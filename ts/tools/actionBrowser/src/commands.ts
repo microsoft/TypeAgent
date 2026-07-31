@@ -51,7 +51,13 @@ interface ParameterDef {
  * the same way the command-reference doc generator does. Best-effort: any
  * failure yields an empty list so the rest of the catalog still generates.
  */
-export async function collectCommands(): Promise<CommandInfo[]> {
+export type CollectCommandsOptions = {
+    strict?: boolean;
+};
+
+export async function collectCommands(
+    options: CollectCommandsOptions = {},
+): Promise<CommandInfo[]> {
     let context: CommandHandlerContext;
     try {
         context = await initializeCommandHandlerContext("action-browser", {
@@ -61,61 +67,78 @@ export async function collectCommands(): Promise<CommandInfo[]> {
             explainer: { enabled: false },
             cache: { enabled: false },
         });
-    } catch {
+    } catch (error) {
+        if (options.strict) {
+            throw new Error(
+                `Failed to initialize command collection: ${getErrorMessage(error)}`,
+            );
+        }
         return [];
     }
 
-    const out: CommandInfo[] = [];
     try {
-        const agents = context.agents;
-        for (const host of agents.getAppAgentNames()) {
-            if (!agents.isCommandEnabled(host)) {
-                continue;
-            }
-            const appAgent = agents.getAppAgent(host);
-            if (appAgent.getCommands === undefined) {
-                continue;
-            }
-            let commands: HandlerNode;
-            try {
-                commands = (await appAgent.getCommands(
-                    agents.getSessionContext(host),
-                )) as unknown as HandlerNode;
-            } catch {
-                continue;
-            }
-            collectHostCommands(host, commands, out);
-        }
+        return await collectCommandsFromContext(
+            context,
+            options.strict ?? false,
+        );
     } finally {
         await closeCommandHandlerContext(context);
     }
+}
 
+export async function collectCommandsFromContext(
+    context: CommandHandlerContext,
+    strict: boolean,
+): Promise<CommandInfo[]> {
+    const out: CommandInfo[] = [];
+    const agents = context.agents;
+    for (const host of agents.getAppAgentNames()) {
+        if (!agents.isCommandEnabled(host)) {
+            continue;
+        }
+        const appAgent = agents.getAppAgent(host);
+        if (appAgent.getCommands === undefined) {
+            continue;
+        }
+        let commands: HandlerNode;
+        try {
+            commands = (await appAgent.getCommands(
+                agents.getSessionContext(host),
+            )) as unknown as HandlerNode;
+        } catch (error) {
+            if (strict) {
+                throw new Error(
+                    `Failed to collect commands for host "${host}": ${getErrorMessage(error)}`,
+                );
+            }
+            continue;
+        }
+        collectHostCommands(host, commands, out);
+    }
     return out.sort(
         (a, b) => a.host.localeCompare(b.host) || a.path.localeCompare(b.path),
     );
 }
 
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
 // A host either exposes a table of sub-commands (walked recursively) or a
 // single top-level command invoked as bare `@<host>` (path left empty).
-function collectHostCommands(
+export function collectHostCommands(
     host: string,
     node: HandlerNode,
     out: CommandInfo[],
 ): void {
     if (node.commands !== undefined && typeof node.commands === "object") {
+        const rootDefault = getDefaultDescriptor(node);
+        if (rootDefault !== undefined) {
+            out.push(createCommandInfo(host, "", node, true, rootDefault));
+        }
         walk(host, node, [], out);
     } else {
-        const action = normalizeActionLink(node.action);
-        out.push({
-            host,
-            path: "",
-            description:
-                typeof node.description === "string" ? node.description : "",
-            group: false,
-            args: extractArgs(node.parameters),
-            flags: extractFlags(node.parameters),
-            ...(action ? { action } : {}),
-        });
+        out.push(createCommandInfo(host, "", node, false, { node }));
     }
 }
 
@@ -137,28 +160,76 @@ function walk(
         const hasSub =
             child.commands !== undefined &&
             Object.keys(child.commands).length > 0;
-        // A string `defaultSubCommand` references another entry that the loop
-        // renders on its own; only an inline descriptor contributes parameters.
-        const defaultSub =
-            typeof child.defaultSubCommand === "object"
-                ? child.defaultSubCommand
-                : undefined;
-        const params = child.parameters ?? defaultSub?.parameters;
-        const action = normalizeActionLink(child.action);
-        out.push({
-            host,
-            path: currentPath.join(" "),
-            description:
-                typeof child.description === "string" ? child.description : "",
-            group: hasSub,
-            args: extractArgs(params),
-            flags: extractFlags(params),
-            ...(action ? { action } : {}),
-        });
+        const endpoint = hasSub ? getDefaultDescriptor(child) : { node: child };
+        out.push(
+            createCommandInfo(
+                host,
+                currentPath.join(" "),
+                child,
+                hasSub,
+                endpoint,
+            ),
+        );
         if (hasSub) {
             walk(host, child, currentPath, out);
         }
     }
+}
+
+type DefaultDescriptor = {
+    node: HandlerNode;
+    name?: string;
+};
+
+function getDefaultDescriptor(
+    table: HandlerNode,
+): DefaultDescriptor | undefined {
+    const defaultSubCommand = table.defaultSubCommand;
+    if (typeof defaultSubCommand === "string") {
+        const target = table.commands?.[defaultSubCommand];
+        if (
+            target === undefined ||
+            (target.commands !== undefined &&
+                typeof target.commands === "object")
+        ) {
+            return undefined;
+        }
+        return { node: target, name: defaultSubCommand };
+    }
+    if (
+        defaultSubCommand === undefined ||
+        (defaultSubCommand.commands !== undefined &&
+            typeof defaultSubCommand.commands === "object")
+    ) {
+        return undefined;
+    }
+    return { node: defaultSubCommand };
+}
+
+function createCommandInfo(
+    host: string,
+    commandPath: string,
+    displayNode: HandlerNode,
+    group: boolean,
+    endpoint: DefaultDescriptor | undefined,
+): CommandInfo {
+    const action = normalizeActionLink(endpoint?.node.action);
+    return {
+        host,
+        path: commandPath,
+        description:
+            typeof displayNode.description === "string"
+                ? displayNode.description
+                : "",
+        group,
+        executable: endpoint !== undefined,
+        ...(endpoint?.name === undefined
+            ? {}
+            : { defaultSubCommand: endpoint.name }),
+        args: extractArgs(endpoint?.node.parameters),
+        flags: extractFlags(endpoint?.node.parameters),
+        ...(action ? { action } : {}),
+    };
 }
 
 // Normalize a handler's declared `action` (a bare actionName or a

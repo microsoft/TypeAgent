@@ -3155,6 +3155,9 @@ importers:
         specifier: ^1.1.6
         version: 1.1.6
     devDependencies:
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../../actionGrammar
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
         version: link:../../actionGrammarCompiler
@@ -6578,6 +6581,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/defaultAgentProvider
     devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1

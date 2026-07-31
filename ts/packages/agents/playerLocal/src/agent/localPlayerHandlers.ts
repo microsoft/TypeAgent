@@ -121,7 +121,7 @@ async function updateLocalPlayerContext(
     }
 }
 
-async function executeLocalPlayerAction(
+export async function executeLocalPlayerAction(
     action: TypeAgentAction<LocalPlayerActions>,
     context: ActionContext<LocalPlayerActionContext>,
 ) {
@@ -135,6 +135,9 @@ async function executeLocalPlayerAction(
 
     try {
         switch (action.actionName) {
+            case "play":
+                return handlePlay(playerService, action.parameters?.fileName);
+
             case "playFile":
                 return handlePlayFile(
                     playerService,
@@ -172,6 +175,9 @@ async function executeLocalPlayerAction(
             case "previous":
                 return handlePrevious(playerService);
 
+            case "toggleShuffle":
+                return handleToggleShuffle(playerService);
+
             case "shuffle":
                 return handleShuffle(playerService, action.parameters.on);
 
@@ -186,6 +192,9 @@ async function executeLocalPlayerAction(
                     playerService,
                     action.parameters.amount,
                 );
+
+            case "toggleMute":
+                return handleToggleMute(playerService);
 
             case "mute":
                 return handleMute(playerService, action.parameters.isMuted);
@@ -235,6 +244,21 @@ async function executeLocalPlayerAction(
 }
 
 // Action handlers
+
+async function handlePlay(service: LocalPlayerService, fileName?: string) {
+    if (fileName) {
+        return handlePlayFile(service, fileName);
+    }
+
+    const state = service.getState();
+    if (state.isPaused) {
+        return handleResume(service);
+    }
+    if (state.queue.length > 0) {
+        return handlePlayFromQueue(service, state.currentIndex + 1);
+    }
+    return handlePlayFolder(service);
+}
 
 async function handlePlayFile(service: LocalPlayerService, fileName: string) {
     const success = await service.playFile(fileName);
@@ -342,6 +366,10 @@ function handleShuffle(service: LocalPlayerService, on: boolean) {
     );
 }
 
+function handleToggleShuffle(service: LocalPlayerService) {
+    return handleShuffle(service, !service.getState().shuffle);
+}
+
 function handleRepeat(
     service: LocalPlayerService,
     mode: "off" | "one" | "all",
@@ -377,6 +405,10 @@ function handleMute(service: LocalPlayerService, isMuted: boolean) {
         service.unmute();
         return createActionResultFromHtmlDisplay("<p>🔊 Unmuted</p>");
     }
+}
+
+function handleToggleMute(service: LocalPlayerService) {
+    return handleMute(service, !service.getState().isMuted);
 }
 
 function handleListFiles(service: LocalPlayerService, folderPath?: string) {

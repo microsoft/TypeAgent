@@ -2360,8 +2360,17 @@ Select actions to create as WebFlows:`;
                     action,
                     context.sessionContext,
                 );
-
-                return createActionResult(webFlowResult.displayText);
+                let displayText = webFlowResult.displayText;
+                if (
+                    action.actionName === "startGoalDrivenTask" &&
+                    (webFlowResult.data as any)?.result?.success &&
+                    (webFlowResult.data as any)?.traceId
+                ) {
+                    displayText +=
+                        "\n\n**Would you like to save this as a reusable macro?**\n" +
+                        `Use: \`@browser flows generate ${(webFlowResult.data as any).traceId}\` to create a WebFlow from this trace.`;
+                }
+                return createActionResult(displayText);
             }
 
             await browserCtrl.runBrowserAction(
@@ -2779,6 +2788,7 @@ class CloseBrowserHandler implements CommandHandlerNoParams {
 
 class OpenWebPageHandler implements CommandHandler {
     public readonly description = "Show a new Web Content view";
+    public readonly action = "openWebPage";
     public readonly parameters = {
         args: {
             site: {
@@ -2790,40 +2800,31 @@ class OpenWebPageHandler implements CommandHandler {
         context: ActionContext<BrowserActionContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const result = await openWebPage(context, {
-            actionName: "openWebPage",
-            schemaName: "browser",
-            parameters: {
-                site: params.args.site,
-                tab: "current",
+        return executeBrowserAction(
+            {
+                actionName: "openWebPage",
+                schemaName: "browser",
+                parameters: {
+                    site: params.args.site,
+                    tab: "current",
+                },
             },
-        });
-        if (result.error) {
-            displayError(result.error, context);
-            return;
-        }
-        // Display result message if available
-        if ((result as any).displayContent) {
-            context.actionIO.setDisplay((result as any).displayContent);
-        }
-        // REVIEW: command doesn't set the activity context
+            context,
+        );
     }
 }
 
 class CloseWebPageHandler implements CommandHandlerNoParams {
     public readonly description = "Close the new Web Content view";
+    public readonly action = "closeWebPage";
     public async run(context: ActionContext<BrowserActionContext>) {
-        const result = await closeWebPage(context);
-        if (result.error) {
-            displayError(result.error, context);
-            return;
-        }
-        // Display result message if available
-        if ((result as any).displayContent) {
-            context.actionIO.setDisplay((result as any).displayContent);
-        }
-
-        // REVIEW: command doesn't clear the activity context
+        return executeBrowserAction(
+            {
+                actionName: "closeWebPage",
+                schemaName: "browser",
+            },
+            context,
+        );
     }
 }
 
@@ -3214,182 +3215,48 @@ class AskAboutPageHandler implements CommandHandler {
 class DiscoverActionsHandler implements CommandHandlerNoParams {
     public readonly description =
         "Discover available actions on the current web page";
+    public readonly action = {
+        schema: "browser.actionDiscovery",
+        actionName: "detectPageActions",
+    };
     public async run(context: ActionContext<BrowserActionContext>) {
-        const agentContext = context.sessionContext.agentContext;
-        if (!agentContext.browserControl) {
-            displayError("No browser connection available.", context);
-            return;
-        }
-
-        context.actionIO.appendDisplay("Analyzing page...", "temporary");
-
-        try {
-            // Run discovery — calls the LLM to detect page actions,
-            // auto-saves them to the WebFlowStore scoped to the domain,
-            // and returns site-scoped actions in data.actions.
-            const discoveryResult = await handleSchemaDiscoveryAction(
-                {
-                    actionName: "detectPageActions",
-                    parameters: {},
-                } as any,
-                context.sessionContext,
-            );
-
-            const actions: any[] = discoveryResult.data?.actions || [];
-
-            if (actions.length === 0) {
-                context.actionIO.setDisplay({
-                    type: "text",
-                    content: "No actions found on this page.",
-                });
-                return;
-            }
-
-            let md = `### Actions available on this page (${actions.length})\n\n`;
-            for (const action of actions) {
-                const params = action.parameters
-                    ? Object.keys(action.parameters)
-                    : [];
-                const paramStr =
-                    params.length > 0 ? ` *(${params.join(", ")})*` : "";
-                md += `- **${action.name}**${paramStr}`;
-                if (action.description) {
-                    md += ` — ${action.description}`;
-                }
-                md += "\n";
-            }
-
-            context.actionIO.setDisplay({
-                type: "markdown",
-                content: md,
-            });
-        } catch (error: any) {
-            displayError(
-                `Discovery failed: ${error?.message || error}`,
-                context,
-            );
-        }
+        return executeBrowserAction(
+            {
+                schemaName: "browser.actionDiscovery",
+                actionName: "detectPageActions",
+                parameters: {},
+            },
+            context,
+        );
     }
 }
 
 class InferActionsHandler implements CommandHandlerNoParams {
     public readonly description =
         "Analyze page and infer new actions that can be automated";
+    public readonly action = {
+        schema: "browser.actionDiscovery",
+        actionName: "inferActions",
+    };
     public async run(context: ActionContext<BrowserActionContext>) {
-        const agentContext = context.sessionContext.agentContext;
-        if (!agentContext.browserControl) {
-            displayError("No browser connection available.", context);
-            return;
-        }
-
-        context.actionIO.appendDisplay(
-            "Analyzing page for possible actions...",
-            "temporary",
+        return executeBrowserAction(
+            {
+                schemaName: "browser.actionDiscovery",
+                actionName: "inferActions",
+                parameters: {},
+            },
+            context,
         );
-
-        try {
-            const result = await handleSchemaDiscoveryAction(
-                {
-                    actionName: "inferActions",
-                    parameters: {},
-                } as any,
-                context.sessionContext,
-            );
-
-            const newActions = result.data?.newActions || [];
-            const existingActions = result.data?.existingActions || [];
-
-            // Store inferred actions for follow-up
-            agentContext.lastInferredActions = newActions;
-            agentContext.lastInferredActionsPageUrl = result.data?.pageUrl;
-
-            if (newActions.length > 0 && agentContext.choiceManager) {
-                // Register choice callback for number responses
-                const choiceId = agentContext.choiceManager.registerChoice(
-                    async (response) => {
-                        const selectedIndices = response as number[];
-                        if (selectedIndices.length === 0) {
-                            return createActionResult(
-                                "No actions selected. WebFlow creation cancelled.",
-                            );
-                        }
-
-                        // Convert 0-based indices to 1-based for the handler
-                        const oneBasedIndices = selectedIndices.map(
-                            (i) => i + 1,
-                        );
-
-                        const createResult = await handleSchemaDiscoveryAction(
-                            {
-                                actionName: "createInferredFlows",
-                                parameters: {
-                                    selectedIndices: oneBasedIndices,
-                                    inferredActions: newActions,
-                                },
-                            } as any,
-                            context.sessionContext,
-                            undefined,
-                            context.actionIO,
-                        );
-
-                        // Clear stored actions
-                        agentContext.lastInferredActions = undefined;
-                        agentContext.lastInferredActionsPageUrl = undefined;
-                        agentContext.pendingInferChoiceId = undefined;
-
-                        return createActionResult(createResult.displayText);
-                    },
-                );
-                agentContext.pendingInferChoiceId = choiceId;
-                debug(
-                    `[InferChoice] Registered pending choice: ${choiceId}, newActions: ${newActions.length}`,
-                );
-
-                // Build display with choice prompt
-                let displayText = `Found ${newActions.length + existingActions.length} possible actions on this page:
-
-`;
-                let choiceIndex = 0;
-
-                for (const existingAction of existingActions) {
-                    displayText += `${choiceIndex + 1}. ${existingAction.name} - Already available ✓
-`;
-                    choiceIndex++;
-                }
-
-                for (const newAction of newActions) {
-                    displayText += `${choiceIndex + 1}. ${newAction.name} - ${newAction.description} [NEW]
-`;
-                    choiceIndex++;
-                }
-
-                displayText += `
-
-To create WebFlows, say: "build flow 1" or "build flows 1,2" or "build all flows"`;
-
-                context.actionIO.setDisplay({
-                    type: "markdown",
-                    content: displayText,
-                });
-            } else {
-                // No new actions or no choice manager - show original message
-                context.actionIO.setDisplay({
-                    type: "markdown",
-                    content: result.displayText,
-                });
-            }
-        } catch (error: any) {
-            displayError(
-                `Action inference failed: ${error?.message || error}`,
-                context,
-            );
-        }
     }
 }
 
 class LearnHandler implements CommandHandler {
     public readonly description =
         "Learn a new action by demonstrating or describing it";
+    public readonly action = {
+        schema: "browser.webFlows",
+        actionName: "startGoalDrivenTask",
+    };
     public readonly parameters = {
         args: {
             goal: {
@@ -3402,8 +3269,7 @@ class LearnHandler implements CommandHandler {
     };
     public async run(
         context: ActionContext<BrowserActionContext>,
-        _params: ParsedCommandParams<typeof this.parameters>,
-        args: string[],
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const agentContext = context.sessionContext.agentContext;
         if (!agentContext.browserControl) {
@@ -3411,7 +3277,7 @@ class LearnHandler implements CommandHandler {
             return;
         }
 
-        const goal = args.join(" ").trim();
+        const goal = params.args.goal.trim();
         if (!goal) {
             displayError(
                 "Please provide a goal description. Example: @browser learn add item to cart",
@@ -3420,48 +3286,17 @@ class LearnHandler implements CommandHandler {
             return;
         }
 
-        context.actionIO.appendDisplay(
-            `Starting goal-driven automation: "${goal}"...`,
-            "temporary",
+        return executeBrowserAction(
+            {
+                schemaName: "browser.webFlows",
+                actionName: "startGoalDrivenTask",
+                parameters: {
+                    goal,
+                    maxSteps: 30,
+                },
+            },
+            context,
         );
-
-        try {
-            const result = await handleWebFlowAction(
-                {
-                    actionName: "startGoalDrivenTask",
-                    parameters: {
-                        goal,
-                        maxSteps: 30,
-                    },
-                } as any,
-                context.sessionContext,
-            );
-
-            // If successful, offer to save as WebFlow
-            if (
-                (result.data as any)?.result?.success &&
-                (result.data as any)?.traceId
-            ) {
-                let md = result.displayText + "\n\n";
-                md += "**Would you like to save this as a reusable macro?**\n";
-                md += `Use: \`@browser flows generate ${(result.data as any).traceId}\` to create a WebFlow from this trace.`;
-
-                context.actionIO.setDisplay({
-                    type: "markdown",
-                    content: md,
-                });
-            } else {
-                context.actionIO.setDisplay({
-                    type: "markdown",
-                    content: result.displayText,
-                });
-            }
-        } catch (error: any) {
-            displayError(
-                `Goal-driven task failed: ${error?.message || error}`,
-                context,
-            );
-        }
     }
 }
 

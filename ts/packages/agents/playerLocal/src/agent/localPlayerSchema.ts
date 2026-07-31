@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 export type LocalPlayerActions =
+    | PlayAction
     | PlayFileAction
     | PlayFolderAction
     | PlayFromQueueAction
@@ -11,10 +12,12 @@ export type LocalPlayerActions =
     | StopAction
     | NextAction
     | PreviousAction
+    | ToggleShuffleAction
     | ShuffleAction
     | RepeatAction
     | SetVolumeAction
     | ChangeVolumeAction
+    | ToggleMuteAction
     | MuteAction
     | ListFilesAction
     | SearchFilesAction
@@ -26,6 +29,19 @@ export type LocalPlayerActions =
 
 export type LocalPlayerEntities = FilePath;
 export type FilePath = string;
+
+// user: play music
+// agent: { "actionName": "play" }
+// user: play the file sunrise.mp3
+// agent: { "actionName": "play", "parameters": { "fileName": "sunrise.mp3" } }
+// Play a named file, or resume/default playback when no file is named.
+export interface PlayAction {
+    actionName: "play";
+    parameters?: {
+        // The optional file name or path to play.
+        fileName?: string;
+    };
+}
 
 // Play a specific audio file by path or name
 export interface PlayFileAction {
@@ -86,6 +102,13 @@ export interface PreviousAction {
     actionName: "previous";
 }
 
+// user: toggle shuffle
+// agent: { "actionName": "toggleShuffle" }
+// Toggle shuffle to the opposite of its current state.
+export interface ToggleShuffleAction {
+    actionName: "toggleShuffle";
+}
+
 // Turn shuffle on or off
 export interface ShuffleAction {
     actionName: "shuffle";
@@ -119,6 +142,13 @@ export interface ChangeVolumeAction {
         // Amount to change volume by (can be negative)
         amount: number;
     };
+}
+
+// user: toggle mute
+// agent: { "actionName": "toggleMute" }
+// Toggle mute to the opposite of its current state.
+export interface ToggleMuteAction {
+    actionName: "toggleMute";
 }
 
 // Mute or unmute audio

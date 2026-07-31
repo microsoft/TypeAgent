@@ -13,12 +13,15 @@ import { renderHtml } from "./render.js";
 const HELP = `action-browser — generate the self-contained TypeAgent Action Browser.
 
 Usage:
-  action-browser [--out <file.html>] [--json] [--help]
+    action-browser [--out <file.html>] [--json] [--check] [--allow-missing] [--help]
 
 Options:
   --out <file>   Output HTML path. Defaults to
                  ts/docs/overview/action-browser.html.
   --json         Also write the raw catalog JSON next to the HTML output.
+    --check        Require valid links and action coverage for every endpoint.
+    --allow-missing
+                                 Report the migration baseline without failing on missing links.
   --help         Show this message.
 
 The generator reads bundled agent manifests, action schemas, and grammar
@@ -39,6 +42,8 @@ async function main(): Promise<void> {
         options: {
             out: { type: "string" },
             json: { type: "boolean", default: false },
+            check: { type: "boolean", default: false },
+            "allow-missing": { type: "boolean", default: false },
             help: { type: "boolean", default: false },
         },
         allowPositionals: false,
@@ -55,7 +60,56 @@ async function main(): Promise<void> {
             ? path.resolve(values.out)
             : defaultOutPath();
 
-    const catalog = await collectCatalog();
+    const catalog = await collectCatalog({ strict: values.check });
+
+    if (values.check) {
+        const issues = catalog.commandActionLinkIssues;
+        const missing = catalog.missingCommandActions;
+        process.stdout.write(
+            `Command action coverage: ${catalog.counts.linkedCommandEndpoints} / ` +
+                `${catalog.counts.commandEndpoints} endpoints ` +
+                `(${missing.length} missing, ${issues.length} invalid)\n`,
+        );
+        if (issues.length > 0) {
+            for (const issue of issues) {
+                const command =
+                    issue.host === "system"
+                        ? `@${issue.path}`
+                        : issue.path.length > 0
+                          ? `@${issue.host} ${issue.path}`
+                          : `@${issue.host}`;
+                const action = issue.schema
+                    ? `${issue.schema}.${issue.actionName}`
+                    : issue.actionName;
+                process.stderr.write(
+                    `${command} -> ${action}: ${issue.message}\n`,
+                );
+            }
+        }
+        if (!values["allow-missing"]) {
+            for (const gap of missing) {
+                const command =
+                    gap.host === "system"
+                        ? `@${gap.path}`
+                        : gap.path.length > 0
+                          ? `@${gap.host} ${gap.path}`
+                          : `@${gap.host}`;
+                process.stderr.write(`${command}: no equivalent action\n`);
+            }
+        }
+        if (catalog.runtimeOnlySchemas.length > 0) {
+            process.stdout.write(
+                `Runtime-only schemas omitted: ${catalog.runtimeOnlySchemas.join(", ")}\n`,
+            );
+        }
+        if (
+            issues.length > 0 ||
+            (missing.length > 0 && !values["allow-missing"])
+        ) {
+            process.exitCode = 1;
+        }
+        return;
+    }
 
     await fs.mkdir(path.dirname(outPath), { recursive: true });
 
@@ -75,7 +129,7 @@ async function main(): Promise<void> {
     process.stdout.write(
         `Action browser: ${catalog.counts.agents} agents, ` +
             `${catalog.counts.actions} actions, ` +
-            `${catalog.counts.commands} commands\n`,
+            `${catalog.counts.commandEndpoints} command endpoints\n`,
     );
     process.stdout.write(`wrote ${outPath}\n`);
 }
