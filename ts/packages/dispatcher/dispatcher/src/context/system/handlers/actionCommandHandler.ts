@@ -40,6 +40,10 @@ const debugExplain = registerDebug("typeagent:action:explain");
 
 export class ActionCommandHandler implements CommandHandler {
     public readonly description = "Execute an action";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "executeTypedAction",
+    };
     public readonly parameters = {
         args: {
             schemaName: {

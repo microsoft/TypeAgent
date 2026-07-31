@@ -129,6 +129,10 @@ function summaryContent(response: QuestionFormResponse): DisplayContent {
 export class QuestionCardsCommandHandler implements CommandHandler {
     public readonly description =
         "Walk the interactive question types (single-select, multi-select, yes/no, free-text). Add --paged for a one-at-a-time Back/Next wizard.";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "showQuestionCards",
+    };
     public readonly parameters = {
         flags: {
             paged: {

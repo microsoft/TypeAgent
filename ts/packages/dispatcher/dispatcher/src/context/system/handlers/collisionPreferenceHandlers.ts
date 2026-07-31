@@ -41,6 +41,10 @@ function memberLabel(m: PreferenceMember): string {
 
 class CollisionPreferenceListCommandHandler implements CommandHandler {
     public readonly description = "List stored collision preferences (Tier-1)";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "listCollisionPreferences",
+    };
     public readonly parameters = {} as const;
 
     public async run(context: ActionContext<CommandHandlerContext>) {
@@ -64,6 +68,10 @@ class CollisionPreferenceListCommandHandler implements CommandHandler {
 class CollisionPreferenceSetCommandHandler implements CommandHandler {
     public readonly description =
         "Set an explicit collision preference: among a candidate set, always pick the chosen option";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "setCollisionPreference",
+    };
     public readonly parameters = {
         args: {
             candidates: {
@@ -141,6 +149,10 @@ class CollisionPreferenceSetCommandHandler implements CommandHandler {
 class CollisionPreferenceRemoveCommandHandler implements CommandHandler {
     public readonly description =
         "Remove a stored collision preference by key (see `@collision preferences list`)";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "removeCollisionPreference",
+    };
     public readonly parameters = {
         args: {
             key: {
@@ -167,6 +179,10 @@ class CollisionPreferenceRemoveCommandHandler implements CommandHandler {
 
 class CollisionPreferenceClearCommandHandler implements CommandHandler {
     public readonly description = "Remove every stored collision preference";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "clearCollisionPreferences",
+    };
     public readonly parameters = {} as const;
 
     public async run(context: ActionContext<CommandHandlerContext>) {

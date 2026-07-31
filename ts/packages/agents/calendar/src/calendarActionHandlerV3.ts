@@ -37,6 +37,7 @@ import {
     CalendarClient,
     ICalendarProvider,
     CalendarProviderType,
+    CalendarUser,
     createCalendarProviderFromConfig,
     claimSilentRestoreAnnouncement,
     evaluateGraphReadiness,
@@ -85,16 +86,7 @@ export class CalendarClientLoginCommandHandler
             const name = user.displayName || "Unknown";
             const email = user.email || "Unknown";
             displayWarn(`Already logged in as ${name}<${email}>`, context);
-            // Re-emit the signed-in marker so the avatar (name + photo)
-            // resyncs even when the user was already authenticated — e.g.
-            // restored silently on launch before the photo had been fetched.
-            const photoAttr = user.photoUrl
-                ? ` data-photo="${escapeHtml(user.photoUrl)}"`
-                : "";
-            context.actionIO.appendDisplay({
-                type: "html",
-                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
-            });
+            await applyCalendarLoginState(context, user);
             return;
         }
 
@@ -123,18 +115,7 @@ export class CalendarClientLoginCommandHandler
                 `Successfully logged in as ${name} <${email}>`,
                 context,
             );
-            // Hidden marker the chat-ui / shell scan for after each agent
-            // message. Lifts the signed-in identity into UI state so the
-            // user-letter avatar shows the real initial and stops triggering
-            // login on click. data-photo carries the base64 profile photo
-            // (when the provider has one) so the avatar can render the image.
-            const photoAttr = user.photoUrl
-                ? ` data-photo="${escapeHtml(user.photoUrl)}"`
-                : "";
-            context.actionIO.appendDisplay({
-                type: "html",
-                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
-            });
+            await applyCalendarLoginState(context, user);
         } else {
             displayWarn(
                 "Login failed. If using Google Calendar, you can also try '@calendar google-auth <code>' with a manual authorization code.",
@@ -227,6 +208,7 @@ export class GoogleAuthCommandHandler implements CommandHandler {
                 `Successfully logged in to Google Calendar as ${user.displayName || "Unknown"} <${user.email || "Unknown"}>`,
                 context,
             );
+            await applyCalendarLoginState(context, user);
         } else {
             displayWarn(
                 "Failed to complete authorization. Please try '@calendar login' again to get a new code.",
@@ -257,6 +239,22 @@ function escapeHtml(text: string): string {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+async function applyCalendarLoginState(
+    context: ActionContext<CalendarActionContext>,
+    user: CalendarUser,
+): Promise<void> {
+    const name = user.displayName || "Unknown";
+    const email = user.email || "Unknown";
+    const photoAttr = user.photoUrl
+        ? ` data-photo="${escapeHtml(user.photoUrl)}"`
+        : "";
+    context.actionIO.appendDisplay({
+        type: "html",
+        content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
+    });
+    await context.sessionContext.notifyReadinessChanged();
 }
 
 // Attempt a silent, non-interactive sign-in using cached MS Graph
@@ -1394,8 +1392,9 @@ export async function runCalendarLogin(
             );
         }
         const user = await provider.getUser();
+        await applyCalendarLoginState(actionContext, user);
         return createActionResultFromTextDisplay(
-            `[${ts()}] Signed in as ${user.displayName || user.email || "Unknown"}. Re-run your calendar command — readiness was re-checked automatically.`,
+            `[${ts()}] Signed in as ${user.displayName || user.email || "Unknown"}. Re-run your calendar command - readiness was re-checked automatically.`,
         );
     } catch (e: any) {
         return createActionResultFromError(

@@ -156,6 +156,7 @@ describe("email auth actions", () => {
 
     it("re-emits identity when login is already authenticated", async () => {
         const agent = instantiate();
+        let readinessCalls = 0;
         const displays: unknown[] = [];
         const agentContext = {
             emailProvider: {
@@ -168,7 +169,12 @@ describe("email auth actions", () => {
             providerType: "microsoft",
         };
         const context = {
-            sessionContext: { agentContext },
+            sessionContext: {
+                agentContext,
+                notifyReadinessChanged: async () => {
+                    readinessCalls++;
+                },
+            },
             actionIO: {
                 setDisplay: (value: unknown) => displays.push(value),
                 appendDisplay: (value: unknown) => displays.push(value),
@@ -182,6 +188,7 @@ describe("email auth actions", () => {
 
         assert.match(JSON.stringify(displays), /ada@example\.com/);
         assert.match(JSON.stringify(displays), /typeagent-user-signed-in/);
+        assert.equal(readinessCalls, 1);
     });
 
     it("logs out and refreshes cached readiness", async () => {

@@ -54,7 +54,7 @@ export type CommandHandler = CommandDescriptor & {
     ): Promise<CompletionGroups>;
 };
 
-type CommandHandlerTypes = CommandHandlerNoParams | CommandHandler;
+export type CommandHandlerTypes = CommandHandlerNoParams | CommandHandler;
 
 function isCommandHandlerNoParams(
     handler: CommandHandlerTypes,
@@ -104,7 +104,7 @@ export function isCommandDescriptorTable(
     return (entry as CommandDescriptorTable).commands !== undefined;
 }
 
-function getCommandHandler(
+export function getCommandHandler(
     handlers: CommandDefinitions,
     commands: string[],
 ): CommandHandlerTypes {

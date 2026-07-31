@@ -13,7 +13,10 @@ import type {
     CommandDescriptor,
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
-import { instantiate } from "../src/calendarActionHandlerV3.js";
+import {
+    instantiate,
+    runCalendarLogin,
+} from "../src/calendarActionHandlerV3.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const grammarPath = path.resolve(here, "..", "..", "src", "calendarSchema.agr");
@@ -75,6 +78,7 @@ describe("calendar auth actions", () => {
 
     it("re-emits identity when login is already authenticated", async () => {
         const agent = instantiate();
+        let readinessCalls = 0;
         const displays: unknown[] = [];
         const context = {
             sessionContext: {
@@ -87,6 +91,9 @@ describe("calendar auth actions", () => {
                         }),
                     },
                     providerType: "microsoft",
+                },
+                notifyReadinessChanged: async () => {
+                    readinessCalls++;
                 },
             },
             actionIO: {
@@ -102,6 +109,7 @@ describe("calendar auth actions", () => {
 
         expect(JSON.stringify(displays)).toMatch(/ada@example\.com/);
         expect(JSON.stringify(displays)).toMatch(/typeagent-user-signed-in/);
+        expect(readinessCalls).toBe(1);
     });
 
     it("logs out and refreshes cached readiness", async () => {
@@ -137,6 +145,37 @@ describe("calendar auth actions", () => {
         expect(logoutCalls).toBe(1);
         expect(readinessCalls).toBe(1);
         expect(JSON.stringify(displays)).toMatch(/typeagent-user-signed-out/);
+    });
+
+    it("refreshes readiness after setup login completes", async () => {
+        let readinessCalls = 0;
+        const displays: unknown[] = [];
+        const context = {
+            sessionContext: {
+                agentContext: {
+                    calendarProvider: {
+                        login: async () => true,
+                        getUser: async () => ({
+                            displayName: "Ada",
+                            email: "ada@example.com",
+                        }),
+                    },
+                    providerType: "microsoft",
+                },
+                notifyReadinessChanged: async () => {
+                    readinessCalls++;
+                },
+            },
+            actionIO: {
+                appendDisplay: (value: unknown) => displays.push(value),
+            },
+        } as any;
+
+        await runCalendarLogin(context);
+
+        expect(readinessCalls).toBe(1);
+        expect(JSON.stringify(displays)).toMatch(/typeagent-user-signed-in/);
+        expect(JSON.stringify(displays)).toMatch(/ada@example\.com/);
     });
 
     it("forwards the Google authorization code unchanged", async () => {

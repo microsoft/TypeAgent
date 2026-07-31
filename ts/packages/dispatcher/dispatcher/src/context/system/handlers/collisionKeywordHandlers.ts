@@ -126,6 +126,10 @@ function listAllOverrides(context: ActionContext<CommandHandlerContext>): void {
 class CollisionKeywordsCommandHandler implements CommandHandler {
     public readonly description =
         "Inspect/tune contextSelector keyword vectors: @collision keywords [<schema.action> [list|add|remove|clear] [keywords…]]";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "manageCollisionKeywords",
+    };
     public readonly parameters = {
         args: {
             tokens: {
@@ -473,6 +477,10 @@ function formatBackfillSummary(
 // ones) and invalidates the in-memory index so the fresh vectors take effect on
 // the next collision without a restart.
 class CollisionKeywordsBackfillCommandHandler implements CommandHandler {
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "backfillCollisionKeywords",
+    };
     public readonly description =
         "Backfill/refresh committed keyword files for agent actions. Lexical by default; --llm uses the preferred LLM distillation pass.";
     public readonly parameters = {

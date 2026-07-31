@@ -14,6 +14,10 @@ import {
 export class PortsCommandHandler implements CommandHandler {
     public readonly description =
         "Lists ports registered by agents and the number of clients connected to each.";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "listRegisteredPorts",
+    };
 
     public readonly parameters = {};
 

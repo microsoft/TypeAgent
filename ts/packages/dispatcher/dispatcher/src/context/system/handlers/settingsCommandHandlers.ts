@@ -25,6 +25,7 @@ import chalk from "chalk";
 
 class SettingsShowCommandHandler implements CommandHandler {
     public readonly description = "Show all persistent user settings";
+    public readonly action = "showSettings";
     public readonly parameters = {};
 
     public async run(context: ActionContext<CommandHandlerContext>) {
@@ -43,6 +44,7 @@ class SettingsShowCommandHandler implements CommandHandler {
 
 class SettingsResetCommandHandler implements CommandHandler {
     public readonly description = "Reset all settings to defaults";
+    public readonly action = "resetSettings";
     public readonly parameters = {};
 
     public async run(context: ActionContext<CommandHandlerContext>) {
@@ -54,6 +56,7 @@ class SettingsResetCommandHandler implements CommandHandler {
 class SettingsServerHiddenCommandHandler implements CommandHandler {
     public readonly description =
         "Set whether the AgentServer starts hidden (true/false)";
+    public readonly action = "setServerHidden";
     public readonly parameters = {
         args: {
             value: {
@@ -94,6 +97,7 @@ class SettingsServerHiddenCommandHandler implements CommandHandler {
 
 class SettingsServerIdleTimeoutCommandHandler implements CommandHandler {
     public readonly description = "Set idle timeout in seconds (0 to disable)";
+    public readonly action = "setIdleTimeout";
     public readonly parameters = {
         args: {
             seconds: {
@@ -123,6 +127,7 @@ class SettingsServerIdleTimeoutCommandHandler implements CommandHandler {
 class SettingsConversationResumeCommandHandler implements CommandHandler {
     public readonly description =
         "Set whether to resume the last conversation on startup (true/false)";
+    public readonly action = "setConversationResume";
     public readonly parameters = {
         args: {
             value: {
@@ -164,6 +169,7 @@ class SettingsConversationResumeCommandHandler implements CommandHandler {
 class SettingsUIAutoCompleteCommandHandler implements CommandHandler {
     public readonly description =
         "Set whether inline autocompletion is enabled in the CLI (true/false)";
+    public readonly action = "setAutoComplete";
     public readonly parameters = {
         args: {
             value: {

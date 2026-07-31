@@ -87,6 +87,7 @@ class HistoryDeleteCommandHandler implements CommandHandler {
 
 class HistorySaveCommandHandler implements CommandHandler {
     public readonly description: string = "Save the chat history to a file";
+    public readonly action = "saveHistory";
     public readonly parameters = {
         args: {
             file: {
@@ -126,6 +127,7 @@ class HistorySaveCommandHandler implements CommandHandler {
 
 class HistoryInsertCommandHandler implements CommandHandler {
     public readonly description = "Insert messages to chat history";
+    public readonly action = "insertHistory";
     public readonly parameters = {
         args: {
             messages: {
@@ -178,6 +180,7 @@ class HistoryInsertCommandHandler implements CommandHandler {
 class HistoryEntityListCommandHandler implements CommandHandler {
     public readonly description =
         "Shows all of the entities currently in 'working memory.'";
+    public readonly action = "listHistoryEntities";
     public readonly parameters = {} as const;
 
     public async run(
@@ -200,6 +203,7 @@ class HistoryEntityListCommandHandler implements CommandHandler {
 class HistoryEntityDeleteCommandHandler implements CommandHandler {
     public readonly description =
         "Delete entities from the chat history (working memory).";
+    public readonly action = "deleteHistoryEntity";
     public readonly parameters = {
         args: {
             entityId: {
@@ -230,24 +234,26 @@ class HistoryEntityDeleteCommandHandler implements CommandHandler {
     }
 }
 
-export function getHistoryCommandHandlers(): CommandHandlerTable {
-    return {
-        description: "History commands",
-        defaultSubCommand: "list",
-        commands: {
-            list: new HistoryListCommandHandler(),
-            clear: new HistoryClearCommandHandler(),
-            delete: new HistoryDeleteCommandHandler(),
-            insert: new HistoryInsertCommandHandler(),
-            save: new HistorySaveCommandHandler(),
-            entities: {
-                description: "History entity commands",
-                defaultSubCommand: "list",
-                commands: {
-                    list: new HistoryEntityListCommandHandler(),
-                    delete: new HistoryEntityDeleteCommandHandler(),
-                },
+export const historyCommandHandlers: CommandHandlerTable = {
+    description: "History commands",
+    defaultSubCommand: "list",
+    commands: {
+        list: new HistoryListCommandHandler(),
+        clear: new HistoryClearCommandHandler(),
+        delete: new HistoryDeleteCommandHandler(),
+        insert: new HistoryInsertCommandHandler(),
+        save: new HistorySaveCommandHandler(),
+        entities: {
+            description: "History entity commands",
+            defaultSubCommand: "list",
+            commands: {
+                list: new HistoryEntityListCommandHandler(),
+                delete: new HistoryEntityDeleteCommandHandler(),
             },
         },
-    };
+    },
+};
+
+export function getHistoryCommandHandlers(): CommandHandlerTable {
+    return historyCommandHandlers;
 }

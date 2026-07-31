@@ -80,6 +80,10 @@ function resolvePathWithSession(
 
 class ConstructionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new construction store";
+    public readonly action = {
+        schema: "system.construction",
+        actionName: "newConstructionStore",
+    };
     public readonly parameters = {
         args: {
             file: {
@@ -118,6 +122,10 @@ class ConstructionNewCommandHandler implements CommandHandler {
 
 class ConstructionLoadCommandHandler implements CommandHandler {
     public readonly description = "Load a construction store from disk";
+    public readonly action = {
+        schema: "system.construction",
+        actionName: "loadConstructionStore",
+    };
     public readonly parameters = {
         args: {
             file: {
@@ -160,6 +168,10 @@ class ConstructionLoadCommandHandler implements CommandHandler {
 
 class ConstructionSaveCommandHandler implements CommandHandler {
     public readonly description = "Save construction store to disk";
+    public readonly action = {
+        schema: "system.construction",
+        actionName: "saveConstructionStore",
+    };
     public readonly parameters = {
         args: {
             file: {
@@ -192,6 +204,10 @@ class ConstructionSaveCommandHandler implements CommandHandler {
 
 class ConstructionInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show current construction store info";
+    public readonly action = {
+        schema: "system.construction",
+        actionName: "showConstructionInfo",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const info = systemContext.agentCache.getInfo();
@@ -234,6 +250,10 @@ class ConstructionInfoCommandHandler implements CommandHandlerNoParams {
 
 class ConstructionOffCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Disable construction store";
+    public readonly action = {
+        schema: "system.construction",
+        actionName: "disableConstructionStore",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
@@ -245,6 +265,10 @@ class ConstructionOffCommandHandler implements CommandHandlerNoParams {
 
 class ConstructionListCommandHandler implements CommandHandler {
     public readonly description = "List constructions";
+    public readonly action = {
+        schema: "system.construction",
+        actionName: "listConstructions",
+    };
     public readonly parameters = {
         flags: {
             verbose: {
@@ -319,6 +343,10 @@ async function expandPaths(paths: string[]) {
 
 class ConstructionImportCommandHandler implements CommandHandler {
     public readonly description = "Import constructions from test data";
+    public readonly action = {
+        schema: "system.construction",
+        actionName: "importConstructions",
+    };
     public readonly parameters = {
         flags: {
             extended: {
@@ -408,6 +436,10 @@ class ConstructionImportCommandHandler implements CommandHandler {
 class ConstructionPruneCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Prune out of date construction from the cache";
+    public readonly action = {
+        schema: "system.construction",
+        actionName: "pruneConstructions",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const count = await systemContext.agentCache.prune();
@@ -417,6 +449,10 @@ class ConstructionPruneCommandHandler implements CommandHandlerNoParams {
 
 class ConstructionDeleteCommandHandler implements CommandHandler {
     public readonly description = "Delete a construction by id";
+    public readonly action = {
+        schema: "system.construction",
+        actionName: "deleteConstruction",
+    };
     public readonly parameters = {
         args: {
             namespace: {
@@ -439,81 +475,103 @@ class ConstructionDeleteCommandHandler implements CommandHandler {
     }
 }
 
-export function getConstructionCommandHandlers(): CommandHandlerTable {
-    return {
-        description: "Command to manage the construction store",
-        commands: {
-            new: new ConstructionNewCommandHandler(),
-            load: new ConstructionLoadCommandHandler(),
-            save: new ConstructionSaveCommandHandler(),
-            auto: getToggleHandlerTable(
-                "construction auto save",
-                async (context, enable) => {
-                    await changeContextConfig(
-                        { cache: { autoSave: enable } },
-                        context,
-                    );
-                },
-            ),
-            off: new ConstructionOffCommandHandler(),
-            info: new ConstructionInfoCommandHandler(),
-            list: new ConstructionListCommandHandler(),
-            import: new ConstructionImportCommandHandler(),
-            prune: new ConstructionPruneCommandHandler(),
-            delete: new ConstructionDeleteCommandHandler(),
-            builtin: getToggleHandlerTable(
-                "construction built-in cache",
-                async (context, enable) => {
-                    await changeContextConfig(
-                        { cache: { builtInCache: enable } },
-                        context,
-                    );
-                },
-            ),
-            merge: getToggleHandlerTable(
-                "construction merge",
-                async (
-                    context: ActionContext<CommandHandlerContext>,
-                    enable: boolean,
-                ) => {
-                    await changeContextConfig(
-                        { cache: { mergeMatchSets: enable } },
-                        context,
-                    );
-                },
-            ),
-            wildcard: {
-                description: "wildcard matching",
-                defaultSubCommand: "on",
-                commands: {
-                    ...getToggleCommandHandlers(
-                        "wildcard matching",
-                        async (
-                            context: ActionContext<CommandHandlerContext>,
-                            enable: boolean,
-                        ) => {
-                            await changeContextConfig(
-                                { cache: { matchWildcard: enable } },
-                                context,
-                            );
-                        },
-                    ),
-                    entity: getToggleHandlerTable(
-                        "entity wildcard matching",
-                        async (
-                            context: ActionContext<CommandHandlerContext>,
-                            enable: boolean,
-                        ) => {
-                            await changeContextConfig(
-                                {
-                                    cache: { matchEntityWildcard: enable },
-                                },
-                                context,
-                            );
-                        },
-                    ),
-                },
+export const constructionCommandHandlers: CommandHandlerTable = {
+    description: "Command to manage the construction store",
+    commands: {
+        new: new ConstructionNewCommandHandler(),
+        load: new ConstructionLoadCommandHandler(),
+        save: new ConstructionSaveCommandHandler(),
+        auto: getToggleHandlerTable(
+            "construction auto save",
+            async (context, enable) => {
+                await changeContextConfig(
+                    { cache: { autoSave: enable } },
+                    context,
+                );
+            },
+            {
+                schema: "system.construction",
+                actionName: "setConstructionAutoSave",
+            },
+        ),
+        off: new ConstructionOffCommandHandler(),
+        info: new ConstructionInfoCommandHandler(),
+        list: new ConstructionListCommandHandler(),
+        import: new ConstructionImportCommandHandler(),
+        prune: new ConstructionPruneCommandHandler(),
+        delete: new ConstructionDeleteCommandHandler(),
+        builtin: getToggleHandlerTable(
+            "construction built-in cache",
+            async (context, enable) => {
+                await changeContextConfig(
+                    { cache: { builtInCache: enable } },
+                    context,
+                );
+            },
+            {
+                schema: "system.construction",
+                actionName: "setBuiltInConstructionCache",
+            },
+        ),
+        merge: getToggleHandlerTable(
+            "construction merge",
+            async (
+                context: ActionContext<CommandHandlerContext>,
+                enable: boolean,
+            ) => {
+                await changeContextConfig(
+                    { cache: { mergeMatchSets: enable } },
+                    context,
+                );
+            },
+            {
+                schema: "system.construction",
+                actionName: "setConstructionMerge",
+            },
+        ),
+        wildcard: {
+            description: "wildcard matching",
+            defaultSubCommand: "on",
+            commands: {
+                ...getToggleCommandHandlers(
+                    "wildcard matching",
+                    async (
+                        context: ActionContext<CommandHandlerContext>,
+                        enable: boolean,
+                    ) => {
+                        await changeContextConfig(
+                            { cache: { matchWildcard: enable } },
+                            context,
+                        );
+                    },
+                    {
+                        schema: "system.construction",
+                        actionName: "setWildcardMatching",
+                    },
+                ),
+                entity: getToggleHandlerTable(
+                    "entity wildcard matching",
+                    async (
+                        context: ActionContext<CommandHandlerContext>,
+                        enable: boolean,
+                    ) => {
+                        await changeContextConfig(
+                            {
+                                cache: { matchEntityWildcard: enable },
+                            },
+                            context,
+                        );
+                    },
+                    {
+                        schema: "system.construction",
+                        actionName: "setEntityWildcardMatching",
+                    },
+                ),
             },
         },
-    };
+    },
+};
+
+export function getConstructionCommandHandlers(): CommandHandlerTable {
+    return constructionCommandHandlers;
 }

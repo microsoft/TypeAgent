@@ -40,6 +40,24 @@ import { HistoryAction } from "./schema/historyActionSchema.js";
 import { ConversationAction } from "./schema/conversationActionSchema.js";
 import { GrammarAction } from "./schema/grammarActionSchema.js";
 import { UserSettingsAction } from "./schema/settingsActionSchema.js";
+import { IndexAction } from "./schema/indexActionSchema.js";
+import { executeIndexAction } from "./action/indexActionHandler.js";
+import { SystemDiagnosticsAction } from "./schema/systemDiagnosticsActionSchema.js";
+import { executeSystemDiagnosticsAction } from "./action/systemDiagnosticsActionHandler.js";
+import { SessionAction } from "./schema/sessionActionSchema.js";
+import { executeSessionAction } from "./action/sessionActionHandler.js";
+import { MemoryAction } from "./schema/memoryActionSchema.js";
+import { executeMemoryAction } from "./action/memoryActionHandler.js";
+import { CopilotAction } from "./schema/copilotActionSchema.js";
+import { executeCopilotAction } from "./action/copilotActionHandler.js";
+import { FeedbackAction } from "./schema/feedbackActionSchema.js";
+import { executeFeedbackAction } from "./action/feedbackActionHandler.js";
+import { SystemOperationsAction } from "./schema/systemOperationsActionSchema.js";
+import { executeSystemOperationsAction } from "./action/systemOperationsActionHandler.js";
+import { ConstructionAction } from "./schema/constructionActionSchema.js";
+import { executeConstructionAction } from "./action/constructionActionHandler.js";
+import { CollisionAction } from "./schema/collisionActionSchema.js";
+import { executeCollisionAction } from "./action/collisionActionHandler.js";
 
 // handlers
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
@@ -50,7 +68,7 @@ import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js"
 import { getConversationCommandHandlers } from "./handlers/conversationCommandHandlers.js";
 import { getCopilotCommandHandlers } from "./handlers/copilotCommandHandlers.js";
 import { getDemoCommandHandlers } from "./handlers/demoCommandHandlers.js";
-import { getCollisionCommandHandlers } from "./handlers/collisionCommandHandlers.js";
+import { collisionCommandHandlers } from "./handlers/collisionCommandHandlers.js";
 import { getGrammarCommandHandlers } from "./handlers/grammarCommandHandlers.js";
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
@@ -71,6 +89,10 @@ import { PortsCommandHandler } from "./handlers/portsCommandHandler.js";
 
 class ClearConsoleCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Clear the console";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "clearConsole",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.clear(getRequestId(systemContext));
@@ -80,6 +102,10 @@ class ClearConsoleCommandHandler implements CommandHandlerNoParams {
 class ClearDeepCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Clear the console and wipe chat history, reasoning, activity, and persistent display log so nothing replays on rejoin";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "deepClearConsole",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         systemContext.chatHistory.clear();
@@ -102,7 +128,7 @@ export const systemHandlers: CommandHandlerTable = {
         session: getSessionCommandHandlers(),
         conversation: getConversationCommandHandlers(),
         copilot: getCopilotCommandHandlers(),
-        collision: getCollisionCommandHandlers(),
+        collision: collisionCommandHandlers,
         grammar: getGrammarCommandHandlers(),
         history: getHistoryCommandHandlers(),
         memory: getMemoryCommandHandlers(),
@@ -123,6 +149,10 @@ export const systemHandlers: CommandHandlerTable = {
         run: new RunCommandScriptHandler(),
         exit: {
             description: "Exit the program",
+            action: {
+                schema: "system.operations",
+                actionName: "exitTypeAgent",
+            },
             async run(context: ActionContext<CommandHandlerContext>) {
                 const systemContext = context.sessionContext.agentContext;
                 systemContext.clientIO.exit(getRequestId(systemContext));
@@ -130,6 +160,10 @@ export const systemHandlers: CommandHandlerTable = {
         },
         shutdown: {
             description: "Shut down the agent server and exit",
+            action: {
+                schema: "system.operations",
+                actionName: "shutdownAgentServer",
+            },
             async run(context: ActionContext<CommandHandlerContext>) {
                 const systemContext = context.sessionContext.agentContext;
                 systemContext.clientIO.shutdown(getRequestId(systemContext));
@@ -141,6 +175,10 @@ export const systemHandlers: CommandHandlerTable = {
                 restart: {
                     description:
                         "Restart the agent server so it loads rebuilt code",
+                    action: {
+                        schema: "system.operations",
+                        actionName: "restartAgentServer",
+                    },
                     async run(context: ActionContext<CommandHandlerContext>) {
                         const systemContext =
                             context.sessionContext.agentContext;
@@ -179,24 +217,85 @@ function executeSystemAction(
         | TypeAgentAction<HistoryAction, "system.history">
         | TypeAgentAction<GrammarAction, "system.grammar">
         | TypeAgentAction<UserSettingsAction, "system.settings">
-        | TypeAgentAction<DescribeAction, "system.describe">,
+        | TypeAgentAction<DescribeAction, "system.describe">
+        | TypeAgentAction<IndexAction, "system.index">
+        | TypeAgentAction<SystemDiagnosticsAction, "system.diagnostics">
+        | TypeAgentAction<SessionAction, "system.session">
+        | TypeAgentAction<MemoryAction, "system.memory">
+        | TypeAgentAction<CopilotAction, "system.copilot">
+        | TypeAgentAction<FeedbackAction, "system.feedback">
+        | TypeAgentAction<SystemOperationsAction, "system.operations">
+        | TypeAgentAction<ConstructionAction, "system.construction">
+        | TypeAgentAction<CollisionAction, "system.collision">,
     context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.schemaName) {
         case "system.conversation":
             return executeConversationAction(action, context);
         case "system.config":
-            return executeConfigAction(action, context);
+            return executeConfigAction(action, context, {
+                handlers: systemHandlers.commands.config as CommandHandlerTable,
+            });
         case "system.notify":
             return executeNotificationAction(action, context);
         case "system.history":
             return executeHistoryAction(action, context);
         case "system.grammar":
-            return executeGrammarAction(action, context);
+            return executeGrammarAction(action, context, systemHandlers);
         case "system.settings":
             return executeSettingsAction(action, context);
         case "system.describe":
             return executeDescribeAction(action, context);
+        case "system.index":
+            return executeIndexAction(action, context);
+        case "system.diagnostics":
+            return executeSystemDiagnosticsAction(
+                action,
+                context,
+                systemHandlers,
+            );
+        case "system.session":
+            return executeSessionAction(
+                action,
+                context,
+                systemHandlers.commands.session as CommandHandlerTable,
+            );
+        case "system.memory":
+            return executeMemoryAction(
+                action,
+                context,
+                systemHandlers.commands.memory as CommandHandlerTable,
+            );
+        case "system.copilot":
+            return executeCopilotAction(
+                action,
+                context,
+                systemHandlers.commands.copilot as CommandHandlerTable,
+            );
+        case "system.feedback":
+            return executeFeedbackAction(
+                action,
+                context,
+                systemHandlers.commands.feedback as CommandHandlerTable,
+            );
+        case "system.operations":
+            return executeSystemOperationsAction(
+                action,
+                context,
+                systemHandlers,
+            );
+        case "system.construction":
+            return executeConstructionAction(
+                action,
+                context,
+                systemHandlers.commands.const as CommandHandlerTable,
+            );
+        case "system.collision":
+            return executeCollisionAction(
+                action,
+                context,
+                collisionCommandHandlers,
+            );
         default:
             throw new Error(
                 `Invalid system sub-translator: ${(action as TypeAgentAction).schemaName}`,
@@ -209,6 +308,85 @@ export const systemManifest: AppAgentManifest = {
     description:
         "Built-in agent to manage system configuration and conversations",
     subActionManifests: {
+        collision: {
+            schema: {
+                description:
+                    "Inspect collision telemetry and run collision corpus, keyword, neighborhood, optimization, and preference workflows.",
+                schemaFile:
+                    "./src/context/system/schema/collisionActionSchema.ts",
+                schemaType: "CollisionAction",
+            },
+        },
+        construction: {
+            schema: {
+                description:
+                    "Create, load, save, inspect, import, prune, and configure TypeAgent construction stores.",
+                schemaFile:
+                    "./src/context/system/schema/constructionActionSchema.ts",
+                schemaType: "ConstructionAction",
+            },
+        },
+        operations: {
+            schema: {
+                description:
+                    "Run low-level TypeAgent operations including help, display, scripts, tracing, debugging, and process lifecycle commands.",
+                schemaFile:
+                    "./src/context/system/schema/systemOperationsActionSchema.ts",
+                schemaType: "SystemOperationsAction",
+            },
+        },
+        feedback: {
+            schema: {
+                description:
+                    "List, summarize, filter, export, and count user feedback.",
+                schemaFile:
+                    "./src/context/system/schema/feedbackActionSchema.ts",
+                schemaType: "FeedbackAction",
+            },
+        },
+        copilot: {
+            schema: {
+                description:
+                    "Import Copilot sessions, hand off a problem to Copilot Chat, or sign in to GitHub Copilot.",
+                schemaFile:
+                    "./src/context/system/schema/copilotActionSchema.ts",
+                schemaType: "CopilotAction",
+            },
+        },
+        memory: {
+            schema: {
+                description:
+                    "Configure, query, search, and answer from TypeAgent conversation memory.",
+                schemaFile: "./src/context/system/schema/memoryActionSchema.ts",
+                schemaType: "MemoryAction",
+            },
+        },
+        session: {
+            schema: {
+                description:
+                    "Create, open, reset, clear, list, delete, and inspect TypeAgent sessions.",
+                schemaFile:
+                    "./src/context/system/schema/sessionActionSchema.ts",
+                schemaType: "SessionAction",
+            },
+        },
+        diagnostics: {
+            schema: {
+                description:
+                    "Inspect environment and token diagnostics, or generate random test requests.",
+                schemaFile:
+                    "./src/context/system/schema/systemDiagnosticsActionSchema.ts",
+                schemaType: "SystemDiagnosticsAction",
+            },
+        },
+        index: {
+            schema: {
+                description:
+                    "Create, list, inspect, and delete TypeAgent indexes.",
+                schemaFile: "./src/context/system/schema/indexActionSchema.ts",
+                schemaType: "IndexAction",
+            },
+        },
         config: {
             schema: {
                 description:

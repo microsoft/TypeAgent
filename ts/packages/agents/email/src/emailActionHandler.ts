@@ -3,6 +3,7 @@
 
 import {
     IEmailProvider,
+    EmailUser,
     EmailMessage,
     EmailProviderType,
     EmailSearchQuery,
@@ -131,16 +132,7 @@ class EmailLoginCommandHandler implements CommandHandlerNoParams {
             const name = user.displayName || "Unknown";
             const email = user.email || "Unknown";
             displayWarn(`Already logged in as ${name}<${email}>`, context);
-            // Re-emit the signed-in marker so the avatar (name + photo)
-            // resyncs even when the user was already authenticated — e.g.
-            // restored silently on launch before the photo had been fetched.
-            const photoAttr = user.photoUrl
-                ? ` data-photo="${escapeHtml(user.photoUrl)}"`
-                : "";
-            context.actionIO.appendDisplay({
-                type: "html",
-                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
-            });
+            await applyEmailLoginState(context, user, false);
             return;
         }
 
@@ -168,28 +160,7 @@ class EmailLoginCommandHandler implements CommandHandlerNoParams {
                 `Successfully logged in as ${name} <${email}>`,
                 context,
             );
-            // Hidden marker the chat-ui / shell scan for after each agent
-            // message. Lifts the signed-in identity into UI state so the
-            // user-letter avatar shows the real initial and stops triggering
-            // login on click. data-photo carries the base64 profile photo
-            // (when the provider has one) so the avatar can render the image.
-            const photoAttr = user.photoUrl
-                ? ` data-photo="${escapeHtml(user.photoUrl)}"`
-                : "";
-            context.actionIO.appendDisplay({
-                type: "html",
-                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
-            });
-
-            // Kick off async index build/sync after successful login
-            const agentCtx = context.sessionContext.agentContext;
-            if (!agentCtx.kpIndex.loaded) {
-                // First time: build initial index in background
-                startBackgroundInitialIndex(agentCtx);
-            } else {
-                // Index exists: forward sync in background
-                startBackgroundSync(agentCtx);
-            }
+            await applyEmailLoginState(context, user, true);
         } else {
             displayWarn(
                 "Login failed. If using Google, you can also try '@email google-auth <code>' with a manual authorization code.",
@@ -278,13 +249,7 @@ class GoogleAuthCommandHandler implements CommandHandler {
                 context,
             );
 
-            // Kick off async index build/sync after successful auth
-            const agentCtx = context.sessionContext.agentContext;
-            if (!agentCtx.kpIndex.loaded) {
-                startBackgroundInitialIndex(agentCtx);
-            } else {
-                startBackgroundSync(agentCtx);
-            }
+            await applyEmailLoginState(context, user, true);
         } else {
             displayWarn(
                 "Failed to complete authorization. Please try '@email login' again to get a new code.",
@@ -476,8 +441,9 @@ export async function runEmailLogin(
             );
         }
         const user = await provider.getUser();
+        await applyEmailLoginState(actionContext, user, true);
         return createActionResultFromTextDisplay(
-            `[${emailTs()}] Signed in as ${user.displayName || user.email || "Unknown"}. Re-run your email command — readiness was re-checked automatically.`,
+            `[${emailTs()}] Signed in as ${user.displayName || user.email || "Unknown"}. Re-run your email command - readiness was re-checked automatically.`,
         );
     } catch (e: any) {
         return createActionResultFromError(
@@ -865,6 +831,31 @@ function escapeHtml(text: string): string {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+async function applyEmailLoginState(
+    context: ActionContext<EmailActionContext>,
+    user: EmailUser,
+    startIndex: boolean,
+): Promise<void> {
+    const name = user.displayName || "Unknown";
+    const email = user.email || "Unknown";
+    const photoAttr = user.photoUrl
+        ? ` data-photo="${escapeHtml(user.photoUrl)}"`
+        : "";
+    context.actionIO.appendDisplay({
+        type: "html",
+        content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
+    });
+    if (startIndex) {
+        const agentContext = context.sessionContext.agentContext;
+        if (!agentContext.kpIndex.loaded) {
+            startBackgroundInitialIndex(agentContext);
+        } else {
+            startBackgroundSync(agentContext);
+        }
+    }
+    await context.sessionContext.notifyReadinessChanged();
 }
 
 // Attempt a silent, non-interactive sign-in using cached MS Graph

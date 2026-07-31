@@ -12,6 +12,20 @@ export async function executeSettingsAction(
 ) {
     const settingsAction = action as unknown as UserSettingsAction;
     switch (settingsAction.actionName) {
+        case "showSettings":
+            await processCommandNoLock(
+                "@settings show",
+                context.sessionContext.agentContext,
+            );
+            break;
+
+        case "resetSettings":
+            await processCommandNoLock(
+                "@settings reset",
+                context.sessionContext.agentContext,
+            );
+            break;
+
         case "setServerHidden":
             await processCommandNoLock(
                 `@settings server hidden ${settingsAction.parameters.enable}`,

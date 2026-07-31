@@ -22,6 +22,10 @@ import {
 
 export class HelpCommandHandler implements CommandHandler {
     public readonly description = "Show help";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "showCommandHelp",
+    };
     public readonly defaultSubCommand = "command";
     public readonly parameters = {
         args: {

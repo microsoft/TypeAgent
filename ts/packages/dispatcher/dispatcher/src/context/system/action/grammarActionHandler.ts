@@ -7,6 +7,10 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
+    CommandHandlerTable,
+    executeCommandFromHandlers,
+} from "@typeagent/agent-sdk/helpers/command";
+import {
     createActionResultFromTextDisplay,
     createActionResultFromHtmlDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
@@ -17,7 +21,27 @@ import { GrammarAction } from "../schema/grammarActionSchema.js";
 export async function executeGrammarAction(
     action: TypeAgentAction<GrammarAction>,
     context: ActionContext<CommandHandlerContext>,
+    systemHandlers?: CommandHandlerTable,
 ): Promise<ActionResult | undefined> {
+    if (action.actionName === "scanGrammarCollisions") {
+        if (systemHandlers === undefined) {
+            throw new Error("System command handlers are unavailable.");
+        }
+        return executeCommandFromHandlers(
+            systemHandlers,
+            ["grammar", "collisions"],
+            {
+                args: {},
+                flags: {
+                    ...(action.parameters?.jsonPath === undefined
+                        ? {}
+                        : { json: action.parameters.jsonPath }),
+                },
+            },
+            context,
+        );
+    }
+
     const chc = context.sessionContext.agentContext;
     const store = chc.persistedGrammarStore;
 

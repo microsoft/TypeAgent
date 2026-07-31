@@ -12,6 +12,10 @@ import { TokenCounter, openai } from "@typeagent/aiclient";
 
 class TokenSummaryCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Get overall LLM usage statistics.";
+    public readonly action = {
+        schema: "system.diagnostics",
+        actionName: "showTokenSummary",
+    };
 
     public async run(context: ActionContext<CommandHandlerContext>) {
         const total: openai.CompletionUsageStats =
@@ -35,6 +39,10 @@ class TokenSummaryCommandHandler implements CommandHandlerNoParams {
 
 class TokenDetailsCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Gets detailed LLM usage statistics.";
+    public readonly action = {
+        schema: "system.diagnostics",
+        actionName: "showTokenDetails",
+    };
 
     public async run(context: ActionContext<CommandHandlerContext>) {
         const retValue: string[] = [];
@@ -48,13 +56,15 @@ class TokenDetailsCommandHandler implements CommandHandlerNoParams {
     }
 }
 
+export const tokenCommandHandlers: CommandHandlerTable = {
+    description: "Get LLM token usage statistics for this session.",
+    defaultSubCommand: "summary",
+    commands: {
+        summary: new TokenSummaryCommandHandler(),
+        details: new TokenDetailsCommandHandler(),
+    },
+};
+
 export function getTokenCommandHandlers(): CommandHandlerTable {
-    return {
-        description: "Get LLM token usage statistics for this session.",
-        defaultSubCommand: "summary",
-        commands: {
-            summary: new TokenSummaryCommandHandler(),
-            details: new TokenDetailsCommandHandler(),
-        },
-    };
+    return tokenCommandHandlers;
 }

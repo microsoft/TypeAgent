@@ -169,6 +169,10 @@ class GrammarClearCommandHandler implements CommandHandler {
 class GrammarCollisionsCommandHandler implements CommandHandler {
     public readonly description =
         "Scan all loaded agent grammars for cross-agent collisions, with concrete witness inputs";
+    public readonly action = {
+        schema: "system.grammar",
+        actionName: "scanGrammarCollisions",
+    };
     public readonly parameters = {
         flags: {
             json: {
