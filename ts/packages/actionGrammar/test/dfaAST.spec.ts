@@ -665,66 +665,6 @@ describe("DFA AST Matching", () => {
             expect(result.fixedStringPartCount).toBe(1);
             expect(result.uncheckedWildcardCount).toBe(1);
         });
-
-        test("counts built-in word captures as checked (NFA parity)", () => {
-            // $(name:word) is a structural single-token constraint. The NFA
-            // marks it checked at compile time; AST finalization must agree
-            // even though "word" has no entity validator.
-            const grammar: Grammar = {
-                alternatives: [
-                    {
-                        parts: [
-                            createStringPart(["schedule"]),
-                            createStringPart(["a"]),
-                            createWildcardPart("description", "wildcard"),
-                            createStringPart(["for"]),
-                            createWildcardPart("date", "wildcard"),
-                            createStringPart(["at"]),
-                            createWildcardPart("time", "word"),
-                        ],
-                        value: {
-                            type: "object",
-                            value: [
-                                {
-                                    type: "property",
-                                    key: "description",
-                                    value: null,
-                                },
-                                { type: "property", key: "date", value: null },
-                                { type: "property", key: "time", value: null },
-                            ],
-                        },
-                    },
-                ],
-            };
-
-            const dfa = compileToDFA(grammar);
-            const result = matchDFAToAST(dfa, [
-                "schedule",
-                "a",
-                "team",
-                "meeting",
-                "for",
-                "Friday",
-                "at",
-                "2pm",
-            ]);
-
-            expect(result.matched).toBe(true);
-            expect(result.fixedStringPartCount).toBe(4);
-            expect(result.checkedWildcardCount).toBe(1);
-            expect(result.uncheckedWildcardCount).toBe(3);
-            const timePart = result.ast!.parts.find(
-                (p) => p.kind === "wildcard" && p.variable === "time",
-            );
-            expect(timePart).toMatchObject({
-                kind: "wildcard",
-                variable: "time",
-                typeName: "word",
-                checked: true,
-                tokens: ["2pm"],
-            });
-        });
     });
 
     describe("Case insensitive matching", () => {

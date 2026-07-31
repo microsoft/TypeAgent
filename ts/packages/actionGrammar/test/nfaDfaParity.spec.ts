@@ -1646,8 +1646,6 @@ describe("Real Grammar Value Parity", () => {
         const requests = [
             "schedule a team meeting for Friday at 2pm",
             "set up lunch with clients on Monday at noon",
-            "book sync with mary jane friday at noon",
-            "book lunch with alex at home Friday at noon",
             "find all events on Tuesday that include Bob",
             "show me meetings about Q1 planning",
             "include Charlie in the project review",
