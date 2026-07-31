@@ -6,8 +6,6 @@
 // Types: wildcard = 1+ words, word = exactly 1 word
 
 // scheduleEvent
-// Prefer specific multi-field patterns first; shorter day-to-day forms follow
-// (e.g. "schedule a design review for next tuesday at 3pm" without location).
 <ScheduleEvent> = schedule a $(description:wildcard) for $(date:wildcard) at $(time:word) in $(location:wildcard) with $(participant:wildcard) -> {
     actionName: "scheduleEvent",
     parameters: {
@@ -16,32 +14,6 @@
         time,
         location,
         participant
-    }
-}
-  | schedule a $(description:wildcard) for $(date:wildcard) at $(time:word) with $(participant:wildcard) -> {
-    actionName: "scheduleEvent",
-    parameters: {
-        description,
-        date,
-        time,
-        participant
-    }
-}
-  | schedule a $(description:wildcard) for $(date:wildcard) at $(time:word) in $(location:wildcard) -> {
-    actionName: "scheduleEvent",
-    parameters: {
-        description,
-        date,
-        time,
-        location
-    }
-}
-  | schedule a $(description:wildcard) for $(date:wildcard) at $(time:word) -> {
-    actionName: "scheduleEvent",
-    parameters: {
-        description,
-        date,
-        time
     }
 }
   | (can you)? set up $(description:wildcard) on $(date:wildcard) at $(time:word) -> {
@@ -62,10 +34,9 @@
         participant
     }
 }
-  // Explicit "for"/"on" separators for multi-word dates ("next tuesday") and
-  // when the speaker includes the preposition before a day name.
-  // participant is wildcard so "mary jane" works.
-  | book $(description:wildcard) with $(participant:wildcard) for $(date:wildcard) at $(time:word) -> {
+  // Multi-word participant + explicit for/on date
+  // e.g. "book sync with mary jane for friday at noon"
+  | book $(description:wildcard) with $(participant:wildcard) (for | on) $(date:wildcard) at $(time:word) -> {
     actionName: "scheduleEvent",
     parameters: {
         description,
@@ -74,19 +45,10 @@
         participant
     }
 }
-  | book $(description:wildcard) with $(participant:wildcard) on $(date:wildcard) at $(time:word) -> {
-    actionName: "scheduleEvent",
-    parameters: {
-        description,
-        date,
-        time,
-        participant
-    }
-}
-  // Bare RelativeDay after participant ("book sync with mary jane friday at noon").
-  // participant/description are wildcards; date is a closed RelativeDay literal set
-  // so the day token is not absorbed into participant. $(time:word) stays one token
-  // so this cannot steal the "at $(location) $(date) at $(time)" alternative.
+  // Multi-word participant + bare single-token day
+  // e.g. "book sync with mary jane friday at noon"
+  // RelativeDay is a closed literal set so the day is not absorbed into participant.
+  // Does not compete with the at-location alternative (that requires "at $(location)").
   | book $(description:wildcard) with $(participant:wildcard) $(date:<RelativeDay>) at $(time:word) -> {
     actionName: "scheduleEvent",
     parameters: {
@@ -97,7 +59,7 @@
     }
 };
 
-// Single-token relative days (no multi-word spans like "next tuesday").
+// Single-token relative days only (not "next tuesday" — use for/on above).
 <RelativeDay> = today | tomorrow | tonight
   | monday | tuesday | wednesday | thursday | friday | saturday | sunday
   | mon | tue | wed | thu | fri | sat | sun;
@@ -136,8 +98,7 @@
 };
 
 // findTodaysEvents
-// Bare "what's/what is on my calendar" (optional trailing date) is a common day-to-day ask.
-<FindTodaysEvents> = (what's | what is) on my calendar $(date:wildcard)? -> {
+<FindTodaysEvents> = what's on my calendar $(date:wildcard) -> {
     actionName: "findTodaysEvents"
 }
   | show me all my appointments and meetings for $(date:wildcard) -> {
