@@ -64,6 +64,29 @@ function getSize(filePath) {
     }
 }
 
+function measureDirectory(root) {
+    const pending = [root];
+    let bytes = 0;
+    let files = 0;
+
+    while (pending.length > 0) {
+        const directory = pending.pop();
+        for (const entry of fs.readdirSync(directory, {
+            withFileTypes: true,
+        })) {
+            const entryPath = path.join(directory, entry.name);
+            if (entry.isDirectory()) {
+                pending.push(entryPath);
+            } else if (entry.isFile()) {
+                bytes += getSize(entryPath);
+                files++;
+            }
+        }
+    }
+
+    return { bytes, files };
+}
+
 function removeDevelopmentFiles(root, dryRun) {
     const stack = [root];
     let removedBytes = 0;
@@ -79,23 +102,9 @@ function removeDevelopmentFiles(root, dryRun) {
                     isPackageDirectory(current) &&
                     removableDirectoryNames.has(entry.name.toLowerCase());
                 if (removeDirectory) {
-                    const files = [];
-                    const pending = [fullPath];
-                    while (pending.length > 0) {
-                        const directory = pending.pop();
-                        for (const child of fs.readdirSync(directory, {
-                            withFileTypes: true,
-                        })) {
-                            const childPath = path.join(directory, child.name);
-                            if (child.isDirectory()) pending.push(childPath);
-                            else if (child.isFile()) files.push(childPath);
-                        }
-                    }
-                    removedBytes += files.reduce(
-                        (total, file) => total + getSize(file),
-                        0,
-                    );
-                    removedFiles += files.length;
+                    const measured = measureDirectory(fullPath);
+                    removedBytes += measured.bytes;
+                    removedFiles += measured.files;
                     removedDirectories++;
                     if (!dryRun) {
                         fs.rmSync(fullPath, { recursive: true, force: true });
