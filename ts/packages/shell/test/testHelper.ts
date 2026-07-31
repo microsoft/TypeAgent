@@ -11,6 +11,7 @@ import {
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 // These need to be in sync with the UI
@@ -43,40 +44,140 @@ async function waitForPromiseWithTimeout<T>(
     });
 }
 
-async function closeInstance(instanceName: string, force: boolean = false) {
-    const existing = runningApplications.get(instanceName);
-    if (existing) {
-        if (force) {
-            console.log(`Force closing instance ${instanceName}`);
+function waitForProcessExit(
+    proc: ReturnType<ElectronApplication["process"]>,
+): Promise<void> {
+    return new Promise<void>((resolve) => {
+        if (proc.exitCode !== null || proc.signalCode !== null) {
+            resolve();
+            return;
         }
-        try {
-            await waitForPromiseWithTimeout(existing.close(), 10000);
-        } catch (e: any) {
-            // A graceful close() can legitimately exceed the timeout when the
-            // app's own shutdown is slow (e.g. a large session reinitialize
-            // still draining through the dispatcher's shutdown queue). The
-            // instance is being torn down regardless, so a slow or hung close is
-            // not by itself a test failure: force-kill the process, warn, and
-            // continue instead of throwing and failing an otherwise-passing
-            // test.
-            const pid = existing.process().pid;
-            console.warn(
-                `WARN: instance ${instanceName} did not close within timeout (${e.message}); force-killing PID ${pid}.`,
-            );
-            try {
-                existing.process().kill();
-            } catch (killError: any) {
-                console.error(
-                    `Failed to kill instance ${instanceName} PID ${pid}: ${killError?.message ?? killError}`,
-                );
+        proc.once("exit", () => resolve());
+    });
+}
+
+function runCommand(command: string, args: string[]): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+        execFile(command, args, { windowsHide: true }, (error, stdout) => {
+            if (error) {
+                reject(error);
+            } else {
+                resolve(stdout);
             }
-        } finally {
-            runningApplications.delete(instanceName);
+        });
+    });
+}
+
+async function killProcessTree(
+    proc: ReturnType<ElectronApplication["process"]>,
+): Promise<void> {
+    const pid = proc.pid;
+    if (pid === undefined) {
+        proc.kill("SIGKILL");
+        return;
+    }
+    if (process.platform === "win32") {
+        await runCommand("taskkill", ["/PID", pid.toString(), "/T", "/F"]);
+        return;
+    }
+
+    const processList = await runCommand("ps", ["-A", "-o", "pid=,ppid="]);
+    const children = new Map<number, number[]>();
+    for (const line of processList.split("\n")) {
+        const [childText, parentText] = line.trim().split(/\s+/);
+        const childPid = Number(childText);
+        const parentPid = Number(parentText);
+        if (!Number.isInteger(childPid) || !Number.isInteger(parentPid)) {
+            continue;
         }
-        if (force) {
-            console.log(`Force closed instance ${instanceName}`);
+        const siblings = children.get(parentPid) ?? [];
+        siblings.push(childPid);
+        children.set(parentPid, siblings);
+    }
+
+    const descendants: number[] = [];
+    const collectDescendants = (parentPid: number) => {
+        for (const childPid of children.get(parentPid) ?? []) {
+            collectDescendants(childPid);
+            descendants.push(childPid);
+        }
+    };
+    collectDescendants(pid);
+    for (const processId of [...descendants, pid]) {
+        try {
+            process.kill(processId, "SIGKILL");
+        } catch (error: any) {
+            if (error?.code !== "ESRCH") {
+                throw error;
+            }
         }
     }
+}
+
+async function forceCloseInstance(instanceName: string): Promise<void> {
+    const existing = runningApplications.get(instanceName);
+    if (existing === undefined) {
+        return;
+    }
+
+    const proc = existing.process();
+    console.log(`Force closing instance ${instanceName}`);
+    try {
+        await killProcessTree(proc);
+        await waitForPromiseWithTimeout(waitForProcessExit(proc), 10000);
+    } catch (error: any) {
+        if (proc.exitCode === null && proc.signalCode === null) {
+            console.error(
+                `Failed to close instance ${instanceName} PID ${proc.pid}: ${error?.message ?? error}`,
+            );
+        }
+    } finally {
+        runningApplications.delete(instanceName);
+    }
+    console.log(`Force closed instance ${instanceName}`);
+}
+
+async function exitInstance(
+    instanceName: string,
+    page: Page,
+    budgetMs: number,
+    requireGracefulShutdown: boolean,
+): Promise<number> {
+    const existing = runningApplications.get(instanceName);
+    if (existing === undefined) {
+        throw new Error(`No running instance '${instanceName}' to shut down.`);
+    }
+
+    const proc = existing.process();
+    const exited = waitForProcessExit(proc);
+    const start = Date.now();
+    let gracefulError: unknown;
+    try {
+        await sendUserRequestFast("@exit", page);
+        await waitForPromiseWithTimeout(exited, budgetMs);
+        return Date.now() - start;
+    } catch (error) {
+        gracefulError = error;
+        console.warn(
+            `WARN: instance ${instanceName} did not shut down within ${budgetMs}ms; force-closing its process tree.`,
+        );
+        await killProcessTree(proc);
+        await waitForPromiseWithTimeout(exited, 10000);
+    } finally {
+        runningApplications.delete(instanceName);
+    }
+
+    if (requireGracefulShutdown) {
+        const message =
+            gracefulError instanceof Error
+                ? gracefulError.message
+                : String(gracefulError);
+        throw new Error(
+            `Shell did not shut down within ${budgetMs}ms after @exit (${message}). ` +
+                `A graceful shutdown must not require a force-kill.`,
+        );
+    }
+    return Date.now() - start;
 }
 
 /**
@@ -150,7 +251,7 @@ export async function startShell(
             );
             retryAttempt++;
 
-            await closeInstance(instanceName, true);
+            await forceCloseInstance(instanceName);
         }
     } while (retryAttempt <= maxRetries);
 
@@ -189,8 +290,7 @@ async function getChatViewWindow(app: ElectronApplication): Promise<Page> {
  * @param page The main window of the application
  */
 async function exitApplication(page: Page): Promise<void> {
-    await sendUserRequestFast("@exit", page);
-    await closeInstance(process.env["INSTANCE_NAME"]!);
+    await exitInstance(process.env["INSTANCE_NAME"]!, page, 30000, false);
 }
 
 /**
@@ -210,41 +310,7 @@ export async function exitAndAwaitCleanShutdown(
     budgetMs: number = 30000,
 ): Promise<number> {
     const instanceName = process.env["INSTANCE_NAME"]!;
-    const existing = runningApplications.get(instanceName);
-    if (existing === undefined) {
-        throw new Error(`No running instance '${instanceName}' to shut down.`);
-    }
-    const proc = existing.process();
-    const start = Date.now();
-    // Register the exit listener before sending @exit so a fast exit is not missed.
-    const exited = new Promise<void>((resolve) => {
-        if (proc.exitCode !== null || proc.signalCode !== null) {
-            resolve();
-            return;
-        }
-        proc.once("exit", () => resolve());
-    });
-    try {
-        // User-facing graceful shutdown: @exit -> app.quit() -> full cleanup.
-        await sendUserRequestFast("@exit", page);
-        await waitForPromiseWithTimeout(exited, budgetMs);
-        return Date.now() - start;
-    } catch (e: any) {
-        // Did not exit within budget: the shutdown-hang regression we want to
-        // catch. Force-kill so the leftover process does not hold the
-        // instance-directory lock for later tests, then surface the failure.
-        try {
-            proc.kill();
-        } catch {
-            // best effort
-        }
-        throw new Error(
-            `Shell did not shut down within ${budgetMs}ms after @exit (${e.message}). ` +
-                `A graceful shutdown must not require a force-kill.`,
-        );
-    } finally {
-        runningApplications.delete(instanceName);
-    }
+    return exitInstance(instanceName, page, budgetMs, true);
 }
 
 /**

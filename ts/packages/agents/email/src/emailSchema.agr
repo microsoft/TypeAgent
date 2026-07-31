@@ -40,10 +40,10 @@ import { EmailAction } from "./emailActionsSchema.ts";
 
 // ===== Shared Sub-Rules =====
 
-<SendEmailPhrase> = <Polite>? (('send' ('an' | 'a')? 'email') | 'email') ('to' | 'for')?;
-<ReplyPhrase> = <Polite>? ('reply' | 'respond') ('to' | 'for')?;
-<ForwardPhrase> = <Polite>? ('forward' | 'fwd') ('the' | 'this')? ('email' | 'message')?;
-<FindPhrase> = <Polite>? (('find' | 'look' 'up' | 'locate' | 'pull' 'up') ('the' | 'that')? ('email' | 'message'));
+<SendEmailPhrase> = (<Polite>)? (('send' ('an' | 'a')? 'email') | 'email') ('to' | 'for')?;
+<ReplyPhrase> = (<Polite>)? ('reply' | 'respond') ('to' | 'for')?;
+<ForwardPhrase> = (<Polite>)? ('forward' | 'fwd') ('the' | 'this')? ('email' | 'message')?;
+<FindPhrase> = (<Polite>)? (('find' | 'look' 'up' | 'locate' | 'pull' 'up') ('the' | 'that')? ('email' | 'message'));
 
 <WithSubject> = ('with' ('the' | 'a')? 'subject' | 'subject' ('should' 'be' | 'is' | ':')?);
 <WithBody> = ('and' | 'with')? ('let' ('me' | 'them') 'know' | 'saying' | 'that' | 'about' | 'body' | 'message')?;

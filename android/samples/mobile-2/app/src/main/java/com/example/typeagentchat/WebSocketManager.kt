@@ -27,6 +27,7 @@ class WebSocketManager {
     private var conversationId: String? = null
     private var connectionId: String? = null
     private var pendingUserInteraction: PendingUserInteraction? = null
+    private var clientActionHandler: ClientActionHandler? = null
 
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages
@@ -40,6 +41,12 @@ class WebSocketManager {
         )
     )
     val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus
+
+    internal fun setClientActionHandler(handler: ClientActionHandler?) {
+        synchronized(lock) {
+            clientActionHandler = handler
+        }
+    }
 
     fun connect(
         url: String,
@@ -350,6 +357,9 @@ class WebSocketManager {
             TAG,
             "RPC call channel=$channelName method=$methodName argCount=${args.length()}"
         )
+        if (methodName == "takeAction") {
+            Log.d(TAG, "RPC call raw takeAction args=$args")
+        }
         when {
             channelName.startsWith(CLIENT_IO_CHANNEL_PREFIX) -> handleClientIoCall(methodName, args)
             else -> Log.d(TAG, "Unhandled RPC call channel=$channelName method=$methodName")
@@ -364,13 +374,9 @@ class WebSocketManager {
             TAG,
             "RPC invoke channel=$channelName method=$methodName callId=$callId argCount=${args.length()}"
         )
-        // Note: agentServer's sharedDispatcher never forwards a raw "question" invoke to
-        // connected clients; it converts ClientIO.question() into a requestInteraction
-        // broadcast (type "question") instead, handled in handleRequestInteractionCall.
-        // If a "question" invoke ever does arrive here, respond with an error below
-        // rather than silently guessing an answer.
         val result = when (methodName) {
             "getUserContext" -> JSONObject.NULL
+            "question" -> handleQuestionInvoke(args)
             else -> null
         }
 
@@ -495,6 +501,10 @@ class WebSocketManager {
                 }
             }
 
+            "takeAction" -> {
+                handleTakeActionCall(args)
+            }
+
             else -> {
                 val requestId = extractRequestId(args.opt(0))
                 logInboundEvent(
@@ -504,6 +514,47 @@ class WebSocketManager {
                 )
             }
         }
+    }
+
+    private fun handleTakeActionCall(args: JSONArray) {
+        val requestId = extractRequestId(args.opt(0))
+        val actionName = args.optString(1).orEmpty()
+        val actionData = args.optNullable(2)
+        logInboundEvent(
+            type = "take-action:$actionName",
+            requestId = requestId,
+            content = stringifyDisplayValue(actionData)
+        )
+        Log.d(
+            TAG,
+            "takeAction received action=$actionName requestId=${requestId.orEmpty()} data=${stringifyDisplayValue(actionData)}"
+        )
+        if (actionName != "set-alarm") {
+            Log.d(TAG, "takeAction ignored: unsupported action=$actionName")
+            return
+        }
+
+        val alarm = parseSetAlarmActionPayload(actionData)
+        if (alarm == null) {
+            Log.e(
+                TAG,
+                "Invalid set-alarm payload: ${stringifyDisplayValue(actionData)}"
+            )
+            return
+        }
+        val handler = synchronized(lock) { clientActionHandler }
+        if (handler == null) {
+            Log.e(
+                TAG,
+                "set-alarm parsed (hour=${alarm.hour} minute=${alarm.minute}) but no client action handler is registered"
+            )
+            return
+        }
+        Log.d(
+            TAG,
+            "Dispatching set-alarm to client handler hour=${alarm.hour} minute=${alarm.minute}"
+        )
+        handler.onSetAlarm(alarm)
     }
 
     private fun handleDisplayLogEvent(event: JSONObject) {
@@ -862,6 +913,29 @@ class WebSocketManager {
         }
     }
 
+    private fun handleQuestionInvoke(args: JSONArray): Int {
+        val requestId = extractRequestId(args.opt(0))
+        val choicesArray = args.optJSONArray(2) ?: JSONArray()
+        val choices = buildList {
+            for (index in 0 until choicesArray.length()) {
+                val choice = choicesArray.optString(index).orEmpty()
+                if (choice.isNotBlank()) {
+                    add(choice)
+                }
+            }
+        }
+        val defaultIndex = args.optInt(3, 0)
+        Log.d(
+            TAG,
+            "ClientIO.question requestId=${requestId.orEmpty()} defaultIndex=$defaultIndex"
+        )
+
+        if (choices.isEmpty()) {
+            return 0
+        }
+        return defaultIndex.coerceIn(0, choices.lastIndex)
+    }
+
     private fun tryHandlePendingInteractionResponse(message: String, currentConversationId: String): Boolean {
         val pending = synchronized(lock) { pendingUserInteraction } ?: return false
         val response = when (pending) {
@@ -1094,6 +1168,10 @@ class WebSocketManager {
         private const val NORMAL_CLOSURE_STATUS = 1000
         private const val AGENT_SERVER_CHANNEL = "agent-server"
         private const val CLIENT_IO_CHANNEL_PREFIX = "clientio:"
+    }
+
+    internal fun interface ClientActionHandler {
+        fun onSetAlarm(action: SetAlarmAction)
     }
 }
 

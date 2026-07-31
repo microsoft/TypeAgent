@@ -8,11 +8,11 @@ import { WeatherAction } from "./weatherSchema.ts";
 <Start> : WeatherAction = <getCurrentConditions> | <getForecast> | <getAlerts>;
 
 // Action Rules
-<getCurrentConditions> = <Polite>? <CurrentWeatherPatterns> $(location:<LocationSpec>) $(units:<UnitsSpec>)? -> { actionName: "getCurrentConditions", parameters: { location, units } };
+<getCurrentConditions> = (<Polite>)? <CurrentWeatherPatterns> $(location:<LocationSpec>) $(units:<UnitsSpec>)? -> { actionName: "getCurrentConditions", parameters: { location, units } };
 
-<getForecast> = <Polite>? <ForecastPatterns> $(location:<LocationSpec>) $(days:<DaysSpec>)? $(units:<UnitsSpec>)? -> { actionName: "getForecast", parameters: { location, days, units } };
+<getForecast> = (<Polite>)? <ForecastPatterns> $(location:<LocationSpec>) $(days:<DaysSpec>)? $(units:<UnitsSpec>)? -> { actionName: "getForecast", parameters: { location, days, units } };
 
-<getAlerts> = <Polite>? <AlertPatterns> $(location:<LocationSpec>) -> { actionName: "getAlerts", parameters: { location } };
+<getAlerts> = (<Polite>)? <AlertPatterns> $(location:<LocationSpec>) -> { actionName: "getAlerts", parameters: { location } };
 
 // Weather Pattern Rules
 <CurrentWeatherPatterns> =
