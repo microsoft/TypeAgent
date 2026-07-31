@@ -25,6 +25,15 @@ const traceViewerBundlePath = path.join(
     "traceViewer.js",
 );
 
+const wizardBundlePath = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "dist",
+    "webview",
+    "wizard.js",
+);
+
 // The webview client bundle is produced by `pnpm build` (esbuild browser
 // target). Skip gracefully if tests run before a build.
 const hasBundle = existsSync(bundlePath);
@@ -56,6 +65,14 @@ test(
     { skip: !existsSync(traceViewerBundlePath) },
     () => {
         assertBrowserSafe(readFileSync(traceViewerBundlePath, "utf8"));
+    },
+);
+
+test(
+    "wizard bundle excludes node/vscode/ws (browser-safe)",
+    { skip: !existsSync(wizardBundlePath) },
+    () => {
+        assertBrowserSafe(readFileSync(wizardBundlePath, "utf8"));
     },
 );
 

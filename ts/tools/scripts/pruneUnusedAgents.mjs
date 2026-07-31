@@ -28,14 +28,14 @@
  * pruned artifact (e.g. `node dist/server.js --config <profile>`) to confirm.
  *
  * Usage:
- *   node tools/scripts/pruneUnusedAgents.mjs --dir <deployDir> [--profile service] [--dry-run]
+ *   node tools/scripts/pruneUnusedAgents.mjs --dir <deployDir> [--profile inbox] [--dry-run]
  */
 
 import fs from "node:fs";
 import path from "node:path";
 
 function parseArgs(argv) {
-    const args = { profile: "service", dryRun: false };
+    const args = { profile: "inbox", dryRun: false };
     for (let i = 2; i < argv.length; i++) {
         const a = argv[i];
         if (a === "--dir") args.dir = argv[++i];

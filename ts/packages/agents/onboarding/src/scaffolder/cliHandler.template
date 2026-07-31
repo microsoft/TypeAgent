@@ -30,7 +30,11 @@ function buildArgs(action: TypeAgentAction<{{PASCAL_NAME}}Actions>): string[] {
     switch (action.actionName) {
 {{SWITCH_CASES}}
         default:
-            throw new Error(`Unknown action: ${action.actionName}`);
+            // `action` is narrowed to `never` here because the switch is
+            // exhaustive over the action union; cast back to read the name.
+            throw new Error(
+                `Unknown action: ${(action as TypeAgentAction<{{PASCAL_NAME}}Actions>).actionName}`,
+            );
     }
     return args;
 }

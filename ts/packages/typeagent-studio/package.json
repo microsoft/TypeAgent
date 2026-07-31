@@ -41,6 +41,12 @@
         "icon": "$(graph)"
       },
       {
+        "command": "typeagent-studio.newAgent",
+        "title": "New Agent…",
+        "category": "TypeAgent Studio",
+        "icon": "$(sparkle)"
+      },
+      {
         "command": "typeagent-studio.startOnboardingSession",
         "title": "Start onboarding session",
         "category": "TypeAgent Studio"
@@ -330,6 +336,11 @@
         }
       ],
       "view/title": [
+        {
+          "command": "typeagent-studio.newAgent",
+          "when": "view == typeagentStudioSandboxes",
+          "group": "navigation@0"
+        },
         {
           "command": "typeagent-studio.startSandbox",
           "when": "view == typeagentStudioSandboxes",

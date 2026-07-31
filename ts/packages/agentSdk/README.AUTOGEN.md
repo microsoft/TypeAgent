@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d66b00d28ad6b48d2ae6bac995f5cba92699a2a33854d4589450d6cbdd7c649c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=f645528e0d3784aa3d5044bbe04320b56a087c38f3735b671a6e1ee2f5653220 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-sdk — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The `@typeagent/agent-sdk` package is a TypeScript library that provides the core interfaces, types, and utilities required to build Dispatcher Agents within the TypeAgent ecosystem. Dispatcher Agents are responsible for handling user commands, executing actions, and managing their lifecycle and context. This package serves as a foundational dependency for many tools and agents in the ecosystem, ensuring consistency and extensibility in agent development.
+The `@typeagent/agent-sdk` package is a TypeScript library that provides the foundational interfaces, types, and utilities for building Dispatcher Agents in the TypeAgent ecosystem. Dispatcher Agents are responsible for handling user commands, executing actions, and managing their lifecycle and context. This package is a core dependency for many other TypeAgent tools and agents, ensuring a consistent and extensible framework for agent development.
 
 ## What it does
 
-The `@typeagent/agent-sdk` package supports the creation and management of Dispatcher Agents by offering the following capabilities:
+The `@typeagent/agent-sdk` package enables developers to create and manage Dispatcher Agents by providing the following key features:
 
 ### Manifest and Instantiation
 
-- **Manifest**: The `AppAgentManifest` defines metadata about the agent, such as its emoji, description, and translator configuration. This manifest is the first interaction point between the Dispatcher and the agent.
+- **Manifest**: The `AppAgentManifest` defines metadata about the agent, such as its emoji, description, and translator configuration. This manifest is the first point of interaction between the Dispatcher and the agent.
 - **Instantiation Entry Point**: The `AppAgent` interface is the primary contract that agents implement. The Dispatcher uses the `instantiate` function exported from the `./agent/handlers` module to create an instance of the agent.
 
 ### Lifecycle Management
@@ -160,16 +160,16 @@ External: `debug`, `type-fest`
 ### Used by
 
 - [@typeagent/action-browser](../../tools/actionBrowser/README.md)
+- [@typeagent/agent-cache](../../packages/cache/README.md)
 - [@typeagent/agent-rpc](../../packages/agentRpc/README.md)
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
+- [@typeagent/android-mobile-agent](../../packages/agents/androidMobile/README.md)
 - [@typeagent/azure-ai-foundry](../../packages/azure-ai-foundry/README.md)
 - [@typeagent/browser](../../packages/agents/browser/README.md)
 - [@typeagent/browser-extension](../../packages/agents/browserExtension/README.md)
-- [@typeagent/chat-ui](../../packages/chat-ui/README.md)
-- [@typeagent/code-agent](../../packages/agents/code/README.md)
-- [@typeagent/copilot-plugin](../../packages/copilot-plugin/README.md)
-- _…and 53 more workspace consumers._
+- [@typeagent/calendar](../../packages/agents/calendar/README.md)
+- _…and 54 more workspace consumers._
 
 ### Files of interest
 
@@ -187,6 +187,6 @@ External: `debug`, `type-fest`
 
 ---
 
-_Auto-generated against commit `fa4bb9b44db12e2d15b83e03e59f9c7147ed2b50` on `2026-07-27T19:08:36.121Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
+_Auto-generated against commit `5018562335eded84b16dedcbb8e86d59b538a978` on `2026-07-30T06:29:20.146Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -459,3 +459,19 @@ export function actionResultToString(actionResult: ActionResult): string {
         return fields.join("\n");
     }
 }
+
+// Default cap on characters of a tool/action response body echoed back to the
+// dispatcher. Conservative v1 default; not yet model-aware — a model-derived
+// budget belongs in the host where the selected model is known. Callers should
+// reference this instead of inlining a magic number.
+export const DEFAULT_MAX_RESPONSE_CHARS = 4000;
+
+// Truncate `text` to at most `maxChars`, appending a marker when clipped.
+export function truncateText(
+    text: string,
+    maxChars: number = DEFAULT_MAX_RESPONSE_CHARS,
+): string {
+    return text.length > maxChars
+        ? text.slice(0, maxChars) + "\n…(truncated)"
+        : text;
+}

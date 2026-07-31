@@ -63,7 +63,7 @@ parameters:
     displayName: "agent-server variant (external = lean, full = bundled CLIs)"
   - name: profile
     type: string
-    default: service
+    default: inbox
     displayName: "agent-server provider profile"
   - name: publishOptionalAgents
     type: boolean

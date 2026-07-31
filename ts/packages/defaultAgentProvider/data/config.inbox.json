@@ -1,0 +1,77 @@
+{
+  "description": "Inbox profile for the installed agent-server",
+  "agents": {
+    "chat": {
+      "name": "@typeagent/chat-agent",
+      "execMode": "dispatcher"
+    },
+    "list": {
+      "name": "@typeagent/list-agent"
+    },
+    "timer": {
+      "name": "@typeagent/timer-agent"
+    },
+    "player": {
+      "name": "@typeagent/music"
+    },
+    "powershell": {
+      "name": "@typeagent/powershell-typeagent"
+    },
+    "utility": {
+      "name": "@typeagent/utility-typeagent"
+    },
+    "taskflow": {
+      "name": "@typeagent/taskflow-typeagent",
+      "execMode": "dispatcher"
+    },
+    "browser": {
+      "name": "@typeagent/browser"
+    },
+    "code": {
+      "name": "@typeagent/code-agent"
+    },
+    "visualStudio": {
+      "name": "@typeagent/visualstudio-agent"
+    },
+    "github-cli": {
+      "name": "@typeagent/github-cli-agent"
+    },
+    "calendar": {
+      "name": "@typeagent/calendar"
+    },
+    "email": {
+      "name": "@typeagent/email"
+    },
+    "greeting": {
+      "name": "greeting-agent",
+      "execMode": "dispatcher"
+    }
+  },
+  "mcpServers": {
+    "mcpfilesystem": {
+      "emojiChar": "📁",
+      "description": "Local file system agent — reads, writes, edits, and organizes files and folders on the local disk within a set of allowed directories. Use this for requests to read a file's text or contents, read an image or media file, read several files at once, create or overwrite a file, make line-based edits to a file, create a folder or directory, list the contents of a directory (optionally with file sizes), show a recursive directory tree, move or rename a file or folder, search for files by name or pattern, get file metadata (size, timestamps, permissions), or list the directories it is allowed to access.",
+      "defaultEnabled": false,
+      "serverScript": "./node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+      "serverScriptArgs": {
+        "allowedDirectories": {
+          "description": "Allowed directories for the file system agent to access",
+          "type": "string",
+          "multiple": true
+        }
+      }
+    }
+  },
+  "explainers": {
+    "v5": {
+      "constructions": {
+        "data": ["./data/explainer/v5/data/player/basic.json"],
+        "file": "./data/explainer/v5/constructions.json"
+      }
+    }
+  },
+  "tests": [
+    "./test/data/explanations/**/**/*.json",
+    "./test/repo/explanations/**/**/*.json"
+  ]
+}

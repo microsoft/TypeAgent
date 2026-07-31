@@ -22,15 +22,16 @@ service, for the chat/MCP surface.)
 > the thin `studio` agent) and a hybrid driver use the _same_ runtime. See
 > [`DESIGN.md` §3.0 and §3.5](../../docs/plans/vscode-devx/DESIGN.md).
 
-> **Runtime placement (P-1.6 done).** The runtime lives in the standalone
-> `studio-service` (launched/attached by this extension via `ensureStudioService`,
-> or `typeagent-studio serve`); the `studio` agent hosts a registry + proxies to
-> it. This extension routes its shared live surfaces (sandboxes, event log,
-> collisions, corpus, health, feedback, replay) through the service channel. The
-> in-process `createStudioRuntime` survives **only** for onboarding commands (J1);
-> do **not** add new in-process runtime/capability logic here. New capability is a
-> **typed runtime method reachable over the Studio service channel** (and surfaced
-> as a thin `studio` agent action for chat/MCP), which this extension then renders.
+> **Runtime placement (P-1.6 done; onboarding channelized).** The runtime lives
+> in the standalone `studio-service` (launched/attached by this extension via
+> `ensureStudioService`, or `typeagent-studio serve`); the `studio` agent hosts a
+> registry + proxies to it. This extension routes **all** its live surfaces —
+> sandboxes, event log, collisions, corpus, health, feedback, replay, and now
+> onboarding (the New Agent wizard + command palette, F1.x) — through the service
+> channel. There is **no in-process runtime** anymore; do **not** add new
+> in-process runtime/capability logic here. New capability is a **typed runtime
+> method reachable over the Studio service channel** (and surfaced as a thin
+> `studio` agent action for chat/MCP), which this extension then renders.
 
 When adding a feature here:
 

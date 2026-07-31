@@ -68,6 +68,7 @@
     "@typeagent/photo-agent": "workspace:*",
     "@typeagent/powershell-typeagent": "workspace:*",
     "@typeagent/screencapture-agent": "workspace:*",
+    "@typeagent/selfhelp-agent": "workspace:*",
     "@typeagent/studio-agent": "workspace:*",
     "@typeagent/taskflow-typeagent": "workspace:*",
     "@typeagent/telemetry": "workspace:*",

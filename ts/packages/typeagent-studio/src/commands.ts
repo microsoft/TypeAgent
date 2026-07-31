@@ -4,7 +4,7 @@
 import * as fs from "node:fs/promises";
 import * as vscode from "vscode";
 import type { OnboardingPhaseName } from "@typeagent/core/onboardingBridge";
-import type { StudioRuntime } from "./studioRuntime.js";
+import type { OnboardingRuntime } from "./serviceRuntimeFacade.js";
 import {
     formatOnboardingDiagnosticsBundle,
     formatOnboardingHealthSnapshotMarkdown,
@@ -16,11 +16,21 @@ import {
     getAdvanceTargetPhase,
     normalizeMarkdownFileName,
 } from "./onboardingPresentation.js";
+import { openNewAgentWizard } from "./wizardView.js";
 
 export function registerStudioCommands(
     context: vscode.ExtensionContext,
-    runtime: StudioRuntime,
+    runtime: OnboardingRuntime,
 ): void {
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-studio.newAgent",
+            withErrors(async () => {
+                openNewAgentWizard(context, runtime);
+            }),
+        ),
+    );
+
     context.subscriptions.push(
         vscode.commands.registerCommand(
             "typeagent-studio.startOnboardingSession",
@@ -66,7 +76,7 @@ export function registerStudioCommands(
                 if (!prompt) {
                     return;
                 }
-                const route = runtime.routeConversation(prompt);
+                const route = await runtime.routeConversation(prompt);
                 void vscode.window.showInformationMessage(
                     `Routed to ${route.target} (${route.reason}).`,
                 );
@@ -88,7 +98,7 @@ export function registerStudioCommands(
                     })) ?? defaultSandboxId;
 
                 let installed: Awaited<
-                    ReturnType<StudioRuntime["installLastSessionToSandbox"]>
+                    ReturnType<OnboardingRuntime["installLastSessionToSandbox"]>
                 >;
                 const installPolicy = getInstallHealthGatePolicy();
                 try {
@@ -323,7 +333,7 @@ export function registerStudioCommands(
             withErrors(async () => {
                 const state = await runtime.getActiveOnboardingSession();
                 const target = getAdvanceTargetPhase(
-                    runtime.listPhases(),
+                    await runtime.listPhases(),
                     state.currentPhase,
                     state.phases,
                 );
@@ -696,9 +706,9 @@ function withErrors<TArgs extends unknown[]>(
 }
 
 async function selectPhase(
-    runtime: StudioRuntime,
+    runtime: OnboardingRuntime,
 ): Promise<OnboardingPhaseName | undefined> {
-    return vscode.window.showQuickPick(runtime.listPhases(), {
+    return vscode.window.showQuickPick(await runtime.listPhases(), {
         title: "Onboarding Phase",
         placeHolder: "Select a phase",
         ignoreFocusOut: true,
@@ -831,7 +841,7 @@ interface ExportArtifact {
     saveTitle: string;
     defaultFileName: () => string;
     getContent: (
-        runtime: StudioRuntime,
+        runtime: OnboardingRuntime,
         format: "plain" | "markdown",
     ) => Promise<string>;
 }
@@ -892,7 +902,7 @@ function getExportArtifacts(): ExportArtifact[] {
 }
 
 async function exportOnboardingArtifact(
-    runtime: StudioRuntime,
+    runtime: OnboardingRuntime,
     artifact: ExportArtifact,
     destination: ExportDestination,
 ): Promise<void> {
@@ -938,7 +948,9 @@ async function exportOnboardingArtifact(
     );
 }
 
-async function openOnboardingSummary(runtime: StudioRuntime): Promise<void> {
+async function openOnboardingSummary(
+    runtime: OnboardingRuntime,
+): Promise<void> {
     const summary = await getOnboardingSummary(runtime);
     const doc = await vscode.workspace.openTextDocument({
         language: "markdown",
@@ -949,19 +961,21 @@ async function openOnboardingSummary(runtime: StudioRuntime): Promise<void> {
     });
 }
 
-async function getOnboardingSummary(runtime: StudioRuntime): Promise<string> {
+async function getOnboardingSummary(
+    runtime: OnboardingRuntime,
+): Promise<string> {
     const state = await runtime.getActiveOnboardingSession();
     return formatOnboardingSummary(state);
 }
 
 async function getOnboardingHealthSnapshot(
-    runtime: StudioRuntime,
+    runtime: OnboardingRuntime,
 ): Promise<string> {
     const state = await runtime.getActiveOnboardingSession();
     let gate:
         | Awaited<
               ReturnType<
-                  StudioRuntime["evaluatePackagingHealthGateForActiveSession"]
+                  OnboardingRuntime["evaluatePackagingHealthGateForActiveSession"]
               >
           >
         | undefined;
@@ -975,13 +989,13 @@ async function getOnboardingHealthSnapshot(
 }
 
 async function getOnboardingHealthSnapshotMarkdown(
-    runtime: StudioRuntime,
+    runtime: OnboardingRuntime,
 ): Promise<string> {
     const state = await runtime.getActiveOnboardingSession();
     let gate:
         | Awaited<
               ReturnType<
-                  StudioRuntime["evaluatePackagingHealthGateForActiveSession"]
+                  OnboardingRuntime["evaluatePackagingHealthGateForActiveSession"]
               >
           >
         | undefined;
@@ -995,7 +1009,7 @@ async function getOnboardingHealthSnapshotMarkdown(
 }
 
 async function getOnboardingDiagnosticsBundle(
-    runtime: StudioRuntime,
+    runtime: OnboardingRuntime,
 ): Promise<string> {
     const summary = await getOnboardingSummary(runtime);
     const healthSnapshot = await getOnboardingHealthSnapshot(runtime);
@@ -1033,7 +1047,7 @@ function getOnboardingSettingsSnapshotMarkdown(): string {
 }
 
 async function showPackagingHealthGateStatus(
-    runtime: StudioRuntime,
+    runtime: OnboardingRuntime,
 ): Promise<void> {
     const gate = await runtime.evaluatePackagingHealthGateForActiveSession();
     const message = `Packaging health gate ${gate.status}: ${gate.summary}`;
@@ -1062,7 +1076,7 @@ async function showPackagingHealthGateStatus(
 }
 
 async function openPackagingHealthReport(
-    runtime: StudioRuntime,
+    runtime: OnboardingRuntime,
 ): Promise<void> {
     const content = await getPackagingHealthReport(runtime);
     const doc = await vscode.workspace.openTextDocument({
@@ -1075,14 +1089,18 @@ async function openPackagingHealthReport(
 }
 
 async function getPackagingHealthReport(
-    runtime: StudioRuntime,
+    runtime: OnboardingRuntime,
 ): Promise<string> {
     const gate = await runtime.evaluatePackagingHealthGateForActiveSession();
     return formatPackagingHealthReport(gate);
 }
 
 function formatPackagingHealthReport(
-    gate: Awaited<ReturnType<StudioRuntime["checkPackagingHealthGate"]>>,
+    gate: Awaited<
+        ReturnType<
+            OnboardingRuntime["evaluatePackagingHealthGateForActiveSession"]
+        >
+    >,
 ): string {
     const lines: string[] = [];
     lines.push("# TypeAgent Studio Packaging Health Report");
