@@ -81,9 +81,7 @@ private fun fallbackTypedContent(
     val fallbackText = messageContentToText(content, declaredType)
     return when (declaredType) {
         "html", "iframe" -> ParsedDisplayContent(
-            text = stripHtmlTags(fallbackText).ifBlank {
-                "Rich content is not supported in this client yet."
-            },
+            text = htmlFallbackText(fallbackText),
             format = MessageFormat.TEXT
         )
 
@@ -197,6 +195,22 @@ private fun stripHtmlTags(value: String): String {
         .replace(Regex("<[^>]*>"), " ")
         .replace(Regex("\\s+"), " ")
         .trim()
+}
+
+private fun htmlFallbackText(value: String): String {
+    if (isReasoningTrace(value)) {
+        return ""
+    }
+    return stripHtmlTags(value).ifBlank {
+        "Rich content is not supported in this client yet."
+    }
+}
+
+private fun isReasoningTrace(value: String): Boolean {
+    val normalized = value.lowercase()
+    return normalized.contains("reasoning-tools-call") ||
+        normalized.contains("execute_actions") ||
+        normalized.contains("discover-actions")
 }
 
 private fun JSONObject.optNullable(name: String): Any? {

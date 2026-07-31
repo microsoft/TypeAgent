@@ -64,6 +64,24 @@ class DisplayContentParserTest {
     }
 
     @Test
+    fun `suppresses reasoning tool traces in html content`() {
+        val display = extractAgentMessageContent(
+            JSONObject()
+                .put(
+                    "message",
+                    JSONObject()
+                        .put("type", "html")
+                        .put(
+                            "content",
+                            "<summary>Thinking</summary>reasoning-tools-call tool=discover-actions then execute_actions androidMobile.setAlarm"
+                        )
+                )
+        )
+
+        assertEquals("", display.text)
+    }
+
+    @Test
     fun `returns friendly fallback for structured content without alternates`() {
         val display = extractAgentMessageContent(
             JSONObject()
