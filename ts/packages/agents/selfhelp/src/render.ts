@@ -15,6 +15,7 @@ import {
     lookupAction,
     lookupCommand,
 } from "./catalog.js";
+import { CommandHelpResponse } from "./commandHelpResponseSchema.js";
 import { HelpResponse, HelpWay } from "./helpResponseSchema.js";
 import { StructuredBlock } from "@typeagent/agent-sdk";
 
@@ -139,4 +140,11 @@ export function renderHelp(
     }
 
     return blocks;
+}
+
+export function renderStructured(
+    response: CommandHelpResponse,
+    index: CatalogIndex,
+): StructuredBlock[] {
+    return renderHelp(response, index);
 }
