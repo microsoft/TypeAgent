@@ -419,12 +419,10 @@
                   Impersonate="yes" />
 
     <!-- ═══════════════════════════════════════════════
-         Custom action — fail loudly if the shell was requested with no location
-         SHELL=1 needs a download location (SHELLBASEURL or SHELLSTORAGE). Rather
-         than silently no-op (the previous behavior masked by Return="ignore"),
-         abort with a clear message so the user knows the shell was not installed.
+         Custom action — fail if no complete shell source was configured
+         Blob storage is optional when the package feed fallback is complete.
          ═══════════════════════════════════════════════ -->
-    <CustomAction Id="ShellLocationMissing" Error="Installing the TypeAgent Shell requires a download location, but none was configured in this package. Re-run with SHELLBASEURL=https://&lt;account&gt;.blob.core.windows.net/&lt;container&gt;/ (or SHELLSTORAGE + SHELLCONTAINER), or clear the shell option." />
+    <CustomAction Id="ShellLocationMissing" Error="Installing the TypeAgent Shell requires either a blob location or a complete package feed configuration. Set SHELLBASEURL, SHELLSTORAGE, or SHELLFEED + SHELLPACKAGE + SHELLORG + SHELLPROJECT; otherwise clear the shell option." />
 
     <!-- ═══════════════════════════════════════════════
          Custom action — optional TypeAgent Shell install
@@ -456,7 +454,7 @@
       <Custom Action="InstallPrereqs"          After="ProvisionAiSystemsConfig">NOT REMOVE~="ALL"</Custom>
       <Custom Action="StartAgentServer"        After="InstallPrereqs">(NOT REMOVE~="ALL") AND (STARTSERVER="1")</Custom>
       <Custom Action="EnableAutostart"         After="StartAgentServer">(NOT REMOVE~="ALL") AND (AUTOSTART="1")</Custom>
-      <Custom Action="ShellLocationMissing"    After="EnableAutostart">(NOT REMOVE~="ALL") AND (SHELL="1") AND (NOT SHELLBASEURL) AND (NOT SHELLSTORAGE) AND (NOT SHELLFEED)</Custom>
+      <Custom Action="ShellLocationMissing"    After="EnableAutostart">(NOT REMOVE~="ALL") AND (SHELL="1") AND (NOT SHELLBASEURL) AND (NOT SHELLSTORAGE) AND ((NOT SHELLFEED) OR (NOT SHELLPACKAGE) OR (NOT SHELLORG) OR (NOT SHELLPROJECT))</Custom>
       <Custom Action="InstallTypeAgentShell"   After="ShellLocationMissing">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
       <Custom Action="DisableAutostart"        Before="UnregisterCopilotPlugin">REMOVE~="ALL"</Custom>
       <Custom Action="UnregisterCopilotPlugin" Before="RemoveFiles">REMOVE~="ALL"</Custom>

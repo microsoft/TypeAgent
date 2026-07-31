@@ -39,17 +39,17 @@ let stagedPluginDir = "";
 // SHELLBASEURL / SHELLSTORAGE / SHELLCONTAINER / SHELLCHANNEL property defaults
 // so the "install the shell" option has a location on a fresh machine.
 let shellBaseUrl = "";
-let shellStorage = "";
-let shellContainer = "";
-let shellChannel = "lkg";
+let shellStorage = "typeagentshell";
+let shellContainer = "typeagentshell";
+let shellChannel = "ci";
 // Optional Azure Artifacts Universal Package fallback for the shell download,
 // baked into the MSI so the installer can pull the shell from the feed when the
 // blob download fails (e.g. the account disallows anonymous access).
-let shellFeed = "";
-let shellPackage = "";
+let shellFeed = "typeagent";
+let shellPackage = "typeagent-shell.win32-x64";
 let shellFeedVersion = "";
-let shellOrg = "";
-let shellProject = "";
+let shellOrg = "https://dev.azure.com/msctoproj";
+let shellProject = "AI_Systems";
 
 for (let i = 0; i < args.length; i++) {
     if (args[i] === "--rid") rid = args[++i];

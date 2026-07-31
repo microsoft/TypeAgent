@@ -124,14 +124,16 @@ function Get-BlobFile {
 
     $containerName = if ($Container) { $Container } else { $Storage }
     Write-Log "Downloading (az) blob '$Name' from $Storage/$containerName"
-    & az storage blob download `
+    $output = & az storage blob download `
         --account-name $Storage `
         --container-name $containerName `
         --name $Name `
         --file $Destination `
         --auth-mode login `
-        --overwrite 2>&1 | ForEach-Object { Write-Log "az> $_" }
-    if ($LASTEXITCODE -ne 0) {
+        --overwrite 2>&1
+    $exitCode = $LASTEXITCODE
+    $output | ForEach-Object { Write-Log "az> $_" }
+    if ($exitCode -ne 0) {
         throw "az storage blob download failed for '$Name' from $Storage/$containerName."
     }
 }
@@ -139,6 +141,49 @@ function Get-BlobFile {
 # Download the whole shell Universal Package (channel .yml + setup exe) from the
 # Azure Artifacts feed into $Destination. Authenticated via the caller's
 # `az login`; policy-compliant (no anonymous access, no public npmjs).
+function Resolve-LatestFeedVersion {
+    $output = & az devops invoke `
+        --organization $Organization `
+        --area packaging `
+        --resource packages `
+        --route-parameters project=$Project feedId=$Feed `
+        --query-parameters protocolType=upack packageNameQuery=$FeedPackage includeAllVersions=true `
+        --api-version 7.1 `
+        --output json `
+        --only-show-errors 2>&1
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        $details = ($output | Out-String).Trim()
+        throw "Failed to list versions for '$FeedPackage' in feed '$Feed': $details"
+    }
+
+    $response = ($output | Out-String) | ConvertFrom-Json
+    $package = @(
+        $response.value |
+            Where-Object { $_.name -eq $FeedPackage -and $_.protocolType -eq "UPack" } |
+            Select-Object -First 1
+    )
+    if ($package.Count -eq 0) {
+        throw "Package '$FeedPackage' was not found in feed '$Feed'."
+    }
+
+    $versions = @($package[0].versions | Where-Object { $_.isListed -and -not $_.isDeleted })
+    if ($versions.Count -eq 0) {
+        throw "Package '$FeedPackage' has no listed versions in feed '$Feed'."
+    }
+
+    $latest = @($versions | Where-Object { $_.isLatest } | Select-Object -First 1)
+    if ($latest.Count -eq 0) {
+        $latest = @($versions | Sort-Object publishDate -Descending | Select-Object -First 1)
+    }
+
+    $version = [string]$latest[0].version
+    if (-not $version) {
+        throw "Unable to resolve the latest version of '$FeedPackage'."
+    }
+    return $version
+}
+
 function Get-ShellFromFeed {
     param([Parameter(Mandatory = $true)][string]$Destination)
 
@@ -148,10 +193,18 @@ function Get-ShellFromFeed {
     if (-not $Organization) {
         throw "-Organization is required for a feed download."
     }
+    if (-not $Project) {
+        throw "-Project is required for a feed download."
+    }
     # `az artifacts universal download` lives in the azure-devops extension.
-    & az extension add --name azure-devops --only-show-errors 2>&1 | ForEach-Object { Write-Log "az> $_" }
+    $extensionOutput = & az extension add --name azure-devops --only-show-errors 2>&1
+    $extensionExitCode = $LASTEXITCODE
+    $extensionOutput | ForEach-Object { Write-Log "az> $_" }
+    if ($extensionExitCode -ne 0) {
+        throw "Failed to install or update the Azure DevOps CLI extension."
+    }
 
-    $ver = if ($FeedVersion) { $FeedVersion } else { "*" }
+    $ver = if ($FeedVersion) { $FeedVersion } else { Resolve-LatestFeedVersion }
     Write-Log "Downloading universal package '$FeedPackage' v$ver from feed '$Feed'"
     $azArgs = @(
         "artifacts", "universal", "download",
@@ -162,8 +215,10 @@ function Get-ShellFromFeed {
         "--path", $Destination
     )
     if ($Project) { $azArgs += @("--project", $Project, "--scope", "project") }
-    & az @azArgs 2>&1 | ForEach-Object { Write-Log "az> $_" }
-    if ($LASTEXITCODE -ne 0) {
+    $downloadOutput = & az @azArgs 2>&1
+    $downloadExitCode = $LASTEXITCODE
+    $downloadOutput | ForEach-Object { Write-Log "az> $_" }
+    if ($downloadExitCode -ne 0) {
         throw "az artifacts universal download failed for '$FeedPackage' v$ver from feed '$Feed'."
     }
 }
