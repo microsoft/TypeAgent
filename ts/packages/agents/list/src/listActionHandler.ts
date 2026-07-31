@@ -15,10 +15,17 @@ import {
     createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ListAction, ListActivity } from "./listSchema.js";
-import { isPlaceholderListName } from "./listNameUtils.js";
+import {
+    isPlaceholderListName,
+    normalizeListName,
+    RECOVERED_LIST_NAME,
+} from "./listNameUtils.js";
 
-export { isPlaceholderListName } from "./listNameUtils.js";
-
+export {
+    isPlaceholderListName,
+    normalizeListName,
+    RECOVERED_LIST_NAME,
+} from "./listNameUtils.js";
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeListContext,
@@ -119,7 +126,11 @@ function listNameFromAction(
     return undefined;
 }
 
-async function listValidateWildcardMatch(
+/**
+ * Reject grammar matches whose listName is only a determiner / "list"
+ * (after stripping leading dets). Exported for unit tests.
+ */
+export async function listValidateWildcardMatch(
     action: ListAction | ListActivity,
     context: SessionContext<ListActionContext>,
 ) {
@@ -134,6 +145,17 @@ async function listValidateWildcardMatch(
         return validateWildcardItems(action.parameters.items, context);
     }
     return true;
+}
+
+/** Normalize listName and reject placeholders at execute time. */
+function requireListName(listName: string): string {
+    const normalized = normalizeListName(listName);
+    if (normalized === "" || isPlaceholderListName(normalized)) {
+        throw new Error(
+            'List name is missing or only a reference phrase (e.g. "the list"); clarify which list',
+        );
+    }
+    return normalized;
 }
 
 async function initializeListContext() {
@@ -157,6 +179,134 @@ function createMemoryList(list: List): MemoryList {
     };
 }
 
+/**
+ * Collapse legacy/raw list records onto normalized keys.
+ * Placeholder keys ("the", "list", "my", "it", …) are not kept as identities,
+ * but any items under them are salvaged into RECOVERED_LIST_NAME so hydrate
+ * never permanently drops user data from the pre-fix failure mode.
+ * RECOVERED_LIST_NAME itself is a canonical, addressable store key (aliases
+ * "recovered" / "the recovered list" normalize to it) so a salvage-only store
+ * is steady-state and does not rewrite on every session load.
+ * Exported for unit tests.
+ */
+export function coalesceStoredLists(rawLists: List[]): List[] {
+    const map = new Map<string, Set<string>>();
+    const salvaged = new Set<string>();
+    if (!Array.isArray(rawLists)) {
+        return [];
+    }
+    for (const list of rawLists) {
+        // Corrupted / hand-edited entries: null name, non-string name, or
+        // non-object rows. Salvage any items we can still read.
+        if (list == null || typeof list !== "object") {
+            continue;
+        }
+        const rawName = (list as List).name;
+        const rawItems = Array.isArray((list as List).items)
+            ? (list as List).items
+            : [];
+        if (typeof rawName !== "string") {
+            for (const item of rawItems) {
+                if (typeof item === "string") {
+                    salvaged.add(item);
+                }
+            }
+            continue;
+        }
+        const name = normalizeListName(rawName);
+        if (isPlaceholderListName(name)) {
+            for (const item of rawItems) {
+                if (typeof item === "string") {
+                    salvaged.add(item);
+                }
+            }
+            continue;
+        }
+        let items = map.get(name);
+        if (items === undefined) {
+            items = new Set<string>();
+            map.set(name, items);
+        }
+        for (const item of rawItems) {
+            if (typeof item === "string") {
+                items.add(item);
+            }
+        }
+    }
+    if (salvaged.size > 0) {
+        let items = map.get(RECOVERED_LIST_NAME);
+        if (items === undefined) {
+            items = new Set<string>();
+            map.set(RECOVERED_LIST_NAME, items);
+        }
+        for (const item of salvaged) {
+            items.add(item);
+        }
+    }
+    return Array.from(map.entries()).map(([name, itemsSet]) => ({
+        name,
+        items: Array.from(itemsSet),
+    }));
+}
+
+/**
+ * True when raw disk records would change under coalesce (dirty names, merges,
+ * or placeholder salvage). Used to decide whether to rewrite lists.json on load.
+ */
+export function storedListsNeedRewrite(rawLists: List[]): boolean {
+    if (!Array.isArray(rawLists)) {
+        return true;
+    }
+    const coalesced = coalesceStoredLists(rawLists);
+    if (coalesced.length !== rawLists.length) {
+        return true;
+    }
+    // Build multiset comparison on normalized shape (order-independent names).
+    const rawByName = new Map<string, Set<string>>();
+    for (const list of rawLists) {
+        if (list == null || typeof list !== "object") {
+            return true;
+        }
+        if (typeof list.name !== "string") {
+            return true;
+        }
+        // Any non-canonical name on disk must be rewritten.
+        if (list.name !== normalizeListName(list.name)) {
+            return true;
+        }
+        if (isPlaceholderListName(list.name)) {
+            return true;
+        }
+        if (rawByName.has(list.name)) {
+            return true; // duplicate keys → merge
+        }
+        const itemSet = new Set<string>();
+        for (const item of list.items ?? []) {
+            if (typeof item === "string") {
+                itemSet.add(item);
+            } else {
+                return true; // non-string item → rewrite
+            }
+        }
+        rawByName.set(list.name, itemSet);
+    }
+    for (const list of coalesced) {
+        const rawItems = rawByName.get(list.name);
+        if (rawItems === undefined) {
+            return true;
+        }
+        if (rawItems.size !== list.items.length) {
+            return true;
+        }
+        for (const item of list.items) {
+            if (!rawItems.has(item)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 class MemoryListCollection {
     private lists = new Map<string, MemoryList>();
     constructor(
@@ -164,12 +314,9 @@ class MemoryListCollection {
         private storage: Storage,
         private listStoreName: string,
     ) {
-        rawLists.forEach((list) => {
-            const lookupName = list.name;
-            if (lookupName !== undefined) {
-                this.lists.set(lookupName, createMemoryList(list));
-            }
-        });
+        for (const list of coalesceStoredLists(rawLists)) {
+            this.lists.set(list.name, createMemoryList(list));
+        }
     }
 
     createList(name: string) {
@@ -193,10 +340,11 @@ class MemoryListCollection {
 
     removeItems(listName: string, items: string[]) {
         const list = this.getList(listName);
-        if (list !== undefined) {
-            for (const item of items) {
-                list.itemsSet.delete(item);
-            }
+        if (list === undefined) {
+            throw new Error(`List '${listName}' not found`);
+        }
+        for (const item of items) {
+            list.itemsSet.delete(item);
         }
     }
 
@@ -234,14 +382,22 @@ async function createListStoreForSession(
     listStoreName: string,
 ) {
     let lists: List[] = [];
+    let existed = false;
     // check whether file exists
     if (await storage.exists(listStoreName)) {
+        existed = true;
         const data = await storage.read(listStoreName, "utf8");
         lists = JSON.parse(data);
     } else {
         await storage.write(listStoreName, JSON.stringify(lists));
     }
-    return new MemoryListCollection(lists, storage, listStoreName);
+    const store = new MemoryListCollection(lists, storage, listStoreName);
+    // Persist scrubbed/normalized keys immediately so read-only sessions and
+    // process exit before a mutate do not leave polluted keys on disk.
+    if (existed && storedListsNeedRewrite(lists)) {
+        await store.save();
+    }
+    return store;
 }
 
 async function updateListContext(
@@ -353,14 +509,10 @@ async function handleListAction(
     switch (action.actionName) {
         case "addItems": {
             const store = getStore(listContext);
-            const { items, listName } = action.parameters;
+            const { items } = action.parameters;
+            const listName = requireListName(action.parameters.listName);
             if (items.length === 0) {
                 throw new Error("No items to add");
-            }
-            if (listName === "" || isPlaceholderListName(listName)) {
-                throw new Error(
-                    'List name is missing or only a reference phrase (e.g. "the list"); clarify which list',
-                );
             }
 
             store.addItems(listName, items);
@@ -378,14 +530,10 @@ async function handleListAction(
         }
         case "removeItems": {
             const store = getStore(listContext);
-            const { items, listName } = action.parameters;
+            const { items } = action.parameters;
+            const listName = requireListName(action.parameters.listName);
             if (items.length === 0) {
                 throw new Error("No items to remove");
-            }
-            if (listName === "" || isPlaceholderListName(listName)) {
-                throw new Error(
-                    'List name is missing or only a reference phrase (e.g. "the list"); clarify which list',
-                );
             }
 
             store.removeItems(listName, items);
@@ -403,7 +551,7 @@ async function handleListAction(
         }
         case "createList": {
             const store = getStore(listContext);
-            const listName = action.parameters.listName;
+            const listName = requireListName(action.parameters.listName);
 
             if (store.createList(listName)) {
                 displayText = `Created list: ${listName}`;
@@ -423,7 +571,8 @@ async function handleListAction(
             break;
         }
         case "getList": {
-            result = getListDisplay(listContext, action.parameters.listName);
+            const listName = requireListName(action.parameters.listName);
+            result = getListDisplay(listContext, listName);
             break;
         }
         case "listLists": {
@@ -463,8 +612,7 @@ async function handleListAction(
         }
         case "clearList": {
             const store = getStore(listContext);
-            const clearListAction = action;
-            const listName = clearListAction.parameters.listName;
+            const listName = requireListName(action.parameters.listName);
             const list = getList(listContext, listName);
             list.itemsSet.clear();
             await store.save();
@@ -477,9 +625,10 @@ async function handleListAction(
             break;
         }
         case "startEditList": {
+            const listName = requireListName(action.parameters.listName);
             result = getListDisplay(
                 listContext,
-                action.parameters.listName,
+                listName,
                 "What do you want to add or remove from this list?",
             );
             // TODO: formalize the schema for activityContext
@@ -487,7 +636,7 @@ async function handleListAction(
                 activityName: "edit",
                 description: "editing list",
                 state: {
-                    listName: action.parameters.listName,
+                    listName,
                 },
             };
             break;
