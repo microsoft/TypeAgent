@@ -5,30 +5,24 @@ import { writeFileSync } from "node:fs";
 
 const API_URL = "https://models.dev/api.json";
 
-/** Exact OpenAI model ids. */
-const EXACT = new Set(["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4.1-mini"]);
-
-/** Include every openai id equal to the prefix or starting with `${prefix}-`. */
-const PREFIXES = ["gpt-5.6", "gpt-5.4"] as const;
-
-/** Dropped from the pin (not used in the bench). */
-const EXCLUDE = new Set(["gpt-5.4-pro", "gpt-5.6"]);
+/** OpenAI model ids to pin (models.dev `openai` provider). */
+const MODELS = [
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "gpt-5.6-luna",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+] as const;
 
 interface Cost {
     input?: number;
     output?: number;
     cache_read?: number;
-}
-
-function selectOpenAiIds(ids: string[]): string[] {
-    return ids
-        .filter(
-            (id) =>
-                !EXCLUDE.has(id) &&
-                (EXACT.has(id) ||
-                    PREFIXES.some((p) => id === p || id.startsWith(`${p}-`))),
-        )
-        .sort();
 }
 
 async function main(): Promise<void> {
@@ -47,32 +41,22 @@ async function main(): Promise<void> {
         throw new Error("models.dev response missing openai.models");
     }
 
-    const needed = selectOpenAiIds(Object.keys(openai));
-    if (needed.length === 0) {
-        throw new Error("no OpenAI models matched the snapshot allowlist");
-    }
-
     const rates: Record<
         string,
         { inUsdPer1M: number; cachedUsdPer1M: number; outUsdPer1M: number }
     > = {};
     const missing: string[] = [];
 
-    for (const id of needed) {
+    for (const id of MODELS) {
         const cost = openai[id]?.cost;
-        if (
-            typeof cost?.input !== "number" ||
-            typeof cost?.output !== "number"
-        ) {
+        if (typeof cost?.input !== "number" || typeof cost?.output !== "number") {
             missing.push(id);
             continue;
         }
         rates[id] = {
             inUsdPer1M: cost.input,
             cachedUsdPer1M:
-                typeof cost.cache_read === "number"
-                    ? cost.cache_read
-                    : cost.input,
+                typeof cost.cache_read === "number" ? cost.cache_read : cost.input,
             outUsdPer1M: cost.output,
         };
     }
@@ -97,7 +81,7 @@ async function main(): Promise<void> {
         )}\n`,
     );
     process.stderr.write(
-        `[snapshotPrices] wrote ${outPath}: ${Object.keys(rates).length} openai models (${needed.join(", ")})\n`,
+        `[snapshotPrices] wrote ${outPath}: ${MODELS.length} models (${MODELS.join(", ")})\n`,
     );
 }
 
