@@ -24,7 +24,7 @@ import { VideoAction } from "./videoActionSchema.ts";
 // Video request patterns
 <VideoRequest> = <VideoPhrase> -> "video_request";
 
-<VideoPhrase> = (<Polite>)? <CreateVerb> <VideoTarget> (<VideoContent>)? | <VideoTarget> <FromFiles> | <NeedPhrase> <VideoTarget>;
+<VideoPhrase> = (<Polite>)? <CreateVerb> <VideoTarget> <VideoContent>? | <VideoTarget> <FromFiles> | <NeedPhrase> <VideoTarget>;
 
 <Polite> = ('can you' | 'could you' | 'please' | 'would you')?;
 
