@@ -554,17 +554,19 @@ describe("listValidateWildcardMatch", () => {
         ).toBe(false);
     });
 
-    test.each(["getList", "clearList", "startEditList", "removeItems"] as const)(
-        "rejects bare 'the list' on %s",
-        async (actionName) => {
-            expect(
-                await listValidateWildcardMatch(
-                    action(actionName, "the list"),
-                    ctx,
-                ),
-            ).toBe(false);
-        },
-    );
+    test.each([
+        "getList",
+        "clearList",
+        "startEditList",
+        "removeItems",
+    ] as const)("rejects bare 'the list' on %s", async (actionName) => {
+        expect(
+            await listValidateWildcardMatch(
+                action(actionName, "the list"),
+                ctx,
+            ),
+        ).toBe(false);
+    });
 
     test.each([
         "grocery",
@@ -704,9 +706,7 @@ describe("coalesceStoredLists (session hydrate)", () => {
 
     test("does not create recovered list when no placeholder items", () => {
         expect(
-            coalesceStoredLists([
-                { name: "grocery", items: ["milk"] },
-            ]),
+            coalesceStoredLists([{ name: "grocery", items: ["milk"] }]),
         ).toEqual([{ name: "grocery", items: ["milk"] }]);
     });
 
@@ -777,9 +777,7 @@ describe("coalesceStoredLists (session hydrate)", () => {
                 { name: "recovered", items: ["keep"] },
                 { name: "the", items: ["from-the"] },
             ]),
-        ).toEqual([
-            { name: RECOVERED_LIST_NAME, items: ["keep", "from-the"] },
-        ]);
+        ).toEqual([{ name: RECOVERED_LIST_NAME, items: ["keep", "from-the"] }]);
         expect(
             coalesceStoredLists([
                 { name: RECOVERED_LIST_NAME, items: ["keep"] },
@@ -847,15 +845,15 @@ describe("storedListsNeedRewrite", () => {
     });
 
     test("true for placeholder keys (even with items)", () => {
-        expect(
-            storedListsNeedRewrite([{ name: "the", items: ["x"] }]),
-        ).toBe(true);
-        expect(
-            storedListsNeedRewrite([{ name: "list", items: [] }]),
-        ).toBe(true);
-        expect(
-            storedListsNeedRewrite([{ name: "mine", items: ["x"] }]),
-        ).toBe(true);
+        expect(storedListsNeedRewrite([{ name: "the", items: ["x"] }])).toBe(
+            true,
+        );
+        expect(storedListsNeedRewrite([{ name: "list", items: [] }])).toBe(
+            true,
+        );
+        expect(storedListsNeedRewrite([{ name: "mine", items: ["x"] }])).toBe(
+            true,
+        );
     });
 
     test("true for unnormalized names", () => {
@@ -863,7 +861,9 @@ describe("storedListsNeedRewrite", () => {
             storedListsNeedRewrite([{ name: "a grocery", items: ["eggs"] }]),
         ).toBe(true);
         expect(
-            storedListsNeedRewrite([{ name: "Grocery List", items: ["bread"] }]),
+            storedListsNeedRewrite([
+                { name: "Grocery List", items: ["bread"] },
+            ]),
         ).toBe(true);
         expect(
             storedListsNeedRewrite([{ name: "grocery lists", items: ["x"] }]),

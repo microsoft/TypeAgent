@@ -81,7 +81,16 @@ const QUANTIFIERS = new Set([
  * strip ("all of them" → "of them"). Never a list identity alone or in an
  * all-closed-class phrase.
  */
-const CLOSED_GLUE = new Set(["of", "for", "to", "with", "from", "on", "in", "at"]);
+const CLOSED_GLUE = new Set([
+    "of",
+    "for",
+    "to",
+    "with",
+    "from",
+    "on",
+    "in",
+    "at",
+]);
 
 /**
  * Anaphoric pronouns the grammar/LLM may bind as listName
