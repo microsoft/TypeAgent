@@ -15,7 +15,6 @@ interface GeneratedAction {
     schemaName: string;
     actionName: string;
     parameters: string;
-
     paramSpec: ParamSpec;
     description?: string;
 }
@@ -31,7 +30,36 @@ type ParamSpec =
       }
     | { k: "any" };
 
-function toSpec(t: any, depth = 0): ParamSpec {
+/** Loose shape of action-schema type nodes (runtime schema objects). */
+interface SchemaTypeNode {
+    type?: string;
+    typeEnum?: string[];
+    elementType?: SchemaTypeNode;
+    fields?: Record<string, SchemaFieldNode>;
+    definition?: { type?: SchemaTypeNode };
+}
+
+interface SchemaFieldNode {
+    optional?: boolean;
+    type?: SchemaTypeNode;
+}
+
+interface ActionTypeNode {
+    type?: {
+        fields?: Record<string, SchemaFieldNode>;
+    };
+    comments?: string[];
+}
+
+interface ParsedActionSchema {
+    actionSchemas: Iterable<[string, ActionTypeNode]>;
+}
+
+interface ActionSchemaFileLike {
+    parsedActionSchema?: ParsedActionSchema;
+}
+
+function toSpec(t: SchemaTypeNode | undefined, depth = 0): ParamSpec {
     if (!t || depth > 5) return { k: "any" };
     switch (t.type) {
         case "string":
@@ -41,7 +69,9 @@ function toSpec(t: any, depth = 0): ParamSpec {
         case "boolean":
             return { k: "boolean" };
         case "string-union":
-            return { k: "string", enum: t.typeEnum ?? undefined };
+            return t.typeEnum !== undefined
+                ? { k: "string", enum: t.typeEnum }
+                : { k: "string" };
         case "array":
             return { k: "array", item: toSpec(t.elementType, depth + 1) };
         case "object": {
@@ -49,7 +79,7 @@ function toSpec(t: any, depth = 0): ParamSpec {
                 string,
                 { optional: boolean; spec: ParamSpec }
             > = {};
-            for (const [n, f] of Object.entries<any>(t.fields ?? {})) {
+            for (const [n, f] of Object.entries(t.fields ?? {})) {
                 fields[n] = {
                     optional: !!f.optional,
                     spec: toSpec(f.type, depth + 1),
@@ -64,13 +94,13 @@ function toSpec(t: any, depth = 0): ParamSpec {
     }
 }
 
-function parameterSpec(actionType: any): ParamSpec {
-    const params = actionType?.type?.fields?.parameters?.type;
+function parameterSpec(actionType: ActionTypeNode): ParamSpec {
+    const params = actionType.type?.fields?.parameters?.type;
     if (!params) return { k: "object", fields: {} };
     return toSpec(params);
 }
 
-function renderType(t: any, depth = 0): string {
+function renderType(t: SchemaTypeNode | undefined, depth = 0): string {
     if (!t || depth > 3) return "any";
     switch (t.type) {
         case "string":
@@ -83,13 +113,13 @@ function renderType(t: any, depth = 0): string {
             return `${renderType(t.elementType, depth + 1)}[]`;
         case "string-union":
             return t.typeEnum
-                ? t.typeEnum.map((v: string) => JSON.stringify(v)).join("|")
+                ? t.typeEnum.map((v) => JSON.stringify(v)).join("|")
                 : "string";
         case "object": {
             if (!t.fields) return "object";
             const inner = Object.entries(t.fields)
                 .map(
-                    ([n, f]: [string, any]) =>
+                    ([n, f]) =>
                         `${n}${f.optional ? "?" : ""}: ${renderType(
                             f.type,
                             depth + 1,
@@ -105,13 +135,13 @@ function renderType(t: any, depth = 0): string {
     }
 }
 
-function summarizeParameters(actionType: any): string {
-    const fields = actionType?.type?.fields;
+function summarizeParameters(actionType: ActionTypeNode): string {
+    const fields = actionType.type?.fields;
     if (!fields) return "(none)";
     const params = fields.parameters?.type;
     if (!params || params.type !== "object" || !params.fields) return "(none)";
     const names = Object.entries(params.fields).map(
-        ([name, f]: [string, any]) =>
+        ([name, f]) =>
             `${name}${f.optional ? "?" : ""}: ${renderType(f.type)}`,
     );
     return names.length === 0 ? "(none)" : names.join(", ");
@@ -149,25 +179,29 @@ async function main(): Promise<void> {
     const unloadable: string[] = [];
     for (const schemaName of active) {
         if (LABEL_EXCLUDED_SCHEMAS.has(schemaName)) continue;
-        let file;
+        let file: ActionSchemaFileLike;
         try {
             const config = p.getActionConfig(schemaName);
-            file = p.getActionSchemaFileForConfig(config);
-        } catch (e) {
+            file = p.getActionSchemaFileForConfig(
+                config,
+            ) as ActionSchemaFileLike;
+        } catch {
             unloadable.push(schemaName);
             continue;
         }
-        const parsed = (file as any).parsedActionSchema;
+        const parsed = file.parsedActionSchema;
+        if (!parsed?.actionSchemas) continue;
         for (const [actionName, actionType] of parsed.actionSchemas) {
+            const description = actionType.comments
+                ?.join(" ")
+                .trim()
+                .slice(0, 300);
             actions.push({
                 schemaName,
                 actionName,
                 parameters: summarizeParameters(actionType),
                 paramSpec: parameterSpec(actionType),
-                description: (actionType as any)?.comments
-                    ?.join(" ")
-                    .trim()
-                    .slice(0, 300),
+                ...(description ? { description } : {}),
             });
         }
     }
