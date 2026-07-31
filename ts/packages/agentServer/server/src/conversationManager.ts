@@ -29,7 +29,10 @@ import {
     ConversationNameIndex,
     createConversationNameIndex,
 } from "./conversationNameIndex.js";
-import { createConversationSearchIndex } from "./conversationSearchIndex.js";
+import {
+    ContentSearchQuery,
+    createConversationSearchIndex,
+} from "./conversationSearchIndex.js";
 import { importCopilotSessions } from "./copilot/mirrorImporter.js";
 import { lockInstanceDir } from "agent-dispatcher/internal";
 
@@ -178,11 +181,12 @@ export type ConversationManager = {
     ): void;
     /**
      * Cross-conversation content search: rank conversations by how well their
-     * indexed messages match the query. Returns [] when the unified index has
+     * indexed messages match the query. Accepts a natural-language `question`,
+     * keyword `terms`, or both (blended). Returns [] when the unified index has
      * no model provider configured.
      */
     searchConversationContent(
-        query: string,
+        query: ContentSearchQuery,
         maxMatches?: number,
     ): Promise<ConversationContentMatch[]>;
     renameConversation(
@@ -1078,7 +1082,7 @@ export async function createConversationManager(
         },
 
         async searchConversationContent(
-            query: string,
+            query: ContentSearchQuery,
             maxMatches?: number,
         ): Promise<ConversationContentMatch[]> {
             // See findConversations: RPC serializes an omitted arg to `null`.

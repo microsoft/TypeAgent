@@ -1015,15 +1015,22 @@ function getCopilotSessionConfig(
         description: [
             "Search the CONTENT of ALL the user's conversations (not just the current one) and return the best-matching conversations with representative snippets.",
             "Use this to answer questions like 'what did we discuss in the CLI conversation' or to find where a topic was talked about across conversations.",
-            "This reads matching content back to you — unlike the conversation find/search *actions*, which only render in the UI.",
+            "Provide a natural-language `question` and/or a list of keyword `terms` - they are blended (NL/semantic + literal message-text match), so put distinctive keywords (e.g. proper nouns) in `terms` to catch literal mentions.",
+            "This reads matching content back to you - unlike the conversation find/search *actions*, which only render in the UI.",
         ].join("\n"),
         parameters: {
             type: "object",
             properties: {
-                query: {
+                question: {
                     type: "string",
                     description:
-                        "What to search for across conversation content",
+                        "A natural-language question to match against conversation content",
+                },
+                terms: {
+                    type: "array",
+                    items: { type: "string" },
+                    description:
+                        "Keyword/phrase terms to match literally against message text (names, distinctive words)",
                 },
                 maxMatches: {
                     type: "number",
@@ -1031,7 +1038,7 @@ function getCopilotSessionConfig(
                         "Maximum number of conversations to return (default 10)",
                 },
             },
-            required: ["query"],
+            required: [],
         },
         handler: async (args: any) => {
             const search = systemContext.searchConversations;
@@ -1042,15 +1049,27 @@ function getCopilotSessionConfig(
                     resultType: "success" as const,
                 };
             }
-            const query = typeof args?.query === "string" ? args.query : "";
+            const question =
+                typeof args?.question === "string" ? args.question : undefined;
+            const terms = Array.isArray(args?.terms)
+                ? args.terms.map((t: unknown) => String(t))
+                : undefined;
+            if (!question && (terms === undefined || terms.length === 0)) {
+                return {
+                    textResultForLlm:
+                        "Provide a `question` and/or `terms` to search for.",
+                    resultType: "success" as const,
+                };
+            }
             const maxMatches =
                 typeof args?.maxMatches === "number"
                     ? args.maxMatches
                     : undefined;
-            const matches = await search(query, maxMatches);
+            const matches = await search({ question, terms }, maxMatches);
             if (matches.length === 0) {
+                const what = question ?? (terms ?? []).join(", ");
                 return {
-                    textResultForLlm: `No conversations with content matching "${query}" found.`,
+                    textResultForLlm: `No conversations with content matching "${what}" found.`,
                     resultType: "success" as const,
                 };
             }

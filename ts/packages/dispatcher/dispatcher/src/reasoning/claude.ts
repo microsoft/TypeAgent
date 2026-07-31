@@ -779,7 +779,8 @@ function getClaudeOptions(
     };
 
     const searchConversationsSchema = {
-        query: z.string(),
+        question: z.string().optional(),
+        terms: z.array(z.string()).optional(),
         maxMatches: z.number().optional(),
     };
     const searchConversationsTool: SdkMcpToolDefinition<
@@ -789,7 +790,8 @@ function getClaudeOptions(
         description: [
             "Search the CONTENT of ALL the user's conversations (not just the current one) and return the best-matching conversations with representative snippets.",
             "Use this to answer questions like 'what did we discuss in the CLI conversation' or to find where a topic was talked about across conversations.",
-            "This reads matching content back to you — unlike the conversation find/search *actions*, which only render in the UI.",
+            "Provide a natural-language `question` and/or a list of keyword `terms` - they are blended (NL/semantic + literal message-text match), so put distinctive keywords (e.g. proper nouns) in `terms` to catch literal mentions.",
+            "This reads matching content back to you - unlike the conversation find/search *actions*, which only render in the UI.",
         ].join("\n"),
         inputSchema: searchConversationsSchema,
         handler: async (args) => {
@@ -804,13 +806,26 @@ function getClaudeOptions(
                     ],
                 };
             }
-            const matches = await search(args.query, args.maxMatches);
-            if (matches.length === 0) {
+            const question = args.question;
+            const terms = args.terms;
+            if (!question && (terms === undefined || terms.length === 0)) {
                 return {
                     content: [
                         {
                             type: "text",
-                            text: `No conversations with content matching "${args.query}" found.`,
+                            text: "Provide a `question` and/or `terms` to search for.",
+                        },
+                    ],
+                };
+            }
+            const matches = await search({ question, terms }, args.maxMatches);
+            if (matches.length === 0) {
+                const what = question ?? (terms ?? []).join(", ");
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `No conversations with content matching "${what}" found.`,
                         },
                     ],
                 };

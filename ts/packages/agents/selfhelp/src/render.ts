@@ -18,6 +18,7 @@ import {
     CommandHelpResponse,
     CommandHelpWay,
 } from "./commandHelpResponseSchema.js";
+import { ExplainResponse } from "./explainResponseSchema.js";
 import { StructuredBlock } from "@typeagent/agent-sdk";
 
 const MAX_RENDERED_PHRASINGS = 3;
@@ -116,5 +117,50 @@ export function renderStructured(
             blocks.push(card);
         }
     }
+    return blocks;
+}
+
+// Renders an explainTypeAgent answer: a summary paragraph, optional supporting
+// points as a bulleted list, and optional follow-up pointers (commands shown
+// with a leading '@') as a second list.
+export function renderExplain(response: ExplainResponse): StructuredBlock[] {
+    const summary = response.summary?.trim();
+    const details = Array.isArray(response.details)
+        ? response.details.map((d) => d.trim()).filter((d) => d.length > 0)
+        : [];
+    const seeAlso = Array.isArray(response.seeAlso) ? response.seeAlso : [];
+
+    const blocks: StructuredBlock[] = [];
+    blocks.push({
+        kind: "text",
+        text:
+            summary ||
+            "I couldn't find an answer to that in the TypeAgent docs. Run `@help` to see the available commands.",
+    });
+
+    if (details.length > 0) {
+        blocks.push({
+            kind: "list",
+            items: details.map((text) => ({ text })),
+        });
+    }
+
+    const pointers = seeAlso
+        .filter((p) => p && (p.label?.trim() || p.command?.trim()))
+        .map((p) => {
+            const command = p.command?.trim();
+            const label = p.label?.trim();
+            const text = command ? `@${command}` : (label ?? "");
+            const item: { text: string; subtitle?: string } = { text };
+            if (command && label) {
+                item.subtitle = label;
+            }
+            return item;
+        });
+    if (pointers.length > 0) {
+        blocks.push({ kind: "heading", text: "See also", level: 3 });
+        blocks.push({ kind: "list", items: pointers });
+    }
+
     return blocks;
 }

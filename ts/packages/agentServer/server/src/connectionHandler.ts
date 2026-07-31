@@ -459,8 +459,11 @@ export function createAgentServerConnectionHandler(
                 query: string,
                 maxMatches?: number,
             ) => {
+                // The wire/command path passes a plain query string; treat it
+                // as a natural-language question (the index blends in a
+                // message-text match too).
                 return conversationManager.searchConversationContent(
-                    query,
+                    { question: query },
                     maxMatches,
                 );
             },

@@ -212,7 +212,7 @@ export type ConversationContentSink = (
  * agent-server; undefined for hosts without a unified content index.
  */
 export type ConversationSearcher = (
-    query: string,
+    query: { question?: string | undefined; terms?: string[] | undefined },
     maxMatches?: number,
 ) => Promise<
     {

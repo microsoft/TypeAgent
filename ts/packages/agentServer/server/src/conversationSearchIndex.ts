@@ -29,6 +29,18 @@ export type RankedConversationContent = {
 };
 
 /**
+ * A content-search request over the unified index. Provide a natural-language
+ * `question`, a set of keyword `terms`, or both - they are blended (best score
+ * per message wins). `question` drives the knowledge/query-translation search;
+ * `terms` (or the question, when no terms are given) drive the message-text
+ * similarity search.
+ */
+export type ContentSearchQuery = {
+    question?: string | undefined;
+    terms?: string[] | undefined;
+};
+
+/**
  * A single knowPro index spanning every conversation's messages, each tagged
  * with its owning conversation id. Backs cross-conversation content search
  * ("which conversation was this discussed in?") without spinning up each
@@ -45,7 +57,7 @@ export interface ConversationSearchIndex {
     tombstone(conversationId: string): void;
     /** Rank conversations by how well their content matches the query. */
     search(
-        query: string,
+        query: ContentSearchQuery,
         maxConversations?: number,
         maxSnippetsPerConversation?: number,
     ): Promise<RankedConversationContent[]>;
@@ -150,20 +162,67 @@ class ConversationSearchIndexImpl implements ConversationSearchIndex {
     }
 
     public async search(
-        query: string,
+        query: ContentSearchQuery,
         maxConversations: number = 10,
         maxSnippetsPerConversation: number = 3,
     ): Promise<RankedConversationContent[]> {
-        if (this.memory === undefined || query.trim().length === 0) {
-            return [];
-        }
-        const result = await this.memory.searchWithLanguage(query);
-        if (!result.success) {
-            debugError(`Unified content search failed: ${result.message}`);
-            return [];
-        }
-        const messageMatches = result.data.flatMap((r) => r.messageMatches);
         const memory = this.memory;
+        if (memory === undefined) {
+            return [];
+        }
+        const question = query.question?.trim();
+        const terms = (query.terms ?? [])
+            .map((t) => t.trim())
+            .filter((t) => t.length > 0);
+        // Text-similarity runs on the explicit terms, or the question when no
+        // terms were given - so a lone NL question still gets a message-text
+        // match (catching literal mentions extraction may have missed).
+        const textQuery = terms.length > 0 ? terms.join(" ") : question;
+        if (!question && !textQuery) {
+            return [];
+        }
+
+        // Blend two knowPro searches, keeping the best score per message:
+        //  - question -> searchWithLanguage: query translation + extracted-
+        //    knowledge match (semantic, but needs extraction to have run).
+        //  - terms/text -> searchByTextSimilarity: message-text embedding match
+        //    (finds literal / near-literal mentions without extraction).
+        const scoreByOrdinal = new Map<number, number>();
+        const addMatches = (
+            matches:
+                | readonly { messageOrdinal: number; score: number }[]
+                | undefined,
+        ) => {
+            for (const m of matches ?? []) {
+                const prev = scoreByOrdinal.get(m.messageOrdinal);
+                if (prev === undefined || m.score > prev) {
+                    scoreByOrdinal.set(m.messageOrdinal, m.score);
+                }
+            }
+        };
+
+        if (question) {
+            const nl = await memory.searchWithLanguage(question);
+            if (nl.success) {
+                addMatches(nl.data.flatMap((r) => r.messageMatches));
+            } else {
+                debugError(`Unified NL search failed: ${nl.message}`);
+            }
+        }
+        if (textQuery) {
+            try {
+                const text = await memory.searchByTextSimilarity(textQuery);
+                addMatches(text?.messageMatches);
+            } catch (e: any) {
+                debugError(
+                    `Unified text-similarity search failed: ${e?.message}`,
+                );
+            }
+        }
+
+        const messageMatches = [...scoreByOrdinal.entries()].map(
+            ([messageOrdinal, score]) => ({ messageOrdinal, score }),
+        );
         return rankConversationMatches(
             messageMatches,
             (ordinal) => {
