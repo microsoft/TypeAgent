@@ -192,6 +192,19 @@ export type CopilotImporter = (
     onProgress?: (progress: CopilotImportProgress) => void,
 ) => Promise<CopilotImportSummary>;
 
+/**
+ * Host-provided sink that mirrors each conversation turn (user request or
+ * assistant result) into a cross-conversation content index, tagged by the
+ * host's conversation id. Injected per-conversation by the agent-server;
+ * undefined for standalone hosts. Called independently of the knowledge-
+ * extraction flags (which connected mode disables), so the unified index still
+ * populates there.
+ */
+export type ConversationContentSink = (
+    text: string,
+    sender: "user" | "assistant",
+) => void;
+
 // A request-scoped route chosen by the registry-first contextSelector tier
 // (§11.4) when the topical winner is a neighborhood sibling with no cache
 // MatchResult. Unlike `collisionOneShotPicks` (durable, cross-turn, explicit
@@ -249,6 +262,12 @@ export type CommandHandlerContext = {
      * mode).
      */
     readonly copilotImport?: CopilotImporter | undefined;
+    /**
+     * Host-provided sink mirroring each turn into the cross-conversation
+     * content index (see {@link ConversationContentSink}). Undefined for hosts
+     * without a unified index.
+     */
+    readonly conversationContentSink?: ConversationContentSink | undefined;
     // Per activation configs
     developerMode?: boolean;
     // When true, each translated request is confirmed via the client
@@ -486,6 +505,13 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
      * agent-server; omitted by hosts without a ConversationManager.
      */
     copilotImport?: CopilotImporter | undefined;
+
+    /**
+     * Sink mirroring each turn into the host's cross-conversation content
+     * index (see {@link ConversationContentSink}). Injected per-conversation
+     * by the agent-server; omitted by standalone hosts.
+     */
+    conversationContentSink?: ConversationContentSink | undefined;
 };
 
 async function getSession(
@@ -1089,6 +1115,7 @@ export async function initializeCommandHandlerContext(
             clientIO,
             getConversationList: options?.getConversationList,
             copilotImport: options?.copilotImport,
+            conversationContentSink: options?.conversationContentSink,
 
             // Runtime context
             commandLock: createLimiter(1), // Make sure we process one command at a time.

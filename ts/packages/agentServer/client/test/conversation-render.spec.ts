@@ -49,3 +49,41 @@ describe("renderConversationActionResult — list", () => {
         expect(json).toContain("No conversations found.");
     });
 });
+
+describe("renderConversationActionResult — matches", () => {
+    test("shows query, name, and percent match", () => {
+        const json = render({
+            kind: "matches",
+            query: "gym music",
+            currentConversationId: "id2",
+            matches: [
+                {
+                    conversation: {
+                        conversationId: "id1",
+                        name: "Workout Playlist",
+                        clientCount: 0,
+                        createdAt: "2026-01-01T00:00:00Z",
+                        messageCount: 3,
+                    },
+                    score: 0.92,
+                },
+                {
+                    conversation: {
+                        conversationId: "id2",
+                        name: "Beta",
+                        clientCount: 0,
+                        createdAt: "2026-01-02T00:00:00Z",
+                        messageCount: 1,
+                    },
+                    score: 0.71,
+                },
+            ],
+        });
+        expect(json).toContain("Matches for");
+        expect(json).toContain("gym music");
+        expect(json).toContain("Workout Playlist");
+        expect(json).toContain("92% match");
+        // The current conversation is marked.
+        expect(json).toContain("Beta (current)");
+    });
+});

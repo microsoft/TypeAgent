@@ -28,6 +28,7 @@ import {
     DispatcherConnectOptions,
     CreateConversationOptions,
     ConversationInfo,
+    ConversationMatch,
     JoinConversationResult,
     RenameConversationOptions,
     SpeechToken,
@@ -115,6 +116,14 @@ export type AgentServerConnection = {
         options?: CreateConversationOptions,
     ): Promise<ConversationInfo>;
     listConversations(name?: string): Promise<ConversationInfo[]>;
+    /**
+     * Fuzzy-find conversations by name (lexical + embedding). Results are
+     * sorted by descending relevance score.
+     */
+    findConversations(
+        query: string,
+        maxMatches?: number,
+    ): Promise<ConversationMatch[]>;
     renameConversation(
         conversationId: string,
         newName: string,
@@ -338,6 +347,13 @@ export function createAgentServerConnection(
 
         async listConversations(name?: string): Promise<ConversationInfo[]> {
             return rpc.invoke("listConversations", name);
+        },
+
+        async findConversations(
+            query: string,
+            maxMatches?: number,
+        ): Promise<ConversationMatch[]> {
+            return rpc.invoke("findConversations", query, maxMatches);
         },
 
         async renameConversation(

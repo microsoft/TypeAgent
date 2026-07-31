@@ -45,6 +45,15 @@ export type ConversationInfo = {
     readOnly?: boolean;
 };
 
+/**
+ * A conversation matched by fuzzy name search, with a relevance score in
+ * [0, 1] (higher is a closer match).
+ */
+export type ConversationMatch = {
+    conversation: ConversationInfo;
+    score: number;
+};
+
 export type ConversationNameCollisionBehavior = "error" | "appendNumber";
 
 export type ConversationNameCollisionOptions = {
@@ -110,6 +119,16 @@ export type AgentServerInvokeFunctions = {
         options?: CreateConversationOptions,
     ) => Promise<ConversationInfo>;
     listConversations: (name?: string) => Promise<ConversationInfo[]>;
+    /**
+     * Fuzzy-find conversations by name. Blends lexical (exact / substring /
+     * edit-distance) with embedding similarity, so imprecise or semantically
+     * close queries still match. Results are sorted by descending score. Falls
+     * back to lexical-only matching when no embedding provider is configured.
+     */
+    findConversations: (
+        query: string,
+        maxMatches?: number,
+    ) => Promise<ConversationMatch[]>;
     renameConversation: (
         conversationId: string,
         newName: string,

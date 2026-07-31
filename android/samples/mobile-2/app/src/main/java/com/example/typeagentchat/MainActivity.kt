@@ -6,8 +6,10 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.provider.AlarmClock
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -73,6 +75,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        webSocketManager.setClientActionHandler { action ->
+            runOnUiThread {
+                launchSetAlarmIntent(action)
+            }
+        }
         webSocketManager.connect(
             url = tunnelUrl,
             tunnelToken = tunnelToken
@@ -90,8 +97,52 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        webSocketManager.setClientActionHandler(null)
         webSocketManager.disconnect()
         super.onDestroy()
+    }
+
+    private fun launchSetAlarmIntent(action: SetAlarmAction) {
+        val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+            putExtra(AlarmClock.EXTRA_HOUR, action.hour)
+            putExtra(AlarmClock.EXTRA_MINUTES, action.minute)
+            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+            if (action.originalRequest.isNotBlank()) {
+                putExtra(AlarmClock.EXTRA_MESSAGE, action.originalRequest)
+            }
+        }
+        val target = intent.resolveActivity(packageManager)
+        Log.d(
+            TAG,
+            "Launching set-alarm intent hour=${action.hour} minute=${action.minute} target=${target?.flattenToShortString() ?: "none"}"
+        )
+        try {
+            startActivity(intent)
+            Log.d(TAG, "set-alarm intent dispatched to clock app")
+            Toast.makeText(
+                this,
+                "Alarm set for %02d:%02d".format(action.hour, action.minute),
+                Toast.LENGTH_SHORT
+            ).show()
+        } catch (_: ActivityNotFoundException) {
+            Log.e(TAG, "No alarm app available to handle set-alarm intent")
+            Toast.makeText(
+                this,
+                "No alarm app is available on this device.",
+                Toast.LENGTH_SHORT
+            ).show()
+        } catch (error: SecurityException) {
+            Log.e(TAG, "Missing permission to set alarm", error)
+            Toast.makeText(
+                this,
+                "This app is not allowed to set alarms.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private companion object {
+        private const val TAG = "MainActivity"
     }
 }
 

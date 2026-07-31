@@ -56,7 +56,8 @@
             "src/github-cliSchema.agr"
           ],
           "outputGlobs": [
-            "dist/github-cliSchema.ag.json"
+            "dist/github-cliSchema.ag.json",
+            "dist/github-cliSchema.ag.map.json"
           ]
         }
       },

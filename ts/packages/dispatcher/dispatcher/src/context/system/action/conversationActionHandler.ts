@@ -9,8 +9,16 @@ import { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
 // Quote a conversation name so the command parser keeps it as a single
 // argument; names often contain spaces (and, rarely, quotes).
 function quoteName(name: string): string {
-    const escaped = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    return `"${escaped}"`;
+    if (!name.includes('"')) {
+        return `"${name}"`;
+    }
+    if (!name.includes("'")) {
+        return `'${name}'`;
+    }
+
+    // If the name contains both quote types, fall back to escaping for a
+    // double-quoted token.
+    return `"${name.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
 // Each conversation action runs its equivalent `@conversation` command, which
@@ -41,6 +49,9 @@ export async function executeConversationAction(
         }
         case "listConversation":
             command = "@conversation list";
+            break;
+        case "findConversation":
+            command = `@conversation find ${action.parameters.query}`;
             break;
         case "showConversationInfo":
             command = "@conversation info";

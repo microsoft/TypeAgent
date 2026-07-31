@@ -59,7 +59,8 @@
             "src/listSchema.agr"
           ],
           "outputGlobs": [
-            "dist/listSchema.ag.json"
+            "dist/listSchema.ag.json",
+            "dist/listSchema.ag.map.json"
           ]
         }
       },

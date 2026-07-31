@@ -65,7 +65,8 @@
             "src/osNotificationsSchema.agr"
           ],
           "outputGlobs": [
-            "dist/osNotificationsSchema.ag.json"
+            "dist/osNotificationsSchema.ag.json",
+            "dist/osNotificationsSchema.ag.map.json"
           ]
         }
       },

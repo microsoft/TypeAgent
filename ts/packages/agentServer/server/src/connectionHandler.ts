@@ -451,6 +451,10 @@ export function createAgentServerConnectionHandler(
                 return conversationManager.listConversations(name);
             },
 
+            findConversations: async (query: string, maxMatches?: number) => {
+                return conversationManager.findConversations(query, maxMatches);
+            },
+
             renameConversation: async (
                 conversationId: string,
                 newName: string,
