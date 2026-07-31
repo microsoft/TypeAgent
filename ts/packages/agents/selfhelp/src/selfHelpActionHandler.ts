@@ -20,27 +20,15 @@ import {
 import { createTypeChat } from "@typeagent/agent-runtime";
 import { openai } from "@typeagent/aiclient";
 import { SelfHelpAction } from "./selfHelpSchema.js";
+import { HelpResponse, helpResponseSchemaText } from "./helpResponseSchema.js";
 import {
-    CommandHelpResponse,
-    commandHelpResponseSchemaText,
-} from "./commandHelpResponseSchema.js";
-import {
-    ExplainResponse,
-    explainResponseSchemaText,
-} from "./explainResponseSchema.js";
-import {
-    // TODO(describeAgent): findAgent and groupForAgent back the disabled
-    // describeAgent action (see selfHelpSchema.ts). They stay exported and
-    // tested for a future pass that may combine this with the built-in describe.
-    // findAgent,
     formatAgentRoster,
     formatGrounding,
-    // groupForAgent,
     loadCatalogIndex,
     selectRelevantGroups,
 } from "./catalog.js";
 import { formatDocsGrounding, loadDocChunks, selectDocChunks } from "./docs.js";
-import { renderExplain, renderStructured } from "./render.js";
+import { renderHelp } from "./render.js";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:selfhelp");
@@ -52,53 +40,24 @@ export function instantiate(): AppAgent {
     };
 }
 
-const answerInstructions = [
-    "You are the Help agent for TypeAgent. The user wants to know how to do something",
-    'in TypeAgent - usually "what\'s the command for X", "how do I X", or "can I X".',
-    "You are given a list of available capabilities: each host's @-commands and the",
-    "equivalent natural-language actions. Identify the capability or capabilities that",
-    "satisfy the request and return them.",
+const helpInstructions = [
+    "You are the Help agent for TypeAgent. Answer the user's question about TypeAgent",
+    "itself, using ONLY the provided capabilities (each host's @-commands and",
+    "natural-language actions) and documentation excerpts.",
     "Rules:",
-    "- Use ONLY hosts, commandPath values, and actionName values that appear in the",
-    "  list. Never invent a command, path, host, or action.",
-    "- When the same thing can be done by a command AND a natural-language action, fill",
-    "  BOTH commandPath and actionName on the same way so the user sees both options.",
-    "- Order ways from most to least relevant.",
-    "- If nothing in the list matches, return an empty ways array and use summary to say",
-    "  so - i.e. TypeAgent does not support that - suggesting the user run @help.",
-    "- Keep summary to one or two sentences.",
-].join("\n");
-
-// TODO(describeAgent): disabled along with the describeAgent action; see the
-// TODO in selfHelpSchema.ts.
-/*
-const describeInstructions = [
-    "You are the Help agent for TypeAgent. The user wants to know what a specific",
-    "application agent can do. You are given that agent's capabilities: its @-commands",
-    "and its equivalent natural-language actions.",
-    "Rules:",
-    "- In summary, say in one or two sentences what this agent is for.",
-    "- List the agent's capabilities in `ways`, most useful first, each with a short",
-    "  `does`. Use ONLY hosts, commandPath values, and actionName values from the list;",
-    "  never invent one. Pair a command with its action on the same way when both exist.",
-    "- If the user asked whether the agent can do a specific thing, answer that directly",
-    "  in summary (yes or no) and include the matching capability in `ways` if it exists.",
-    "- If the capability list is empty, return an empty ways array and say in summary that",
-    "  the agent has no described actions.",
-].join("\n");
-*/
-
-const explainInstructions = [
-    "You are the Help agent for TypeAgent. Answer the user's conceptual or setup",
-    "question about TypeAgent using ONLY the documentation excerpts provided.",
-    "Rules:",
-    "- Answer directly in `summary` (one to three sentences).",
-    "- Use `details` only for supporting points or ordered setup steps that add value",
-    "  beyond the summary; otherwise omit it.",
-    "- Do not invent features, commands, or settings that are not in the excerpts.",
-    "- If the excerpts do not answer the question, say so in `summary` and suggest @help.",
-    "- When relevant, add `seeAlso` pointers such as listing all commands (command",
-    '  "help") or the configured agents (command "config agent").',
+    "- Put a direct answer in `summary` (one to three sentences).",
+    "- If the user wants to DO something and a capability matches, list the way(s) in",
+    "  `ways`, most relevant first. Copy host, commandPath, and actionName EXACTLY from",
+    "  the capabilities list; never invent one. When the same thing has both a command",
+    "  and an action, fill BOTH on the same way.",
+    "- For conceptual or setup questions (what TypeAgent is, how a feature works, what",
+    "  keys/configuration are needed), answer in `summary` and use `details` for",
+    "  supporting points or ordered steps, grounded in the documentation excerpts.",
+    "- Omit `ways` for purely conceptual questions; omit `details` for pure command",
+    "  lookups.",
+    "- Never invent commands, actions, features, or settings not present in the input.",
+    '- Add `seeAlso` pointers when helpful (e.g. command "help" to list all commands,',
+    '  "config agent" to list agents). If nothing matches, say so in `summary`.',
 ].join("\n");
 
 type TokenUsage = {
@@ -154,159 +113,63 @@ function showStatus(context: ActionContext<unknown>, message: string): void {
     );
 }
 
-async function answerCommandQuestion(
+export async function runHelp(
     question: string,
     context: ActionContext<unknown>,
 ): Promise<ActionResult> {
     const trimmed = question.trim();
     if (trimmed.length === 0) {
         return createActionResultFromError(
-            "Ask what you want to do in TypeAgent, e.g. 'what's the command to create a new conversation?'",
+            "Ask a question about TypeAgent, e.g. 'what's the command to create a conversation?' or 'what keys do I need to run it?'",
         );
     }
 
     const index = loadCatalogIndex();
-    if (index === undefined) {
-        return createActionResultFromError(
-            "The TypeAgent command catalog isn't available. Try `@help` to list commands.",
-        );
-    }
-
-    showStatus(context, "Looking that up…");
-
-    const grounding = formatGrounding(selectRelevantGroups(index, trimmed));
-
-    const tokenUsage = newTokenUsage();
-    const chat = createHelpChat<CommandHelpResponse>(
-        commandHelpResponseSchemaText,
-        "CommandHelpResponse",
-        answerInstructions,
-        tokenUsage,
-    );
-
-    const response = await chat.translate(trimmed, grounding);
-    if (!response.success) {
-        debug(`translate failed: ${response.message}`);
-        return createActionResultFromError(
-            `Sorry, I couldn't answer that right now: ${response.message}`,
-        );
-    }
-
-    return {
-        ...createStructuredResult(renderStructured(response.data, index)),
-        tokenUsage,
-    };
-}
-
-async function answerExplainQuestion(
-    question: string,
-    context: ActionContext<unknown>,
-): Promise<ActionResult> {
-    const trimmed = question.trim();
-    if (trimmed.length === 0) {
-        return createActionResultFromError(
-            "Ask a question about TypeAgent, e.g. 'what is TypeAgent?' or 'how do I set it up?'",
-        );
-    }
-
     const chunks = selectDocChunks(loadDocChunks(), trimmed);
-    if (chunks.length === 0) {
+    if (index === undefined && chunks.length === 0) {
         return createActionResultFromError(
-            "The TypeAgent documentation isn't available. Try `@help` to list commands.",
+            "TypeAgent help data isn't available. Try `@help` to list commands.",
         );
     }
 
     showStatus(context, "Looking that up…");
 
-    // Append a one-line agent roster so "what can TypeAgent do" gets concrete
-    // examples without bundling every agent's docs.
-    let grounding = formatDocsGrounding(chunks);
-    const index = loadCatalogIndex();
+    // Ground on both the command catalog (for "how do I / what's the command")
+    // and the docs (for concepts and setup), plus a one-line agent roster, so a
+    // single answer can cover any question about TypeAgent.
+    const parts: string[] = [];
     if (index !== undefined) {
-        grounding += `\n\n${formatAgentRoster(index)}`;
+        parts.push(formatGrounding(selectRelevantGroups(index, trimmed)));
     }
+    if (chunks.length > 0) {
+        parts.push(formatDocsGrounding(chunks));
+    }
+    if (index !== undefined) {
+        parts.push(formatAgentRoster(index));
+    }
+    const grounding = parts.join("\n\n");
 
     const tokenUsage = newTokenUsage();
-    const chat = createHelpChat<ExplainResponse>(
-        explainResponseSchemaText,
-        "ExplainResponse",
-        explainInstructions,
+    const chat = createHelpChat<HelpResponse>(
+        helpResponseSchemaText,
+        "HelpResponse",
+        helpInstructions,
         tokenUsage,
     );
 
     const response = await chat.translate(trimmed, grounding);
     if (!response.success) {
-        debug(`explain translate failed: ${response.message}`);
+        debug(`help translate failed: ${response.message}`);
         return createActionResultFromError(
             `Sorry, I couldn't answer that right now: ${response.message}`,
         );
     }
 
     return {
-        ...createStructuredResult(renderExplain(response.data)),
+        ...createStructuredResult(renderHelp(response.data, index)),
         tokenUsage,
     };
 }
-
-// TODO(describeAgent): disabled - overlaps the built-in
-// system.describe.describeAgent. Kept for a future pass that may combine the
-// two. See the TODO in selfHelpSchema.ts.
-/*
-async function answerDescribeAgent(
-    question: string,
-    agentName: string | undefined,
-    context: ActionContext<unknown>,
-): Promise<ActionResult> {
-    const trimmed = question.trim();
-    if (trimmed.length === 0 && !agentName) {
-        return createActionResultFromError(
-            "Name an agent to describe, e.g. 'what can the browser agent do?'",
-        );
-    }
-
-    const index = loadCatalogIndex();
-    if (index === undefined) {
-        return createActionResultFromError(
-            "The TypeAgent command catalog isn't available. Try `@help` to list commands.",
-        );
-    }
-
-    const agent = findAgent(index, trimmed, agentName);
-    if (agent === undefined) {
-        return createStructuredResult([
-            {
-                kind: "text",
-                text: 'I couldn\'t tell which agent you mean. Run `@config agent` to list the installed agents, or name one - e.g. "what can the browser agent do?".',
-            },
-        ]);
-    }
-
-    showStatus(context, `Looking up the ${agent.name} agent…`);
-
-    const grounding = formatGrounding([groupForAgent(index, agent)]);
-
-    const tokenUsage = newTokenUsage();
-    const chat = createHelpChat<CommandHelpResponse>(
-        commandHelpResponseSchemaText,
-        "CommandHelpResponse",
-        describeInstructions,
-        tokenUsage,
-    );
-
-    const response = await chat.translate(trimmed || agent.name, grounding);
-    if (!response.success) {
-        debug(`describe translate failed: ${response.message}`);
-        return createActionResultFromError(
-            `Sorry, I couldn't answer that right now: ${response.message}`,
-        );
-    }
-
-    return {
-        ...createStructuredResult(renderStructured(response.data, index)),
-        tokenUsage,
-    };
-}
-*/
 
 async function executeAction(
     action: TypeAgentAction<SelfHelpAction>,
@@ -314,16 +177,7 @@ async function executeAction(
 ): Promise<ActionResult> {
     switch (action.actionName) {
         case "answerTypeAgentQuestion":
-            return answerCommandQuestion(action.parameters.question, context);
-        case "explainTypeAgent":
-            return answerExplainQuestion(action.parameters.question, context);
-        // TODO(describeAgent): disabled - see selfHelpSchema.ts.
-        // case "describeAgent":
-        //     return answerDescribeAgent(
-        //         action.parameters.question,
-        //         action.parameters.agent,
-        //         context,
-        //     );
+            return runHelp(action.parameters.question, context);
         default:
             throw new Error(
                 `Unknown SelfHelp action: ${(action as TypeAgentAction).actionName}`,
@@ -333,26 +187,7 @@ async function executeAction(
 
 class AskCommandHandler implements CommandHandler {
     public readonly description =
-        "Find the TypeAgent command for what you want to do (e.g. 'create a new conversation').";
-    public readonly parameters = {
-        args: {
-            question: {
-                description: "What you want to do in TypeAgent.",
-                implicitQuotes: true,
-            },
-        },
-    } as const;
-    public async run(
-        context: ActionContext<unknown>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ): Promise<ActionResult> {
-        return answerCommandQuestion(params.args.question, context);
-    }
-}
-
-class AboutCommandHandler implements CommandHandler {
-    public readonly description =
-        "Explain TypeAgent itself - what it is, what it can do, or how to set it up.";
+        "Ask a question about TypeAgent - a command, a concept, or how to set it up.";
     public readonly parameters = {
         args: {
             question: {
@@ -365,41 +200,15 @@ class AboutCommandHandler implements CommandHandler {
         context: ActionContext<unknown>,
         params: ParsedCommandParams<typeof this.parameters>,
     ): Promise<ActionResult> {
-        return answerExplainQuestion(params.args.question, context);
+        return runHelp(params.args.question, context);
     }
 }
-
-// TODO(describeAgent): disabled - overlaps the built-in
-// system.describe.describeAgent. See the TODO in selfHelpSchema.ts.
-/*
-class AgentCommandHandler implements CommandHandler {
-    public readonly description =
-        "Describe what a specific agent can do (e.g. 'browser' or 'what can the list agent do').";
-    public readonly parameters = {
-        args: {
-            query: {
-                description: "The agent name or your question about it.",
-                implicitQuotes: true,
-            },
-        },
-    } as const;
-    public async run(
-        context: ActionContext<unknown>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ): Promise<ActionResult> {
-        return answerDescribeAgent(params.args.query, undefined, context);
-    }
-}
-*/
 
 const askHandler = new AskCommandHandler();
 const handlers: CommandHandlerTable = {
-    description: "Ask about TypeAgent - commands and concepts",
+    description: "Ask about TypeAgent - commands, concepts, and setup",
     defaultSubCommand: askHandler,
     commands: {
         ask: askHandler,
-        about: new AboutCommandHandler(),
-        // TODO(describeAgent): disabled - see selfHelpSchema.ts.
-        // agent: new AgentCommandHandler(),
     },
 };

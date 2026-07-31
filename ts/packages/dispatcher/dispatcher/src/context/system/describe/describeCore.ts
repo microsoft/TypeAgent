@@ -3,7 +3,8 @@
 
 // Shared resolution + rendering core for agent/action capability discovery.
 // Both entry points call into this module directly: the `@describe` command
-// (describeCommandHandlers.ts) and the NL path (describeActionHandler.ts).
+// (describeCommandHandlers.ts) and the NL path (the describeAgent/describeAction
+// actions of system.help, in action/helpActionHandler.ts).
 
 import type {
     ActionInfo,

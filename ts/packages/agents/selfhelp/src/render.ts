@@ -1,11 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Turns a validated CommandHelpResponse into structured display blocks: a short
-// summary followed by one card per way (command usage as the title, what it does
-// as the subtitle, and the natural-language phrasings under an "Or say" field).
-// Everything is resolved from the catalog so the output stays grounded. Pure and
-// side-effect free for testing.
+// Turns a validated HelpResponse into structured display blocks: a short summary,
+// then one card per command "way" (command usage as the title, what it does as
+// the subtitle, and the natural-language phrasings under an "Or say" field),
+// then optional detail bullets and "See also" pointers. Command details are
+// resolved from the catalog so the output stays grounded. Pure and side-effect
+// free for testing.
 
 import {
     CatalogCommand,
@@ -14,11 +15,7 @@ import {
     lookupAction,
     lookupCommand,
 } from "./catalog.js";
-import {
-    CommandHelpResponse,
-    CommandHelpWay,
-} from "./commandHelpResponseSchema.js";
-import { ExplainResponse } from "./explainResponseSchema.js";
+import { HelpResponse, HelpWay } from "./helpResponseSchema.js";
 import { StructuredBlock } from "@typeagent/agent-sdk";
 
 const MAX_RENDERED_PHRASINGS = 3;
@@ -41,7 +38,7 @@ function quotePhrasings(phrasings: string[]): string {
 type CardBlock = Extract<StructuredBlock, { kind: "card" }>;
 
 function renderWayCard(
-    way: CommandHelpWay,
+    way: HelpWay,
     index: CatalogIndex,
 ): StructuredBlock | undefined {
     const cmd = way.commandPath
@@ -85,46 +82,16 @@ function renderWayCard(
     return undefined;
 }
 
-export function renderStructured(
-    response: CommandHelpResponse,
-    index: CatalogIndex,
+// Renders a merged help answer: a summary paragraph, optional command cards for
+// the ways to do a task, optional supporting points as a bulleted list, and
+// optional follow-up pointers (commands shown with a leading '@'). `index` is
+// optional so the summary/details still render when the catalog is unavailable.
+export function renderHelp(
+    response: HelpResponse,
+    index: CatalogIndex | undefined,
 ): StructuredBlock[] {
     const summary = response.summary?.trim();
     const ways = Array.isArray(response.ways) ? response.ways : [];
-
-    if (ways.length === 0) {
-        return [
-            {
-                kind: "text",
-                text:
-                    summary ||
-                    "I couldn't find a matching TypeAgent command for that.",
-            },
-            {
-                kind: "text",
-                text: "Run `@help` to see all available commands.",
-            },
-        ];
-    }
-
-    const blocks: StructuredBlock[] = [];
-    if (summary) {
-        blocks.push({ kind: "text", text: summary });
-    }
-    for (const way of ways) {
-        const card = renderWayCard(way, index);
-        if (card) {
-            blocks.push(card);
-        }
-    }
-    return blocks;
-}
-
-// Renders an explainTypeAgent answer: a summary paragraph, optional supporting
-// points as a bulleted list, and optional follow-up pointers (commands shown
-// with a leading '@') as a second list.
-export function renderExplain(response: ExplainResponse): StructuredBlock[] {
-    const summary = response.summary?.trim();
     const details = Array.isArray(response.details)
         ? response.details.map((d) => d.trim()).filter((d) => d.length > 0)
         : [];
@@ -135,8 +102,17 @@ export function renderExplain(response: ExplainResponse): StructuredBlock[] {
         kind: "text",
         text:
             summary ||
-            "I couldn't find an answer to that in the TypeAgent docs. Run `@help` to see the available commands.",
+            "I couldn't find an answer to that. Run `@help` to see the available commands.",
     });
+
+    if (index !== undefined) {
+        for (const way of ways) {
+            const card = renderWayCard(way, index);
+            if (card) {
+                blocks.push(card);
+            }
+        }
+    }
 
     if (details.length > 0) {
         blocks.push({

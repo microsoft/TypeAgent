@@ -383,11 +383,6 @@ function agentText(agent: CatalogAgent): string {
     return parts.join(" ").toLowerCase();
 }
 
-// TODO(describeAgent): findAgent and groupForAgent back the selfhelp describeAgent
-// action, currently disabled (see selfHelpSchema.ts) because it overlaps the
-// built-in system.describe.describeAgent. Retained and unit-tested for a future
-// pass that may combine the two.
-//
 // Resolves which agent a describe-question is about. An explicit agent name (from
 // the action parameter) wins when it matches a catalog agent; otherwise the agent
 // whose text best overlaps the question is chosen. Returns undefined when nothing
@@ -430,8 +425,8 @@ export function findAgent(
     return best;
 }
 
-// Builds a single host group holding all of an agent's commands and actions, so
-// describeAgent can ground the model on the agent's full capability set.
+// Builds a single host group holding all of an agent's commands and actions - an
+// agent's full capability set, e.g. to describe what one agent can do.
 export function groupForAgent(
     index: CatalogIndex,
     agent: CatalogAgent,

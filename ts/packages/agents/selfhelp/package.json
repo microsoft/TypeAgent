@@ -16,7 +16,8 @@
   "type": "module",
   "exports": {
     "./agent/manifest": "./src/selfHelpManifest.json",
-    "./agent/handlers": "./dist/selfHelpActionHandler.js"
+    "./agent/handlers": "./dist/selfHelpActionHandler.js",
+    "./help": "./dist/help.js"
   },
   "files": [
     "dist",

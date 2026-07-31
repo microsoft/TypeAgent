@@ -11,8 +11,8 @@ import {
     formatDocsGrounding,
     selectDocChunks,
 } from "../src/docs.js";
-import { ExplainResponse } from "../src/explainResponseSchema.js";
-import { renderExplain } from "../src/render.js";
+import { HelpResponse } from "../src/helpResponseSchema.js";
+import { renderHelp } from "../src/render.js";
 
 const SAMPLE = `# TypeAgent
 
@@ -117,9 +117,9 @@ describe("formatDocsGrounding", () => {
     });
 });
 
-describe("renderExplain", () => {
+describe("renderHelp", () => {
     test("renders summary, details list, and see-also pointers", () => {
-        const response: ExplainResponse = {
+        const response: HelpResponse = {
             summary: "TypeAgent is a personal agent.",
             details: ["It routes requests to agents.", "It keeps memory."],
             seeAlso: [
@@ -127,7 +127,7 @@ describe("renderExplain", () => {
                 { label: "List configured agents", command: "config agent" },
             ],
         };
-        const blocks = renderExplain(response);
+        const blocks = renderHelp(response, undefined);
         expect(blocks[0]).toMatchObject({
             kind: "text",
             text: "TypeAgent is a personal agent.",
@@ -145,7 +145,7 @@ describe("renderExplain", () => {
     });
 
     test("falls back to a helpful message when the summary is empty", () => {
-        const blocks = renderExplain({ summary: "" });
+        const blocks = renderHelp({ summary: "" }, undefined);
         expect(blocks).toHaveLength(1);
         expect((blocks[0] as any).text).toContain("@help");
     });

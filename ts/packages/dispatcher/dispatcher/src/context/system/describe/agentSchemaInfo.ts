@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Shared data source for agent/action capability discovery (`@describe` and
-// the `system.describe` NL schema — see describeCore.ts) as well as the
+// the system.help describe actions — see describeCore.ts) as well as the
 // `Dispatcher.getAgentSchemas` RPC surface (dispatcher.ts). Extracted so
 // handlers can call it directly without going through the RPC interface.
 
