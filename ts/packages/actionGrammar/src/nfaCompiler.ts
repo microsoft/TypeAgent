@@ -1120,6 +1120,23 @@ function compileWildcardPart(
     const hasCheckedParamSpec = checkedVariables?.has(variableName) ?? false;
     const isChecked = hasEntityType || hasCheckedParamSpec;
 
+    // $(name:word) is exactly one token — do not build the 1+ token loop used
+    // for free wildcards.  Looping word captures lets short alternatives
+    // swallow trailing literals (e.g. "at 2pm in Seattle with Bob").
+    if (part.typeName === "word") {
+        if (part.optional) {
+            builder.addEpsilonTransition(fromState, toState);
+        }
+        builder.addWildcardTransition(
+            fromState,
+            toState,
+            variableName,
+            part.typeName,
+            isChecked,
+        );
+        return toState;
+    }
+
     if (part.optional) {
         // Optional wildcard: can skip via epsilon or match one or more tokens
         // fromState --epsilon--> toState (skip)
@@ -1246,6 +1263,25 @@ function compileWildcardPartWithSlots(
     const completionActionName = context.completionActionName;
     const completionPropertyPath =
         context.completionPropertyPaths?.get(variableName);
+
+    // $(name:word) is exactly one token (see compileWildcardPart).
+    if (part.typeName === "word") {
+        if (part.optional) {
+            builder.addEpsilonTransition(fromState, toState);
+        }
+        builder.addWildcardTransition(
+            fromState,
+            toState,
+            variableName,
+            part.typeName,
+            isChecked,
+            slotIndex,
+            false, // Single token, never append
+            completionActionName,
+            completionPropertyPath,
+        );
+        return toState;
+    }
 
     if (part.optional) {
         // Optional wildcard: can skip via epsilon or match one or more tokens

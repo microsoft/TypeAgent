@@ -1338,13 +1338,19 @@ export interface DFAASTMatchResult {
 /**
  * Determine at match time whether a wildcard node is truly "checked"
  * (has a registered entity validator that accepts the captured text).
- * Mirrors the slot-based matcher logic: "wildcard" and "string" types are
- * always unchecked; other types are checked only if a validator confirms.
+ * Mirrors the NFA matcher (`nfaCompiler` / `nfaInterpreter`):
+ * - "wildcard" and "string" are always unchecked
+ * - "word" is a built-in structural single-token constraint and is checked
+ *   even though it has no entity validator
+ * - "number" is checked when the capture parses as a number
+ * - other types are checked only if a registered validator accepts the text
  */
 function isRuntimeChecked(w: WildcardMatchNode): boolean {
     const typeName = w.typeName;
     if (!typeName || typeName === "string" || typeName === "wildcard")
         return false;
+    // Built-in single-token constraint — NFA marks these checked at compile time.
+    if (typeName === "word") return true;
     const tokenStr = w.tokens.join(" ");
     if (typeName === "number") {
         return parseNumberToken(tokenStr) !== undefined;

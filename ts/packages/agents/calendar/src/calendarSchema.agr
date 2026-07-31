@@ -62,8 +62,10 @@
         participant
     }
 }
-  // Adjacent $(word) $(word) needs a literal separator; use RelativeDay or "for"/"on".
-  | book $(description:wildcard) with $(participant:word) for $(date:wildcard) at $(time:word) -> {
+  // Explicit "for"/"on" separators for multi-word dates ("next tuesday") and
+  // when the speaker includes the preposition before a day name.
+  // participant is wildcard so "mary jane" works.
+  | book $(description:wildcard) with $(participant:wildcard) for $(date:wildcard) at $(time:word) -> {
     actionName: "scheduleEvent",
     parameters: {
         description,
@@ -72,7 +74,7 @@
         participant
     }
 }
-  | book $(description:wildcard) with $(participant:word) on $(date:wildcard) at $(time:word) -> {
+  | book $(description:wildcard) with $(participant:wildcard) on $(date:wildcard) at $(time:word) -> {
     actionName: "scheduleEvent",
     parameters: {
         description,
@@ -81,7 +83,11 @@
         participant
     }
 }
-  | book $(description:word) with $(participant:word) $(date:<RelativeDay>) at $(time:word) -> {
+  // Bare RelativeDay after participant ("book sync with mary jane friday at noon").
+  // participant/description are wildcards; date is a closed RelativeDay literal set
+  // so the day token is not absorbed into participant. $(time:word) stays one token
+  // so this cannot steal the "at $(location) $(date) at $(time)" alternative.
+  | book $(description:wildcard) with $(participant:wildcard) $(date:<RelativeDay>) at $(time:word) -> {
     actionName: "scheduleEvent",
     parameters: {
         description,
@@ -91,8 +97,7 @@
     }
 };
 
-// Single-token relative days so "book lunch with alex tomorrow at noon" can bind
-// participant + date without two free adjacent wildcards.
+// Single-token relative days (no multi-word spans like "next tuesday").
 <RelativeDay> = today | tomorrow | tonight
   | monday | tuesday | wednesday | thursday | friday | saturday | sunday
   | mon | tue | wed | thu | fri | sat | sun;
