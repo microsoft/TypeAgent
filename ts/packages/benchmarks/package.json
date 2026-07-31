@@ -1,0 +1,30 @@
+{
+  "name": "@typeagent/benchmarks",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeAgent translation benchmark (scaffold)",
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
+    "agent-dispatcher": "workspace:*",
+    "default-agent-provider": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "prettier": "^3.5.3",
+    "typescript": "~5.4.5"
+  },
+  "scripts": {
+    "build": "tsc -b && node -e \"const f=require('node:fs');f.copyFileSync('src/translationBench/catalog.generated.json','dist/src/translationBench/catalog.generated.json');f.copyFileSync('src/core/model-prices.generated.json','dist/src/core/model-prices.generated.json')\"",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "gen-catalog": "pnpm run build && node dist/src/translationBench/scripts/genCatalog.js",
+    "snapshot-prices": "pnpm run build && node dist/src/translationBench/scripts/snapshotPrices.js",
+    "prettier": "prettier --check package.json tsconfig.json src --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write package.json tsconfig.json src --ignore-path ../../.prettierignore",
+    "test": "pnpm run build",
+    "test:local": "pnpm run test",
+    "tsc": "tsc -b"
+  }
+}

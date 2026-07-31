@@ -1,0 +1,68 @@
+{
+  "source": "https://models.dev/api.json",
+  "version": "2026-07-31T02:08:45.776Z",
+  "unit": "USD per 1M tokens",
+  "provider": "openai",
+  "rates": {
+    "gpt-4.1": {
+      "inUsdPer1M": 2,
+      "cachedUsdPer1M": 0.5,
+      "outUsdPer1M": 8
+    },
+    "gpt-4.1-mini": {
+      "inUsdPer1M": 0.4,
+      "cachedUsdPer1M": 0.1,
+      "outUsdPer1M": 1.6
+    },
+    "gpt-5": {
+      "inUsdPer1M": 1.25,
+      "cachedUsdPer1M": 0.125,
+      "outUsdPer1M": 10
+    },
+    "gpt-5-mini": {
+      "inUsdPer1M": 0.25,
+      "cachedUsdPer1M": 0.025,
+      "outUsdPer1M": 2
+    },
+    "gpt-5.4": {
+      "inUsdPer1M": 2.5,
+      "cachedUsdPer1M": 0.25,
+      "outUsdPer1M": 15
+    },
+    "gpt-5.4-mini": {
+      "inUsdPer1M": 0.75,
+      "cachedUsdPer1M": 0.075,
+      "outUsdPer1M": 4.5
+    },
+    "gpt-5.4-nano": {
+      "inUsdPer1M": 0.2,
+      "cachedUsdPer1M": 0.02,
+      "outUsdPer1M": 1.25
+    },
+    "gpt-5.4-pro": {
+      "inUsdPer1M": 30,
+      "cachedUsdPer1M": 30,
+      "outUsdPer1M": 180
+    },
+    "gpt-5.6": {
+      "inUsdPer1M": 5,
+      "cachedUsdPer1M": 0.5,
+      "outUsdPer1M": 30
+    },
+    "gpt-5.6-luna": {
+      "inUsdPer1M": 1,
+      "cachedUsdPer1M": 0.1,
+      "outUsdPer1M": 6
+    },
+    "gpt-5.6-sol": {
+      "inUsdPer1M": 5,
+      "cachedUsdPer1M": 0.5,
+      "outUsdPer1M": 30
+    },
+    "gpt-5.6-terra": {
+      "inUsdPer1M": 2.5,
+      "cachedUsdPer1M": 0.25,
+      "outUsdPer1M": 15
+    }
+  }
+}
