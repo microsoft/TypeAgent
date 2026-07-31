@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { rankConversationMatches } from "../src/conversationSearchIndex.js";
+import {
+    rankConversationMatches,
+    shouldIndexConversationMessage,
+} from "../src/conversationSearchIndex.js";
 
 // Fake message store keyed by ordinal, mirroring what the real index derives
 // from a matched message (its text + the conversation id read off its tag).
@@ -24,6 +27,16 @@ const MATCHES = [
     { messageOrdinal: 2, score: 0.8 },
     { messageOrdinal: 3, score: 0.3 },
 ];
+
+describe("shouldIndexConversationMessage", () => {
+    it("disables indexing in test mode", () => {
+        expect(shouldIndexConversationMessage(true)).toBe(false);
+    });
+
+    it("enables indexing outside test mode", () => {
+        expect(shouldIndexConversationMessage(false)).toBe(true);
+    });
+});
 
 describe("rankConversationMatches", () => {
     it("groups hits by conversation and keeps the best score", () => {

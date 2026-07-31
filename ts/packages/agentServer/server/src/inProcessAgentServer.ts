@@ -42,6 +42,8 @@ export type InProcessAgentServerOptions = {
      * a single user, so the default is 0 (never idle-close a conversation).
      */
     idleTimeoutMs?: number;
+    /** Disable background content indexing for isolated test instances. */
+    testMode?: boolean;
 };
 
 export type InProcessAgentServer = {
@@ -73,6 +75,7 @@ export async function createInProcessAgentServer(
         dispatcherOptions,
         instanceDir,
         options.idleTimeoutMs ?? 0,
+        options.testMode ?? false,
     );
 
     // Pre-warm so the first join is fast and conversation metadata exists.
