@@ -791,6 +791,19 @@ export async function createConversationManager(
         path.join(conversationsDir, "_unified"),
     );
 
+    // Re-apply deletes from previous runs. The unified index persists messages
+    // (append-only) but its tombstone set is in-memory, so any indexed
+    // conversation that no longer exists in the live registry must be
+    // tombstoned again now, or its content would resurface in search.
+    const staleTombstoned = conversationSearchIndex.reconcileTombstones(
+        new Set(conversations.keys()),
+    );
+    if (staleTombstoned > 0) {
+        debugConversation(
+            `Unified index: tombstoned ${staleTombstoned} deleted conversation(s) on startup`,
+        );
+    }
+
     const manager: ConversationManager = {
         async createConversation(
             name: string,

@@ -81,7 +81,13 @@ import { createWebSpeechProvider } from "./webSpeechProvider.js";
 import { openSettingsPopup, openHelpPopup } from "./popups.js";
 import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
-import { iconX, iconJumpQueue, iconStop, iconRetry } from "./icons.js";
+import {
+    iconX,
+    iconJumpQueue,
+    iconStop,
+    iconRetry,
+    iconOpenInWindow,
+} from "./icons.js";
 
 /**
  * How long the transient "sent" acknowledgement stays on the user bubble
@@ -552,6 +558,26 @@ export interface StatusNoticeBadge {
 type CaretPoint = { node: Node; offset: number };
 
 /**
+ * A live-updating bubble tracked by the top rail: either an agent dynamic
+ * display or a bubble flagged live via a `data-live-title` content marker
+ * (the conversation-index progress bar). When such a bubble scrolls out of the
+ * message viewport a compact chip is shown in the rail so the user can watch
+ * its progress and jump back to it.
+ */
+type LiveBubbleEntry = {
+    container: AgentMessageContainer;
+    kind: "dynamic" | "marker";
+    title: string;
+    icon: string;
+    percent?: number;
+    pinned: boolean;
+    offscreen: boolean;
+    position: "above" | "below" | "in";
+    chip?: HTMLDivElement;
+    barFill?: HTMLElement;
+};
+
+/**
  * A lightweight chat panel that renders user and agent messages.
  * Designed for embedding in a Chrome extension side panel or any
  * standalone web page.
@@ -758,6 +784,14 @@ export class ChatPanel {
     private dynamicTimer?: ReturnType<typeof setTimeout>;
     private dynamicContainers = new Map<string, AgentMessageContainer>();
 
+    // Live-bubble "top rail". When a live-updating bubble scrolls out of the
+    // message viewport, a compact chip is shown in `topRail` (an in-flow strip
+    // above the messages, so it never overlaps the transcript or the
+    // scrollbar). Keyed by the observed bubble element (container.div).
+    private topRail?: HTMLDivElement;
+    private liveObserver?: IntersectionObserver;
+    private liveBubbles = new Map<HTMLElement, LiveBubbleEntry>();
+
     // Pending image attachments (base64 data URLs)
     private pendingAttachments: string[] = [];
 
@@ -862,6 +896,8 @@ export class ChatPanel {
     private voiceBanner?: HTMLDivElement;
     private lightboxOverlay?: HTMLDivElement;
     private lightboxKeyHandler?: (ev: KeyboardEvent) => void;
+    private textViewerOverlay?: HTMLDivElement;
+    private textViewerKeyHandler?: (ev: KeyboardEvent) => void;
     private speechState: SpeechState = "idle";
 
     constructor(
@@ -915,6 +951,13 @@ export class ChatPanel {
             wrapper.appendChild(this.voiceBanner);
         }
 
+        // Live-bubble top rail — an in-flow strip above the messages (so it
+        // never overlaps the transcript or the scrollbar). Populated by the
+        // IntersectionObserver below when a live bubble scrolls out of view.
+        this.topRail = document.createElement("div");
+        this.topRail.className = "chat-top-rail";
+        wrapper.appendChild(this.topRail);
+
         // Scrollable message area
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat";
@@ -926,6 +969,17 @@ export class ChatPanel {
         this.messageDiv.appendChild(sentinel);
 
         wrapper.appendChild(this.messageDiv);
+
+        // Watch live bubbles (dynamic displays / marked progress bubbles) and
+        // surface a rail chip whenever one leaves the message viewport. Guarded
+        // for environments without IntersectionObserver (e.g. jsdom tests), in
+        // which case the rail is simply inert.
+        if (typeof IntersectionObserver !== "undefined") {
+            this.liveObserver = new IntersectionObserver(
+                (entries) => this.onLiveIntersection(entries),
+                { root: this.messageDiv, threshold: 0 },
+            );
+        }
 
         // New messages pill — shown when user scrolls away from bottom
         // Positioned outside messageDiv to avoid column-reverse layout issues
@@ -1012,39 +1066,181 @@ export class ChatPanel {
     }
 
     /**
-     * Lazily syntax-highlight a logged tool-call block the first time it opens.
-     * The reasoning engine renders every tool call (single or folded) as a native
-     * <details class="reasoning-tool-call"> holding only that call's own JSON (an
-     * object for one call, an array for a folded run). The <details>/<summary>
-     * handles show/hide plus keyboard toggling on its own; we only highlight the
-     * <pre> once, when it first becomes visible, so it reads like the clickable
-     * action JSON view (same highlightJson tokens). The `toggle` event does not
-     * bubble, so we listen in the capture phase to keep a single delegated
-     * listener. Each block owns its JSON inline, independent of the enclosing
-     * action's JSON view. Shared by the Electron and VS Code shells.
+     * React to a reasoning block opening for the first time. The reasoning
+     * engine renders each logged tool call and tool result as a native
+     * <details> that owns its own content inline (JSON for a call, the full
+     * result text for a result), so the <details>/<summary> handles show/hide
+     * and keyboard toggling on its own. The `toggle` event does not bubble, so
+     * we listen in the capture phase to keep a single delegated listener.
+     *   - tool call: syntax-highlight its JSON once, when first visible, so it
+     *     reads like the clickable action JSON view (same highlightJson tokens).
+     *   - tool result: add an "open in viewer" affordance so the full result can
+     *     be popped out into a larger view.
+     * Shared by the Electron and VS Code shells.
      */
     private setupReasoningToolCall() {
         this.messageDiv.addEventListener(
             "toggle",
             (e) => {
                 const details = e.target as HTMLElement | null;
-                if (
-                    !details?.classList?.contains("reasoning-tool-call") ||
-                    !(details as HTMLDetailsElement).open
-                ) {
+                if (!details || !(details as HTMLDetailsElement).open) {
                     return;
                 }
-                const pre = details.querySelector<HTMLElement>(
-                    "pre.reasoning-tool-call-json",
-                );
-                if (!pre || pre.dataset.highlighted === "true") return;
-                // The <pre> starts as raw (escaped) JSON text; its textContent is
-                // the un-escaped JSON, which highlightJson re-escapes.
-                pre.innerHTML = sanitize(highlightJson(pre.textContent ?? ""));
-                pre.dataset.highlighted = "true";
+                if (details.classList.contains("reasoning-tool-call")) {
+                    const pre = details.querySelector<HTMLElement>(
+                        "pre.reasoning-tool-call-json",
+                    );
+                    if (!pre || pre.dataset.highlighted === "true") return;
+                    // The <pre> starts as raw (escaped) JSON text; its
+                    // textContent is the un-escaped JSON, which highlightJson
+                    // re-escapes.
+                    pre.innerHTML = sanitize(
+                        highlightJson(pre.textContent ?? ""),
+                    );
+                    pre.dataset.highlighted = "true";
+                } else if (
+                    details.classList.contains("reasoning-tool-result")
+                ) {
+                    this.addToolResultViewerButton(
+                        details as HTMLDetailsElement,
+                    );
+                }
             },
             true,
         );
+    }
+
+    /**
+     * Add an "open in viewer" affordance to a tool-result block the first time
+     * it expands. The full result text already lives inline in the block's
+     * <pre>; this lets the user pop it out into a larger, movable view - a
+     * host-native window/editor when the host provides openMessageInWindow
+     * (e.g. the VS Code shell), or an in-page overlay everywhere else (the
+     * Electron shell, web). Idempotent: a second open adds no second button.
+     */
+    private addToolResultViewerButton(details: HTMLDetailsElement) {
+        const summary = details.querySelector<HTMLElement>(
+            ".reasoning-tool-result-summary",
+        );
+        if (
+            !summary ||
+            summary.querySelector(".reasoning-tool-result-open") !== null
+        ) {
+            return;
+        }
+        const pre = details.querySelector<HTMLElement>(
+            "pre.reasoning-tool-result-body",
+        );
+        if (!pre) {
+            return;
+        }
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "reasoning-tool-result-open";
+        button.title = "Open result in viewer";
+        button.setAttribute("aria-label", "Open tool result in viewer");
+        button.appendChild(iconOpenInWindow());
+        button.addEventListener("click", (ev) => {
+            // Don't let the click toggle the enclosing <details>.
+            ev.preventDefault();
+            ev.stopPropagation();
+            this.openToolResultViewer(pre.textContent ?? "");
+        });
+        summary.appendChild(button);
+    }
+
+    /**
+     * Show a tool result's full text in a larger view: a host-native
+     * window/editor when the host supports it (openMessageInWindow), else an
+     * in-page overlay that works in every host.
+     */
+    private openToolResultViewer(text: string) {
+        const html = `<pre class="chat-text-viewer-body">${escapeHtml(
+            text,
+        )}</pre>`;
+        if (this.platformAdapter.openMessageInWindow?.(html, "Tool result")) {
+            return;
+        }
+        this.openTextViewer(text, "Tool result");
+    }
+
+    /**
+     * Open a full-window text viewer overlaying the chat, used as the in-page
+     * fallback for hosts without a native window. Scrollable, with copy and
+     * Esc / backdrop / close-button dismissal. Mirrors openImageLightbox.
+     */
+    public openTextViewer(text: string, title = "Tool result") {
+        this.closeTextViewer();
+
+        const overlay = document.createElement("div");
+        overlay.className = "chat-text-viewer-overlay";
+        overlay.tabIndex = -1;
+
+        const panel = document.createElement("div");
+        panel.className = "chat-text-viewer-panel";
+
+        const header = document.createElement("div");
+        header.className = "chat-text-viewer-header";
+        const titleEl = document.createElement("span");
+        titleEl.className = "chat-text-viewer-title";
+        titleEl.textContent = title;
+        header.appendChild(titleEl);
+
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "chat-text-viewer-button";
+        copyBtn.textContent = "Copy";
+        copyBtn.title = "Copy to clipboard";
+        copyBtn.addEventListener("click", () => {
+            void navigator.clipboard?.writeText(text);
+        });
+        header.appendChild(copyBtn);
+
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "chat-text-viewer-button";
+        closeBtn.textContent = "\u00D7";
+        closeBtn.title = "Close (Esc)";
+        closeBtn.addEventListener("click", () => this.closeTextViewer());
+        header.appendChild(closeBtn);
+
+        panel.appendChild(header);
+
+        const body = document.createElement("pre");
+        body.className = "chat-text-viewer-body";
+        body.textContent = text;
+        panel.appendChild(body);
+
+        overlay.appendChild(panel);
+
+        const onKey = (ev: KeyboardEvent) => {
+            if (ev.key === "Escape") {
+                ev.preventDefault();
+                this.closeTextViewer();
+            }
+        };
+        // Click on the backdrop (not the panel) dismisses.
+        overlay.addEventListener("click", (ev) => {
+            if (ev.target === overlay) this.closeTextViewer();
+        });
+        document.addEventListener("keydown", onKey);
+
+        this.textViewerOverlay = overlay;
+        this.textViewerKeyHandler = onKey;
+        this.rootElement.appendChild(overlay);
+        overlay.focus();
+    }
+
+    /** Tear down the text viewer overlay if it is open. */
+    public closeTextViewer() {
+        if (this.textViewerKeyHandler) {
+            document.removeEventListener("keydown", this.textViewerKeyHandler);
+            this.textViewerKeyHandler = undefined;
+        }
+        if (this.textViewerOverlay) {
+            this.textViewerOverlay.remove();
+            this.textViewerOverlay = undefined;
+        }
     }
 
     /**
@@ -3874,6 +4070,7 @@ export class ChatPanel {
         this.threadContainers.clear();
         this.notificationContainers.clear();
         this.requestAgentContainers.clear();
+        this.clearLiveBubbles();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
         this.pendingThreadResult.clear();
@@ -5605,6 +5802,11 @@ export class ChatPanel {
                 this.scrollToBottom();
 
                 if (result.nextRefreshMs > 0) {
+                    // Still live — track it for the top rail.
+                    this.registerLiveBubble(container, "dynamic", {
+                        title: item.source,
+                        icon: container.iconText || "🌐",
+                    });
                     this.dynamicDisplays.push({
                         source: item.source,
                         displayId: item.displayId,
@@ -5612,7 +5814,8 @@ export class ChatPanel {
                             Date.now() + Math.max(result.nextRefreshMs, 500),
                     });
                 } else {
-                    // Display is done — remove from tracking
+                    // Display is done — remove from tracking (and the rail).
+                    this.unregisterLiveBubble(container);
                     this.dynamicContainers.delete(key);
                 }
             } catch {
@@ -5620,6 +5823,189 @@ export class ChatPanel {
             }
         }
         this.scheduleDynamicRefresh();
+    }
+
+    // ---- Live-bubble top rail --------------------------------------------
+
+    /**
+     * Track (or refresh) a live-updating bubble so a chip appears in the top
+     * rail while it is scrolled out of view. Safe to call repeatedly to update
+     * the chip's title / percent.
+     */
+    private registerLiveBubble(
+        container: AgentMessageContainer,
+        kind: "dynamic" | "marker",
+        info: { title: string; icon: string; percent?: number },
+    ) {
+        if (!this.liveObserver) return;
+        const el = container.div;
+        let entry = this.liveBubbles.get(el);
+        if (!entry) {
+            entry = {
+                container,
+                kind,
+                title: info.title,
+                icon: info.icon,
+                percent: info.percent,
+                pinned: true,
+                offscreen: false,
+                position: "in",
+            };
+            this.liveBubbles.set(el, entry);
+            this.liveObserver.observe(el);
+        } else {
+            entry.kind = kind;
+            entry.title = info.title;
+            entry.icon = info.icon;
+            entry.percent = info.percent;
+        }
+        this.refreshTopRail();
+    }
+
+    /** Stop tracking a bubble and drop its chip. */
+    private unregisterLiveBubble(container: AgentMessageContainer) {
+        const el = container.div;
+        const entry = this.liveBubbles.get(el);
+        if (!entry) return;
+        this.liveObserver?.unobserve(el);
+        entry.chip?.remove();
+        this.liveBubbles.delete(el);
+    }
+
+    /** Drop all live-bubble tracking (called from clear()). */
+    private clearLiveBubbles() {
+        for (const [el, entry] of this.liveBubbles) {
+            this.liveObserver?.unobserve(el);
+            entry.chip?.remove();
+        }
+        this.liveBubbles.clear();
+    }
+
+    /**
+     * Content hook run after any agent bubble renders. Registers the bubble
+     * with the rail when its content carries a `data-live-title` marker, and
+     * unregisters marker-tracked bubbles once that marker is gone (e.g. the
+     * index summary replaces the progress bar).
+     */
+    private onContainerContentChanged(container: AgentMessageContainer) {
+        const marker = container.getLiveMarker();
+        if (marker) {
+            this.registerLiveBubble(container, "marker", {
+                title: marker.title,
+                icon: marker.icon || container.iconText || "⏳",
+                percent: marker.percent,
+            });
+        } else if (this.liveBubbles.get(container.div)?.kind === "marker") {
+            this.unregisterLiveBubble(container);
+        }
+    }
+
+    private onLiveIntersection(entries: IntersectionObserverEntry[]) {
+        for (const e of entries) {
+            const entry = this.liveBubbles.get(e.target as HTMLElement);
+            if (!entry) continue;
+            if (e.isIntersecting) {
+                entry.offscreen = false;
+                entry.position = "in";
+            } else {
+                entry.offscreen = true;
+                const rb = e.rootBounds;
+                entry.position =
+                    rb && e.boundingClientRect.bottom <= rb.top
+                        ? "above"
+                        : "below";
+            }
+        }
+        this.refreshTopRail();
+    }
+
+    /**
+     * Reconcile the rail: show a chip for each pinned bubble that is currently
+     * off-screen, remove it otherwise, and refresh chip contents in place.
+     */
+    private refreshTopRail() {
+        if (!this.topRail) return;
+        for (const entry of this.liveBubbles.values()) {
+            const shouldShow = entry.pinned && entry.offscreen;
+            if (shouldShow && !entry.chip) {
+                entry.chip = this.buildLiveChip(entry);
+                this.topRail.appendChild(entry.chip);
+            } else if (!shouldShow && entry.chip) {
+                entry.chip.remove();
+                entry.chip = undefined;
+                entry.barFill = undefined;
+            }
+            if (entry.chip) this.updateLiveChip(entry);
+        }
+    }
+
+    private buildLiveChip(entry: LiveBubbleEntry): HTMLDivElement {
+        const chip = document.createElement("div");
+        chip.className = "chat-live-chip";
+        chip.setAttribute("role", "button");
+        chip.tabIndex = 0;
+
+        const dir = document.createElement("span");
+        dir.className = "chat-live-chip-dir";
+        chip.appendChild(dir);
+
+        const icon = document.createElement("span");
+        icon.className = "chat-live-chip-icon";
+        chip.appendChild(icon);
+
+        const label = document.createElement("span");
+        label.className = "chat-live-chip-label";
+        chip.appendChild(label);
+
+        if (entry.percent !== undefined) {
+            const bar = document.createElement("span");
+            bar.className = "chat-live-chip-bar";
+            const fill = document.createElement("i");
+            bar.appendChild(fill);
+            chip.appendChild(bar);
+            entry.barFill = fill;
+        }
+
+        const pin = document.createElement("button");
+        pin.className = "chat-live-chip-pin";
+        pin.type = "button";
+        pin.textContent = "📌";
+        pin.title = "Unpin — stop showing this in the rail";
+        pin.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            entry.pinned = false;
+            this.refreshTopRail();
+        });
+        chip.appendChild(pin);
+
+        const jump = () =>
+            entry.container.div.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+            });
+        chip.addEventListener("click", jump);
+        chip.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" || ev.key === " ") {
+                ev.preventDefault();
+                jump();
+            }
+        });
+        return chip;
+    }
+
+    private updateLiveChip(entry: LiveBubbleEntry) {
+        const chip = entry.chip;
+        if (!chip) return;
+        chip.title = `Jump to ${entry.title}`;
+        const dir = chip.querySelector<HTMLElement>(".chat-live-chip-dir");
+        if (dir) dir.textContent = entry.position === "above" ? "▲" : "▼";
+        const icon = chip.querySelector<HTMLElement>(".chat-live-chip-icon");
+        if (icon) icon.textContent = entry.icon;
+        const label = chip.querySelector<HTMLElement>(".chat-live-chip-label");
+        if (label) label.textContent = entry.title;
+        if (entry.barFill && entry.percent !== undefined) {
+            entry.barFill.style.width = `${entry.percent}%`;
+        }
     }
 
     /** Focus the text input. */
@@ -6200,6 +6586,11 @@ export class ChatPanel {
             this.settingsView,
             this.platformAdapter,
         );
+        // Detect the `data-live-title` marker (e.g. the conversation-index
+        // progress bar) whenever this bubble's content changes, so it can be
+        // tracked by the top rail.
+        container.onContentChanged = () =>
+            this.onContainerContentChanged(container);
         if (threadId !== undefined) {
             this.attachFeedbackToContainer(container, threadId);
         }
@@ -6433,6 +6824,10 @@ class AgentMessageContainer {
     private reasoning = false;
     private readonly collapsedReasoning = new WeakSet<HTMLDetailsElement>();
     private lastAppendMode?: DisplayAppendMode;
+
+    // Invoked after this bubble renders content. ChatPanel uses it to detect
+    // the `data-live-title` marker and track the bubble in the top rail.
+    public onContentChanged?: () => void;
     // Mirrors the shell's swapContent pattern: when action JSON is set,
     // clicking the agent name toggles the message body between the
     // rendered response and a <pre> of the action JSON.
@@ -6820,6 +7215,7 @@ class AgentMessageContainer {
             );
             this.lastAppendMode = appendMode;
             this.div.classList.remove("chat-message-hidden");
+            this.onContentChanged?.();
             return;
         }
 
@@ -6836,12 +7232,39 @@ class AgentMessageContainer {
 
         this.lastAppendMode = appendMode;
         this.div.classList.remove("chat-message-hidden");
+        this.onContentChanged?.();
     }
 
     public setIcon(icon: string) {
         if (icon) {
             this.iconDiv.textContent = icon;
         }
+    }
+
+    /** The bubble's current avatar glyph (used as a fallback chip icon). */
+    public get iconText(): string {
+        return this.iconDiv.textContent ?? "";
+    }
+
+    /**
+     * If this bubble's content carries a `data-live-title` marker (emitted by
+     * live progress content such as the conversation-index bar), return its
+     * title / optional icon / optional percent. Used by the top rail.
+     */
+    public getLiveMarker():
+        { title: string; icon?: string; percent?: number } | undefined {
+        const el =
+            this.messageDiv.querySelector<HTMLElement>("[data-live-title]");
+        if (!el) return undefined;
+        const title = el.getAttribute("data-live-title") ?? "";
+        const icon = el.getAttribute("data-live-icon") ?? undefined;
+        const pctStr = el.getAttribute("data-live-percent");
+        const pct = pctStr !== null ? Number(pctStr) : NaN;
+        return {
+            title,
+            icon,
+            percent: Number.isFinite(pct) ? pct : undefined,
+        };
     }
 
     public updateSource(source: string, icon?: string) {

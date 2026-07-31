@@ -23,11 +23,17 @@ function makePanel(opts?: {
         attachments: string[] | undefined,
         requestId: string,
     ) => void;
+    openMessageInWindow?: (html: string, title?: string) => boolean;
 }) {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const panel = new ChatPanel(root, {
-        platformAdapter: { handleLinkClick() {} },
+        platformAdapter: {
+            handleLinkClick() {},
+            ...(opts?.openMessageInWindow
+                ? { openMessageInWindow: opts.openMessageInWindow }
+                : {}),
+        },
         onCancel: opts?.onCancel,
         onSend: opts?.onSend,
     });
@@ -1263,6 +1269,134 @@ describe("reasoning tool calls (single + folded)", () => {
         details.open = true;
         details.dispatchEvent(new Event("toggle"));
         expect(pre.innerHTML).toBe(highlightedHtml);
+    });
+});
+
+describe("reasoning tool results", () => {
+    // Mirrors what the reasoning engine emits for a tool result: a native
+    // <details class="reasoning-tool-result"> with a one-line preview summary
+    // and a <pre> holding the full result text, collapsed until opened.
+    const resultHtml =
+        '<details class="reasoning-tool-result">' +
+        '<summary class="reasoning-tool-result-summary"><strong>\u21B3</strong> ' +
+        "<code>Found 3 matches: alpha beta</code></summary>" +
+        '<pre class="reasoning-tool-result-body">Found 3 matches:\nalpha\nbeta</pre>' +
+        "</details>";
+
+    const fullText = "Found 3 matches:\nalpha\nbeta";
+
+    function addResult(panel: ChatPanel, html: string = resultHtml) {
+        panel.addUserMessage("run a tool", "req-1");
+        panel.addAgentMessage(
+            { type: "markdown", content: html, kind: "info" },
+            "dispatcher.reasoningAction.copilot",
+            undefined,
+            "step",
+            "req-1",
+        );
+    }
+
+    function openResult(root: HTMLElement): HTMLDetailsElement {
+        const details = root.querySelector<HTMLDetailsElement>(
+            "details.reasoning-tool-result",
+        )!;
+        details.open = true;
+        details.dispatchEvent(new Event("toggle"));
+        return details;
+    }
+
+    it("renders the result collapsed with a preview and the full body inline", () => {
+        const { root, panel } = makePanel();
+        addResult(panel);
+        const details = root.querySelector<HTMLDetailsElement>(
+            "details.reasoning-tool-result",
+        );
+        expect(details).not.toBeNull();
+        expect(details!.open).toBe(false);
+        expect(
+            root.querySelector(".reasoning-tool-result-summary code")!
+                .textContent,
+        ).toBe("Found 3 matches: alpha beta");
+        const pre = root.querySelector<HTMLElement>(
+            "pre.reasoning-tool-result-body",
+        )!;
+        expect(pre.textContent).toBe(fullText);
+    });
+
+    it("adds an 'open in viewer' button the first time the result opens (only once)", () => {
+        const { root, panel } = makePanel();
+        addResult(panel);
+        expect(root.querySelector(".reasoning-tool-result-open")).toBeNull();
+        openResult(root);
+        expect(
+            root.querySelectorAll(".reasoning-tool-result-open"),
+        ).toHaveLength(1);
+        // Closing and re-opening does not add a second button.
+        const details = root.querySelector<HTMLDetailsElement>(
+            "details.reasoning-tool-result",
+        )!;
+        details.open = false;
+        details.dispatchEvent(new Event("toggle"));
+        details.open = true;
+        details.dispatchEvent(new Event("toggle"));
+        expect(
+            root.querySelectorAll(".reasoning-tool-result-open"),
+        ).toHaveLength(1);
+    });
+
+    it("opens the in-page text viewer with the full result when no host window is available", () => {
+        const { root, panel } = makePanel();
+        addResult(panel);
+        openResult(root);
+        root.querySelector<HTMLButtonElement>(
+            ".reasoning-tool-result-open",
+        )!.click();
+        const overlay = root.querySelector<HTMLElement>(
+            ".chat-text-viewer-overlay",
+        );
+        expect(overlay).not.toBeNull();
+        expect(
+            overlay!.querySelector<HTMLElement>(".chat-text-viewer-body")!
+                .textContent,
+        ).toBe(fullText);
+        // Esc dismisses the overlay.
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+        expect(root.querySelector(".chat-text-viewer-overlay")).toBeNull();
+    });
+
+    it("hands the full result to the host window when openMessageInWindow is provided", () => {
+        const openMessageInWindow = jest.fn(
+            (_html: string, _title?: string) => true,
+        );
+        const { root, panel } = makePanel({ openMessageInWindow });
+        addResult(panel);
+        openResult(root);
+        root.querySelector<HTMLButtonElement>(
+            ".reasoning-tool-result-open",
+        )!.click();
+        expect(openMessageInWindow).toHaveBeenCalledTimes(1);
+        const [html, title] = openMessageInWindow.mock.calls[0];
+        expect(html).toContain("Found 3 matches:");
+        expect(title).toBe("Tool result");
+        // The host handled it, so no in-page overlay is created.
+        expect(root.querySelector(".chat-text-viewer-overlay")).toBeNull();
+    });
+
+    it("keeps the viewer-button click from toggling the details", () => {
+        const { root, panel } = makePanel();
+        addResult(panel);
+        const details = openResult(root);
+        const button = root.querySelector<HTMLButtonElement>(
+            ".reasoning-tool-result-open",
+        )!;
+        const ev = new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+        });
+        button.dispatchEvent(ev);
+        // A real summary click toggles the <details>; the button suppresses it.
+        expect(ev.defaultPrevented).toBe(true);
+        expect(details.open).toBe(true);
     });
 });
 

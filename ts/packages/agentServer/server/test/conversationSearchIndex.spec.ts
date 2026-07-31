@@ -4,6 +4,7 @@
 import { rankConversationMatches } from "../src/conversationSearchIndex.js";
 import {
     createConversationSearchIndex,
+    selectStaleConversations,
     selectUnindexedTurns,
 } from "../src/conversationSearchIndex.js";
 import * as fs from "node:fs";
@@ -173,6 +174,27 @@ describe("selectUnindexedTurns", () => {
         expect(
             selectUnindexedTurns([{ type: "set-display", seq: 0 }], notIndexed),
         ).toEqual([]);
+    });
+});
+
+describe("selectStaleConversations", () => {
+    it("returns only conversations that are no longer live", () => {
+        const indexed = ["A", "B", "C"];
+        const live = new Set(["A", "C"]);
+        expect(selectStaleConversations(indexed, (id) => live.has(id))).toEqual(
+            ["B"],
+        );
+    });
+
+    it("returns [] when every indexed conversation is still live", () => {
+        const live = new Set(["A", "B"]);
+        expect(
+            selectStaleConversations(["A", "B"], (id) => live.has(id)),
+        ).toEqual([]);
+    });
+
+    it("returns [] when nothing is indexed", () => {
+        expect(selectStaleConversations([], () => true)).toEqual([]);
     });
 });
 

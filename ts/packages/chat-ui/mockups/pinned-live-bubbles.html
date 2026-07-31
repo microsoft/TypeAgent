@@ -1,0 +1,1517 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
+<!--
+  Interactive mockup: pinning a live / dynamically-updating chat bubble so it
+  stays visible when it scrolls out of the viewport.
+
+  This is a throwaway design prototype (fake data, no build step) that mirrors
+  the real chat-ui look and the exact progress-bar markup produced by
+  renderConversationIndexProgress() in the dispatcher. The class names
+  (chat-message-*, .agent-icon, .pbar-*) intentionally echo the real ChatPanel
+  so the interaction maps cleanly onto ChatPanel.setDynamicDisplay.
+
+  Five modes (switch with the segmented control or the URL hash):
+    #normal      - baseline: live bubble scrolls away like any other message.
+    #pin-top     - off-screen live bubble docks a compact copy at the top.
+    #pin-bottom  - ...docks it at the bottom edge (just above the input).
+    #pill        - off-screen work collapses to a floating pill; click to expand.
+    #sticky      - the bubble sticks to the nearest edge with a highlight ring.
+
+  In every mode a pin affordance (the pushpin) returns the bubble to normal
+  scroll behavior; clicking it again re-arms pinning.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pinned live bubbles — TypeAgent chat mockups</title>
+    <style>
+      :root {
+        /* TypeAgent chat palette (from packages/chat-ui/styles/chat.css). */
+        --ta-agent-bubble: #d6f3ff;
+        --ta-user-bubble: lavender;
+        --ta-user-avatar-bg: plum;
+        --ta-user-avatar-fg: purple;
+        --ta-progress-fill: #4caf50;
+        --ta-progress-track: rgba(127, 127, 127, 0.25);
+        --ta-pill-bg: #0066bf;
+        --ta-pill-bg-hover: #0052a3;
+        --ta-meta: darkgray;
+        --ta-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        --ta-ink: #1f1f1f;
+        --highlight: #ffb020;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 28px 20px 60px;
+        font-family:
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ta-ink);
+        background: #f3f3f3;
+        line-height: 1.45;
+      }
+
+      .proto {
+        max-width: 940px;
+        margin: 0 auto;
+      }
+
+      .proto h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
+      }
+
+      .proto .lede {
+        margin: 0 0 18px;
+        color: #444;
+        font-size: 13.5px;
+        max-width: 62ch;
+      }
+
+      /* ---- Mode switcher (segmented control) ---------------------------- */
+      .modes {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 4px;
+        background: #e7e7e7;
+        border-radius: 12px;
+      }
+
+      .modes button {
+        border: 0;
+        background: transparent;
+        color: #333;
+        font: inherit;
+        font-size: 13px;
+        padding: 7px 14px;
+        border-radius: 9px;
+        cursor: pointer;
+        transition: background 0.12s ease;
+      }
+
+      .modes button:hover {
+        background: #dcdcdc;
+      }
+
+      .modes button.active {
+        background: #fff;
+        color: #0b62b5;
+        font-weight: 600;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+      }
+
+      .mode-desc {
+        margin: 12px 0 14px;
+        font-size: 13px;
+        color: #3a3a3a;
+        min-height: 34px;
+        max-width: 70ch;
+      }
+
+      .mode-desc strong {
+        color: var(--ta-ink);
+      }
+
+      /* ---- Demo controls ------------------------------------------------ */
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .controls button,
+      .controls select {
+        font: inherit;
+        font-size: 12.5px;
+        padding: 6px 12px;
+        border: 1px solid #cfcfcf;
+        border-radius: 8px;
+        background: #fff;
+        color: #222;
+        cursor: pointer;
+      }
+
+      .controls button:hover {
+        background: #f0f7ff;
+        border-color: #9dc7ef;
+      }
+
+      .controls .hint {
+        font-size: 12px;
+        color: #666;
+      }
+
+      /* ---- Chat shell --------------------------------------------------- */
+      .chat-shell {
+        position: relative;
+        width: min(460px, 100%);
+        height: 560px;
+        background: #fff;
+        border: 1px solid #e2e2e2;
+        border-radius: 14px;
+        box-shadow: 0 10px 34px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .chat-topbar {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid #ededed;
+        background: #f7f7f7;
+        font-size: 12px;
+        color: #555;
+      }
+
+      .chat-topbar .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #35c05a;
+      }
+
+      .chat-scroll {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 12px 10px 16px;
+        display: flex;
+        flex-direction: column;
+        scroll-behavior: smooth;
+      }
+
+      .chat-input {
+        flex: 0 0 auto;
+        display: flex;
+        gap: 8px;
+        padding: 10px;
+        border-top: 1px solid #ededed;
+        background: #fafafa;
+      }
+
+      .chat-input input {
+        flex: 1;
+        border: 1px solid #d5d5d5;
+        border-radius: 18px;
+        padding: 8px 14px;
+        font: inherit;
+        font-size: 13px;
+        background: #fff;
+      }
+
+      .chat-input .send {
+        border: 0;
+        border-radius: 50%;
+        width: 34px;
+        height: 34px;
+        background: var(--ta-pill-bg);
+        color: #fff;
+        font-size: 16px;
+        cursor: pointer;
+      }
+
+      /* ---- Messages (mirrors chat-ui classes) --------------------------- */
+      .msg {
+        max-width: 86%;
+        margin: 7px 4px;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .msg.user {
+        align-self: flex-end;
+        align-items: flex-end;
+      }
+
+      .msg-meta {
+        font-size: 10px;
+        color: var(--ta-meta);
+        margin: 0 8px 3px;
+      }
+
+      .msg-line {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+      }
+
+      .msg.user .msg-line {
+        flex-direction: row-reverse;
+      }
+
+      .avatar {
+        flex: 0 0 30px;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 17px;
+        line-height: 1;
+      }
+
+      .avatar.agent {
+        background: #eef7fc;
+      }
+
+      .avatar.user {
+        background: var(--ta-user-avatar-bg);
+        color: var(--ta-user-avatar-fg);
+        font-weight: 600;
+        font-size: 15px;
+        font-family: sans-serif;
+      }
+
+      .bubble {
+        position: relative;
+        border-radius: 8px;
+        padding: 8px 14px;
+        box-shadow: var(--ta-shadow);
+        font-size: 13.5px;
+        word-wrap: break-word;
+      }
+
+      .bubble.agent {
+        background: var(--ta-agent-bubble);
+      }
+
+      .bubble.user {
+        background: var(--ta-user-bubble);
+      }
+
+      .bubble p {
+        margin: 0;
+      }
+
+      .bubble.live {
+        min-width: 230px;
+        padding-right: 34px;
+      }
+
+      /* Progress bar — same values as renderConversationIndexProgress(). */
+      .live-head {
+        margin-bottom: 6px;
+      }
+
+      .pbar-track {
+        background: var(--ta-progress-track);
+        border-radius: 6px;
+        height: 12px;
+        width: 100%;
+        overflow: hidden;
+      }
+
+      .pbar-track.slim {
+        height: 6px;
+      }
+
+      .pbar-fill {
+        background: var(--ta-progress-fill);
+        height: 100%;
+        width: 0%;
+        transition: width 0.3s ease;
+      }
+
+      /* ---- Pin affordance ---------------------------------------------- */
+      .pin-toggle {
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        font-size: 15px;
+        line-height: 1;
+        padding: 2px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: inherit;
+        transition:
+          transform 0.1s ease,
+          opacity 0.12s ease;
+      }
+
+      .pin-toggle:hover {
+        transform: scale(1.12);
+      }
+
+      /* "off" = pinning disabled → behaves like a normal message. */
+      .pin-toggle.off {
+        opacity: 0.4;
+        filter: grayscale(1);
+      }
+
+      .pin-toggle .pin-label {
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .bubble.live > .pin-toggle {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+      }
+
+      /* Faint ring while a live bubble is armed for pinning. */
+      .bubble.live.armed {
+        outline: 1px dashed rgba(11, 98, 181, 0.35);
+        outline-offset: 1px;
+      }
+
+      /* ---- Pin docks (top / bottom bands) ------------------------------ */
+      .pin-dock {
+        position: absolute;
+        left: 0;
+        right: 0;
+        z-index: 30;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px;
+        pointer-events: none;
+      }
+
+      .pin-dock > * {
+        pointer-events: auto;
+      }
+
+      .pin-dock:empty {
+        display: none;
+      }
+
+      /* Minimal top rail: an in-flow strip (not absolutely positioned) so it
+         reserves its own height and never covers the transcript or the
+         scrollbar. Chips reuse the floating-pill look. */
+      .top-rail {
+        flex: 0 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px;
+        padding: 6px 8px;
+        border-bottom: 1px solid #ececec;
+        background: #f7f9fb;
+      }
+
+      .top-rail:empty {
+        display: none;
+      }
+
+      .rail-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        max-width: 100%;
+        padding: 4px 6px 4px 10px;
+        background: var(--ta-pill-bg);
+        color: #fff;
+        border-radius: 999px;
+        font-size: 12px;
+        cursor: pointer;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
+        animation: dock-in 0.14s ease-out;
+      }
+
+      .rail-chip:hover {
+        background: var(--ta-pill-bg-hover);
+      }
+
+      .rail-chip .rail-dir {
+        font-size: 10px;
+        opacity: 0.85;
+      }
+
+      .rail-chip .rail-text {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .rail-chip .pill-mini {
+        flex: 0 0 40px;
+      }
+
+      .rail-chip .pin-toggle {
+        color: #fff;
+        font-size: 13px;
+      }
+
+      .pin-dock-top {
+        top: 41px; /* below the fake top bar */
+        background: linear-gradient(
+          to bottom,
+          rgba(247, 251, 254, 0.97),
+          rgba(247, 251, 254, 0.72)
+        );
+        backdrop-filter: blur(3px);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+      }
+
+      .pin-dock-bottom {
+        bottom: 55px; /* above the fake input */
+        background: linear-gradient(
+          to top,
+          rgba(247, 251, 254, 0.97),
+          rgba(247, 251, 254, 0.72)
+        );
+        backdrop-filter: blur(3px);
+        border-top: 1px solid rgba(0, 0, 0, 0.07);
+      }
+
+      .dock-card {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        background: var(--ta-agent-bubble);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        border-radius: 10px;
+        padding: 8px 10px;
+        box-shadow: 0 3px 12px rgba(0, 0, 0, 0.14);
+        cursor: pointer;
+        animation: dock-in 0.14s ease-out;
+      }
+
+      @keyframes dock-in {
+        from {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+      }
+
+      .pin-dock-bottom .dock-card {
+        animation-name: dock-in-up;
+      }
+
+      @keyframes dock-in-up {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+      }
+
+      .dock-card .dir {
+        color: #0b62b5;
+        font-size: 12px;
+      }
+
+      .dock-card .icon {
+        font-size: 15px;
+      }
+
+      .dock-card .body {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .dock-card .title {
+        font-size: 12.5px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .dock-card .sub {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 5px;
+      }
+
+      .dock-card .counts {
+        font-size: 11px;
+        color: #555;
+        white-space: nowrap;
+      }
+
+      /* ---- Floating pill (draggable) ------------------------------------ */
+      /* Full-panel layer (below the top bar, down to the input). It ignores
+         pointer events so the chat stays usable; only the pills capture them,
+         and each pill is absolutely positioned so it can be dragged. */
+      .float-layer {
+        position: absolute;
+        inset: 41px 0 4px 0;
+        z-index: 40;
+        pointer-events: none;
+      }
+
+      .float-layer > * {
+        pointer-events: auto;
+      }
+
+      .pill {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        background: var(--ta-pill-bg);
+        color: #fff;
+        border-radius: 999px;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+        overflow: hidden;
+        max-width: 88%;
+        cursor: grab;
+        animation: dock-in-up 0.14s ease-out;
+      }
+
+      .pill.dragging {
+        cursor: grabbing;
+        animation: none;
+        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.36);
+        z-index: 50;
+      }
+
+      .pill-grip {
+        cursor: grab;
+        opacity: 0.7;
+        font-size: 12px;
+        letter-spacing: -1px;
+      }
+
+      .pill.expanded {
+        border-radius: 14px;
+        width: 300px;
+        max-width: 88%;
+      }
+
+      .pill-summary {
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-size: 12.5px;
+        cursor: grab;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 14px;
+      }
+
+      .pill-summary:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .pill-text {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .pill-mini {
+        flex: 0 0 46px;
+        height: 5px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.3);
+        overflow: hidden;
+      }
+
+      .pill-mini i {
+        display: block;
+        height: 100%;
+        width: 0%;
+        background: #fff;
+        transition: width 0.3s ease;
+      }
+
+      .pill .caret {
+        transition: transform 0.15s ease;
+        font-size: 11px;
+        opacity: 0.85;
+      }
+
+      .pill.expanded .caret {
+        transform: rotate(90deg);
+      }
+
+      .pill-detail {
+        display: none;
+        padding: 2px 14px 12px;
+      }
+
+      .pill.expanded .pill-detail {
+        display: block;
+      }
+
+      .pill .pbar-track {
+        background: rgba(255, 255, 255, 0.25);
+      }
+
+      .pill .pbar-fill {
+        background: #fff;
+      }
+
+      .pill-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .pill .link {
+        border: 0;
+        background: rgba(255, 255, 255, 0.16);
+        color: #fff;
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+
+      .pill .link:hover {
+        background: rgba(255, 255, 255, 0.28);
+      }
+
+      .pill .pin-toggle {
+        color: #fff;
+      }
+
+      /* ---- Sticky highlight -------------------------------------------- */
+      /* Applied to the .msg wrapper (a direct child of the scroll container)
+         so position: sticky has the full transcript as its containing block
+         and can glue the bubble to an edge while everything else scrolls. */
+      .msg.sticky {
+        position: sticky;
+        top: 49px;
+        bottom: 8px;
+        z-index: 20;
+      }
+
+      .msg.sticky .bubble {
+        outline: 2px solid var(--highlight);
+        box-shadow:
+          0 0 0 4px rgba(255, 176, 32, 0.18),
+          0 6px 16px rgba(0, 0, 0, 0.16);
+      }
+
+      .msg.sticky .sticky-tag {
+        display: inline-flex;
+      }
+
+      .sticky-tag {
+        display: none;
+        align-items: center;
+        gap: 4px;
+        align-self: flex-start;
+        margin: 4px 0 0 40px;
+        font-size: 10.5px;
+        font-weight: 600;
+        color: #a25b00;
+        background: rgba(255, 176, 32, 0.16);
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+
+      /* ---- Spinner ----------------------------------------------------- */
+      .spin {
+        display: inline-block;
+        animation: spin 1.7s linear infinite;
+      }
+
+      .spin.done {
+        animation: none;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* ---- Footer legend ----------------------------------------------- */
+      .legend {
+        margin-top: 22px;
+        font-size: 12.5px;
+        color: #555;
+        max-width: 72ch;
+      }
+
+      .legend code {
+        background: #e9e9e9;
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 12px;
+      }
+
+      .legend ul {
+        padding-left: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="proto">
+      <h1>Pinned live bubbles</h1>
+      <p class="lede">
+        A live-updating bubble (like the background <em>“Indexing…”</em>
+        progress) can scroll out of view while the user reads other messages.
+        These mockups keep that live bubble reachable when it leaves the
+        viewport, with a pin control that hands scrolling back to the user.
+      </p>
+
+      <div
+        class="modes"
+        id="modes"
+        role="tablist"
+        aria-label="Pin behavior"
+      ></div>
+      <p class="mode-desc" id="modeDesc"></p>
+
+      <div class="controls">
+        <button id="restart" type="button">↻ Restart indexing</button>
+        <button id="pause" type="button">⏸ Pause</button>
+        <label class="hint"
+          >Speed
+          <select id="speed">
+            <option value="0.5">Slow</option>
+            <option value="1" selected>Normal</option>
+            <option value="2.5">Fast</option>
+          </select>
+        </label>
+        <button id="toTop" type="button">↑ Scroll to top</button>
+        <button id="toBottom" type="button">↓ Scroll to bottom</button>
+        <span class="hint"
+          >Scroll the chat to push a live bubble off-screen.</span
+        >
+      </div>
+
+      <div class="chat-shell" id="chatShell">
+        <div class="chat-topbar">
+          <span class="dot"></span>
+          <span>TypeAgent · Shell</span>
+        </div>
+
+        <!-- In-flow rail for the minimal "top-rail" mode: reserves its own
+             space above the scroll area so it never overlaps messages or the
+             scrollbar. -->
+        <div class="top-rail" id="topRail"></div>
+
+        <div class="pin-dock pin-dock-top" id="dockTop"></div>
+
+        <div class="chat-scroll" id="chatScroll"></div>
+
+        <div class="pin-dock pin-dock-bottom" id="dockBottom"></div>
+        <div class="float-layer" id="floatLayer"></div>
+
+        <div class="chat-input">
+          <input
+            placeholder="Message TypeAgent…"
+            aria-label="Message (mockup)"
+          />
+          <button class="send" title="Send (mockup)">➤</button>
+        </div>
+      </div>
+
+      <div class="legend">
+        <p>
+          The bubble classes and progress-bar markup mirror
+          <code>packages/chat-ui</code> and the dispatcher’s
+          <code>renderConversationIndexProgress()</code>, so this maps directly
+          onto <code>ChatPanel.setDynamicDisplay</code>. Pinning is driven by an
+          <code>IntersectionObserver</code> watching the live bubble.
+        </p>
+        <ul>
+          <li>
+            <strong>📌 Pin toggle</strong> — armed by default for live bubbles.
+            Click it (on the bubble, the dock, or the pill) to disable pinning
+            and return that bubble to normal scroll behavior; click again to
+            re-arm.
+          </li>
+          <li>
+            <strong>Jump</strong> — click a docked card or the expanded pill to
+            scroll the real bubble back into view.
+          </li>
+          <li>
+            The mode is stored in the URL hash — open this file in several tabs
+            (each on a different mode) to compare them side by side.
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <script>
+      // ---------------------------------------------------------------------
+      // Small DOM helpers.
+      // ---------------------------------------------------------------------
+      const $ = (sel, root = document) => root.querySelector(sel);
+      function el(tag, cls, html) {
+        const n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (html != null) n.innerHTML = html;
+        return n;
+      }
+
+      const chatScroll = $("#chatScroll");
+      const dockTop = $("#dockTop");
+      const dockBottom = $("#dockBottom");
+      const topRail = $("#topRail");
+      const floatLayer = $("#floatLayer");
+
+      // ---------------------------------------------------------------------
+      // Modes.
+      // ---------------------------------------------------------------------
+      const MODES = {
+        normal: {
+          label: "Normal (today)",
+          desc: "<strong>Baseline.</strong> A live bubble scrolls away like any other message — once it leaves the viewport there is no way to watch its progress without scrolling back.",
+        },
+        "pin-top": {
+          label: "Pin to top",
+          desc: "When the live bubble leaves the viewport, a <strong>compact copy docks at the top</strong> of the chat until the work finishes. Click the row to jump back to it; click 📌 to unpin.",
+        },
+        "top-rail": {
+          label: "Top rail (minimal)",
+          desc: "A refined top dock: a <strong>minimal pill-style chip in its own space</strong> above the messages, so it never covers the transcript or the scrollbar. Click a chip to jump to the bubble; 📌 to unpin.",
+        },
+        "pin-bottom": {
+          label: "Pin to bottom",
+          desc: "Same idea, <strong>docked to the bottom edge</strong> so the live status sits just above the input while you read history above it.",
+        },
+        smart: {
+          label: "Smart (nearest edge)",
+          desc: "Docks to the <strong>nearest edge</strong>: top when the bubble is above the viewport, bottom when it is below — so the pinned copy is always on the side the bubble left by.",
+        },
+        pill: {
+          label: "Floating pill",
+          desc: "Off-screen live work <strong>collapses into a small floating pill you can drag anywhere</strong> (grab the ⠿ handle). Click it to expand a mini progress card with jump / unpin actions.",
+        },
+        sticky: {
+          label: "Sticky highlight",
+          desc: "The bubble itself <strong>sticks to the nearest edge</strong> (CSS <code>position: sticky</code>) with a highlight ring, staying in view as you scroll past its place in the transcript. 📌 releases it.",
+        },
+      };
+      const MODE_KEYS = Object.keys(MODES);
+      let mode =
+        MODE_KEYS.includes(location.hash.slice(1)) &&
+        location.hash.slice(1) !== ""
+          ? location.hash.slice(1)
+          : "pin-top";
+
+      // ---------------------------------------------------------------------
+      // Transcript. Two live "Indexing" tasks are interleaved: one in the
+      // upper-middle (goes off the TOP once you're at the bottom) and one near
+      // the end (goes off the BOTTOM once you scroll up).
+      // ---------------------------------------------------------------------
+      const t0 = new Date();
+      t0.setHours(11, 58, 23, 0);
+      let clock = 0;
+      function stamp() {
+        const d = new Date(t0.getTime() + clock * 37000);
+        clock++;
+        return d.toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      }
+
+      const script = [
+        {
+          who: "user",
+          name: "robert",
+          html: "<p>index all my conversations</p>",
+        },
+        {
+          who: "agent",
+          name: "system",
+          icon: "🧠",
+          html: "<p>On it — indexing your conversations in the background. You can keep chatting.</p>",
+        },
+        { live: "A", name: "Shell", total: 288 },
+        {
+          who: "user",
+          name: "robert",
+          html: "<p>meanwhile, what's on my calendar today?</p>",
+        },
+        {
+          who: "agent",
+          name: "calendar",
+          icon: "📅",
+          html: "<p>You have <strong>3 events</strong> today:</p>",
+        },
+        {
+          who: "agent",
+          name: "calendar",
+          icon: "📅",
+          html: "<p>• 10:00 Standup<br>• 1:30 Design review<br>• 4:00 1:1 with Sam</p>",
+        },
+        {
+          who: "user",
+          name: "robert",
+          html: "<p>add lunch with Sam at noon</p>",
+        },
+        {
+          who: "agent",
+          name: "calendar",
+          icon: "📅",
+          html: "<p>Added <strong>“Lunch with Sam”</strong> at 12:00 PM.</p>",
+        },
+        {
+          who: "user",
+          name: "robert",
+          html: "<p>any unread email from Priya?</p>",
+        },
+        {
+          who: "agent",
+          name: "email",
+          icon: "✉️",
+          html: "<p><strong>2 unread</strong> from Priya — “Q3 numbers” and “re: offsite”.</p>",
+        },
+        { live: "B", name: "Email", total: 164 },
+        {
+          who: "user",
+          name: "robert",
+          html: "<p>play some focus music</p>",
+        },
+        {
+          who: "agent",
+          name: "player",
+          icon: "🎵",
+          html: "<p>▶ Now playing: <strong>Deep Focus</strong></p>",
+        },
+      ];
+
+      // ---------------------------------------------------------------------
+      // Live task model.
+      // ---------------------------------------------------------------------
+      class LiveTask {
+        constructor(id, name, total) {
+          this.id = id;
+          this.name = name;
+          this.total = total;
+          this.done = 0;
+          this.pinned = true; // armed for pinning
+          this.finished = false;
+          this.justFinished = false;
+          this.dismissed = false; // stop docking shortly after finishing
+          this.position = "in"; // in | above | below
+          this.pillExpanded = false;
+          this.dockRefs = null; // live nodes to update between renders
+          this.build();
+        }
+
+        get pct() {
+          return this.total > 0
+            ? Math.min(100, Math.round((this.done / this.total) * 100))
+            : 0;
+        }
+
+        build() {
+          const wrap = el("div", "msg agent live-msg");
+          wrap.dataset.task = this.id;
+          wrap.appendChild(el("div", "msg-meta", `system · ${stamp()}`));
+
+          const line = el("div", "msg-line");
+          const av = el("div", "avatar agent", `<span class="spin">⚙️</span>`);
+          this.spin = av.querySelector(".spin");
+
+          const bubble = el("div", "bubble agent live armed");
+          this.content = el("div", "live-content");
+          bubble.appendChild(this.content);
+          this.bubblePin = makePin(() => this.togglePinned());
+          bubble.appendChild(this.bubblePin);
+
+          line.appendChild(av);
+          line.appendChild(bubble);
+          wrap.appendChild(line);
+
+          const tag = el("div", "sticky-tag", "📌 pinned in view");
+          wrap.appendChild(tag);
+
+          this.wrap = wrap;
+          this.bubble = bubble;
+          this.renderContent();
+        }
+
+        liveHtml() {
+          return (
+            `<div class="live-head">Indexing "<strong>${this.name}</strong>"` +
+            ` — ${this.done}/${this.total} messages</div>` +
+            `<div class="pbar-track"><div class="pbar-fill" style="width:${this.pct}%"></div></div>`
+          );
+        }
+
+        doneHtml() {
+          return (
+            `<div class="live-head">Indexed <strong>${this.total}</strong> messages in ` +
+            `"${this.name}" — up to date</div>` +
+            `<div class="pbar-track"><div class="pbar-fill" style="width:100%"></div></div>`
+          );
+        }
+
+        renderContent() {
+          this.content.innerHTML = this.finished
+            ? this.doneHtml()
+            : this.liveHtml();
+          if (this.finished) {
+            // Keep the ⚙️ glyph; it simply stops spinning to signal "done".
+            this.spin.classList.add("done");
+          }
+          this.bubble.classList.toggle("armed", this.pinned && !this.finished);
+        }
+
+        step(amount) {
+          if (this.finished) return;
+          this.done = Math.min(this.total, this.done + amount);
+          if (this.done >= this.total) {
+            this.finished = true;
+            this.justFinished = true;
+          }
+        }
+
+        togglePinned() {
+          this.pinned = !this.pinned;
+          render();
+          syncLive(this);
+        }
+
+        reset() {
+          this.done = 0;
+          this.finished = false;
+          this.justFinished = false;
+          this.dismissed = false;
+          this.spin.classList.remove("done"); // resume spinning
+          this.renderContent();
+        }
+      }
+
+      // ---------------------------------------------------------------------
+      // Pin button factory.
+      // ---------------------------------------------------------------------
+      function makePin(onClick, withLabel) {
+        const b = el("button", "pin-toggle", "📌");
+        b.type = "button";
+        if (withLabel) {
+          b.appendChild(el("span", "pin-label", "Unpin"));
+        }
+        b.addEventListener("click", (e) => {
+          e.stopPropagation();
+          onClick();
+        });
+        return b;
+      }
+
+      function setPinState(btn, pinned) {
+        btn.classList.toggle("off", !pinned);
+        btn.setAttribute("aria-pressed", String(pinned));
+        btn.title = pinned
+          ? "Pinned: kept in view when off-screen. Click to return to normal scrolling."
+          : "Not pinned. Click to keep this bubble in view when it scrolls off-screen.";
+        const lbl = btn.querySelector(".pin-label");
+        if (lbl) lbl.textContent = pinned ? "Unpin" : "Pin";
+      }
+
+      // ---------------------------------------------------------------------
+      // Build the transcript.
+      // ---------------------------------------------------------------------
+      const tasks = [];
+      function buildTranscript() {
+        chatScroll.innerHTML = "";
+        for (const m of script) {
+          if (m.live) {
+            const task = new LiveTask(m.live, m.name, m.total);
+            tasks.push(task);
+            chatScroll.appendChild(task.wrap);
+          } else {
+            chatScroll.appendChild(messageEl(m));
+          }
+        }
+      }
+
+      function messageEl(m) {
+        const wrap = el("div", `msg ${m.who}`);
+        wrap.appendChild(el("div", "msg-meta", `${m.name} · ${stamp()}`));
+        const line = el("div", "msg-line");
+        const glyph = m.who === "user" ? "R" : m.icon || "🤖";
+        line.appendChild(el("div", `avatar ${m.who}`, glyph));
+        line.appendChild(el("div", `bubble ${m.who}`, m.html));
+        wrap.appendChild(line);
+        return wrap;
+      }
+
+      // ---------------------------------------------------------------------
+      // Structural render: decide each task's pinned representation for the
+      // current mode. Cheap and only runs on mode / intersection / pin / finish
+      // changes — progress ticks use syncLive() to update numbers in place.
+      // ---------------------------------------------------------------------
+      function render() {
+        dockTop.innerHTML = "";
+        dockBottom.innerHTML = "";
+        topRail.innerHTML = "";
+        floatLayer.innerHTML = "";
+        for (const t of tasks) {
+          t.wrap.classList.remove("sticky");
+          t.dockRefs = null;
+          setPinState(t.bubblePin, t.pinned);
+
+          const offscreen = t.position !== "in" && !t.dismissed;
+
+          if (mode === "sticky") {
+            if (t.pinned && !t.dismissed) t.wrap.classList.add("sticky");
+            continue;
+          }
+          if (mode === "normal" || !t.pinned || !offscreen) continue;
+
+          if (mode === "pin-top") dockTop.appendChild(makeDockCard(t));
+          else if (mode === "top-rail") topRail.appendChild(makeRailChip(t));
+          else if (mode === "pin-bottom")
+            dockBottom.appendChild(makeDockCard(t));
+          else if (mode === "smart")
+            // Nearest edge: above the viewport -> top dock, below -> bottom.
+            (t.position === "above" ? dockTop : dockBottom).appendChild(
+              makeDockCard(t),
+            );
+          else if (mode === "pill") {
+            const pill = makePill(t);
+            floatLayer.appendChild(pill);
+            placePill(t, pill);
+          }
+        }
+      }
+
+      function jumpTo(t) {
+        t.wrap.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+
+      // Minimal pill-style chip for the in-flow top rail.
+      function makeRailChip(t) {
+        const chip = el("div", "rail-chip");
+        chip.appendChild(
+          el("span", "rail-dir", t.position === "above" ? "▲" : "▼"),
+        );
+        chip.appendChild(el("span", `spin${t.finished ? " done" : ""}`, "⚙️"));
+        const text = el(
+          "span",
+          "rail-text",
+          `Indexing “${t.name}” · ${t.done}/${t.total}`,
+        );
+        chip.appendChild(text);
+        const mini = el("span", "pill-mini", `<i style="width:${t.pct}%"></i>`);
+        chip.appendChild(mini);
+        chip.appendChild(makePin(() => t.togglePinned()));
+        chip.addEventListener("click", () => jumpTo(t));
+        t.dockRefs = { text, mini: mini.querySelector("i") };
+        return chip;
+      }
+
+      function makeDockCard(t) {
+        const card = el("div", "dock-card");
+        const dir = t.position === "above" ? "▲" : "▼";
+        card.appendChild(el("span", "dir", dir));
+        card.appendChild(el("span", "icon", `<span class="spin">⚙️</span>`));
+        const body = el("div", "body");
+        body.appendChild(el("div", "title", `Indexing "${t.name}"`));
+        const sub = el("div", "sub");
+        const track = el(
+          "div",
+          "pbar-track slim",
+          `<div class="pbar-fill" style="width:${t.pct}%"></div>`,
+        );
+        const counts = el("span", "counts", `${t.done}/${t.total}`);
+        sub.appendChild(track);
+        sub.appendChild(counts);
+        body.appendChild(sub);
+        card.appendChild(body);
+        card.appendChild(makePin(() => t.togglePinned()));
+
+        card.addEventListener("click", () => jumpTo(t));
+        t.dockRefs = {
+          fill: track.querySelector(".pbar-fill"),
+          counts,
+        };
+        return card;
+      }
+
+      function makePill(t) {
+        const pill = el("div", `pill${t.pillExpanded ? " expanded" : ""}`);
+
+        const summary = el("button", "pill-summary");
+        summary.type = "button";
+        summary.innerHTML =
+          `<span class="pill-grip" aria-hidden="true">⠿</span>` +
+          `<span class="spin">⚙️</span>` +
+          `<span class="pill-text">Indexing “${t.name}” · ${t.done}/${t.total}</span>` +
+          `<span class="pill-mini"><i style="width:${t.pct}%"></i></span>` +
+          `<span class="caret">▸</span>`;
+        summary.addEventListener("click", () => {
+          // A drag ends with a click on this button; swallow that one click so
+          // moving the pill never accidentally expands or collapses it.
+          if (t.suppressPillClick) {
+            t.suppressPillClick = false;
+            return;
+          }
+          t.pillExpanded = !t.pillExpanded;
+          render();
+        });
+
+        const detail = el("div", "pill-detail");
+        detail.innerHTML = `<div class="pbar-track slim"><div class="pbar-fill" style="width:${t.pct}%"></div></div>`;
+        const actions = el("div", "pill-actions");
+        const jump = el("button", "link", "Jump to bubble");
+        jump.type = "button";
+        jump.addEventListener("click", (e) => {
+          e.stopPropagation();
+          jumpTo(t);
+        });
+        actions.appendChild(jump);
+        actions.appendChild(makePin(() => t.togglePinned(), true));
+        detail.appendChild(actions);
+
+        pill.appendChild(summary);
+        pill.appendChild(detail);
+
+        t.dockRefs = {
+          text: summary.querySelector(".pill-text"),
+          mini: summary.querySelector(".pill-mini i"),
+          fill: detail.querySelector(".pbar-fill"),
+        };
+        enableDrag(pill, t);
+        return pill;
+      }
+
+      // Place a pill at its stored drag position, or a sensible default (bottom
+      // of the panel, stacked upward when several pills are showing).
+      function placePill(t, pill) {
+        const layer = floatLayer.getBoundingClientRect();
+        const rect = pill.getBoundingClientRect();
+        if (!t.pillPos) {
+          const i = tasks.indexOf(t);
+          t.pillPos = {
+            left: (layer.width - rect.width) / 2,
+            top: layer.height - rect.height - 12 - i * (rect.height + 10),
+          };
+        }
+        // Keep it inside the panel (e.g. after expand/collapse or a resize).
+        t.pillPos.left = clamp(t.pillPos.left, 4, layer.width - rect.width - 4);
+        t.pillPos.top = clamp(t.pillPos.top, 4, layer.height - rect.height - 4);
+        pill.style.left = t.pillPos.left + "px";
+        pill.style.top = t.pillPos.top + "px";
+      }
+
+      function clamp(v, lo, hi) {
+        return Math.max(lo, Math.min(v, hi));
+      }
+
+      // Drag a pill with a pointer. A small movement threshold separates a
+      // drag from a click, so a plain click still expands the pill.
+      function enableDrag(pill, t) {
+        let startX = 0;
+        let startY = 0;
+        let baseLeft = 0;
+        let baseTop = 0;
+        let dragging = false;
+        let pointerId = null;
+
+        const onMove = (e) => {
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          if (!dragging && Math.hypot(dx, dy) < 4) return;
+          dragging = true;
+          pill.classList.add("dragging");
+          const layer = floatLayer.getBoundingClientRect();
+          const rect = pill.getBoundingClientRect();
+          const left = clamp(baseLeft + dx, 4, layer.width - rect.width - 4);
+          const top = clamp(baseTop + dy, 4, layer.height - rect.height - 4);
+          t.pillPos = { left, top };
+          pill.style.left = left + "px";
+          pill.style.top = top + "px";
+        };
+
+        const onUp = () => {
+          pill.removeEventListener("pointermove", onMove);
+          pill.removeEventListener("pointerup", onUp);
+          pill.removeEventListener("pointercancel", onUp);
+          if (pointerId !== null) pill.releasePointerCapture(pointerId);
+          if (dragging) t.suppressPillClick = true;
+          pill.classList.remove("dragging");
+          dragging = false;
+          pointerId = null;
+        };
+
+        pill.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          // Let the action buttons work without starting a drag.
+          if (e.target.closest("button.pin-toggle, button.link")) return;
+          const layer = floatLayer.getBoundingClientRect();
+          const rect = pill.getBoundingClientRect();
+          baseLeft = rect.left - layer.left;
+          baseTop = rect.top - layer.top;
+          startX = e.clientX;
+          startY = e.clientY;
+          pointerId = e.pointerId;
+          pill.setPointerCapture(pointerId);
+          pill.addEventListener("pointermove", onMove);
+          pill.addEventListener("pointerup", onUp);
+          pill.addEventListener("pointercancel", onUp);
+        });
+      }
+
+      // Update live numbers in the bubble and any active dock/pill in place.
+      function syncLive(t) {
+        t.renderContent();
+        if (!t.dockRefs) return;
+        const pct = t.pct;
+        if (t.dockRefs.fill) t.dockRefs.fill.style.width = pct + "%";
+        if (t.dockRefs.mini) t.dockRefs.mini.style.width = pct + "%";
+        if (t.dockRefs.counts)
+          t.dockRefs.counts.textContent = `${t.done}/${t.total}`;
+        if (t.dockRefs.text)
+          t.dockRefs.text.textContent = `Indexing “${t.name}” · ${t.done}/${t.total}`;
+      }
+
+      // ---------------------------------------------------------------------
+      // Off-screen detection.
+      // ---------------------------------------------------------------------
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            const t = tasks.find((x) => x.bubble === entry.target);
+            if (!t) continue;
+            t.position = positionOf(entry);
+          }
+          render();
+        },
+        {
+          root: chatScroll,
+          // Treat a bubble as off-screen a little early, as it slides under the
+          // dock band, so the handoff to the docked copy feels continuous.
+          rootMargin: "-46px 0px -60px 0px",
+          threshold: 0,
+        },
+      );
+
+      function positionOf(entry) {
+        if (entry.isIntersecting) return "in";
+        const rb = entry.rootBounds;
+        if (!rb) return "in";
+        if (entry.boundingClientRect.bottom <= rb.top + 1) return "above";
+        if (entry.boundingClientRect.top >= rb.bottom - 1) return "below";
+        return "in";
+      }
+
+      // ---------------------------------------------------------------------
+      // Simulation loop.
+      // ---------------------------------------------------------------------
+      let timer = null;
+      let paused = false;
+      let speed = 1;
+
+      function tick() {
+        if (paused) return;
+        for (const t of tasks) {
+          if (t.finished) continue;
+          t.step(
+            Math.max(1, Math.round(t.total / 45)) +
+              Math.floor(Math.random() * 3),
+          );
+          syncLive(t);
+          if (t.justFinished) {
+            t.justFinished = false;
+            render();
+            setTimeout(() => {
+              t.dismissed = true;
+              render();
+            }, 1900);
+          }
+        }
+      }
+
+      function startLoop() {
+        if (timer) clearInterval(timer);
+        timer = setInterval(tick, 560 / speed);
+      }
+
+      // ---------------------------------------------------------------------
+      // Mode switcher UI.
+      // ---------------------------------------------------------------------
+      const modesEl = $("#modes");
+      const modeDesc = $("#modeDesc");
+      function buildModes() {
+        modesEl.innerHTML = "";
+        for (const key of MODE_KEYS) {
+          const b = el("button", "", MODES[key].label);
+          b.type = "button";
+          b.dataset.mode = key;
+          b.addEventListener("click", () => setMode(key));
+          modesEl.appendChild(b);
+        }
+      }
+
+      function setMode(key) {
+        mode = key;
+        if (location.hash.slice(1) !== key) location.hash = key;
+        for (const b of modesEl.children) {
+          b.classList.toggle("active", b.dataset.mode === key);
+        }
+        modeDesc.innerHTML = MODES[key].desc;
+        // Reset any pill expansion when leaving pill mode.
+        if (key !== "pill") tasks.forEach((t) => (t.pillExpanded = false));
+        render();
+      }
+
+      window.addEventListener("hashchange", () => {
+        const key = location.hash.slice(1);
+        if (MODE_KEYS.includes(key) && key !== mode) setMode(key);
+      });
+
+      // ---------------------------------------------------------------------
+      // Controls.
+      // ---------------------------------------------------------------------
+      $("#restart").addEventListener("click", () => {
+        tasks.forEach((t) => t.reset());
+        render();
+        chatScroll.scrollTop = chatScroll.scrollHeight;
+        paused = false;
+        $("#pause").textContent = "⏸ Pause";
+        startLoop();
+      });
+
+      $("#pause").addEventListener("click", () => {
+        paused = !paused;
+        $("#pause").textContent = paused ? "▶ Resume" : "⏸ Pause";
+      });
+
+      $("#speed").addEventListener("change", (e) => {
+        speed = parseFloat(e.target.value);
+        startLoop();
+      });
+
+      $("#toTop").addEventListener("click", () => {
+        chatScroll.scrollTo({ top: 0, behavior: "smooth" });
+      });
+      $("#toBottom").addEventListener("click", () => {
+        chatScroll.scrollTo({
+          top: chatScroll.scrollHeight,
+          behavior: "smooth",
+        });
+      });
+
+      // ---------------------------------------------------------------------
+      // Init.
+      // ---------------------------------------------------------------------
+      buildModes();
+      buildTranscript();
+      tasks.forEach((t) => observer.observe(t.bubble));
+      setMode(mode);
+      // Start at the live edge so the mid-transcript task is already off-screen
+      // above — the pin behavior is visible immediately, no scrolling required.
+      chatScroll.scrollTop = chatScroll.scrollHeight;
+      startLoop();
+    </script>
+  </body>
+</html>

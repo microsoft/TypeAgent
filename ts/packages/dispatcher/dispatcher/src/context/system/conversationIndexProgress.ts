@@ -47,8 +47,11 @@ export function renderConversationIndexProgress(
         ? `Indexing "<strong>${escapeHtml(name)}</strong>"`
         : HEADING;
     const textHeading = name ? `Indexing "${name}"` : HEADING;
+    // A short label for the top-rail chip (see ChatPanel's live-bubble rail).
+    // The name is user-controlled, so escape it for the attribute value.
+    const liveTitle = name ? `Indexing "${name}"` : "Indexing conversations";
     const html =
-        `<div style="font-family:var(--vscode-font-family,sans-serif)">` +
+        `<div data-live-title="${escapeHtml(liveTitle)}" data-live-percent="${pct}" style="font-family:var(--vscode-font-family,sans-serif)">` +
         `<div style="margin-bottom:4px">${htmlHeading}${counts ? ` \u2014 ${counts}` : ""}</div>` +
         `<div style="background:rgba(127,127,127,0.25);border-radius:6px;height:12px;width:100%;overflow:hidden">` +
         `<div style="background:#4caf50;height:100%;width:${pct}%;transition:width .3s"></div>` +

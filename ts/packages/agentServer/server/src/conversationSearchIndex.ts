@@ -25,6 +25,18 @@ const CONV_TAG_PREFIX = "conv:";
 const TURN_TAG_PREFIX = "turn:";
 const UNIFIED_MEMORY_BASENAME = "unifiedMemory";
 
+// The message-text similarity search is bounded two ways so it stops returning
+// essentially every message (score >= 0), which buries the few real matches and
+// floods the caller. Matches come back already sorted by score, so:
+//   - MAX_MESSAGES is a true top-N cut (no multi-pass decaying threshold
+//     needed - the top-N already are the highest-scored).
+//   - MIN_SCORE is a low NOISE floor, not a precision gate: keep it low so a
+//     query with real matches rarely returns 0; raise it only if junk gets
+//     through. Watch `text=` and `scores=` in the
+//     `agent-server:conversation:searchIndex` debug log to tune both.
+const TEXT_SIMILARITY_MAX_MESSAGES = 25;
+const TEXT_SIMILARITY_MIN_SCORE = 0.3;
+
 /** A conversation whose content matched a query, with representative snippets. */
 export type RankedConversationContent = {
     conversationId: string;
@@ -53,8 +65,15 @@ export type ContentSearchQuery = {
  * conversation's own dispatcher.
  *
  * Deletes are handled by tombstoning the conversation id (filtered out of
- * results) because knowPro collections are append-only; a later compaction
- * pass rebuilds the index to reclaim the space.
+ * results) because knowPro collections are append-only. The tombstone set is
+ * in-memory only, so {@link ConversationSearchIndex.reconcileTombstones}
+ * re-applies deletes on startup (otherwise a deleted conversation's messages,
+ * which stay on disk, would resurface in search after a restart).
+ *
+ * TODO (compaction, option B): tombstoned messages still occupy space on disk.
+ * A later compaction pass should rebuild the unified index dropping tombstoned
+ * conversations to reclaim it (trigger on idle-conversation timeout plus a
+ * startup safety check, per docs/plans/conversation-search).
  */
 export interface ConversationSearchIndex {
     /**
@@ -73,6 +92,14 @@ export interface ConversationSearchIndex {
     ): void;
     /** Exclude a (deleted) conversation from future search results. */
     tombstone(conversationId: string): void;
+    /**
+     * Tombstone every indexed conversation that is not in `liveConversationIds`.
+     * Call once on startup to re-apply deletes from previous runs: the index
+     * persists messages (append-only) but the tombstone set is in-memory, so
+     * without this a conversation deleted in an earlier run would reappear in
+     * search. Returns the number of conversations newly tombstoned.
+     */
+    reconcileTombstones(liveConversationIds: ReadonlySet<string>): number;
     /**
      * The user-turn keys already indexed for a conversation. Its size is the
      * conversation's indexed-message count; a history backfill uses membership
@@ -200,6 +227,24 @@ export function selectUnindexedTurns(
     return turns;
 }
 
+/**
+ * From the conversation ids present in the index, pick those that are no longer
+ * live (deleted while the server was down). Pure so it can be unit tested
+ * without a memory: `isLive` reports whether a conversation still exists.
+ */
+export function selectStaleConversations(
+    indexedConversationIds: Iterable<string>,
+    isLive: (conversationId: string) => boolean,
+): string[] {
+    const stale: string[] = [];
+    for (const conversationId of indexedConversationIds) {
+        if (!isLive(conversationId)) {
+            stale.push(conversationId);
+        }
+    }
+    return stale;
+}
+
 class ConversationSearchIndexImpl implements ConversationSearchIndex {
     private readonly tombstoned = new Set<string>();
     // conversationId -> set of indexed user-turn keys. Rebuilt on startup from
@@ -287,6 +332,31 @@ class ConversationSearchIndexImpl implements ConversationSearchIndex {
         this.tombstoned.add(conversationId);
     }
 
+    public reconcileTombstones(
+        liveConversationIds: ReadonlySet<string>,
+    ): number {
+        if (this.memory === undefined) {
+            return 0;
+        }
+        // Collect every conversation id present in the index (including
+        // assistant-only conversations, which have no turn tag and so are not
+        // in turnsByConversation), then tombstone the ones no longer live.
+        const indexed = new Set<string>();
+        for (const message of this.memory.messages) {
+            const conversationId = conversationIdFromTags(message.tags ?? []);
+            if (conversationId !== undefined) {
+                indexed.add(conversationId);
+            }
+        }
+        const stale = selectStaleConversations(indexed, (id) =>
+            liveConversationIds.has(id),
+        );
+        for (const conversationId of stale) {
+            this.tombstone(conversationId);
+        }
+        return stale.length;
+    }
+
     public getIndexedTurns(conversationId: string): ReadonlySet<string> {
         return (
             this.turnsByConversation.get(conversationId) ??
@@ -314,6 +384,12 @@ class ConversationSearchIndexImpl implements ConversationSearchIndex {
         if (!question && !textQuery) {
             return [];
         }
+        debug(
+            "search question=%o textQuery=%o (%d terms)",
+            question,
+            textQuery,
+            terms.length,
+        );
 
         // Blend two knowPro searches, keeping the best score per message:
         //  - question -> searchWithLanguage: query translation + extracted-
@@ -321,6 +397,8 @@ class ConversationSearchIndexImpl implements ConversationSearchIndex {
         //  - terms/text -> searchByTextSimilarity: message-text embedding match
         //    (finds literal / near-literal mentions without extraction).
         const scoreByOrdinal = new Map<number, number>();
+        let nlMatchCount = 0;
+        let textMatchCount = 0;
         const addMatches = (
             matches:
                 | readonly { messageOrdinal: number; score: number }[]
@@ -337,16 +415,28 @@ class ConversationSearchIndexImpl implements ConversationSearchIndex {
         if (question) {
             const nl = await memory.searchWithLanguage(question);
             if (nl.success) {
-                addMatches(nl.data.flatMap((r) => r.messageMatches));
+                const nlMatches = nl.data.flatMap((r) => r.messageMatches);
+                nlMatchCount = nlMatches.length;
+                addMatches(nlMatches);
             } else {
+                debug("NL search failed: %s", nl.message);
                 debugError(`Unified NL search failed: ${nl.message}`);
             }
         }
         if (textQuery) {
             try {
-                const text = await memory.searchByTextSimilarity(textQuery);
+                const text = await memory.searchByTextSimilarity(
+                    textQuery,
+                    undefined,
+                    {
+                        maxMessageMatches: TEXT_SIMILARITY_MAX_MESSAGES,
+                        thresholdScore: TEXT_SIMILARITY_MIN_SCORE,
+                    },
+                );
+                textMatchCount = text?.messageMatches.length ?? 0;
                 addMatches(text?.messageMatches);
             } catch (e: any) {
+                debug("text-similarity search threw: %s", e?.message);
                 debugError(
                     `Unified text-similarity search failed: ${e?.message}`,
                 );
@@ -356,19 +446,40 @@ class ConversationSearchIndexImpl implements ConversationSearchIndex {
         const messageMatches = [...scoreByOrdinal.entries()].map(
             ([messageOrdinal, score]) => ({ messageOrdinal, score }),
         );
-        return rankConversationMatches(
+        let droppedNoConversationId = 0;
+        const ranked = rankConversationMatches(
             messageMatches,
             (ordinal) => {
                 const message = memory.messages.get(ordinal);
+                const conversationId = conversationIdFromTags(
+                    message?.tags ?? [],
+                );
+                if (conversationId === undefined) {
+                    droppedNoConversationId++;
+                }
                 return {
                     text: message?.textChunks?.join(" ") ?? "",
-                    conversationId: conversationIdFromTags(message?.tags ?? []),
+                    conversationId,
                 };
             },
             (conversationId) => this.tombstoned.has(conversationId),
             maxConversations,
             maxSnippetsPerConversation,
         );
+        // One line that pinpoints where a 0-result comes from: which half of
+        // the blend returned matches, how many survived merging, how many were
+        // dropped for lacking a conversation tag, and the final count. The
+        // per-conversation scores help tune TEXT_SIMILARITY_THRESHOLD.
+        debug(
+            "result nl=%d text=%d blended=%d ranked=%d droppedNoConvId=%d scores=%o",
+            nlMatchCount,
+            textMatchCount,
+            messageMatches.length,
+            ranked.length,
+            droppedNoConversationId,
+            ranked.map((r) => Number(r.score.toFixed(3))),
+        );
+        return ranked;
     }
 
     public async waitForPendingTasks(): Promise<void> {

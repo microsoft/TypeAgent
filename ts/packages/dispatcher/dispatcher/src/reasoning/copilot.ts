@@ -567,6 +567,25 @@ function formatToolCallDisplay(toolName: string, input: unknown): string {
     return `**Tool:** \`${toolName}\``;
 }
 
+// Extract the UI display text and error state from a Copilot
+// `tool.execution_complete` event. The SDK reports the full result meant for
+// display in result.detailedContent (falling back to the model-facing, possibly
+// truncated result.content), and failures in error.message.
+function copilotToolResultDisplay(event: any): {
+    content: string;
+    isError: boolean;
+} {
+    const data = event?.data ?? {};
+    const isError = data.success === false;
+    const content = isError
+        ? (data.error?.message ??
+          data.result?.detailedContent ??
+          data.result?.content ??
+          "")
+        : (data.result?.detailedContent ?? data.result?.content ?? "");
+    return { content: String(content ?? ""), isError };
+}
+
 /**
  * Generate a unique request ID for tracing
  */
@@ -1549,11 +1568,18 @@ async function executeReasoningWithoutPlanning(
     debug(`Executing reasoning request: ${originalRequest}`);
     context.actionIO.appendDisplay("Thinking...", "temporary");
     const displayMode = resolveReasoningDisplayMode(context);
-    // Fold runs of identical, back-to-back tool-call lines into one "xN" line.
+    // A tool call and its result share one reasoning-step bubble: the call is
+    // buffered at execution_start and emitted with its result at
+    // execution_complete (toolFolder.result). A failed result is styled as a
+    // warning bubble.
     const toolFolder = new ToolRunFolder(
-        (content) =>
+        (content, isError) =>
             context.actionIO.appendDisplay(
-                { type: "markdown", content, kind: "info" },
+                {
+                    type: "markdown",
+                    content,
+                    kind: isError ? "warning" : "info",
+                },
                 displayMode,
             ),
         formatToolCallDisplay,
@@ -1721,6 +1747,11 @@ async function executeReasoningWithoutPlanning(
                 event.name ||
                 "unknown";
             debug(`Tool execution completed: ${toolName}`);
+            // Emit the buffered call and its result together in one bubble so
+            // the output the model acted on sits with the call that produced it
+            // (and can be opened in a viewer).
+            const { content, isError } = copilotToolResultDisplay(event);
+            toolFolder.result(content, isError);
         },
     );
 
@@ -1880,11 +1911,18 @@ async function executeReasoningWithTracing(
         debug(`Executing reasoning with tracing: ${originalRequest}`);
         context.actionIO.appendDisplay("Thinking...", "temporary");
         const displayMode = resolveReasoningDisplayMode(context);
-        // Fold runs of identical, back-to-back tool-call lines into one "xN" line.
+        // A tool call and its result share one reasoning-step bubble: the call
+        // is buffered at execution_start and emitted with its result at
+        // execution_complete (toolFolder.result). A failed result is styled as a
+        // warning bubble.
         const toolFolder = new ToolRunFolder(
-            (content) =>
+            (content, isError) =>
                 context.actionIO.appendDisplay(
-                    { type: "markdown", content, kind: "info" },
+                    {
+                        type: "markdown",
+                        content,
+                        kind: isError ? "warning" : "info",
+                    },
                     displayMode,
                 ),
             formatToolCallDisplay,
@@ -2062,6 +2100,14 @@ async function executeReasoningWithTracing(
                     event.name ||
                     "unknown";
                 debug(`Tool execution completed: ${toolName}`);
+                const { content, isError } = copilotToolResultDisplay(event);
+                tracer.recordToolResult(
+                    toolName,
+                    content,
+                    isError ? content : undefined,
+                );
+                // Emit the buffered call and its result together in one bubble.
+                toolFolder.result(content, isError);
             },
         );
 

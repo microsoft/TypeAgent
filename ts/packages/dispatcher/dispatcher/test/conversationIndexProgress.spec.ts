@@ -45,6 +45,26 @@ describe("conversation index progress rendering", () => {
         expect(primaryOf(content)).toContain("<strong>CLI notes</strong>");
     });
 
+    it("carries the live-bubble rail marker (title + percent) in the html bar", () => {
+        // ChatPanel's top rail reads these data-* attributes off the progress
+        // bubble to build its chip; the name is escaped in the attribute value.
+        const html = primaryOf(
+            renderConversationIndexProgress({
+                done: 5,
+                total: 20,
+                name: "CLI notes",
+            }),
+        );
+        expect(html).toContain('data-live-percent="25"');
+        expect(html).toContain(
+            'data-live-title="Indexing &quot;CLI notes&quot;"',
+        );
+        // Without a name it falls back to a generic, static title.
+        expect(
+            primaryOf(renderConversationIndexProgress({ done: 1, total: 2 })),
+        ).toContain('data-live-title="Indexing conversations"');
+    });
+
     it("shows 0% before the total is known (no misleading full bar)", () => {
         expect(
             textOf(renderConversationIndexProgress({ done: 0, total: 0 })),

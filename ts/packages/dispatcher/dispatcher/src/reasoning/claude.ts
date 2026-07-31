@@ -51,7 +51,8 @@ import { getActionSchemaTypeName } from "../translation/agentTranslators.js";
 import {
     formatParams as sharedFormatParams,
     formatThinkingDisplay as sharedFormatThinkingDisplay,
-    formatToolResultDisplay as sharedFormatToolResultDisplay,
+    formatToolResult,
+    formatToolRun,
     buildReasoningActionResult,
     estimateReasoningTokens,
     reasoningTokenUsage,
@@ -318,7 +319,15 @@ function formatToolCallDisplay(toolName: string, input: any): string {
     return `**Tool:** ${toolName}${params}`;
 }
 
-const formatToolResultDisplay = sharedFormatToolResultDisplay;
+// Render a Claude tool call as a click-to-expand block (matching the copilot
+// engine). A call and its result render together in one bubble, so this is
+// combined with formatToolResult when the tool finishes.
+function renderToolCallBlock(toolName: string, input: unknown): string {
+    return formatToolRun(formatToolCallDisplay(toolName, input), [
+        { tool: toolName, args: input },
+    ]);
+}
+
 const formatThinkingDisplay = sharedFormatThinkingDisplay;
 
 const mcpExecuteActionTool = `mcp__${mcpServerName}__execute_action`;
@@ -1602,6 +1611,10 @@ async function executeReasoningWithoutPlanning(
     let toolUseCount = 0;
     let reasoningStepCount = 0;
     const toolUseIdToName = new Map<string, string>();
+    // Buffer each tool call until its result arrives so the call and its result
+    // render together in one bubble. Keyed by tool-use id so parallel calls pair
+    // with the correct result.
+    const pendingToolCalls = new Map<string, { tool: string; args: unknown }>();
     const pendingExecuteActions = new Map<string, TypeAgentAction>();
     const executedActions: TypeAgentAction[] = [];
     // LLM token usage reported by the final result message (captured below).
@@ -1676,17 +1689,12 @@ async function executeReasoningWithoutPlanning(
                         parameters: content.input,
                         timestamp: new Date().toISOString(),
                     });
-                    context.actionIO.appendDisplay(
-                        {
-                            type: "markdown",
-                            content: formatToolCallDisplay(
-                                content.name,
-                                content.input,
-                            ),
-                            kind: "info",
-                        },
-                        displayMode,
-                    );
+                    // Buffer the call; it renders together with its result when
+                    // the tool finishes (see the tool_result handler below).
+                    pendingToolCalls.set(content.id, {
+                        tool: content.name,
+                        args: content.input,
+                    });
                 } else if ((content as any).type === "thinking") {
                     const thinkingContent = (content as any).thinking;
                     if (thinkingContent) {
@@ -1745,13 +1753,20 @@ async function executeReasoningWithoutPlanning(
                             result: content,
                             timestamp: new Date().toISOString(),
                         });
+                        // Emit the buffered call and its result together in one
+                        // bubble so the output sits with the call that produced
+                        // it.
+                        const call = pendingToolCalls.get(block.tool_use_id);
+                        pendingToolCalls.delete(block.tool_use_id);
+                        const callBlock = call
+                            ? renderToolCallBlock(call.tool, call.args)
+                            : "";
                         context.actionIO.appendDisplay(
                             {
                                 type: "markdown",
-                                content: formatToolResultDisplay(
-                                    content,
-                                    isError,
-                                ),
+                                content:
+                                    callBlock +
+                                    formatToolResult(content, isError),
                                 kind: isError ? "warning" : "info",
                             },
                             displayMode,
@@ -1877,6 +1892,13 @@ async function executeReasoningWithTracing(
         let toolUseCount = 0;
         let reasoningStepCount = 0;
         const toolUseIdToName = new Map<string, string>();
+        // Buffer each tool call until its result arrives so the call and its
+        // result render together in one bubble. Keyed by tool-use id so parallel
+        // calls pair with the correct result.
+        const pendingToolCalls = new Map<
+            string,
+            { tool: string; args: unknown }
+        >();
         const pendingExecuteActions = new Map<string, TypeAgentAction>();
         const executedActions: TypeAgentAction[] = [];
         // LLM token usage reported by the final result message (captured below).
@@ -1962,17 +1984,12 @@ async function executeReasoningWithTracing(
                             timestamp: new Date().toISOString(),
                         });
 
-                        context.actionIO.appendDisplay(
-                            {
-                                type: "markdown",
-                                content: formatToolCallDisplay(
-                                    content.name,
-                                    content.input,
-                                ),
-                                kind: "info",
-                            },
-                            displayMode,
-                        );
+                        // Buffer the call; it renders together with its result
+                        // when the tool finishes (see the tool_result handler).
+                        pendingToolCalls.set(content.id, {
+                            tool: content.name,
+                            args: content.input,
+                        });
                     } else if ((content as any).type === "thinking") {
                         const thinkingContent = (content as any).thinking;
                         if (thinkingContent) {
@@ -2045,13 +2062,22 @@ async function executeReasoningWithTracing(
                                 timestamp: new Date().toISOString(),
                             });
 
+                            // Emit the buffered call and its result together in
+                            // one bubble so the output sits with the call that
+                            // produced it.
+                            const call = pendingToolCalls.get(
+                                block.tool_use_id,
+                            );
+                            pendingToolCalls.delete(block.tool_use_id);
+                            const callBlock = call
+                                ? renderToolCallBlock(call.tool, call.args)
+                                : "";
                             context.actionIO.appendDisplay(
                                 {
                                     type: "markdown",
-                                    content: formatToolResultDisplay(
-                                        content,
-                                        isError,
-                                    ),
+                                    content:
+                                        callBlock +
+                                        formatToolResult(content, isError),
                                     kind: isError ? "warning" : "info",
                                 },
                                 displayMode,
