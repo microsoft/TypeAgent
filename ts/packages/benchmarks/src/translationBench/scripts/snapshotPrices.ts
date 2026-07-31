@@ -49,14 +49,19 @@ async function main(): Promise<void> {
 
     for (const id of MODELS) {
         const cost = openai[id]?.cost;
-        if (typeof cost?.input !== "number" || typeof cost?.output !== "number") {
+        if (
+            typeof cost?.input !== "number" ||
+            typeof cost?.output !== "number"
+        ) {
             missing.push(id);
             continue;
         }
         rates[id] = {
             inUsdPer1M: cost.input,
             cachedUsdPer1M:
-                typeof cost.cache_read === "number" ? cost.cache_read : cost.input,
+                typeof cost.cache_read === "number"
+                    ? cost.cache_read
+                    : cost.input,
             outUsdPer1M: cost.output,
         };
     }
