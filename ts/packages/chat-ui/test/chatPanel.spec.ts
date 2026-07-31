@@ -1567,4 +1567,42 @@ describe("ChatPanel action result inspector", () => {
         const pre = root.querySelector(".chat-message-result pre.chat-json");
         expect(pre?.textContent).toContain("later");
     });
+
+    it("prepends a display-only success status for a non-error result", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("do it", "req-1");
+        panel.addAgentMessage("done", "agent", undefined, undefined, "req-1");
+
+        panel.appendDiagnosticData("req-1", {
+            type: "actionResult",
+            source: "agent",
+            actionIndex: 0,
+            result: { entities: [] },
+        });
+
+        const pre = root.querySelector(".chat-message-result pre.chat-json");
+        expect(pre).not.toBeNull();
+        expect(pre!.textContent).toContain("status");
+        expect(pre!.textContent).toContain("success");
+        expect(pre!.textContent).not.toContain("error");
+    });
+
+    it("labels a result carrying an error with status error", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("do it", "req-1");
+        panel.addAgentMessage("done", "agent", undefined, undefined, "req-1");
+
+        panel.appendDiagnosticData("req-1", {
+            type: "actionResult",
+            source: "agent",
+            actionIndex: 0,
+            result: { error: "boom" },
+        });
+
+        const pre = root.querySelector(".chat-message-result pre.chat-json");
+        expect(pre).not.toBeNull();
+        expect(pre!.textContent).toContain("status");
+        expect(pre!.textContent).toContain("error");
+        expect(pre!.textContent).toContain("boom");
+    });
 });

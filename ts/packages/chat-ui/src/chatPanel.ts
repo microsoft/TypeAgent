@@ -6744,7 +6744,23 @@ class AgentMessageContainer {
      */
     public setActionResultData(result: unknown) {
         if (result === undefined || result === null) return;
-        const json = JSON.stringify(result, undefined, 2);
+        // Prepend a display-only `status` so the inspector shows the outcome
+        // (success vs error) at a glance. It is derived here for display and is
+        // not part of the real ActionResult: the dispatcher marks a failure
+        // with a string `error` field (success results omit it), which is what
+        // we key on.
+        const display =
+            typeof result === "object"
+                ? {
+                      status:
+                          typeof (result as { error?: unknown }).error ===
+                          "string"
+                              ? "error"
+                              : "success",
+                      ...(result as Record<string, unknown>),
+                  }
+                : result;
+        const json = JSON.stringify(display, undefined, 2);
         const html = `<pre class="chat-json">${highlightJson(json)}</pre>`;
         this.resultDiv.innerHTML = sanitize(html);
         this.actionResultHtml = html;
