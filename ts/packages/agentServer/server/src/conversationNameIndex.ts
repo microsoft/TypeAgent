@@ -192,7 +192,9 @@ export function createConversationNameIndex(
         try {
             queryEmbedding = await generateEmbedding(embeddingModel, query);
         } catch (e: unknown) {
-            debugError(`Could not embed query "${query}": ${e instanceof Error ? e.message : String(e)}`);
+            debugError(
+                `Could not embed query "${query}": ${e instanceof Error ? e.message : String(e)}`,
+            );
             return;
         }
         // Pull a few extra candidates beyond maxMatches so the lexical/embedding
