@@ -15,6 +15,9 @@ import {
     createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ListAction, ListActivity } from "./listSchema.js";
+import { isPlaceholderListName } from "./listNameUtils.js";
+
+export { isPlaceholderListName } from "./listNameUtils.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -90,7 +93,7 @@ function simpleNoun(item: string) {
 
 function validateWildcardItems(
     items: string[],
-    context: SessionContext<ListActionContext>,
+    _context: SessionContext<ListActionContext>,
 ) {
     for (const item of items) {
         if (!simpleNoun(item)) {
@@ -100,19 +103,35 @@ function validateWildcardItems(
     return true;
 }
 
+function listNameFromAction(
+    action: ListAction | ListActivity,
+): string | undefined {
+    if (
+        action.actionName === "addItems" ||
+        action.actionName === "removeItems" ||
+        action.actionName === "createList" ||
+        action.actionName === "getList" ||
+        action.actionName === "clearList" ||
+        action.actionName === "startEditList"
+    ) {
+        return action.parameters.listName;
+    }
+    return undefined;
+}
+
 async function listValidateWildcardMatch(
     action: ListAction | ListActivity,
     context: SessionContext<ListActionContext>,
 ) {
+    const listName = listNameFromAction(action);
+    if (listName !== undefined && isPlaceholderListName(listName)) {
+        return false;
+    }
+
     if (action.actionName === "addItems") {
-        const addItemsAction = action;
-        return validateWildcardItems(addItemsAction.parameters.items, context);
+        return validateWildcardItems(action.parameters.items, context);
     } else if (action.actionName === "removeItems") {
-        const removeItemsAction = action;
-        return validateWildcardItems(
-            removeItemsAction.parameters.items,
-            context,
-        );
+        return validateWildcardItems(action.parameters.items, context);
     }
     return true;
 }
@@ -338,8 +357,10 @@ async function handleListAction(
             if (items.length === 0) {
                 throw new Error("No items to add");
             }
-            if (listName === "") {
-                throw new Error("List name is empty");
+            if (listName === "" || isPlaceholderListName(listName)) {
+                throw new Error(
+                    "List name is missing or only a reference phrase (e.g. \"the list\"); clarify which list",
+                );
             }
 
             store.addItems(listName, items);
@@ -361,8 +382,10 @@ async function handleListAction(
             if (items.length === 0) {
                 throw new Error("No items to remove");
             }
-            if (listName === "") {
-                throw new Error("List name is empty");
+            if (listName === "" || isPlaceholderListName(listName)) {
+                throw new Error(
+                    "List name is missing or only a reference phrase (e.g. \"the list\"); clarify which list",
+                );
             }
 
             store.removeItems(listName, items);

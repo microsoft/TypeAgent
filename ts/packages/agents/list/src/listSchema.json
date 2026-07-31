@@ -2,7 +2,7 @@
   "paramSpec": {
     "addItems": {
       "items.*": "wildcard",
-      "listName": "wildcard"
+      "listName": "checked_wildcard"
     },
     "removeItems": {
       "items.*": "wildcard",

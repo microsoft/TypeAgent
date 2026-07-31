@@ -21,6 +21,8 @@ export type AddItemsAction = {
         // IMPORTANT: Do not invent a list name.
         // If the user uses a reference phrase ("the list", "that list",etc.) we should clarify
         // with the user which list they meant unless it is obvious from the conversation history.
+        // Grammar may still capture a determiner as listName; the handler rejects those
+        // placeholders via validateWildcardMatch (checked_wildcard) so the LLM can clarify.
         listName: string;
     };
 };
