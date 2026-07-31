@@ -39,6 +39,17 @@ pnpm run prettier:fix        # Fix formatting
 
 Tests run against compiled output in `dist/test/` — you must build before running tests.
 
+**Before considering any change complete**, run a formatting check in addition to build and tests —
+CI enforces this separately and it is easy to miss if you only build/test:
+
+```bash
+pnpm run prettier:changed:fix   # Fix formatting for files changed vs origin/main (matches CI's check)
+```
+
+Do not rely on a bare `npx prettier` for validation — always use the repo's pinned version
+(`node_modules/.bin/prettier`, `pnpm exec prettier`, or `npx prettier@<version from package.json>`),
+since a newer/older Prettier version can produce spurious reformatting diffs.
+
 ## Architecture
 
 TypeAgent is a **personal agent** that routes natural language requests to specialized **application agents** (plugins). The core flow is:
