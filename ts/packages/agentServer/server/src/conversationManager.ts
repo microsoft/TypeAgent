@@ -226,6 +226,7 @@ export async function createConversationManager(
     baseOptions: DispatcherOptions,
     baseDir: string,
     idleTimeoutMs: number = DEFAULT_IDLE_TIMEOUT_MS,
+    testMode: boolean = false,
 ): Promise<ConversationManager> {
     const conversationsDir = path.join(baseDir, CONVERSATIONS_DIR);
 
@@ -712,6 +713,7 @@ export async function createConversationManager(
     // conversation id. Inert when no model provider is configured.
     const conversationSearchIndex = await createConversationSearchIndex(
         path.join(conversationsDir, "_unified"),
+        { testMode },
     );
 
     const manager: ConversationManager = {

@@ -58,6 +58,10 @@ function conversationTag(conversationId: string): string {
     return CONV_TAG_PREFIX + conversationId;
 }
 
+export function shouldIndexConversationMessage(testMode: boolean): boolean {
+    return !testMode;
+}
+
 function conversationIdFromTags(
     tags: ReadonlyArray<string | { [k: string]: unknown }>,
 ): string | undefined {
@@ -126,6 +130,7 @@ class ConversationSearchIndexImpl implements ConversationSearchIndex {
         // Extract entities/topics per message for richer retrieval. Production
         // leaves this on so memory search works well; tests turn it off.
         private readonly extractKnowledge: boolean,
+        private readonly testMode: boolean,
     ) {}
 
     public addMessage(
@@ -133,7 +138,11 @@ class ConversationSearchIndexImpl implements ConversationSearchIndex {
         text: string,
         sender?: string,
     ): void {
-        if (this.memory === undefined || text.trim().length === 0) {
+        if (
+            this.memory === undefined ||
+            !shouldIndexConversationMessage(this.testMode) ||
+            text.trim().length === 0
+        ) {
             return;
         }
         this.memory.queueAddMessage(
@@ -197,6 +206,8 @@ export type ConversationSearchIndexOptions = {
      * per-message extraction model call.
      */
     extractKnowledge?: boolean;
+    /** Disable indexing for isolated test shell instances. */
+    testMode?: boolean;
 };
 
 /**
@@ -209,20 +220,23 @@ export async function createConversationSearchIndex(
     options?: ConversationSearchIndexOptions,
 ): Promise<ConversationSearchIndex> {
     const extractKnowledge = options?.extractKnowledge ?? true;
+    const testMode = options?.testMode ?? false;
     let memory: ConversationMemory | undefined;
-    try {
-        memory = await createConversationMemory(
-            { dirPath, baseFileName: UNIFIED_MEMORY_BASENAME },
-            false,
-        );
-    } catch (e: unknown) {
-        debugError(
-            `Unified content search disabled (memory init failed): ${e instanceof Error ? e.message : String(e)}`,
-        );
-        memory = undefined;
+    if (!testMode) {
+        try {
+            memory = await createConversationMemory(
+                { dirPath, baseFileName: UNIFIED_MEMORY_BASENAME },
+                false,
+            );
+        } catch (e: unknown) {
+            debugError(
+                `Unified content search disabled (memory init failed): ${e instanceof Error ? e.message : String(e)}`,
+            );
+            memory = undefined;
+        }
     }
     if (memory !== undefined) {
         debug(`Unified conversation search index ready at ${dirPath}`);
     }
-    return new ConversationSearchIndexImpl(memory, extractKnowledge);
+    return new ConversationSearchIndexImpl(memory, extractKnowledge, testMode);
 }
