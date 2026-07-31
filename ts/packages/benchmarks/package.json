@@ -1,11 +1,27 @@
 {
   "name": "@typeagent/benchmarks",
   "version": "0.0.1",
-  "private": true,
   "description": "TypeAgent translation benchmark (scaffold)",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/benchmarks"
+  },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
+  "scripts": {
+    "build": "tsc -b && node ./scripts/copyAssets.mjs",
+    "clean": "node ./scripts/clean.mjs",
+    "gen-catalog": "pnpm run build && node dist/translationBench/scripts/genCatalog.js",
+    "prettier": "prettier --check package.json tsconfig.json src scripts --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write package.json tsconfig.json src scripts --ignore-path ../../.prettierignore",
+    "snapshot-prices": "pnpm run build && node dist/translationBench/scripts/snapshotPrices.js",
+    "test": "pnpm run build",
+    "test:local": "pnpm run test",
+    "tsc": "tsc -b"
+  },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "agent-dispatcher": "workspace:*",
@@ -15,16 +31,5 @@
     "@types/node": "^22.0.0",
     "prettier": "^3.5.3",
     "typescript": "~5.4.5"
-  },
-  "scripts": {
-    "build": "tsc -b && node ./scripts/copyAssets.mjs",
-    "clean": "node ./scripts/clean.mjs",
-    "gen-catalog": "pnpm run build && node dist/translationBench/scripts/genCatalog.js",
-    "snapshot-prices": "pnpm run build && node dist/translationBench/scripts/snapshotPrices.js",
-    "prettier": "prettier --check package.json tsconfig.json src scripts --ignore-path ../../.prettierignore",
-    "prettier:fix": "prettier --write package.json tsconfig.json src scripts --ignore-path ../../.prettierignore",
-    "test": "pnpm run build",
-    "test:local": "pnpm run test",
-    "tsc": "tsc -b"
   }
 }

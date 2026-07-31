@@ -13,9 +13,8 @@ export interface PriceTable {
     rates: Record<string, Prices>;
 }
 
-export const PRICES: PriceTable = require(
-    "./model-prices.generated.json",
-) as PriceTable;
+export const PRICES: PriceTable =
+    require("./model-prices.generated.json") as PriceTable;
 
 export function pricesFor(model: string): {
     prices: Prices | undefined;

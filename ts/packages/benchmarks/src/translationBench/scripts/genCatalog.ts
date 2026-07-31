@@ -15,7 +15,7 @@ interface GeneratedAction {
     schemaName: string;
     actionName: string;
     parameters: string;
-    
+
     paramSpec: ParamSpec;
     description?: string;
 }
@@ -118,9 +118,6 @@ function summarizeParameters(actionType: any): string {
 }
 
 async function main(): Promise<void> {
-    
-    
-    
     const systemContext = await initializeCommandHandlerContext(
         "translation-bench-catalog",
         {
@@ -157,11 +154,6 @@ async function main(): Promise<void> {
             const config = p.getActionConfig(schemaName);
             file = p.getActionSchemaFileForConfig(config);
         } catch (e) {
-            
-            
-            
-            
-            
             unloadable.push(schemaName);
             continue;
         }
