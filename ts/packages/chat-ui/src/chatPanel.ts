@@ -2683,7 +2683,10 @@ export class ChatPanel {
             requestId,
         );
         container.setMessage(content, source, undefined);
-        this.scrollToBottom();
+        // In-place replace (e.g. a live progress bar): keep the viewport at the
+        // bottom if already there, but don't raise the New-messages pill - the
+        // bubble is being rewritten, not newly added.
+        this.scrollToBottom(false);
     }
 
     /**
@@ -6315,7 +6318,11 @@ export class ChatPanel {
         this.scrollToBottom();
     }
 
-    private scrollToBottom() {
+    // `notifyIfScrolledAway` controls the "New messages" pill: pass false for
+    // in-place content updates (e.g. a live progress bar rewriting the same
+    // bubble) so replacing an existing message does not masquerade as a new
+    // message when the user has scrolled up.
+    private scrollToBottom(notifyIfScrolledAway: boolean = true) {
         // If user has manually scrolled away from bottom, don't auto-scroll.
         // Show the pill instead so they can choose to jump to new messages.
         if (this.userHasManuallyScrolled) {
@@ -6323,8 +6330,10 @@ export class ChatPanel {
                 this.hideNewMessagesPill();
                 return;
             }
-            this.hasUnseenNewMessages = true;
-            this.showNewMessagesPill();
+            if (notifyIfScrolledAway) {
+                this.hasUnseenNewMessages = true;
+                this.showNewMessagesPill();
+            }
             return;
         }
 
