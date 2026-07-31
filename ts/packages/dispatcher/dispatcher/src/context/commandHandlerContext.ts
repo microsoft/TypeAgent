@@ -203,6 +203,7 @@ export type CopilotImporter = (
 export type ConversationContentSink = (
     text: string,
     sender: "user" | "assistant",
+    turnKey?: string,
 ) => void;
 
 /**
@@ -222,6 +223,47 @@ export type ConversationSearcher = (
         snippets: string[];
     }[]
 >;
+
+/**
+ * Which conversations a content-index backfill should cover: the one the
+ * command ran in (`current`), a specific one (`named`), or every conversation
+ * (`all`).
+ */
+export type ConversationIndexTarget =
+    { scope: "current" } | { scope: "all" } | { scope: "named"; name: string };
+
+/** Per-conversation outcome of a content-index backfill. */
+export type ConversationIndexResult = {
+    indexed: {
+        name: string;
+        /** User turns newly added to the index by this backfill. */
+        newlyIndexed: number;
+        /** Total user turns in the conversation (already-indexed + new). */
+        totalMessages: number;
+    }[];
+    /** Set to the requested name when a `named` target matched nothing. */
+    notFound?: string;
+};
+
+/** Progress of an in-flight content-index backfill (user turns). */
+export type ConversationIndexProgress = {
+    /** User turns indexed and persisted so far. */
+    done: number;
+    /** Total user turns this backfill will index. */
+    total: number;
+};
+
+/**
+ * Host-provided backfill of conversation history into the unified content
+ * index (see {@link ConversationSearcher}). Indexes the user turns not already
+ * present so past conversations become searchable. `onProgress` (optional) is
+ * called as turns are indexed, for a live progress display. Injected by the
+ * agent-server; undefined for hosts without a unified content index.
+ */
+export type ConversationIndexer = (
+    target: ConversationIndexTarget,
+    onProgress?: (progress: ConversationIndexProgress) => void,
+) => Promise<ConversationIndexResult>;
 
 // A request-scoped route chosen by the registry-first contextSelector tier
 // (§11.4) when the topical winner is a neighborhood sibling with no cache
@@ -291,6 +333,12 @@ export type CommandHandlerContext = {
      * for hosts without a unified content index.
      */
     readonly searchConversations?: ConversationSearcher | undefined;
+    /**
+     * Host-provided backfill of conversation history into the unified content
+     * index (see {@link ConversationIndexer}). Injected by the agent-server;
+     * undefined for hosts without a unified content index.
+     */
+    readonly indexConversations?: ConversationIndexer | undefined;
     // Per activation configs
     developerMode?: boolean;
     // When true, each translated request is confirmed via the client
@@ -327,6 +375,12 @@ export type CommandHandlerContext = {
     // is disposed on session close.
     subagentManager?: SubagentManager | undefined;
     commandResult?: CommandResult | undefined;
+    // Monotonic count of non-transient display output sent to the client this
+    // session. executeAction snapshots it around an agent's executeAction call
+    // to tell whether the action (or a command it delegated to) already showed
+    // visible output, so it can skip the redundant "Action ... completed."
+    // bubble. Transient status (appendDisplay mode "temporary") does not count.
+    displayCount: number;
     chatHistory: ChatHistory;
     constructionProvider?: ConstructionProvider | undefined;
     displayLog: DisplayLog;
@@ -541,6 +595,13 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
      * omitted by standalone hosts without a unified index.
      */
     searchConversations?: ConversationSearcher | undefined;
+
+    /**
+     * Backfill of conversation history into the host's unified content index
+     * (see {@link ConversationIndexer}). Injected by the agent-server; omitted
+     * by standalone hosts without a unified index.
+     */
+    indexConversations?: ConversationIndexer | undefined;
 };
 
 async function getSession(
@@ -1145,6 +1206,7 @@ export async function initializeCommandHandlerContext(
             copilotImport: options?.copilotImport,
             conversationContentSink: options?.conversationContentSink,
             searchConversations: options?.searchConversations,
+            indexConversations: options?.indexConversations,
 
             // Runtime context
             commandLock: createLimiter(1), // Make sure we process one command at a time.
@@ -1177,6 +1239,7 @@ export async function initializeCommandHandlerContext(
             promptLogger,
             devTrace,
             batchMode: false,
+            displayCount: 0,
             pendingChoiceRoutes: new Map(),
             instanceDirLock,
             constructionProvider,
