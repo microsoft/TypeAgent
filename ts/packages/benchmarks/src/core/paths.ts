@@ -1,42 +1,37 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const PACKAGE_NAME = "@typeagent/benchmarks";
+const require = createRequire(import.meta.url);
+const here = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * Package root = directory whose package.json name is @typeagent/benchmarks.
- * Walk up from this file so the same code works from src/ and dist/.
- * No env overrides — data and results always live under this package.
+ * This module lives at src/core/ or dist/src/core/.
+ * Package root is two or three levels up; pick the one that owns our package.json.
  */
-export const packageRoot: string = (() => {
-    let dir = path.dirname(fileURLToPath(import.meta.url));
-    for (;;) {
-        const pkgPath = path.join(dir, "package.json");
-        if (existsSync(pkgPath)) {
-            let name: string | undefined;
-            try {
-                name = (JSON.parse(readFileSync(pkgPath, "utf8")) as { name?: string })
-                    .name;
-            } catch {
-                name = undefined;
-            }
-            if (name === PACKAGE_NAME) {
+function resolvePackageRoot(): string {
+    for (const rel of ["../../..", "../.."] as const) {
+        const dir = path.resolve(here, rel);
+        try {
+            const pkg = require(path.join(dir, "package.json")) as {
+                name?: string;
+            };
+            if (pkg.name === "@typeagent/benchmarks") {
                 return dir;
             }
+        } catch {
+            // candidate missing or unreadable
         }
-        const parent = path.dirname(dir);
-        if (parent === dir) {
-            throw new Error(
-                `Cannot find ${PACKAGE_NAME} package root above ${fileURLToPath(import.meta.url)}`,
-            );
-        }
-        dir = parent;
     }
-})();
+    throw new Error(
+        `Cannot resolve @typeagent/benchmarks package root from ${here}`,
+    );
+}
+
+export const packageRoot = resolvePackageRoot();
 
 /** datasets: <package>/data/translationBench/ */
 export function dataDir(): string {
