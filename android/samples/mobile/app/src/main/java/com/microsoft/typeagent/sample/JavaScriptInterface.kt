@@ -56,6 +56,15 @@ class JavaScriptInterface(var context: Context) : DefaultJSInterface("Android") 
     }
 
     @JavascriptInterface
+    fun setTimer(durationInSeconds: Int) {
+        Log.i("javascript", "setTimer")
+        val intent = Intent(AlarmClock.ACTION_SET_TIMER)
+            .putExtra(AlarmClock.EXTRA_LENGTH, durationInSeconds)
+            .putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+        startActivity(context, intent, null)
+    }
+
+    @JavascriptInterface
     fun callPhoneNumber(phoneNumber: String) {
         Log.i("javascript", "callPhoneNumber")
         val uri = String.format(Locale.ROOT, "tel:%s", phoneNumber)
