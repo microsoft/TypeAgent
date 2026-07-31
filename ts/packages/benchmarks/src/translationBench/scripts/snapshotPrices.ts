@@ -11,6 +11,9 @@ const EXACT = new Set(["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4.1-mini"]);
 /** Include every openai id equal to the prefix or starting with `${prefix}-`. */
 const PREFIXES = ["gpt-5.6", "gpt-5.4"] as const;
 
+/** Dropped from the pin (too expensive / not used in the bench). */
+const EXCLUDE = new Set(["gpt-5.4-pro"]);
+
 interface Cost {
     input?: number;
     output?: number;
@@ -21,8 +24,9 @@ function selectOpenAiIds(ids: string[]): string[] {
     return ids
         .filter(
             (id) =>
-                EXACT.has(id) ||
-                PREFIXES.some((p) => id === p || id.startsWith(`${p}-`)),
+                !EXCLUDE.has(id) &&
+                (EXACT.has(id) ||
+                    PREFIXES.some((p) => id === p || id.startsWith(`${p}-`))),
         )
         .sort();
 }

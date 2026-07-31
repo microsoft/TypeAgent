@@ -1,45 +1,49 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const PACKAGE_NAME = "@typeagent/benchmarks";
+
 /**
- * Absolute path to this package root (directory that owns package.json).
- * Resolved by walking up from this module so it works from both src/ and dist/.
+ * Package root = directory whose package.json name is @typeagent/benchmarks.
+ * Walk up from this file so the same code works from src/ and dist/.
+ * No env overrides — data and results always live under this package.
  */
 export const packageRoot: string = (() => {
     let dir = path.dirname(fileURLToPath(import.meta.url));
     for (;;) {
-        if (existsSync(path.join(dir, "package.json"))) {
-            return dir;
+        const pkgPath = path.join(dir, "package.json");
+        if (existsSync(pkgPath)) {
+            let name: string | undefined;
+            try {
+                name = (JSON.parse(readFileSync(pkgPath, "utf8")) as { name?: string })
+                    .name;
+            } catch {
+                name = undefined;
+            }
+            if (name === PACKAGE_NAME) {
+                return dir;
+            }
         }
         const parent = path.dirname(dir);
         if (parent === dir) {
             throw new Error(
-                `Cannot locate package root (no package.json above ${fileURLToPath(import.meta.url)})`,
+                `Cannot find ${PACKAGE_NAME} package root above ${fileURLToPath(import.meta.url)}`,
             );
         }
         dir = parent;
     }
 })();
 
-/** Join segments under the benchmarks package root. */
-export function fromPackageRoot(...segments: string[]): string {
-    return path.join(packageRoot, ...segments);
+/** datasets: <package>/data/translationBench/ */
+export function dataDir(): string {
+    return path.join(packageRoot, "data", "translationBench");
 }
 
-export type BenchName = "translationBench";
-
-export function dataDir(bench: BenchName = "translationBench"): string {
-    return fromPackageRoot("data", bench);
-}
-
-export function resultsDir(bench: BenchName = "translationBench"): string {
-    const override = process.env.BENCH_RESULTS_DIR;
-    if (override !== undefined && override !== "") {
-        return override;
-    }
-    return fromPackageRoot("results", bench);
+/** run output: <package>/results/translationBench/ */
+export function resultsDir(): string {
+    return path.join(packageRoot, "results", "translationBench");
 }

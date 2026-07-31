@@ -39,11 +39,6 @@
       "cachedUsdPer1M": 0.02,
       "outUsdPer1M": 1.25
     },
-    "gpt-5.4-pro": {
-      "inUsdPer1M": 30,
-      "cachedUsdPer1M": 30,
-      "outUsdPer1M": 180
-    },
     "gpt-5.6": {
       "inUsdPer1M": 5,
       "cachedUsdPer1M": 0.5,
