@@ -112,6 +112,11 @@ describe("@conversation command handlers build manage-conversation payloads", ()
         expectPayload({ subcommand: "delete", name: "old-project" });
     });
 
+    it("search", async () => {
+        await runCommand("search", { args: { query: "docker command" } });
+        expectPayload({ subcommand: "search", query: "docker command" });
+    });
+
     it("help", async () => {
         await runCommand("help", undefined);
         expectPayload({ subcommand: "help" });

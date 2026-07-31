@@ -136,4 +136,25 @@ describe("executeConversationAction delegates to @conversation commands", () => 
         });
         expectCommand('@conversation delete "old-project"');
     });
+
+    it("findConversation runs find with the query", async () => {
+        await run({
+            actionName: "findConversation",
+            parameters: { query: "the workout playlist" },
+        });
+        expectCommand("@conversation find the workout playlist");
+    });
+
+    it("searchConversation runs search with the query", async () => {
+        await run({
+            actionName: "searchConversation",
+            parameters: { query: "the docker command" },
+        });
+        expectCommand("@conversation search the docker command");
+    });
+
+    it("help runs help", async () => {
+        await run({ actionName: "help" });
+        expectCommand("@conversation help");
+    });
 });

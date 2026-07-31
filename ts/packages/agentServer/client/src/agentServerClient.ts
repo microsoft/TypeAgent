@@ -29,6 +29,7 @@ import {
     CreateConversationOptions,
     ConversationInfo,
     ConversationMatch,
+    ConversationContentMatch,
     JoinConversationResult,
     RenameConversationOptions,
     SpeechToken,
@@ -124,6 +125,16 @@ export type AgentServerConnection = {
         query: string,
         maxMatches?: number,
     ): Promise<ConversationMatch[]>;
+    /**
+     * Search conversation *content* (the knowPro unified message index) and
+     * rank conversations by how well their messages match. Distinct from
+     * {@link findConversations}, which matches on names. Returns [] when the
+     * content index has no model provider configured.
+     */
+    searchConversationContent(
+        query: string,
+        maxMatches?: number,
+    ): Promise<ConversationContentMatch[]>;
     renameConversation(
         conversationId: string,
         newName: string,
@@ -353,6 +364,13 @@ export function createAgentServerConnection(
             maxMatches?: number,
         ): Promise<ConversationMatch[]> {
             return rpc.invoke("findConversations", query, maxMatches);
+        },
+
+        async searchConversationContent(
+            query: string,
+            maxMatches?: number,
+        ): Promise<ConversationContentMatch[]> {
+            return rpc.invoke("searchConversationContent", query, maxMatches);
         },
 
         async renameConversation(

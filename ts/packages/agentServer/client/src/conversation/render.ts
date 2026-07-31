@@ -6,14 +6,37 @@
 // the same thing inside the message bubble; non-UI clients still get the
 // auto-derived markdown/text fallback.
 
-import type { DisplayContent, StructuredBlock } from "@typeagent/agent-sdk";
-import { createStructuredContent } from "@typeagent/agent-sdk/helpers/display";
+import type {
+    DisplayContent,
+    StructuredBlock,
+    TableCell,
+    TableColumn,
+} from "@typeagent/agent-sdk";
+import {
+    createStructuredContent,
+    createTable,
+} from "@typeagent/agent-sdk/helpers/display";
 import type { ConversationActionResult } from "./manage.js";
 
 // Bold quoted names for the markdown text blocks - parity with the shells'
 // previous HTML that bolded quoted conversation names.
 function boldQuoted(message: string): string {
     return message.replace(/"([^"]+)"/g, (_, name) => `**${name}**`);
+}
+
+// Render an ISO timestamp as `YYYY-MM-DD HH:MM` in local time. The format is
+// human-readable and lexically sortable, so the table's client-side date sort
+// orders conversations chronologically.
+function formatCreated(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) {
+        return iso;
+    }
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    return (
+        `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+        `${pad(date.getHours())}:${pad(date.getMinutes())}`
+    );
 }
 
 export function renderConversationActionResult(
@@ -55,20 +78,31 @@ export function renderConversationActionResult(
                     { kind: "text", text: "No conversations found." },
                 ]);
             }
-            const items = result.conversations.map((c) => {
-                const created = new Date(c.createdAt).toLocaleDateString();
-                const messages = `${c.messageCount} message${
-                    c.messageCount === 1 ? "" : "s"
-                }`;
-                const clients = `${c.clientCount} client${
-                    c.clientCount === 1 ? "" : "s"
-                }`;
+            const columns: TableColumn[] = [
+                { id: "name", header: "Name" },
+                {
+                    id: "messages",
+                    header: "Messages",
+                    type: "number",
+                    align: "right",
+                },
+                {
+                    id: "clients",
+                    header: "Clients",
+                    type: "number",
+                    align: "right",
+                },
+                { id: "created", header: "Created", type: "date" },
+            ];
+            const rows: TableCell[][] = result.conversations.map((c) => {
                 const isCurrent =
                     c.conversationId === result.currentConversationId;
-                return {
-                    text: isCurrent ? `${c.name} (current)` : c.name,
-                    subtitle: `${messages} · ${clients} · created ${created}`,
-                };
+                return [
+                    isCurrent ? `${c.name} (current)` : c.name,
+                    c.messageCount,
+                    c.clientCount,
+                    formatCreated(c.createdAt),
+                ];
             });
             const blocks: StructuredBlock[] = [
                 {
@@ -76,7 +110,7 @@ export function renderConversationActionResult(
                     level: 3,
                     text: `Conversations (${result.conversations.length})`,
                 },
-                { kind: "list", items },
+                createTable(columns, rows),
             ];
             return createStructuredContent(blocks);
         }
@@ -103,6 +137,51 @@ export function renderConversationActionResult(
                 { kind: "list", items },
             ];
             return createStructuredContent(blocks);
+        }
+        case "contentMatches": {
+            const items = result.matches.map((m) => {
+                const c = m.conversation;
+                const isCurrent =
+                    c.conversationId === result.currentConversationId;
+                const pct = `${Math.round(m.score * 100)}% match`;
+                const snippet = m.snippets[0];
+                return {
+                    text: isCurrent ? `${c.name} (current)` : c.name,
+                    subtitle: snippet ? `${pct} · ${snippet}` : pct,
+                };
+            });
+            const blocks: StructuredBlock[] = [
+                {
+                    kind: "heading",
+                    level: 3,
+                    text: `Content matches for “${result.query}” (${result.matches.length})`,
+                },
+                { kind: "list", items },
+            ];
+            return createStructuredContent(blocks);
+        }
+        case "help": {
+            const rows: [string, string][] = [
+                ["new [name]", "Create a new conversation"],
+                ["list", "List all conversations"],
+                ["find <name>", "Find conversations by name"],
+                ["search <text>", "Search conversation content"],
+                ["info", "Show the current conversation"],
+                ["switch [name]", "Switch to a conversation (or the next one)"],
+                ["next", "Switch to the next conversation"],
+                ["prev", "Switch to the previous conversation"],
+                ["rename [name] <newName>", "Rename a conversation"],
+                ["delete <name>", "Delete a conversation"],
+                ["help", "Show this help"],
+            ];
+            const items = rows.map(([usage, description]) => ({
+                text: usage,
+                subtitle: description,
+            }));
+            return createStructuredContent([
+                { kind: "heading", level: 3, text: "Conversation commands" },
+                { kind: "list", items },
+            ]);
         }
     }
 }

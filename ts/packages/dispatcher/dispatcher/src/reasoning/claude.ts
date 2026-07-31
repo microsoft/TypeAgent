@@ -661,11 +661,12 @@ function getClaudeOptions(
         },
     };
 
-    // TODO (deferred): cross-conversation browsing. get_conversation_info /
-    // read_conversation are scoped to the CURRENT conversation only. To help a
-    // user who is unsure which conversation they were in, add
-    // list_conversations / read_conversation(conversationId) backed by the
-    // agent-server ConversationManager (getConversationList). Not implemented yet.
+    // get_conversation_info / read_conversation are scoped to the CURRENT
+    // conversation. Cross-conversation browsing is provided by
+    // list_conversations (id + name) and search_conversations (content search
+    // with snippets), both backed by the agent-server ConversationManager.
+    // TODO (deferred): read_conversation(conversationId) to page another
+    // conversation's full transcript, not just its search snippets.
     const conversationInfoSchema = {};
     const getConversationInfoTool: SdkMcpToolDefinition<
         typeof conversationInfoSchema
@@ -742,6 +743,81 @@ function getClaudeOptions(
             return {
                 content: [
                     { type: "text", text: `${header}\n${lines.join("\n")}` },
+                ],
+            };
+        },
+    };
+
+    const listConversationsSchema = {};
+    const listConversationsTool: SdkMcpToolDefinition<
+        typeof listConversationsSchema
+    > = {
+        name: "list_conversations",
+        description: [
+            "List ALL of the user's conversations (id + name), across the whole session store — not just the current one.",
+            "Use this to resolve a conversation the user names (e.g. 'the CLI conversation') to its id before reading or searching it.",
+        ].join("\n"),
+        inputSchema: listConversationsSchema,
+        handler: async () => {
+            const list = systemContext.getConversationList?.() ?? [];
+            if (list.length === 0) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "No other conversations are available in this host.",
+                        },
+                    ],
+                };
+            }
+            return {
+                content: [
+                    { type: "text", text: JSON.stringify(list, null, 2) },
+                ],
+            };
+        },
+    };
+
+    const searchConversationsSchema = {
+        query: z.string(),
+        maxMatches: z.number().optional(),
+    };
+    const searchConversationsTool: SdkMcpToolDefinition<
+        typeof searchConversationsSchema
+    > = {
+        name: "search_conversations",
+        description: [
+            "Search the CONTENT of ALL the user's conversations (not just the current one) and return the best-matching conversations with representative snippets.",
+            "Use this to answer questions like 'what did we discuss in the CLI conversation' or to find where a topic was talked about across conversations.",
+            "This reads matching content back to you — unlike the conversation find/search *actions*, which only render in the UI.",
+        ].join("\n"),
+        inputSchema: searchConversationsSchema,
+        handler: async (args) => {
+            const search = systemContext.searchConversations;
+            if (search === undefined) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "Cross-conversation content search is not available in this host.",
+                        },
+                    ],
+                };
+            }
+            const matches = await search(args.query, args.maxMatches);
+            if (matches.length === 0) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `No conversations with content matching "${args.query}" found.`,
+                        },
+                    ],
+                };
+            }
+            return {
+                content: [
+                    { type: "text", text: JSON.stringify(matches, null, 2) },
                 ],
             };
         },
@@ -1016,6 +1092,8 @@ function getClaudeOptions(
                 "- `remember`: Durably save a new memory so it can be recalled later",
                 "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
                 "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
+                "- `list_conversations`: List ALL conversations (id + name) across the session store — use to resolve a conversation the user names",
+                "- `search_conversations`: Search the CONTENT of ALL conversations and read back matching snippets (use for 'what did we discuss in X')",
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file, language, cursor/selection ranges, workspace, open editors, the active file's diagnostic messages) and the user's selected text (bounded) when present; use the code agent's read actions for full file contents",
                 "- `find_installable_agent`: List agents that are not installed yet but can be installed on demand. Call it when no active agent can fulfill the request; if a candidate matches, tell the user the exact `@package install` command (never install it yourself)",
                 "- `ask_user`: Ask the user ONE multiple-choice question and block for their answer - only when genuinely blocked on a decision only they can make (see Autonomous Execution Policy)",
@@ -1429,6 +1507,8 @@ function getClaudeOptions(
                     rememberTool,
                     getConversationInfoTool,
                     readConversationTool,
+                    listConversationsTool,
+                    searchConversationsTool,
                     getUserContextTool,
                     ...subagentTools,
                     findInstallableAgentTool,

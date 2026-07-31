@@ -73,8 +73,6 @@ export interface BridgeClientIOContext {
      * the only generic completion signal we have).
      */
     sweepRequestIds?(liveServerIds: Set<string>): void;
-    /** Handle a "vscode-shell-action" routed from the code agent. */
-    handleShellAction(requestId: RequestId, data: unknown): Promise<void>;
     /**
      * Handle a "manage-conversation" client action emitted by the system
      * agent (for both `@conversation` slash commands and natural-language
@@ -324,13 +322,7 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
             ctx.broadcast({ type: "interactionCancelled", interactionId });
         },
         takeAction: (requestId, action, data) => {
-            if (action === "vscode-shell-action") {
-                ctx.handleShellAction(requestId, data).catch((e: any) => {
-                    vscode.window.showErrorMessage(
-                        `Shell action failed: ${e?.message ?? String(e)}`,
-                    );
-                });
-            } else if (action === "manage-conversation") {
+            if (action === "manage-conversation") {
                 ctx.handleManageConversation(requestId, data).catch(
                     (e: any) => {
                         vscode.window.showErrorMessage(

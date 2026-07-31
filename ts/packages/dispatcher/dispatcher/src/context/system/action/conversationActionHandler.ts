@@ -44,6 +44,9 @@ export async function executeConversationAction(
         case "findConversation":
             command = `@conversation find ${action.parameters.query}`;
             break;
+        case "searchConversation":
+            command = `@conversation search ${action.parameters.query}`;
+            break;
         case "showConversationInfo":
             command = "@conversation info";
             break;
@@ -69,6 +72,9 @@ export async function executeConversationAction(
         }
         case "deleteConversation":
             command = `@conversation delete ${quoteName(action.parameters.name)}`;
+            break;
+        case "help":
+            command = "@conversation help";
             break;
         default:
             throw new Error(

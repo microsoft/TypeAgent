@@ -244,8 +244,32 @@ class ConversationFindCommandHandler implements CommandHandler {
     }
 }
 
+class ConversationSearchCommandHandler implements CommandHandler {
+    public readonly description =
+        "Search conversation content (knowPro message index)";
+    public readonly action = "searchConversation";
+    public readonly parameters = {
+        args: {
+            query: {
+                description: "Text to search for across conversation content",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        dispatchManageConversation(context, {
+            subcommand: "search",
+            query: params.args.query,
+        });
+    }
+}
+
 class ConversationHelpCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show conversation command help";
+    public readonly action = "help";
     public async run(context: ActionContext<CommandHandlerContext>) {
         dispatchManageConversation(context, { subcommand: "help" });
     }
@@ -259,6 +283,7 @@ export function getConversationCommandHandlers(): CommandHandlerTable {
             new: new ConversationNewCommandHandler(),
             list: new ConversationListCommandHandler(),
             find: new ConversationFindCommandHandler(),
+            search: new ConversationSearchCommandHandler(),
             info: new ConversationInfoCommandHandler(),
             switch: new ConversationSwitchCommandHandler(),
             prev: new ConversationPrevCommandHandler(),

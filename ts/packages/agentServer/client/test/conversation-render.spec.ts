@@ -3,6 +3,7 @@
 
 import { renderConversationActionResult } from "../src/conversation/render.js";
 import type { ConversationActionResult } from "../src/conversation/manage.js";
+import type { StructuredBlock, StructuredContent } from "@typeagent/agent-sdk";
 
 // The renderer returns structured DisplayContent; serialize it so tests can
 // assert on the rendered text without coupling to the block shape.
@@ -10,9 +11,11 @@ function render(result: ConversationActionResult): string {
     return JSON.stringify(renderConversationActionResult(result));
 }
 
+type TableBlock = Extract<StructuredBlock, { kind: "table" }>;
+
 describe("renderConversationActionResult — list", () => {
-    test("shows a per-conversation message count, pluralized", () => {
-        const json = render({
+    test("renders a sortable table with numeric counts and a current marker", () => {
+        const content = renderConversationActionResult({
             kind: "list",
             currentConversationId: "id2",
             conversations: [
@@ -31,13 +34,29 @@ describe("renderConversationActionResult — list", () => {
                     messageCount: 5,
                 },
             ],
-        });
+        }) as StructuredContent;
 
-        expect(json).toContain("Conversations (2)");
-        expect(json).toContain("1 message");
-        expect(json).toContain("5 messages");
-        // The current conversation is marked.
-        expect(json).toContain("Beta (current)");
+        expect(JSON.stringify(content)).toContain("Conversations (2)");
+
+        const table = content.blocks.find(
+            (b): b is TableBlock => b.kind === "table",
+        );
+        expect(table).toBeDefined();
+        // Sortable is on by default (not explicitly disabled).
+        expect(table!.sortable).not.toBe(false);
+        expect(table!.columns.map((c) => c.header)).toEqual([
+            "Name",
+            "Messages",
+            "Clients",
+            "Created",
+        ]);
+        // Message/client counts are numeric cells, not pluralized text.
+        expect(table!.rows[0]).toEqual(
+            expect.arrayContaining(["Alpha", 1, 0]),
+        );
+        expect(table!.rows[1]).toEqual(
+            expect.arrayContaining(["Beta (current)", 5, 1]),
+        );
     });
 
     test("empty list renders a friendly message", () => {

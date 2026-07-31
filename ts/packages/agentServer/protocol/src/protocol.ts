@@ -54,6 +54,17 @@ export type ConversationMatch = {
     score: number;
 };
 
+/**
+ * A conversation whose message *content* matched a search, with a relevance
+ * score in [0, 1] and representative snippets (best match first). Distinct
+ * from {@link ConversationMatch}, which matches on the conversation name.
+ */
+export type ConversationContentMatch = {
+    conversation: ConversationInfo;
+    score: number;
+    snippets: string[];
+};
+
 export type ConversationNameCollisionBehavior = "error" | "appendNumber";
 
 export type ConversationNameCollisionOptions = {
@@ -129,6 +140,16 @@ export type AgentServerInvokeFunctions = {
         query: string,
         maxMatches?: number,
     ) => Promise<ConversationMatch[]>;
+    /**
+     * Search conversation *content* (the knowPro unified message index) and
+     * rank conversations by how well their messages match the query. Distinct
+     * from {@link findConversations}, which matches on conversation names.
+     * Returns [] when the content index has no model provider configured.
+     */
+    searchConversationContent: (
+        query: string,
+        maxMatches?: number,
+    ) => Promise<ConversationContentMatch[]>;
     renameConversation: (
         conversationId: string,
         newName: string,

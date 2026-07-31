@@ -205,6 +205,24 @@ export type ConversationContentSink = (
     sender: "user" | "assistant",
 ) => void;
 
+/**
+ * Host-provided cross-conversation content search over the unified message
+ * index. Returns the best-matching conversations (id + name) with a relevance
+ * score in [0, 1] and representative snippets, best first. Injected by the
+ * agent-server; undefined for hosts without a unified content index.
+ */
+export type ConversationSearcher = (
+    query: string,
+    maxMatches?: number,
+) => Promise<
+    {
+        conversationId: string;
+        name: string;
+        score: number;
+        snippets: string[];
+    }[]
+>;
+
 // A request-scoped route chosen by the registry-first contextSelector tier
 // (§11.4) when the topical winner is a neighborhood sibling with no cache
 // MatchResult. Unlike `collisionOneShotPicks` (durable, cross-turn, explicit
@@ -267,6 +285,12 @@ export type CommandHandlerContext = {
      * without a unified index.
      */
     readonly conversationContentSink?: ConversationContentSink | undefined;
+    /**
+     * Host-provided cross-conversation content search (see
+     * {@link ConversationSearcher}). Injected by the agent-server; undefined
+     * for hosts without a unified content index.
+     */
+    readonly searchConversations?: ConversationSearcher | undefined;
     // Per activation configs
     developerMode?: boolean;
     // When true, each translated request is confirmed via the client
@@ -510,6 +534,13 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
      * by the agent-server; omitted by standalone hosts.
      */
     conversationContentSink?: ConversationContentSink | undefined;
+
+    /**
+     * Cross-conversation content search over the host's unified message index
+     * (see {@link ConversationSearcher}). Injected by the agent-server;
+     * omitted by standalone hosts without a unified index.
+     */
+    searchConversations?: ConversationSearcher | undefined;
 };
 
 async function getSession(
@@ -1113,6 +1144,7 @@ export async function initializeCommandHandlerContext(
             getConversationList: options?.getConversationList,
             copilotImport: options?.copilotImport,
             conversationContentSink: options?.conversationContentSink,
+            searchConversations: options?.searchConversations,
 
             // Runtime context
             commandLock: createLimiter(1), // Make sure we process one command at a time.

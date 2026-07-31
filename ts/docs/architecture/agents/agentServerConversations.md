@@ -270,7 +270,7 @@ See `packages/vscode-shell/src/agentServerBridge.ts` (`handleManageConversation`
 
 The browser extension (`packages/agents/browserExtension/src/extension`) is a Chrome MV3 extension that runs in **connected mode only** — its service worker maintains a WebSocket to the agentServer. The chat panel surfaces the same `@conversation` slash commands and NL phrases as the Shell and CLI.
 
-The chat panel forwards the dispatcher's `manage-conversation` `takeAction` payload to the service worker via a `chatPanelManageConversation` invoke RPC. The service worker (`extension/serviceWorker/dispatcherConnection.ts`) delegates to the shared `manageConversation` helper from `@typeagent/agent-server-client/conversation` (which implements all eight subcommands) via a thin `AgentServerConnection` adapter over the extension's RPC channel, and returns a rendered HTML message plus a `switched` flag.
+The chat panel forwards the dispatcher's `manage-conversation` `takeAction` payload to the service worker via a `chatPanelManageConversation` invoke RPC. The service worker (`extension/serviceWorker/dispatcherConnection.ts`) delegates to the shared `manageConversation` helper from `@typeagent/agent-server-client/conversation` (which implements every subcommand) via a thin `AgentServerConnection` adapter over the extension's RPC channel, and returns a rendered HTML message plus a `switched` flag.
 
 When `switched` is set, the chat panel clears its DOM and re-runs `loadSessionHistory()` (mirroring the Shell's `replayDisplayHistory` on `conversationChanged`), then renders the confirmation message so it lands after the replayed history. Live display events arriving during the replay are queued via a `runOrDefer` gate and flushed in order on completion.
 
@@ -290,7 +290,7 @@ Modules:
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `naming.ts`    | `normalizeConversationName`, `findConversationByName`, `findUniqueConversationByName`, `formatAutoConversationName`, `sortConversationsByCreatedDesc`                                                                                                                  |
 | `lifecycle.ts` | `findOrCreateNamedConversation`, `joinNamedOrFallback`, `switchConversationSafe`, `createEphemeralConversation`, `deleteEphemeralConversation`, `validateConversationNameUnique`, `isConversationNotFoundError`                                                        |
-| `manage.ts`    | `manageConversation` (top-level dispatcher) + per-subcommand entries (`manageNew`, `manageList`, `manageInfo`, `manageSwitch`, `manageCycle`, `manageRename`, `manageDelete`). All return a discriminated `ConversationActionResult` the caller renders to its own UI. |
+| `manage.ts`    | `manageConversation` (top-level dispatcher) + per-subcommand entries (`manageNew`, `manageList`, `manageFind`, `manageSearch`, `manageInfo`, `manageSwitch`, `manageCycle`, `manageRename`, `manageDelete`). All return a discriminated `ConversationActionResult` the caller renders to its own UI. |
 
 ### Switch protocol
 
@@ -345,6 +345,8 @@ where `payload` has the shape:
 { subcommand: "help" }
 { subcommand: "new"; name?: string }
 { subcommand: "list" }
+{ subcommand: "find"; query: string }
+{ subcommand: "search"; query: string }
 { subcommand: "info" }
 { subcommand: "switch"; name: string }
 { subcommand: "prev" }
@@ -353,7 +355,7 @@ where `payload` has the shape:
 { subcommand: "rename"; name?: string; newName: string }
 ```
 
-`help` is dispatched when `@conversation` / `/conversation` is invoked with no subcommand (via the dispatcher's `defaultSubCommand: "help"`); there is intentionally no natural-language form for it. NL drops `help` from its `ConversationActionPayload` union and only emits `new`, `list`, `info`, `switch`, `prev`, `next`, `rename`, `delete`. See `packages/dispatcher/dispatcher/src/context/system/manageConversationPayload.ts` for the authoritative type.
+`help` is dispatched when `@conversation` / `/conversation` is invoked with no subcommand (via the dispatcher's `defaultSubCommand: "help"`), and also has a natural-language form (e.g. "conversation help", "help with conversations"). `find` matches conversations by **name** (lexical + embedding); `search` matches conversation **content** via the knowPro unified message index. The full natural-language set the `system.conversation` sub-agent emits is `new`, `list`, `find`, `search`, `info`, `switch`, `prev`, `next`, `rename`, `delete`, and `help`. See `packages/dispatcher/dispatcher/src/context/system/manageConversationPayload.ts` for the authoritative type.
 
 Each client handles `"manage-conversation"` using its own conversation management API:
 

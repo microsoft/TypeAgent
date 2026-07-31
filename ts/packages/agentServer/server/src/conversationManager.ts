@@ -10,6 +10,7 @@ import {
     CreateConversationOptions,
     ConversationInfo,
     ConversationMatch,
+    ConversationContentMatch,
     ConversationSource,
     RenameConversationOptions,
 } from "@typeagent/agent-server-protocol";
@@ -28,10 +29,7 @@ import {
     ConversationNameIndex,
     createConversationNameIndex,
 } from "./conversationNameIndex.js";
-import {
-    ConversationContentMatch,
-    createConversationSearchIndex,
-} from "./conversationSearchIndex.js";
+import { createConversationSearchIndex } from "./conversationSearchIndex.js";
 import { importCopilotSessions } from "./copilot/mirrorImporter.js";
 import { lockInstanceDir } from "agent-dispatcher/internal";
 
@@ -500,6 +498,23 @@ export async function createConversationManager(
                                 text,
                                 sender,
                             ),
+                        // Let the reasoning agent search across ALL
+                        // conversations' content (the knowPro unified index)
+                        // and read the best matches back, enriched with each
+                        // conversation's name.
+                        searchConversations: async (query, maxMatches) => {
+                            const matches =
+                                await manager.searchConversationContent(
+                                    query,
+                                    maxMatches,
+                                );
+                            return matches.map((m) => ({
+                                conversationId: m.conversation.conversationId,
+                                name: m.conversation.name,
+                                score: m.score,
+                                snippets: m.snippets,
+                            }));
+                        },
                     }),
                 )
                 .then((dispatcher) => {
@@ -1029,11 +1044,14 @@ export async function createConversationManager(
 
         async findConversations(
             query: string,
-            maxMatches: number = 10,
+            maxMatches?: number,
         ): Promise<ConversationMatch[]> {
+            // Coalesce with `??` rather than a `= 10` default: the RPC boundary
+            // serializes an omitted `maxMatches` to `null`, which slips past a
+            // default parameter and would reach the ranker as 0.
             const matches = await conversationNameIndex.search(
                 query,
-                maxMatches,
+                maxMatches ?? 10,
             );
             const result: ConversationMatch[] = [];
             for (const match of matches) {
@@ -1061,15 +1079,28 @@ export async function createConversationManager(
 
         async searchConversationContent(
             query: string,
-            maxMatches: number = 10,
+            maxMatches?: number,
         ): Promise<ConversationContentMatch[]> {
-            // Drop hits for conversations that vanished from the registry
-            // (belt-and-suspenders; the index also tombstones on delete).
+            // See findConversations: RPC serializes an omitted arg to `null`.
             const matches = await conversationSearchIndex.search(
                 query,
-                maxMatches,
+                maxMatches ?? 10,
             );
-            return matches.filter((m) => conversations.has(m.conversationId));
+            const result: ConversationContentMatch[] = [];
+            for (const match of matches) {
+                const record = conversations.get(match.conversationId);
+                // The index can briefly lag a concurrent delete; skip ids
+                // that no longer resolve to a live conversation.
+                if (record === undefined) {
+                    continue;
+                }
+                result.push({
+                    conversation: await toConversationInfo(record),
+                    score: match.score,
+                    snippets: match.snippets,
+                });
+            }
+            return result;
         },
 
         async renameConversation(

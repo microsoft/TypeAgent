@@ -897,11 +897,12 @@ function getCopilotSessionConfig(
         },
     });
 
-    // TODO (deferred): cross-conversation browsing. get_conversation_info /
-    // read_conversation are scoped to the CURRENT conversation only. To help a
-    // user who is unsure which conversation they were in, add
-    // list_conversations / read_conversation(conversationId) backed by the
-    // agent-server ConversationManager (getConversationList). Not implemented yet.
+    // get_conversation_info / read_conversation are scoped to the CURRENT
+    // conversation. Cross-conversation browsing is provided by
+    // list_conversations (id + name) and search_conversations (content search
+    // with snippets), both backed by the agent-server ConversationManager.
+    // TODO (deferred): read_conversation(conversationId) to page another
+    // conversation's full transcript, not just its search snippets.
     const getConversationInfoTool = defineTool("get_conversation_info", {
         description: [
             "Get metadata about the current conversation transcript: total message count and which agents have responded.",
@@ -979,6 +980,82 @@ function getCopilotSessionConfig(
             const header = `Messages ${offset}\u2013${offset + page.length - 1} of ${total}${more ? " (more available — increase offset to continue)" : ""}:`;
             return {
                 textResultForLlm: `${header}\n${lines.join("\n")}`,
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const listConversationsTool = defineTool("list_conversations", {
+        description: [
+            "List ALL of the user's conversations (id + name), across the whole session store — not just the current one.",
+            "Use this to resolve a conversation the user names (e.g. 'the CLI conversation') to its id before reading or searching it.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {},
+            required: [],
+        },
+        handler: async () => {
+            const list = systemContext.getConversationList?.() ?? [];
+            if (list.length === 0) {
+                return {
+                    textResultForLlm:
+                        "No other conversations are available in this host.",
+                    resultType: "success" as const,
+                };
+            }
+            return {
+                textResultForLlm: JSON.stringify(list, null, 2),
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const searchConversationsTool = defineTool("search_conversations", {
+        description: [
+            "Search the CONTENT of ALL the user's conversations (not just the current one) and return the best-matching conversations with representative snippets.",
+            "Use this to answer questions like 'what did we discuss in the CLI conversation' or to find where a topic was talked about across conversations.",
+            "This reads matching content back to you — unlike the conversation find/search *actions*, which only render in the UI.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                query: {
+                    type: "string",
+                    description:
+                        "What to search for across conversation content",
+                },
+                maxMatches: {
+                    type: "number",
+                    description:
+                        "Maximum number of conversations to return (default 10)",
+                },
+            },
+            required: ["query"],
+        },
+        handler: async (args: any) => {
+            const search = systemContext.searchConversations;
+            if (search === undefined) {
+                return {
+                    textResultForLlm:
+                        "Cross-conversation content search is not available in this host.",
+                    resultType: "success" as const,
+                };
+            }
+            const query = typeof args?.query === "string" ? args.query : "";
+            const maxMatches =
+                typeof args?.maxMatches === "number"
+                    ? args.maxMatches
+                    : undefined;
+            const matches = await search(query, maxMatches);
+            if (matches.length === 0) {
+                return {
+                    textResultForLlm: `No conversations with content matching "${query}" found.`,
+                    resultType: "success" as const,
+                };
+            }
+            return {
+                textResultForLlm: JSON.stringify(matches, null, 2),
                 resultType: "success" as const,
             };
         },
@@ -1285,6 +1362,8 @@ function getCopilotSessionConfig(
             rememberTool,
             getConversationInfoTool,
             readConversationTool,
+            listConversationsTool,
+            searchConversationsTool,
             getUserContextTool,
             ...subagentTools,
             findInstallableAgentTool,
@@ -1298,6 +1377,8 @@ function getCopilotSessionConfig(
             "remember",
             "get_conversation_info",
             "read_conversation",
+            "list_conversations",
+            "search_conversations",
             "get_user_context",
             ...(subagentsEnabled
                 ? [
@@ -1341,6 +1422,8 @@ function getCopilotSessionConfig(
                 "- `remember`: Durably save a new memory so it can be recalled later",
                 "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
                 "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
+                "- `list_conversations`: List ALL conversations (id + name) across the session store — use to resolve a conversation the user names",
+                "- `search_conversations`: Search the CONTENT of ALL conversations and read back matching snippets (use for 'what did we discuss in X')",
                 "",
                 "## Editor Context Tools",
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file path, language, cursor/selection ranges, workspace, diagnostic counts). Contains NO file or selection text.",

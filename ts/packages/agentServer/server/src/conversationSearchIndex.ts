@@ -20,7 +20,7 @@ const CONV_TAG_PREFIX = "conv:";
 const UNIFIED_MEMORY_BASENAME = "unifiedMemory";
 
 /** A conversation whose content matched a query, with representative snippets. */
-export type ConversationContentMatch = {
+export type RankedConversationContent = {
     conversationId: string;
     /** Best (highest) matching-message score for this conversation. */
     score: number;
@@ -48,7 +48,7 @@ export interface ConversationSearchIndex {
         query: string,
         maxConversations?: number,
         maxSnippetsPerConversation?: number,
-    ): Promise<ConversationContentMatch[]>;
+    ): Promise<RankedConversationContent[]>;
     /** Await all queued indexing work (e.g. before search in tests). */
     waitForPendingTasks(): Promise<void>;
     close(): Promise<void>;
@@ -83,7 +83,7 @@ export function rankConversationMatches(
     isTombstoned: (conversationId: string) => boolean,
     maxConversations: number,
     maxSnippetsPerConversation: number,
-): ConversationContentMatch[] {
+): RankedConversationContent[] {
     const byConversation = new Map<
         string,
         { score: number; snippets: { text: string; score: number }[] }
@@ -104,7 +104,7 @@ export function rankConversationMatches(
             entry.snippets.push({ text: snippet, score });
         }
     }
-    const results: ConversationContentMatch[] = [];
+    const results: RankedConversationContent[] = [];
     for (const [conversationId, entry] of byConversation) {
         const snippets = entry.snippets
             .sort((a, b) => b.score - a.score)
@@ -153,7 +153,7 @@ class ConversationSearchIndexImpl implements ConversationSearchIndex {
         query: string,
         maxConversations: number = 10,
         maxSnippetsPerConversation: number = 3,
-    ): Promise<ConversationContentMatch[]> {
+    ): Promise<RankedConversationContent[]> {
         if (this.memory === undefined || query.trim().length === 0) {
             return [];
         }

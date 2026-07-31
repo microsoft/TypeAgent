@@ -455,6 +455,16 @@ export function createAgentServerConnectionHandler(
                 return conversationManager.findConversations(query, maxMatches);
             },
 
+            searchConversationContent: async (
+                query: string,
+                maxMatches?: number,
+            ) => {
+                return conversationManager.searchConversationContent(
+                    query,
+                    maxMatches,
+                );
+            },
+
             renameConversation: async (
                 conversationId: string,
                 newName: string,

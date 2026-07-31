@@ -224,12 +224,15 @@ export const systemManifest: AppAgentManifest = {
                     "Use this agent when the user wants to: " +
                     "CREATE a new conversation (e.g. 'create a new conversation', 'start a new conversation called test', 'new conversation named work', 'open a new conversation test'), " +
                     "LIST conversations (e.g. 'list our conversations', 'list my conversations', 'show all conversations', 'what conversations do I have'), " +
+                    "FIND a conversation by name (e.g. 'find the conversation about the workout playlist', 'which conversation was about taxes'), " +
+                    "SEARCH the CONTENT of conversations (e.g. 'search my conversations for the docker command we used', 'search my chat history for the API key steps'), " +
                     "SWITCH to an existing conversation by name (e.g. 'switch to conversation test', 'go to my work conversation', 'switch to test'), " +
                     "advance to the NEXT conversation (e.g. 'switch to next conversation', 'next conversation', 'go to the next conversation'), " +
                     "go to the PREVIOUS conversation (e.g. 'switch to previous conversation', 'previous conversation'), " +
                     "DELETE a conversation (e.g. 'delete conversation test', 'remove the work conversation'), " +
                     "RENAME the current conversation, " +
-                    "or SHOW info about the current conversation. " +
+                    "SHOW info about the current conversation, " +
+                    "or get HELP with conversation commands (e.g. 'conversation help', 'help with conversations'). " +
                     "Use this for TypeAgent shell conversations only — NOT for media playlists, songs, files, or browser tabs.",
                 schemaFile:
                     "./src/context/system/schema/conversationActionSchema.ts",
