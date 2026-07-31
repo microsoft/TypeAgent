@@ -1386,23 +1386,6 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                 generation: {
                     description: "Generated action schema",
                     commands: {
-                        ...getToggleCommandHandlers(
-                            "generated action schema",
-                            async (context, enable: boolean) => {
-                                await changeContextConfig(
-                                    {
-                                        translation: {
-                                            schema: {
-                                                generation: {
-                                                    enabled: enable,
-                                                },
-                                            },
-                                        },
-                                    },
-                                    context,
-                                );
-                            },
-                        ),
                         json: getToggleHandlerTable(
                             "use generate json schema if model supports it",
                             async (context, enable: boolean) => {
@@ -2159,6 +2142,15 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
             async (context, enable) => {
                 await changeContextConfig(
                     { execution: { subagents: enable } },
+                    context,
+                );
+            },
+        ),
+        reasoningForwardActions: getToggleHandlerTable(
+            "let the reasoning agent forward client actions (e.g. @conversation switch) to the client instead of capturing them",
+            async (context, enable) => {
+                await changeContextConfig(
+                    { execution: { reasoningForwardActions: enable } },
                     context,
                 );
             },

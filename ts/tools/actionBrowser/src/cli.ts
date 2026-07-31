@@ -21,10 +21,10 @@ Options:
   --json         Also write the raw catalog JSON next to the HTML output.
   --help         Show this message.
 
-The generator is fully static: it reads bundled agent manifests, action
-schemas, and grammar files from the workspace (no running dispatcher, no
-network, no LLM). Dynamic runtime capabilities (MCP tools, recorded web
-flows) are out of scope.
+The generator reads bundled agent manifests, action schemas, and grammar
+files from the workspace, and boots a headless read-only dispatcher to
+enumerate each host's @-commands (no network, no LLM, no API keys). Dynamic
+runtime capabilities (MCP tools, recorded web flows) are out of scope.
 `;
 
 function defaultOutPath(): string {
@@ -75,7 +75,7 @@ async function main(): Promise<void> {
     process.stdout.write(
         `Action browser: ${catalog.counts.agents} agents, ` +
             `${catalog.counts.actions} actions, ` +
-            `${catalog.counts.commands} system commands\n`,
+            `${catalog.counts.commands} commands\n`,
     );
     process.stdout.write(`wrote ${outPath}\n`);
 }

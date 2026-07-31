@@ -65,7 +65,14 @@ export type SchemaContent = {
     content: string;
     config?: string | undefined; // for "ts" only
 };
-export type GrammarContent = { format: GrammarFormat; content: string };
+export type GrammarContent = {
+    format: GrammarFormat;
+    content: string;
+    // JSON text of the compiled grammar's source-map side-car (<name>.ag.map.json),
+    // when present next to an "ag" grammar file. Lets a host recover matched-rule
+    // source text.
+    sourceMap?: string | undefined;
+};
 
 export type SchemaManifest = {
     description: string;

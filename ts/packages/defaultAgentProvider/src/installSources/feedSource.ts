@@ -42,6 +42,19 @@ export const AGENT_KEYWORD = "typeagent-agent";
 // case-insensitive (see listScopedPackages).
 export const DEFAULT_FEED_SCOPES = ["@typeagent", "@secretagents"];
 
+// The name of the first-party seed feed (see getSeedInstallSources). Only this
+// well-known feed falls back to DEFAULT_FEED_REGISTRY; user-defined feeds must
+// specify their own registry (or set TYPEAGENT_FEED_REGISTRY) as before.
+export const SEED_FEED_NAME = "typeagent";
+
+// Compiled production default for the first-party feed's npm registry. Shipped
+// builds (e.g. the MSI) resolve on-demand agent discovery without a repo-local
+// config.local.yaml. Precedence is config.registry > TYPEAGENT_FEED_REGISTRY >
+// this default, so both config and env still override it. Not a secret — the
+// URL is public; access is authorized per-call via `az account get-access-token`.
+export const DEFAULT_FEED_REGISTRY =
+    "https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent-feed/npm/registry/";
+
 const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000; // ~1h
 
 function resolveFeedRegistry(config: FeedSourceConfig): string | undefined {
@@ -50,7 +63,13 @@ function resolveFeedRegistry(config: FeedSourceConfig): string | undefined {
         return fromConfig;
     }
     const fromEnv = process.env.TYPEAGENT_FEED_REGISTRY?.trim();
-    return fromEnv && fromEnv.length > 0 ? fromEnv : undefined;
+    if (fromEnv && fromEnv.length > 0) {
+        return fromEnv;
+    }
+    if (config.name === SEED_FEED_NAME) {
+        return DEFAULT_FEED_REGISTRY;
+    }
+    return undefined;
 }
 
 function resolveFeedScopes(config: FeedSourceConfig): string[] {

@@ -68,6 +68,7 @@ function makeSession(
     return {
         clientCount: 1,
         createdAt: new Date().toISOString(),
+        messageCount: 0,
         ...overrides,
     };
 }
@@ -424,6 +425,25 @@ describe("@conversation list", () => {
         await handleConversationCommand(ctx, "list");
 
         expect(capturedLog()).toContain("5");
+    });
+
+    it("displays messageCount for each conversation", async () => {
+        const ctx = makeCtx({
+            getCurrentConversationId: () => "sess-1",
+        });
+        ctx.connection.listConversations.mockResolvedValue([
+            makeSession({
+                conversationId: "sess-1",
+                name: "Chat",
+                clientCount: 5,
+                messageCount: 42,
+                createdAt: "2026-01-15T10:00:00.000Z",
+            }),
+        ]);
+
+        await handleConversationCommand(ctx, "list");
+
+        expect(capturedLog()).toContain("42");
     });
 });
 

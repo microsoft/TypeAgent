@@ -734,8 +734,10 @@ The system agent also has sub-agents with LLM-translated action schemas:
   "describe the play action"). `executeDescribeAction` forwards to the equivalent `@describe`
   command (same convention as `system.config`/`system.history`), which resolves the agent/action
   against `getAgentSchemas()` (agentSchemaInfo.ts) and renders a deterministic markdown summary,
-  optionally polished by a fast LLM call when one is configured (falls back to the deterministic
-  text on missing/failed model — see `describeCore.ts`).
+  optionally polished by a fast structured-output LLM call when one is configured — the model
+  returns a schema-validated JSON object (summary / explanation + example) that is rendered to
+  markdown deterministically, falling back to the deterministic text on a missing/failed model
+  (see `describeCore.ts`).
 - **`system.config`** — Natural language configuration changes.
 - **`system.conversation`** — Natural language management of **agentServer client-connection
   conversations** (the named, GUID-keyed sessions described in

@@ -26,6 +26,7 @@
 
 <ConvNoun> = (conversation | chat | session | tab);
 <ConvNounPlural> = (conversations | chats | sessions | tabs);
+<ConvNounAny> = (<ConvNoun> | <ConvNounPlural>);
 
 // "create/start/make/open/begin a new conversation called/named X"
 <NewConversationNamed> = <Polite> (create | start | make | open | begin) (a | an)? new <ConvNoun> (called | named | titled) $(name:wildcard) -> {
@@ -68,7 +69,7 @@
 // "switch conversation to X" was being matched as a browser webflow.
 <SwitchConversationNamed> =
   // "switch/go/change/open/load/resume to (the) conversation (called|named) X"
-  <Polite> (switch | go | change | open | load | resume) to (the)? <ConvNoun> (called | named)? $(name:wildcard) -> {
+  <Polite> (switch | go | change | open | load | resume) to (the)? <ConvNoun> (called | named | about | on | regarding | discussing | for)? $(name:wildcard) -> {
     actionName: "switchConversation",
     parameters: { name }
   }
@@ -83,7 +84,7 @@
     parameters: { name }
   }
   // "open/load/resume (the) conversation (called|named) X"
-  | <Polite> (open | load | resume) (the)? <ConvNoun> (called | named)? $(name:wildcard) -> {
+  | <Polite> (open | load | resume) (the)? <ConvNoun> (called | named | about | on | regarding | discussing | for)? $(name:wildcard) -> {
     actionName: "switchConversation",
     parameters: { name }
   };
@@ -132,9 +133,22 @@
     parameters: { name }
   };
 
+// "find/search/locate (for)? (the|a|my)? conversation(s) (about|on|...)? X"
+// "which/what conversation(s) (was|were)? (about|on|...) X"
+<FindConversation> =
+  <Polite> (find | search | locate | look for) (me)? (the | a | my | our | any)? <ConvNounAny> (about | on | regarding | with | containing | named | called | mentioning | discussing | for)? $(query:wildcard) -> {
+    actionName: "findConversation",
+    parameters: { query }
+  }
+  | <Polite> (which | what) <ConvNounAny> (was | were | is | are | did we)? (about | on | regarding | discussing | mentioned | covered | for) $(query:wildcard) -> {
+    actionName: "findConversation",
+    parameters: { query }
+  };
+
 <Start> = <NewConversationNamed>
   | <NewConversation>
   | <ListConversation>
+  | <FindConversation>
   | <ShowConversationInfo>
   | <SwitchConversationNamed>
   | <NextConversation>

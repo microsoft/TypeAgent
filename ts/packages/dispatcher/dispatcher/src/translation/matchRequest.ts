@@ -420,6 +420,7 @@ export async function matchRequest(
         type: chosen.type,
         requestAction: chosen.match,
         elapsedMs,
+        ruleText: chosen.ruleText,
         config: {
             ...matchConfig,
             explainerName: systemContext.agentCache.explainerName,

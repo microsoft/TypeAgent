@@ -111,9 +111,9 @@ describe("ConversationManager renameConversation", () => {
         });
 
         expect(
-            manager
-                .listConversations()
-                .find((c) => c.conversationId === target.conversationId)?.name,
+            (await manager.listConversations()).find(
+                (c) => c.conversationId === target.conversationId,
+            )?.name,
         ).toBe("Project (6)");
         await manager.close();
     });
@@ -148,9 +148,9 @@ describe("ConversationManager renameConversation", () => {
         });
 
         expect(
-            manager
-                .listConversations()
-                .find((c) => c.conversationId === target.conversationId)?.name,
+            (await manager.listConversations()).find(
+                (c) => c.conversationId === target.conversationId,
+            )?.name,
         ).toBe("Project");
         await manager.close();
     });

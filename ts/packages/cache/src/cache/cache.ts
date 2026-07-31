@@ -598,7 +598,10 @@ export class AgentCache {
                 // TODO: Move this in the construction store
                 return constructionMatches.map((m) => {
                     const { construction, ...rest } = m;
-                    return rest;
+                    // Keep a lightweight string of the matched construction
+                    // (not the heavy object) so callers can display the rule
+                    // that was triggered.
+                    return { ...rest, ruleText: construction.toString() };
                 });
             }
             if (!grammarStore.isEnabled()) {

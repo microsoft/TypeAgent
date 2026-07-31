@@ -101,6 +101,10 @@
     },
     "ipconfig": {
       "name": "@typeagent/ipconfig-agent"
+    },
+    "selfhelp": {
+      "name": "@typeagent/selfhelp-agent",
+      "execMode": "dispatcher"
     }
   },
   "mcpServers": {

@@ -127,6 +127,13 @@ function parseSlashCommand(args: string): ParsedCommand {
                     : { subcommand: "list" },
             };
         }
+        case "find": {
+            const query = parseNameArg(subArgs);
+            if (!query) {
+                return { ok: false, usage: "@conversation find <query>" };
+            }
+            return { ok: true, payload: { subcommand: "find", query } };
+        }
         case "info":
             return { ok: true, payload: { subcommand: "info" } };
         case "prev":
@@ -168,7 +175,7 @@ function parseSlashCommand(args: string): ParsedCommand {
         default:
             return {
                 ok: false,
-                usage: `Unknown subcommand '${sub}'. Available: new, switch, list, info, rename, delete`,
+                usage: `Unknown subcommand '${sub}'. Available: new, switch, list, find, info, rename, delete`,
             };
     }
 }
@@ -214,9 +221,14 @@ function renderResult(result: ConversationActionResult): void {
                 "  " +
                 "NAME".padEnd(nameWidth + 2) +
                 "CREATED".padEnd(22) +
+                "MESSAGES".padEnd(10) +
                 "CLIENTS";
             const divider =
-                "  " + "─".repeat(nameWidth + 2) + "─".repeat(22) + "───────";
+                "  " +
+                "─".repeat(nameWidth + 2) +
+                "─".repeat(22) +
+                "─".repeat(10) +
+                "───────";
             console.log(chalk.bold("\nConversations:"));
             console.log(chalk.dim(header));
             console.log(chalk.dim(divider));
@@ -232,10 +244,32 @@ function renderResult(result: ConversationActionResult): void {
                     marker +
                     s.name.padEnd(nameWidth + 2) +
                     created.padEnd(22) +
+                    String(s.messageCount).padEnd(10) +
                     String(s.clientCount) +
                     suffix;
                 console.log(isCurrent ? chalk.green(line) : line);
             }
+            console.log("");
+            break;
+        }
+        case "matches": {
+            // eslint-disable-next-line no-console
+            console.log(
+                chalk.bold(`\nMatches for '${chalk.green(result.query)}':`),
+            );
+            const currentId = result.currentConversationId;
+            for (const m of result.matches) {
+                const c = m.conversation;
+                const isCurrent = c.conversationId === currentId;
+                const marker = isCurrent ? "\u25b8 " : "  ";
+                const pct = chalk.dim(`(${Math.round(m.score * 100)}%)`);
+                const line = `${marker}${c.name}  ${pct}${
+                    isCurrent ? "  (current)" : ""
+                }`;
+                // eslint-disable-next-line no-console
+                console.log(isCurrent ? chalk.green(line) : line);
+            }
+            // eslint-disable-next-line no-console
             console.log("");
             break;
         }

@@ -23,6 +23,7 @@ export type {
 export type * from "@typeagent/dispatcher-rpc/types";
 export type {
     ConversationInfo,
+    ConversationMatch,
     JoinConversationResult,
     DispatcherConnectOptions,
     SpeechToken,

@@ -20,7 +20,7 @@ import {
     writeArtifact,
 } from "../lib/workspace.js";
 import { getPackagingModel } from "../lib/llm.js";
-import { spawn } from "child_process";
+import { buildScaffoldedAgent } from "../lib/agentBuild.js";
 import path from "path";
 import fs from "fs/promises";
 import { fileURLToPath } from "node:url";
@@ -78,18 +78,12 @@ async function handlePackageAgent(
 
     await updatePhase(integrationName, "packaging", { status: "in-progress" });
 
-    // Run pnpm install + build in the agent directory
-    const installResult = await runCommand("pnpm", ["install"], agentDir);
-    if (!installResult.success) {
-        return {
-            error: `pnpm install failed:\n${installResult.output}`,
-        };
-    }
-
-    const buildResult = await runCommand("pnpm", ["run", "build"], agentDir);
+    // Rebuild the agent (idempotent — the Scaffolder phase already builds it,
+    // but re-running ensures the distributed artifact reflects any later edits).
+    const buildResult = await buildScaffoldedAgent(agentDir);
     if (!buildResult.success) {
         return {
-            error: `Build failed:\n${buildResult.output}`,
+            error: buildResult.output,
         };
     }
 
@@ -474,36 +468,6 @@ async function registerWithDispatcher(
     } catch (err: any) {
         return `⚠️ Could not auto-register — update dispatcher config manually.\n${err?.message ?? err}`;
     }
-}
-
-async function runCommand(
-    cmd: string,
-    args: string[],
-    cwd: string,
-): Promise<{ success: boolean; output: string }> {
-    return new Promise((resolve) => {
-        const proc = spawn(cmd, args, {
-            cwd,
-            stdio: ["ignore", "pipe", "pipe"],
-            shell: process.platform === "win32",
-        });
-
-        let output = "";
-        proc.stdout?.on("data", (d: Buffer) => {
-            output += d.toString();
-        });
-        proc.stderr?.on("data", (d: Buffer) => {
-            output += d.toString();
-        });
-
-        proc.on("close", (code) => {
-            resolve({ success: code === 0, output });
-        });
-
-        proc.on("error", (err) => {
-            resolve({ success: false, output: err.message });
-        });
-    });
 }
 
 async function handleGenerateReadme(

@@ -26,9 +26,13 @@ class WebSocketManager {
     private var webSocket: WebSocket? = null
     private var conversationId: String? = null
     private var connectionId: String? = null
+    private var pendingUserInteraction: PendingUserInteraction? = null
+    private var clientActionHandler: ClientActionHandler? = null
 
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages
+    private val _pendingYesNoPrompt = MutableStateFlow<PendingYesNoPrompt?>(null)
+    val pendingYesNoPrompt: StateFlow<PendingYesNoPrompt?> = _pendingYesNoPrompt
 
     private val _connectionStatus = MutableStateFlow(
         ConnectionStatus(
@@ -37,6 +41,12 @@ class WebSocketManager {
         )
     )
     val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus
+
+    internal fun setClientActionHandler(handler: ClientActionHandler?) {
+        synchronized(lock) {
+            clientActionHandler = handler
+        }
+    }
 
     fun connect(
         url: String,
@@ -55,9 +65,11 @@ class WebSocketManager {
 
         synchronized(lock) {
             pendingInvokes.clear()
+            pendingUserInteraction = null
             conversationId = null
             connectionId = null
         }
+        _pendingYesNoPrompt.value = null
         webSocket?.cancel()
         val generation = connectionGeneration.incrementAndGet()
         _connectionStatus.value = ConnectionStatus(
@@ -93,9 +105,11 @@ class WebSocketManager {
                 Log.d(TAG, "WebSocket disconnected: code=$code reason=$reason")
                 failPendingInvokes("Disconnected")
                 synchronized(lock) {
+                    pendingUserInteraction = null
                     conversationId = null
                     connectionId = null
                 }
+                _pendingYesNoPrompt.value = null
                 _connectionStatus.value = ConnectionStatus(
                     text = "Disconnected",
                     state = ConnectionStatus.State.DISCONNECTED
@@ -111,6 +125,10 @@ class WebSocketManager {
                 }
                 Log.e(TAG, "WebSocket error: $errorMessage", t)
                 failPendingInvokes(errorMessage)
+                synchronized(lock) {
+                    pendingUserInteraction = null
+                }
+                _pendingYesNoPrompt.value = null
                 _connectionStatus.value = ConnectionStatus(
                     text = "Error: $errorMessage",
                     state = ConnectionStatus.State.ERROR
@@ -138,6 +156,9 @@ class WebSocketManager {
         }
 
         appendUserMessage(message)
+        if (tryHandlePendingInteractionResponse(message, currentConversationId)) {
+            return
+        }
 
         sendInvoke(
             channelName = dispatcherChannelName(currentConversationId),
@@ -164,10 +185,14 @@ class WebSocketManager {
 
                 Log.d(
                     TAG,
-                    "submitCommand acknowledged: requestId=$requestId connectionId=${connectionId.orEmpty()} content=$message"
+                    "submitCommand acknowledged: requestId=$requestId connectionId=${connectionId.orEmpty()}"
                 )
             },
             onError = { error ->
+                synchronized(lock) {
+                    pendingUserInteraction = null
+                }
+                _pendingYesNoPrompt.value = null
                 Log.e(TAG, "submitCommand error: $error")
                 _connectionStatus.value = ConnectionStatus(
                     text = "Error: $error",
@@ -180,9 +205,51 @@ class WebSocketManager {
     fun disconnect() {
         webSocket?.close(NORMAL_CLOSURE_STATUS, "App closed")
         webSocket = null
+        synchronized(lock) {
+            pendingUserInteraction = null
+        }
+        _pendingYesNoPrompt.value = null
         failPendingInvokes("App closed")
         client.dispatcher.executorService.shutdown()
         client.connectionPool.evictAll()
+    }
+
+    fun respondToPendingYesNo(yes: Boolean): Boolean {
+        val currentConversationId = synchronized(lock) { conversationId } ?: return false
+        val pending = synchronized(lock) { pendingUserInteraction } ?: return false
+        if (!pending.expectsBooleanReply) {
+            return false
+        }
+
+        val submission = when (pending) {
+            is PendingUserInteraction.Choice -> InteractionSubmission.Choice(payload = yes)
+            is PendingUserInteraction.Interaction -> {
+                val index = if (yes) {
+                    pending.choices.indexOfFirst { it.equals("Yes", ignoreCase = true) }
+                } else {
+                    pending.choices.indexOfFirst { it.equals("No", ignoreCase = true) }
+                }
+                if (index !in pending.choices.indices) {
+                    return false
+                }
+                val response = JSONObject()
+                    .put("interactionId", pending.interactionId)
+                    .put("type", "question")
+                    .put("value", index)
+                InteractionSubmission.Interaction(response = response)
+            }
+        }
+
+        synchronized(lock) {
+            pendingUserInteraction = null
+        }
+        _pendingYesNoPrompt.value = null
+        submitInteractionSubmission(
+            currentConversationId = currentConversationId,
+            pending = pending,
+            response = submission
+        )
+        return true
     }
 
     private fun joinConversation() {
@@ -251,18 +318,26 @@ class WebSocketManager {
                 Log.d(TAG, "Unhandled message payload: $text")
             }
         } catch (error: Exception) {
-            Log.d(TAG, "Non-JSON message received: $text")
+            Log.e(
+                TAG,
+                "Failed to parse inbound frame as JSON; treating as raw text. length=${text.length}",
+                error
+            )
             logInboundEvent(
                 type = "raw-text",
                 requestId = null,
                 content = text
             )
-            appendAssistantContent(requestId = null, content = text)
+            appendAssistantContent(
+                requestId = null,
+                content = ParsedDisplayContent(text = text, format = MessageFormat.TEXT)
+            )
         }
     }
 
     private fun handleInvokeResult(message: JSONObject) {
         val callId = message.optInt("callId", -1)
+        Log.d(TAG, "RPC invokeResult callId=$callId")
         val pending = synchronized(lock) { pendingInvokes.remove(callId) } ?: return
         pending.onResult(message.optNullable("result"))
     }
@@ -270,6 +345,7 @@ class WebSocketManager {
     private fun handleInvokeError(message: JSONObject) {
         val callId = message.optInt("callId", -1)
         val error = message.optString("error", "Unknown RPC error")
+        Log.e(TAG, "RPC invokeError callId=$callId error=$error")
         val pending = synchronized(lock) { pendingInvokes.remove(callId) } ?: return
         pending.onError(error)
     }
@@ -277,6 +353,13 @@ class WebSocketManager {
     private fun handleRpcCall(channelName: String, message: JSONObject) {
         val methodName = message.optString("name")
         val args = message.optJSONArray("args") ?: JSONArray()
+        Log.d(
+            TAG,
+            "RPC call channel=$channelName method=$methodName argCount=${args.length()}"
+        )
+        if (methodName == "takeAction") {
+            Log.d(TAG, "RPC call raw takeAction args=$args")
+        }
         when {
             channelName.startsWith(CLIENT_IO_CHANNEL_PREFIX) -> handleClientIoCall(methodName, args)
             else -> Log.d(TAG, "Unhandled RPC call channel=$channelName method=$methodName")
@@ -286,8 +369,14 @@ class WebSocketManager {
     private fun handleRpcInvoke(channelName: String, message: JSONObject) {
         val methodName = message.optString("name")
         val callId = message.optInt("callId", -1)
+        val args = message.optJSONArray("args") ?: JSONArray()
+        Log.d(
+            TAG,
+            "RPC invoke channel=$channelName method=$methodName callId=$callId argCount=${args.length()}"
+        )
         val result = when (methodName) {
             "getUserContext" -> JSONObject.NULL
+            "question" -> handleQuestionInvoke(args)
             else -> null
         }
 
@@ -302,12 +391,12 @@ class WebSocketManager {
         when (methodName) {
             "appendDisplay" -> {
                 val requestId = extractRequestId(args.opt(0))
-                val content = extractAgentMessageText(args.opt(0))
+                val content = extractAgentMessageContent(args.opt(0))
                 val mode = args.optString(1)
                 logInboundEvent(
                     type = "append-display",
                     requestId = requestId,
-                    content = content
+                    content = content.text
                 )
                 if (shouldAppendToAssistantBubble(content, mode)) {
                     appendAssistantContent(requestId = requestId, content = content)
@@ -317,7 +406,7 @@ class WebSocketManager {
             "setDisplayInfo" -> {
                 val requestId = extractRequestId(args.opt(0))
                 val source = args.optString(1).orEmpty()
-                val actionSummary = stringifyValue(args.optNullable(3))
+                val actionSummary = stringifyDisplayValue(args.optNullable(3))
                 val content = listOf(source, actionSummary)
                     .filter { it.isNotBlank() && it != "null" }
                     .joinToString(" ")
@@ -336,11 +425,11 @@ class WebSocketManager {
 
             "setDisplay" -> {
                 val requestId = extractRequestId(args.opt(0))
-                val content = extractAgentMessageText(args.opt(0))
+                val content = extractAgentMessageContent(args.opt(0))
                 logInboundEvent(
                     type = "set-display",
                     requestId = requestId,
-                    content = content
+                    content = content.text
                 )
                 replaceAssistantContent(requestId = requestId, content = content)
             }
@@ -350,7 +439,7 @@ class WebSocketManager {
                 val event = args.optString(1)
                 val data = args.optNullable(2)
                 val requestId = extractRequestId(notificationId)
-                val content = stringifyValue(data)
+                val content = stringifyDisplayValue(data)
                 val normalizedType = if (event == "commandComplete") {
                     "command-result"
                 } else {
@@ -361,7 +450,7 @@ class WebSocketManager {
                     requestId = requestId,
                     content = content
                 )
-                if (event == "commandComplete" && requestId != null) {
+                if (event == "commandComplete") {
                     finalizeAssistantMessage(requestId)
                     _connectionStatus.value = ConnectionStatus(
                         text = "Connected",
@@ -393,15 +482,79 @@ class WebSocketManager {
                 )
             }
 
+            "requestChoice" -> {
+                handleRequestChoiceCall(args)
+            }
+
+            "requestInteraction" -> {
+                handleRequestInteractionCall(args)
+            }
+
+            "interactionResolved", "interactionCancelled" -> {
+                val interactionId = args.optString(0).orEmpty()
+                val pending = synchronized(lock) { pendingUserInteraction }
+                if (pending is PendingUserInteraction.Interaction && pending.interactionId == interactionId) {
+                    synchronized(lock) {
+                        pendingUserInteraction = null
+                    }
+                    _pendingYesNoPrompt.value = null
+                }
+            }
+
+            "takeAction" -> {
+                handleTakeActionCall(args)
+            }
+
             else -> {
                 val requestId = extractRequestId(args.opt(0))
                 logInboundEvent(
                     type = methodName,
                     requestId = requestId,
-                    content = stringifyValue(args.optNullable(0))
+                    content = stringifyDisplayValue(args.optNullable(0))
                 )
             }
         }
+    }
+
+    private fun handleTakeActionCall(args: JSONArray) {
+        val requestId = extractRequestId(args.opt(0))
+        val actionName = args.optString(1).orEmpty()
+        val actionData = args.optNullable(2)
+        logInboundEvent(
+            type = "take-action:$actionName",
+            requestId = requestId,
+            content = stringifyDisplayValue(actionData)
+        )
+        Log.d(
+            TAG,
+            "takeAction received action=$actionName requestId=${requestId.orEmpty()} data=${stringifyDisplayValue(actionData)}"
+        )
+        if (actionName != "set-alarm") {
+            Log.d(TAG, "takeAction ignored: unsupported action=$actionName")
+            return
+        }
+
+        val alarm = parseSetAlarmActionPayload(actionData)
+        if (alarm == null) {
+            Log.e(
+                TAG,
+                "Invalid set-alarm payload: ${stringifyDisplayValue(actionData)}"
+            )
+            return
+        }
+        val handler = synchronized(lock) { clientActionHandler }
+        if (handler == null) {
+            Log.e(
+                TAG,
+                "set-alarm parsed (hour=${alarm.hour} minute=${alarm.minute}) but no client action handler is registered"
+            )
+            return
+        }
+        Log.d(
+            TAG,
+            "Dispatching set-alarm to client handler hour=${alarm.hour} minute=${alarm.minute}"
+        )
+        handler.onSetAlarm(alarm)
     }
 
     private fun handleDisplayLogEvent(event: JSONObject) {
@@ -409,8 +562,8 @@ class WebSocketManager {
         when (eventType) {
             "append-display" -> {
                 val requestId = extractRequestId(event.opt("requestId")) ?: extractRequestId(event.optJSONObject("message"))
-                val content = extractAgentMessageText(event.opt("message"))
-                logInboundEvent(eventType, requestId, content)
+                val content = extractAgentMessageContent(event.opt("message"))
+                logInboundEvent(eventType, requestId, content.text)
                 appendAssistantContent(requestId, content)
             }
 
@@ -418,7 +571,7 @@ class WebSocketManager {
                 val requestId = extractRequestId(event.opt("requestId"))
                 val content = listOf(
                     event.optString("source"),
-                    stringifyValue(event.optNullable("action"))
+                    stringifyDisplayValue(event.optNullable("action"))
                 ).filter { it.isNotBlank() && it != "null" }
                     .joinToString(" ")
                 logInboundEvent(eventType, requestId, content)
@@ -432,14 +585,12 @@ class WebSocketManager {
 
             "command-result" -> {
                 val requestId = extractRequestId(event.opt("requestId"))
-                logInboundEvent(eventType, requestId, stringifyValue(event.optNullable("metrics")))
-                if (requestId != null) {
-                    finalizeAssistantMessage(requestId)
-                }
+                logInboundEvent(eventType, requestId, stringifyDisplayValue(event.optNullable("metrics")))
+                finalizeAssistantMessage(requestId)
             }
 
             else -> {
-                logInboundEvent(eventType, extractRequestId(event.opt("requestId")), stringifyValue(event))
+                logInboundEvent(eventType, extractRequestId(event.opt("requestId")), stringifyDisplayValue(event))
             }
         }
     }
@@ -453,8 +604,9 @@ class WebSocketManager {
         }
     }
 
-    private fun appendAssistantContent(requestId: String?, content: String) {
-        if (content.isBlank()) {
+    private fun appendAssistantContent(requestId: String?, content: ParsedDisplayContent) {
+        val normalizedText = normalizeAssistantContentText(content)
+        if (normalizedText.isEmpty()) {
             return
         }
 
@@ -466,11 +618,13 @@ class WebSocketManager {
             if (existingIndex >= 0) {
                 val existing = updated[existingIndex]
                 updated[existingIndex] = existing.copy(
-                    text = existing.text + content
+                    text = existing.text + normalizedText,
+                    format = existing.format.mergeWith(content.format)
                 )
             } else {
                 updated += Message(
-                    text = content.trim(),
+                    text = normalizedText,
+                    format = content.format,
                     isUser = false,
                     requestId = requestId
                 )
@@ -479,9 +633,9 @@ class WebSocketManager {
         }
     }
 
-    private fun replaceAssistantContent(requestId: String?, content: String) {
-        val trimmed = content.trim()
-        if (trimmed.isEmpty()) {
+    private fun replaceAssistantContent(requestId: String?, content: ParsedDisplayContent) {
+        val normalizedText = normalizeAssistantContentText(content)
+        if (normalizedText.isEmpty()) {
             return
         }
 
@@ -492,10 +646,14 @@ class WebSocketManager {
             }
             if (existingIndex >= 0) {
                 val existing = updated[existingIndex]
-                updated[existingIndex] = existing.copy(text = trimmed)
+                updated[existingIndex] = existing.copy(
+                    text = normalizedText,
+                    format = content.format
+                )
             } else {
                 updated += Message(
-                    text = trimmed,
+                    text = normalizedText,
+                    format = content.format,
                     isUser = false,
                     requestId = requestId
                 )
@@ -504,11 +662,15 @@ class WebSocketManager {
         }
     }
 
-    private fun finalizeAssistantMessage(requestId: String) {
+    private fun finalizeAssistantMessage(requestId: String?) {
         synchronized(lock) {
             val updated = _messages.value.toMutableList()
-            val existingIndex = updated.indexOfLast {
-                !it.isUser && it.requestId == requestId && !it.isFinal
+            val existingIndex = if (requestId == null) {
+                updated.indexOfLast { !it.isUser && !it.isFinal }
+            } else {
+                updated.indexOfLast {
+                    !it.isUser && it.requestId == requestId && !it.isFinal
+                }
             }
             if (existingIndex >= 0) {
                 val existing = updated[existingIndex]
@@ -548,11 +710,15 @@ class WebSocketManager {
             .put("name", channelName)
             .put("message", message)
 
+        Log.d(
+            TAG,
+            "RPC send invoke channel=$channelName method=$methodName callId=$callId"
+        )
         if (!socket.send(envelope.toString())) {
-            val removed = synchronized(lock) { pendingInvokes.remove(callId) }
-            if (removed != null) {
-                onError("Failed to send RPC invoke for $methodName.")
+            synchronized(lock) {
+                pendingInvokes.remove(callId)
             }
+            onError("Failed to send RPC invoke for $methodName.")
         }
     }
 
@@ -565,7 +731,11 @@ class WebSocketManager {
         val envelope = JSONObject()
             .put("name", channelName)
             .put("message", message)
-        socket.send(envelope.toString())
+        val sent = socket.send(envelope.toString())
+        Log.d(
+            TAG,
+            "RPC send invokeResult channel=$channelName callId=$callId sent=$sent"
+        )
     }
 
     private fun sendRpcError(channelName: String, callId: Int, error: String) {
@@ -577,7 +747,11 @@ class WebSocketManager {
         val envelope = JSONObject()
             .put("name", channelName)
             .put("message", message)
-        socket.send(envelope.toString())
+        val sent = socket.send(envelope.toString())
+        Log.e(
+            TAG,
+            "RPC send invokeError channel=$channelName callId=$callId sent=$sent error=$error"
+        )
     }
 
     private fun failPendingInvokes(reason: String) {
@@ -590,48 +764,8 @@ class WebSocketManager {
     private fun logInboundEvent(type: String, requestId: String?, content: String) {
         Log.d(
             TAG,
-            "Inbound event type=$type requestId=${requestId.orEmpty()} connectionId=${connectionId.orEmpty()} content=$content"
+            "Inbound event type=$type requestId=${requestId.orEmpty()} connectionId=${connectionId.orEmpty()} contentLength=${content.length}"
         )
-    }
-
-    private fun extractAgentMessageText(value: Any?): String {
-        val agentMessage = value as? JSONObject ?: return stringifyValue(value)
-        val displayContent = agentMessage.optNullable("message")
-        return extractDisplayText(displayContent)
-    }
-
-    private fun extractDisplayText(value: Any?): String {
-        return when (value) {
-            null, JSONObject.NULL -> ""
-            is String -> value
-            is JSONArray -> {
-                if (value.length() == 0) {
-                    ""
-                } else {
-                    val parts = mutableListOf<String>()
-                    for (index in 0 until value.length()) {
-                        parts += extractDisplayText(value.optNullable(index))
-                    }
-                    parts.joinToString("\n")
-                }
-            }
-
-            is JSONObject -> {
-                val content = value.optNullable("content")
-                if (content != null && content != JSONObject.NULL) {
-                    extractDisplayText(content)
-                } else {
-                    val alternates = value.optJSONArray("alternates")
-                    if (alternates != null && alternates.length() > 0) {
-                        extractDisplayText(alternates.optJSONObject(0)?.optNullable("content"))
-                    } else {
-                        value.toString()
-                    }
-                }
-            }
-
-            else -> value.toString()
-        }
     }
 
     private fun extractRequestId(value: Any?): String? {
@@ -657,24 +791,317 @@ class WebSocketManager {
         }
     }
 
-    private fun stringifyValue(value: Any?): String {
-        return when (value) {
-            null, JSONObject.NULL -> ""
-            is String -> value
-            is JSONObject -> value.toString()
-            is JSONArray -> value.toString()
-            else -> value.toString()
-        }
-    }
-
-    private fun shouldAppendToAssistantBubble(content: String, mode: String): Boolean {
-        if (content.isBlank()) {
+    private fun shouldAppendToAssistantBubble(content: ParsedDisplayContent, mode: String): Boolean {
+        if (content.text.isEmpty()) {
             return false
         }
         if (mode == "temporary") {
             return false
         }
-        return !content.startsWith("[")
+        if (content.format == MessageFormat.MARKDOWN) {
+            return true
+        }
+        return !content.text.startsWith("[")
+    }
+
+    private fun normalizeAssistantContentText(content: ParsedDisplayContent): String {
+        return content.text
+    }
+
+    private fun handleRequestChoiceCall(args: JSONArray) {
+        val requestId = extractRequestId(args.opt(0))
+        val choiceId = args.optString(1).orEmpty()
+        val choiceType = args.optString(2).orEmpty()
+        val prompt = args.optString(3).orEmpty()
+        val choicesArray = args.optJSONArray(4) ?: JSONArray()
+        val choices = buildList {
+            for (index in 0 until choicesArray.length()) {
+                val choice = choicesArray.optString(index).orEmpty()
+                if (choice.isNotBlank()) {
+                    add(choice)
+                }
+            }
+        }
+        logInboundEvent(
+            type = "request-choice",
+            requestId = requestId,
+            content = "choiceType=$choiceType choices=${choices.size}"
+        )
+
+        if (choiceId.isBlank()) {
+            return
+        }
+
+        synchronized(lock) {
+            pendingUserInteraction = PendingUserInteraction.Choice(
+                requestId = requestId,
+                prompt = prompt,
+                choiceId = choiceId,
+                choiceType = choiceType,
+                choices = choices
+            )
+        }
+        appendInteractionPrompt(
+            requestId = requestId,
+            prompt = prompt,
+            choices = choices,
+            expectsBoolean = choiceType.equals("yesNo", ignoreCase = true)
+        )
+        _pendingYesNoPrompt.value = if (choiceType.equals("yesNo", ignoreCase = true)) {
+            PendingYesNoPrompt(
+                requestId = requestId,
+                prompt = prompt.ifBlank { "Please confirm this action." }
+            )
+        } else {
+            null
+        }
+    }
+
+    private fun handleRequestInteractionCall(args: JSONArray) {
+        val interaction = args.optJSONObject(0) ?: return
+        val interactionType = interaction.optString("type").orEmpty()
+        val interactionId = interaction.optString("interactionId").orEmpty()
+        val prompt = interaction.optString("message").orEmpty()
+        val requestId = extractRequestId(interaction.opt("requestId"))
+
+        logInboundEvent(
+            type = "request-interaction",
+            requestId = requestId,
+            content = interaction.toString()
+        )
+
+        if (!interactionType.equals("question", ignoreCase = true) || interactionId.isBlank()) {
+            return
+        }
+
+        val choicesArray = interaction.optJSONArray("choices") ?: JSONArray()
+        val choices = buildList {
+            for (index in 0 until choicesArray.length()) {
+                val choice = choicesArray.optString(index).orEmpty()
+                if (choice.isNotBlank()) {
+                    add(choice)
+                }
+            }
+        }
+        synchronized(lock) {
+            pendingUserInteraction = PendingUserInteraction.Interaction(
+                requestId = requestId,
+                prompt = prompt,
+                interactionId = interactionId,
+                choices = choices
+            )
+        }
+        appendInteractionPrompt(
+            requestId = requestId,
+            prompt = prompt,
+            choices = choices,
+            expectsBoolean = choices.size == 2 &&
+                choices.any { it.equals("Yes", ignoreCase = true) } &&
+                choices.any { it.equals("No", ignoreCase = true) }
+        )
+        _pendingYesNoPrompt.value = if (
+            choices.size == 2 &&
+            choices.any { it.equals("Yes", ignoreCase = true) } &&
+            choices.any { it.equals("No", ignoreCase = true) }
+        ) {
+            PendingYesNoPrompt(
+                requestId = requestId,
+                prompt = prompt.ifBlank { "Please confirm this action." }
+            )
+        } else {
+            null
+        }
+    }
+
+    private fun handleQuestionInvoke(args: JSONArray): Int {
+        val requestId = extractRequestId(args.opt(0))
+        val choicesArray = args.optJSONArray(2) ?: JSONArray()
+        val choices = buildList {
+            for (index in 0 until choicesArray.length()) {
+                val choice = choicesArray.optString(index).orEmpty()
+                if (choice.isNotBlank()) {
+                    add(choice)
+                }
+            }
+        }
+        val defaultIndex = args.optInt(3, 0)
+        Log.d(
+            TAG,
+            "ClientIO.question requestId=${requestId.orEmpty()} defaultIndex=$defaultIndex"
+        )
+
+        if (choices.isEmpty()) {
+            return 0
+        }
+        return defaultIndex.coerceIn(0, choices.lastIndex)
+    }
+
+    private fun tryHandlePendingInteractionResponse(message: String, currentConversationId: String): Boolean {
+        val pending = synchronized(lock) { pendingUserInteraction } ?: return false
+        val response = when (pending) {
+            is PendingUserInteraction.Choice -> parsePendingChoiceResponse(pending, message)
+            is PendingUserInteraction.Interaction -> parsePendingInteractionResponse(pending, message)
+        } ?: run {
+            appendInteractionPrompt(
+                requestId = pending.requestId,
+                prompt = pending.prompt,
+                choices = pending.choices,
+                expectsBoolean = pending.expectsBooleanReply
+            )
+            return true
+        }
+
+        synchronized(lock) {
+            pendingUserInteraction = null
+        }
+        _pendingYesNoPrompt.value = null
+        submitInteractionSubmission(
+            currentConversationId = currentConversationId,
+            pending = pending,
+            response = response
+        )
+        return true
+    }
+
+    private fun submitInteractionSubmission(
+        currentConversationId: String,
+        pending: PendingUserInteraction,
+        response: InteractionSubmission
+    ) {
+        when (response) {
+            is InteractionSubmission.Choice -> {
+                val choice = pending as? PendingUserInteraction.Choice ?: return
+                sendInvoke(
+                    channelName = dispatcherChannelName(currentConversationId),
+                    methodName = "respondToChoice",
+                    args = listOf(choice.choiceId, response.payload),
+                    onResult = {
+                        Log.d(TAG, "respondToChoice completed")
+                    },
+                    onError = { error ->
+                        Log.e(TAG, "respondToChoice error: $error")
+                        synchronized(lock) {
+                            pendingUserInteraction = pending
+                        }
+                        if (pending.expectsBooleanReply) {
+                            _pendingYesNoPrompt.value = PendingYesNoPrompt(
+                                requestId = pending.requestId,
+                                prompt = pending.prompt.ifBlank { "Please confirm this action." }
+                            )
+                        }
+                        _connectionStatus.value = ConnectionStatus(
+                            text = "Error: $error",
+                            state = ConnectionStatus.State.ERROR
+                        )
+                    }
+                )
+            }
+
+            is InteractionSubmission.Interaction -> {
+                sendInvoke(
+                    channelName = dispatcherChannelName(currentConversationId),
+                    methodName = "respondToInteraction",
+                    args = listOf(response.response),
+                    onResult = {
+                        Log.d(TAG, "respondToInteraction completed")
+                    },
+                    onError = { error ->
+                        Log.e(TAG, "respondToInteraction error: $error")
+                        synchronized(lock) {
+                            pendingUserInteraction = pending
+                        }
+                        if (pending.expectsBooleanReply) {
+                            _pendingYesNoPrompt.value = PendingYesNoPrompt(
+                                requestId = pending.requestId,
+                                prompt = pending.prompt.ifBlank { "Please confirm this action." }
+                            )
+                        }
+                        _connectionStatus.value = ConnectionStatus(
+                            text = "Error: $error",
+                            state = ConnectionStatus.State.ERROR
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    private fun parsePendingChoiceResponse(
+        pending: PendingUserInteraction.Choice,
+        message: String
+    ): InteractionSubmission? {
+        return when (pending.choiceType.lowercase()) {
+            "yesno" -> {
+                val parsed = parseYesNoInput(message) ?: return null
+                InteractionSubmission.Choice(payload = parsed)
+            }
+            "multichoice" -> {
+                val index = parseSingleChoiceIndex(message, pending.choices.size) ?: return null
+                InteractionSubmission.Choice(payload = listOf(index))
+            }
+            "pickremember" -> {
+                val tokens = message.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+                if (tokens.isEmpty()) {
+                    return null
+                }
+                val index = parseSingleChoiceIndex(tokens.first(), pending.choices.size) ?: return null
+                val remember = tokens.drop(1).any { it.equals("remember", ignoreCase = true) }
+                val payload = JSONObject()
+                    .put("selected", index)
+                    .put("remember", remember)
+                InteractionSubmission.Choice(payload = payload)
+            }
+            else -> null
+        }
+    }
+
+    private fun parsePendingInteractionResponse(
+        pending: PendingUserInteraction.Interaction,
+        message: String
+    ): InteractionSubmission? {
+        val yesNo = parseYesNoInput(message)
+        val index = when {
+            yesNo != null -> {
+                if (yesNo) {
+                    pending.choices.indexOfFirst { it.equals("Yes", ignoreCase = true) }
+                } else {
+                    pending.choices.indexOfFirst { it.equals("No", ignoreCase = true) }
+                }
+            }
+            else -> parseSingleChoiceIndex(message, pending.choices.size)
+        } ?: return null
+        if (index !in pending.choices.indices) {
+            return null
+        }
+        val response = JSONObject()
+            .put("interactionId", pending.interactionId)
+            .put("type", "question")
+            .put("value", index)
+        return InteractionSubmission.Interaction(response = response)
+    }
+
+    private fun appendInteractionPrompt(
+        requestId: String?,
+        prompt: String,
+        choices: List<String>,
+        expectsBoolean: Boolean
+    ) {
+        val displayPrompt = prompt.ifBlank { "Please choose an option." }
+        val instructions = when {
+            choices.isEmpty() -> "Reply with your response."
+            expectsBoolean -> "Type Y to confirm or N to cancel, or use the Yes/No buttons."
+            else -> {
+                val choiceLines = choices.mapIndexed { index, choice -> "${index + 1}. $choice" }
+                "${choiceLines.joinToString("\n")}\nType the option number."
+            }
+        }
+        appendAssistantContent(
+            requestId = requestId,
+            content = ParsedDisplayContent(
+                text = "$displayPrompt\n$instructions",
+                format = MessageFormat.TEXT
+            )
+        )
     }
 
     private fun Any?.wrapJsonValue(): Any {
@@ -701,11 +1128,50 @@ class WebSocketManager {
         val onError: (String) -> Unit
     )
 
+    private sealed interface PendingUserInteraction {
+        val requestId: String?
+        val prompt: String
+        val choices: List<String>
+        val expectsBooleanReply: Boolean
+
+        data class Choice(
+            override val requestId: String?,
+            override val prompt: String,
+            val choiceId: String,
+            val choiceType: String,
+            override val choices: List<String>
+        ) : PendingUserInteraction {
+            override val expectsBooleanReply: Boolean =
+                choiceType.equals("yesNo", ignoreCase = true)
+        }
+
+        data class Interaction(
+            override val requestId: String?,
+            override val prompt: String,
+            val interactionId: String,
+            override val choices: List<String>
+        ) : PendingUserInteraction {
+            override val expectsBooleanReply: Boolean =
+                choices.size == 2 &&
+                    choices.any { it.equals("Yes", ignoreCase = true) } &&
+                    choices.any { it.equals("No", ignoreCase = true) }
+        }
+    }
+
+    private sealed interface InteractionSubmission {
+        data class Choice(val payload: Any) : InteractionSubmission
+        data class Interaction(val response: JSONObject) : InteractionSubmission
+    }
+
     companion object {
         private const val TAG = "WebSocketManager"
         private const val NORMAL_CLOSURE_STATUS = 1000
         private const val AGENT_SERVER_CHANNEL = "agent-server"
         private const val CLIENT_IO_CHANNEL_PREFIX = "clientio:"
+    }
+
+    internal fun interface ClientActionHandler {
+        fun onSetAlarm(action: SetAlarmAction)
     }
 }
 
@@ -720,3 +1186,8 @@ data class ConnectionStatus(
         ERROR
     }
 }
+
+data class PendingYesNoPrompt(
+    val requestId: String?,
+    val prompt: String
+)

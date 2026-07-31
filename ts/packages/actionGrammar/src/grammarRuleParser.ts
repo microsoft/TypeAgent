@@ -393,11 +393,11 @@ export type GrammarParseResult = {
 export function isWhitespace(char: string) {
     return /^\s$/.test(char);
 }
-function isIdStart(char: string) {
+export function isIdStart(char: string) {
     return /^\p{ID_Start}$/u.test(char);
 }
 
-function isIdContinue(char: string) {
+export function isIdContinue(char: string) {
     return /^\p{ID_Continue}$/u.test(char);
 }
 // Even some of these are not used yet, include them for future use.

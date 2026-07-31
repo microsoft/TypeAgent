@@ -54,6 +54,7 @@ import {
     type RunProvenance,
     type FidelityCell,
 } from "../replayViewModel.js";
+import { el } from "./domHelpers.js";
 
 /** Default base (A): the last commit — the baseline the working tree is compared against. */
 const DEFAULT_VERSION_A: ResolvedVersion = {
@@ -1562,12 +1563,6 @@ function setStatus(text: string): void {
 }
 
 // --- DOM helpers ----------------------------------------------------------
-function el(tag: string, className: string): HTMLElement {
-    const node = document.createElement(tag);
-    node.className = className;
-    return node;
-}
-
 function text(value: string): Text {
     return document.createTextNode(value);
 }

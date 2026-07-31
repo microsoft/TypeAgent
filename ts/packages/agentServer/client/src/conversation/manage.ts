@@ -12,6 +12,7 @@ import type {
     AgentServerConnection,
     ConversationDispatcher,
     ConversationInfo,
+    ConversationMatch,
 } from "../index.js";
 import {
     findConversationByName,
@@ -38,9 +39,14 @@ export type ManageConversationPayload = {
         | "prev"
         | "next"
         | "rename"
-        | "delete";
+        | "delete"
+        | "find";
     name?: string;
     newName?: string;
+    /** Search term for the `find` subcommand. */
+    query?: string;
+    /** Optional cap on `find` results. */
+    maxMatches?: number;
 };
 
 export type ManageConversationContext = {
@@ -132,6 +138,12 @@ export type ConversationActionResult =
           conversations: ConversationInfo[];
           currentConversationId: string | undefined;
       }
+    | {
+          kind: "matches";
+          query: string;
+          matches: ConversationMatch[];
+          currentConversationId: string | undefined;
+      }
     | { kind: "info"; conversationId: string; name: string }
     | { kind: "cancelled"; target: ConversationInfo };
 
@@ -152,6 +164,10 @@ function warning(message: string): ConversationActionResult {
 function error(message: string, cause?: unknown): ConversationActionResult {
     return { kind: "error", message, cause };
 }
+
+// Minimum fuzzy score for `switch <name>` to accept a non-exact match and
+// switch to it (find-then-switch). Below this, switch reports "not found".
+const SWITCH_FUZZY_MIN_SCORE = 0.6;
 
 async function performSwitch(
     connection: AgentServerConnection,
@@ -301,6 +317,32 @@ export async function manageList(
     };
 }
 
+/**
+ * `find` — fuzzy-find conversations by name (lexical + embedding). Returns a
+ * ranked `matches` result for the caller to render.
+ */
+export async function manageFind(
+    connection: AgentServerConnection,
+    ctx: ManageConversationContext,
+    query: string | undefined,
+    maxMatches?: number,
+): Promise<ConversationActionResult> {
+    const trimmed = query?.trim();
+    if (!trimmed) {
+        return warning("A search term is required to find conversations.");
+    }
+    const matches = await connection.findConversations(trimmed, maxMatches);
+    if (matches.length === 0) {
+        return warning(`No conversations matching "${trimmed}" found.`);
+    }
+    return {
+        kind: "matches",
+        query: trimmed,
+        matches,
+        currentConversationId: ctx.currentConversationId,
+    };
+}
+
 /** `info` — show the current conversation id + name. */
 export function manageInfo(
     ctx: ManageConversationContext,
@@ -330,7 +372,17 @@ export async function manageSwitch(
         return warning("A conversation name is required to switch.");
     }
     const all = await connection.listConversations();
-    const match = findConversationByName(all, trimmed);
+    let match = findConversationByName(all, trimmed);
+    let fuzzy = false;
+    if (match === undefined) {
+        // No exact name: fall back to a fuzzy find-then-switch on the best
+        // match, as long as it clears a confidence floor.
+        const found = await connection.findConversations(trimmed, 1);
+        if (found.length > 0 && found[0].score >= SWITCH_FUZZY_MIN_SCORE) {
+            match = found[0].conversation;
+            fuzzy = true;
+        }
+    }
     if (match === undefined) {
         return warning(`No conversation named "${trimmed}" found.`);
     }
@@ -342,7 +394,9 @@ export async function manageSwitch(
         clientIO,
         ctx,
         match,
-        `Switched to conversation "${match.name}".`,
+        fuzzy
+            ? `Switched to conversation "${match.name}" (closest match for "${trimmed}").`
+            : `Switched to conversation "${match.name}".`,
     );
 }
 
@@ -454,14 +508,15 @@ export async function manageRename(
         );
     }
 
-    // Preserve original createdAt/clientCount so callers re-sorting by
-    // created time don't see zero placeholders.
+    // Preserve original createdAt/clientCount/messageCount so callers
+    // re-sorting by created time don't see zero placeholders.
     const original = all.find((c) => c.conversationId === targetId);
     const updated: ConversationInfo = {
         conversationId: targetId,
         name: trimmedNew,
         clientCount: original?.clientCount ?? 0,
         createdAt: original?.createdAt ?? "",
+        messageCount: original?.messageCount ?? 0,
     };
 
     if (isCurrent && ctx.onCurrentConversationUpdated !== undefined) {
@@ -581,6 +636,13 @@ export async function manageConversation(
                 return await manageNew(connection, clientIO, ctx, payload.name);
             case "list":
                 return await manageList(connection, ctx, payload.name);
+            case "find":
+                return await manageFind(
+                    connection,
+                    ctx,
+                    payload.query,
+                    payload.maxMatches,
+                );
             case "info":
                 return manageInfo(ctx);
             case "switch":

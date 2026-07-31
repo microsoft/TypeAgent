@@ -13,6 +13,8 @@ import {
     renderActionNotFoundMessage,
     polishAgentView,
     polishActionView,
+    renderPolishedAgentView,
+    renderPolishedActionView,
     isCapabilityDiscoveryAlias,
     renderCapabilitiesDiscoveryFallback,
 } from "../src/context/system/describe/describeCore.js";
@@ -444,6 +446,66 @@ describe("describeCore deterministic rendering", () => {
         ]);
         expect(markdown).toContain("Showing 5 of 6 agents");
         expect(markdown).toContain("...and 1 more agents available");
+    });
+});
+
+describe("describeCore structured-output rendering", () => {
+    it("splices the model summary into the agent view, keeping the table", () => {
+        const agent = makeSpotifyAgent(3);
+        const deterministic = renderAgentView(agent, false, () => true);
+        const result = renderPolishedAgentView(agent, deterministic, {
+            summary: "It plays and controls your local music.",
+        });
+        expect(result).toContain(
+            "**🎵 The spotify agent** It plays and controls your local music.",
+        );
+        // The deterministic action table is preserved unchanged.
+        expect(result).toContain("| Action | What it does |");
+        expect(result).toContain("| play |");
+    });
+
+    it("returns the deterministic agent view when the summary is empty", () => {
+        const agent = makeSpotifyAgent(3);
+        const deterministic = renderAgentView(agent, false, () => true);
+        expect(
+            renderPolishedAgentView(agent, deterministic, { summary: "   " }),
+        ).toBe(deterministic);
+    });
+
+    it("renders the action view from the structured explanation and example", () => {
+        const agent = makeSpotifyAgent(3);
+        const match = {
+            agent,
+            subSchema: agent.subSchemas[0],
+            action: agent.subSchemas[0].actions[0],
+        };
+        const markdown = renderPolishedActionView(match, {
+            explanation: "Starts playback of the requested music.",
+            example: "play some jazz",
+        });
+        expect(markdown).toContain(
+            "**🎵 spotify.play** — Starts playback of the requested music.",
+        );
+        expect(markdown).toContain("**Parameters**");
+        expect(markdown).toContain("`query` (string)");
+        expect(markdown).toContain('**Example:** "play some jazz"');
+    });
+
+    it("falls back to the one-line description and omits an empty example", () => {
+        const agent = makeSpotifyAgent(3);
+        const match = {
+            agent,
+            subSchema: agent.subSchemas[0],
+            action: agent.subSchemas[0].actions[0],
+        };
+        const markdown = renderPolishedActionView(match, {
+            explanation: "   ",
+            example: "   ",
+        });
+        expect(markdown).toContain(
+            "**🎵 spotify.play** — Play a track, album, artist, or playlist",
+        );
+        expect(markdown).not.toContain("**Example:**");
     });
 });
 

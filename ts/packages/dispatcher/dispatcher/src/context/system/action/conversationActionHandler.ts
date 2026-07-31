@@ -1,31 +1,46 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getRequestId } from "../../commandHandlerContext.js";
+import { processCommandNoLock } from "../../../command/command.js";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { ConversationAction } from "../schema/conversationActionSchema.js";
-import { ManageConversationPayload } from "../manageConversationPayload.js";
 import { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
 
+// Quote a conversation name so the command parser keeps it as a single
+// argument; names often contain spaces (and, rarely, quotes).
+function quoteName(name: string): string {
+    if (!name.includes('"')) {
+        return `"${name}"`;
+    }
+    if (!name.includes("'")) {
+        return `'${name}'`;
+    }
+
+    // If the name contains both quote types, fall back to escaping for a
+    // double-quoted token.
+    return `"${name.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+// Each conversation action runs its equivalent `@conversation` command, which
+// owns the actual work (forwarding the manage-conversation payload to the
+// client). This mirrors the history agent and keeps the command canonical, so
+// the two paths cannot drift.
 export async function executeConversationAction(
     action: TypeAgentAction<ConversationAction>,
     context: ActionContext<CommandHandlerContext>,
 ) {
-    const agentContext = context.sessionContext.agentContext;
-    const requestId = getRequestId(agentContext);
-    let payload: ManageConversationPayload;
-
+    const systemContext = context.sessionContext.agentContext;
     let resultEntity: { name: string; type: string[] } | undefined;
-
+    let command: string;
     switch (action.actionName) {
         case "newConversation": {
             // Grammar matches that emit `parameters: {}` are normalized away
             // by the grammar engine, so `action.parameters` may be missing on
             // grammar-cache hits even though the schema marks it required.
             const name = action.parameters?.name;
-            payload = name
-                ? { subcommand: "new", name }
-                : { subcommand: "new" };
+            command = name
+                ? `@conversation new ${quoteName(name)}`
+                : "@conversation new";
             resultEntity = {
                 name: name ?? "new conversation",
                 type: ["conversation"],
@@ -33,37 +48,36 @@ export async function executeConversationAction(
             break;
         }
         case "listConversation":
-            payload = { subcommand: "list" };
+            command = "@conversation list";
+            break;
+        case "findConversation":
+            command = `@conversation find ${action.parameters.query}`;
             break;
         case "showConversationInfo":
-            payload = { subcommand: "info" };
+            command = "@conversation info";
             break;
         case "switchConversation":
-            payload = { subcommand: "switch", name: action.parameters.name };
+            command = `@conversation switch ${quoteName(action.parameters.name)}`;
             break;
         case "nextConversation":
-            payload = { subcommand: "next" };
+            command = "@conversation next";
             break;
         case "prevConversation":
-            payload = { subcommand: "prev" };
+            command = "@conversation prev";
             break;
         case "renameConversation": {
-            const renameName = action.parameters.name;
-            payload = renameName
-                ? {
-                      subcommand: "rename",
-                      name: renameName,
-                      newName: action.parameters.newName,
-                  }
-                : { subcommand: "rename", newName: action.parameters.newName };
+            const { name, newName } = action.parameters;
+            command = name
+                ? `@conversation rename ${quoteName(name)} ${quoteName(newName)}`
+                : `@conversation rename ${quoteName(newName)}`;
             resultEntity = {
-                name: action.parameters.newName,
+                name: newName,
                 type: ["conversation"],
             };
             break;
         }
         case "deleteConversation":
-            payload = { subcommand: "delete", name: action.parameters.name };
+            command = `@conversation delete ${quoteName(action.parameters.name)}`;
             break;
         default:
             throw new Error(
@@ -71,6 +85,6 @@ export async function executeConversationAction(
             );
     }
 
-    agentContext.clientIO.takeAction(requestId, "manage-conversation", payload);
+    await processCommandNoLock(command, systemContext);
     return { entities: [], resultEntity };
 }

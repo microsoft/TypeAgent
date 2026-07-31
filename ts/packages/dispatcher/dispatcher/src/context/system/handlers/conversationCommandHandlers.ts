@@ -18,9 +18,11 @@ import {
 } from "../../commandHandlerContext.js";
 import { ManageConversationPayload } from "../manageConversationPayload.js";
 
-// Each handler dispatches the same "manage-conversation" client action
-// emitted by the natural-language conversationActionHandler — so the CLI
-// and Shell already know how to render the result.
+// Forward the manage-conversation payload to the client, which performs the
+// actual switch/rename/etc. The equivalent conversation action runs these
+// commands (see conversationActionHandler), so the payload is built in exactly
+// one place. Each handler's `action` property records that equivalence for
+// tooling such as the action browser.
 function dispatchManageConversation(
     context: ActionContext<CommandHandlerContext>,
     payload: ManageConversationPayload,
@@ -64,6 +66,7 @@ function completeConversationName(
 class ConversationNewCommandHandler implements CommandHandler {
     public readonly description =
         "Create a new conversation, optionally with a name";
+    public readonly action = "newConversation";
     public readonly parameters = {
         args: {
             name: {
@@ -86,6 +89,7 @@ class ConversationNewCommandHandler implements CommandHandler {
 
 class ConversationListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List all conversations";
+    public readonly action = "listConversation";
     public async run(context: ActionContext<CommandHandlerContext>) {
         dispatchManageConversation(context, { subcommand: "list" });
     }
@@ -93,6 +97,7 @@ class ConversationListCommandHandler implements CommandHandlerNoParams {
 
 class ConversationInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show info about the current conversation";
+    public readonly action = "showConversationInfo";
     public async run(context: ActionContext<CommandHandlerContext>) {
         dispatchManageConversation(context, { subcommand: "info" });
     }
@@ -101,6 +106,7 @@ class ConversationInfoCommandHandler implements CommandHandlerNoParams {
 class ConversationSwitchCommandHandler implements CommandHandler {
     public readonly description =
         "Switch to a conversation by name (defaults to the next conversation in the list)";
+    public readonly action = "switchConversation";
     public readonly parameters = {
         args: {
             name: {
@@ -115,6 +121,8 @@ class ConversationSwitchCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const { name } = params.args;
+        // With no name, cycle to the next conversation (a CLI convenience the
+        // switchConversation action does not have).
         dispatchManageConversation(
             context,
             name ? { subcommand: "switch", name } : { subcommand: "next" },
@@ -132,6 +140,7 @@ class ConversationSwitchCommandHandler implements CommandHandler {
 class ConversationPrevCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Switch to the previous conversation in the list (wraps around)";
+    public readonly action = "prevConversation";
     public async run(context: ActionContext<CommandHandlerContext>) {
         dispatchManageConversation(context, { subcommand: "prev" });
     }
@@ -140,6 +149,7 @@ class ConversationPrevCommandHandler implements CommandHandlerNoParams {
 class ConversationNextCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Switch to the next conversation in the list (wraps around)";
+    public readonly action = "nextConversation";
     public async run(context: ActionContext<CommandHandlerContext>) {
         dispatchManageConversation(context, { subcommand: "next" });
     }
@@ -148,6 +158,7 @@ class ConversationNextCommandHandler implements CommandHandlerNoParams {
 class ConversationRenameCommandHandler implements CommandHandler {
     public readonly description =
         "Rename a conversation. With one argument, renames the current conversation; with two, renames the named conversation.";
+    public readonly action = "renameConversation";
     public readonly parameters = {
         args: {
             nameOrNewName: {
@@ -167,11 +178,7 @@ class ConversationRenameCommandHandler implements CommandHandler {
         const { nameOrNewName, newName } = params.args;
         const payload: ManageConversationPayload =
             newName !== undefined
-                ? {
-                      subcommand: "rename",
-                      name: nameOrNewName,
-                      newName,
-                  }
+                ? { subcommand: "rename", name: nameOrNewName, newName }
                 : { subcommand: "rename", newName: nameOrNewName };
         dispatchManageConversation(context, payload);
     }
@@ -188,6 +195,7 @@ class ConversationRenameCommandHandler implements CommandHandler {
 
 class ConversationDeleteCommandHandler implements CommandHandler {
     public readonly description = "Delete a conversation by name";
+    public readonly action = "deleteConversation";
     public readonly parameters = {
         args: {
             name: {
@@ -213,6 +221,29 @@ class ConversationDeleteCommandHandler implements CommandHandler {
     }
 }
 
+class ConversationFindCommandHandler implements CommandHandler {
+    public readonly description =
+        "Fuzzy-find conversations by name (lexical + embedding)";
+    public readonly action = "findConversation";
+    public readonly parameters = {
+        args: {
+            query: {
+                description: "Name (or approximate name) to search for",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        dispatchManageConversation(context, {
+            subcommand: "find",
+            query: params.args.query,
+        });
+    }
+}
+
 class ConversationHelpCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show conversation command help";
     public async run(context: ActionContext<CommandHandlerContext>) {
@@ -227,6 +258,7 @@ export function getConversationCommandHandlers(): CommandHandlerTable {
         commands: {
             new: new ConversationNewCommandHandler(),
             list: new ConversationListCommandHandler(),
+            find: new ConversationFindCommandHandler(),
             info: new ConversationInfoCommandHandler(),
             switch: new ConversationSwitchCommandHandler(),
             prev: new ConversationPrevCommandHandler(),
