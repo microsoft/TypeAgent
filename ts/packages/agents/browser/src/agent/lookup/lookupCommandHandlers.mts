@@ -43,6 +43,10 @@ export class LookupCommandHandlerTable implements CommandHandlerTable {
 
 class LookupStatusCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show the current internet lookup mode";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "showLookupSettings",
+    };
     public async run(
         context: ActionContext<BrowserActionContext>,
     ): Promise<void> {
@@ -73,6 +77,10 @@ class LookupStatusCommandHandler implements CommandHandlerNoParams {
 class LookupModeCommandHandler implements CommandHandler {
     public readonly description =
         "Set the internet lookup mode: off (browser), api, or mcp";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "setLookupMode",
+    };
     public readonly parameters = {
         args: {
             mode: {

@@ -117,6 +117,7 @@ async function resolveRecipients(
 
 class EmailLoginCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Log into email service";
+    public readonly action = "emailLogin";
     public async run(context: ActionContext<EmailActionContext>) {
         const provider = context.sessionContext.agentContext.emailProvider;
         const providerType = context.sessionContext.agentContext.providerType;
@@ -200,6 +201,7 @@ class EmailLoginCommandHandler implements CommandHandlerNoParams {
 
 class EmailLogoutCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Log out of email service";
+    public readonly action = "emailLogout";
     public async run(context: ActionContext<EmailActionContext>) {
         const provider = context.sessionContext.agentContext.emailProvider;
         if (provider === undefined) {
@@ -218,12 +220,14 @@ class EmailLogoutCommandHandler implements CommandHandlerNoParams {
             type: "html",
             content: `<span class="typeagent-user-signed-out" hidden></span>`,
         });
+        await context.sessionContext.notifyReadinessChanged();
     }
 }
 
 class GoogleAuthCommandHandler implements CommandHandler {
     public readonly description =
         "Complete Google Gmail OAuth flow with authorization code";
+    public readonly action = "emailGoogleAuth";
     public readonly parameters = {
         args: {
             code: {
@@ -299,14 +303,19 @@ class EmailIndexCommandHandler implements CommandHandlerNoParams {
     }
 }
 
+const emailLoginHandler = new EmailLoginCommandHandler();
+const emailLogoutHandler = new EmailLogoutCommandHandler();
+const googleAuthHandler = new GoogleAuthCommandHandler();
+const emailIndexHandler = new EmailIndexCommandHandler();
+
 const handlers: CommandHandlerTable = {
     description: "Email commands",
     defaultSubCommand: "login",
     commands: {
-        login: new EmailLoginCommandHandler(),
-        logout: new EmailLogoutCommandHandler(),
-        "google-auth": new GoogleAuthCommandHandler(),
-        index: new EmailIndexCommandHandler(),
+        login: emailLoginHandler,
+        logout: emailLogoutHandler,
+        "google-auth": googleAuthHandler,
+        index: emailIndexHandler,
     },
 };
 
@@ -521,9 +530,22 @@ async function executeEmailAction(
     action: TypeAgentAction<EmailAction>,
     context: ActionContext<EmailActionContext>,
 ) {
-    if (action.actionName === "indexInbox") {
-        runEmailIndex(context);
-        return;
+    switch (action.actionName) {
+        case "emailLogin":
+            await emailLoginHandler.run(context);
+            return undefined;
+        case "emailLogout":
+            await emailLogoutHandler.run(context);
+            return undefined;
+        case "emailGoogleAuth":
+            await googleAuthHandler.run(context, {
+                args: { code: action.parameters.code },
+                flags: undefined,
+            });
+            return undefined;
+        case "indexInbox":
+            runEmailIndex(context);
+            return undefined;
     }
 
     const { emailProvider } = context.sessionContext.agentContext;

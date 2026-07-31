@@ -149,6 +149,12 @@ import { LookupCommandHandlerTable } from "./lookup/lookupCommandHandlers.mjs";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { createAgentInvokeHandlers } from "./agentServiceHandlers.mjs";
 import { hookModelTokenUsage, runWithTokenUsage } from "./tokenUsage.mjs";
+import { BrowserConfigActions } from "./configActionSchema.mjs";
+import { executeBrowserConfigAction } from "./configActionHandler.mjs";
+import { BrowserAutomationActions } from "./automationActionSchema.mjs";
+import { executeBrowserAutomationAction } from "./automationActionHandler.mjs";
+import { BrowserPageToolsActions } from "./pageToolsActionSchema.mjs";
+import { executeBrowserPageToolsAction } from "./pageToolsActionHandler.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugClientRouting = registerDebug("typeagent:browser:client-routing");
@@ -1857,7 +1863,10 @@ async function executeBrowserAction(
         | TypeAgentAction<ExternalBrowserActions, "browser.external">
         | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
         | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">
-        | TypeAgentAction<WebFlowActions, "browser.webFlows">,
+        | TypeAgentAction<WebFlowActions, "browser.webFlows">
+        | TypeAgentAction<BrowserConfigActions, "browser.config">
+        | TypeAgentAction<BrowserAutomationActions, "browser.automation">
+        | TypeAgentAction<BrowserPageToolsActions, "browser.pageTools">,
 
     context: ActionContext<BrowserActionContext>,
 ) {
@@ -1889,7 +1898,10 @@ async function executeBrowserActionImpl(
         | TypeAgentAction<ExternalBrowserActions, "browser.external">
         | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
         | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">
-        | TypeAgentAction<WebFlowActions, "browser.webFlows">,
+        | TypeAgentAction<WebFlowActions, "browser.webFlows">
+        | TypeAgentAction<BrowserConfigActions, "browser.config">
+        | TypeAgentAction<BrowserAutomationActions, "browser.automation">
+        | TypeAgentAction<BrowserPageToolsActions, "browser.pageTools">,
 
     context: ActionContext<BrowserActionContext>,
 ) {
@@ -1958,6 +1970,12 @@ async function executeBrowserActionImpl(
 
     // try {
     switch (action.schemaName) {
+        case "browser.pageTools":
+            return executeBrowserPageToolsAction(action, context, handlers);
+        case "browser.automation":
+            return executeBrowserAutomationAction(action, context, handlers);
+        case "browser.config":
+            return executeBrowserConfigAction(action, context, handlers);
         case "browser":
             switch (action.actionName) {
                 case "openWebPage":
@@ -2757,6 +2775,10 @@ export async function createAutomationBrowser(isVisible?: boolean) {
 
 class OpenStandaloneAutomationBrowserHandler implements CommandHandlerNoParams {
     public readonly description = "Open a standalone browser instance";
+    public readonly action = {
+        schema: "browser.automation",
+        actionName: "launchStandaloneAutomationBrowser",
+    };
     public async run(context: ActionContext<BrowserActionContext>) {
         if (context.sessionContext.agentContext.browserProcess) {
             context.sessionContext.agentContext.browserProcess.kill();
@@ -2768,6 +2790,10 @@ class OpenStandaloneAutomationBrowserHandler implements CommandHandlerNoParams {
 
 class OpenHiddenAutomationBrowserHandler implements CommandHandlerNoParams {
     public readonly description = "Open a hidden/headless browser instance";
+    public readonly action = {
+        schema: "browser.automation",
+        actionName: "launchHiddenAutomationBrowser",
+    };
     public async run(context: ActionContext<BrowserActionContext>) {
         if (context.sessionContext.agentContext.browserProcess) {
             context.sessionContext.agentContext.browserProcess.kill();
@@ -2779,6 +2805,10 @@ class OpenHiddenAutomationBrowserHandler implements CommandHandlerNoParams {
 
 class CloseBrowserHandler implements CommandHandlerNoParams {
     public readonly description = "Close the new Web Content view";
+    public readonly action = {
+        schema: "browser.automation",
+        actionName: "closeAutomationBrowser",
+    };
     public async run(context: ActionContext<BrowserActionContext>) {
         if (context.sessionContext.agentContext.browserProcess) {
             context.sessionContext.agentContext.browserProcess.kill();
@@ -3045,6 +3075,10 @@ export async function handleWebsiteLibraryStats(
 class RecordActionHandler implements CommandHandler {
     public readonly description =
         "Record a new browser action by capturing user interactions";
+    public readonly action = {
+        schema: "browser.pageTools",
+        actionName: "startPageActionRecording",
+    };
     public readonly parameters = {
         args: {
             name: {
@@ -3084,6 +3118,10 @@ class RecordActionHandler implements CommandHandler {
 
 class StopRecordingHandler implements CommandHandler {
     public readonly description = "Stop recording and create a WebFlow";
+    public readonly action = {
+        schema: "browser.pageTools",
+        actionName: "stopPageActionRecording",
+    };
     public readonly parameters = {
         args: {
             description: {
@@ -3111,6 +3149,10 @@ class StopRecordingHandler implements CommandHandler {
 class AskAboutPageHandler implements CommandHandler {
     public readonly description =
         "Ask a question about the current web page using extracted knowledge";
+    public readonly action = {
+        schema: "browser.pageTools",
+        actionName: "answerCurrentPageQuestion",
+    };
     public readonly parameters = {
         args: {
             question: {
@@ -3327,6 +3369,10 @@ export const handlers: CommandHandlerTable = {
             commands: {
                 on: {
                     description: "Enable external browser control",
+                    action: {
+                        schema: "browser.config",
+                        actionName: "useExternalBrowserControl",
+                    },
                     run: async (
                         context: ActionContext<BrowserActionContext>,
                     ) => {
@@ -3373,6 +3419,10 @@ export const handlers: CommandHandlerTable = {
                 },
                 off: {
                     description: "Disable external browser control",
+                    action: {
+                        schema: "browser.config",
+                        actionName: "useClientBrowserControl",
+                    },
                     run: async (
                         context: ActionContext<BrowserActionContext>,
                     ) => {
@@ -3421,6 +3471,10 @@ export const handlers: CommandHandlerTable = {
             commands: {
                 list: {
                     description: "List all available URL resolvers",
+                    action: {
+                        schema: "browser.config",
+                        actionName: "listUrlResolvers",
+                    },
                     run: async (
                         context: ActionContext<BrowserActionContext>,
                     ) => {
@@ -3442,6 +3496,10 @@ export const handlers: CommandHandlerTable = {
                 },
                 keyword: {
                     description: "Toggle keyword resolver",
+                    action: {
+                        schema: "browser.config",
+                        actionName: "toggleKeywordResolver",
+                    },
                     run: async (
                         context: ActionContext<BrowserActionContext>,
                     ) => {
@@ -3462,6 +3520,10 @@ export const handlers: CommandHandlerTable = {
                 },
                 history: {
                     description: "Toggle history resolver",
+                    action: {
+                        schema: "browser.config",
+                        actionName: "toggleHistoryResolver",
+                    },
                     run: async (
                         context: ActionContext<BrowserActionContext>,
                     ) => {

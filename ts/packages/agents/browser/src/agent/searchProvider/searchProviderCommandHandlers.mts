@@ -29,6 +29,10 @@ export class SearchProviderCommandHandlerTable implements CommandHandlerTable {
 
 export class ListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Lists browser agent search providers";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "listSearchProviders",
+    };
     public async run(
         context: ActionContext<BrowserActionContext>,
     ): Promise<void> {
@@ -52,6 +56,10 @@ export class ListCommandHandler implements CommandHandlerNoParams {
 
 export class SetCommandHandler implements CommandHandler {
     public readonly description = "Sets the active search provider";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "setSearchProvider",
+    };
     public readonly parameters = {
         args: {
             provider: {
@@ -100,6 +108,10 @@ export class SetCommandHandler implements CommandHandler {
 export class ShowCommandHandler implements CommandHandler {
     public readonly description =
         "Shows the details of the selected search provider";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "showSearchProvider",
+    };
     public readonly parameters = {
         args: {
             provider: {
@@ -138,6 +150,10 @@ export class ShowCommandHandler implements CommandHandler {
 
 export class AddCommandHandler implements CommandHandler {
     public readonly description = "Adds a new search provider";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "addSearchProvider",
+    };
     public readonly parameters = {
         args: {
             provider: {
@@ -196,6 +212,10 @@ export class AddCommandHandler implements CommandHandler {
 
 export class RemoveCommandHandler implements CommandHandler {
     public readonly description = "Removes the selected search provider";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "removeSearchProvider",
+    };
     public readonly parameters = {
         args: {
             provider: {
@@ -260,6 +280,10 @@ export class RemoveCommandHandler implements CommandHandler {
 export class ImportCommandHandler implements CommandHandler {
     public readonly description =
         "Imports the search providers from the specified browser";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "importSearchProviders",
+    };
     public readonly parameters = {
         args: {
             browser: {

@@ -41,6 +41,11 @@ function expectCommand(command: string) {
 }
 
 describe("executeConversationAction delegates to @conversation commands", () => {
+    it("showConversationHelp runs help", async () => {
+        await run({ actionName: "showConversationHelp" });
+        expectCommand("@conversation help");
+    });
+
     it("newConversation with a name runs a quoted new command", async () => {
         const r = await run({
             actionName: "newConversation",

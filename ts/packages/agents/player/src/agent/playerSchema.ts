@@ -2,6 +2,9 @@
 // Licensed under the MIT License.
 
 export type PlayerActions =
+    | SpotifyLoginAction
+    | SpotifyLogoutAction
+    | LoadSpotifyUserDataAction
     | PlayMusicAction
     | FindMusicAction
     | PlayFromCurrentTrackListAction
@@ -33,6 +36,31 @@ export type PlayerActions =
 
 export type PlayerEntities = MusicDevice;
 export type MusicDevice = string;
+
+// user: log in to Spotify
+// agent: { "actionName": "spotifyLogin" }
+// Sign in to the configured Spotify account.
+export interface SpotifyLoginAction {
+    actionName: "spotifyLogin";
+}
+
+// user: log out of Spotify
+// agent: { "actionName": "spotifyLogout" }
+// Sign out of Spotify and clear the saved refresh token.
+export interface SpotifyLogoutAction {
+    actionName: "spotifyLogout";
+}
+
+// user: load my Spotify user data from streaming-history.json
+// agent: { "actionName": "loadSpotifyUserData", "parameters": { "file": "streaming-history.json" } }
+// Import Spotify listening-history data from a stored JSON file.
+export interface LoadSpotifyUserDataAction {
+    actionName: "loadSpotifyUserData";
+    parameters: {
+        // Path of the Spotify history JSON file in instance storage.
+        file: string;
+    };
+}
 
 // Specification for a song by title and optional artist/album
 export interface SongSpecification {

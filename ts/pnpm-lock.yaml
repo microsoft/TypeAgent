@@ -2247,6 +2247,9 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
     devDependencies:
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../../actionGrammar
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
         version: link:../../actionGrammarCompiler
@@ -3115,6 +3118,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../../actionGrammar
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
         version: link:../../actionGrammarCompiler

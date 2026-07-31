@@ -246,6 +246,7 @@ class ConversationFindCommandHandler implements CommandHandler {
 
 class ConversationHelpCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show conversation command help";
+    public readonly action = "showConversationHelp";
     public async run(context: ActionContext<CommandHandlerContext>) {
         dispatchManageConversation(context, { subcommand: "help" });
     }

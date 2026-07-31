@@ -2,11 +2,39 @@
 // Licensed under the MIT License.
 
 export type EmailAction =
+    | EmailLoginAction
+    | EmailLogoutAction
+    | EmailGoogleAuthAction
     | SendEmailAction
     | ReplyEmailAction
     | ForwardEmailAction
     | FindEmailAction
     | IndexInboxAction;
+
+// user: log in to email
+// agent: { "actionName": "emailLogin" }
+// Sign in to the configured email provider.
+export type EmailLoginAction = {
+    actionName: "emailLogin";
+};
+
+// user: log out of email
+// agent: { "actionName": "emailLogout" }
+// Sign out of the configured email provider.
+export type EmailLogoutAction = {
+    actionName: "emailLogout";
+};
+
+// user: complete Gmail authorization with code 4/abc123
+// agent: { "actionName": "emailGoogleAuth", "parameters": { "code": "4/abc123" } }
+// Complete Google Gmail authorization with the exact authorization code.
+export type EmailGoogleAuthAction = {
+    actionName: "emailGoogleAuth";
+    parameters: {
+        // The unmodified authorization code returned by Google.
+        code: string;
+    };
+};
 
 // user: index my inbox
 // agent: { "actionName": "indexInbox" }

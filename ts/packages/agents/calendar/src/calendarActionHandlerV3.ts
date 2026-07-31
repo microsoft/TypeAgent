@@ -71,6 +71,7 @@ export class CalendarClientLoginCommandHandler
     implements CommandHandlerNoParams
 {
     public readonly description = "Log into calendar service";
+    public readonly action = "calendarLogin";
     public async run(context: ActionContext<CalendarActionContext>) {
         const provider = context.sessionContext.agentContext.calendarProvider;
         const providerType = context.sessionContext.agentContext.providerType;
@@ -148,6 +149,7 @@ export class CalendarClientLogoutCommandHandler
     implements CommandHandlerNoParams
 {
     public readonly description = "Log out of calendar service";
+    public readonly action = "calendarLogout";
     public async run(context: ActionContext<CalendarActionContext>) {
         const provider = context.sessionContext.agentContext.calendarProvider;
         if (provider === undefined) {
@@ -167,6 +169,7 @@ export class CalendarClientLogoutCommandHandler
             type: "html",
             content: `<span class="typeagent-user-signed-out" hidden></span>`,
         });
+        await context.sessionContext.notifyReadinessChanged();
     }
 }
 
@@ -174,6 +177,7 @@ export class CalendarClientLogoutCommandHandler
 export class GoogleAuthCommandHandler implements CommandHandler {
     public readonly description =
         "Complete Google Calendar OAuth flow with authorization code";
+    public readonly action = "calendarGoogleAuth";
     public readonly parameters = {
         args: {
             code: {
@@ -232,13 +236,17 @@ export class GoogleAuthCommandHandler implements CommandHandler {
     }
 }
 
+const calendarLoginHandler = new CalendarClientLoginCommandHandler();
+const calendarLogoutHandler = new CalendarClientLogoutCommandHandler();
+const googleAuthHandler = new GoogleAuthCommandHandler();
+
 const handlers: CommandHandlerTable = {
     description: "Calendar login command",
     defaultSubCommand: "login",
     commands: {
-        login: new CalendarClientLoginCommandHandler(),
-        logout: new CalendarClientLogoutCommandHandler(),
-        "google-auth": new GoogleAuthCommandHandler(),
+        login: calendarLoginHandler,
+        logout: calendarLogoutHandler,
+        "google-auth": googleAuthHandler,
     },
 };
 
@@ -550,6 +558,21 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 `\n[Calendar V3] Executing action: ${calendarAction.actionName} (provider: ${providerType || "none"})`,
             ),
         );
+
+        switch (calendarAction.actionName) {
+            case "calendarLogin":
+                await calendarLoginHandler.run(context);
+                return undefined;
+            case "calendarLogout":
+                await calendarLogoutHandler.run(context);
+                return undefined;
+            case "calendarGoogleAuth":
+                await googleAuthHandler.run(context, {
+                    args: { code: calendarAction.parameters.code },
+                    flags: undefined,
+                });
+                return undefined;
+        }
 
         if (!provider) {
             return createActionResultFromError(

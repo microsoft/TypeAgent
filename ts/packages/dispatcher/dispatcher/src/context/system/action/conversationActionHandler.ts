@@ -33,6 +33,9 @@ export async function executeConversationAction(
     let resultEntity: { name: string; type: string[] } | undefined;
     let command: string;
     switch (action.actionName) {
+        case "showConversationHelp":
+            command = "@conversation help";
+            break;
         case "newConversation": {
             // Grammar matches that emit `parameters: {}` are normalized away
             // by the grammar engine, so `action.parameters` may be missing on

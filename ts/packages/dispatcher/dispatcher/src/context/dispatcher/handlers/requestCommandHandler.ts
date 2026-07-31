@@ -821,6 +821,10 @@ async function requestExplain(
 
 export class RequestCommandHandler implements CommandHandler {
     public readonly description = "Translate and explain a request";
+    public readonly action = {
+        schema: "dispatcher.diagnostics",
+        actionName: "dispatchRequest",
+    };
     public readonly parameters = {
         args: {
             request: {

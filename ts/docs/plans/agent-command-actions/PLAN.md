@@ -128,7 +128,8 @@ paths use a shared typed helper.
 3. **Complete agent-host actions.** Add the known localPlayer and browser gaps,
    auth/OAuth actions, browser configuration, and dispatcher diagnostics.
    PowerShell `show` and email indexing were completed in the second
-   implementation slice. No agent-host command remains excluded.
+   implementation slice. This phase is complete: no agent-host command remains
+   uncovered.
 4. **Complete existing system families.** Finish `system.config`,
    `system.conversation`, `system.describe`, `system.grammar`, `system.history`,
    `system.notify`, and `system.settings`.

@@ -145,7 +145,12 @@
     parameters: { query }
   };
 
-<Start> = <NewConversationNamed>
+<ShowConversationHelp> = <Polite> (show | open | display)? <ConvNoun> (command)? help -> {
+    actionName: "showConversationHelp"
+};
+
+<Start> = <ShowConversationHelp>
+  | <NewConversationNamed>
   | <NewConversation>
   | <ListConversation>
   | <FindConversation>

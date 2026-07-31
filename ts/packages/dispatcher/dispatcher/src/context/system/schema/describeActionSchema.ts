@@ -1,7 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type DescribeAction = DescribeAgentAction | DescribeActionAction;
+export type DescribeAction =
+    | DescribeAgentOrAction
+    | DescribeAgentAction
+    | DescribeActionAction;
+
+// Describe an agent, or one action when actionName is supplied.
+export type DescribeAgentOrAction = {
+    actionName: "describeAgentOrAction";
+    parameters: {
+        // Agent name, or an action name when no owning agent is supplied.
+        name: string;
+        // Action name when name identifies the owning agent.
+        targetActionName?: string;
+        // Whether to show all actions instead of the default subset.
+        all?: boolean;
+    };
+};
 
 // Describe what an agent can do: a natural-language summary plus its actions.
 // Works for installed-but-disabled agents too — describing is informational

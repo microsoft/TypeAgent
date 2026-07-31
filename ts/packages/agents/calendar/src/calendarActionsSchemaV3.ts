@@ -16,12 +16,40 @@ export type CalendarTimeRange = string; // "2pm to 3pm", "9am-10am", "1-2pm" - u
 export type CalendarEntities = CalendarDate | CalendarTime | CalendarTimeRange;
 
 export type CalendarActionV3 =
+    | CalendarLoginAction
+    | CalendarLogoutAction
+    | CalendarGoogleAuthAction
     | ScheduleEventAction
     | FindEventsAction
     | AddParticipantAction
     | FindTodaysEventsAction
     | FindThisWeeksEventsAction
     | RemoveEventAction;
+
+// user: log in to my calendar
+// agent: { "actionName": "calendarLogin" }
+// Sign in to the configured calendar provider.
+export type CalendarLoginAction = {
+    actionName: "calendarLogin";
+};
+
+// user: log out of my calendar
+// agent: { "actionName": "calendarLogout" }
+// Sign out of the configured calendar provider.
+export type CalendarLogoutAction = {
+    actionName: "calendarLogout";
+};
+
+// user: complete Google Calendar authorization with code 4/abc123
+// agent: { "actionName": "calendarGoogleAuth", "parameters": { "code": "4/abc123" } }
+// Complete Google Calendar authorization with the exact authorization code.
+export type CalendarGoogleAuthAction = {
+    actionName: "calendarGoogleAuth";
+    parameters: {
+        // The unmodified authorization code returned by Google.
+        code: string;
+    };
+};
 
 // Schedule a new event on the calendar
 // Examples: "schedule a meeting tomorrow at 2pm", "add dentist appointment on Friday at 3pm"

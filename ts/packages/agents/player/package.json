@@ -46,6 +46,7 @@
     "typechat": "^0.1.1"
   },
   "devDependencies": {
+    "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/debug": "^4.1.12",

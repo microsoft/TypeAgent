@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 export type ConversationAction =
+    | ShowConversationHelpAction
     | NewConversationAction
     | ListConversationAction
     | FindConversationAction
@@ -11,6 +12,11 @@ export type ConversationAction =
     | PrevConversationAction
     | RenameConversationAction
     | DeleteConversationAction;
+
+// Show help for TypeAgent conversation management commands.
+export type ShowConversationHelpAction = {
+    actionName: "showConversationHelp";
+};
 
 // Create a new conversation and optionally give it a name.
 // Use this when the user wants to create, start, make, or open a brand-new conversation.

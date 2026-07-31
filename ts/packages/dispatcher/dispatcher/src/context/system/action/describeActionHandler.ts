@@ -26,6 +26,25 @@ export async function executeDescribeAction(
     let markdown: string;
     let historyText: string;
     switch (nlAction.actionName) {
+        case "describeAgentOrAction": {
+            const { name, targetActionName, all } = nlAction.parameters;
+            markdown =
+                targetActionName !== undefined
+                    ? await describeAction(
+                          systemContext,
+                          targetActionName,
+                          name,
+                      )
+                    : await describeAgentOrAction(
+                          systemContext,
+                          name,
+                          all ?? false,
+                      );
+            historyText = targetActionName
+                ? `Described the "${targetActionName}" action from "${name}".`
+                : `Described "${name}".`;
+            break;
+        }
         case "describeAgent": {
             const { agentName, all } = nlAction.parameters;
             markdown = await describeAgentOrAction(

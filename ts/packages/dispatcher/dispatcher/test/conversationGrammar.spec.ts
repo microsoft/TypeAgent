@@ -49,6 +49,17 @@ function makeMatcher() {
 describe("system.conversation grammar", () => {
     const match = makeMatcher();
 
+    describe("showConversationHelp", () => {
+        it.each(["conversation help", "show conversation command help"])(
+            "matches %p",
+            (input) => {
+                expect(match(input)).toEqual({
+                    actionName: "showConversationHelp",
+                });
+            },
+        );
+    });
+
     describe("listConversation", () => {
         it.each([
             "list conversations",

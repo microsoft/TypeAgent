@@ -16,6 +16,10 @@ const validEngines = ["claude", "copilot", "none"];
 
 export class ReasonCommandHandler implements CommandHandler {
     public readonly description = "Reason about a request";
+    public readonly action = {
+        schema: "dispatcher.diagnostics",
+        actionName: "reasonAboutRequest",
+    };
     public readonly parameters = {
         flags: {
             engine: {

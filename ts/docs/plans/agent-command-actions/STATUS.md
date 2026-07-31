@@ -18,8 +18,8 @@ collection, not manual estimates.
 | Metric                               |               Count |
 | ------------------------------------ | ------------------: |
 | Executable command endpoints         |                 387 |
-| Valid linked endpoints               |                  46 |
-| Missing action declarations          |                 341 |
+| Valid linked endpoints               |                  96 |
+| Missing action declarations          |                 291 |
 | Invalid / dangling / ambiguous links |                   0 |
 | Runtime-only static omissions        | 1 (`mcpfilesystem`) |
 
@@ -34,28 +34,41 @@ collection, not manual estimates.
 - [x] Report runtime-only schema omissions explicitly.
 - [x] Add missing/invalid endpoint counters and migration check mode.
 - [ ] Generate and maintain the per-host endpoint ledger.
-- [ ] Audit and link exact existing equivalents.
-- [ ] Complete all remaining agent-host actions.
+- [x] Audit and link exact existing equivalents.
+- [x] Complete all remaining agent-host actions.
 - [ ] Complete existing system action families.
 - [ ] Add remaining system action families.
 - [ ] Enable permanent zero-gap regression check.
 
 ## Implemented hosts and slices
 
-| Host            | Coverage completed in this milestone                                                         |
-| --------------- | -------------------------------------------------------------------------------------------- |
-| localPlayer     | All 16 endpoints, including bare status default, general play, and mute/shuffle toggles.     |
-| osNotifications | `sync`, `test`.                                                                              |
-| selfhelp        | Bare default and `ask`.                                                                      |
-| powershell      | All five management endpoints: `list`, `run`, `delete`, `show`, and `import`.                |
-| browser         | `open`, `close`, `learn`, `actions match`, `actions infer`, and inherited `actions` default. |
-| email           | `index`; auth management remains.                                                            |
-| greeting        | Bare command, including deterministic `--mock` action parity.                                |
+| Host            | Coverage completed in this milestone                                                      |
+| --------------- | ----------------------------------------------------------------------------------------- |
+| localPlayer     | All 16 endpoints, including bare status default, general play, and mute/shuffle toggles.  |
+| osNotifications | `sync`, `test`.                                                                           |
+| selfhelp        | Bare default and `ask`.                                                                   |
+| powershell      | All five management endpoints: `list`, `run`, `delete`, `show`, and `import`.             |
+| browser         | All 31 endpoints, including config, automation lifecycle, extraction, Q&A, and recording. |
+| email           | All 5 endpoints: login default, logout, Google auth, and inbox indexing.                  |
+| greeting        | Bare command, including deterministic `--mock` action parity.                             |
+| player          | All 3 Spotify management endpoints: load, login, and logout.                              |
+| calendar        | All 4 auth endpoints, including the bare login default and Google auth.                   |
+| dispatcher      | All 6 request/match/translate/reason/explain diagnostics.                                 |
+
+All non-system command hosts are now fully covered.
+
+## System progress
+
+| Family       | Completed in this milestone                                     |
+| ------------ | --------------------------------------------------------------- |
+| conversation | Added help action for bare `@conversation` and explicit `help`. |
+| grammar      | Unified and linked list/show/delete/clear plus bare default.    |
+| describe     | Added exact multiplexing action for `@describe`.                |
 
 The current migration check is:
 
 ```text
-Command action coverage: 46 / 387 endpoints (341 missing, 0 invalid)
+Command action coverage: 96 / 387 endpoints (291 missing, 0 invalid)
 Runtime-only schemas omitted: mcpfilesystem
 ```
 
@@ -67,23 +80,12 @@ pnpm --filter @typeagent/action-browser test:local
 node tools/actionBrowser/dist/cli.js --check --allow-missing
 ```
 
-Strict completion command (expected to fail until all 341 remaining gaps
+Strict completion command (expected to fail until all 291 remaining gaps
 close):
 
 ```powershell
 node tools/actionBrowser/dist/cli.js --check
 ```
 
-## Known blockers requiring new behavior
-
-| Host / command             | Reason it cannot be linked yet                                   |
-| -------------------------- | ---------------------------------------------------------------- |
-| browser `extractKnowledge` | Named action is not in a registered schema.                      |
-| browser `ask`              | Proposed action is outside active `BrowserActions`.              |
-| browser `actions record`   | Starts recording; proposed action consumes a finished recording. |
-| calendar/email login       | Readiness setup intercepts execution while signed out.           |
-| calendar/email logout      | Must refresh cached readiness after logout.                      |
-
-No built-in command is excluded. OAuth callbacks, dispatcher diagnostics,
-PowerShell `show`, browser automation controls, recording stop, and every
-system command remain in the endpoint ledger until covered.
+The remaining gaps are all system command families. No built-in command is
+excluded; every remaining endpoint stays in the ledger until covered.
