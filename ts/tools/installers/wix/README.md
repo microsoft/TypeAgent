@@ -93,7 +93,8 @@ pnpm run build
 node tools/scripts/deployAgentServer.mjs `
   --out "$env:TEMP\typeagent-msi-stage\agent-server" `
   --platform win32 --arch x64 `
-  --profile inbox
+  --profile inbox `
+  --external-cli
 ```
 
 #### 3. Stage copilot-plugin

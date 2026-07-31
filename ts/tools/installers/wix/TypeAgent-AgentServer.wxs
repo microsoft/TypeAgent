@@ -557,7 +557,7 @@
 
         <Control Id="ShellCheckBox" Type="CheckBox" X="20" Y="221" Width="340" Height="12"
                  Property="SHELL" CheckBoxValue="1"
-                 Text="Also install the TypeAgent Shell desktop app (needs SHELLSTORAGE or SHELLBASEURL)" />
+                 Text="Also install the TypeAgent Shell desktop app" />
 
         <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
         <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17"
