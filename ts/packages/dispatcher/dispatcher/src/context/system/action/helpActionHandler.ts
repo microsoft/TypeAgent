@@ -3,7 +3,7 @@
 
 import { ActionContext, ActionResult, AppAction } from "@typeagent/agent-sdk";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { runHelp } from "@typeagent/selfhelp-agent/help";
+import { runHelp } from "@typeagent/selfhelp/help";
 import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { getAgentSchemas } from "../describe/agentSchemaInfo.js";
 import {
@@ -31,7 +31,9 @@ export async function executeHelpAction(
             return runHelp(helpAction.parameters.question, context);
         case "describeAgent": {
             const { agentName, all } = helpAction.parameters;
-            const schemas = await getAgentSchemas(systemContext);
+            const schemas = await getAgentSchemas(systemContext, undefined, {
+                includeSchemaless: true,
+            });
             if (resolveAgent(schemas, agentName).kind !== "found") {
                 // Not a real installed agent - answer it as a concept question.
                 return runHelp(agentName, context);

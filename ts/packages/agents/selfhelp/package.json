@@ -1,10 +1,7 @@
 {
-  "name": "@typeagent/selfhelp-agent",
+  "name": "@typeagent/selfhelp",
   "version": "0.0.1",
-  "description": "Help agent that answers questions about TypeAgent itself",
-  "keywords": [
-    "typeagent-agent"
-  ],
+  "description": "TypeAgent help grounding library, used by the dispatcher's built-in system.help to answer questions about TypeAgent itself.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -15,8 +12,6 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    "./agent/manifest": "./src/selfHelpManifest.json",
-    "./agent/handlers": "./dist/selfHelpActionHandler.js",
     "./help": "./dist/help.js"
   },
   "files": [
@@ -25,8 +20,7 @@
     "!dist/tsconfig.tsbuildinfo"
   ],
   "scripts": {
-    "asc": "asc -i ./src/selfHelpSchema.ts -o ./dist/selfHelpSchema.pas.json -t SelfHelpAction",
-    "build": "concurrently npm:tsc npm:asc npm:copy-catalog",
+    "build": "concurrently npm:tsc npm:copy-catalog",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "copy-catalog": "node scripts/copyCatalog.mjs",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
@@ -44,7 +38,6 @@
     "typechat": "^0.1.1"
   },
   "devDependencies": {
-    "@typeagent/action-schema-compiler": "workspace:*",
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
     "concurrently": "^9.1.2",
@@ -52,25 +45,5 @@
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
-  },
-  "fluidBuild": {
-    "tasks": {
-      "asc": {
-        "dependsOn": [
-          "@typeagent/action-schema-compiler#tsc"
-        ],
-        "files": {
-          "inputGlobs": [
-            "src/selfHelpSchema.ts"
-          ],
-          "outputGlobs": [
-            "dist/selfHelpSchema.pas.json"
-          ]
-        }
-      }
-    }
-  },
-  "typeagent": {
-    "defaultAgentName": "selfhelp"
   }
 }

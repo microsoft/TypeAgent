@@ -694,7 +694,9 @@ export async function describeAction(
     actionName: string,
     agentName?: string,
 ): Promise<string> {
-    const schemas = await getAgentSchemas(context);
+    const schemas = await getAgentSchemas(context, undefined, {
+        includeSchemaless: true,
+    });
     const resolution = resolveAction(schemas, actionName, agentName);
     switch (resolution.kind) {
         case "ambiguous":
@@ -717,7 +719,9 @@ export async function describeAgentOrAction(
     name: string,
     all: boolean,
 ): Promise<string> {
-    const schemas = await getAgentSchemas(context);
+    const schemas = await getAgentSchemas(context, undefined, {
+        includeSchemaless: true,
+    });
     const agentResolution = resolveAgent(schemas, name);
     if (agentResolution.kind === "found") {
         // isSchemaEnabled can throw for an unregistered schema name; treat

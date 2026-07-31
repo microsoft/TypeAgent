@@ -64,7 +64,7 @@
     "@typeagent/image-memory": "workspace:*",
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
-    "@typeagent/selfhelp-agent": "workspace:*",
+    "@typeagent/selfhelp": "workspace:*",
     "@typeagent/taskflow-typeagent": "workspace:*",
     "@typeagent/telemetry": "workspace:*",
     "@typeagent/typechat-utils": "workspace:*",

@@ -18,6 +18,8 @@ import {
     isCapabilityDiscoveryAlias,
     renderCapabilitiesDiscoveryFallback,
 } from "../src/context/system/describe/describeCore.js";
+import { getAgentSchemas } from "../src/context/system/describe/agentSchemaInfo.js";
+import type { CommandHandlerContext } from "../src/context/commandHandlerContext.js";
 
 function makeAction(name: string, description: string) {
     return { name, description };
@@ -542,5 +544,44 @@ describe("describeCore LLM fallback (no model configured)", () => {
         const deterministic = renderActionView(match);
         const result = await polishActionView(match, deterministic);
         expect(result).toBe(deterministic);
+    });
+});
+
+describe("getAgentSchemas includeSchemaless", () => {
+    // Minimal context: one registered agent ("greeting") with no action schema.
+    function makeRosterContext(): CommandHandlerContext {
+        return {
+            agents: {
+                waitUntilReady: async () => {},
+                getActionConfigs: () => [],
+                getAppAgentNames: () => ["greeting"],
+                getAppAgentEmoji: () => "🖐️",
+                getAppAgentDescription: () =>
+                    "Agent to generate greeting messages",
+            },
+        } as unknown as CommandHandlerContext;
+    }
+
+    it("omits schema-less agents by default (RPC surface unchanged)", async () => {
+        expect(await getAgentSchemas(makeRosterContext())).toEqual([]);
+    });
+
+    it("includes a schema-less agent as an empty entry when requested", async () => {
+        const schemas = await getAgentSchemas(makeRosterContext(), undefined, {
+            includeSchemaless: true,
+        });
+        expect(schemas).toHaveLength(1);
+        expect(schemas[0]).toMatchObject({
+            name: "greeting",
+            emoji: "🖐️",
+            description: "Agent to generate greeting messages",
+            subSchemas: [],
+        });
+        // The describe engine can now resolve and render it, instead of
+        // reporting "no agent named".
+        expect(resolveAgent(schemas, "GREETING").kind).toBe("found");
+        expect(renderAgentView(schemas[0], false, () => false)).toContain(
+            "no callable actions",
+        );
     });
 });
