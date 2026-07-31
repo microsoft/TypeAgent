@@ -1279,28 +1279,31 @@ table.sc-table {
 
 table.sc-table th,
 table.sc-table td {
-  /* Final fallback (used where --vscode-* isn't defined, e.g. the Electron
-     shell) is a mid-gray alpha so borders read on both light and dark. */
-  border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.35));
-  padding: 4px 10px;
+  padding: 5px 10px;
   text-align: left;
   vertical-align: top;
+  /* Let long unbreakable tokens (e.g. slugs like "subagent/prime-83-...")
+     wrap instead of forcing the table wider than its bubble. `anywhere` (not
+     `break-word`) also shrinks the column's min-content width, which is what
+     actually keeps the table from scrolling sideways in a narrow bubble. */
+  overflow-wrap: anywhere;
 }
 
+/* A single header underline plus subtle zebra striping - no full per-cell
+   grid, which reads as a heavy spreadsheet inside a chat bubble. */
 table.sc-table thead th {
-  background: var(
-    --chat-conversation-list-hover-background,
-    rgba(0, 0, 0, 0.06)
-  );
+  background: transparent;
   color: var(--chat-conversation-foreground, #1f1f1f);
   font-weight: 600;
   white-space: nowrap;
+  border-bottom: 1px solid
+    var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.4));
 }
 
 table.sc-table tbody tr:nth-child(even) {
   /* Mid-gray alpha fallback so the zebra stripe stays visible on the Electron
      shell's dark bubbles (where --vscode-list-hoverBackground is undefined). */
-  background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12));
+  background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.08));
 }
 
 .sc-cell-number {
