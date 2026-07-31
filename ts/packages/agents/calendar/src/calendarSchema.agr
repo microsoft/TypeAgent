@@ -131,17 +131,8 @@
 };
 
 // findTodaysEvents
-// Bare "what's on my calendar" (no trailing date) is a common day-to-day ask.
-<FindTodaysEvents> = what's on my calendar $(date:wildcard) -> {
-    actionName: "findTodaysEvents"
-}
-  | what is on my calendar $(date:wildcard) -> {
-    actionName: "findTodaysEvents"
-}
-  | what's on my calendar -> {
-    actionName: "findTodaysEvents"
-}
-  | what is on my calendar -> {
+// Bare "what's/what is on my calendar" (optional trailing date) is a common day-to-day ask.
+<FindTodaysEvents> = (what's | what is) on my calendar $(date:wildcard)? -> {
     actionName: "findTodaysEvents"
 }
   | show me all my appointments and meetings for $(date:wildcard) -> {
