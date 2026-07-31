@@ -6,6 +6,8 @@
 // Types: wildcard = 1+ words, word = exactly 1 word
 
 // scheduleEvent
+// Prefer specific multi-field patterns first; shorter day-to-day forms follow
+// (e.g. "schedule a design review for next tuesday at 3pm" without location).
 <ScheduleEvent> = schedule a $(description:wildcard) for $(date:wildcard) at $(time:word) in $(location:wildcard) with $(participant:wildcard) -> {
     actionName: "scheduleEvent",
     parameters: {
@@ -14,6 +16,32 @@
         time,
         location,
         participant
+    }
+}
+  | schedule a $(description:wildcard) for $(date:wildcard) at $(time:word) with $(participant:wildcard) -> {
+    actionName: "scheduleEvent",
+    parameters: {
+        description,
+        date,
+        time,
+        participant
+    }
+}
+  | schedule a $(description:wildcard) for $(date:wildcard) at $(time:word) in $(location:wildcard) -> {
+    actionName: "scheduleEvent",
+    parameters: {
+        description,
+        date,
+        time,
+        location
+    }
+}
+  | schedule a $(description:wildcard) for $(date:wildcard) at $(time:word) -> {
+    actionName: "scheduleEvent",
+    parameters: {
+        description,
+        date,
+        time
     }
 }
   | (can you)? set up $(description:wildcard) on $(date:wildcard) at $(time:word) -> {
@@ -33,7 +61,41 @@
         location,
         participant
     }
+}
+  // Adjacent $(word) $(word) needs a literal separator; use RelativeDay or "for"/"on".
+  | book $(description:wildcard) with $(participant:word) for $(date:wildcard) at $(time:word) -> {
+    actionName: "scheduleEvent",
+    parameters: {
+        description,
+        date,
+        time,
+        participant
+    }
+}
+  | book $(description:wildcard) with $(participant:word) on $(date:wildcard) at $(time:word) -> {
+    actionName: "scheduleEvent",
+    parameters: {
+        description,
+        date,
+        time,
+        participant
+    }
+}
+  | book $(description:word) with $(participant:word) $(date:<RelativeDay>) at $(time:word) -> {
+    actionName: "scheduleEvent",
+    parameters: {
+        description,
+        date,
+        time,
+        participant
+    }
 };
+
+// Single-token relative days so "book lunch with alex tomorrow at noon" can bind
+// participant + date without two free adjacent wildcards.
+<RelativeDay> = today | tomorrow | tonight
+  | monday | tuesday | wednesday | thursday | friday | saturday | sunday
+  | mon | tue | wed | thu | fri | sat | sun;
 
 // findEvents
 <FindEvents> = find all events on $(date:wildcard) that include $(participant:wildcard) -> {
@@ -69,7 +131,17 @@
 };
 
 // findTodaysEvents
+// Bare "what's on my calendar" (no trailing date) is a common day-to-day ask.
 <FindTodaysEvents> = what's on my calendar $(date:wildcard) -> {
+    actionName: "findTodaysEvents"
+}
+  | what is on my calendar $(date:wildcard) -> {
+    actionName: "findTodaysEvents"
+}
+  | what's on my calendar -> {
+    actionName: "findTodaysEvents"
+}
+  | what is on my calendar -> {
     actionName: "findTodaysEvents"
 }
   | show me all my appointments and meetings for $(date:wildcard) -> {
