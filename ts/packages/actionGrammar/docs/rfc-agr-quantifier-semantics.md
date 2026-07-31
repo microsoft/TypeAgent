@@ -45,7 +45,7 @@ Repo evidence (pre-fix): ~16 bare `<Name>?` sites across email/weather/video/cod
 // Usage in patterns: (<CategoryName>)?   (note: (<Name>)? not <Name>? — bare optional not yet supported)
 ```
 
-Meanwhile `sample.agr` documents the *opposite* aspiration:
+Meanwhile `sample.agr` documents the _opposite_ aspiration:
 
 ```agr
 // ts/extensions/agr-language/sample.agr  (misleading today)
@@ -79,8 +79,18 @@ Quantifier meaning is deliberately gated:
 // grammarRuleParser.ts — expressionsSpecialChar (main)
 // "?" "*" "+" are intentionally ABSENT
 export const expressionsSpecialChar = [
-  "|", "(", ")", "<", ">", "$", "-", ";",
-  "{", "}", "[", "]",
+  "|",
+  "(",
+  ")",
+  "<",
+  ">",
+  "$",
+  "-",
+  ";",
+  "{",
+  "}",
+  "[",
+  "]",
 ];
 
 // Only these forms set optional/repeat today:
@@ -201,9 +211,18 @@ what is the time\?               // escaped single char
 type Quantifier = { optional?: true; repeat?: true }; // ? | * | +
 
 function readQuantifier(): Quantifier | undefined {
-  if (isAt("?")) { skip(1); return { optional: true }; }
-  if (isAt("*")) { skip(1); return { optional: true, repeat: true }; }
-  if (isAt("+")) { skip(1); return { repeat: true }; }
+  if (isAt("?")) {
+    skip(1);
+    return { optional: true };
+  }
+  if (isAt("*")) {
+    skip(1);
+    return { optional: true, repeat: true };
+  }
+  if (isAt("+")) {
+    skip(1);
+    return { repeat: true };
+  }
   return undefined;
 }
 
@@ -217,9 +236,21 @@ function readQuantifier(): Quantifier | undefined {
 ```ts
 // expressionsSpecialChar (B) — promote quantifiers to special
 export const expressionsSpecialChar = [
-  "|", "(", ")", "<", ">", "$", "-", ";",
-  "{", "}", "[", "]",
-  "?", "*", "+",          // NEW — stop string runs before quantifier
+  "|",
+  "(",
+  ")",
+  "<",
+  ">",
+  "$",
+  "-",
+  ";",
+  "{",
+  "}",
+  "[",
+  "]",
+  "?",
+  "*",
+  "+", // NEW — stop string runs before quantifier
 ];
 ```
 
@@ -375,7 +406,7 @@ const cases = [
   ["please ? open outlook", false], // never require a literal "?"
 
   // required still required
-  ["open", false],                  // missing <App>
+  ["open", false], // missing <App>
   ["open outlook", true],
 
   // grouped form always works
