@@ -359,7 +359,7 @@ async function handleListAction(
             }
             if (listName === "" || isPlaceholderListName(listName)) {
                 throw new Error(
-                    "List name is missing or only a reference phrase (e.g. \"the list\"); clarify which list",
+                    'List name is missing or only a reference phrase (e.g. "the list"); clarify which list',
                 );
             }
 
@@ -384,7 +384,7 @@ async function handleListAction(
             }
             if (listName === "" || isPlaceholderListName(listName)) {
                 throw new Error(
-                    "List name is missing or only a reference phrase (e.g. \"the list\"); clarify which list",
+                    'List name is missing or only a reference phrase (e.g. "the list"); clarify which list',
                 );
             }
 
