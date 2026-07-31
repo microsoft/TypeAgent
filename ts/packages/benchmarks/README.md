@@ -1,2 +1,2 @@
 # @typeagent/benchmarks
-TypeAgent action-translation eval scaffold: pinned action catalog + OpenAI model prices (`pnpm run gen-catalog`, `pnpm run snapshot-prices`).
+Action-translation eval for TypeAgent: pinned catalogs, model prices, and scoring harness.
