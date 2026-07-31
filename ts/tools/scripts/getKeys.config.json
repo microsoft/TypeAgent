@@ -80,7 +80,8 @@
   },
   "vault": {
     "shared": "aisystems",
-    "configSecret": "typeagent-config"
+    "configSecret": "typeagent-config",
+    "localOnly": ["spotify.clientId", "spotify.clientSecret", "spotify.port"]
   },
   "cert": {
     "vault": "aisystems",
