@@ -58,6 +58,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
@@ -75,11 +77,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        webSocketManager.setClientActionHandler { action ->
-            runOnUiThread {
-                launchSetAlarmIntent(action)
+        webSocketManager.setClientActionHandler(object : WebSocketManager.ClientActionHandler {
+            override fun onSetAlarm(action: SetAlarmAction) {
+                runOnUiThread { launchSetAlarmIntent(action) }
             }
-        }
+
+            override fun onSetTimer(action: SetTimerAction) {
+                runOnUiThread { launchSetTimerIntent(action) }
+            }
+        })
         webSocketManager.connect(
             url = tunnelUrl,
             tunnelToken = tunnelToken
@@ -111,33 +117,67 @@ class MainActivity : ComponentActivity() {
                 putExtra(AlarmClock.EXTRA_MESSAGE, action.originalRequest)
             }
         }
+        launchClockIntent(
+            intent = intent,
+            actionName = "set-alarm",
+            detail = "hour=${action.hour} minute=${action.minute}",
+            successMessage = "Alarm set for %02d:%02d".format(action.hour, action.minute),
+            missingAppMessage = "No alarm app is available on this device.",
+            deniedMessage = "This app is not allowed to set alarms."
+        )
+    }
+
+    /**
+     * Handles `takeAction("set-timer", ...)` from the androidMobile agent.
+     *
+     * `EXTRA_SKIP_UI` is true so the clock app starts the countdown in the
+     * background instead of coming to the foreground. The reference
+     * implementation in TypeAgent PR #2780 (`JavaScriptInterface.setTimer`)
+     * passes false; we diverge deliberately so a voice/chat request never
+     * yanks the user out of the conversation. The confirmation toast is then
+     * the only in-app feedback, so it is not optional.
+     */
+    private fun launchSetTimerIntent(action: SetTimerAction) {
+        val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
+            putExtra(AlarmClock.EXTRA_LENGTH, action.durationInSeconds)
+            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+            if (action.originalRequest.isNotBlank()) {
+                putExtra(AlarmClock.EXTRA_MESSAGE, action.originalRequest)
+            }
+        }
+        launchClockIntent(
+            intent = intent,
+            actionName = "set-timer",
+            detail = "durationInSeconds=${action.durationInSeconds}",
+            successMessage = "Timer set for ${formatTimerDuration(action.durationInSeconds)}",
+            missingAppMessage = "No timer app is available on this device.",
+            deniedMessage = "This app is not allowed to set timers."
+        )
+    }
+
+    private fun launchClockIntent(
+        intent: Intent,
+        actionName: String,
+        detail: String,
+        successMessage: String,
+        missingAppMessage: String,
+        deniedMessage: String
+    ) {
         val target = intent.resolveActivity(packageManager)
         Log.d(
             TAG,
-            "Launching set-alarm intent hour=${action.hour} minute=${action.minute} target=${target?.flattenToShortString() ?: "none"}"
+            "Launching $actionName intent $detail target=${target?.flattenToShortString() ?: "none"}"
         )
         try {
             startActivity(intent)
-            Log.d(TAG, "set-alarm intent dispatched to clock app")
-            Toast.makeText(
-                this,
-                "Alarm set for %02d:%02d".format(action.hour, action.minute),
-                Toast.LENGTH_SHORT
-            ).show()
+            Log.d(TAG, "$actionName intent dispatched to clock app")
+            Toast.makeText(this, successMessage, Toast.LENGTH_SHORT).show()
         } catch (_: ActivityNotFoundException) {
-            Log.e(TAG, "No alarm app available to handle set-alarm intent")
-            Toast.makeText(
-                this,
-                "No alarm app is available on this device.",
-                Toast.LENGTH_SHORT
-            ).show()
+            Log.e(TAG, "No app available to handle $actionName intent")
+            Toast.makeText(this, missingAppMessage, Toast.LENGTH_SHORT).show()
         } catch (error: SecurityException) {
-            Log.e(TAG, "Missing permission to set alarm", error)
-            Toast.makeText(
-                this,
-                "This app is not allowed to set alarms.",
-                Toast.LENGTH_SHORT
-            ).show()
+            Log.e(TAG, "Missing permission for $actionName", error)
+            Toast.makeText(this, deniedMessage, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -585,12 +625,14 @@ private fun MessageBubble(message: Message) {
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold
                 )
-                ChatMessageText(
-                    text = message.text,
-                    format = message.format,
-                    color = textColor,
-                    style = MaterialTheme.typography.bodyLarge
-                )
+                message.segments.forEach { segment ->
+                    ChatMessageText(
+                        text = segment.text,
+                        format = segment.format,
+                        color = segmentColor(segment.kind, textColor),
+                        style = segmentTextStyle(segment.kind)
+                    )
+                }
                 if (!message.isUser && !message.isFinal) {
                     Text(
                         text = "Responding...",
@@ -600,5 +642,28 @@ private fun MessageBubble(message: Message) {
                 }
             }
         }
+    }
+}
+
+/**
+ * Mirrors the shell's `chat-message-kind-*` styling: routing notes and other
+ * `info`/`status` annotations are de-emphasised so the actual answer stands out.
+ */
+@Composable
+private fun segmentColor(kind: MessageKind, baseColor: Color): Color {
+    return when (kind) {
+        MessageKind.INFO, MessageKind.STATUS -> baseColor.copy(alpha = 0.6f)
+        MessageKind.WARNING -> MaterialTheme.colorScheme.tertiary
+        MessageKind.ERROR -> MaterialTheme.colorScheme.error
+        MessageKind.SUCCESS, MessageKind.NONE -> baseColor
+    }
+}
+
+@Composable
+private fun segmentTextStyle(kind: MessageKind): TextStyle {
+    return if (kind.isSecondary) {
+        MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic)
+    } else {
+        MaterialTheme.typography.bodyLarge
     }
 }
