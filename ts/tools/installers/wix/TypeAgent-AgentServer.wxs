@@ -81,7 +81,7 @@
          download for a public container; otherwise SHELLSTORAGE/SHELLCONTAINER
          are used with the Azure CLI (az login).
          ═══════════════════════════════════════════════ -->
-    <Property Id="SHELL" Value="0" Secure="yes" />
+    <Property Id="SHELL" Secure="yes" />
     <!-- Shell download coordinates: baked from build vars when provided, else
          left undefined. candle rejects Value="" (CNDL0006), so only emit Value
          when the build var is non-empty (preprocessor comparison). -->
@@ -252,12 +252,24 @@
          so it writes under the user's LocalAppData. Fatal on failure
          (Return="check") since the rest of the install depends on the files.
          ═══════════════════════════════════════════════ -->
-    <SetProperty Id="ExtractPayload"
-           Before="ExtractPayload"
+    <SetProperty Id="ExtractAgentServerPayload"
+           Before="ExtractAgentServerPayload"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -Payload &quot;agent-server&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot;" />
 
-    <CustomAction Id="ExtractPayload"
+    <CustomAction Id="ExtractAgentServerPayload"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+
+    <SetProperty Id="ExtractCopilotPluginPayload"
+           Before="ExtractCopilotPluginPayload"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -Payload &quot;copilot-plugin&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot;" />
+
+    <CustomAction Id="ExtractCopilotPluginPayload"
                   BinaryKey="WixCA"
                   DllEntry="WixQuietExec64"
                   Execute="deferred"
@@ -419,12 +431,10 @@
                   Impersonate="yes" />
 
     <!-- ═══════════════════════════════════════════════
-         Custom action — fail loudly if the shell was requested with no location
-         SHELL=1 needs a download location (SHELLBASEURL or SHELLSTORAGE). Rather
-         than silently no-op (the previous behavior masked by Return="ignore"),
-         abort with a clear message so the user knows the shell was not installed.
+         Custom action — fail if no complete shell source was configured
+         Blob storage is optional when the package feed fallback is complete.
          ═══════════════════════════════════════════════ -->
-    <CustomAction Id="ShellLocationMissing" Error="Installing the TypeAgent Shell requires a download location, but none was configured in this package. Re-run with SHELLBASEURL=https://&lt;account&gt;.blob.core.windows.net/&lt;container&gt;/ (or SHELLSTORAGE + SHELLCONTAINER), or clear the shell option." />
+    <CustomAction Id="ShellLocationMissing" Error="Installing the TypeAgent Shell requires either a blob location or a complete package feed configuration. Set SHELLBASEURL, SHELLSTORAGE, or SHELLFEED + SHELLPACKAGE + SHELLORG + SHELLPROJECT; otherwise clear the shell option." />
 
     <!-- ═══════════════════════════════════════════════
          Custom action — optional TypeAgent Shell install
@@ -447,8 +457,9 @@
                   Impersonate="yes" />
 
     <InstallExecuteSequence>
-      <Custom Action="ExtractPayload"          After="InstallFiles">NOT REMOVE~="ALL"</Custom>
-      <Custom Action="RegisterCopilotPlugin"   After="ExtractPayload">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="ExtractAgentServerPayload" After="InstallFiles">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="ExtractCopilotPluginPayload" After="ExtractAgentServerPayload">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="RegisterCopilotPlugin"   After="ExtractCopilotPluginPayload">NOT REMOVE~="ALL"</Custom>
       <Custom Action="ProvisionSelfHostConfig" After="RegisterCopilotPlugin">(NOT REMOVE~="ALL") AND (PROVIDER&lt;&gt;"AISYSTEMS")</Custom>
       <Custom Action="ProvisionAiSystemsConfig" After="ProvisionSelfHostConfig">(NOT REMOVE~="ALL") AND (PROVIDER="AISYSTEMS")</Custom>
       <!-- Prereqs (claude/copilot from the feed) run AFTER provisioning so the
@@ -456,7 +467,7 @@
       <Custom Action="InstallPrereqs"          After="ProvisionAiSystemsConfig">NOT REMOVE~="ALL"</Custom>
       <Custom Action="StartAgentServer"        After="InstallPrereqs">(NOT REMOVE~="ALL") AND (STARTSERVER="1")</Custom>
       <Custom Action="EnableAutostart"         After="StartAgentServer">(NOT REMOVE~="ALL") AND (AUTOSTART="1")</Custom>
-      <Custom Action="ShellLocationMissing"    After="EnableAutostart">(NOT REMOVE~="ALL") AND (SHELL="1") AND (NOT SHELLBASEURL) AND (NOT SHELLSTORAGE) AND (NOT SHELLFEED)</Custom>
+      <Custom Action="ShellLocationMissing"    After="EnableAutostart">(NOT REMOVE~="ALL") AND (SHELL="1") AND (NOT SHELLBASEURL) AND (NOT SHELLSTORAGE) AND ((NOT SHELLFEED) OR (NOT SHELLPACKAGE) OR (NOT SHELLORG) OR (NOT SHELLPROJECT))</Custom>
       <Custom Action="InstallTypeAgentShell"   After="ShellLocationMissing">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
       <Custom Action="DisableAutostart"        Before="UnregisterCopilotPlugin">REMOVE~="ALL"</Custom>
       <Custom Action="UnregisterCopilotPlugin" Before="RemoveFiles">REMOVE~="ALL"</Custom>
@@ -484,6 +495,19 @@
 
       <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
       <Property Id="WixUI_Mode" Value="InstallDir" />
+
+      <ProgressText Action="ExtractAgentServerPayload">Extracting TypeAgent agent server...</ProgressText>
+      <ProgressText Action="ExtractCopilotPluginPayload">Extracting Copilot plugin...</ProgressText>
+      <ProgressText Action="RegisterCopilotPlugin">Registering Copilot plugin...</ProgressText>
+      <ProgressText Action="ProvisionSelfHostConfig">Configuring TypeAgent...</ProgressText>
+      <ProgressText Action="ProvisionAiSystemsConfig">Downloading TypeAgent configuration...</ProgressText>
+      <ProgressText Action="InstallPrereqs">Checking TypeAgent prerequisites...</ProgressText>
+      <ProgressText Action="StartAgentServer">Starting TypeAgent agent server...</ProgressText>
+      <ProgressText Action="EnableAutostart">Enabling TypeAgent automatic startup...</ProgressText>
+      <ProgressText Action="InstallTypeAgentShell">Downloading and installing TypeAgent Shell...</ProgressText>
+      <ProgressText Action="DisableAutostart">Disabling TypeAgent automatic startup...</ProgressText>
+      <ProgressText Action="UnregisterCopilotPlugin">Unregistering Copilot plugin...</ProgressText>
+      <ProgressText Action="CleanupPayload">Removing TypeAgent components...</ProgressText>
 
       <DialogRef Id="ErrorDlg" />
       <DialogRef Id="FatalError" />
@@ -559,7 +583,7 @@
 
         <Control Id="ShellCheckBox" Type="CheckBox" X="20" Y="221" Width="340" Height="12"
                  Property="SHELL" CheckBoxValue="1"
-                 Text="Also install the TypeAgent Shell desktop app (needs SHELLSTORAGE or SHELLBASEURL)" />
+                 Text="Also install the TypeAgent Shell desktop app" />
 
         <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
         <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17"

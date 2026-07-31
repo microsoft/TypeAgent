@@ -39,17 +39,17 @@ let stagedPluginDir = "";
 // SHELLBASEURL / SHELLSTORAGE / SHELLCONTAINER / SHELLCHANNEL property defaults
 // so the "install the shell" option has a location on a fresh machine.
 let shellBaseUrl = "";
-let shellStorage = "";
-let shellContainer = "";
-let shellChannel = "lkg";
+let shellStorage = "typeagentshell";
+let shellContainer = "typeagentshell";
+let shellChannel = "ci";
 // Optional Azure Artifacts Universal Package fallback for the shell download,
 // baked into the MSI so the installer can pull the shell from the feed when the
 // blob download fails (e.g. the account disallows anonymous access).
-let shellFeed = "";
-let shellPackage = "";
+let shellFeed = "typeagent";
+let shellPackage = "typeagent-shell.win32-x64";
 let shellFeedVersion = "";
-let shellOrg = "";
-let shellProject = "";
+let shellOrg = "https://dev.azure.com/msctoproj";
+let shellProject = "AI_Systems";
 
 for (let i = 0; i < args.length; i++) {
     if (args[i] === "--rid") rid = args[++i];
@@ -140,6 +140,89 @@ function runCommand(cmd, cmdArgs, options = {}) {
         process.exit(1);
     }
     return result;
+}
+
+function runCaptured(cmd, cmdArgs) {
+    const result = spawnSync(cmd, cmdArgs, {
+        encoding: "utf8",
+        shell: process.platform === "win32",
+    });
+    if (result.error) {
+        throw new Error(`${cmd} failed: ${result.error.message}`);
+    }
+    if (result.status !== 0) {
+        const details = (result.stderr || result.stdout || "").trim();
+        throw new Error(
+            `${cmd} exited with code ${result.status}${details ? `: ${details}` : ""}`,
+        );
+    }
+    return result.stdout;
+}
+
+function resolveLatestUniversalPackageVersion() {
+    if (!shellOrg || !shellProject || !shellFeed || !shellPackage) {
+        throw new Error(
+            "Resolving the shell feed version requires shell org, project, feed, and package.",
+        );
+    }
+
+    runCaptured("az", [
+        "extension",
+        "add",
+        "--name",
+        "azure-devops",
+        "--only-show-errors",
+    ]);
+    const output = runCaptured("az", [
+        "devops",
+        "invoke",
+        "--organization",
+        shellOrg,
+        "--area",
+        "packaging",
+        "--resource",
+        "packages",
+        "--route-parameters",
+        `project=${shellProject}`,
+        `feedId=${shellFeed}`,
+        "--query-parameters",
+        "protocolType=upack",
+        `packageNameQuery=${shellPackage}`,
+        "includeAllVersions=true",
+        "--api-version",
+        "7.1",
+        "--output",
+        "json",
+        "--only-show-errors",
+    ]);
+
+    const response = JSON.parse(output);
+    const packageEntry = response.value?.find(
+        (entry) =>
+            entry.name?.toLowerCase() === shellPackage.toLowerCase() &&
+            entry.protocolType?.toLowerCase() === "upack",
+    );
+    if (!packageEntry) {
+        throw new Error(
+            `Shell package '${shellPackage}' was not found in feed '${shellFeed}'.`,
+        );
+    }
+
+    const versions = (packageEntry.versions ?? []).filter(
+        (entry) => entry.isListed && !entry.isDeleted,
+    );
+    const latest =
+        versions.find((entry) => entry.isLatest) ??
+        versions.sort(
+            (left, right) =>
+                Date.parse(right.publishDate) - Date.parse(left.publishDate),
+        )[0];
+    if (!latest?.version) {
+        throw new Error(
+            `Shell package '${shellPackage}' has no listed versions in feed '${shellFeed}'.`,
+        );
+    }
+    return latest.version;
 }
 
 function findExe(candidates) {
@@ -248,6 +331,19 @@ function downloadArtifact(packageName, ver, targetDir) {
         process.exit(1);
     }
     console.log(`✅ Downloaded ${packageName}: ${files.length} items`);
+}
+
+if (!shellFeedVersion && shellFeed && shellPackage) {
+    console.log(
+        `\n🔎 Resolving latest ${shellPackage} version from feed ${shellFeed}...`,
+    );
+    try {
+        shellFeedVersion = resolveLatestUniversalPackageVersion();
+    } catch (error) {
+        console.error(`❌ ${error.message}`);
+        process.exit(1);
+    }
+    console.log(`✅ Shell feed version: ${shellFeedVersion}`);
 }
 
 // ── Step 1: Download artifacts ────────────────────────────────────────────────
