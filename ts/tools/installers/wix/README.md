@@ -318,6 +318,10 @@ into the MSI, the script queries Azure Artifacts and downloads the latest listed
 version, including prerelease versions. Any blob metadata or installer download
 failure is logged and automatically falls back to the package feed.
 
+Local MSI packaging resolves the latest listed shell Universal Package version
+and bakes that exact version into the MSI. Pipeline builds continue to pass the
+version produced by the current pipeline run.
+
 ## Pipeline Usage
 
 ### Automatic (on `main` branch)
@@ -441,6 +445,9 @@ az account show  # Verify
   thousands of components, which made the installer's "Computing space
   requirements" (CostFinalize) step take minutes. Do **not** reintroduce
   `heat.exe dir` harvesting for these trees.
+- Payload extraction uses Windows inbox `tar.exe`, with separate custom actions
+  for the agent-server and Copilot plugin so the progress dialog identifies each
+  stage.
 - Store WiX includes (`.wxi`) in `ts/tools/installers/wix/includes/`
 - Keep `.wxs` files simple; delegate complexity to `.wxi` includes
 - Test locally before pushing to main (MSI builds are slow)

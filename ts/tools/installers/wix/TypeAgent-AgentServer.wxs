@@ -81,7 +81,7 @@
          download for a public container; otherwise SHELLSTORAGE/SHELLCONTAINER
          are used with the Azure CLI (az login).
          ═══════════════════════════════════════════════ -->
-    <Property Id="SHELL" Value="0" Secure="yes" />
+    <Property Id="SHELL" Secure="yes" />
     <!-- Shell download coordinates: baked from build vars when provided, else
          left undefined. candle rejects Value="" (CNDL0006), so only emit Value
          when the build var is non-empty (preprocessor comparison). -->
@@ -252,12 +252,24 @@
          so it writes under the user's LocalAppData. Fatal on failure
          (Return="check") since the rest of the install depends on the files.
          ═══════════════════════════════════════════════ -->
-    <SetProperty Id="ExtractPayload"
-           Before="ExtractPayload"
+    <SetProperty Id="ExtractAgentServerPayload"
+           Before="ExtractAgentServerPayload"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -Payload &quot;agent-server&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot;" />
 
-    <CustomAction Id="ExtractPayload"
+    <CustomAction Id="ExtractAgentServerPayload"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+
+    <SetProperty Id="ExtractCopilotPluginPayload"
+           Before="ExtractCopilotPluginPayload"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -Payload &quot;copilot-plugin&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot;" />
+
+    <CustomAction Id="ExtractCopilotPluginPayload"
                   BinaryKey="WixCA"
                   DllEntry="WixQuietExec64"
                   Execute="deferred"
@@ -445,8 +457,9 @@
                   Impersonate="yes" />
 
     <InstallExecuteSequence>
-      <Custom Action="ExtractPayload"          After="InstallFiles">NOT REMOVE~="ALL"</Custom>
-      <Custom Action="RegisterCopilotPlugin"   After="ExtractPayload">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="ExtractAgentServerPayload" After="InstallFiles">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="ExtractCopilotPluginPayload" After="ExtractAgentServerPayload">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="RegisterCopilotPlugin"   After="ExtractCopilotPluginPayload">NOT REMOVE~="ALL"</Custom>
       <Custom Action="ProvisionSelfHostConfig" After="RegisterCopilotPlugin">(NOT REMOVE~="ALL") AND (PROVIDER&lt;&gt;"AISYSTEMS")</Custom>
       <Custom Action="ProvisionAiSystemsConfig" After="ProvisionSelfHostConfig">(NOT REMOVE~="ALL") AND (PROVIDER="AISYSTEMS")</Custom>
       <!-- Prereqs (claude/copilot from the feed) run AFTER provisioning so the
@@ -482,6 +495,19 @@
 
       <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
       <Property Id="WixUI_Mode" Value="InstallDir" />
+
+      <ProgressText Action="ExtractAgentServerPayload">Extracting TypeAgent agent server...</ProgressText>
+      <ProgressText Action="ExtractCopilotPluginPayload">Extracting Copilot plugin...</ProgressText>
+      <ProgressText Action="RegisterCopilotPlugin">Registering Copilot plugin...</ProgressText>
+      <ProgressText Action="ProvisionSelfHostConfig">Configuring TypeAgent...</ProgressText>
+      <ProgressText Action="ProvisionAiSystemsConfig">Downloading TypeAgent configuration...</ProgressText>
+      <ProgressText Action="InstallPrereqs">Checking TypeAgent prerequisites...</ProgressText>
+      <ProgressText Action="StartAgentServer">Starting TypeAgent agent server...</ProgressText>
+      <ProgressText Action="EnableAutostart">Enabling TypeAgent automatic startup...</ProgressText>
+      <ProgressText Action="InstallTypeAgentShell">Downloading and installing TypeAgent Shell...</ProgressText>
+      <ProgressText Action="DisableAutostart">Disabling TypeAgent automatic startup...</ProgressText>
+      <ProgressText Action="UnregisterCopilotPlugin">Unregistering Copilot plugin...</ProgressText>
+      <ProgressText Action="CleanupPayload">Removing TypeAgent components...</ProgressText>
 
       <DialogRef Id="ErrorDlg" />
       <DialogRef Id="FatalError" />

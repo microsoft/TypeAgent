@@ -142,6 +142,89 @@ function runCommand(cmd, cmdArgs, options = {}) {
     return result;
 }
 
+function runCaptured(cmd, cmdArgs) {
+    const result = spawnSync(cmd, cmdArgs, {
+        encoding: "utf8",
+        shell: process.platform === "win32",
+    });
+    if (result.error) {
+        throw new Error(`${cmd} failed: ${result.error.message}`);
+    }
+    if (result.status !== 0) {
+        const details = (result.stderr || result.stdout || "").trim();
+        throw new Error(
+            `${cmd} exited with code ${result.status}${details ? `: ${details}` : ""}`,
+        );
+    }
+    return result.stdout;
+}
+
+function resolveLatestUniversalPackageVersion() {
+    if (!shellOrg || !shellProject || !shellFeed || !shellPackage) {
+        throw new Error(
+            "Resolving the shell feed version requires shell org, project, feed, and package.",
+        );
+    }
+
+    runCaptured("az", [
+        "extension",
+        "add",
+        "--name",
+        "azure-devops",
+        "--only-show-errors",
+    ]);
+    const output = runCaptured("az", [
+        "devops",
+        "invoke",
+        "--organization",
+        shellOrg,
+        "--area",
+        "packaging",
+        "--resource",
+        "packages",
+        "--route-parameters",
+        `project=${shellProject}`,
+        `feedId=${shellFeed}`,
+        "--query-parameters",
+        "protocolType=upack",
+        `packageNameQuery=${shellPackage}`,
+        "includeAllVersions=true",
+        "--api-version",
+        "7.1",
+        "--output",
+        "json",
+        "--only-show-errors",
+    ]);
+
+    const response = JSON.parse(output);
+    const packageEntry = response.value?.find(
+        (entry) =>
+            entry.name?.toLowerCase() === shellPackage.toLowerCase() &&
+            entry.protocolType?.toLowerCase() === "upack",
+    );
+    if (!packageEntry) {
+        throw new Error(
+            `Shell package '${shellPackage}' was not found in feed '${shellFeed}'.`,
+        );
+    }
+
+    const versions = (packageEntry.versions ?? []).filter(
+        (entry) => entry.isListed && !entry.isDeleted,
+    );
+    const latest =
+        versions.find((entry) => entry.isLatest) ??
+        versions.sort(
+            (left, right) =>
+                Date.parse(right.publishDate) - Date.parse(left.publishDate),
+        )[0];
+    if (!latest?.version) {
+        throw new Error(
+            `Shell package '${shellPackage}' has no listed versions in feed '${shellFeed}'.`,
+        );
+    }
+    return latest.version;
+}
+
 function findExe(candidates) {
     return candidates.find((p) => fs.existsSync(p)) ?? null;
 }
@@ -248,6 +331,19 @@ function downloadArtifact(packageName, ver, targetDir) {
         process.exit(1);
     }
     console.log(`✅ Downloaded ${packageName}: ${files.length} items`);
+}
+
+if (!shellFeedVersion && shellFeed && shellPackage) {
+    console.log(
+        `\n🔎 Resolving latest ${shellPackage} version from feed ${shellFeed}...`,
+    );
+    try {
+        shellFeedVersion = resolveLatestUniversalPackageVersion();
+    } catch (error) {
+        console.error(`❌ ${error.message}`);
+        process.exit(1);
+    }
+    console.log(`✅ Shell feed version: ${shellFeedVersion}`);
 }
 
 // ── Step 1: Download artifacts ────────────────────────────────────────────────
