@@ -1,0 +1,99 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+//
+// Auto-generated REST handler for {{NAME}}
+//
+// Generated deterministically from an OpenAPI 3 spec (parseOpenApiSpec arm).
+// v1 limitations: no auth (no Authorization/api-key headers), scalar-only
+// query/path params (no array/object/style/explode), header/cookie params
+// are dropped when optional and rejected when required, DELETE requests
+// never carry a body.
+
+import {
+    ActionContext,
+    AppAgent,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
+import {
+    createActionResultFromTextDisplay,
+    truncateText,
+} from "@typeagent/agent-sdk/helpers/action";
+import { {{PASCAL_NAME}}Actions } from "./{{NAME}}Schema.js";
+
+const BASE_URL = {{BASE_URL}};
+
+function formatResponseBody(text: string): string {
+    try {
+        return truncateText(JSON.stringify(JSON.parse(text), null, 2));
+    } catch {
+        return truncateText(text);
+    }
+}
+
+async function callRest(
+    method: string,
+    path: string,
+    query: Record<string, unknown>,
+    body: Record<string, unknown> | undefined,
+): Promise<string> {
+    const trimmedBase = BASE_URL.replace(/\/$/, "");
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    const url = new URL(`${trimmedBase}${normalizedPath}`);
+    for (const [key, value] of Object.entries(query)) {
+        if (value === undefined || value === null) continue;
+        url.searchParams.set(key, String(value));
+    }
+
+    const headers: Record<string, string> = { Accept: "application/json" };
+    let requestBody: string | undefined;
+    if (body !== undefined) {
+        headers["Content-Type"] = "application/json";
+        requestBody = JSON.stringify(body);
+    }
+
+    const res = await fetch(url, {
+        method,
+        headers,
+        signal: AbortSignal.timeout(30_000),
+        ...(requestBody !== undefined ? { body: requestBody } : {}),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+        throw new Error(`${res.status} ${res.statusText}: ${truncateText(text)}`);
+    }
+    return formatResponseBody(text);
+}
+
+async function runAction(
+    action: TypeAgentAction<{{PASCAL_NAME}}Actions>,
+): Promise<string> {
+    const parameters = action.parameters as Record<string, unknown>;
+    switch (action.actionName) {
+{{SWITCH_CASES}}
+        default:
+            // Cast rather than reading `action.actionName` directly: when
+            // the switch above exhaustively covers every literal in the
+            // {{PASCAL_NAME}}Actions union, TS narrows `action` to `never`
+            // here, and `never` has no properties.
+            throw new Error(
+                `Unknown action: ${(action as { actionName: string }).actionName}`,
+            );
+    }
+}
+
+export function instantiate(): AppAgent {
+    return {
+        executeAction: async (
+            action: TypeAgentAction<{{PASCAL_NAME}}Actions>,
+            context: ActionContext<{{PASCAL_NAME}}Actions>,
+        ) => {
+            try {
+                const output = await runAction(action);
+                return createActionResultFromTextDisplay(output);
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e);
+                return createActionResultFromTextDisplay(`Error: ${msg}`);
+            }
+        },
+    };
+}
