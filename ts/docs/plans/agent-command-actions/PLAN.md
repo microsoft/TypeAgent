@@ -17,11 +17,11 @@ metric measures whether a command handler declares a `readonly action` **link**
 reconcile the 64 non-system commands against the agents' existing action
 schemas, the picture is very different:
 
-| Bucket | Count | Where |
-| --- | ---: | --- |
-| Already have a matching action (NL works when the agent is enabled; only the link is missing) | ~30 | localPlayer 14, browser 7 (+`ask` partial), powershell 4, osNotifications 2, selfhelp 1 |
-| Not a sensible NL action (auth / config / diagnostics) | ~32 | browser 16, player 3, calendar 3, email 3, dispatcher 6, powershell 1 |
-| Genuinely missing an action (write a new one) | ~1 | email `index` |
+| Bucket                                                                                        | Count | Where                                                                                   |
+| --------------------------------------------------------------------------------------------- | ----: | --------------------------------------------------------------------------------------- |
+| Already have a matching action (NL works when the agent is enabled; only the link is missing) |   ~30 | localPlayer 14, browser 7 (+`ask` partial), powershell 4, osNotifications 2, selfhelp 1 |
+| Not a sensible NL action (auth / config / diagnostics)                                        |   ~32 | browser 16, player 3, calendar 3, email 3, dispatcher 6, powershell 1                   |
+| Genuinely missing an action (write a new one)                                                 |    ~1 | email `index`                                                                           |
 
 **Approach (confirmed):** declare the `action` link where an action already
 exists; author brand-new actions only for genuine gaps. Pilot on `localPlayer`,
@@ -35,7 +35,7 @@ then roll out.
   cross-reference a typed command with its NL action. It does not itself wire
   execution.
 - Reference implementation to copy (the `@system conversation` / `@system
-  history` commands are the only 12 that already declare the link):
+history` commands are the only 12 that already declare the link):
   - Command handlers: `packages/dispatcher/dispatcher/src/context/system/handlers/conversationCommandHandlers.ts`
     (each handler has `public readonly action = "newConversation"` etc.) and
     `.../handlers/historyCommandHandler.ts`.
@@ -153,7 +153,7 @@ Gaps to author:
   argument, not spoken), dispatcher diagnostics (`request` / `match` /
   `translate` / `reason` / `reasoning` / `explain` — circular), and the CLI-only
   commands `powershell show`, browser `auto launch hidden|standalone`, `auto
-  close`, and `actions stop recording`.
+close`, and `actions stop recording`.
 - **Auth naming:** agent-prefixed verbs (`calendarLogin`, `emailLogout`,
   `spotifyLogin`, …) — not `connect`/`disconnect`, not bare `login`/`logout`.
 - **Default-off agents stay off** (localPlayer, player, osNotifications); their

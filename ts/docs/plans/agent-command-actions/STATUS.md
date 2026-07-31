@@ -19,51 +19,51 @@ each phase lands.
 
 ### Linking (existing actions)
 
-| Command | Action | Done |
-| --- | --- | :--: |
-| localPlayer play | playFile | ☐ |
-| localPlayer pause | pause | ☐ |
-| localPlayer resume | resume | ☐ |
-| localPlayer stop | stop | ☐ |
-| localPlayer next | next | ☐ |
-| localPlayer prev | previous | ☐ |
-| localPlayer shuffle | shuffle | ☐ |
-| localPlayer status | status | ☐ |
-| localPlayer list | listFiles | ☐ |
-| localPlayer queue | showQueue | ☐ |
-| localPlayer clear | clearQueue | ☐ |
-| localPlayer mute | mute | ☐ |
-| localPlayer volume | setVolume | ☐ |
-| localPlayer setfolder | setMusicFolder | ☐ |
-| localPlayer folder | showMusicFolder | ☐ |
-| powershell list | listPowerShellFlows | ☐ |
-| powershell run | executePowerShellFlow | ☐ |
-| powershell delete | deletePowerShellFlow | ☐ |
-| powershell import | importPowerShellFlow | ☐ |
-| osNotifications sync | syncOsNotifications | ☐ |
-| osNotifications test | testOsNotification | ☐ |
-| selfhelp ask | answerTypeAgentQuestion | ☐ |
-| browser open | openWebPage | ☐ |
-| browser close | closeWebPage | ☐ |
-| browser extractKnowledge | extractPageKnowledge | ☐ |
-| browser learn | startGoalDrivenTask | ☐ |
-| browser actions match | detectPageActions | ☐ |
-| browser actions infer | inferActions | ☐ |
-| browser actions record | createWebFlowFromRecording | ☐ |
-| browser ask | searchWebMemories (verify/partial) | ☐ |
+| Command                  | Action                             | Done |
+| ------------------------ | ---------------------------------- | :--: |
+| localPlayer play         | playFile                           |  ☐   |
+| localPlayer pause        | pause                              |  ☐   |
+| localPlayer resume       | resume                             |  ☐   |
+| localPlayer stop         | stop                               |  ☐   |
+| localPlayer next         | next                               |  ☐   |
+| localPlayer prev         | previous                           |  ☐   |
+| localPlayer shuffle      | shuffle                            |  ☐   |
+| localPlayer status       | status                             |  ☐   |
+| localPlayer list         | listFiles                          |  ☐   |
+| localPlayer queue        | showQueue                          |  ☐   |
+| localPlayer clear        | clearQueue                         |  ☐   |
+| localPlayer mute         | mute                               |  ☐   |
+| localPlayer volume       | setVolume                          |  ☐   |
+| localPlayer setfolder    | setMusicFolder                     |  ☐   |
+| localPlayer folder       | showMusicFolder                    |  ☐   |
+| powershell list          | listPowerShellFlows                |  ☐   |
+| powershell run           | executePowerShellFlow              |  ☐   |
+| powershell delete        | deletePowerShellFlow               |  ☐   |
+| powershell import        | importPowerShellFlow               |  ☐   |
+| osNotifications sync     | syncOsNotifications                |  ☐   |
+| osNotifications test     | testOsNotification                 |  ☐   |
+| selfhelp ask             | answerTypeAgentQuestion            |  ☐   |
+| browser open             | openWebPage                        |  ☐   |
+| browser close            | closeWebPage                       |  ☐   |
+| browser extractKnowledge | extractPageKnowledge               |  ☐   |
+| browser learn            | startGoalDrivenTask                |  ☐   |
+| browser actions match    | detectPageActions                  |  ☐   |
+| browser actions infer    | inferActions                       |  ☐   |
+| browser actions record   | createWebFlowFromRecording         |  ☐   |
+| browser ask              | searchWebMemories (verify/partial) |  ☐   |
 
 ### New actions
 
-| Command | New action | Done |
-| --- | --- | :--: |
-| email index | indexInbox | ☐ |
-| calendar login / logout | calendarLogin / calendarLogout | ☐ |
-| email login / logout | emailLogin / emailLogout | ☐ |
-| player spotify login / logout | spotifyLogin / spotifyLogout | ☐ |
-| browser external on/off | (config sub-schema) | ☐ |
-| browser resolver history/keyword/list | (config sub-schema) | ☐ |
-| browser lookup mode/status | (config sub-schema) | ☐ |
-| browser search add/import/list/remove/set/show | (config sub-schema) | ☐ |
+| Command                                        | New action                     | Done |
+| ---------------------------------------------- | ------------------------------ | :--: |
+| email index                                    | indexInbox                     |  ☐   |
+| calendar login / logout                        | calendarLogin / calendarLogout |  ☐   |
+| email login / logout                           | emailLogin / emailLogout       |  ☐   |
+| player spotify login / logout                  | spotifyLogin / spotifyLogout   |  ☐   |
+| browser external on/off                        | (config sub-schema)            |  ☐   |
+| browser resolver history/keyword/list          | (config sub-schema)            |  ☐   |
+| browser lookup mode/status                     | (config sub-schema)            |  ☐   |
+| browser search add/import/list/remove/set/show | (config sub-schema)            |  ☐   |
 
 ### Excluded (for now)
 

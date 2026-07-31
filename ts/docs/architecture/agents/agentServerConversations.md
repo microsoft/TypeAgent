@@ -286,10 +286,10 @@ All four clients (CLI, Electron Shell, VS Code, browser extension) drive their c
 
 Modules:
 
-| Module         | Surface                                                                                                                                                                                                                                                                |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `naming.ts`    | `normalizeConversationName`, `findConversationByName`, `findUniqueConversationByName`, `formatAutoConversationName`, `sortConversationsByCreatedDesc`                                                                                                                  |
-| `lifecycle.ts` | `findOrCreateNamedConversation`, `joinNamedOrFallback`, `switchConversationSafe`, `createEphemeralConversation`, `deleteEphemeralConversation`, `validateConversationNameUnique`, `isConversationNotFoundError`                                                        |
+| Module         | Surface                                                                                                                                                                                                                                                                                              |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `naming.ts`    | `normalizeConversationName`, `findConversationByName`, `findUniqueConversationByName`, `formatAutoConversationName`, `sortConversationsByCreatedDesc`                                                                                                                                                |
+| `lifecycle.ts` | `findOrCreateNamedConversation`, `joinNamedOrFallback`, `switchConversationSafe`, `createEphemeralConversation`, `deleteEphemeralConversation`, `validateConversationNameUnique`, `isConversationNotFoundError`                                                                                      |
 | `manage.ts`    | `manageConversation` (top-level dispatcher) + per-subcommand entries (`manageNew`, `manageList`, `manageFind`, `manageSearch`, `manageInfo`, `manageSwitch`, `manageCycle`, `manageRename`, `manageDelete`). All return a discriminated `ConversationActionResult` the caller renders to its own UI. |
 
 ### Switch protocol
