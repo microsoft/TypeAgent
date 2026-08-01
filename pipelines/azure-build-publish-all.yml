@@ -238,6 +238,9 @@ stages:
                 --profile "${{ parameters.profile }}" $EXTRA
             displayName: "Bundle agent-server ($(platform)-$(arch))"
             workingDirectory: $(buildDirectory)
+            env:
+              PUPPETEER_SKIP_DOWNLOAD: "true"
+              PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
 
           - script: |
               node tools/scripts/validateBundledArtifact.mjs --dir "$(stagingDir)/agent-server"
@@ -251,6 +254,9 @@ stages:
               pnpm install --prod=false --frozen-lockfile
             displayName: "Restore build dependencies"
             workingDirectory: $(buildDirectory)
+            env:
+              PUPPETEER_SKIP_DOWNLOAD: "true"
+              PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
 
           - publish: $(stagingDir)/agent-server
             displayName: "Upload artifact: agent-server-$(platform)-$(arch)"
