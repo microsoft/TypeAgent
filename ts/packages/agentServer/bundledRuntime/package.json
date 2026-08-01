@@ -1,0 +1,28 @@
+{
+  "name": "agent-server-bundled-runtime",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Runtime dependencies kept external from the bundled agent server",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.150",
+    "@azure/msal-node-extensions": "^1.5.0",
+    "@github/copilot-sdk": "1.0.5",
+    "@modelcontextprotocol/server-filesystem": "2026.1.14",
+    "better-sqlite3": "12.6.2",
+    "graphology": "^0.25.4",
+    "graphology-communities-louvain": "^2.0.1",
+    "graphology-layout": "^0.6.1",
+    "graphology-layout-forceatlas2": "^0.10.1",
+    "graphology-layout-noverlap": "^0.4.1",
+    "graphology-metrics": "^2.1.0",
+    "keytar": "7.9.0",
+    "onnxruntime-node": "1.21.0",
+    "puppeteer": "^24.15.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-adblocker": "^2.13.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "sharp": "^0.33.5"
+  }
+}

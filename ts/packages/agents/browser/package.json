@@ -205,6 +205,21 @@
     }
   },
   "typeagent": {
-    "defaultAgentName": "browser"
+    "defaultAgentName": "browser",
+    "bundle": {
+      "entries": [
+        "dist/views/server/server.mjs"
+      ],
+      "assets": [
+        "dist/views/public"
+      ],
+      "assetMappings": [
+        {
+          "package": "@typeagent/azure-ai-foundry",
+          "source": "dist/phrases.json",
+          "destination": "dist/agent/phrases.json"
+        }
+      ]
+    }
   }
 }
