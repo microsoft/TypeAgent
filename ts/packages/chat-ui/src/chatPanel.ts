@@ -780,6 +780,10 @@ export class ChatPanel {
         source: string;
         displayId: string;
         nextRefreshTime: number;
+        // The action's own bubble, captured when the host associates a
+        // requestId, so refreshes update it in place instead of spawning a
+        // separate container. Undefined => fall back to a standalone bubble.
+        container?: AgentMessageContainer;
     }[] = [];
     private dynamicTimer?: ReturnType<typeof setTimeout>;
     private dynamicContainers = new Map<string, AgentMessageContainer>();
@@ -5750,13 +5754,24 @@ export class ChatPanel {
         source: string,
         displayId: string,
         nextRefreshMs: number,
+        requestId?: string,
     ) {
         if (!this.getDynamicDisplay) return;
         const MIN_INTERVAL = 500;
+        // When the host passes the originating requestId, refresh the action's
+        // own bubble in place (a single bubble) rather than a separate
+        // globe-icon container. Captured now, while the action's bubble is
+        // still mapped, so it survives the request's thread-container cleanup
+        // on completion.
+        const container =
+            requestId !== undefined
+                ? this.threadContainers.get(this.resolveThreadId(requestId))
+                : undefined;
         this.dynamicDisplays.push({
             source,
             displayId,
             nextRefreshTime: Date.now() + Math.max(nextRefreshMs, MIN_INTERVAL),
+            container,
         });
         this.scheduleDynamicRefresh();
     }
@@ -5790,33 +5805,54 @@ export class ChatPanel {
                     item.displayId,
                 );
 
-                // Reuse the same container so refreshes replace content
+                // Prefer the action's own bubble (captured at registration)
+                // so the live display updates in place. Fall back to a
+                // standalone container only when the host didn't associate a
+                // request bubble, keyed so repeat refreshes reuse it.
                 const key = `${item.source}:${item.displayId}`;
-                let container = this.dynamicContainers.get(key);
+                let container = item.container;
                 if (!container) {
-                    container = this.createAgentContainer(item.source, "🌐");
-                    this.dynamicContainers.set(key, container);
+                    container = this.dynamicContainers.get(key);
+                    if (!container) {
+                        container = this.createAgentContainer(
+                            item.source,
+                            "🌐",
+                        );
+                        this.dynamicContainers.set(key, container);
+                    }
                 }
                 // Replace content (no append mode = replace)
                 container.setMessage(result.content, item.source, undefined);
-                this.scrollToBottom();
+                // In-place tick update, not a new message: don't raise the
+                // "New messages" pill when the user has scrolled up.
+                this.scrollToBottom(false);
 
                 if (result.nextRefreshMs > 0) {
-                    // Still live — track it for the top rail.
-                    this.registerLiveBubble(container, "dynamic", {
-                        title: item.source,
-                        icon: container.iconText || "🌐",
-                    });
+                    // Still live — track it for the top rail. If the content
+                    // advertises a data-live-title marker (e.g. the player's
+                    // now-playing card), onContainerContentChanged already
+                    // registered it with a rich title + progress percent, so
+                    // don't overwrite that with the generic source label.
+                    if (!container.getLiveMarker()) {
+                        this.registerLiveBubble(container, "dynamic", {
+                            title: item.source,
+                            icon: container.iconText || "🌐",
+                        });
+                    }
                     this.dynamicDisplays.push({
                         source: item.source,
                         displayId: item.displayId,
                         nextRefreshTime:
                             Date.now() + Math.max(result.nextRefreshMs, 500),
+                        container: item.container,
                     });
                 } else {
-                    // Display is done — remove from tracking (and the rail).
+                    // Display is done — stop tracking. Only drop a standalone
+                    // fallback container; the action's own bubble persists.
                     this.unregisterLiveBubble(container);
-                    this.dynamicContainers.delete(key);
+                    if (item.container === undefined) {
+                        this.dynamicContainers.delete(key);
+                    }
                 }
             } catch {
                 // Refresh failed — don't re-register

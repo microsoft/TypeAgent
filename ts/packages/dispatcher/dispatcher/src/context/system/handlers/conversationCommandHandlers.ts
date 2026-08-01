@@ -15,7 +15,6 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayError,
-    displayResult,
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
@@ -406,10 +405,12 @@ class ConversationSummarizeCommandHandler implements CommandHandler {
         const result = await summarize(name);
         switch (result.kind) {
             case "ok":
-                displayResult(
-                    `**Summary of "${result.name}"**\n\n${result.summary}`,
-                    context,
-                );
+                // The summary is markdown (headings, bullets, bold); render it
+                // as such so it doesn't show raw `**` and `-` markers.
+                context.actionIO.appendDisplay({
+                    type: "markdown",
+                    content: `**Summary of "${result.name}"**\n\n${result.summary}`,
+                });
                 break;
             case "not-found":
                 displayError(
@@ -418,10 +419,10 @@ class ConversationSummarizeCommandHandler implements CommandHandler {
                 );
                 break;
             case "empty":
-                displayResult(
-                    `**${result.name}** has no messages to summarize yet.`,
-                    context,
-                );
+                context.actionIO.appendDisplay({
+                    type: "markdown",
+                    content: `**${result.name}** has no messages to summarize yet.`,
+                });
                 break;
             case "unavailable":
                 displayWarn(result.reason, context);
