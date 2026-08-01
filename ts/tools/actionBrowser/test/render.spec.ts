@@ -64,7 +64,7 @@ describe("renderHtml", () => {
 
         const html = renderHtml(catalog);
         const scripts = [
-            ...html.matchAll(/<script(?: [^>]*)?>([\s\S]*?)<\/script>/gi),
+            ...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi),
         ];
         const executableScript = scripts.at(-1)?.[1];
 
