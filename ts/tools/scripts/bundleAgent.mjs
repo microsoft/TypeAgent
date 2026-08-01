@@ -36,27 +36,44 @@ function parseArgs(argv) {
     return args;
 }
 
-export async function bundleAgentPackage(packageRoot, out) {
+const requiredRuntimeExternals = new Set([
+    "@anthropic-ai/claude-agent-sdk",
+    "better-sqlite3",
+    "puppeteer",
+    "sharp",
+]);
+
+function loadBundleDefinition(packageRoot) {
     const sourcePackageJson = path.join(packageRoot, "package.json");
     const pkg = readJson(sourcePackageJson);
     if (!pkg.name) {
         throw new Error(`${sourcePackageJson} has no package name.`);
     }
-    const exports = pkg.exports ?? {};
-    const handlerTarget = resolveExportTarget(exports["./agent/handlers"]);
-    const manifestTarget = resolveExportTarget(exports["./agent/manifest"]);
+    const packageExports = pkg.exports ?? {};
+    const handlerTarget = resolveExportTarget(
+        packageExports["./agent/handlers"],
+    );
+    const manifestTarget = resolveExportTarget(
+        packageExports["./agent/manifest"],
+    );
     if (!handlerTarget || !manifestTarget) {
         throw new Error(
             `${pkg.name} must export ./agent/handlers and ./agent/manifest.`,
         );
     }
+    return {
+        sourcePackageJson,
+        pkg,
+        packageExports,
+        handlerTarget,
+        manifestTarget,
+    };
+}
 
-    fs.rmSync(out, { recursive: true, force: true });
-    fs.mkdirSync(out, { recursive: true });
-
+async function bundleDeclaredExports(packageRoot, out, pkg, packageExports) {
     const metafiles = [];
     const bundledExports = {};
-    for (const [exportName, exportValue] of Object.entries(exports)) {
+    for (const [exportName, exportValue] of Object.entries(packageExports)) {
         const target = resolveExportTarget(exportValue);
         if (!target) {
             continue;
@@ -81,8 +98,12 @@ export async function bundleAgentPackage(packageRoot, out) {
             bundledExports[exportName] = target;
         }
     }
+    return { metafiles, bundledExports };
+}
 
+async function bundleAdditionalEntries(packageRoot, out, pkg) {
     const additionalEntries = pkg.typeagent?.bundle?.entries ?? [];
+    const metafiles = [];
     for (const target of additionalEntries) {
         const source = path.resolve(packageRoot, target);
         if (!fs.existsSync(source)) {
@@ -96,16 +117,10 @@ export async function bundleAgentPackage(packageRoot, out) {
         });
         metafiles.push(metafile);
     }
+    return { additionalEntries, metafiles };
+}
 
-    const manifestSource = path.resolve(packageRoot, manifestTarget);
-    const assets = new Set(copyRuntimeAssets(packageRoot, out));
-    for (const asset of copyManifestReferences(
-        manifestSource,
-        packageRoot,
-        out,
-    )) {
-        assets.add(asset);
-    }
+function copyConfiguredRuntimeAssets(packageRoot, out, pkg, assets) {
     for (const runtimePath of pkg.typeagent?.bundle?.assets ?? []) {
         const source = path.resolve(packageRoot, runtimePath);
         const destination = path.resolve(out, runtimePath);
@@ -118,6 +133,9 @@ export async function bundleAgentPackage(packageRoot, out) {
             assets.add(path.join(runtimePath, relative));
         }
     }
+}
+
+function copyMappedAssets(packageRoot, out, pkg, assets) {
     const packages = workspacePackages();
     for (const mapping of pkg.typeagent?.bundle?.assetMappings ?? []) {
         const sourcePackage = packages.get(mapping.package);
@@ -144,7 +162,24 @@ export async function bundleAgentPackage(packageRoot, out) {
         copyFile(source, destination);
         assets.add(mapping.destination);
     }
+}
 
+function copyBundleAssets(packageRoot, out, pkg, manifestTarget) {
+    const manifestSource = path.resolve(packageRoot, manifestTarget);
+    const assets = new Set(copyRuntimeAssets(packageRoot, out));
+    for (const asset of copyManifestReferences(
+        manifestSource,
+        packageRoot,
+        out,
+    )) {
+        assets.add(asset);
+    }
+    copyConfiguredRuntimeAssets(packageRoot, out, pkg, assets);
+    copyMappedAssets(packageRoot, out, pkg, assets);
+    return assets;
+}
+
+function collectExternalPackages(metafiles, pkg) {
     const externalPackages = new Set();
     for (const metafile of metafiles) {
         for (const packageName of externalPackagesFromMetafile(metafile)) {
@@ -152,18 +187,21 @@ export async function bundleAgentPackage(packageRoot, out) {
         }
     }
     for (const packageName of Object.keys(pkg.dependencies ?? {})) {
-        if (
-            [
-                "@anthropic-ai/claude-agent-sdk",
-                "better-sqlite3",
-                "puppeteer",
-                "sharp",
-            ].includes(packageName)
-        ) {
+        if (requiredRuntimeExternals.has(packageName)) {
             externalPackages.add(packageName);
         }
     }
+    return externalPackages;
+}
 
+function writeGeneratedPackage(
+    out,
+    pkg,
+    handlerTarget,
+    bundledExports,
+    externalPackages,
+    sourcePackageJson,
+) {
     const generatedPackage = {
         name: pkg.name,
         version: pkg.version,
@@ -181,14 +219,28 @@ export async function bundleAgentPackage(packageRoot, out) {
         typeagent: pkg.typeagent,
     };
     writeJson(path.join(out, "package.json"), generatedPackage);
+}
 
+function collectBundledInputs(packageRoot, metafiles) {
     const inputs = new Set();
     for (const metafile of metafiles) {
         for (const input of Object.keys(metafile.inputs)) {
             inputs.add(path.relative(packageRoot, path.resolve(input)));
         }
     }
-    const metrics = fileMetrics(out);
+    return inputs;
+}
+
+function writeBundleManifest(
+    out,
+    pkg,
+    bundledExports,
+    additionalEntries,
+    externalPackages,
+    assets,
+    inputs,
+    metrics,
+) {
     writeJson(path.join(out, "bundle-manifest.json"), {
         package: pkg.name,
         version: pkg.version,
@@ -199,6 +251,52 @@ export async function bundleAgentPackage(packageRoot, out) {
         bundledInputs: [...inputs].sort(),
         metrics,
     });
+}
+
+export async function bundleAgentPackage(packageRoot, out) {
+    const {
+        sourcePackageJson,
+        pkg,
+        packageExports,
+        handlerTarget,
+        manifestTarget,
+    } = loadBundleDefinition(packageRoot);
+
+    fs.rmSync(out, { recursive: true, force: true });
+    fs.mkdirSync(out, { recursive: true });
+
+    const declared = await bundleDeclaredExports(
+        packageRoot,
+        out,
+        pkg,
+        packageExports,
+    );
+    const additional = await bundleAdditionalEntries(packageRoot, out, pkg);
+    const metafiles = [...declared.metafiles, ...additional.metafiles];
+    const assets = copyBundleAssets(packageRoot, out, pkg, manifestTarget);
+    const externalPackages = collectExternalPackages(metafiles, pkg);
+
+    writeGeneratedPackage(
+        out,
+        pkg,
+        handlerTarget,
+        declared.bundledExports,
+        externalPackages,
+        sourcePackageJson,
+    );
+
+    const inputs = collectBundledInputs(packageRoot, metafiles);
+    const metrics = fileMetrics(out);
+    writeBundleManifest(
+        out,
+        pkg,
+        declared.bundledExports,
+        additional.additionalEntries,
+        externalPackages,
+        assets,
+        inputs,
+        metrics,
+    );
     return {
         packageName: pkg.name,
         metrics,
