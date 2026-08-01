@@ -79,10 +79,58 @@ class TimerActionParserTest {
     }
 
     @Test
+    fun `treats a JSON null originalRequest as absent`() {
+        val timer = parseSetTimerActionPayload(
+            JSONObject()
+                .put("originalRequest", JSONObject.NULL)
+                .put("durationInSeconds", 45)
+        )
+
+        requireNotNull(timer)
+        assertEquals("", timer.originalRequest)
+    }
+
+    @Test
+    fun `rejects a JSON null duration`() {
+        assertNull(
+            parseSetTimerActionPayload(
+                JSONObject()
+                    .put("originalRequest", "Set a timer")
+                    .put("durationInSeconds", JSONObject.NULL)
+            )
+        )
+    }
+
+    @Test
+    fun `accepts a long duration value`() {
+        val timer = parseSetTimerActionPayload(payload(120L))
+
+        requireNotNull(timer)
+        assertEquals(120, timer.durationInSeconds)
+    }
+
+    @Test
+    fun `caps an oversized originalRequest`() {
+        val timer = parseSetTimerActionPayload(payload(60, "a".repeat(10_000)))
+
+        requireNotNull(timer)
+        assertEquals(256, timer.originalRequest.length)
+    }
+
+    @Test
+    fun `blank originalRequest normalizes to empty`() {
+        val timer = parseSetTimerActionPayload(payload(60, "   "))
+
+        requireNotNull(timer)
+        assertEquals("", timer.originalRequest)
+    }
+
+    @Test
     fun `formats durations for the confirmation toast`() {
         assertEquals("30 s", formatTimerDuration(30))
         assertEquals("5 min", formatTimerDuration(300))
         assertEquals("1 h 5 min 30 s", formatTimerDuration(3930))
         assertEquals("24 h", formatTimerDuration(86_400))
+        assertEquals("0 s", formatTimerDuration(0))
     }
 }

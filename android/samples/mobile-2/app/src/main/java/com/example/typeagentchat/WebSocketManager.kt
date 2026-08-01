@@ -112,6 +112,7 @@ class WebSocketManager {
                     pendingUserInteraction = null
                     conversationId = null
                     connectionId = null
+                    finalizeOpenDisplayThreads()
                 }
                 _pendingYesNoPrompt.value = null
                 _connectionStatus.value = ConnectionStatus(
@@ -131,6 +132,7 @@ class WebSocketManager {
                 failPendingInvokes(errorMessage)
                 synchronized(lock) {
                     pendingUserInteraction = null
+                    finalizeOpenDisplayThreads()
                 }
                 _pendingYesNoPrompt.value = null
                 _connectionStatus.value = ConnectionStatus(
@@ -211,8 +213,7 @@ class WebSocketManager {
         webSocket = null
         synchronized(lock) {
             pendingUserInteraction = null
-            displayThreads.clear()
-            displayMessageIds.clear()
+            finalizeOpenDisplayThreads()
         }
         _pendingYesNoPrompt.value = null
         failPendingInvokes("App closed")
@@ -337,7 +338,11 @@ class WebSocketManager {
             applyDisplay(
                 requestId = null,
                 content = ParsedDisplayContent(text = text, format = MessageFormat.TEXT),
-                mode = DisplayAppendMode.BLOCK
+                // STEP seals the bubble immediately. Without it every
+                // unparseable frame in the session would accumulate into the
+                // same no-requestId bubble, which would never be finalized and
+                // would show "Responding..." forever.
+                mode = DisplayAppendMode.STEP
             )
         }
     }
@@ -746,6 +751,22 @@ class WebSocketManager {
             updated[index] = updated[index].copy(isFinal = true)
             _messages.value = updated
         }
+    }
+
+    /**
+     * Seals every bubble that still has an open display thread. Used when the
+     * socket goes away mid-request so a bubble is not stranded showing
+     * "Responding..." forever, and so the per-request state is not retained
+     * across a reconnect.
+     */
+    private fun finalizeOpenDisplayThreads() {
+        for (key in displayThreads.keys.toList()) {
+            val thread = displayThreads[key] ?: continue
+            val requestId = if (key == DEFAULT_THREAD_KEY) null else key
+            commitThread(key, requestId, thread)
+        }
+        displayThreads.clear()
+        displayMessageIds.clear()
     }
 
     private fun finalizeAssistantMessage(requestId: String?) {

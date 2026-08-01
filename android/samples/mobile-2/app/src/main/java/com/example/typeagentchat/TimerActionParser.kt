@@ -17,6 +17,15 @@ internal data class SetTimerAction(
 private const val MAX_TIMER_SECONDS = 86_400L
 
 /**
+ * `originalRequest` is echoed into `AlarmClock.EXTRA_MESSAGE`. Intent extras
+ * travel through a binder transaction with a ~1 MB budget, and an oversized
+ * extra makes `startActivity` throw `TransactionTooLargeException` - a
+ * `RuntimeException` no caller expects. Cap the label so a hostile or buggy
+ * server cannot crash the app from the network.
+ */
+private const val MAX_ORIGINAL_REQUEST_CHARS = 256
+
+/**
  * Parses the payload of `takeAction("set-timer", ...)` emitted by the
  * androidMobile agent's `SetTimerAction` (TypeAgent PR #2780):
  *
@@ -30,7 +39,12 @@ private const val MAX_TIMER_SECONDS = 86_400L
  */
 internal fun parseSetTimerActionPayload(data: Any?): SetTimerAction? {
     val payload = data as? JSONObject ?: return null
-    val originalRequest = payload.optString("originalRequest").trim()
+    // Not `optString`: Android's org.json renders a JSON null as the literal
+    // string "null", which would end up as the timer label.
+    val originalRequest = (payload.opt("originalRequest") as? String)
+        .orEmpty()
+        .trim()
+        .take(MAX_ORIGINAL_REQUEST_CHARS)
     val duration = readDurationSeconds(payload) ?: return null
     if (duration <= 0L || duration > MAX_TIMER_SECONDS) {
         return null

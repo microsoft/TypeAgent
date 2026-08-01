@@ -27,6 +27,10 @@ servers that emit actions this sample does not support.
 | `set-alarm` | `AlarmClock.ACTION_SET_ALARM` | Opens the clock app so the user can confirm the alarm. |
 | `set-timer` | `AlarmClock.ACTION_SET_TIMER` | Starts the countdown in the background (`EXTRA_SKIP_UI = true`) and confirms with a toast, so a chat request never yanks the user out of the conversation. Durations outside the documented 1..86400 second range are rejected rather than clamped. |
 
+Both actions require the app to be in the foreground: Android 10+ silently refuses
+background activity starts (no exception is thrown), so the app checks its own
+lifecycle state first and reports a failure rather than a false confirmation.
+
 Both require the `com.android.alarm.permission.SET_ALARM` permission (declared in
 the manifest, install-time only) and matching `<queries>` entries so
 `resolveActivity` works under Android 11+ package visibility rules.

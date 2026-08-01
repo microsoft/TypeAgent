@@ -66,6 +66,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import com.example.typeagentchat.ui.theme.TypeAgentChatTheme
 
 class MainActivity : ComponentActivity() {
@@ -123,7 +124,8 @@ class MainActivity : ComponentActivity() {
             detail = "hour=${action.hour} minute=${action.minute}",
             successMessage = "Alarm set for %02d:%02d".format(action.hour, action.minute),
             missingAppMessage = "No alarm app is available on this device.",
-            deniedMessage = "This app is not allowed to set alarms."
+            deniedMessage = "This app is not allowed to set alarms.",
+            backgroundMessage = "Could not set the alarm while the app was in the background."
         )
     }
 
@@ -135,7 +137,8 @@ class MainActivity : ComponentActivity() {
      * implementation in TypeAgent PR #2780 (`JavaScriptInterface.setTimer`)
      * passes false; we diverge deliberately so a voice/chat request never
      * yanks the user out of the conversation. The confirmation toast is then
-     * the only in-app feedback, so it is not optional.
+     * the only in-app feedback, so it is not optional - and it must not claim
+     * success when the launch was refused. See [launchClockIntent].
      */
     private fun launchSetTimerIntent(action: SetTimerAction) {
         val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
@@ -151,23 +154,53 @@ class MainActivity : ComponentActivity() {
             detail = "durationInSeconds=${action.durationInSeconds}",
             successMessage = "Timer set for ${formatTimerDuration(action.durationInSeconds)}",
             missingAppMessage = "No timer app is available on this device.",
-            deniedMessage = "This app is not allowed to set timers."
+            deniedMessage = "This app is not allowed to set timers.",
+            backgroundMessage = "Could not set the timer while the app was in the background."
         )
     }
 
+    /**
+     * Starts a clock intent and reports the outcome truthfully.
+     *
+     * Two failure modes are checked up front because neither raises an
+     * exception:
+     * - no matching activity, which `startActivity` only surfaces as
+     *   `ActivityNotFoundException` for implicit intents that resolve to
+     *   nothing at dispatch time;
+     * - a background activity start, which Android 10+ refuses *silently* -
+     *   no `ActivityNotFoundException`, no `SecurityException`, just a logcat
+     *   warning. Without this guard the success toast would fire while no
+     *   alarm or timer was created, and with `EXTRA_SKIP_UI` that toast is the
+     *   user's only feedback.
+     */
     private fun launchClockIntent(
         intent: Intent,
         actionName: String,
         detail: String,
         successMessage: String,
         missingAppMessage: String,
-        deniedMessage: String
+        deniedMessage: String,
+        backgroundMessage: String
     ) {
         val target = intent.resolveActivity(packageManager)
         Log.d(
             TAG,
             "Launching $actionName intent $detail target=${target?.flattenToShortString() ?: "none"}"
         )
+        if (target == null) {
+            Log.e(TAG, "No app available to handle $actionName intent")
+            Toast.makeText(this, missingAppMessage, Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            Log.w(
+                TAG,
+                "Skipping $actionName intent: activity is ${lifecycle.currentState}, " +
+                    "background activity starts are refused without an exception"
+            )
+            Toast.makeText(this, backgroundMessage, Toast.LENGTH_LONG).show()
+            return
+        }
         try {
             startActivity(intent)
             Log.d(TAG, "$actionName intent dispatched to clock app")

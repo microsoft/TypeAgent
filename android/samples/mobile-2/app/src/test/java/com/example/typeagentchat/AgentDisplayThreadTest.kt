@@ -156,6 +156,82 @@ class AgentDisplayThreadTest {
     }
 
     @Test
+    fun `empty block content leaves an existing bubble intact`() {
+        val thread = AgentDisplayThread()
+
+        thread.setMessage(text("Answer"), DisplayAppendMode.BLOCK)
+        thread.setMessage(text("Thinking..."), DisplayAppendMode.TEMPORARY)
+        // A suppressed reasoning trace parses to empty text. It must neither
+        // flush the temporary tail nor empty the thread, because an empty
+        // thread makes WebSocketManager drop and re-append the bubble.
+        thread.setMessage(text(""), DisplayAppendMode.BLOCK)
+
+        assertEquals("Answer\n\nThinking...", thread.render().text)
+        assertEquals(false, thread.render().isEmpty)
+    }
+
+    @Test
+    fun `empty replace clears the thread`() {
+        val thread = AgentDisplayThread()
+
+        thread.setMessage(text("Answer"), DisplayAppendMode.BLOCK)
+        thread.setMessage(text(""), DisplayAppendMode.REPLACE)
+
+        assertTrue(thread.render().isEmpty)
+    }
+
+    @Test
+    fun `step content survives the temporary flush`() {
+        val thread = AgentDisplayThread()
+
+        thread.setMessage(text("Thinking..."), DisplayAppendMode.TEMPORARY)
+        thread.setMessage(text("Phase 1 done"), DisplayAppendMode.STEP)
+
+        assertEquals("Phase 1 done", thread.render().text)
+    }
+
+    @Test
+    fun `inline after a temporary flush starts a new chunk`() {
+        val thread = AgentDisplayThread()
+
+        thread.setMessage(text("Hello"), DisplayAppendMode.INLINE)
+        thread.setMessage(text("Thinking..."), DisplayAppendMode.TEMPORARY)
+        thread.setMessage(text(" world"), DisplayAppendMode.INLINE)
+
+        assertEquals("Hello\n\n world", thread.render().text)
+    }
+
+    @Test
+    fun `replace after a temporary flush keeps only the new content`() {
+        val thread = AgentDisplayThread()
+
+        thread.setMessage(text("Answer"), DisplayAppendMode.BLOCK)
+        thread.setMessage(text("Thinking..."), DisplayAppendMode.TEMPORARY)
+        thread.setMessage(text("Final"), DisplayAppendMode.REPLACE)
+
+        assertEquals("Final", thread.render().text)
+    }
+
+    @Test
+    fun `newline only content renders nothing`() {
+        val thread = AgentDisplayThread()
+
+        thread.setMessage(text("\n\n"), DisplayAppendMode.BLOCK)
+
+        assertTrue(thread.render().isEmpty)
+    }
+
+    @Test
+    fun `one markdown segment makes the whole message markdown`() {
+        val thread = AgentDisplayThread()
+
+        thread.setMessage(text("plain"), DisplayAppendMode.BLOCK)
+        thread.setMessage(markdown("**bold**"), DisplayAppendMode.BLOCK)
+
+        assertEquals(MessageFormat.MARKDOWN, thread.render().format)
+    }
+
+    @Test
     fun `display message kind parsing`() {
         assertEquals(MessageKind.INFO, MessageKind.parse("info"))
         assertEquals(MessageKind.STATUS, MessageKind.parse("status"))

@@ -72,9 +72,17 @@ internal class AgentDisplayThread {
         get() = chunks.isEmpty()
 
     fun setMessage(content: ParsedDisplayContent, mode: DisplayAppendMode) {
+        val text = content.text
+        // An empty update is a no-op for every mode but REPLACE. Suppressed
+        // content (e.g. a reasoning trace stripped by DisplayContentParser)
+        // must not flush the temporary tail, because emptying the thread makes
+        // the caller drop the bubble and re-create it at the end of the
+        // transcript, losing its chronological position.
+        if (text.isEmpty() && mode != DisplayAppendMode.REPLACE) {
+            return
+        }
         flushTemporary()
 
-        val text = content.text
         when (mode) {
             DisplayAppendMode.REPLACE -> {
                 chunks.clear()
