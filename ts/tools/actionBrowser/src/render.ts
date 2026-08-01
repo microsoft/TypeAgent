@@ -18,7 +18,13 @@ import { escapeHtml } from "./util.js";
 
 interface TreeNode {
     kind:
-        "root" | "category" | "agent" | "action" | "host" | "group" | "command";
+        | "root"
+        | "category"
+        | "agent"
+        | "action"
+        | "host"
+        | "group"
+        | "command";
     name: string;
     emoji?: string;
     description?: string;

@@ -250,7 +250,9 @@ export type ConversationSummarizer = (
  * (`all`).
  */
 export type ConversationIndexTarget =
-    { scope: "current" } | { scope: "all" } | { scope: "named"; name: string };
+    | { scope: "current" }
+    | { scope: "all" }
+    | { scope: "named"; name: string };
 
 /** Per-conversation outcome of a content-index backfill. */
 export type ConversationIndexResult = {
@@ -334,7 +336,8 @@ export type CommandHandlerContext = {
      * for standalone hosts that don't manage multiple conversations.
      */
     readonly getConversationList?:
-        (() => { conversationId: string; name: string }[]) | undefined;
+        | (() => { conversationId: string; name: string }[])
+        | undefined;
     /**
      * Host-provided capability to import GitHub Copilot Chat sessions as
      * conversation mirrors, streaming per-session progress. Injected by the
@@ -601,7 +604,8 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
      * conversation.
      */
     getConversationList?:
-        (() => { conversationId: string; name: string }[]) | undefined;
+        | (() => { conversationId: string; name: string }[])
+        | undefined;
 
     /**
      * Optional capability letting the host import GitHub Copilot Chat sessions
@@ -669,7 +673,8 @@ function getCosmosFactories(): PromptLoggerOptions {
     const cosmosConnectionString = process.env["COSMOSDB_CONNECTION_STRING"];
     let cosmosContainerFactory: CosmosContainerClientFactory | undefined;
     let cosmosPartitionKeyBuilderFactory:
-        CosmosPartitionKeyBuilderFactory | undefined;
+        | CosmosPartitionKeyBuilderFactory
+        | undefined;
 
     if (cosmosConnectionString && cosmosConnectionString !== "") {
         cosmosContainerFactory = async (endpoint, dbName, containerName) => {
@@ -1736,8 +1741,9 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     await grammarStore.setAutoSave(config.cache.autoSave);
 
     // Import getPackageFilePath for resolving schema paths
-    const { getPackageFilePath } =
-        await import("../utils/getPackageFilePath.js");
+    const { getPackageFilePath } = await import(
+        "../utils/getPackageFilePath.js"
+    );
 
     // Configure agent cache with grammar generation support
     context.agentCache.configureGrammarGeneration(

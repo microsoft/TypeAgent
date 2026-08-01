@@ -420,7 +420,9 @@ function handleRequestChoice(msg: {
     void (async () => {
         const opts = { showMessage: false, requestId: msg.requestId };
         let response:
-            boolean | number[] | { selected: number; remember: boolean };
+            | boolean
+            | number[]
+            | { selected: number; remember: boolean };
         if (msg.choiceType === "yesNo") {
             response = await chatPanel.askYesNo(msg.message, undefined, opts);
         } else if (msg.choiceType === "pickRemember") {

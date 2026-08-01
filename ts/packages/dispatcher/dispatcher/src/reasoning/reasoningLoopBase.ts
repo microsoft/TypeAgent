@@ -142,7 +142,8 @@ export function formatToolCallDisplay(
                 "unknown";
             const params = formatParams(
                 (inp.action as Record<string, unknown>)?.parameters as
-                    Record<string, unknown> | undefined,
+                    | Record<string, unknown>
+                    | undefined,
             );
             return `**Tool:** execute_action — \`${inp.schemaName}.${actionName}\`${params}`;
         } else if (toolName.startsWith(mcpPrefix)) {

@@ -873,7 +873,8 @@ export function createEnhancedClientIO(
             return;
         }
         const clientId = message.requestId.clientRequestId as
-            string | undefined;
+            | string
+            | undefined;
         if (clientId?.startsWith("agent-")) {
             const header = chalk.dim(`[${message.source}]`);
             if (currentSpinner?.isActive()) {
@@ -1112,7 +1113,9 @@ export function createEnhancedClientIO(
                     break;
                 case AppAgentEvent.Info:
                     if (currentSpinner?.isActive()) {
-                        currentSpinner.writeAbove(`${chalk.cyan("ℹ")} ${data}`);
+                        currentSpinner.writeAbove(
+                            `${chalk.cyan("ℹ")} ${data}`,
+                        );
                     } else {
                         console.info(`ℹ ${data}`);
                     }
@@ -1655,7 +1658,8 @@ export function createEnhancedClientIO(
                 return;
             }
             writeQueueLine(
-                chalk.cyan("▶ running: ") + chalk.dim(truncateText(entry.text)),
+                chalk.cyan("▶ running: ") +
+                    chalk.dim(truncateText(entry.text)),
             );
         },
         requestCancelled(

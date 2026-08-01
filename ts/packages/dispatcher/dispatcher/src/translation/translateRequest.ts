@@ -370,7 +370,8 @@ export async function pickInitialSchema(
                     // match can still be "known to be ambiguous" via the
                     // persisted registry. Escalate to clarify in that case.
                     const escalateConfident = ():
-                        PickInitialSchemaResult | undefined => {
+                        | PickInitialSchemaResult
+                        | undefined => {
                         if (
                             !collisionCfg.detect ||
                             collisionCfg.strategy !== "preference-clarify" ||

@@ -159,7 +159,8 @@ export type ConversationSummaryTranslator =
 // undefined when no model provider is configured (createChatModel throws), so
 // callers degrade gracefully instead of surfacing a raw error.
 export function createConversationSummaryTranslator():
-    ConversationSummaryTranslator | undefined {
+    | ConversationSummaryTranslator
+    | undefined {
     try {
         return createJsonTranslatorFromSchemaDef<ConversationSummaryResponse>(
             "ConversationSummaryResponse",

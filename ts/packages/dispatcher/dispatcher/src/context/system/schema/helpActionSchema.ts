@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 export type HelpAction =
-    AnswerTypeAgentQuestionAction | DescribeAgentAction | DescribeActionAction;
+    | AnswerTypeAgentQuestionAction
+    | DescribeAgentAction
+    | DescribeActionAction;
 
 // Answer any question about TypeAgent ITSELF that isn't about one specific named
 // agent: find the command or action for a task ("what's the command for X", "how

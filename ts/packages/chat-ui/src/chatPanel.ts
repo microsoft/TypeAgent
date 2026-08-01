@@ -7288,7 +7288,8 @@ class AgentMessageContainer {
      * title / optional icon / optional percent. Used by the top rail.
      */
     public getLiveMarker():
-        { title: string; icon?: string; percent?: number } | undefined {
+        | { title: string; icon?: string; percent?: number }
+        | undefined {
         const el =
             this.messageDiv.querySelector<HTMLElement>("[data-live-title]");
         if (!el) return undefined;

@@ -408,7 +408,8 @@ export class ConversationMemory
         // To avoid knowledge duplication, we manually extract message knowledge and merge it
         // with any prior knowledge
         //
-        this.settings.conversationSettings.semanticRefIndexSettings.autoExtractKnowledge = false;
+        this.settings.conversationSettings.semanticRefIndexSettings.autoExtractKnowledge =
+            false;
     }
 }
 
@@ -435,7 +436,8 @@ export async function createConversationMemory(
 }
 
 export type ConversationTaskCallback =
-    ((error?: any | undefined) => void) | undefined;
+    | ((error?: any | undefined) => void)
+    | undefined;
 
 type AddMessageTask = {
     type: "addMessage";
@@ -447,7 +449,8 @@ type AddMessageTask = {
 
 type ConversationMemoryTasks = AddMessageTask;
 
-export interface ConversationMemoryData extends kp.IConversationDataWithIndexes<ConversationMessage> {}
+export interface ConversationMemoryData
+    extends kp.IConversationDataWithIndexes<ConversationMessage> {}
 
 export function parseConversationMemoryTranscript(
     transcriptText: string,
