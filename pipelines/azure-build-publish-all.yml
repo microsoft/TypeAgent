@@ -832,6 +832,7 @@ stages:
         variables:
           msiRid: win32-x64
           MSI_BUILD_DIR: $(stagingDir)/msi
+          MSI_PUBLISH_DIR: $(stagingDir)/msi-publish
         steps:
           - checkout: self
             displayName: "Checkout (for build scripts)"
@@ -965,8 +966,31 @@ stages:
                 Write-Host "Signing MSI: $($msiPath.FullName)"
                 node .\sign-msi.mjs "$($msiPath.FullName)"
 
-          # Publish MSI as pipeline artifact.
-          - publish: $(MSI_BUILD_DIR)
+          - pwsh: |
+              $source = Get-ChildItem "$(MSI_BUILD_DIR)" -Filter "*.msi"
+              if ($source.Count -ne 1) {
+                Write-Error "Expected exactly one MSI in $(MSI_BUILD_DIR); found $($source.Count)."
+                exit 1
+              }
+
+              $publishPath = "$(MSI_PUBLISH_DIR)"
+              if (Test-Path $publishPath) {
+                Remove-Item -LiteralPath $publishPath -Recurse -Force
+              }
+              New-Item -ItemType Directory -Force $publishPath | Out-Null
+              Copy-Item -LiteralPath $source[0].FullName -Destination $publishPath
+
+              $publishedFiles = @(Get-ChildItem $publishPath -File)
+              if ($publishedFiles.Count -ne 1 -or $publishedFiles[0].Extension -ne ".msi") {
+                Write-Error "MSI publication directory must contain exactly one .msi file."
+                exit 1
+              }
+              Write-Host "Prepared MSI-only publication directory:"
+              Write-Host "  $($publishedFiles[0].FullName)"
+            displayName: "Stage signed MSI for publication"
+
+          # Publish the MSI-only directory as the pipeline artifact.
+          - publish: $(MSI_PUBLISH_DIR)
             displayName: "Upload artifact: msi-$(msiRid)"
             artifact: msi-$(msiRid)
 
@@ -978,7 +1002,7 @@ stages:
               scriptType: pscore
               scriptLocation: inlineScript
               inlineScript: |
-                $publishPath = "$(MSI_BUILD_DIR)"
+                $publishPath = "$(MSI_PUBLISH_DIR)"
                 $msi = Get-ChildItem $publishPath -Filter "*.msi" | Select-Object -First 1
                 if ($null -eq $msi) {
                   Write-Error "No MSI found in $publishPath"
@@ -1012,34 +1036,24 @@ stages:
                   artifact: msi-win32-x64
                   displayName: "Download signed MSI artifact"
 
-                - pwsh: |
-                    $src  = "$(Pipeline.Workspace)/msi-win32-x64"
-                    $dest = "$(stagingDir)/msi-publish"
-                    New-Item -ItemType Directory -Force $dest | Out-Null
-
-                    $msi = Get-ChildItem $src -Filter "*.msi" | Select-Object -First 1
-                    if ($null -eq $msi) {
-                      Write-Error "No MSI found in $src"
-                      exit 1
-                    }
-                    Copy-Item $msi.FullName $dest
-
-                    $hash = (Get-FileHash $msi.FullName -Algorithm SHA256).Hash.ToLower()
-                    $meta = [ordered]@{
-                      version = "$(packageVersion)"
-                      file    = $msi.Name
-                      sha256  = $hash
-                    }
-                    $meta | ConvertTo-Json | Set-Content -Path (Join-Path $dest "latest.json") -Encoding utf8
-
-                    Write-Host "Staged for blob publish:"
-                    Get-ChildItem $dest | ForEach-Object { Write-Host "  $($_.Name)" }
-                  displayName: "Stage signed MSI + latest.json"
+                - task: AzureCLI@2
+                  displayName: "Clear previous MSI channel files"
+                  inputs:
+                    azureSubscription: $(azureSubscription)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az storage blob delete-batch `
+                        --account-name "$(azureStorageAccountName)" `
+                        --source "$(azureStorageContainerName)" `
+                        --pattern "msi/$(resolvedChannel)/*" `
+                        --auth-mode login `
+                        --only-show-errors
 
                 - task: AzureFileCopy@6
                   displayName: "Upload MSI to Azure Storage (msi/$(resolvedChannel))"
                   inputs:
-                    SourcePath: $(stagingDir)/msi-publish/*
+                    SourcePath: $(Pipeline.Workspace)\msi-win32-x64\*.msi
                     Destination: AzureBlob
                     azureSubscription: $(azureSubscription)
                     storage: $(azureStorageAccountName)
