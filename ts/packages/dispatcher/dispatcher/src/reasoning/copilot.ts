@@ -571,7 +571,13 @@ function formatToolCallDisplay(toolName: string, input: unknown): string {
 // `tool.execution_complete` event. The SDK reports the full result meant for
 // display in result.detailedContent (falling back to the model-facing, possibly
 // truncated result.content), and failures in error.message.
-function copilotToolResultDisplay(event: any): {
+function copilotToolResultDisplay(event: {
+    data?: {
+        success?: boolean;
+        error?: { message?: string };
+        result?: { detailedContent?: string; content?: string };
+    };
+}): {
     content: string;
     isError: boolean;
 } {
@@ -1059,7 +1065,7 @@ function getCopilotSessionConfig(
             },
             required: [],
         },
-        handler: async (args: any) => {
+        handler: async (args: Record<string, unknown>) => {
             const search = systemContext.searchConversations;
             if (search === undefined) {
                 return {

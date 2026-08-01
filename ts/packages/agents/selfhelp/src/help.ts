@@ -74,7 +74,7 @@ function createHelpChat<T extends object>(
         ["selfhelp"],
     );
     chatModel.completionCallback = (_params, data) => {
-        const u = (data as any)?.usage;
+        const u = data?.usage;
         if (u) {
             usage.prompt_tokens += u.prompt_tokens ?? 0;
             usage.completion_tokens += u.completion_tokens ?? 0;

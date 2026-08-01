@@ -261,6 +261,7 @@ function renderResult(result: ConversationActionResult): void {
             break;
         }
         case "matches": {
+            // eslint-disable-next-line no-console
             console.log(
                 chalk.bold(`\nMatches for '${chalk.green(result.query)}':`),
             );
@@ -273,12 +274,15 @@ function renderResult(result: ConversationActionResult): void {
                 const line = `${marker}${c.name}  ${pct}${
                     isCurrent ? "  (current)" : ""
                 }`;
+                // eslint-disable-next-line no-console
                 console.log(isCurrent ? chalk.green(line) : line);
             }
+            // eslint-disable-next-line no-console
             console.log("");
             break;
         }
         case "contentMatches": {
+            // eslint-disable-next-line no-console
             console.log(
                 chalk.bold(
                     `\nContent matches for '${chalk.green(result.query)}':`,
@@ -293,12 +297,15 @@ function renderResult(result: ConversationActionResult): void {
                 const line = `${marker}${c.name}  ${pct}${
                     isCurrent ? "  (current)" : ""
                 }`;
+                // eslint-disable-next-line no-console
                 console.log(isCurrent ? chalk.green(line) : line);
                 const snippet = m.snippets[0];
                 if (snippet) {
+                    // eslint-disable-next-line no-console
                     console.log(chalk.dim(`    ${snippet}`));
                 }
             }
+            // eslint-disable-next-line no-console
             console.log("");
             break;
         }

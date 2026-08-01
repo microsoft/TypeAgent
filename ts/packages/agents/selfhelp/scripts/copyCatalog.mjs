@@ -21,6 +21,7 @@ const dest = resolve(destDir, "action-browser.json");
 if (existsSync(src)) {
     mkdirSync(destDir, { recursive: true });
     copyFileSync(src, dest);
+    // eslint-disable-next-line no-console
     console.log(`copyCatalog: wrote ${dest}`);
 } else {
     console.warn(
@@ -60,4 +61,5 @@ if (existsSync(readme)) {
     copyFileSync(readme, resolve(docsDestDir, "README.md"));
     copiedDocs++;
 }
+// eslint-disable-next-line no-console
 console.log(`copyCatalog: wrote ${copiedDocs} doc(s) to ${docsDestDir}`);

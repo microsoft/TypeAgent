@@ -435,10 +435,13 @@ class ConversationSearchIndexImpl implements ConversationSearchIndex {
                 );
                 textMatchCount = text?.messageMatches.length ?? 0;
                 addMatches(text?.messageMatches);
-            } catch (e: any) {
-                debug("text-similarity search threw: %s", e?.message);
+            } catch (e: unknown) {
+                debug(
+                    "text-similarity search threw: %s",
+                    e instanceof Error ? e.message : String(e),
+                );
                 debugError(
-                    `Unified text-similarity search failed: ${e?.message}`,
+                    `Unified text-similarity search failed: ${e instanceof Error ? e.message : String(e)}`,
                 );
             }
         }
@@ -522,9 +525,9 @@ export async function createConversationSearchIndex(
             { dirPath, baseFileName: UNIFIED_MEMORY_BASENAME },
             false,
         );
-    } catch (e: any) {
+    } catch (e: unknown) {
         debugError(
-            `Unified content search disabled (memory init failed): ${e?.message}`,
+            `Unified content search disabled (memory init failed): ${e instanceof Error ? e.message : String(e)}`,
         );
         memory = undefined;
     }
