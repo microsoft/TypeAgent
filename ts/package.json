@@ -15,10 +15,10 @@
   "scripts": {
     "api": "pnpm -C packages/api exec npm run start",
     "build": "fluid-build . -t build",
-    "bundle:agent-server": "node tools/scripts/bundleAgentServer.mjs",
-    "bundle:copilot-plugin": "node tools/scripts/stageCopilotPlugin.mjs",
     "build:ext:vscode": "fluid-build . -t build:ext:vscode",
     "build:shell": "fluid-build agent-shell -t build --dep",
+    "bundle:agent-server": "node tools/scripts/bundleAgentServer.mjs",
+    "bundle:copilot-plugin": "node tools/scripts/stageCopilotPlugin.mjs",
     "check:dep": "node tools/scripts/fix-dependabot-alerts.mjs --dry-run",
     "check:dep:fix": "node tools/scripts/fix-dependabot-alerts.mjs",
     "check:link": "git ls-tree -r --name-only HEAD .. | grep \\.md | xargs  markdown-link-check",
