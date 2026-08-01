@@ -75,7 +75,7 @@ function writeRuntimeInstallWorkspace(directory) {
         "  better-sqlite3: true",
         "  keytar: true",
         "  onnxruntime-node: true",
-        "  puppeteer: true",
+        "  puppeteer: false",
         "  sharp: true",
         "",
     ].join("\n");
