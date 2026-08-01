@@ -59,6 +59,16 @@ export async function executeConversationAction(
                       : `@conversation index ${quoteName(name)}`;
             break;
         }
+        case "summarizeConversation": {
+            // Grammar-cache hits may drop an empty `parameters`, so read name
+            // defensively (see newConversation).
+            const name = action.parameters?.name;
+            command =
+                name === undefined
+                    ? "@conversation summarize"
+                    : `@conversation summarize ${quoteName(name)}`;
+            break;
+        }
         case "showConversationInfo":
             command = "@conversation info";
             break;

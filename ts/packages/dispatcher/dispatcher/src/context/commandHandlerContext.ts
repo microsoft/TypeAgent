@@ -225,6 +225,26 @@ export type ConversationSearcher = (
 >;
 
 /**
+ * The result of summarizing a conversation (see {@link ConversationSummarizer}):
+ * the summary text, or why one could not be produced.
+ */
+export type ConversationSummaryResult =
+    | { kind: "ok"; conversationId: string; name: string; summary: string }
+    | { kind: "not-found"; query: string }
+    | { kind: "empty"; conversationId: string; name: string }
+    | { kind: "unavailable"; reason: string };
+
+/**
+ * Host-provided conversation summarizer. Resolves a conversation by name or
+ * topic (or the current one when omitted), reads its stored transcript, and
+ * returns an LLM-written summary. Injected by the agent-server; undefined for
+ * hosts without stored conversations.
+ */
+export type ConversationSummarizer = (
+    nameOrTopic?: string | undefined,
+) => Promise<ConversationSummaryResult>;
+
+/**
  * Which conversations a content-index backfill should cover: the one the
  * command ran in (`current`), a specific one (`named`), or every conversation
  * (`all`).
@@ -335,6 +355,12 @@ export type CommandHandlerContext = {
      * for hosts without a unified content index.
      */
     readonly searchConversations?: ConversationSearcher | undefined;
+    /**
+     * Host-provided conversation summarizer (see {@link ConversationSummarizer}).
+     * Injected by the agent-server; undefined for hosts without stored
+     * conversations.
+     */
+    readonly summarizeConversation?: ConversationSummarizer | undefined;
     /**
      * Host-provided backfill of conversation history into the unified content
      * index (see {@link ConversationIndexer}). Injected by the agent-server;
@@ -597,6 +623,13 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
      * omitted by standalone hosts without a unified index.
      */
     searchConversations?: ConversationSearcher | undefined;
+
+    /**
+     * Conversation summarizer over the host's stored transcripts (see
+     * {@link ConversationSummarizer}). Injected by the agent-server; omitted by
+     * standalone hosts.
+     */
+    summarizeConversation?: ConversationSummarizer | undefined;
 
     /**
      * Backfill of conversation history into the host's unified content index
@@ -1208,6 +1241,7 @@ export async function initializeCommandHandlerContext(
             copilotImport: options?.copilotImport,
             conversationContentSink: options?.conversationContentSink,
             searchConversations: options?.searchConversations,
+            summarizeConversation: options?.summarizeConversation,
             indexConversations: options?.indexConversations,
 
             // Runtime context

@@ -21,6 +21,7 @@ import {
     ConversationIndexTarget,
     ConversationIndexResult,
     ConversationIndexProgress,
+    ConversationSummaryResult,
 } from "agent-dispatcher";
 import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import type {
@@ -42,6 +43,12 @@ import {
     selectUnindexedTurns,
 } from "./conversationSearchIndex.js";
 import { importCopilotSessions } from "./copilot/mirrorImporter.js";
+import {
+    buildTranscriptTurns,
+    createConversationSummaryTranslator,
+    summarizeTranscript,
+    type ConversationSummaryTranslator,
+} from "./conversationSummary.js";
 import { lockInstanceDir } from "agent-dispatcher/internal";
 
 import registerDebug from "debug";
@@ -252,6 +259,9 @@ export async function createConversationManager(
     baseOptions: DispatcherOptions,
     baseDir: string,
     idleTimeoutMs: number = DEFAULT_IDLE_TIMEOUT_MS,
+    // When true (embedded test hosts), skip work that would make real model
+    // calls - currently the on-demand conversation summary model.
+    testMode: boolean = false,
 ): Promise<ConversationManager> {
     const conversationsDir = path.join(baseDir, CONVERSATIONS_DIR);
 
@@ -463,6 +473,80 @@ export async function createConversationManager(
         return count;
     }
 
+    // Lazily created TypeChat translator for conversation summaries. `null`
+    // records a failed init (e.g. no model provider) so we don't retry it on
+    // every call. Skipped in test mode so unit tests never issue a model call.
+    let summaryTranslator: ConversationSummaryTranslator | null | undefined;
+    function getSummaryTranslator(): ConversationSummaryTranslator | undefined {
+        if (testMode) {
+            return undefined;
+        }
+        if (summaryTranslator === undefined) {
+            summaryTranslator = createConversationSummaryTranslator() ?? null;
+        }
+        return summaryTranslator ?? undefined;
+    }
+
+    // Resolve a conversation (exact name, then fuzzy name match, or the current
+    // one when no name is given), read its stored transcript, and summarize it.
+    async function summarizeConversationImpl(
+        nameOrTopic: string | undefined,
+        currentConversationId: string,
+    ): Promise<ConversationSummaryResult> {
+        const query = nameOrTopic?.trim();
+        let record: ConversationRecord | undefined;
+        if (query === undefined || query.length === 0) {
+            record = conversations.get(currentConversationId);
+        } else {
+            record = findConversationByName(query);
+            if (record === undefined) {
+                // Fall back to a fuzzy name match (lexical + embedding).
+                const matches = await conversationNameIndex.search(query, 1);
+                const top = matches[0];
+                if (top !== undefined) {
+                    record = conversations.get(top.conversationId);
+                }
+            }
+        }
+        if (record === undefined) {
+            return { kind: "not-found", query: query ?? "" };
+        }
+        const translator = getSummaryTranslator();
+        if (translator === undefined) {
+            return {
+                kind: "unavailable",
+                reason: "No language model is configured for summarization.",
+            };
+        }
+        // Prefer the live dispatcher's in-memory log when the conversation is
+        // active. Re-reading the on-disk log races the debounced write: the
+        // summarize request itself just appended a turn, so a large log may be
+        // mid-rewrite and the read sees truncated JSON or a locked file (yielding
+        // zero turns). Idle conversations have no live log and fall back to disk.
+        const entries =
+            record.sharedDispatcher?.getDisplayLogEntries() ??
+            (await readDisplayLogEntries(record.conversationId));
+        const turns = buildTranscriptTurns(entries);
+        if (turns.length === 0) {
+            return {
+                kind: "empty",
+                conversationId: record.conversationId,
+                name: record.name,
+            };
+        }
+        const summary = await summarizeTranscript(
+            translator,
+            record.name,
+            turns,
+        );
+        return {
+            kind: "ok",
+            conversationId: record.conversationId,
+            name: record.name,
+            summary,
+        };
+    }
+
     // Resolve a conversation by exact (case-insensitive) name, or undefined.
     function findConversationByName(
         name: string,
@@ -575,6 +659,13 @@ export async function createConversationManager(
                                 target,
                                 record.conversationId,
                                 onProgress,
+                            ),
+                        // Summarize a conversation (by name/topic, or the
+                        // current one when omitted) from its stored transcript.
+                        summarizeConversation: (nameOrTopic) =>
+                            summarizeConversationImpl(
+                                nameOrTopic,
+                                record.conversationId,
                             ),
                     }),
                 )

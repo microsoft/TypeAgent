@@ -7,6 +7,7 @@ export type ConversationAction =
     | FindConversationAction
     | SearchConversationAction
     | IndexConversationAction
+    | SummarizeConversationAction
     | ShowConversationInfoAction
     | SwitchConversationAction
     | NextConversationAction
@@ -83,6 +84,23 @@ export type IndexConversationAction = {
     parameters: {
         // Which conversation to index: omit for the current conversation, use
         // "all" for every conversation, or give a conversation's name/topic.
+        name?: string;
+    };
+};
+
+// Summarize a conversation - produce a short written recap of what was
+// discussed and done in it. Use this when the user wants a summary, recap,
+// overview, or "tl;dr" of a conversation (not to search inside it).
+// Examples: "summarize the yes conversation", "summarize this conversation",
+// "give me a recap of the Paris trip conversation", "what happened in the
+// budget conversation", "tldr the current conversation".
+// IMPORTANT: use searchConversation to find content inside conversations; use
+// this to get a narrative summary of one conversation.
+export type SummarizeConversationAction = {
+    actionName: "summarizeConversation";
+    parameters: {
+        // Which conversation to summarize: omit for the current conversation,
+        // or give a conversation's name/topic.
         name?: string;
     };
 };

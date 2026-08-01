@@ -8,6 +8,7 @@ export type {
     ConversationIndexTarget,
     ConversationIndexResult,
     ConversationIndexProgress,
+    ConversationSummaryResult,
 } from "./context/commandHandlerContext.js";
 export {
     PortRegistrar,

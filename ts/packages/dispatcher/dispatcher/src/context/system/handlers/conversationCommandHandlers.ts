@@ -13,7 +13,12 @@ import {
     CommandHandlerNoParams,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
-import { displayWarn } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayError,
+    displayResult,
+    displayStatus,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
 import {
     CommandHandlerContext,
     ConversationIndexTarget,
@@ -366,6 +371,72 @@ class ConversationIndexCommandHandler implements CommandHandler {
     }
 }
 
+class ConversationSummarizeCommandHandler implements CommandHandler {
+    public readonly description =
+        "Summarize a conversation from its stored transcript";
+    public readonly action = "summarizeConversation";
+    public readonly parameters = {
+        args: {
+            name: {
+                description:
+                    "Conversation to summarize by name/topic. Omit to summarize the current conversation.",
+                optional: true,
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        const systemContext = context.sessionContext.agentContext;
+        const summarize = systemContext.summarizeConversation;
+        if (summarize === undefined) {
+            displayWarn(
+                "Conversation summarization is not available in this host.",
+                context,
+            );
+            return;
+        }
+        const { name } = params.args;
+        displayStatus(
+            name ? `Summarizing "${name}"...` : "Summarizing conversation...",
+            context,
+        );
+        const result = await summarize(name);
+        switch (result.kind) {
+            case "ok":
+                displayResult(
+                    `**Summary of "${result.name}"**\n\n${result.summary}`,
+                    context,
+                );
+                break;
+            case "not-found":
+                displayError(
+                    `No conversation found matching "${result.query}".`,
+                    context,
+                );
+                break;
+            case "empty":
+                displayResult(
+                    `**${result.name}** has no messages to summarize yet.`,
+                    context,
+                );
+                break;
+            case "unavailable":
+                displayWarn(result.reason, context);
+                break;
+        }
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<CompletionGroups> {
+        return completeConversationName(context, names, "name");
+    }
+}
+
 class ConversationHelpCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show conversation command help";
     public readonly action = "help";
@@ -384,6 +455,7 @@ export function getConversationCommandHandlers(): CommandHandlerTable {
             find: new ConversationFindCommandHandler(),
             search: new ConversationSearchCommandHandler(),
             index: new ConversationIndexCommandHandler(),
+            summarize: new ConversationSummarizeCommandHandler(),
             info: new ConversationInfoCommandHandler(),
             switch: new ConversationSwitchCommandHandler(),
             prev: new ConversationPrevCommandHandler(),

@@ -211,6 +211,36 @@
     parameters: { name }
   };
 
+// Summarize a conversation from its stored transcript. Anchored on the verb
+// "summarize"/"recap"/"sum up" (or "summary/recap/overview/tldr of") so these
+// do not collide with the search/find patterns above.
+<SummarizeConversation> =
+  // "summarize (this|the|current) conversation"  -> current
+  <Polite> (summarize | recap | sum up) (this | the current | current | the) <ConvNoun> -> {
+    actionName: "summarizeConversation",
+    parameters: {}
+  }
+  // "summarize (the) conversation (called|named|about|...) X"  -> named
+  | <Polite> (summarize | recap | sum up) (the)? <ConvNoun> (called | named | about | on | regarding | discussing | for) $(name:wildcard) -> {
+    actionName: "summarizeConversation",
+    parameters: { name }
+  }
+  // "summarize (the|my) X conversation"  -> named
+  | <Polite> (summarize | recap | sum up) (the | my)? $(name:wildcard) <ConvNoun> -> {
+    actionName: "summarizeConversation",
+    parameters: { name }
+  }
+  // "give me a summary/recap/overview/tldr of (this|the current) conversation" -> current
+  | <Polite> (give me | show me | get me)? (a | an)? (summary | recap | overview | tldr) of (this | the current | current | the) <ConvNoun> -> {
+    actionName: "summarizeConversation",
+    parameters: {}
+  }
+  // "give me a summary/recap/overview/tldr of (the) conversation X"  -> named
+  | <Polite> (give me | show me | get me)? (a | an)? (summary | recap | overview | tldr) of (the | my)? <ConvNoun> (called | named | about | on | regarding | for)? $(name:wildcard) -> {
+    actionName: "summarizeConversation",
+    parameters: { name }
+  };
+
 // "conversation help" / "help with conversations" / "help managing conversations"
 <HelpConversation> =
   <Polite> (show | display | get)? <ConvNoun> help -> {
@@ -226,6 +256,7 @@
   | <FindConversation>
   | <SearchConversation>
   | <IndexConversation>
+  | <SummarizeConversation>
   | <ShowConversationInfo>
   | <SwitchConversationNamed>
   | <NextConversation>

@@ -174,6 +174,19 @@ describe("executeConversationAction delegates to @conversation commands", () => 
         expectCommand('@conversation index "my work project"');
     });
 
+    it("summarizeConversation (current) runs a bare summarize command", async () => {
+        await run({ actionName: "summarizeConversation", parameters: {} });
+        expectCommand("@conversation summarize");
+    });
+
+    it("summarizeConversation with a name runs a quoted summarize", async () => {
+        await run({
+            actionName: "summarizeConversation",
+            parameters: { name: "Paris trip" },
+        });
+        expectCommand('@conversation summarize "Paris trip"');
+    });
+
     it("help runs help", async () => {
         await run({ actionName: "help" });
         expectCommand("@conversation help");

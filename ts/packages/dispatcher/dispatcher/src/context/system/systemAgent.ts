@@ -227,6 +227,7 @@ export const systemManifest: AppAgentManifest = {
                     "FIND a conversation by name (e.g. 'find the conversation about the workout playlist', 'which conversation was about taxes'), " +
                     "SEARCH the CONTENT of conversations (e.g. 'search my conversations for the docker command we used', 'search my chat history for the API key steps'), " +
                     "INDEX a conversation's history so its content becomes searchable (e.g. 'index this conversation', 'index all conversations', 'index the conversation about taxes'), " +
+                    "SUMMARIZE a conversation from its transcript (e.g. 'summarize this conversation', 'summarize the yes conversation', 'give me a recap of the Paris trip conversation'), " +
                     "SWITCH to an existing conversation by name (e.g. 'switch to conversation test', 'go to my work conversation', 'switch to test'), " +
                     "advance to the NEXT conversation (e.g. 'switch to next conversation', 'next conversation', 'go to the next conversation'), " +
                     "go to the PREVIOUS conversation (e.g. 'switch to previous conversation', 'previous conversation'), " +

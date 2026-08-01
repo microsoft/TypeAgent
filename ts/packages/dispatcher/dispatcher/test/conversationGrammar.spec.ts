@@ -309,6 +309,32 @@ describe("system.conversation grammar", () => {
         });
     });
 
+    describe("summarizeConversation", () => {
+        it.each([
+            "summarize this conversation",
+            "summarize the current conversation",
+            "recap this conversation",
+            "give me a summary of this conversation",
+        ])("matches current-conversation %j", (input) => {
+            const r = match(input);
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("summarizeConversation");
+            expect(r.parameters?.name).toBeUndefined();
+        });
+
+        it.each([
+            ["summarize the conversation about taxes", "taxes"],
+            ["summarize the design conversation", "design"],
+            ["summarize the yes conversation", "yes"],
+            ["give me a summary of the conversation about taxes", "taxes"],
+        ])("matches %j with name %j", (input, name) => {
+            const r = match(input);
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("summarizeConversation");
+            expect(r.parameters.name).toBe(name);
+        });
+    });
+
     describe("help", () => {
         it.each([
             "conversation help",
