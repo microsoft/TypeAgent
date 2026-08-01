@@ -195,6 +195,7 @@ function colorizeQuotedNames(message: string): string {
     return message.replace(/"([^"]+)"/g, (_, name) => `'${chalk.green(name)}'`);
 }
 
+// code-complexity-allow: switch handler for all conversation result kinds; each case is straightforward but there are many
 function renderResult(result: ConversationActionResult): void {
     switch (result.kind) {
         case "ok":

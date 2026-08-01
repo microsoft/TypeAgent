@@ -235,6 +235,7 @@ const MAX_ENTRIES = 24;
 // Keyword-overlap prefilter: the full catalog (~500 actions) is too large to
 // hand the model wholesale, so select the entries most relevant to the question,
 // keeping each command together with its linked action.
+// code-complexity-allow: scoring and grouping inlined for clarity; inherently iterative over the full catalog
 export function selectRelevantGroups(
     index: CatalogIndex,
     question: string,

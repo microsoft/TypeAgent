@@ -643,6 +643,7 @@ export class RequestCommandHandler implements CommandHandler {
             },
         },
     } as const;
+    // code-complexity-allow: helper logic inlined from removed stand-alone helpers; request dispatch is inherently branchy
     public async run(
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,

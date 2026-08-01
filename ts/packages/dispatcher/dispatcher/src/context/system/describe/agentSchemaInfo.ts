@@ -33,6 +33,7 @@ export function extractActions(
     return actions;
 }
 
+// code-complexity-allow: iterates over agent configs with several nested steps; each step is necessary for schema discovery
 export async function getAgentSchemas(
     context: CommandHandlerContext,
     agentName?: string,
