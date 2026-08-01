@@ -77,7 +77,10 @@ export async function executeBrowserConfigAction(
                 handlers,
                 ["search", "show"],
                 {
-                    args: { provider: action.parameters.provider },
+                    args: {
+                        provider:
+                            action.parameters?.provider?.trim() || undefined,
+                    },
                     flags: undefined,
                 },
                 context,

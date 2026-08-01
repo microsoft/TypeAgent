@@ -116,7 +116,8 @@ export class ShowCommandHandler implements CommandHandler {
         args: {
             provider: {
                 description:
-                    "The name of the search provider to show details for.",
+                    "The name of the search provider to show details for. Omit to show the active provider.",
+                optional: true,
             },
         },
     } as const;
@@ -126,12 +127,14 @@ export class ShowCommandHandler implements CommandHandler {
     ): Promise<void> {
         const searchProviders: SearchProvider[] =
             context.sessionContext.agentContext.searchProviders;
+        const requestedProvider =
+            params.args.provider?.trim() ||
+            context.sessionContext.agentContext.activeSearchProvider.name;
 
         let bFound: boolean = false;
         searchProviders.forEach((provider) => {
             if (
-                provider.name.toLowerCase() ===
-                params.args.provider.toLowerCase()
+                provider.name.toLowerCase() === requestedProvider.toLowerCase()
             ) {
                 displayResult(JSON.stringify(provider, null, 2), context);
                 bFound = true;
@@ -141,7 +144,7 @@ export class ShowCommandHandler implements CommandHandler {
 
         if (!bFound) {
             displayError(
-                `Search provider '${params.args.provider}' not found.`,
+                `Search provider '${requestedProvider}' not found.`,
                 context,
             );
         }

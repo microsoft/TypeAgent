@@ -72,9 +72,9 @@ export type SetSearchProvider = {
 // Show one browser search provider's configuration.
 export type ShowSearchProvider = {
     actionName: "showSearchProvider";
-    parameters: {
-        // Name of the configured search provider.
-        provider: string;
+    parameters?: {
+        // Name of the configured search provider. Omit to show the active provider.
+        provider?: string;
     };
 };
 

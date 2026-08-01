@@ -59,6 +59,12 @@ describe("browser config actions", () => {
                 { args: { provider: "Bing" }, flags: undefined },
             ],
             [
+                "showSearchProvider",
+                { provider: "" },
+                ["search", "show"],
+                { args: { provider: undefined }, flags: undefined },
+            ],
+            [
                 "addSearchProvider",
                 { provider: "Example", url: "https://example.com/?q=%s" },
                 ["search", "add"],
