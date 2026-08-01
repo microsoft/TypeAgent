@@ -43,6 +43,7 @@ export const optionalExternalPackages = [
     "mongodb-client-encryption",
     "snappy",
     "utf-8-validate",
+    "x11",
 ];
 
 const ignoredDirectoryNames = new Set([
@@ -282,6 +283,7 @@ export async function bundleEntry({
         format: "esm",
         target: "node22",
         external: [
+            ...builtinModules.filter((name) => name !== "punycode"),
             ...runtimeExternalPackages,
             ...optionalExternalPackages,
             ...external,
@@ -398,6 +400,19 @@ export function resolveInstalledPackage(packageName, fromPackageJson) {
             const resolved = require.resolve(packageName);
             packageJson = findPackageJsonFromResolved(resolved, packageName);
         } catch {
+            const hoistedPackageJson = path.join(
+                tsRoot,
+                "node_modules",
+                ".pnpm",
+                "node_modules",
+                ...packageName.split("/"),
+                "package.json",
+            );
+            if (fs.existsSync(hoistedPackageJson)) {
+                packageJson = hoistedPackageJson;
+            }
+        }
+        if (!packageJson) {
             const storePrefix = `${packageName.replace("/", "+")}@`;
             const store = path.join(tsRoot, "node_modules", ".pnpm");
             const match = fs

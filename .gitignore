@@ -466,3 +466,4 @@ ts/packages/agentSdkWrapper/plans/
 /ts/packages/copilot-plugin/dist-exe
 /ts/msi-out
 ts/config.local.yaml.bak
+/ts/tmp/bundled-agent-server

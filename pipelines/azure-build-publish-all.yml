@@ -159,23 +159,12 @@ stages:
             displayName: "Upload artifact: npm-packages"
             artifact: npm-packages
 
-          # Stage copilot-plugin dist (platform-neutral; used by plugin
-          # publish and MSI build).
+          # Stage the minimal copilot-plugin runtime used by plugin publication
+          # and the MSI.
           - bash: |
               set -euo pipefail
-              PLUGIN_SRC="$(buildDirectory)/packages/copilot-plugin"
-              STAGE="$(stagingDir)/copilot-plugin"
-              mkdir -p "$STAGE"
-
-              cp -r "$PLUGIN_SRC/dist"        "$STAGE/dist"
-              cp    "$PLUGIN_SRC/hooks.json"  "$STAGE/hooks.json"
-              cp    "$PLUGIN_SRC/.mcp.json"   "$STAGE/.mcp.json"
-              cp    "$PLUGIN_SRC/plugin.json"  "$STAGE/plugin.json"
-              cp -r "$PLUGIN_SRC/agents"      "$STAGE/agents"
-              cp -r "$PLUGIN_SRC/skills"      "$STAGE/skills"
-
-              echo "Staged copilot-plugin artifact:"
-              find "$STAGE" -type f | head -20 || true
+              node tools/scripts/stageCopilotPlugin.mjs \
+                --out "$(stagingDir)/copilot-plugin"
             displayName: "Stage copilot-plugin artifact"
             workingDirectory: $(buildDirectory)
 
@@ -184,7 +173,7 @@ stages:
             artifact: copilot-plugin
 
       # ── Job 1b: Platform-specific artifacts (matrix) ──────────────
-      # Produces: agent-server deploy, optional agents, MCP exe per RID.
+      # Produces: bundled agent-server, optional agent bundles, MCP exe per RID.
       - job: build_platform_artifacts
         displayName: "Build platform artifacts"
         strategy:
@@ -226,6 +215,11 @@ stages:
             displayName: "Build agent-server (+ deps)"
             workingDirectory: $(buildDirectory)
 
+          - script: |
+              node tools/scripts/buildAgentProfile.mjs --profile all
+            displayName: "Build product agents"
+            workingDirectory: $(buildDirectory)
+
           # Also build copilot-plugin (may already be built as an
           # agent-server dep; this ensures the full plugin is ready).
           - script: |
@@ -233,16 +227,29 @@ stages:
             displayName: "Build copilot-plugin (+ deps)"
             workingDirectory: $(buildDirectory)
 
-          # Deploy agent-server for this platform.
+          # Bundle and validate agent-server for this platform.
           - bash: |
               set -euo pipefail
               EXTRA=""
               if [ "${{ parameters.variant }}" = "external" ]; then EXTRA="--external-cli"; fi
-              node tools/scripts/deployAgentServer.mjs \
+              node tools/scripts/bundleAgentServer.mjs \
                 --out "$(stagingDir)/agent-server" \
                 --platform "$(platform)" --arch "$(arch)" \
                 --profile "${{ parameters.profile }}" $EXTRA
-            displayName: "Deploy agent-server ($(platform)-$(arch))"
+            displayName: "Bundle agent-server ($(platform)-$(arch))"
+            workingDirectory: $(buildDirectory)
+
+          - script: |
+              node tools/scripts/validateBundledArtifact.mjs --dir "$(stagingDir)/agent-server"
+            displayName: "Validate bundled agent-server ($(platform)-$(arch))"
+            workingDirectory: $(buildDirectory)
+
+          # pnpm's legacy deploy implementation can leave the workspace in
+          # production-only mode. Restore development dependencies before
+          # running subsequent bundle and executable build scripts.
+          - script: |
+              pnpm install --prod=false --frozen-lockfile
+            displayName: "Restore build dependencies"
             workingDirectory: $(buildDirectory)
 
           - publish: $(stagingDir)/agent-server
