@@ -932,7 +932,7 @@ stages:
                 --plugin-version "$(packageVersion)" `
                 --shell-storage "$(azureStorageAccountName)" `
                 --shell-container "$(azureStorageContainerName)" `
-                --shell-channel "lkg" `
+                --shell-channel "$(resolvedChannel)" `
                 --shell-feed "$(adoFeed)" `
                 --shell-package "typeagent-shell.$(msiRid)" `
                 --shell-feed-version "$(packageVersion)" `

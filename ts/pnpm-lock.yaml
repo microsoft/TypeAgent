@@ -3965,6 +3965,29 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+
+  packages/benchmarks:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../dispatcher/dispatcher
+      default-agent-provider:
+        specifier: workspace:*
+        version: link:../defaultAgentProvider
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/cache:
     dependencies:
       '@typeagent/action-grammar':
