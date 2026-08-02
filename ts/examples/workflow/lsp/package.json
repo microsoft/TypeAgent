@@ -45,6 +45,6 @@
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5",
-    "vscode-languageserver-protocol": "^3.17.5"
+    "vscode-languageserver-protocol": "3.17.5"
   }
 }

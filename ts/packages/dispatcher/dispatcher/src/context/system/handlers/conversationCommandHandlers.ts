@@ -4,6 +4,7 @@
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import type {
     CompletionGroups,
+    DisplayContent,
     PartialParsedCommandParams,
     SessionContext,
 } from "@typeagent/agent-sdk";
@@ -13,10 +14,23 @@ import {
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import {
+    displayError,
+    displayStatus,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
+import {
     CommandHandlerContext,
+    ConversationIndexTarget,
     getRequestId,
 } from "../../commandHandlerContext.js";
+import {
+    renderConversationIndexProgress,
+    renderConversationIndexSummary,
+} from "../conversationIndexProgress.js";
 import { ManageConversationPayload } from "../manageConversationPayload.js";
+import registerDebug from "debug";
+
+const debugIndex = registerDebug("dispatcher:conversation:index");
 
 // Forward the manage-conversation payload to the client, which performs the
 // actual switch/rename/etc. The equivalent conversation action runs these
@@ -244,8 +258,189 @@ class ConversationFindCommandHandler implements CommandHandler {
     }
 }
 
+class ConversationSearchCommandHandler implements CommandHandler {
+    public readonly description =
+        "Search conversation content (knowPro message index)";
+    public readonly action = "searchConversation";
+    public readonly parameters = {
+        args: {
+            query: {
+                description: "Text to search for across conversation content",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        dispatchManageConversation(context, {
+            subcommand: "search",
+            query: params.args.query,
+        });
+    }
+}
+
+class ConversationIndexCommandHandler implements CommandHandler {
+    public readonly description =
+        "Index conversation history so its content is searchable across conversations";
+    public readonly action = "indexConversation";
+    public readonly parameters = {
+        args: {
+            name: {
+                description:
+                    "Conversation to index by name, or 'all' for every conversation. Omit to index the current conversation.",
+                optional: true,
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        const systemContext = context.sessionContext.agentContext;
+        const indexer = systemContext.indexConversations;
+        if (indexer === undefined) {
+            displayWarn(
+                "Conversation content indexing is not available in this host.",
+                context,
+            );
+            return;
+        }
+        const { name } = params.args;
+        const target: ConversationIndexTarget =
+            name === undefined
+                ? { scope: "current" }
+                : name.toLowerCase() === "all"
+                  ? { scope: "all" }
+                  : { scope: "named", name };
+
+        // Non-blocking: create the progress bubble now, then index in the
+        // background and replace that bubble in place via clientIO.setDisplay
+        // (keyed by requestId) so the agent stays usable while indexing runs.
+        const requestId = getRequestId(systemContext);
+        const asMessage = (content: DisplayContent) => ({
+            message: content,
+            requestId,
+            source: "system",
+            actionIndex: 0,
+        });
+        const setBar = (content: DisplayContent) =>
+            systemContext.clientIO.setDisplay(asMessage(content));
+        systemContext.clientIO.appendDisplay(
+            asMessage(renderConversationIndexProgress({ done: 0, total: 0 })),
+            "block",
+        );
+        debugIndex("started (%s)", name ?? "current");
+        void indexer(target, (progress) => {
+            debugIndex(
+                "progress %d/%d (%s)",
+                progress.done,
+                progress.total,
+                progress.name,
+            );
+            setBar(renderConversationIndexProgress(progress));
+        })
+            .then((result) => {
+                debugIndex("finished: %o", result);
+                setBar(
+                    result.notFound !== undefined
+                        ? `No conversation named "${result.notFound}".`
+                        : renderConversationIndexSummary(result.indexed),
+                );
+            })
+            .catch((e) => {
+                const message = e instanceof Error ? e.message : String(e);
+                debugIndex("failed: %s", message);
+                setBar(`Indexing failed: ${message}`);
+            });
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<CompletionGroups> {
+        // Offer existing conversation names plus the special "all" target.
+        const groups = completeConversationName(context, names, "name");
+        if (names.includes("name")) {
+            groups.groups.push({ name: "all", completions: ["all"] });
+        }
+        return groups;
+    }
+}
+
+class ConversationSummarizeCommandHandler implements CommandHandler {
+    public readonly description =
+        "Summarize a conversation from its stored transcript";
+    public readonly action = "summarizeConversation";
+    public readonly parameters = {
+        args: {
+            name: {
+                description:
+                    "Conversation to summarize by name/topic. Omit to summarize the current conversation.",
+                optional: true,
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        const systemContext = context.sessionContext.agentContext;
+        const summarize = systemContext.summarizeConversation;
+        if (summarize === undefined) {
+            displayWarn(
+                "Conversation summarization is not available in this host.",
+                context,
+            );
+            return;
+        }
+        const { name } = params.args;
+        displayStatus(
+            name ? `Summarizing "${name}"...` : "Summarizing conversation...",
+            context,
+        );
+        const result = await summarize(name);
+        switch (result.kind) {
+            case "ok":
+                // The summary is markdown (headings, bullets, bold); render it
+                // as such so it doesn't show raw `**` and `-` markers.
+                context.actionIO.appendDisplay({
+                    type: "markdown",
+                    content: `**Summary of "${result.name}"**\n\n${result.summary}`,
+                });
+                break;
+            case "not-found":
+                displayError(
+                    `No conversation found matching "${result.query}".`,
+                    context,
+                );
+                break;
+            case "empty":
+                context.actionIO.appendDisplay({
+                    type: "markdown",
+                    content: `**${result.name}** has no messages to summarize yet.`,
+                });
+                break;
+            case "unavailable":
+                displayWarn(result.reason, context);
+                break;
+        }
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<CompletionGroups> {
+        return completeConversationName(context, names, "name");
+    }
+}
+
 class ConversationHelpCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show conversation command help";
+    public readonly action = "help";
     public async run(context: ActionContext<CommandHandlerContext>) {
         dispatchManageConversation(context, { subcommand: "help" });
     }
@@ -259,6 +454,9 @@ export function getConversationCommandHandlers(): CommandHandlerTable {
             new: new ConversationNewCommandHandler(),
             list: new ConversationListCommandHandler(),
             find: new ConversationFindCommandHandler(),
+            search: new ConversationSearchCommandHandler(),
+            index: new ConversationIndexCommandHandler(),
+            summarize: new ConversationSummarizeCommandHandler(),
             info: new ConversationInfoCommandHandler(),
             switch: new ConversationSwitchCommandHandler(),
             prev: new ConversationPrevCommandHandler(),

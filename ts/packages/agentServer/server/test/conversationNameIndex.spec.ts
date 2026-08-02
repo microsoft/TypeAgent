@@ -112,6 +112,17 @@ describe("conversationNameIndex", () => {
         ).toBeUndefined();
     });
 
+    it("returns [] for a non-positive maxMatches without crashing", async () => {
+        // Regression: an omitted maxMatches serializes to null over RPC,
+        // yielding maxMatches=0 → indexesOfNearest(0) → TopNCollection(0),
+        // whose first push dereferenced an undefined heap top and threw
+        // "Cannot read properties of undefined (reading 'score')".
+        const index = seededIndex(keywordModel());
+        await expect(
+            index.search("workout playlist setup", 0),
+        ).resolves.toEqual([]);
+    });
+
     it("reflects a renamed conversation", async () => {
         const index = seededIndex(keywordModel());
         index.update("id-grocery", "trip to France");

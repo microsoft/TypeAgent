@@ -20,6 +20,7 @@ import type {
     PendingInteractionResponse,
     QueueCancelReason,
     QueueSnapshot,
+    DisplayLogEntry,
 } from "@typeagent/dispatcher-types";
 import {
     closeCommandHandlerContext,
@@ -559,6 +560,9 @@ export async function createSharedDispatcher(
         prewarmReasoning() {
             prewarmDispatcherReasoning(context);
         },
+        getDisplayLogEntries() {
+            return context.displayLog.getEntries();
+        },
         join(
             clientIO: ClientIO,
             closeFn: () => void,
@@ -828,6 +832,15 @@ export type SharedDispatcher = {
      * spawn) doesn't slow the initial load.
      */
     prewarmReasoning(): void;
+    /**
+     * Snapshot of this conversation's in-memory display log. Authoritative for
+     * a live conversation: reading the on-disk log instead races the debounced
+     * write (a large log can be mid-rewrite, so the reader sees truncated JSON
+     * or a locked file), and the in-memory copy also includes any in-flight
+     * turn. The dispatcher loads the log from disk on start, so this is a
+     * superset of the persisted entries.
+     */
+    getDisplayLogEntries(): DisplayLogEntry[];
     join(
         clientIO: ClientIO,
         closeFn: () => void,

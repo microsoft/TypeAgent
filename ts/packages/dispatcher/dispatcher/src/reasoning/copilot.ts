@@ -567,6 +567,31 @@ function formatToolCallDisplay(toolName: string, input: unknown): string {
     return `**Tool:** \`${toolName}\``;
 }
 
+// Extract the UI display text and error state from a Copilot
+// `tool.execution_complete` event. The SDK reports the full result meant for
+// display in result.detailedContent (falling back to the model-facing, possibly
+// truncated result.content), and failures in error.message.
+function copilotToolResultDisplay(event: {
+    data?: {
+        success?: boolean;
+        error?: { message?: string };
+        result?: { detailedContent?: string; content?: string };
+    };
+}): {
+    content: string;
+    isError: boolean;
+} {
+    const data = event?.data ?? {};
+    const isError = data.success === false;
+    const content = isError
+        ? (data.error?.message ??
+          data.result?.detailedContent ??
+          data.result?.content ??
+          "")
+        : (data.result?.detailedContent ?? data.result?.content ?? "");
+    return { content: String(content ?? ""), isError };
+}
+
 /**
  * Generate a unique request ID for tracing
  */
@@ -897,11 +922,12 @@ function getCopilotSessionConfig(
         },
     });
 
-    // TODO (deferred): cross-conversation browsing. get_conversation_info /
-    // read_conversation are scoped to the CURRENT conversation only. To help a
-    // user who is unsure which conversation they were in, add
-    // list_conversations / read_conversation(conversationId) backed by the
-    // agent-server ConversationManager (getConversationList). Not implemented yet.
+    // get_conversation_info / read_conversation are scoped to the CURRENT
+    // conversation. Cross-conversation browsing is provided by
+    // list_conversations (id + name) and search_conversations (content search
+    // with snippets), both backed by the agent-server ConversationManager.
+    // TODO (deferred): read_conversation(conversationId) to page another
+    // conversation's full transcript, not just its search snippets.
     const getConversationInfoTool = defineTool("get_conversation_info", {
         description: [
             "Get metadata about the current conversation transcript: total message count and which agents have responded.",
@@ -979,6 +1005,101 @@ function getCopilotSessionConfig(
             const header = `Messages ${offset}\u2013${offset + page.length - 1} of ${total}${more ? " (more available — increase offset to continue)" : ""}:`;
             return {
                 textResultForLlm: `${header}\n${lines.join("\n")}`,
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const listConversationsTool = defineTool("list_conversations", {
+        description: [
+            "List ALL of the user's conversations (id + name), across the whole session store — not just the current one.",
+            "Use this to resolve a conversation the user names (e.g. 'the CLI conversation') to its id before reading or searching it.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {},
+            required: [],
+        },
+        handler: async () => {
+            const list = systemContext.getConversationList?.() ?? [];
+            if (list.length === 0) {
+                return {
+                    textResultForLlm:
+                        "No other conversations are available in this host.",
+                    resultType: "success" as const,
+                };
+            }
+            return {
+                textResultForLlm: JSON.stringify(list, null, 2),
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const searchConversationsTool = defineTool("search_conversations", {
+        description: [
+            "Search the CONTENT of ALL the user's conversations (not just the current one) and return the best-matching conversations with representative snippets.",
+            "Use this to answer questions like 'what did we discuss in the CLI conversation' or to find where a topic was talked about across conversations.",
+            "Provide a natural-language `question` and/or a list of keyword `terms` - they are blended (NL/semantic + literal message-text match), so put distinctive keywords (e.g. proper nouns) in `terms` to catch literal mentions.",
+            "This reads matching content back to you - unlike the conversation find/search *actions*, which only render in the UI.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                question: {
+                    type: "string",
+                    description:
+                        "A natural-language question to match against conversation content",
+                },
+                terms: {
+                    type: "array",
+                    items: { type: "string" },
+                    description:
+                        "Keyword/phrase terms to match literally against message text (names, distinctive words)",
+                },
+                maxMatches: {
+                    type: "number",
+                    description:
+                        "Maximum number of conversations to return (default 10)",
+                },
+            },
+            required: [],
+        },
+        handler: async (args: Record<string, unknown>) => {
+            const search = systemContext.searchConversations;
+            if (search === undefined) {
+                return {
+                    textResultForLlm:
+                        "Cross-conversation content search is not available in this host.",
+                    resultType: "success" as const,
+                };
+            }
+            const question =
+                typeof args?.question === "string" ? args.question : undefined;
+            const terms = Array.isArray(args?.terms)
+                ? args.terms.map((t: unknown) => String(t))
+                : undefined;
+            if (!question && (terms === undefined || terms.length === 0)) {
+                return {
+                    textResultForLlm:
+                        "Provide a `question` and/or `terms` to search for.",
+                    resultType: "success" as const,
+                };
+            }
+            const maxMatches =
+                typeof args?.maxMatches === "number"
+                    ? args.maxMatches
+                    : undefined;
+            const matches = await search({ question, terms }, maxMatches);
+            if (matches.length === 0) {
+                const what = question ?? (terms ?? []).join(", ");
+                return {
+                    textResultForLlm: `No conversations with content matching "${what}" found.`,
+                    resultType: "success" as const,
+                };
+            }
+            return {
+                textResultForLlm: JSON.stringify(matches, null, 2),
                 resultType: "success" as const,
             };
         },
@@ -1285,6 +1406,8 @@ function getCopilotSessionConfig(
             rememberTool,
             getConversationInfoTool,
             readConversationTool,
+            listConversationsTool,
+            searchConversationsTool,
             getUserContextTool,
             ...subagentTools,
             findInstallableAgentTool,
@@ -1298,6 +1421,8 @@ function getCopilotSessionConfig(
             "remember",
             "get_conversation_info",
             "read_conversation",
+            "list_conversations",
+            "search_conversations",
             "get_user_context",
             ...(subagentsEnabled
                 ? [
@@ -1341,6 +1466,8 @@ function getCopilotSessionConfig(
                 "- `remember`: Durably save a new memory so it can be recalled later",
                 "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
                 "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
+                "- `list_conversations`: List ALL conversations (id + name) across the session store — use to resolve a conversation the user names",
+                "- `search_conversations`: Search the CONTENT of ALL conversations and read back matching snippets (use for 'what did we discuss in X')",
                 "",
                 "## Editor Context Tools",
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file path, language, cursor/selection ranges, workspace, diagnostic counts). Contains NO file or selection text.",
@@ -1447,11 +1574,18 @@ async function executeReasoningWithoutPlanning(
     debug(`Executing reasoning request: ${originalRequest}`);
     context.actionIO.appendDisplay("Thinking...", "temporary");
     const displayMode = resolveReasoningDisplayMode(context);
-    // Fold runs of identical, back-to-back tool-call lines into one "xN" line.
+    // A tool call and its result share one reasoning-step bubble: the call is
+    // buffered at execution_start and emitted with its result at
+    // execution_complete (toolFolder.result). A failed result is styled as a
+    // warning bubble.
     const toolFolder = new ToolRunFolder(
-        (content) =>
+        (content, isError) =>
             context.actionIO.appendDisplay(
-                { type: "markdown", content, kind: "info" },
+                {
+                    type: "markdown",
+                    content,
+                    kind: isError ? "warning" : "info",
+                },
                 displayMode,
             ),
         formatToolCallDisplay,
@@ -1619,6 +1753,11 @@ async function executeReasoningWithoutPlanning(
                 event.name ||
                 "unknown";
             debug(`Tool execution completed: ${toolName}`);
+            // Emit the buffered call and its result together in one bubble so
+            // the output the model acted on sits with the call that produced it
+            // (and can be opened in a viewer).
+            const { content, isError } = copilotToolResultDisplay(event);
+            toolFolder.result(content, isError);
         },
     );
 
@@ -1778,11 +1917,18 @@ async function executeReasoningWithTracing(
         debug(`Executing reasoning with tracing: ${originalRequest}`);
         context.actionIO.appendDisplay("Thinking...", "temporary");
         const displayMode = resolveReasoningDisplayMode(context);
-        // Fold runs of identical, back-to-back tool-call lines into one "xN" line.
+        // A tool call and its result share one reasoning-step bubble: the call
+        // is buffered at execution_start and emitted with its result at
+        // execution_complete (toolFolder.result). A failed result is styled as a
+        // warning bubble.
         const toolFolder = new ToolRunFolder(
-            (content) =>
+            (content, isError) =>
                 context.actionIO.appendDisplay(
-                    { type: "markdown", content, kind: "info" },
+                    {
+                        type: "markdown",
+                        content,
+                        kind: isError ? "warning" : "info",
+                    },
                     displayMode,
                 ),
             formatToolCallDisplay,
@@ -1960,6 +2106,14 @@ async function executeReasoningWithTracing(
                     event.name ||
                     "unknown";
                 debug(`Tool execution completed: ${toolName}`);
+                const { content, isError } = copilotToolResultDisplay(event);
+                tracer.recordToolResult(
+                    toolName,
+                    content,
+                    isError ? content : undefined,
+                );
+                // Emit the buffered call and its result together in one bubble.
+                toolFolder.result(content, isError);
             },
         );
 
