@@ -2,21 +2,19 @@
 // Licensed under the MIT License.
 
 export type ConversationAction =
-    | ShowConversationHelpAction
     | NewConversationAction
     | ListConversationAction
     | FindConversationAction
+    | SearchConversationAction
+    | IndexConversationAction
+    | SummarizeConversationAction
     | ShowConversationInfoAction
     | SwitchConversationAction
     | NextConversationAction
     | PrevConversationAction
     | RenameConversationAction
-    | DeleteConversationAction;
-
-// Show help for TypeAgent conversation management commands.
-export type ShowConversationHelpAction = {
-    actionName: "showConversationHelp";
-};
+    | DeleteConversationAction
+    | HelpConversationAction;
 
 // Create a new conversation and optionally give it a name.
 // Use this when the user wants to create, start, make, or open a brand-new conversation.
@@ -55,6 +53,58 @@ export type FindConversationAction = {
     };
 };
 
+// Search the CONTENT of conversations (what was actually said or discussed
+// inside them), not their names. Use this when the user wants to search across
+// their conversation history for messages, topics, or details that were
+// mentioned.
+// Examples: "search my conversations for the docker command we used",
+// "search conversation content for what we decided about pricing",
+// "search my chat history for the API key rotation steps".
+// IMPORTANT: use findConversation instead when the user wants to locate a
+// conversation by its name/title rather than search what is inside it.
+export type SearchConversationAction = {
+    actionName: "searchConversation";
+    parameters: {
+        // The text or topic to search for within conversation content
+        query: string;
+    };
+};
+
+// Index a conversation's history so its content becomes searchable across
+// conversations. Use this when the user wants to index, reindex, or make a past
+// conversation (or all conversations) searchable - i.e. add older messages that
+// aren't in the content-search index yet.
+// Examples: "index this conversation", "index all conversations",
+// "reindex my conversations", "index the conversation about the Paris trip",
+// "make my conversations searchable".
+// IMPORTANT: use searchConversation to search existing content; use this only to
+// ADD a conversation's history to the index.
+export type IndexConversationAction = {
+    actionName: "indexConversation";
+    parameters: {
+        // Which conversation to index: omit for the current conversation, use
+        // "all" for every conversation, or give a conversation's name/topic.
+        name?: string;
+    };
+};
+
+// Summarize a conversation - produce a short written recap of what was
+// discussed and done in it. Use this when the user wants a summary, recap,
+// overview, or "tl;dr" of a conversation (not to search inside it).
+// Examples: "summarize the yes conversation", "summarize this conversation",
+// "give me a recap of the Paris trip conversation", "what happened in the
+// budget conversation", "tldr the current conversation".
+// IMPORTANT: use searchConversation to find content inside conversations; use
+// this to get a narrative summary of one conversation.
+export type SummarizeConversationAction = {
+    actionName: "summarizeConversation";
+    parameters: {
+        // Which conversation to summarize: omit for the current conversation,
+        // or give a conversation's name/topic.
+        name?: string;
+    };
+};
+
 // Show information about the current conversation.
 // Use this when the user asks about the current conversation info.
 // Examples: "show conversation info", "what conversation am I in", "current conversation info".
@@ -62,17 +112,23 @@ export type ShowConversationInfoAction = {
     actionName: "showConversationInfo";
 };
 
-// Switch to an existing conversation by name.
-// Use this when the user wants to switch to, go to, open, or change to an EXISTING conversation
-// identified by name.  For "next"/"previous" without a specific name, use NextConversationAction
+// Switch to an existing conversation, identified either by its NAME or by what
+// was DISCUSSED in it (its content/topic).
+// Use this when the user wants to switch to, go to, open, or change to an EXISTING conversation.
+// The switch tries an exact name, then a fuzzy name, then a content search over
+// the conversations' messages - so "switch to the conversation where we talked
+// about spikes" resolves to the conversation whose content is about spikes.
+// For "next"/"previous" without a specific target, use NextConversationAction
 // or PrevConversationAction instead.
 // Examples: "switch to conversation test", "go to my work conversation",
-// "switch to test", "open conversation named work", "change to the test conversation".
+// "switch to test", "open conversation named work", "change to the test conversation",
+// "switch to the conversation where we talked about spikes".
 // IMPORTANT: use this only when switching to an already-existing conversation, not creating a new one.
 export type SwitchConversationAction = {
     actionName: "switchConversation";
     parameters: {
-        // The name of the conversation to switch to
+        // The name of the conversation to switch to, or a topic/description of
+        // what was discussed in it.
         name: string;
     };
 };
@@ -120,4 +176,14 @@ export type DeleteConversationAction = {
         // The name of the conversation to delete
         name: string;
     };
+};
+
+// Show help for conversation management: the available conversation commands
+// and what they do.
+// Use this when the user asks how to manage conversations or what conversation
+// commands are available.
+// Examples: "conversation help", "help with conversations", "what conversation
+// commands are there", "how do I manage conversations".
+export type HelpConversationAction = {
+    actionName: "help";
 };

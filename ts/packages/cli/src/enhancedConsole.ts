@@ -1580,6 +1580,7 @@ export function createEnhancedClientIO(
                     subcommand: string;
                     name?: string;
                     newName?: string;
+                    query?: string;
                 };
                 const convCtx = getConversationCommandContext();
                 if (!convCtx) {
@@ -1607,6 +1608,12 @@ export function createEnhancedClientIO(
                         break;
                     case "next":
                         args = "next";
+                        break;
+                    case "find":
+                        args = `find "${payload.query ?? ""}"`;
+                        break;
+                    case "search":
+                        args = `search "${payload.query ?? ""}"`;
                         break;
                     case "delete":
                         args = `delete "${payload.name}"`;

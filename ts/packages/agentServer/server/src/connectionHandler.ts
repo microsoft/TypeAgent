@@ -455,6 +455,19 @@ export function createAgentServerConnectionHandler(
                 return conversationManager.findConversations(query, maxMatches);
             },
 
+            searchConversationContent: async (
+                query: string,
+                maxMatches?: number,
+            ) => {
+                // The wire/command path passes a plain query string; treat it
+                // as a natural-language question (the index blends in a
+                // message-text match too).
+                return conversationManager.searchConversationContent(
+                    { question: query },
+                    maxMatches,
+                );
+            },
+
             renameConversation: async (
                 conversationId: string,
                 newName: string,

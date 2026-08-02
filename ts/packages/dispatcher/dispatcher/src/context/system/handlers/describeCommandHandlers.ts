@@ -21,8 +21,8 @@ export class DescribeCommandHandler implements CommandHandler {
     public readonly description =
         "Describe what an agent or action can do (installed-but-disabled agents included)";
     public readonly action = {
-        schema: "system.describe",
-        actionName: "describeAgentOrAction",
+        schema: "system.help",
+        actionName: "describeAgent",
     };
     public readonly parameters = {
         args: {

@@ -563,6 +563,10 @@ function makeConnectionAdapter(): AgentServerConnection {
             const { rpc } = requireFresh();
             return rpc.invoke("findConversations", query, maxMatches);
         },
+        searchConversationContent: (query: string, maxMatches?: number) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("searchConversationContent", query, maxMatches);
+        },
         renameConversation: (id: string, newName: string) => {
             const { rpc } = requireFresh();
             return rpc.invoke(
@@ -736,6 +740,48 @@ function renderActionResult(
             return ok(
                 `<b>Matches for “${escapeHtml(result.query)}”:</b><ul>${items}</ul>`,
             );
+        }
+        case "contentMatches": {
+            const items = result.matches
+                .map((m) => {
+                    const c = m.conversation;
+                    const cur =
+                        c.conversationId === result.currentConversationId
+                            ? "▸ "
+                            : "";
+                    const pct = Math.round(m.score * 100);
+                    const snippet = m.snippets[0];
+                    const snippetHtml = snippet
+                        ? `<br><span style="opacity:0.6;">${escapeHtml(snippet)}</span>`
+                        : "";
+                    return `<li>${cur}${escapeHtml(c.name)} <span style="opacity:0.6;">(${pct}%)</span>${snippetHtml}</li>`;
+                })
+                .join("");
+            return ok(
+                `<b>Content matches for “${escapeHtml(result.query)}”:</b><ul>${items}</ul>`,
+            );
+        }
+        case "help": {
+            const rows: [string, string][] = [
+                ["new [name]", "Create a new conversation"],
+                ["list", "List all conversations"],
+                ["find <name>", "Find conversations by name"],
+                ["search <text>", "Search conversation content"],
+                ["info", "Show the current conversation"],
+                ["switch [name]", "Switch to a conversation (or the next one)"],
+                ["next", "Switch to the next conversation"],
+                ["prev", "Switch to the previous conversation"],
+                ["rename [name] <newName>", "Rename a conversation"],
+                ["delete <name>", "Delete a conversation"],
+                ["help", "Show this help"],
+            ];
+            const items = rows
+                .map(
+                    ([usage, desc]) =>
+                        `<li><code>${escapeHtml(usage)}</code> — ${escapeHtml(desc)}</li>`,
+                )
+                .join("");
+            return ok(`<b>Conversation commands:</b><ul>${items}</ul>`);
         }
     }
 }

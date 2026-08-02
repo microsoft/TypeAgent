@@ -14,6 +14,7 @@ export {
     CreateConversationOptions,
     ConversationInfo,
     ConversationMatch,
+    ConversationContentMatch,
     ConversationSource,
     ConversationNameCollisionOptions,
     ConversationNameCollisionBehavior,

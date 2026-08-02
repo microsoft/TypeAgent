@@ -131,7 +131,7 @@ paths use a shared typed helper.
    implementation slice. This phase is complete: no agent-host command remains
    uncovered.
 4. **Complete existing system families.** Finish `system.config`,
-   `system.conversation`, `system.describe`, `system.grammar`, `system.history`,
+   `system.conversation`, `system.help`, `system.grammar`, `system.history`,
    `system.notify`, and `system.settings`.
 5. **Add remaining system families.** Register focused schemas for session,
    memory, index, Copilot, collision, construction, feedback, demo, help,

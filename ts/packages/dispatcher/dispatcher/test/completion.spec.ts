@@ -2236,4 +2236,103 @@ describe("Command Completion - startIndex", () => {
             }
         });
     });
+
+    // ── @help completes its `command` argument with command paths ────────
+
+    describe("help command argument completion", () => {
+        it("offers command names, agent names, and flags for '@help '", async () => {
+            const result = await getCommandCompletion(
+                "@help ",
+                "forward",
+                context,
+            );
+            expect(result).toBeDefined();
+            // startIndex anchors at the argument boundary (after "@help ").
+            expect(result!.startIndex).toBe(6);
+
+            const commands = result!.completions.find(
+                (g) => g.name === "Commands",
+            );
+            expect(commands).toBeDefined();
+            // System subcommands are valid arguments to @help.
+            expect(commands!.completions).toContain("config");
+
+            const agentNames = result!.completions.find(
+                (g) => g.name === "Agent Names",
+            );
+            expect(agentNames).toBeDefined();
+            expect(agentNames!.completions).toContain("comptest");
+
+            // Built-in flags are still offered.
+            const flags = result!.completions.find(
+                (g) => g.name === "Command Flags",
+            );
+            expect(flags).toBeDefined();
+            expect(flags!.completions).toContain("--all");
+            expect(flags!.completions).toContain("-a");
+        });
+
+        it("offers command names alongside flags for '@help' (no trailing space)", async () => {
+            // Regression guard: a matched command like @help must still
+            // complete its `command` argument on forward typing, not just
+            // the flags.
+            const result = await getCommandCompletion(
+                "@help",
+                "forward",
+                context,
+            );
+            expect(result).toBeDefined();
+            const commands = result!.completions.find(
+                (g) => g.name === "Commands",
+            );
+            expect(commands).toBeDefined();
+            expect(commands!.completions).toContain("config");
+            const agentNames = result!.completions.find(
+                (g) => g.name === "Agent Names",
+            );
+            expect(agentNames).toBeDefined();
+            expect(agentNames!.completions).toContain("comptest");
+        });
+
+        it("anchors partial argument for trie filtering '@help con'", async () => {
+            const result = await getCommandCompletion(
+                "@help con",
+                "forward",
+                context,
+            );
+            expect(result).toBeDefined();
+            // "@help con" (9 chars) → argument "con" starts at index 6.
+            // matchedPrefixLength is 0 (nothing resolved), so the anchor
+            // stays at the value start and the caller's trie filters
+            // "con" against the full command/agent set.
+            expect(result!.startIndex).toBe(6);
+            const agentNames = result!.completions.find(
+                (g) => g.name === "Agent Names",
+            );
+            expect(agentNames).toBeDefined();
+            expect(agentNames!.completions).toContain("comptest");
+        });
+
+        it("drills into subcommands for a nested path '@help config '", async () => {
+            const result = await getCommandCompletion(
+                "@help config ",
+                "forward",
+                context,
+            );
+            expect(result).toBeDefined();
+            // "@help config " (13 chars): resolution consumes "config "
+            // so the anchor advances past it to offer config's subcommands.
+            expect(result!.startIndex).toBe(13);
+            const commands = result!.completions.find(
+                (g) => g.name === "Commands",
+            );
+            expect(commands).toBeDefined();
+            expect(commands!.completions.length).toBeGreaterThan(0);
+            // An agent/subcommand was consumed → agent names no longer apply.
+            const agentNames = result!.completions.find(
+                (g) => g.name === "Agent Names",
+            );
+            expect(agentNames).toBeUndefined();
+        });
+    });
 });

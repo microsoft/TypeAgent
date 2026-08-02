@@ -9,16 +9,8 @@ import { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
 // Quote a conversation name so the command parser keeps it as a single
 // argument; names often contain spaces (and, rarely, quotes).
 function quoteName(name: string): string {
-    if (!name.includes('"')) {
-        return `"${name}"`;
-    }
-    if (!name.includes("'")) {
-        return `'${name}'`;
-    }
-
-    // If the name contains both quote types, fall back to escaping for a
-    // double-quoted token.
-    return `"${name.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+    const escaped = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    return `"${escaped}"`;
 }
 
 // Each conversation action runs its equivalent `@conversation` command, which
@@ -33,9 +25,6 @@ export async function executeConversationAction(
     let resultEntity: { name: string; type: string[] } | undefined;
     let command: string;
     switch (action.actionName) {
-        case "showConversationHelp":
-            command = "@conversation help";
-            break;
         case "newConversation": {
             // Grammar matches that emit `parameters: {}` are normalized away
             // by the grammar engine, so `action.parameters` may be missing on
@@ -56,6 +45,31 @@ export async function executeConversationAction(
         case "findConversation":
             command = `@conversation find ${action.parameters.query}`;
             break;
+        case "searchConversation":
+            command = `@conversation search ${action.parameters.query}`;
+            break;
+        case "indexConversation": {
+            // Grammar-cache hits may drop an empty `parameters`, so read name
+            // defensively (see newConversation).
+            const name = action.parameters?.name;
+            command =
+                name === undefined
+                    ? "@conversation index"
+                    : name.toLowerCase() === "all"
+                      ? "@conversation index all"
+                      : `@conversation index ${quoteName(name)}`;
+            break;
+        }
+        case "summarizeConversation": {
+            // Grammar-cache hits may drop an empty `parameters`, so read name
+            // defensively (see newConversation).
+            const name = action.parameters?.name;
+            command =
+                name === undefined
+                    ? "@conversation summarize"
+                    : `@conversation summarize ${quoteName(name)}`;
+            break;
+        }
         case "showConversationInfo":
             command = "@conversation info";
             break;
@@ -81,6 +95,9 @@ export async function executeConversationAction(
         }
         case "deleteConversation":
             command = `@conversation delete ${quoteName(action.parameters.name)}`;
+            break;
+        case "help":
+            command = "@conversation help";
             break;
         default:
             throw new Error(

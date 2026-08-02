@@ -28,6 +28,14 @@
 <ConvNounPlural> = (conversations | chats | sessions | tabs);
 <ConvNounAny> = (<ConvNoun> | <ConvNounPlural>);
 
+// Optional quantifier + article in front of a noun. Matches "", "all",
+// "the", "my", "our", and combinations like "all my", "all the",
+// "all of the", "all of my". Broad on purpose so phrasings such as
+// "list all of the conversations" resolve here as a non-wildcard match
+// and win over other agents' wildcard rules (e.g. powershell.listFiles's
+// "list ... $(path:wildcard)"), instead of being grabbed as a file path.
+<Determiner> = (all)? (of)? (the | my | our)?;
+
 // "create/start/make/open/begin a new conversation called/named X"
 <NewConversationNamed> = <Polite> (create | start | make | open | begin) (a | an)? new <ConvNoun> (called | named | titled) $(name:wildcard) -> {
     actionName: "newConversation",
@@ -45,7 +53,9 @@
 };
 
 // "list/show (me) (all/my/our/the) conversations"
-<ListConversation> = <Polite> (list | show | display) (me | us)? (all | my | our | the)? <ConvNounPlural> -> {
+// Determiner is broad ("all of the", "all of my", ...) so these anchor
+// on the plural noun and beat wildcard rules from other agents.
+<ListConversation> = <Polite> (list | show | display) (me | us)? <Determiner> <ConvNounPlural> -> {
     actionName: "listConversation"
 }
   | <Polite> (what | which) <ConvNounPlural> (do | are)? (i | we)? have -> {
@@ -70,6 +80,13 @@
 <SwitchConversationNamed> =
   // "switch/go/change/open/load/resume to (the) conversation (called|named) X"
   <Polite> (switch | go | change | open | load | resume) to (the)? <ConvNoun> (called | named | about | on | regarding | discussing | for)? $(name:wildcard) -> {
+    actionName: "switchConversation",
+    parameters: { name }
+  }
+  // "switch/go/... to (the) conversation where we talked/discussed about X"
+  // Captures just the topic X (not the whole phrase) so the content-search
+  // fallback in manageSwitch matches on the topic.
+  | <Polite> (switch | go | change | open | load | resume) to (the)? <ConvNoun> where (we | i | you)? (talked | talk | discussed | discuss | spoke | chatted | mentioned | said) (about | on | regarding | of)? $(name:wildcard) -> {
     actionName: "switchConversation",
     parameters: { name }
   }
@@ -145,19 +162,106 @@
     parameters: { query }
   };
 
-<ShowConversationHelp> = <Polite> (show | open | display)? <ConvNoun> (command)? help -> {
-    actionName: "showConversationHelp"
-};
+// Content search: search WITHIN conversations (their messages / history),
+// distinct from FindConversation which locates a conversation by name.
+// Anchored on content-oriented words (through/across/inside/within/in,
+// "history", "content of") so these do not collide with the name-search
+// patterns above.
+<SearchConversation> =
+  <Polite> search (through | across | inside | within | in) (all | my | our | the)? <ConvNounAny> (for | about | mentioning | containing)? $(query:wildcard) -> {
+    actionName: "searchConversation",
+    parameters: { query }
+  }
+  | <Polite> search (all | my | our | the)? (chat | conversation | message) history (for | about)? $(query:wildcard) -> {
+    actionName: "searchConversation",
+    parameters: { query }
+  }
+  | <Polite> search (the)? content of (all | my | our | the)? <ConvNounAny> (for | about)? $(query:wildcard) -> {
+    actionName: "searchConversation",
+    parameters: { query }
+  };
 
-<Start> = <ShowConversationHelp>
-  | <NewConversationNamed>
+// Index conversation content so it becomes searchable across conversations.
+// Anchored on the verb "index"/"reindex" (and "make ... searchable") so these
+// do not collide with the search patterns above.
+<IndexConversation> =
+  // "index/reindex (this|the|current|the current) conversation"  -> current
+  <Polite> (index | reindex) (this | the current | current | the) <ConvNoun> -> {
+    actionName: "indexConversation",
+    parameters: {}
+  }
+  // "index/reindex (all/my/our/the ...) conversations"  -> all conversations
+  | <Polite> (index | reindex) <Determiner> <ConvNounPlural> -> {
+    actionName: "indexConversation",
+    parameters: { name: "all" }
+  }
+  // "make (all/my/our/the ...) conversations searchable"  -> all conversations
+  | <Polite> make <Determiner> <ConvNounPlural> searchable -> {
+    actionName: "indexConversation",
+    parameters: { name: "all" }
+  }
+  // "index/reindex (the) conversation (called|named|about|...) X"  -> named
+  | <Polite> (index | reindex) (the)? <ConvNoun> (called | named | about | on | regarding | discussing | for) $(name:wildcard) -> {
+    actionName: "indexConversation",
+    parameters: { name }
+  }
+  // "index/reindex (the|my) X conversation"  -> named
+  | <Polite> (index | reindex) (the | my)? $(name:wildcard) <ConvNoun> -> {
+    actionName: "indexConversation",
+    parameters: { name }
+  };
+
+// Summarize a conversation from its stored transcript. Anchored on the verb
+// "summarize"/"recap"/"sum up" (or "summary/recap/overview/tldr of") so these
+// do not collide with the search/find patterns above.
+<SummarizeConversation> =
+  // "summarize (this|the|current) conversation"  -> current
+  <Polite> (summarize | recap | sum up) (this | the current | current | the) <ConvNoun> -> {
+    actionName: "summarizeConversation",
+    parameters: {}
+  }
+  // "summarize (the) conversation (called|named|about|...) X"  -> named
+  | <Polite> (summarize | recap | sum up) (the)? <ConvNoun> (called | named | about | on | regarding | discussing | for) $(name:wildcard) -> {
+    actionName: "summarizeConversation",
+    parameters: { name }
+  }
+  // "summarize (the|my) X conversation"  -> named
+  | <Polite> (summarize | recap | sum up) (the | my)? $(name:wildcard) <ConvNoun> -> {
+    actionName: "summarizeConversation",
+    parameters: { name }
+  }
+  // "give me a summary/recap/overview/tldr of (this|the current) conversation" -> current
+  | <Polite> (give me | show me | get me)? (a | an)? (summary | recap | overview | tldr) of (this | the current | current | the) <ConvNoun> -> {
+    actionName: "summarizeConversation",
+    parameters: {}
+  }
+  // "give me a summary/recap/overview/tldr of (the) conversation X"  -> named
+  | <Polite> (give me | show me | get me)? (a | an)? (summary | recap | overview | tldr) of (the | my)? <ConvNoun> (called | named | about | on | regarding | for)? $(name:wildcard) -> {
+    actionName: "summarizeConversation",
+    parameters: { name }
+  };
+
+// "conversation help" / "help with conversations" / "help managing conversations"
+<HelpConversation> =
+  <Polite> (show | display | get)? <ConvNoun> help -> {
+    actionName: "help"
+  }
+  | <Polite> help (with | for | on | managing | about)? <ConvNounAny> -> {
+    actionName: "help"
+  };
+
+<Start> = <NewConversationNamed>
   | <NewConversation>
   | <ListConversation>
   | <FindConversation>
+  | <SearchConversation>
+  | <IndexConversation>
+  | <SummarizeConversation>
   | <ShowConversationInfo>
   | <SwitchConversationNamed>
   | <NextConversation>
   | <PrevConversation>
   | <RenameConversationCurrent>
   | <RenameConversationNamed>
-  | <DeleteConversation>;
+  | <DeleteConversation>
+  | <HelpConversation>;

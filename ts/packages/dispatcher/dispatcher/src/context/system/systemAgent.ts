@@ -14,7 +14,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { executeConversationAction } from "./action/conversationActionHandler.js";
 import { executeConfigAction } from "./action/configActionHandler.js";
-import { executeDescribeAction } from "./action/describeActionHandler.js";
+import { executeHelpAction } from "./action/helpActionHandler.js";
 import {
     type CommandHandlerContext,
     getRequestId,
@@ -34,7 +34,7 @@ import { executeHistoryAction } from "./action/historyActionHandler.js";
 import { executeGrammarAction } from "./action/grammarActionHandler.js";
 import { executeSettingsAction } from "./action/settingsActionHandler.js";
 import { ConfigAction } from "./schema/configActionSchema.js";
-import { DescribeAction } from "./schema/describeActionSchema.js";
+import { HelpAction } from "./schema/helpActionSchema.js";
 import { NotificationAction } from "./schema/notificationActionSchema.js";
 import { HistoryAction } from "./schema/historyActionSchema.js";
 import { ConversationAction } from "./schema/conversationActionSchema.js";
@@ -217,7 +217,7 @@ function executeSystemAction(
         | TypeAgentAction<HistoryAction, "system.history">
         | TypeAgentAction<GrammarAction, "system.grammar">
         | TypeAgentAction<UserSettingsAction, "system.settings">
-        | TypeAgentAction<DescribeAction, "system.describe">
+        | TypeAgentAction<HelpAction, "system.help">
         | TypeAgentAction<IndexAction, "system.index">
         | TypeAgentAction<SystemDiagnosticsAction, "system.diagnostics">
         | TypeAgentAction<SessionAction, "system.session">
@@ -244,8 +244,8 @@ function executeSystemAction(
             return executeGrammarAction(action, context, systemHandlers);
         case "system.settings":
             return executeSettingsAction(action, context);
-        case "system.describe":
-            return executeDescribeAction(action, context);
+        case "system.help":
+            return executeHelpAction(action, context);
         case "system.index":
             return executeIndexAction(action, context);
         case "system.diagnostics":
@@ -402,12 +402,17 @@ export const systemManifest: AppAgentManifest = {
                     "Use this agent when the user wants to: " +
                     "CREATE a new conversation (e.g. 'create a new conversation', 'start a new conversation called test', 'new conversation named work', 'open a new conversation test'), " +
                     "LIST conversations (e.g. 'list our conversations', 'list my conversations', 'show all conversations', 'what conversations do I have'), " +
+                    "FIND a conversation by name (e.g. 'find the conversation about the workout playlist', 'which conversation was about taxes'), " +
+                    "SEARCH the CONTENT of conversations (e.g. 'search my conversations for the docker command we used', 'search my chat history for the API key steps'), " +
+                    "INDEX a conversation's history so its content becomes searchable (e.g. 'index this conversation', 'index all conversations', 'index the conversation about taxes'), " +
+                    "SUMMARIZE a conversation from its transcript (e.g. 'summarize this conversation', 'summarize the yes conversation', 'give me a recap of the Paris trip conversation'), " +
                     "SWITCH to an existing conversation by name (e.g. 'switch to conversation test', 'go to my work conversation', 'switch to test'), " +
                     "advance to the NEXT conversation (e.g. 'switch to next conversation', 'next conversation', 'go to the next conversation'), " +
                     "go to the PREVIOUS conversation (e.g. 'switch to previous conversation', 'previous conversation'), " +
                     "DELETE a conversation (e.g. 'delete conversation test', 'remove the work conversation'), " +
                     "RENAME the current conversation, " +
-                    "or SHOW info about the current conversation. " +
+                    "SHOW info about the current conversation, " +
+                    "or get HELP with conversation commands (e.g. 'conversation help', 'help with conversations'). " +
                     "Use this for TypeAgent shell conversations only — NOT for media playlists, songs, files, or browser tabs.",
                 schemaFile:
                     "./src/context/system/schema/conversationActionSchema.ts",
@@ -458,19 +463,18 @@ export const systemManifest: AppAgentManifest = {
                 schemaType: "UserSettingsAction",
             },
         },
-        describe: {
+        help: {
             schema: {
                 description:
-                    "Describe what an agent or action can do — capability discovery, not execution. " +
-                    "Use this when the user wants to know WHAT an agent or action does, e.g. " +
-                    "'what can the spotify agent do', 'describe the calendar agent', " +
-                    "'show me all of spotify's actions', 'what does the play action do', " +
-                    "'describe spotify's play action'. This works even for installed-but-disabled " +
-                    "agents. Do NOT use this to execute an action or to list all agents " +
-                    "(that's a config command).",
-                schemaFile:
-                    "./src/context/system/schema/describeActionSchema.ts",
-                schemaType: "DescribeAction",
+                    "Answer questions about TypeAgent itself - capability discovery and help, not execution. " +
+                    "Use this when the user wants to: " +
+                    "FIND the command or action for a task ('what's the command for X', 'how do I X', 'can I X in TypeAgent'); " +
+                    "EXPLAIN TypeAgent or one of its concepts/features ('what is TypeAgent', 'what can it do', 'how does translation/memory/the cache work', 'how do I set it up', 'give me more details about TypeAgent X'); " +
+                    "or DESCRIBE a specific installed agent or action ('what can the spotify agent do', 'describe the calendar agent', 'what does the play action do'). " +
+                    "Describing works even for installed-but-disabled agents. " +
+                    "Do NOT use this to actually perform a task in another domain (playing music, sending email, editing code, controlling a browser), for general-knowledge questions, or to list all agents (that's the config command).",
+                schemaFile: "./src/context/system/schema/helpActionSchema.ts",
+                schemaType: "HelpAction",
             },
         },
     },
