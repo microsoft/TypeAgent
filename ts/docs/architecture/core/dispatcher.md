@@ -730,14 +730,17 @@ subcommands, and help text.
 
 The system agent also has sub-agents with LLM-translated action schemas:
 
-- **`system.describe`** — Natural language capability discovery ("what can the spotify agent do",
-  "describe the play action"). `executeDescribeAction` forwards to the equivalent `@describe`
-  command (same convention as `system.config`/`system.history`), which resolves the agent/action
-  against `getAgentSchemas()` (agentSchemaInfo.ts) and renders a deterministic markdown summary,
-  optionally polished by a fast structured-output LLM call when one is configured — the model
-  returns a schema-validated JSON object (summary / explanation + example) that is rendered to
-  markdown deterministically, falling back to the deterministic text on a missing/failed model
-  (see `describeCore.ts`).
+- **`system.help`** — Natural language questions about TypeAgent itself. One schema owns three
+  actions: `answerTypeAgentQuestion` (find the command/action for a task) and `explainTypeAgent`
+  (conceptual/setup questions), both grounded via the `@typeagent/selfhelp` library, plus
+  `describeAgent`/`describeAction` capability discovery ("what can the spotify agent do", "describe
+  the play action"). The describe actions forward to the same `describeCore` engine as the
+  `@describe` command, which resolves the agent/action against `getAgentSchemas()`
+  (agentSchemaInfo.ts) and renders a deterministic markdown summary, optionally polished by a fast
+  structured-output LLM call when one is configured, falling back to the deterministic text on a
+  missing/failed model (see `describeCore.ts`). When `describeAgent` names something that is not an
+  installed agent (a concept like "translation"), the handler falls back to `explainTypeAgent`
+  rather than dead-ending.
 - **`system.config`** — Natural language configuration changes.
 - **`system.conversation`** — Natural language management of **agentServer client-connection
   conversations** (the named, GUID-keyed sessions described in

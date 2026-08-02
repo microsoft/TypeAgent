@@ -18,11 +18,12 @@ export type ManageConversationPayload = {
         | "rename"
         | "delete"
         | "find"
+        | "search"
         | "help";
     name?: string;
     newName?: string;
-    /** Search term for the `find` subcommand. */
+    /** Search term for the `find` (by name) and `search` (by content) subcommands. */
     query?: string;
-    /** Optional cap on `find` results. */
+    /** Optional cap on `find` / `search` results. */
     maxMatches?: number;
 };

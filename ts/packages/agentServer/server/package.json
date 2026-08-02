@@ -51,6 +51,7 @@
     "@typeagent/conversation-memory": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*",
     "@typeagent/websocket-channel-server": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "better-sqlite3": "12.6.2",
