@@ -146,6 +146,25 @@ export async function importCopilotSessions(
 
                 if (res.created) {
                     result.imported++;
+                    // Read-only mirrors never replay through the live tee, so
+                    // populate the unified content index explicitly here. Gated
+                    // on `created` so re-imports don't double-index.
+                    for (const turn of turns) {
+                        if (turn.userMessage) {
+                            conversationManager.indexConversationMessage(
+                                res.conversationId,
+                                turn.userMessage,
+                                "user",
+                            );
+                        }
+                        if (turn.assistantResponse) {
+                            conversationManager.indexConversationMessage(
+                                res.conversationId,
+                                turn.assistantResponse,
+                                "assistant",
+                            );
+                        }
+                    }
                 } else if (res.renamed) {
                     // Existing mirror whose title we reconciled — count it
                     // separately from unchanged skips.

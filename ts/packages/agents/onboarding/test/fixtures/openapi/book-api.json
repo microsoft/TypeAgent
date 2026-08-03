@@ -1,0 +1,85 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Book API",
+    "version": "1.0.0"
+  },
+  "servers": [{ "url": "/v3" }],
+  "paths": {
+    "/books/{book_id}": {
+      "parameters": [
+        {
+          "name": "book_id",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string" }
+        }
+      ],
+      "get": {
+        "operationId": "get_book",
+        "summary": "Get a book",
+        "parameters": [
+          {
+            "name": "include_reviews",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "boolean" }
+          }
+        ],
+        "responses": { "200": { "description": "ok" } }
+      },
+      "put": {
+        "operationId": "update_book",
+        "summary": "Update a book",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" }
+                },
+                "required": ["title"]
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/books": {
+      "get": {
+        "operationId": "search_books",
+        "summary": "Search books",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": { "200": { "description": "ok" } }
+      },
+      "post": {
+        "operationId": "create_book",
+        "summary": "Create a book",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "author": { "type": "string" }
+                },
+                "required": ["title"]
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "created" } }
+      }
+    }
+  }
+}

@@ -68,7 +68,8 @@
             "src/agent/playerSchema.agr"
           ],
           "outputGlobs": [
-            "dist/agent/playerSchema.ag.json"
+            "dist/agent/playerSchema.ag.json",
+            "dist/agent/playerSchema.ag.map.json"
           ]
         }
       },

@@ -78,7 +78,8 @@
             "src/powershellSchema.agr"
           ],
           "outputGlobs": [
-            "dist/powershellSchema.ag.json"
+            "dist/powershellSchema.ag.json",
+            "dist/powershellSchema.ag.map.json"
           ]
         }
       },
@@ -91,7 +92,8 @@
             "src/namespaces/files/filesSchema.agr"
           ],
           "outputGlobs": [
-            "dist/filesSchema.ag.json"
+            "dist/filesSchema.ag.json",
+            "dist/filesSchema.ag.map.json"
           ]
         }
       },
@@ -104,7 +106,8 @@
             "src/namespaces/processes/processesSchema.agr"
           ],
           "outputGlobs": [
-            "dist/processesSchema.ag.json"
+            "dist/processesSchema.ag.json",
+            "dist/processesSchema.ag.map.json"
           ]
         }
       },
@@ -117,7 +120,8 @@
             "src/namespaces/system/systemSchema.agr"
           ],
           "outputGlobs": [
-            "dist/systemSchema.ag.json"
+            "dist/systemSchema.ag.json",
+            "dist/systemSchema.ag.map.json"
           ]
         }
       },
@@ -130,7 +134,8 @@
             "src/namespaces/services/servicesSchema.agr"
           ],
           "outputGlobs": [
-            "dist/servicesSchema.ag.json"
+            "dist/servicesSchema.ag.json",
+            "dist/servicesSchema.ag.map.json"
           ]
         }
       },
@@ -143,7 +148,8 @@
             "src/namespaces/network/networkSchema.agr"
           ],
           "outputGlobs": [
-            "dist/networkSchema.ag.json"
+            "dist/networkSchema.ag.json",
+            "dist/networkSchema.ag.map.json"
           ]
         }
       },
@@ -156,7 +162,8 @@
             "src/namespaces/data/dataSchema.agr"
           ],
           "outputGlobs": [
-            "dist/dataSchema.ag.json"
+            "dist/dataSchema.ag.json",
+            "dist/dataSchema.ag.map.json"
           ]
         }
       },
@@ -169,7 +176,8 @@
             "src/namespaces/archives/archivesSchema.agr"
           ],
           "outputGlobs": [
-            "dist/archivesSchema.ag.json"
+            "dist/archivesSchema.ag.json",
+            "dist/archivesSchema.ag.map.json"
           ]
         }
       },
@@ -280,6 +288,15 @@
     }
   },
   "typeagent": {
-    "defaultAgentName": "powershell"
+    "defaultAgentName": "powershell",
+    "bundle": {
+      "assetMappings": [
+        {
+          "package": "@typeagent/powershell-typeagent",
+          "source": "scripts/scriptHost.ps1",
+          "destination": "scripts/scriptHost.ps1"
+        }
+      ]
+    }
   }
 }

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Shared data source for agent/action capability discovery (`@describe` and
-// the `system.describe` NL schema — see describeCore.ts) as well as the
+// the system.help describe actions — see describeCore.ts) as well as the
 // `Dispatcher.getAgentSchemas` RPC surface (dispatcher.ts). Extracted so
 // handlers can call it directly without going through the RPC interface.
 
@@ -33,9 +33,11 @@ export function extractActions(
     return actions;
 }
 
+// code-complexity-allow: iterates over agent configs with several nested steps; each step is necessary for schema discovery
 export async function getAgentSchemas(
     context: CommandHandlerContext,
     agentName?: string,
+    options?: { includeSchemaless?: boolean },
 ): Promise<AgentSchemaInfo[]> {
     await context.agents.waitUntilReady();
     const configs = context.agents.getActionConfigs();
@@ -95,5 +97,24 @@ export async function getAgentSchemas(
             subSchemas,
         });
     }
+
+    // Optionally include installed agents that expose no action schema (e.g. a
+    // greeting/generator agent) as entries with no sub-schemas, so capability
+    // discovery can still report them ("no callable actions") instead of
+    // "no agent named". Off by default so the getAgentSchemas RPC is unchanged.
+    if (options?.includeSchemaless) {
+        const present = new Set(result.map((a) => a.name));
+        for (const name of context.agents.getAppAgentNames()) {
+            if (agentName !== undefined && name !== agentName) continue;
+            if (present.has(name)) continue;
+            result.push({
+                name,
+                emoji: context.agents.getAppAgentEmoji(name),
+                description: context.agents.getAppAgentDescription(name),
+                subSchemas: [],
+            });
+        }
+    }
+
     return result;
 }

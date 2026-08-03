@@ -54,7 +54,8 @@
             "src/timerSchema.agr"
           ],
           "outputGlobs": [
-            "dist/timerSchema.ag.json"
+            "dist/timerSchema.ag.json",
+            "dist/timerSchema.ag.map.json"
           ]
         }
       },

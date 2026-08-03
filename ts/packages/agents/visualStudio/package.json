@@ -56,7 +56,8 @@
             "src/visualStudioSchema.agr"
           ],
           "outputGlobs": [
-            "dist/visualStudioSchema.ag.json"
+            "dist/visualStudioSchema.ag.json",
+            "dist/visualStudioSchema.ag.map.json"
           ]
         }
       },

@@ -13,9 +13,13 @@ import {
     renderActionNotFoundMessage,
     polishAgentView,
     polishActionView,
+    renderPolishedAgentView,
+    renderPolishedActionView,
     isCapabilityDiscoveryAlias,
     renderCapabilitiesDiscoveryFallback,
 } from "../src/context/system/describe/describeCore.js";
+import { getAgentSchemas } from "../src/context/system/describe/agentSchemaInfo.js";
+import type { CommandHandlerContext } from "../src/context/commandHandlerContext.js";
 
 function makeAction(name: string, description: string) {
     return { name, description };
@@ -447,6 +451,66 @@ describe("describeCore deterministic rendering", () => {
     });
 });
 
+describe("describeCore structured-output rendering", () => {
+    it("splices the model summary into the agent view, keeping the table", () => {
+        const agent = makeSpotifyAgent(3);
+        const deterministic = renderAgentView(agent, false, () => true);
+        const result = renderPolishedAgentView(agent, deterministic, {
+            summary: "It plays and controls your local music.",
+        });
+        expect(result).toContain(
+            "**🎵 The spotify agent** It plays and controls your local music.",
+        );
+        // The deterministic action table is preserved unchanged.
+        expect(result).toContain("| Action | What it does |");
+        expect(result).toContain("| play |");
+    });
+
+    it("returns the deterministic agent view when the summary is empty", () => {
+        const agent = makeSpotifyAgent(3);
+        const deterministic = renderAgentView(agent, false, () => true);
+        expect(
+            renderPolishedAgentView(agent, deterministic, { summary: "   " }),
+        ).toBe(deterministic);
+    });
+
+    it("renders the action view from the structured explanation and example", () => {
+        const agent = makeSpotifyAgent(3);
+        const match = {
+            agent,
+            subSchema: agent.subSchemas[0],
+            action: agent.subSchemas[0].actions[0],
+        };
+        const markdown = renderPolishedActionView(match, {
+            explanation: "Starts playback of the requested music.",
+            example: "play some jazz",
+        });
+        expect(markdown).toContain(
+            "**🎵 spotify.play** — Starts playback of the requested music.",
+        );
+        expect(markdown).toContain("**Parameters**");
+        expect(markdown).toContain("`query` (string)");
+        expect(markdown).toContain('**Example:** "play some jazz"');
+    });
+
+    it("falls back to the one-line description and omits an empty example", () => {
+        const agent = makeSpotifyAgent(3);
+        const match = {
+            agent,
+            subSchema: agent.subSchemas[0],
+            action: agent.subSchemas[0].actions[0],
+        };
+        const markdown = renderPolishedActionView(match, {
+            explanation: "   ",
+            example: "   ",
+        });
+        expect(markdown).toContain(
+            "**🎵 spotify.play** — Play a track, album, artist, or playlist",
+        );
+        expect(markdown).not.toContain("**Example:**");
+    });
+});
+
 describe("describeCore LLM fallback (no model configured)", () => {
     const originalEnv = { ...process.env };
 
@@ -480,5 +544,44 @@ describe("describeCore LLM fallback (no model configured)", () => {
         const deterministic = renderActionView(match);
         const result = await polishActionView(match, deterministic);
         expect(result).toBe(deterministic);
+    });
+});
+
+describe("getAgentSchemas includeSchemaless", () => {
+    // Minimal context: one registered agent ("greeting") with no action schema.
+    function makeRosterContext(): CommandHandlerContext {
+        return {
+            agents: {
+                waitUntilReady: async () => {},
+                getActionConfigs: () => [],
+                getAppAgentNames: () => ["greeting"],
+                getAppAgentEmoji: () => "🖐️",
+                getAppAgentDescription: () =>
+                    "Agent to generate greeting messages",
+            },
+        } as unknown as CommandHandlerContext;
+    }
+
+    it("omits schema-less agents by default (RPC surface unchanged)", async () => {
+        expect(await getAgentSchemas(makeRosterContext())).toEqual([]);
+    });
+
+    it("includes a schema-less agent as an empty entry when requested", async () => {
+        const schemas = await getAgentSchemas(makeRosterContext(), undefined, {
+            includeSchemaless: true,
+        });
+        expect(schemas).toHaveLength(1);
+        expect(schemas[0]).toMatchObject({
+            name: "greeting",
+            emoji: "🖐️",
+            description: "Agent to generate greeting messages",
+            subSchemas: [],
+        });
+        // The describe engine can now resolve and render it, instead of
+        // reporting "no agent named".
+        expect(resolveAgent(schemas, "GREETING").kind).toBe("found");
+        expect(renderAgentView(schemas[0], false, () => false)).toContain(
+            "no callable actions",
+        );
     });
 });

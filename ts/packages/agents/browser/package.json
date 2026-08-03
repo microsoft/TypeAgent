@@ -132,7 +132,8 @@
             "src/agent/browserSchema.agr"
           ],
           "outputGlobs": [
-            "dist/agent/browserSchema.ag.json"
+            "dist/agent/browserSchema.ag.json",
+            "dist/agent/browserSchema.ag.map.json"
           ]
         }
       },
@@ -204,6 +205,35 @@
     }
   },
   "typeagent": {
-    "defaultAgentName": "browser"
+    "defaultAgentName": "browser",
+    "bundle": {
+      "entries": [
+        "dist/views/server/server.mjs",
+        "dist/puppeteer/index.mjs"
+      ],
+      "assets": [
+        "dist/views/public",
+        "dist/extension",
+        "src/agent/discovery/schema",
+        "src/agent/indexing/schema",
+        "src/agent/knowledge/actions/schema",
+        "src/agent/knowledge/schema",
+        "src/agent/search/schema",
+        "src/agent/webFlows/samples",
+        "src/agent/webFlows/schema"
+      ],
+      "assetMappings": [
+        {
+          "package": "@typeagent/azure-ai-foundry",
+          "source": "dist/phrases.json",
+          "destination": "dist/agent/phrases.json"
+        },
+        {
+          "package": "@typeagent/browser",
+          "source": "src/agent/webFlows/webFlowSandbox.d.ts",
+          "destination": "src/agent/webFlows/webFlowSandbox.d.ts"
+        }
+      ]
+    }
   }
 }

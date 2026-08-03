@@ -15,6 +15,7 @@ export type MatchResult = {
     partialPartCount?: number | undefined; // Only used for partial match
     partialMatchedCurrent?: number | undefined; // Character offset where partial matching stopped
     matchedStarts?: readonly number[] | undefined; // Start position of each matched part (partial only; -1 = optional skipped)
+    ruleText?: string | undefined; // The matched construction/rule pattern, for display (construction store only)
 };
 
 export interface GrammarStore {

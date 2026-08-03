@@ -1188,6 +1188,9 @@ export type TranslationResult = {
     type: "translate" | "construction" | "grammar";
     config: any;
     allMatches?: any;
+    // The matched construction/rule pattern text (construction cache hits
+    // only), surfaced for the explained popover.
+    ruleText?: string | undefined;
 };
 
 // null means cancelled because of replacement parse error.

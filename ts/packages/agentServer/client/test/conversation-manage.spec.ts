@@ -6,10 +6,12 @@ import {
     manageConversation,
     manageCycle,
     manageDelete,
+    manageFind,
     manageInfo,
     manageList,
     manageNew,
     manageRename,
+    manageSearch,
     manageSwitch,
     type ManageConversationContext,
 } from "../src/conversation/manage.js";
@@ -181,6 +183,171 @@ describe("manageSwitch", () => {
             "",
         );
         expect(result.kind).toBe("warning");
+    });
+});
+
+describe("manageSwitch — fuzzy fallback", () => {
+    test("switches to the top fuzzy match when there is no exact name", async () => {
+        const conn = makeStubConnection({
+            list: [
+                makeInfo("a", "Workout Playlist"),
+                makeInfo("b", "Groceries"),
+            ],
+        });
+        // "workout" is not an exact name, but the stub's findConversations
+        // returns it as a substring match, so switch should adopt it.
+        const result = await manageSwitch(
+            conn,
+            fakeClientIO,
+            ctx({ currentConversationId: "b" }),
+            "workout",
+        );
+        expect(result.kind).toBe("ok");
+        if (result.kind === "ok") {
+            expect(result.switched).toBe(true);
+            expect(result.conversation?.conversationId).toBe("a");
+            expect(result.message).toMatch(/closest match/);
+        }
+    });
+});
+
+describe("manageSwitch — content fallback", () => {
+    test("switches by content when no name matches", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "Sprint planning"), makeInfo("b", "Random")],
+            intercept: {
+                // No conversation name matches; content search finds the one
+                // whose messages discussed the topic.
+                searchConversationContent: () =>
+                    [
+                        {
+                            conversation: makeInfo("a", "Sprint planning"),
+                            score: 0.8,
+                            snippets: ["we should add spikes"],
+                        },
+                    ] as any,
+            },
+        });
+        const result = await manageSwitch(
+            conn,
+            fakeClientIO,
+            ctx({ currentConversationId: "b" }),
+            "where we talked about spikes",
+        );
+        expect(result.kind).toBe("ok");
+        if (result.kind === "ok") {
+            expect(result.switched).toBe(true);
+            expect(result.conversation?.conversationId).toBe("a");
+            expect(result.message).toMatch(/matched by content/);
+        }
+    });
+    test("warns when neither name nor content matches", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "Sprint planning")],
+        });
+        const result = await manageSwitch(
+            conn,
+            fakeClientIO,
+            ctx({ currentConversationId: "a" }),
+            "where we talked about unicorns",
+        );
+        expect(result.kind).toBe("warning");
+    });
+});
+
+describe("manageFind", () => {
+    test("returns ranked matches", async () => {
+        const conn = makeStubConnection({
+            list: [
+                makeInfo("a", "Workout Playlist"),
+                makeInfo("b", "Groceries"),
+            ],
+        });
+        const result = await manageFind(conn, ctx(), "workout");
+        expect(result.kind).toBe("matches");
+        if (result.kind === "matches") {
+            expect(result.query).toBe("workout");
+            expect(result.matches[0].conversation.conversationId).toBe("a");
+        }
+    });
+    test("drops malformed matches from the server", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "Workout")],
+            intercept: {
+                // A version-skewed server could send partial entries; the
+                // helper must filter them so renderers never hit
+                // `.conversation`/`.score` on undefined.
+                findConversations: () =>
+                    [
+                        undefined,
+                        { score: 0.9 },
+                        { conversation: makeInfo("a", "Workout"), score: 1 },
+                    ] as any,
+            },
+        });
+        const result = await manageFind(conn, ctx(), "workout");
+        expect(result.kind).toBe("matches");
+        if (result.kind === "matches") {
+            expect(result.matches).toHaveLength(1);
+            expect(result.matches[0].conversation.conversationId).toBe("a");
+        }
+    });
+    test("warns when nothing matches", async () => {
+        const conn = makeStubConnection({ list: [makeInfo("a", "Workout")] });
+        const result = await manageFind(conn, ctx(), "zzz-nonexistent");
+        expect(result.kind).toBe("warning");
+    });
+    test("warns when the query is blank", async () => {
+        const conn = makeStubConnection({ list: [makeInfo("a", "A")] });
+        const result = await manageFind(conn, ctx(), "   ");
+        expect(result.kind).toBe("warning");
+    });
+});
+
+describe("manageSearch", () => {
+    test("returns content matches", async () => {
+        const conn = makeStubConnection({
+            list: [
+                makeInfo("a", "Workout Playlist"),
+                makeInfo("b", "Groceries"),
+            ],
+        });
+        const result = await manageSearch(conn, ctx(), "workout");
+        expect(result.kind).toBe("contentMatches");
+        if (result.kind === "contentMatches") {
+            expect(result.query).toBe("workout");
+            expect(result.matches[0].conversation.conversationId).toBe("a");
+        }
+    });
+    test("warns when nothing matches", async () => {
+        const conn = makeStubConnection({ list: [makeInfo("a", "Workout")] });
+        const result = await manageSearch(conn, ctx(), "zzz-nonexistent");
+        expect(result.kind).toBe("warning");
+    });
+    test("warns when the query is blank", async () => {
+        const conn = makeStubConnection({ list: [makeInfo("a", "A")] });
+        const result = await manageSearch(conn, ctx(), "   ");
+        expect(result.kind).toBe("warning");
+    });
+});
+
+describe("manageConversation — search + help subcommands", () => {
+    test("routes search to content matches", async () => {
+        const conn = makeStubConnection({
+            list: [makeInfo("a", "Workout Playlist")],
+        });
+        const result = await manageConversation(conn, fakeClientIO, ctx(), {
+            subcommand: "search",
+            query: "workout",
+        });
+        expect(result.kind).toBe("contentMatches");
+    });
+    test("help returns the help listing", async () => {
+        const conn = makeStubConnection({ list: [] });
+        const result = await manageConversation(conn, fakeClientIO, ctx(), {
+            subcommand: "help",
+        });
+        expect(result.kind).toBe("help");
     });
 });
 
@@ -682,7 +849,7 @@ describe("manageNew — collision against current", () => {
 });
 
 describe("manageRename — result fidelity", () => {
-    test("returned conversation preserves real createdAt + clientCount", async () => {
+    test("returned conversation preserves real createdAt + clientCount + messageCount", async () => {
         const conn = makeStubConnection({
             list: [
                 {
@@ -690,6 +857,7 @@ describe("manageRename — result fidelity", () => {
                     name: "Old",
                     createdAt: "2026-05-15T10:00:00Z",
                     clientCount: 7,
+                    messageCount: 42,
                 },
             ],
         });
@@ -706,6 +874,7 @@ describe("manageRename — result fidelity", () => {
         if (result.kind === "ok" && result.conversation) {
             expect(result.conversation.createdAt).toBe("2026-05-15T10:00:00Z");
             expect(result.conversation.clientCount).toBe(7);
+            expect(result.conversation.messageCount).toBe(42);
             // and the new Date parse works (no Invalid Date corruption)
             expect(
                 isNaN(new Date(result.conversation.createdAt).getTime()),

@@ -73,6 +73,9 @@ export type InterpretResult = {
     fromUser: boolean;
     fromCache: "construction" | "grammar" | false;
     tokenUsage?: ai.CompletionUsageStats | undefined;
+    // The matched construction/rule pattern text (cache hits only), surfaced
+    // for the explained popover.
+    ruleText?: string | undefined;
 };
 
 export function getCannotUseCacheReason(
@@ -333,5 +336,6 @@ export async function interpretRequest(
         fromCache:
             translateResult.type === "translate" ? false : translateResult.type,
         tokenUsage,
+        ruleText: translateResult.ruleText,
     };
 }

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=49339682363669abb9eb1a2fce4052e99402d7ea3bf648113caa0803634d6b15 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=aeedf2258b3938cabc8023661455e7f21c619634706020af10b1fca252d7bfbc -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-shell — AI-generated documentation
@@ -174,6 +174,6 @@ External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `micr
 
 ---
 
-_Auto-generated against commit `33c83792f9a6ab6f17e52ca4856f765a2a056905` on `2026-07-27T20:21:59.625Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `95c8336eb7cd853020fc28cbc98b6380676e73f3` on `2026-07-30T17:32:13.295Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

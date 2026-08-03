@@ -1,6 +1,6 @@
 # @typeagent/action-browser
 
-Static generator for the TypeAgent Action Browser — a self-contained, interactive HTML catalog of every agent action, parameter, example phrasing, and system command. Produced as part of the documentation build.
+Static generator for the TypeAgent Action Browser — a self-contained, interactive HTML catalog of every agent action, parameter, example phrasing, and `@`-command. Produced as part of the documentation build.
 
 ## Trademarks
 

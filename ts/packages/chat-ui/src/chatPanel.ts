@@ -21,6 +21,8 @@ import type {
     PhaseTiming,
     CompletionUsageStats,
     NotifyExplainedData,
+    ExplainedDetail,
+    ExplainedSegment,
     RequestId,
     UserFeedbackCategory,
     UserFeedbackEntry,
@@ -79,7 +81,13 @@ import { createWebSpeechProvider } from "./webSpeechProvider.js";
 import { openSettingsPopup, openHelpPopup } from "./popups.js";
 import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
-import { iconX, iconJumpQueue, iconStop, iconRetry } from "./icons.js";
+import {
+    iconX,
+    iconJumpQueue,
+    iconStop,
+    iconRetry,
+    iconOpenInWindow,
+} from "./icons.js";
 
 /**
  * How long the transient "sent" acknowledgement stays on the user bubble
@@ -101,6 +109,7 @@ export const DEFAULT_AVATAR_MAP: Readonly<Record<string, string>> = {
     calendar: "📅",
     chat: "💬",
     code: "⚛️",
+    conversation: "💬",
     desktop: "🪟",
     dispatcher: "🤖",
     email: "📩",
@@ -116,6 +125,7 @@ export const DEFAULT_AVATAR_MAP: Readonly<Record<string, string>> = {
     photo: "📷",
     player: "🎧",
     scriptflow: "🔁",
+    selfhelp: "💡",
     settings: "⚙️",
     shell: "🐚",
     spelunker: "⛏",
@@ -147,7 +157,12 @@ export interface DynamicDisplayResult {
 // pulling dispatcher-types in; the rationale is stale now that
 // dispatcher-types is a small types package with minimal dependencies (just
 // @typeagent/agent-sdk, which chat-ui already depends on).
-export type { PhaseTiming, CompletionUsageStats, NotifyExplainedData };
+export type {
+    PhaseTiming,
+    CompletionUsageStats,
+    NotifyExplainedData,
+    ExplainedDetail,
+};
 
 /**
  * One entry in a session history transcript replayed via
@@ -191,6 +206,7 @@ export type HistoryEntry =
           parsePhase?: PhaseTiming;
           firstMessageMs?: number;
       }
+    | { kind: "explained"; requestId: string; data: NotifyExplainedData }
     | { kind: "system"; text: string };
 
 /**
@@ -542,6 +558,26 @@ export interface StatusNoticeBadge {
 type CaretPoint = { node: Node; offset: number };
 
 /**
+ * A live-updating bubble tracked by the top rail: either an agent dynamic
+ * display or a bubble flagged live via a `data-live-title` content marker
+ * (the conversation-index progress bar). When such a bubble scrolls out of the
+ * message viewport a compact chip is shown in the rail so the user can watch
+ * its progress and jump back to it.
+ */
+type LiveBubbleEntry = {
+    container: AgentMessageContainer;
+    kind: "dynamic" | "marker";
+    title: string;
+    icon: string;
+    percent?: number;
+    pinned: boolean;
+    offscreen: boolean;
+    position: "above" | "below" | "in";
+    chip?: HTMLDivElement;
+    barFill?: HTMLElement;
+};
+
+/**
  * A lightweight chat panel that renders user and agent messages.
  * Designed for embedding in a Chrome extension side panel or any
  * standalone web page.
@@ -744,9 +780,21 @@ export class ChatPanel {
         source: string;
         displayId: string;
         nextRefreshTime: number;
+        // The action's own bubble, captured when the host associates a
+        // requestId, so refreshes update it in place instead of spawning a
+        // separate container. Undefined => fall back to a standalone bubble.
+        container?: AgentMessageContainer;
     }[] = [];
     private dynamicTimer?: ReturnType<typeof setTimeout>;
     private dynamicContainers = new Map<string, AgentMessageContainer>();
+
+    // Live-bubble "top rail". When a live-updating bubble scrolls out of the
+    // message viewport, a compact chip is shown in `topRail` (an in-flow strip
+    // above the messages, so it never overlaps the transcript or the
+    // scrollbar). Keyed by the observed bubble element (container.div).
+    private topRail?: HTMLDivElement;
+    private liveObserver?: IntersectionObserver;
+    private liveBubbles = new Map<HTMLElement, LiveBubbleEntry>();
 
     // Pending image attachments (base64 data URLs)
     private pendingAttachments: string[] = [];
@@ -756,6 +804,12 @@ export class ChatPanel {
     // roadrunner icon and tooltip to the correct bubble after the
     // dispatcher reports back. Cleared by clear().
     private userMessageById = new Map<string, HTMLElement>();
+
+    // The most recent "explained" payload per requestId, captured by
+    // notifyExplained so the click-to-open roadrunner popover can render the
+    // triggered rule / generalized form and its parameter mapping. Cleared by
+    // clear().
+    private explainedById = new Map<string, NotifyExplainedData>();
 
     // The command actually submitted for each requestId, keyed by the id
     // stamped on the user bubble. `command` is what was sent to `onSend`
@@ -846,6 +900,8 @@ export class ChatPanel {
     private voiceBanner?: HTMLDivElement;
     private lightboxOverlay?: HTMLDivElement;
     private lightboxKeyHandler?: (ev: KeyboardEvent) => void;
+    private textViewerOverlay?: HTMLDivElement;
+    private textViewerKeyHandler?: (ev: KeyboardEvent) => void;
     private speechState: SpeechState = "idle";
 
     constructor(
@@ -899,6 +955,13 @@ export class ChatPanel {
             wrapper.appendChild(this.voiceBanner);
         }
 
+        // Live-bubble top rail — an in-flow strip above the messages (so it
+        // never overlaps the transcript or the scrollbar). Populated by the
+        // IntersectionObserver below when a live bubble scrolls out of view.
+        this.topRail = document.createElement("div");
+        this.topRail.className = "chat-top-rail";
+        wrapper.appendChild(this.topRail);
+
         // Scrollable message area
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat";
@@ -910,6 +973,17 @@ export class ChatPanel {
         this.messageDiv.appendChild(sentinel);
 
         wrapper.appendChild(this.messageDiv);
+
+        // Watch live bubbles (dynamic displays / marked progress bubbles) and
+        // surface a rail chip whenever one leaves the message viewport. Guarded
+        // for environments without IntersectionObserver (e.g. jsdom tests), in
+        // which case the rail is simply inert.
+        if (typeof IntersectionObserver !== "undefined") {
+            this.liveObserver = new IntersectionObserver(
+                (entries) => this.onLiveIntersection(entries),
+                { root: this.messageDiv, threshold: 0 },
+            );
+        }
 
         // New messages pill — shown when user scrolls away from bottom
         // Positioned outside messageDiv to avoid column-reverse layout issues
@@ -996,39 +1070,181 @@ export class ChatPanel {
     }
 
     /**
-     * Lazily syntax-highlight a logged tool-call block the first time it opens.
-     * The reasoning engine renders every tool call (single or folded) as a native
-     * <details class="reasoning-tool-call"> holding only that call's own JSON (an
-     * object for one call, an array for a folded run). The <details>/<summary>
-     * handles show/hide plus keyboard toggling on its own; we only highlight the
-     * <pre> once, when it first becomes visible, so it reads like the clickable
-     * action JSON view (same highlightJson tokens). The `toggle` event does not
-     * bubble, so we listen in the capture phase to keep a single delegated
-     * listener. Each block owns its JSON inline, independent of the enclosing
-     * action's JSON view. Shared by the Electron and VS Code shells.
+     * React to a reasoning block opening for the first time. The reasoning
+     * engine renders each logged tool call and tool result as a native
+     * <details> that owns its own content inline (JSON for a call, the full
+     * result text for a result), so the <details>/<summary> handles show/hide
+     * and keyboard toggling on its own. The `toggle` event does not bubble, so
+     * we listen in the capture phase to keep a single delegated listener.
+     *   - tool call: syntax-highlight its JSON once, when first visible, so it
+     *     reads like the clickable action JSON view (same highlightJson tokens).
+     *   - tool result: add an "open in viewer" affordance so the full result can
+     *     be popped out into a larger view.
+     * Shared by the Electron and VS Code shells.
      */
     private setupReasoningToolCall() {
         this.messageDiv.addEventListener(
             "toggle",
             (e) => {
                 const details = e.target as HTMLElement | null;
-                if (
-                    !details?.classList?.contains("reasoning-tool-call") ||
-                    !(details as HTMLDetailsElement).open
-                ) {
+                if (!details || !(details as HTMLDetailsElement).open) {
                     return;
                 }
-                const pre = details.querySelector<HTMLElement>(
-                    "pre.reasoning-tool-call-json",
-                );
-                if (!pre || pre.dataset.highlighted === "true") return;
-                // The <pre> starts as raw (escaped) JSON text; its textContent is
-                // the un-escaped JSON, which highlightJson re-escapes.
-                pre.innerHTML = sanitize(highlightJson(pre.textContent ?? ""));
-                pre.dataset.highlighted = "true";
+                if (details.classList.contains("reasoning-tool-call")) {
+                    const pre = details.querySelector<HTMLElement>(
+                        "pre.reasoning-tool-call-json",
+                    );
+                    if (!pre || pre.dataset.highlighted === "true") return;
+                    // The <pre> starts as raw (escaped) JSON text; its
+                    // textContent is the un-escaped JSON, which highlightJson
+                    // re-escapes.
+                    pre.innerHTML = sanitize(
+                        highlightJson(pre.textContent ?? ""),
+                    );
+                    pre.dataset.highlighted = "true";
+                } else if (
+                    details.classList.contains("reasoning-tool-result")
+                ) {
+                    this.addToolResultViewerButton(
+                        details as HTMLDetailsElement,
+                    );
+                }
             },
             true,
         );
+    }
+
+    /**
+     * Add an "open in viewer" affordance to a tool-result block the first time
+     * it expands. The full result text already lives inline in the block's
+     * <pre>; this lets the user pop it out into a larger, movable view - a
+     * host-native window/editor when the host provides openMessageInWindow
+     * (e.g. the VS Code shell), or an in-page overlay everywhere else (the
+     * Electron shell, web). Idempotent: a second open adds no second button.
+     */
+    private addToolResultViewerButton(details: HTMLDetailsElement) {
+        const summary = details.querySelector<HTMLElement>(
+            ".reasoning-tool-result-summary",
+        );
+        if (
+            !summary ||
+            summary.querySelector(".reasoning-tool-result-open") !== null
+        ) {
+            return;
+        }
+        const pre = details.querySelector<HTMLElement>(
+            "pre.reasoning-tool-result-body",
+        );
+        if (!pre) {
+            return;
+        }
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "reasoning-tool-result-open";
+        button.title = "Open result in viewer";
+        button.setAttribute("aria-label", "Open tool result in viewer");
+        button.appendChild(iconOpenInWindow());
+        button.addEventListener("click", (ev) => {
+            // Don't let the click toggle the enclosing <details>.
+            ev.preventDefault();
+            ev.stopPropagation();
+            this.openToolResultViewer(pre.textContent ?? "");
+        });
+        summary.appendChild(button);
+    }
+
+    /**
+     * Show a tool result's full text in a larger view: a host-native
+     * window/editor when the host supports it (openMessageInWindow), else an
+     * in-page overlay that works in every host.
+     */
+    private openToolResultViewer(text: string) {
+        const html = `<pre class="chat-text-viewer-body">${escapeHtml(
+            text,
+        )}</pre>`;
+        if (this.platformAdapter.openMessageInWindow?.(html, "Tool result")) {
+            return;
+        }
+        this.openTextViewer(text, "Tool result");
+    }
+
+    /**
+     * Open a full-window text viewer overlaying the chat, used as the in-page
+     * fallback for hosts without a native window. Scrollable, with copy and
+     * Esc / backdrop / close-button dismissal. Mirrors openImageLightbox.
+     */
+    public openTextViewer(text: string, title = "Tool result") {
+        this.closeTextViewer();
+
+        const overlay = document.createElement("div");
+        overlay.className = "chat-text-viewer-overlay";
+        overlay.tabIndex = -1;
+
+        const panel = document.createElement("div");
+        panel.className = "chat-text-viewer-panel";
+
+        const header = document.createElement("div");
+        header.className = "chat-text-viewer-header";
+        const titleEl = document.createElement("span");
+        titleEl.className = "chat-text-viewer-title";
+        titleEl.textContent = title;
+        header.appendChild(titleEl);
+
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "chat-text-viewer-button";
+        copyBtn.textContent = "Copy";
+        copyBtn.title = "Copy to clipboard";
+        copyBtn.addEventListener("click", () => {
+            void navigator.clipboard?.writeText(text);
+        });
+        header.appendChild(copyBtn);
+
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "chat-text-viewer-button";
+        closeBtn.textContent = "\u00D7";
+        closeBtn.title = "Close (Esc)";
+        closeBtn.addEventListener("click", () => this.closeTextViewer());
+        header.appendChild(closeBtn);
+
+        panel.appendChild(header);
+
+        const body = document.createElement("pre");
+        body.className = "chat-text-viewer-body";
+        body.textContent = text;
+        panel.appendChild(body);
+
+        overlay.appendChild(panel);
+
+        const onKey = (ev: KeyboardEvent) => {
+            if (ev.key === "Escape") {
+                ev.preventDefault();
+                this.closeTextViewer();
+            }
+        };
+        // Click on the backdrop (not the panel) dismisses.
+        overlay.addEventListener("click", (ev) => {
+            if (ev.target === overlay) this.closeTextViewer();
+        });
+        document.addEventListener("keydown", onKey);
+
+        this.textViewerOverlay = overlay;
+        this.textViewerKeyHandler = onKey;
+        this.rootElement.appendChild(overlay);
+        overlay.focus();
+    }
+
+    /** Tear down the text viewer overlay if it is open. */
+    public closeTextViewer() {
+        if (this.textViewerKeyHandler) {
+            document.removeEventListener("keydown", this.textViewerKeyHandler);
+            this.textViewerKeyHandler = undefined;
+        }
+        if (this.textViewerOverlay) {
+            this.textViewerOverlay.remove();
+            this.textViewerOverlay = undefined;
+        }
     }
 
     /**
@@ -2667,7 +2883,10 @@ export class ChatPanel {
             requestId,
         );
         container.setMessage(content, source, undefined);
-        this.scrollToBottom();
+        // In-place replace (e.g. a live progress bar): keep the viewport at the
+        // bottom if already there, but don't raise the New-messages pill - the
+        // bubble is being rewritten, not newly added.
+        this.scrollToBottom(false);
     }
 
     /**
@@ -3761,6 +3980,12 @@ export class ChatPanel {
                     });
                 }
                 break;
+            case "explained":
+                // Re-attach the roadrunner icon + click-to-open popover to the
+                // replayed user bubble (the "explained" notify is persisted so
+                // it survives conversation rehydration).
+                this.notifyExplained(entry.requestId, entry.data);
+                break;
         }
     }
 
@@ -3849,10 +4074,12 @@ export class ChatPanel {
         this.threadContainers.clear();
         this.notificationContainers.clear();
         this.requestAgentContainers.clear();
+        this.clearLiveBubbles();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
         this.pendingThreadResult.clear();
         this.userMessageById.clear();
+        this.explainedById.clear();
         this.sentCommandByRequestId.clear();
         this.requestStartByRequestId.clear();
         this.firstMessageMsByRequestId.clear();
@@ -3893,6 +4120,10 @@ export class ChatPanel {
         const container = this.userMessageById.get(requestId);
         if (!container) return;
 
+        // Keep the payload so the click-to-open popover can render the
+        // triggered rule / generalized form and its parameter mapping.
+        this.explainedById.set(requestId, data);
+
         const cachePart = data.fromCache
             ? `Translated by ${data.fromCache}`
             : "Translated by model";
@@ -3925,15 +4156,444 @@ export class ChatPanel {
         iconHost.classList.add("chat-message-explained-host");
         tooltipHost.classList.add("chat-message-explained");
         tooltipHost.setAttribute("data-expl", message);
-        iconHost.appendChild(iconRoadrunner(color));
+
+        const icon = iconRoadrunner(color);
+        // The roadrunner is now an interactive control: clicking it opens a
+        // popover explaining how the phrase was resolved. Keep the hover
+        // tooltip (the provenance line) as a quick-glance affordance.
+        icon.setAttribute("role", "button");
+        icon.setAttribute("tabindex", "0");
+        icon.setAttribute("aria-label", "Show translation explanation");
+        icon.style.cursor = "pointer";
+        icon.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.toggleExplainedPopover(requestId, tooltipHost, icon);
+        });
+        icon.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                this.toggleExplainedPopover(requestId, tooltipHost, icon);
+            }
+        });
+        iconHost.appendChild(icon);
     }
 
     /**
-     * Update the roadrunner color and tooltip on the "grammarRule" follow-up
-     * notification. If a rule wasn't cached, recolors the icon and extends
-     * the tooltip; succeeded rules leave the icon as-is. Mirrors the shell's
-     * MessageContainer.updateGrammarResult.
+     * Toggle the explanation popover for a user bubble. Clicking the
+     * roadrunner opens a card describing how the phrase was resolved: either
+     * the triggered grammar rule / construction and the parameter mapping, or
+     * the generalized form the model produced. Clicking the icon again (or
+     * outside the popover, or pressing Escape) closes it.
      */
+    private toggleExplainedPopover(
+        requestId: string,
+        host: HTMLElement,
+        anchor: HTMLElement,
+    ) {
+        // The message container carries a `transform` (entrance animation),
+        // which traps the popover's z-index inside the bubble's own stacking
+        // context. Elevate the whole container while the popover is open so it
+        // paints above neighboring bubbles. Derive it from the DOM (not
+        // userMessageById, which is cleared after history replay).
+        const container = host.closest<HTMLElement>(
+            ".chat-message-container-user",
+        );
+        const existing = host.querySelector(".chat-explained-popover");
+        if (existing) {
+            existing.remove();
+            host.classList.remove("chat-explained-open");
+            container?.classList.remove("chat-explained-elevated");
+            return;
+        }
+        const data = this.explainedById.get(requestId);
+        if (!data) return;
+
+        const popover = this.buildExplainedPopover(data, host);
+        const close = () => {
+            popover.remove();
+            host.classList.remove("chat-explained-open");
+            container?.classList.remove("chat-explained-elevated");
+            document.removeEventListener("keydown", onKey, true);
+            document.removeEventListener("mousedown", onOutside, true);
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                close();
+            }
+        };
+        const onOutside = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (!popover.contains(target) && !anchor.contains(target)) {
+                close();
+            }
+        };
+
+        const closeBtn = popover.querySelector<HTMLElement>(
+            ".chat-explained-popover-close",
+        );
+        closeBtn?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            close();
+        });
+
+        host.appendChild(popover);
+        host.classList.add("chat-explained-open");
+        container?.classList.add("chat-explained-elevated");
+        // Defer listener registration so the opening click doesn't
+        // immediately trigger the outside-click handler.
+        setTimeout(() => {
+            document.addEventListener("keydown", onKey, true);
+            document.addEventListener("mousedown", onOutside, true);
+        }, 0);
+    }
+
+    /**
+     * Render the explanation popover card for an "explained" payload. When the
+     * dispatcher supplied structured `detail`, show the phrase, the resolved
+     * action, the rule / generalized form, and the parameter mapping;
+     * otherwise fall back to the provenance line. `surface` is a themed,
+     * in-DOM element used to pick a light- or dark-appropriate category
+     * palette.
+     */
+    private buildExplainedPopover(
+        data: NotifyExplainedData,
+        surface: HTMLElement,
+    ): HTMLElement {
+        const dark = ChatPanel.isDarkSurface(surface);
+        const popover = document.createElement("div");
+        popover.className = "chat-explained-popover";
+
+        const header = document.createElement("div");
+        header.className = "chat-explained-popover-header";
+        const title = document.createElement("span");
+        title.className = "chat-explained-popover-title";
+        const detail = data.detail;
+        title.textContent =
+            detail === undefined || detail.source === "model"
+                ? "Generalized by the model"
+                : detail.source === "grammar"
+                  ? "Matched a grammar rule"
+                  : "Matched a cached construction";
+        header.appendChild(title);
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "chat-explained-popover-close";
+        closeBtn.setAttribute("aria-label", "Close");
+        closeBtn.textContent = "×";
+        header.appendChild(closeBtn);
+        popover.appendChild(header);
+
+        const addRow = (label: string, value: string, mono = false) => {
+            const row = document.createElement("div");
+            row.className = "chat-explained-row";
+            const key = document.createElement("div");
+            key.className = "chat-explained-key";
+            key.textContent = label;
+            const val = document.createElement("div");
+            val.className = mono
+                ? "chat-explained-val chat-explained-mono"
+                : "chat-explained-val";
+            val.textContent = value;
+            row.appendChild(key);
+            row.appendChild(val);
+            popover.appendChild(row);
+        };
+
+        if (detail) {
+            // Assign a stable color per sub-phrase category (politeness,
+            // action, entity, ...) so a phrase word and its matching
+            // generalized-form marker share a color.
+            const colors = this.buildCategoryColors(
+                detail.segments,
+                detail.rule,
+                detail.generalizations,
+                dark,
+            );
+
+            const phraseRow = document.createElement("div");
+            phraseRow.className = "chat-explained-row";
+            const phraseKey = document.createElement("div");
+            phraseKey.className = "chat-explained-key";
+            phraseKey.textContent = "Phrase";
+            const phraseVal = document.createElement("div");
+            phraseVal.className = "chat-explained-val chat-explained-phrase";
+            if (detail.segments && detail.segments.length > 0) {
+                this.appendColoredSegments(phraseVal, detail.segments, colors);
+            } else {
+                phraseVal.textContent = detail.phrase;
+            }
+            phraseRow.appendChild(phraseKey);
+            phraseRow.appendChild(phraseVal);
+            popover.appendChild(phraseRow);
+
+            addRow("Action", detail.action, true);
+            if (detail.rule) {
+                const ruleRow = document.createElement("div");
+                ruleRow.className = "chat-explained-row";
+                const ruleKey = document.createElement("div");
+                ruleKey.className = "chat-explained-key";
+                ruleKey.textContent =
+                    detail.source === "model" ? "Generalized form" : "Rule";
+                const ruleVal = document.createElement("div");
+                ruleVal.className = "chat-explained-val chat-explained-mono";
+                // Each <...> marker is colored to match the phrase words it
+                // generalizes (same category color).
+                this.appendGeneralizedForm(ruleVal, detail.rule, colors);
+                ruleRow.appendChild(ruleKey);
+                ruleRow.appendChild(ruleVal);
+                popover.appendChild(ruleRow);
+
+                if (colors.size > 0) {
+                    const legend = document.createElement("div");
+                    legend.className = "chat-explained-legend";
+                    for (const [category, color] of colors) {
+                        const item = document.createElement("span");
+                        item.className = "chat-explained-legend-item";
+                        const swatch = document.createElement("span");
+                        swatch.className = "chat-explained-swatch";
+                        swatch.style.backgroundColor = color;
+                        item.appendChild(swatch);
+                        item.appendChild(document.createTextNode(category));
+                        legend.appendChild(item);
+                    }
+                    popover.appendChild(legend);
+                }
+            }
+
+            if (detail.mapping && detail.mapping.length > 0) {
+                const mapLabel = document.createElement("div");
+                mapLabel.className =
+                    "chat-explained-key chat-explained-maphead";
+                mapLabel.textContent = "Mapping";
+                popover.appendChild(mapLabel);
+                const table = document.createElement("div");
+                table.className = "chat-explained-map";
+                for (const m of detail.mapping) {
+                    const name = document.createElement("div");
+                    name.className = "chat-explained-mapname";
+                    name.textContent = m.name;
+                    const value = document.createElement("div");
+                    value.className = "chat-explained-mapval";
+                    value.textContent = m.value;
+                    table.appendChild(name);
+                    table.appendChild(value);
+                }
+                popover.appendChild(table);
+            }
+
+            if (detail.generalizations && detail.generalizations.length > 0) {
+                this.appendGeneralizations(
+                    popover,
+                    detail.generalizations,
+                    colors,
+                );
+            }
+        }
+
+        // Always include the provenance line at the foot for context.
+        const foot = document.createElement("div");
+        foot.className = "chat-explained-foot";
+        const cachePart = data.fromCache
+            ? `Translated by ${data.fromCache}`
+            : "Translated by model";
+        foot.textContent =
+            data.error === undefined
+                ? `${cachePart} · explained at ${data.time}`
+                : `${cachePart} · ${data.error}`;
+        popover.appendChild(foot);
+
+        return popover;
+    }
+
+    /**
+     * Category color palettes for the explained popover. The light palette is
+     * darker/saturated to read on light surfaces; the dark palette is brighter
+     * to read on dark surfaces. Same length so a category keeps its slot.
+     */
+    private static readonly EXPLAINED_PALETTE_LIGHT = [
+        "#1a7f37", // green
+        "#9126c4", // purple
+        "#1667b8", // blue
+        "#c2410c", // orange
+        "#0e7490", // teal
+        "#be185d", // magenta
+        "#8a6d00", // gold
+        "#5b21b6", // indigo
+    ];
+    private static readonly EXPLAINED_PALETTE_DARK = [
+        "#4ade80", // green
+        "#c084fc", // purple
+        "#60a5fa", // blue
+        "#fb923c", // orange
+        "#22d3ee", // cyan
+        "#f472b6", // pink
+        "#fcd34d", // yellow
+        "#a78bfa", // violet
+    ];
+
+    /**
+     * Whether `el` renders on a dark surface, by luminance of its resolved
+     * (themed) text color: light text implies a dark background. Used to pick
+     * the category palette so colors stay legible under both host themes.
+     */
+    private static isDarkSurface(el: HTMLElement): boolean {
+        const match = getComputedStyle(el).color.match(
+            /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i,
+        );
+        if (!match) return false;
+        const luminance =
+            (0.299 * +match[1] + 0.587 * +match[2] + 0.114 * +match[3]) / 255;
+        return luminance > 0.55;
+    }
+
+    /**
+     * The category name inside a generalized-form marker, e.g. "<M:action>" ->
+     * "action", "<politeness>?" -> "politeness".
+     */
+    private static markerCategory(token: string): string {
+        return token.replace(/^</, "").replace(/>\??$/, "").replace(/^M:/, "");
+    }
+
+    /**
+     * Assign a stable color per sub-phrase category, drawn first from the
+     * phrase segments (in order) then any extra categories that appear only in
+     * the rule markers or the sample rephrasings, so every place a category
+     * appears shares one color.
+     */
+    private buildCategoryColors(
+        segments: ExplainedDetail["segments"],
+        rule: string | undefined,
+        generalizations: ExplainedDetail["generalizations"],
+        dark: boolean,
+    ): Map<string, string> {
+        const palette = dark
+            ? ChatPanel.EXPLAINED_PALETTE_DARK
+            : ChatPanel.EXPLAINED_PALETTE_LIGHT;
+        const colors = new Map<string, string>();
+        const assign = (category: string | undefined) => {
+            if (category && !colors.has(category)) {
+                colors.set(category, palette[colors.size % palette.length]);
+            }
+        };
+        for (const seg of segments ?? []) assign(seg.category);
+        if (rule) {
+            for (const token of rule.match(/<[^>]+>\??/g) ?? []) {
+                assign(ChatPanel.markerCategory(token));
+            }
+        }
+        for (const gen of generalizations ?? []) {
+            if (Array.isArray(gen)) {
+                for (const seg of gen) assign(seg?.category);
+            }
+        }
+        return colors;
+    }
+
+    /**
+     * Render per-category-colored segment spans (a phrase or a sample
+     * rephrasing) into `container`, separated by spaces.
+     */
+    private appendColoredSegments(
+        container: HTMLElement,
+        segments: ExplainedSegment[],
+        colors: Map<string, string>,
+    ) {
+        segments.forEach((seg, i) => {
+            if (i > 0) container.appendChild(document.createTextNode(" "));
+            const span = document.createElement("span");
+            span.textContent = seg?.text ?? "";
+            span.style.color = colors.get(seg?.category) ?? "";
+            container.appendChild(span);
+        });
+    }
+
+    /**
+     * Render a generalized-form string into `container`, splitting `<...>`
+     * markers from the literal text and coloring each marker to match the
+     * phrase words it generalizes (via the category color map).
+     */
+    private appendGeneralizedForm(
+        container: HTMLElement,
+        form: string,
+        colors: Map<string, string>,
+    ) {
+        const markerRe = /<[^>]+>\??/g;
+        let last = 0;
+        let match: RegExpExecArray | null;
+        const addLiteral = (text: string) => {
+            if (!text) return;
+            const span = document.createElement("span");
+            span.className = "chat-explained-literal";
+            span.textContent = text;
+            container.appendChild(span);
+        };
+        while ((match = markerRe.exec(form)) !== null) {
+            addLiteral(form.slice(last, match.index));
+            const span = document.createElement("span");
+            span.className = "chat-explained-marker";
+            span.textContent = match[0];
+            span.style.color =
+                colors.get(ChatPanel.markerCategory(match[0])) ?? "";
+            container.appendChild(span);
+            last = match.index + match[0].length;
+        }
+        addLiteral(form.slice(last));
+    }
+
+    /**
+     * Render the "also matches" list of same-meaning rephrasings, each colored
+     * by category like the phrase. Shows the first few and reveals the rest
+     * behind a "load more" link.
+     */
+    private appendGeneralizations(
+        popover: HTMLElement,
+        gens: NonNullable<ExplainedDetail["generalizations"]>,
+        colors: Map<string, string>,
+    ) {
+        const INITIAL = 3;
+        const label = document.createElement("div");
+        label.className = "chat-explained-key chat-explained-maphead";
+        label.textContent = "Also matches";
+        popover.appendChild(label);
+
+        const list = document.createElement("div");
+        list.className = "chat-explained-gens";
+        popover.appendChild(list);
+
+        const moreLink = document.createElement("button");
+        moreLink.type = "button";
+        moreLink.className = "chat-explained-more";
+        popover.appendChild(moreLink);
+
+        let shown = 0;
+        const reveal = (count: number) => {
+            const end = Math.min(shown + count, gens.length);
+            for (let i = shown; i < end; i++) {
+                const item = document.createElement("div");
+                item.className = "chat-explained-gen";
+                const gen = gens[i];
+                if (typeof gen === "string") {
+                    item.textContent = gen;
+                } else if (Array.isArray(gen)) {
+                    this.appendColoredSegments(item, gen, colors);
+                }
+                list.appendChild(item);
+            }
+            shown = end;
+            const remaining = gens.length - shown;
+            if (remaining <= 0) {
+                moreLink.remove();
+            } else {
+                moreLink.textContent = `load ${remaining} more`;
+            }
+        };
+        moreLink.addEventListener("click", (e) => {
+            e.stopPropagation();
+            reveal(gens.length);
+        });
+        reveal(INITIAL);
+    }
+
     public updateGrammarResult(
         requestId: string,
         success: boolean,
@@ -5094,13 +5754,24 @@ export class ChatPanel {
         source: string,
         displayId: string,
         nextRefreshMs: number,
+        requestId?: string,
     ) {
         if (!this.getDynamicDisplay) return;
         const MIN_INTERVAL = 500;
+        // When the host passes the originating requestId, refresh the action's
+        // own bubble in place (a single bubble) rather than a separate
+        // globe-icon container. Captured now, while the action's bubble is
+        // still mapped, so it survives the request's thread-container cleanup
+        // on completion.
+        const container =
+            requestId !== undefined
+                ? this.threadContainers.get(this.resolveThreadId(requestId))
+                : undefined;
         this.dynamicDisplays.push({
             source,
             displayId,
             nextRefreshTime: Date.now() + Math.max(nextRefreshMs, MIN_INTERVAL),
+            container,
         });
         this.scheduleDynamicRefresh();
     }
@@ -5134,33 +5805,243 @@ export class ChatPanel {
                     item.displayId,
                 );
 
-                // Reuse the same container so refreshes replace content
+                // Prefer the action's own bubble (captured at registration)
+                // so the live display updates in place. Fall back to a
+                // standalone container only when the host didn't associate a
+                // request bubble, keyed so repeat refreshes reuse it.
                 const key = `${item.source}:${item.displayId}`;
-                let container = this.dynamicContainers.get(key);
+                let container = item.container;
                 if (!container) {
-                    container = this.createAgentContainer(item.source, "🌐");
-                    this.dynamicContainers.set(key, container);
+                    container = this.dynamicContainers.get(key);
+                    if (!container) {
+                        container = this.createAgentContainer(
+                            item.source,
+                            "🌐",
+                        );
+                        this.dynamicContainers.set(key, container);
+                    }
                 }
                 // Replace content (no append mode = replace)
                 container.setMessage(result.content, item.source, undefined);
-                this.scrollToBottom();
+                // In-place tick update, not a new message: don't raise the
+                // "New messages" pill when the user has scrolled up.
+                this.scrollToBottom(false);
 
                 if (result.nextRefreshMs > 0) {
+                    // Still live — track it for the top rail. If the content
+                    // advertises a data-live-title marker (e.g. the player's
+                    // now-playing card), onContainerContentChanged already
+                    // registered it with a rich title + progress percent, so
+                    // don't overwrite that with the generic source label.
+                    if (!container.getLiveMarker()) {
+                        this.registerLiveBubble(container, "dynamic", {
+                            title: item.source,
+                            icon: container.iconText || "🌐",
+                        });
+                    }
                     this.dynamicDisplays.push({
                         source: item.source,
                         displayId: item.displayId,
                         nextRefreshTime:
                             Date.now() + Math.max(result.nextRefreshMs, 500),
+                        container: item.container,
                     });
                 } else {
-                    // Display is done — remove from tracking
-                    this.dynamicContainers.delete(key);
+                    // Display is done — stop tracking. Only drop a standalone
+                    // fallback container; the action's own bubble persists.
+                    this.unregisterLiveBubble(container);
+                    if (item.container === undefined) {
+                        this.dynamicContainers.delete(key);
+                    }
                 }
             } catch {
                 // Refresh failed — don't re-register
             }
         }
         this.scheduleDynamicRefresh();
+    }
+
+    // ---- Live-bubble top rail --------------------------------------------
+
+    /**
+     * Track (or refresh) a live-updating bubble so a chip appears in the top
+     * rail while it is scrolled out of view. Safe to call repeatedly to update
+     * the chip's title / percent.
+     */
+    private registerLiveBubble(
+        container: AgentMessageContainer,
+        kind: "dynamic" | "marker",
+        info: { title: string; icon: string; percent?: number },
+    ) {
+        if (!this.liveObserver) return;
+        const el = container.div;
+        let entry = this.liveBubbles.get(el);
+        if (!entry) {
+            entry = {
+                container,
+                kind,
+                title: info.title,
+                icon: info.icon,
+                percent: info.percent,
+                pinned: true,
+                offscreen: false,
+                position: "in",
+            };
+            this.liveBubbles.set(el, entry);
+            this.liveObserver.observe(el);
+        } else {
+            entry.kind = kind;
+            entry.title = info.title;
+            entry.icon = info.icon;
+            entry.percent = info.percent;
+        }
+        this.refreshTopRail();
+    }
+
+    /** Stop tracking a bubble and drop its chip. */
+    private unregisterLiveBubble(container: AgentMessageContainer) {
+        const el = container.div;
+        const entry = this.liveBubbles.get(el);
+        if (!entry) return;
+        this.liveObserver?.unobserve(el);
+        entry.chip?.remove();
+        this.liveBubbles.delete(el);
+    }
+
+    /** Drop all live-bubble tracking (called from clear()). */
+    private clearLiveBubbles() {
+        for (const [el, entry] of this.liveBubbles) {
+            this.liveObserver?.unobserve(el);
+            entry.chip?.remove();
+        }
+        this.liveBubbles.clear();
+    }
+
+    /**
+     * Content hook run after any agent bubble renders. Registers the bubble
+     * with the rail when its content carries a `data-live-title` marker, and
+     * unregisters marker-tracked bubbles once that marker is gone (e.g. the
+     * index summary replaces the progress bar).
+     */
+    private onContainerContentChanged(container: AgentMessageContainer) {
+        const marker = container.getLiveMarker();
+        if (marker) {
+            this.registerLiveBubble(container, "marker", {
+                title: marker.title,
+                icon: marker.icon || container.iconText || "⏳",
+                percent: marker.percent,
+            });
+        } else if (this.liveBubbles.get(container.div)?.kind === "marker") {
+            this.unregisterLiveBubble(container);
+        }
+    }
+
+    private onLiveIntersection(entries: IntersectionObserverEntry[]) {
+        for (const e of entries) {
+            const entry = this.liveBubbles.get(e.target as HTMLElement);
+            if (!entry) continue;
+            if (e.isIntersecting) {
+                entry.offscreen = false;
+                entry.position = "in";
+            } else {
+                entry.offscreen = true;
+                const rb = e.rootBounds;
+                entry.position =
+                    rb && e.boundingClientRect.bottom <= rb.top
+                        ? "above"
+                        : "below";
+            }
+        }
+        this.refreshTopRail();
+    }
+
+    /**
+     * Reconcile the rail: show a chip for each pinned bubble that is currently
+     * off-screen, remove it otherwise, and refresh chip contents in place.
+     */
+    private refreshTopRail() {
+        if (!this.topRail) return;
+        for (const entry of this.liveBubbles.values()) {
+            const shouldShow = entry.pinned && entry.offscreen;
+            if (shouldShow && !entry.chip) {
+                entry.chip = this.buildLiveChip(entry);
+                this.topRail.appendChild(entry.chip);
+            } else if (!shouldShow && entry.chip) {
+                entry.chip.remove();
+                entry.chip = undefined;
+                entry.barFill = undefined;
+            }
+            if (entry.chip) this.updateLiveChip(entry);
+        }
+    }
+
+    private buildLiveChip(entry: LiveBubbleEntry): HTMLDivElement {
+        const chip = document.createElement("div");
+        chip.className = "chat-live-chip";
+        chip.setAttribute("role", "button");
+        chip.tabIndex = 0;
+
+        const dir = document.createElement("span");
+        dir.className = "chat-live-chip-dir";
+        chip.appendChild(dir);
+
+        const icon = document.createElement("span");
+        icon.className = "chat-live-chip-icon";
+        chip.appendChild(icon);
+
+        const label = document.createElement("span");
+        label.className = "chat-live-chip-label";
+        chip.appendChild(label);
+
+        if (entry.percent !== undefined) {
+            const bar = document.createElement("span");
+            bar.className = "chat-live-chip-bar";
+            const fill = document.createElement("i");
+            bar.appendChild(fill);
+            chip.appendChild(bar);
+            entry.barFill = fill;
+        }
+
+        const pin = document.createElement("button");
+        pin.className = "chat-live-chip-pin";
+        pin.type = "button";
+        pin.textContent = "📌";
+        pin.title = "Unpin — stop showing this in the rail";
+        pin.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            entry.pinned = false;
+            this.refreshTopRail();
+        });
+        chip.appendChild(pin);
+
+        const jump = () =>
+            entry.container.div.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+            });
+        chip.addEventListener("click", jump);
+        chip.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" || ev.key === " ") {
+                ev.preventDefault();
+                jump();
+            }
+        });
+        return chip;
+    }
+
+    private updateLiveChip(entry: LiveBubbleEntry) {
+        const chip = entry.chip;
+        if (!chip) return;
+        chip.title = `Jump to ${entry.title}`;
+        const dir = chip.querySelector<HTMLElement>(".chat-live-chip-dir");
+        if (dir) dir.textContent = entry.position === "above" ? "▲" : "▼";
+        const icon = chip.querySelector<HTMLElement>(".chat-live-chip-icon");
+        if (icon) icon.textContent = entry.icon;
+        const label = chip.querySelector<HTMLElement>(".chat-live-chip-label");
+        if (label) label.textContent = entry.title;
+        if (entry.barFill && entry.percent !== undefined) {
+            entry.barFill.style.width = `${entry.percent}%`;
+        }
     }
 
     /** Focus the text input. */
@@ -5741,6 +6622,11 @@ export class ChatPanel {
             this.settingsView,
             this.platformAdapter,
         );
+        // Detect the `data-live-title` marker (e.g. the conversation-index
+        // progress bar) whenever this bubble's content changes, so it can be
+        // tracked by the top rail.
+        container.onContentChanged = () =>
+            this.onContainerContentChanged(container);
         if (threadId !== undefined) {
             this.attachFeedbackToContainer(container, threadId);
         }
@@ -5859,7 +6745,11 @@ export class ChatPanel {
         this.scrollToBottom();
     }
 
-    private scrollToBottom() {
+    // `notifyIfScrolledAway` controls the "New messages" pill: pass false for
+    // in-place content updates (e.g. a live progress bar rewriting the same
+    // bubble) so replacing an existing message does not masquerade as a new
+    // message when the user has scrolled up.
+    private scrollToBottom(notifyIfScrolledAway: boolean = true) {
         // If user has manually scrolled away from bottom, don't auto-scroll.
         // Show the pill instead so they can choose to jump to new messages.
         if (this.userHasManuallyScrolled) {
@@ -5867,8 +6757,10 @@ export class ChatPanel {
                 this.hideNewMessagesPill();
                 return;
             }
-            this.hasUnseenNewMessages = true;
-            this.showNewMessagesPill();
+            if (notifyIfScrolledAway) {
+                this.hasUnseenNewMessages = true;
+                this.showNewMessagesPill();
+            }
             return;
         }
 
@@ -5968,6 +6860,10 @@ class AgentMessageContainer {
     private reasoning = false;
     private readonly collapsedReasoning = new WeakSet<HTMLDetailsElement>();
     private lastAppendMode?: DisplayAppendMode;
+
+    // Invoked after this bubble renders content. ChatPanel uses it to detect
+    // the `data-live-title` marker and track the bubble in the top rail.
+    public onContentChanged?: () => void;
     // Mirrors the shell's swapContent pattern: when action JSON is set,
     // clicking the agent name toggles the message body between the
     // rendered response and a <pre> of the action JSON.
@@ -6288,7 +7184,23 @@ class AgentMessageContainer {
      */
     public setActionResultData(result: unknown) {
         if (result === undefined || result === null) return;
-        const json = JSON.stringify(result, undefined, 2);
+        // Prepend a display-only `status` so the inspector shows the outcome
+        // (success vs error) at a glance. It is derived here for display and is
+        // not part of the real ActionResult: the dispatcher marks a failure
+        // with a string `error` field (success results omit it), which is what
+        // we key on.
+        const display =
+            typeof result === "object"
+                ? {
+                      status:
+                          typeof (result as { error?: unknown }).error ===
+                          "string"
+                              ? "error"
+                              : "success",
+                      ...(result as Record<string, unknown>),
+                  }
+                : result;
+        const json = JSON.stringify(display, undefined, 2);
         const html = `<pre class="chat-json">${highlightJson(json)}</pre>`;
         this.resultDiv.innerHTML = sanitize(html);
         this.actionResultHtml = html;
@@ -6339,6 +7251,7 @@ class AgentMessageContainer {
             );
             this.lastAppendMode = appendMode;
             this.div.classList.remove("chat-message-hidden");
+            this.onContentChanged?.();
             return;
         }
 
@@ -6355,12 +7268,40 @@ class AgentMessageContainer {
 
         this.lastAppendMode = appendMode;
         this.div.classList.remove("chat-message-hidden");
+        this.onContentChanged?.();
     }
 
     public setIcon(icon: string) {
         if (icon) {
             this.iconDiv.textContent = icon;
         }
+    }
+
+    /** The bubble's current avatar glyph (used as a fallback chip icon). */
+    public get iconText(): string {
+        return this.iconDiv.textContent ?? "";
+    }
+
+    /**
+     * If this bubble's content carries a `data-live-title` marker (emitted by
+     * live progress content such as the conversation-index bar), return its
+     * title / optional icon / optional percent. Used by the top rail.
+     */
+    public getLiveMarker():
+        | { title: string; icon?: string; percent?: number }
+        | undefined {
+        const el =
+            this.messageDiv.querySelector<HTMLElement>("[data-live-title]");
+        if (!el) return undefined;
+        const title = el.getAttribute("data-live-title") ?? "";
+        const icon = el.getAttribute("data-live-icon") ?? undefined;
+        const pctStr = el.getAttribute("data-live-percent");
+        const pct = pctStr !== null ? Number(pctStr) : NaN;
+        return {
+            title,
+            icon,
+            percent: Number.isFinite(pct) ? pct : undefined,
+        };
     }
 
     public updateSource(source: string, icon?: string) {

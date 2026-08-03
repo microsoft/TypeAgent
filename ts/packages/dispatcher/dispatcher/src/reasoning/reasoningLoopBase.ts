@@ -155,17 +155,50 @@ export function formatToolCallDisplay(
     return `**Tool:** ${toolName}${params}`;
 }
 
-export function formatToolResultDisplay(
-    content: string,
-    isError: boolean,
-): string {
+// Collapse a tool result to a short single-line preview for a summary/one-liner:
+// trim, flatten newlines, and cap at MAX_LEN with an ellipsis. Empty results
+// render as "(empty)" so the line is never blank.
+function toolResultPreview(content: string): string {
     const MAX_LEN = 120;
     let preview = content.trim().replace(/\n+/g, " ");
     if (preview.length > MAX_LEN) {
         preview = preview.slice(0, MAX_LEN) + "…";
     }
+    return preview || "(empty)";
+}
+
+export function formatToolResultDisplay(
+    content: string,
+    isError: boolean,
+): string {
     const label = isError ? "**Error:**" : "**↳**";
-    return `${label} \`${preview || "(empty)"}\``;
+    return `${label} \`${toolResultPreview(content)}\``;
+}
+
+/**
+ * Render a tool result as a native <details> block that mirrors the tool-call
+ * block (formatToolRun): the <summary> shows a one-line preview (with an error
+ * marker when the tool failed) and expanding it reveals the full result text.
+ * The full text lives inline in the <pre> so chat-ui can both show it in place
+ * and hand it to the "open in viewer" affordance. Self-contained HTML starting
+ * with "<", so splitActionContent leaves it intact rather than hoisting it into
+ * the enclosing action's JSON view. The preview and body text are HTML-escaped
+ * (arbitrary tool output), so markup in a result can never break out.
+ */
+export function formatToolResult(content: string, isError: boolean): string {
+    const label = isError ? "Error:" : "↳";
+    const cls = isError
+        ? "reasoning-tool-result reasoning-tool-result-error"
+        : "reasoning-tool-result";
+    const body = content.trim() || "(empty)";
+    return [
+        `<details class="${cls}">`,
+        `<summary class="reasoning-tool-result-summary"><strong>${label}</strong> <code>${escapeHtmlText(
+            toolResultPreview(content),
+        )}</code></summary>`,
+        `<pre class="reasoning-tool-result-body">${escapeHtmlText(body)}</pre>`,
+        `</details>`,
+    ].join("");
 }
 
 // Escape the three HTML-significant characters so text renders literally inside
@@ -271,25 +304,30 @@ export function formatToolRun(
  * Tool lines are buffered instead of emitted right away, because the count is
  * not known until the run ends. Callers must:
  *   - route every tool-call line through tool()
- *   - call flush() before emitting any non-tool display
- *   - call flush() once more after the reasoning stream completes
+ *   - call result() when the tool finishes, to emit the call and its result
+ *     together in one bubble
+ *   - call flush() before emitting any non-tool display, and once more after
+ *     the reasoning stream completes, to emit a call that has no result yet
  *
  * Every run - single or folded - is emitted as its own click-to-expand block
  * (see formatToolRun): the summary is the display line ("xN" only when folded)
- * and the hidden body is that run's own JSON.
+ * and the hidden body is that run's own JSON. result() appends the result's own
+ * block after it.
  */
 export class ToolRunFolder {
     private pending: string | undefined;
     private count = 0;
     private details: ToolCallDetail[] = [];
 
-    // `format` turns a raw tool call into its display line; it also serves as
-    // the folding key (identical display = same run). Injected rather than
-    // imported because each reasoning engine formats tool calls differently and
-    // its formatter lives in the engine module (copilot.ts), which depends on
-    // this file, not the other way around.
+    // `emit` receives a rendered block and whether it represents a failed tool
+    // result, so the caller can style it (e.g. a warning bubble); a call-only
+    // flush always passes false. `format` turns a raw tool call into its display
+    // line and doubles as the folding key (identical display = same run).
+    // Injected rather than imported because each reasoning engine formats tool
+    // calls differently and its formatter lives in the engine module
+    // (copilot.ts), which depends on this file, not the other way around.
     constructor(
-        private readonly emit: (content: string) => void,
+        private readonly emit: (content: string, isError: boolean) => void,
         private readonly format: (toolName: string, args: unknown) => string,
     ) {}
 
@@ -309,12 +347,13 @@ export class ToolRunFolder {
         this.details = [{ tool: toolName, args }];
     }
 
-    // Emit the buffered run (if any) as a click-to-expand block and reset. A run
-    // of two or more identical calls gets an "xN" summary; a single call shows
-    // its line unchanged. Both reveal their own JSON on click.
-    flush(): void {
+    // Render the buffered run (if any) as a click-to-expand block and reset,
+    // returning the HTML (empty string when nothing is buffered). A run of two
+    // or more identical calls gets an "xN" summary; a single call shows its line
+    // unchanged. Shared by flush() and result().
+    private takePending(): string {
         if (this.pending === undefined) {
-            return;
+            return "";
         }
         const line =
             this.count > 1 ? `${this.pending} x${this.count}` : this.pending;
@@ -322,7 +361,29 @@ export class ToolRunFolder {
         this.pending = undefined;
         this.count = 0;
         this.details = [];
-        this.emit(formatToolRun(line, details));
+        return formatToolRun(line, details);
+    }
+
+    // Emit the buffered run (if any) on its own - used before a non-tool display
+    // interrupts a run, or after the stream completes with a call that has no
+    // result to pair with.
+    flush(): void {
+        const block = this.takePending();
+        if (block !== "") {
+            this.emit(block, false);
+        }
+    }
+
+    // Emit the buffered tool call together with its result as a single block, so
+    // the call and the output it produced share one bubble: the call's
+    // click-to-expand block followed by the result's (an error result marks the
+    // whole emission as an error).
+    result(resultContent: string, isError: boolean): void {
+        const callBlock = this.takePending();
+        this.emit(
+            callBlock + formatToolResult(resultContent, isError),
+            isError,
+        );
     }
 }
 

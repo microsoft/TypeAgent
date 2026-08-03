@@ -61,7 +61,8 @@
             "src/agent/localPlayerSchema.agr"
           ],
           "outputGlobs": [
-            "dist/agent/localPlayerSchema.ag.json"
+            "dist/agent/localPlayerSchema.ag.json",
+            "dist/agent/localPlayerSchema.ag.map.json"
           ]
         }
       },

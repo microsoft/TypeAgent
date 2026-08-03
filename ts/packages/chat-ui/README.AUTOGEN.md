@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=15ee56d87e10ae7094dc91827e8bc977cba2da1d9941305c88572905f2c8dcad -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4f66b584686aa5dfb38c578f68524186f16edc144eabd5397804088f714e1ee2 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/chat-ui — AI-generated documentation
@@ -12,19 +12,19 @@
 
 ## Overview
 
-The `@typeagent/chat-ui` package provides a shared, framework-free chat user interface for various TypeAgent applications. It is designed to deliver a consistent and interactive chat experience across multiple platforms, including the VS Code shell extension, the browser extension chat panel, and the Visual Studio extension webview. The package includes components for rendering chat messages, handling streaming updates, replaying chat history, managing connection status, and collecting user feedback.
+The `@typeagent/chat-ui` package provides a shared, framework-free chat user interface for TypeAgent applications. It is designed to deliver a consistent and interactive chat experience across multiple platforms, including the VS Code shell extension, the browser extension chat panel, and the Visual Studio extension webview. The package includes components for rendering chat messages, handling streaming updates, replaying chat history, managing connection status, and collecting user feedback.
 
-This package is a TypeScript library that ships with both TypeScript source files and CSS styles. It is designed to be integrated into host applications, which are responsible for managing the chat interface and its interactions with users and agents.
+This TypeScript library ships with both TypeScript source files and CSS styles, making it easy to integrate into host applications. Hosts are responsible for managing the chat interface and its interactions with users and agents.
 
 ## What it does
 
 The `@typeagent/chat-ui` package provides the following key features:
 
-- **ChatPanel**: The core component for rendering the chat interface. It supports:
+- **ChatPanel**: The primary component for rendering the chat interface. It supports:
 
-  - Adding user and agent messages using `addAgentMessage`.
+  - Adding user and agent messages via `addAgentMessage`.
   - Updating display metadata with `setDisplayInfo`.
-  - Replaying historical chat entries via `replayHistory`.
+  - Replaying historical chat entries using `replayHistory`.
   - Streaming updates for dynamic content display.
 
 - **FeedbackWidget**: A component for collecting user feedback, including thumbs-up/thumbs-down ratings, comments, and contextual information.
@@ -122,6 +122,6 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ---
 
-_Auto-generated against commit `fa4bb9b44db12e2d15b83e03e59f9c7147ed2b50` on `2026-07-27T19:08:36.121Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `5018562335eded84b16dedcbb8e86d59b538a978` on `2026-07-30T06:29:20.146Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

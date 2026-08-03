@@ -26,6 +26,9 @@ import { PowerShellProcessesActions } from "./processesActionsSchema.mts";
 <ProcessMemory> =
     (show|what's|what is) (using)? (the)? (most)? memory
       -> { actionName: "processMemory", parameters: {} }
+  // "show top 5 memory hogs" — needs both "show" and "top" (not covered by (top|show) alone)
+  | show top $(topN:number) memory (hogs|usage|consumers|processes)?
+      -> { actionName: "processMemory", parameters: { topN } }
   | (top|show) $(topN:number)? memory (hogs|usage|consumers)
       -> { actionName: "processMemory", parameters: { topN } }
   | processes (sorted)? by memory (usage)?
@@ -36,6 +39,9 @@ import { PowerShellProcessesActions } from "./processesActionsSchema.mts";
 <ProcessCpu> =
     (show|what's|what is) (using)? (the)? (most)? cpu
       -> { actionName: "processCpu", parameters: {} }
+  // "show top 10 cpu hogs" — needs both "show" and "top"
+  | show top $(topN:number) cpu (hogs|usage|consumers|processes)?
+      -> { actionName: "processCpu", parameters: { topN } }
   | (top|show) $(topN:number)? cpu (hogs|usage|consumers)
       -> { actionName: "processCpu", parameters: { topN } }
   | processes (sorted)? by cpu (usage)?

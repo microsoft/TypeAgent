@@ -233,7 +233,17 @@ export class ConversationMemory
     }
 
     public async waitForPendingTasks(): Promise<void> {
+        // async's queue.drain() promise only resolves on the NEXT drain event;
+        // when the queue is already idle no such event ever fires and awaiting
+        // it would hang forever. idle() short-circuits that. It is checked
+        // synchronously right before drain(), so no task can settle in the gap.
+        if (this.updatesTaskQueue.idle()) {
+            debugLogger("waitForPendingTasks: queue idle, nothing to drain");
+            return;
+        }
+        debugLogger("waitForPendingTasks: draining queue");
         await this.updatesTaskQueue.drain();
+        debugLogger("waitForPendingTasks: drained");
     }
 
     public async serialize(): Promise<ConversationMemoryData> {

@@ -25,21 +25,19 @@
   ],
   "scripts": {
     "agc": "agc -i ./src/codeSchema.agr -o ./dist/codeSchema.ag.json",
-    "agc:all": "concurrently npm:agc npm:agc:debug npm:agc:display npm:agc:general npm:agc:workbench npm:agc:extension npm:agc:vscode-shell",
+    "agc:all": "concurrently npm:agc npm:agc:debug npm:agc:display npm:agc:general npm:agc:workbench npm:agc:extension",
     "agc:debug": "agc -i ./src/vscode/debugActionsSchema.agr -o ./dist/debugSchema.ag.json",
     "agc:display": "agc -i ./src/vscode/displayActionsSchema.agr -o ./dist/displaySchema.ag.json",
     "agc:extension": "agc -i ./src/vscode/extensionsActionsSchema.agr -o ./dist/extensionSchema.ag.json",
     "agc:general": "agc -i ./src/vscode/generalActionsSchema.agr -o ./dist/generalSchema.ag.json",
-    "agc:vscode-shell": "agc -i ./src/vscode/vscodeConversationActionsSchema.agr -o ./dist/vscodeShellSchema.ag.json",
     "agc:workbench": "agc -i ./src/vscode/workbenchCommandActionsSchema.agr -o ./dist/workbenchSchema.ag.json",
     "asc": "asc -i ./src/codeActionsSchema.ts -o ./dist/codeSchema.pas.json -t CodeActions -a CodeActivity",
-    "asc:all": "concurrently npm:asc npm:asc:debug npm:asc:display npm:asc:general npm:asc:editor npm:asc:workbench npm:asc:extension npm:asc:vscode-shell",
+    "asc:all": "concurrently npm:asc npm:asc:debug npm:asc:display npm:asc:general npm:asc:editor npm:asc:workbench npm:asc:extension",
     "asc:debug": "asc -i ./src/vscode/debugActionsSchema.ts -o ./dist/debugSchema.pas.json -t CodeDebugActions",
     "asc:display": "asc -i ./src/vscode/displayActionsSchema.ts -o ./dist/displaySchema.pas.json -t CodeDisplayActions",
     "asc:editor": "asc -i ./src/vscode/editorCodeActionsSchema.ts -o ./dist/editorSchema.pas.json -t EditorCodeActions",
     "asc:extension": "asc -i ./src/vscode/extensionsActionsSchema.ts -o ./dist/extensionSchema.pas.json -t CodeWorkbenchExtensionActions",
     "asc:general": "asc -i ./src/vscode/generalActionsSchema.ts -o ./dist/generalSchema.pas.json -t CodeGeneralActions",
-    "asc:vscode-shell": "asc -i ./src/vscode/vscodeConversationActionsSchema.ts -o ./dist/vscodeShellSchema.pas.json -t VSCodeConversationActions",
     "asc:workbench": "asc -i ./src/vscode/workbenchCommandActionsSchema.ts -o ./dist/workbenchSchema.pas.json -t CodeWorkbenchActions",
     "build": "concurrently npm:tsc npm:asc:all npm:agc:all",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
@@ -84,7 +82,8 @@
             "src/codeSchema.agr"
           ],
           "outputGlobs": [
-            "dist/codeSchema.ag.json"
+            "dist/codeSchema.ag.json",
+            "dist/codeSchema.ag.map.json"
           ]
         }
       },
@@ -97,7 +96,8 @@
             "src/vscode/debugActionsSchema.agr"
           ],
           "outputGlobs": [
-            "dist/debugSchema.ag.json"
+            "dist/debugSchema.ag.json",
+            "dist/debugSchema.ag.map.json"
           ]
         }
       },
@@ -110,7 +110,8 @@
             "src/vscode/displayActionsSchema.agr"
           ],
           "outputGlobs": [
-            "dist/displaySchema.ag.json"
+            "dist/displaySchema.ag.json",
+            "dist/displaySchema.ag.map.json"
           ]
         }
       },
@@ -123,7 +124,8 @@
             "src/vscode/extensionsActionsSchema.agr"
           ],
           "outputGlobs": [
-            "dist/extensionSchema.ag.json"
+            "dist/extensionSchema.ag.json",
+            "dist/extensionSchema.ag.map.json"
           ]
         }
       },
@@ -136,20 +138,8 @@
             "src/vscode/generalActionsSchema.agr"
           ],
           "outputGlobs": [
-            "dist/generalSchema.ag.json"
-          ]
-        }
-      },
-      "agc:vscode-shell": {
-        "dependsOn": [
-          "@typeagent/action-grammar-compiler#tsc"
-        ],
-        "files": {
-          "inputGlobs": [
-            "src/vscode/vscodeConversationActionsSchema.agr"
-          ],
-          "outputGlobs": [
-            "dist/vscodeShellSchema.ag.json"
+            "dist/generalSchema.ag.json",
+            "dist/generalSchema.ag.map.json"
           ]
         }
       },
@@ -162,7 +152,8 @@
             "src/vscode/workbenchCommandActionsSchema.agr"
           ],
           "outputGlobs": [
-            "dist/workbenchSchema.ag.json"
+            "dist/workbenchSchema.ag.json",
+            "dist/workbenchSchema.ag.map.json"
           ]
         }
       },
@@ -254,19 +245,6 @@
           ],
           "outputGlobs": [
             "dist/workbenchSchema.pas.json"
-          ]
-        }
-      },
-      "asc:vscode-shell": {
-        "dependsOn": [
-          "@typeagent/action-schema-compiler#tsc"
-        ],
-        "files": {
-          "inputGlobs": [
-            "src/vscode/vscodeConversationActionsSchema.ts"
-          ],
-          "outputGlobs": [
-            "dist/vscodeShellSchema.pas.json"
           ]
         }
       }

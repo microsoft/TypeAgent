@@ -63,7 +63,8 @@
             "src/screencaptureSchema.agr"
           ],
           "outputGlobs": [
-            "dist/screencaptureSchema.ag.json"
+            "dist/screencaptureSchema.ag.json",
+            "dist/screencaptureSchema.ag.map.json"
           ]
         }
       },

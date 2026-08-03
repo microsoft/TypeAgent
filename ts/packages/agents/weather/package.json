@@ -60,7 +60,8 @@
             "src/weatherSchema.agr"
           ],
           "outputGlobs": [
-            "dist/weatherSchema.ag.json"
+            "dist/weatherSchema.ag.json",
+            "dist/weatherSchema.ag.map.json"
           ]
         }
       },

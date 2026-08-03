@@ -99,6 +99,12 @@ export function indexesOfNearest(
     type: SimilarityType,
     minScore: number = 0,
 ): ScoredItem[] {
+    // A zero/negative cap has no valid ranking to build: TopNCollection(0)
+    // has no heap top, so the first push would dereference an undefined top.
+    // Asking for 0 nearest yields nothing.
+    if (maxMatches <= 0) {
+        return [];
+    }
     const matches = new TopNCollection(maxMatches, -1);
     if (type === SimilarityType.Dot) {
         for (let i = 0; i < list.length; ++i) {

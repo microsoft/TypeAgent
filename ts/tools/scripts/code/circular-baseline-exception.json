@@ -13,6 +13,9 @@
       "key": "packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/context/memory.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/copilotCommandHandlers.ts"
     },
     {
+      "key": "packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/context/memory.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/action/conversationActionHandler.ts"
+    },
+    {
       "key": "packages/agents/browserExtension/src/extension/contentScript/recording/index.ts > packages/agents/browserExtension/src/extension/contentScript/recording/actions.ts > packages/agents/browserExtension/src/extension/contentScript/recording/capture.ts"
     },
     {

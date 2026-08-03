@@ -13,7 +13,8 @@ export type CodeActions =
     | GetDiagnosticsAction
     | ListOpenEditorsAction
     | GetFileContentAction
-    | GetWorkspaceChangesAction;
+    | GetWorkspaceChangesAction
+    | LaunchCopilotChatAction;
 
 export type CodeActivity = LaunchVSCodeAction;
 
@@ -23,6 +24,31 @@ export type LaunchVSCodeAction = {
     parameters: {
         mode: "last" | "folder" | "workspace";
         path?: string; // Required if mode is "folder" or "workspace"
+    };
+};
+
+// Launch a new chat window with GitHub Copilot, Claude, or other chat providers
+// This creates a new chat session in the specified location.
+export type LaunchCopilotChatAction = {
+    actionName: "launchCopilotChat";
+    parameters: {
+        // Optional initial query/prompt to send to the chat
+        query?: string;
+        // Chat provider: "copilot" (GitHub Copilot, default), "claude" (Claude/Anthropic),
+        // "gpt" (ChatGPT/OpenAI), or "generic" for any available chat extension
+        provider?: "copilot" | "claude" | "gpt" | "generic";
+        // Where to open the new session: "window" (new chat window, default),
+        // "editor" (new chat editor in editor area), or "view" (chat panel/side view)
+        newSessionLocation?: "window" | "editor" | "view";
+        // Copilot chat mode: "agent" (can edit workspace) or "ask" (conversational only)
+        // Note: not all providers support all modes
+        mode?: "agent" | "ask";
+        // Whether to pre-fill but not auto-submit the query
+        isPartialQuery?: boolean;
+        // Whether to attach a screenshot of focused VS Code window
+        attachScreenshot?: boolean;
+        // Absolute paths to files to attach to the chat request
+        attachFiles?: string[];
     };
 };
 

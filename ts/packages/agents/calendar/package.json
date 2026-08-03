@@ -65,7 +65,8 @@
             "src/calendarSchema.agr"
           ],
           "outputGlobs": [
-            "dist/calendarSchema.ag.json"
+            "dist/calendarSchema.ag.json",
+            "dist/calendarSchema.ag.map.json"
           ]
         }
       },

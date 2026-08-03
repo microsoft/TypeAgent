@@ -81,6 +81,15 @@ function buildPlaybackEntities(
     }
 }
 
+// Escape a string for safe use inside a double-quoted HTML attribute value.
+function escapeAttr(s: string): string {
+    return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
 function htmlPlaybackStatus(
     status: SpotifyApi.CurrentPlaybackResponse,
 ): string {
@@ -118,7 +127,13 @@ function htmlPlaybackStatus(
     const vol = device.volume_percent ?? 0;
     const shuffle = status.shuffle_state ? " &middot; Shuffle" : "";
 
-    return `<div class='now-playing-card'>
+    // Markers the chat-ui top rail reads (data-live-title / data-live-percent)
+    // to show a compact now-playing chip - track + artist and a progress bar -
+    // when this card scrolls out of view.
+    const liveTitle = artistsHtml ? `${item.name} · ${artistsHtml}` : item.name;
+    return `<div class='now-playing-card' data-live-title="${escapeAttr(
+        liveTitle,
+    )}" data-live-percent="${progressPct}">
   <div class='now-playing-top'>
     ${albumArt}
     <div class='now-playing-info'>

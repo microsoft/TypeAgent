@@ -60,14 +60,37 @@ export interface CommandFlag {
     description: string;
 }
 
+/** The agent action a command is equivalent to (declared on the handler). */
+export interface CommandActionLink {
+    /** Schema that declares the action; omitted when unambiguous in the agent. */
+    schema?: string;
+    actionName: string;
+}
+
 export interface CommandInfo {
-    /** Space-separated command path, e.g. "config agent". */
+    /**
+     * Host that provides the command: "system" for the built-in, unprefixed
+     * commands (`@config`) or an agent name for prefixed commands (`shell`
+     * for `@shell …`).
+     */
+    host: string;
+    /**
+     * Space-separated command path within the host's namespace, e.g.
+     * "config agent". Empty for a host that exposes a single bare `@<host>`
+     * command.
+     */
     path: string;
     description: string;
     /** True when the entry is a command group (has sub-commands). */
     group: boolean;
     args: CommandArg[];
     flags: CommandFlag[];
+    /**
+     * The agent action this command is equivalent to, when the handler declares
+     * one. Enables cross-linking a typed command with its natural-language
+     * action (and tracking which commands still lack one).
+     */
+    action?: CommandActionLink;
 }
 
 export interface CatalogCounts {
@@ -80,6 +103,7 @@ export interface Catalog {
     /** ISO timestamp of when the catalog was generated. */
     generatedAt: string;
     agents: AgentInfo[];
-    systemCommands: CommandInfo[];
+    /** Every `@command`, across the system host and each agent host. */
+    commands: CommandInfo[];
     counts: CatalogCounts;
 }

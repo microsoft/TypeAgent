@@ -8,20 +8,16 @@ import { AnswerEnhancement } from "./schema/answerEnhancement.mjs";
 import { QueryAnalysis } from "./schema/queryAnalysis.mjs";
 import { SearchContext } from "./utils/contextBuilder.mjs";
 import registerDebug from "debug";
-import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
+import { getBrowserPackageFilePath } from "../utils/packageFilePath.mjs";
 
 const debug = registerDebug("typeagent:browser:answer-generator");
 
 function getSchemaFileContents(fileName: string): string {
-    const packageRoot = path.join("..", "..", "..");
     return fs.readFileSync(
-        fileURLToPath(
-            new URL(
-                path.join(packageRoot, "./src/agent/search/schema", fileName),
-                import.meta.url,
-            ),
+        getBrowserPackageFilePath(
+            path.join("src", "agent", "search", "schema", fileName),
         ),
         "utf8",
     );

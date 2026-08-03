@@ -62,6 +62,14 @@ describe("system.conversation grammar", () => {
             "which chats do i have",
             "please list conversations",
             "can you show my conversations",
+            // "all of the / all of my / all my" determiner variants must
+            // resolve here rather than being grabbed as a file path by
+            // powershell.listFiles's wildcard rule.
+            "list all of the conversations",
+            "list all of my conversations",
+            "list all my conversations",
+            "show me all of the conversations",
+            "show all of my chats",
         ])("matches %p", (input) => {
             const r = match(input);
             expect(r).toBeDefined();
@@ -96,6 +104,31 @@ describe("system.conversation grammar", () => {
             expect(r).toBeDefined();
             expect(r.actionName).toBe("switchConversation");
             expect(r.parameters.name).toBe("research");
+        });
+
+        it("matches 'switch to the conversation about X' (find-then-switch)", () => {
+            const r = match("switch to the conversation about gym music");
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("switchConversation");
+            expect(r.parameters.name).toBe("gym music");
+        });
+
+        it("matches 'switch to the conversation where we talked about X'", () => {
+            const r = match(
+                "switch to the conversation where we talked about spikes",
+            );
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("switchConversation");
+            expect(r.parameters.name).toBe("spikes");
+        });
+
+        it("matches 'go to the conversation where we discussed X'", () => {
+            const r = match(
+                "go to the conversation where we discussed the budget",
+            );
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("switchConversation");
+            expect(r.parameters.name).toBe("the budget");
         });
 
         it("does NOT match bare 'switch to X' (no conversation anchor)", () => {
@@ -192,6 +225,126 @@ describe("system.conversation grammar", () => {
             const r = match("what conversation am i in");
             expect(r).toBeDefined();
             expect(r.actionName).toBe("showConversationInfo");
+        });
+    });
+
+    describe("findConversation", () => {
+        it.each([
+            ["find the conversation about taxes", "taxes"],
+            ["search my conversations for taxes", "taxes"],
+            [
+                "locate the chat about the workout playlist",
+                "the workout playlist",
+            ],
+            [
+                "which conversation was about the trip to paris",
+                "the trip to paris",
+            ],
+            ["find conversation gym music", "gym music"],
+        ])("matches %j", (input, query) => {
+            const r = match(input);
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("findConversation");
+            expect(r.parameters.query).toBe(query);
+        });
+
+        it("does NOT hijack 'what conversation am i in'", () => {
+            const r = match("what conversation am i in");
+            expect(r?.actionName).toBe("showConversationInfo");
+        });
+    });
+
+    describe("searchConversation", () => {
+        it.each([
+            [
+                "search inside my conversations for the docker command",
+                "the docker command",
+            ],
+            ["search across conversations for pricing", "pricing"],
+            ["search within my conversations for the api key", "the api key"],
+            ["search my chat history for taxes", "taxes"],
+            ["search the content of my conversations for budget", "budget"],
+        ])("matches %j", (input, query) => {
+            const r = match(input);
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("searchConversation");
+            expect(r.parameters.query).toBe(query);
+        });
+
+        it("does NOT hijack name-search 'search my conversations for taxes'", () => {
+            const r = match("search my conversations for taxes");
+            expect(r?.actionName).toBe("findConversation");
+        });
+    });
+
+    describe("indexConversation", () => {
+        it.each([
+            "index this conversation",
+            "index the current conversation",
+            "reindex this conversation",
+        ])("matches current-conversation %j", (input) => {
+            const r = match(input);
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("indexConversation");
+            expect(r.parameters?.name).toBeUndefined();
+        });
+
+        it.each([
+            ["index all conversations", "all"],
+            ["reindex my conversations", "all"],
+            ["index all of my conversations", "all"],
+            ["make my conversations searchable", "all"],
+            ["index the conversation about taxes", "taxes"],
+            ["index the design conversation", "design"],
+        ])("matches %j with name %j", (input, name) => {
+            const r = match(input);
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("indexConversation");
+            expect(r.parameters.name).toBe(name);
+        });
+
+        it("does NOT hijack content-search 'search my conversations for x'", () => {
+            const r = match("search my conversations for indexing");
+            expect(r?.actionName).not.toBe("indexConversation");
+        });
+    });
+
+    describe("summarizeConversation", () => {
+        it.each([
+            "summarize this conversation",
+            "summarize the current conversation",
+            "recap this conversation",
+            "give me a summary of this conversation",
+        ])("matches current-conversation %j", (input) => {
+            const r = match(input);
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("summarizeConversation");
+            expect(r.parameters?.name).toBeUndefined();
+        });
+
+        it.each([
+            ["summarize the conversation about taxes", "taxes"],
+            ["summarize the design conversation", "design"],
+            ["summarize the yes conversation", "yes"],
+            ["give me a summary of the conversation about taxes", "taxes"],
+        ])("matches %j with name %j", (input, name) => {
+            const r = match(input);
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("summarizeConversation");
+            expect(r.parameters.name).toBe(name);
+        });
+    });
+
+    describe("help", () => {
+        it.each([
+            "conversation help",
+            "chat help",
+            "help with conversations",
+            "help managing conversations",
+        ])("matches %j", (input) => {
+            const r = match(input);
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("help");
         });
     });
 });

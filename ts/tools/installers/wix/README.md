@@ -93,7 +93,8 @@ pnpm run build
 node tools/scripts/deployAgentServer.mjs `
   --out "$env:TEMP\typeagent-msi-stage\agent-server" `
   --platform win32 --arch x64 `
-  --profile inbox
+  --profile inbox `
+  --external-cli
 ```
 
 #### 3. Stage copilot-plugin
@@ -277,18 +278,23 @@ shell's auto-update feed. This is off by default. During an interactive install
 a checkbox on **ProviderDlg** ("Also install the TypeAgent Shell desktop app")
 enables it; silently, set the public properties. **The download location is
 baked at build time** (`build-msi.mjs --shell-storage/--shell-container`; the
-pipeline passes the shell storage account/container), so the checkbox works on a
-fresh machine without extra input. If a build ships with no location and
-`SHELL=1` is requested, the `ShellLocationMissing` action **aborts loudly** with
-a clear message rather than silently skipping.
+pipeline overrides the local CI defaults with its storage account/container),
+so the checkbox works on a fresh machine without extra input. If a build ships
+with neither a blob location nor a complete feed configuration and `SHELL=1` is
+requested, the `ShellLocationMissing` action **aborts loudly** with a clear
+message rather than silently skipping. Blob access is not required when the
+feed fallback is configured.
 
-| Property         | Values / example                                      | Default                                        | Notes                                                                        |
-| ---------------- | ----------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- |
-| `SHELL`          | `0`, `1`                                              | `0`                                            | `1` enables the optional shell download + silent install.                    |
-| `SHELLCHANNEL`   | `lkg`, `test`, `ci`                                   | build default (`lkg`)                          | electron-updater channel to read (`<channel>-<arch>.yml`).                   |
-| `SHELLSTORAGE`   | Azure Storage account name                            | build default                                  | Used with the Azure CLI (`az login`) to read the shell blobs.                |
-| `SHELLCONTAINER` | Azure Storage container name                          | build default                                  | Defaults to `SHELLSTORAGE` if omitted.                                       |
-| `SHELLBASEURL`   | `https://<account>.blob.core.windows.net/<container>` | build default (derived from storage/container) | Anonymous HTTPS base for a **public** container; when set, `az` is not used. |
+| Property           | Values / example                                      | Default                                        | Notes                                                                        |
+| ------------------ | ----------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- |
+| `SHELL`            | `0`, `1`                                              | `0`                                            | `1` enables the optional shell download + silent install.                    |
+| `SHELLCHANNEL`     | `lkg`, `test`, `ci`                                   | local build: `ci`; pipeline: release channel   | electron-updater channel to read (`<channel>-<arch>.yml`).                   |
+| `SHELLSTORAGE`     | Azure Storage account name                            | local build: `typeagentshell`                  | Used with the Azure CLI (`az login`) to read the shell blobs.                |
+| `SHELLCONTAINER`   | Azure Storage container name                          | local build: `typeagentshell`                  | Defaults to `SHELLSTORAGE` if omitted.                                       |
+| `SHELLBASEURL`     | `https://<account>.blob.core.windows.net/<container>` | build default (derived from storage/container) | Anonymous HTTPS base for a **public** container; when set, `az` is not used. |
+| `SHELLFEED`        | Azure Artifacts feed name                             | local build: `typeagent`                       | Fallback source when blob download fails.                                    |
+| `SHELLPACKAGE`     | Universal Package name                                | local build: `typeagent-shell.win32-x64`       | Package containing channel metadata and the setup executable.                |
+| `SHELLFEEDVERSION` | Exact package version                                 | latest listed version                          | When omitted, prerelease versions are included in latest-version resolution. |
 
 ```powershell
 # Authenticated (az login) blob read from a private container
@@ -307,7 +313,14 @@ the per-user shell install target resolve correctly. The action is **non-fatal**
 `%LOCALAPPDATA%\TypeAgent\logs\msi-install-shell.log` but does not roll back the
 agent-server install. Because the shell shares `~/.typeagent/config.local.yaml`,
 no extra config step is needed. `install-shell.ps1` is the Windows sibling of
-`install-shell.sh` and can also be run standalone.
+`install-shell.sh` and can also be run standalone. If no feed version is baked
+into the MSI, the script queries Azure Artifacts and downloads the latest listed
+version, including prerelease versions. Any blob metadata or installer download
+failure is logged and automatically falls back to the package feed.
+
+Local MSI packaging resolves the latest listed shell Universal Package version
+and bakes that exact version into the MSI. Pipeline builds continue to pass the
+version produced by the current pipeline run.
 
 ## Pipeline Usage
 
@@ -432,6 +445,9 @@ az account show  # Verify
   thousands of components, which made the installer's "Computing space
   requirements" (CostFinalize) step take minutes. Do **not** reintroduce
   `heat.exe dir` harvesting for these trees.
+- Payload extraction uses Windows inbox `tar.exe`, with separate custom actions
+  for the agent-server and Copilot plugin so the progress dialog identifies each
+  stage.
 - Store WiX includes (`.wxi`) in `ts/tools/installers/wix/includes/`
 - Keep `.wxs` files simple; delegate complexity to `.wxi` includes
 - Test locally before pushing to main (MSI builds are slow)

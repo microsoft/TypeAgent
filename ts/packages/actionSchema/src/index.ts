@@ -21,6 +21,7 @@ export {
 } from "./type.js";
 
 export { parseActionSchemaSource, parseSchemaSource } from "./parser.js";
+export { stripEntryTypeComment } from "./entryTypeComment.js";
 export {
     GenerateSchemaOptions,
     generateActionSchema,

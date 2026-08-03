@@ -46,6 +46,9 @@ import {
     compileGrammarToNFA,
     enrichGrammarWithCheckedVariables,
     loadGrammarRulesNoThrow,
+    findMatchedRule,
+    type GrammarSourceMap,
+    type MatchedGrammarRule,
 } from "@typeagent/action-grammar";
 import fs from "node:fs";
 import { FlowDefinition } from "../execute/flowInterpreter.js";
@@ -147,14 +150,25 @@ export const alwaysEnabledAgents = {
     commands: ["system"],
 };
 
-function loadGrammar(actionConfig: ActionConfig): Grammar | undefined {
+function loadGrammar(
+    actionConfig: ActionConfig,
+): { grammar: Grammar; sourceMap?: GrammarSourceMap | undefined } | undefined {
     const grammarContent = getGrammarContent(actionConfig);
     if (grammarContent === undefined) {
         return undefined;
     }
 
     if (grammarContent.format === "ag") {
-        return grammarFromJson(JSON.parse(grammarContent.content));
+        const grammar = grammarFromJson(JSON.parse(grammarContent.content));
+        let sourceMap: GrammarSourceMap | undefined;
+        if (grammarContent.sourceMap !== undefined) {
+            try {
+                sourceMap = JSON.parse(grammarContent.sourceMap);
+            } catch {
+                // Malformed side-car: skip rule-source recovery for this schema.
+            }
+        }
+        return { grammar, sourceMap };
     }
     if (grammarContent.format === "agr") {
         // Parse raw .agr at load time; throw on errors so bad syntax fails loudly.
@@ -169,7 +183,7 @@ function loadGrammar(actionConfig: ActionConfig): Grammar | undefined {
                 `Failed to parse static grammar for ${actionConfig.schemaName}: ${errors.join(", ")}`,
             );
         }
-        return grammar ?? undefined;
+        return grammar ? { grammar } : undefined;
     }
     throw new Error(
         `Unsupported grammar format '${(grammarContent as { format: string }).format}' for ${actionConfig.schemaName}`,
@@ -186,6 +200,13 @@ export class AppAgentManager implements ActionConfigProvider {
     // (build once per agent version, reference from each manager) to avoid the
     // redundant rebuild on connect and on `@package update`.
     private readonly agents = new Map<string, AppAgentRecord>();
+    // Raw compiled grammar + source-map side-car per schema (only for "ag"
+    // grammars that shipped a `.ag.map.json`). Used to recover the matched
+    // rule's `.agr` source text for the explained popover.
+    private readonly grammarSourceMaps = new Map<
+        string,
+        { grammar: Grammar; sourceMap: GrammarSourceMap }
+    >();
     private readonly actionConfigs = new Map<string, ActionConfig>();
     private readonly loadingSchemas = new Set<string>();
     private readonly flowRegistry = new Map<string, FlowDefinition>();
@@ -907,7 +928,17 @@ export class AppAgentManager implements ActionConfigProvider {
                     let g: Grammar | undefined = undefined;
 
                     try {
-                        g = loadGrammar(config);
+                        const loaded = loadGrammar(config);
+                        g = loaded?.grammar;
+                        if (loaded?.grammar && loaded.sourceMap) {
+                            // Keep the raw compiled grammar + side-car (partIds
+                            // align) so the explain path can recover matched-rule
+                            // source text, independent of the merged NFA grammar.
+                            this.grammarSourceMaps.set(schemaName, {
+                                grammar: loaded.grammar,
+                                sourceMap: loaded.sourceMap,
+                            });
+                        }
                     } catch (e) {
                         // Grammar file doesn't exist or failed to load
                         debugError(
@@ -1197,6 +1228,30 @@ export class AppAgentManager implements ActionConfigProvider {
             throw new Error(`Unknown schema name: ${schemaName}`);
         }
         return config;
+    }
+
+    /**
+     * Recover the grammar rule that matched `request` for `schemaName` (its
+     * `.agr` source text plus the request colored by category), using the
+     * compiled grammar's source-map side-car. Returns undefined when the schema
+     * shipped no side-car, the request doesn't match the static grammar, or the
+     * rule can't be pinpointed.
+     */
+    public findMatchedGrammarRule(
+        schemaName: string,
+        request: string,
+        actionName?: string,
+    ): MatchedGrammarRule | undefined {
+        const entry = this.grammarSourceMaps.get(schemaName);
+        if (entry === undefined) {
+            return undefined;
+        }
+        return findMatchedRule(
+            entry.sourceMap,
+            entry.grammar,
+            request,
+            actionName,
+        );
     }
 
     public getSchemaNames() {
@@ -1510,7 +1565,7 @@ export class AppAgentManager implements ActionConfigProvider {
         if (!dynamicGrammar || dynamicGrammar.alternatives.length === 0) return;
 
         const config = this.actionConfigs.get(schemaName);
-        const staticGrammar = config ? loadGrammar(config) : undefined;
+        const staticGrammar = config ? loadGrammar(config)?.grammar : undefined;
 
         const merged: Grammar = {
             alternatives: [
