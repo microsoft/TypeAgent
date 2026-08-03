@@ -26,19 +26,18 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import { TopicRelationshipAnalysis } from "./schema/topicRelationship.mjs";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
+import { getBrowserPackageFilePath } from "../../utils/packageFilePath.mjs";
 
 function getSchemaFileContents(fileName: string): string {
-    const packageRoot = path.join("..", "..", "..", "..");
     return fs.readFileSync(
-        fileURLToPath(
-            new URL(
-                path.join(
-                    packageRoot,
-                    "./src/agent/knowledge/actions/schema",
-                    fileName,
-                ),
-                import.meta.url,
+        getBrowserPackageFilePath(
+            path.join(
+                "src",
+                "agent",
+                "knowledge",
+                "actions",
+                "schema",
+                fileName,
             ),
         ),
         "utf8",

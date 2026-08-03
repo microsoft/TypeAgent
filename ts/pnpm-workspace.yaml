@@ -50,7 +50,7 @@ allowBuilds:
   node-pty: false
   onnxruntime-node: true
   protobufjs: false
-  puppeteer: true
+  puppeteer: false
   sharp: true
 
 # Moved out of the deprecated `pnpm` field in package.json (pnpm v11 no longer reads it).
