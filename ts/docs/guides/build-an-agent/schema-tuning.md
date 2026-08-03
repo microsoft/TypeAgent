@@ -110,7 +110,7 @@ not to re-add**, combined with note #2 so there is no loose item entity to grab.
 
 Authored `.agr` grammars intercept requests before the LLM: fast and
 deterministic, but over-broad rules hide the model. List grammar only matches
-*named* lists (`add milk to the grocery list`). Bare references (`the list`,
+_named_ lists (`add milk to the grocery list`). Bare references (`the list`,
 `both`, `my list`) are left unmatched so translation can resolve them from
 history or clarify — the list agent never sees grammar/caching details.
 
