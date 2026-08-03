@@ -36,6 +36,7 @@ export function getActionContext(
     );
     const actionIO: ActionIO = {
         setDisplay(content: DisplayContent): void {
+            context.displayCount++;
             context.clientIO.setDisplay(
                 makeClientIOMessage(
                     context,
@@ -50,6 +51,12 @@ export function getActionContext(
             content: DisplayContent,
             mode: DisplayAppendMode = "inline",
         ): void {
+            // Transient status ("temporary") is not real output - don't count
+            // it, so an action that only shows a spinner still gets the
+            // synthesized "completed" acknowledgment.
+            if (mode !== "temporary") {
+                context.displayCount++;
+            }
             context.clientIO.appendDisplay(
                 makeClientIOMessage(
                     context,

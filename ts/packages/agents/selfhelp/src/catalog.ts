@@ -8,6 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { queryTokens, score } from "./text.js";
 
 export type CatalogParam = {
     name: string;
@@ -197,65 +198,6 @@ export type HostGroup = {
     actions: CatalogAction[];
 };
 
-const STOPWORDS = new Set([
-    "the",
-    "a",
-    "an",
-    "to",
-    "of",
-    "in",
-    "on",
-    "for",
-    "how",
-    "do",
-    "i",
-    "what",
-    "whats",
-    "is",
-    "are",
-    "can",
-    "could",
-    "would",
-    "should",
-    "my",
-    "me",
-    "you",
-    "your",
-    "with",
-    "and",
-    "or",
-    "that",
-    "this",
-    "please",
-    "want",
-    "need",
-    "get",
-    "use",
-    "using",
-    "command",
-    "commands",
-    "typeagent",
-    "there",
-    "does",
-    "it",
-    "was",
-    "were",
-    "will",
-    "from",
-    "by",
-    "at",
-    "as",
-    "be",
-    "am",
-]);
-
-function tokenize(text: string): string[] {
-    return text
-        .toLowerCase()
-        .split(/[^a-z0-9]+/)
-        .filter((t) => t.length >= 2 && !STOPWORDS.has(t));
-}
-
 // A command's searchable text folds in its linked action's phrasings so a
 // naturally phrased question still matches the typed command.
 function commandText(index: CatalogIndex, cmd: CatalogCommand): string {
@@ -275,16 +217,6 @@ function actionText(action: CatalogAction): string {
         .toLowerCase();
 }
 
-function score(queryTokens: string[], text: string): number {
-    let s = 0;
-    for (const token of queryTokens) {
-        if (text.includes(token)) {
-            s++;
-        }
-    }
-    return s;
-}
-
 type ScoredCommand = {
     kind: "command";
     host: string;
@@ -298,21 +230,22 @@ type ScoredAction = {
     s: number;
 };
 
-type GroupSelection = {
-    commands: Map<string, CatalogCommand>;
-    actions: Map<string, CatalogAction>;
-};
-
 const MAX_ENTRIES = 24;
 
-function collectScoredEntries(
+// Keyword-overlap prefilter: the full catalog (~500 actions) is too large to
+// hand the model wholesale, so select the entries most relevant to the question,
+// keeping each command together with its linked action.
+// code-complexity-allow: scoring and grouping inlined for clarity; inherently iterative over the full catalog
+export function selectRelevantGroups(
     index: CatalogIndex,
-    queryTokens: string[],
-): (ScoredCommand | ScoredAction)[] {
-    const scored: (ScoredCommand | ScoredAction)[] = [];
+    question: string,
+): HostGroup[] {
+    const qTokens = queryTokens(question);
     const { catalog } = index;
+
+    const scored: (ScoredCommand | ScoredAction)[] = [];
     for (const command of catalog.commands) {
-        const s = score(queryTokens, commandText(index, command));
+        const s = score(qTokens, commandText(index, command));
         if (s > 0) {
             scored.push({ kind: "command", host: command.host, command, s });
         }
@@ -320,7 +253,7 @@ function collectScoredEntries(
     for (const agent of catalog.agents) {
         for (const schema of agent.schemas) {
             for (const action of schema.actions) {
-                const s = score(queryTokens, actionText(action));
+                const s = score(qTokens, actionText(action));
                 if (s > 0) {
                     scored.push({
                         kind: "action",
@@ -333,93 +266,58 @@ function collectScoredEntries(
         }
     }
     scored.sort((a, b) => b.s - a.s);
-    return scored;
-}
 
-function ensureGroup(
-    groups: Map<string, GroupSelection>,
-    host: string,
-): GroupSelection {
-    let group = groups.get(host);
-    if (!group) {
-        group = { commands: new Map(), actions: new Map() };
-        groups.set(host, group);
-    }
-    return group;
-}
-
-function addCommandSelection(
-    index: CatalogIndex,
-    groups: Map<string, GroupSelection>,
-    item: ScoredCommand,
-): void {
-    const group = ensureGroup(groups, item.host);
-    group.commands.set(item.command.path, item.command);
-    const link = item.command.action;
-    if (!link) {
-        return;
-    }
-    const action = lookupAction(index, item.host, link.actionName);
-    if (action) {
-        group.actions.set(action.actionName, action);
-    }
-}
-
-function addActionSelection(
-    index: CatalogIndex,
-    groups: Map<string, GroupSelection>,
-    item: ScoredAction,
-): void {
-    const group = ensureGroup(groups, item.host);
-    group.actions.set(item.action.actionName, item.action);
-    for (const command of index.catalog.commands) {
-        if (
-            command.host === item.host &&
-            command.action?.actionName === item.action.actionName
-        ) {
-            group.commands.set(command.path, command);
+    const groups = new Map<
+        string,
+        {
+            commands: Map<string, CatalogCommand>;
+            actions: Map<string, CatalogAction>;
         }
-    }
-}
-
-function describeHosts(catalog: Catalog): Map<string, string> {
-    return new Map(
-        catalog.agents.map((agent) => [agent.name, agent.description]),
-    );
-}
-
-// Keyword-overlap prefilter: the full catalog (~500 actions) is too large to
-// hand the model wholesale, so select the entries most relevant to the question,
-// keeping each command together with its linked action.
-export function selectRelevantGroups(
-    index: CatalogIndex,
-    question: string,
-): HostGroup[] {
-    const queryTokens = [...new Set(tokenize(question))];
-    const { catalog } = index;
-    const scored = collectScoredEntries(index, queryTokens);
-    const groups = new Map<string, GroupSelection>();
+    >();
+    const ensure = (host: string) => {
+        let g = groups.get(host);
+        if (!g) {
+            g = { commands: new Map(), actions: new Map() };
+            groups.set(host, g);
+        }
+        return g;
+    };
 
     for (const item of scored.slice(0, MAX_ENTRIES)) {
+        const g = ensure(item.host);
         if (item.kind === "command") {
-            addCommandSelection(index, groups, item);
-            continue;
+            g.commands.set(item.command.path, item.command);
+            const link = item.command.action;
+            if (link) {
+                const action = lookupAction(index, item.host, link.actionName);
+                if (action) {
+                    g.actions.set(action.actionName, action);
+                }
+            }
+        } else {
+            g.actions.set(item.action.actionName, item.action);
+            for (const command of catalog.commands) {
+                if (
+                    command.host === item.host &&
+                    command.action?.actionName === item.action.actionName
+                ) {
+                    g.commands.set(command.path, command);
+                }
+            }
         }
-        addActionSelection(index, groups, item);
     }
 
     // Nothing matched: offer a compact list of every command so the model can
     // still find one or state plainly that none apply.
     if (groups.size === 0) {
         for (const command of catalog.commands) {
-            ensureGroup(groups, command.host).commands.set(
-                command.path,
-                command,
-            );
+            ensure(command.host).commands.set(command.path, command);
         }
     }
 
-    const descByHost = describeHosts(catalog);
+    const descByHost = new Map(
+        catalog.agents.map((a) => [a.name, a.description]),
+    );
     return [...groups.entries()].map(([host, g]) => ({
         host,
         description: descByHost.get(host) ?? "",
@@ -469,4 +367,97 @@ export function formatGrounding(groups: HostGroup[]): string {
         }
     }
     return lines.join("\n");
+}
+
+// All of an agent's searchable text (name, category, description, and every
+// action's name/description/phrasings) folded into one lower-cased string, used
+// to match a "what can the X agent do" question to the agent it names.
+function agentText(agent: CatalogAgent): string {
+    const parts = [agent.name, agent.category, agent.description];
+    for (const schema of agent.schemas) {
+        parts.push(schema.description);
+        for (const action of schema.actions) {
+            parts.push(action.actionName, action.description);
+            parts.push(action.phrasings.join(" "));
+        }
+    }
+    return parts.join(" ").toLowerCase();
+}
+
+// Resolves which agent a describe-question is about. An explicit agent name (from
+// the action parameter) wins when it matches a catalog agent; otherwise the agent
+// whose text best overlaps the question is chosen. Returns undefined when nothing
+// scores, so the caller can point the user at `@config agent`.
+export function findAgent(
+    index: CatalogIndex,
+    question: string,
+    explicitName?: string,
+): CatalogAgent | undefined {
+    const { catalog } = index;
+    if (explicitName) {
+        const wanted = explicitName.trim().toLowerCase();
+        const exact = catalog.agents.find(
+            (a) => a.name.toLowerCase() === wanted,
+        );
+        if (exact) {
+            return exact;
+        }
+    }
+
+    const qTokens = queryTokens(
+        explicitName ? `${explicitName} ${question}` : question,
+    );
+    if (qTokens.length === 0) {
+        return undefined;
+    }
+
+    let best: CatalogAgent | undefined;
+    let bestScore = 0;
+    for (const agent of catalog.agents) {
+        // The agent name matching a query token is the strongest signal, so
+        // weight it above incidental overlap in action descriptions.
+        const nameHit = qTokens.includes(agent.name.toLowerCase()) ? 5 : 0;
+        const s = nameHit + score(qTokens, agentText(agent));
+        if (s > bestScore) {
+            bestScore = s;
+            best = agent;
+        }
+    }
+    return best;
+}
+
+// Builds a single host group holding all of an agent's commands and actions - an
+// agent's full capability set, e.g. to describe what one agent can do.
+export function groupForAgent(
+    index: CatalogIndex,
+    agent: CatalogAgent,
+): HostGroup {
+    const actions = new Map<string, CatalogAction>();
+    for (const schema of agent.schemas) {
+        for (const action of schema.actions) {
+            if (!actions.has(action.actionName)) {
+                actions.set(action.actionName, action);
+            }
+        }
+    }
+    const commands = index.catalog.commands.filter(
+        (c) => c.host === agent.name,
+    );
+    return {
+        host: agent.name,
+        description: agent.description,
+        commands,
+        actions: [...actions.values()],
+    };
+}
+
+// A one-line summary of the installed agents (count + a sample of names), used
+// to give explainTypeAgent concrete examples when answering "what can TypeAgent
+// do" without bundling every agent's docs.
+export function formatAgentRoster(index: CatalogIndex, sample = 12): string {
+    const names = index.catalog.agents.map((a) => a.name);
+    const shown = names.slice(0, sample);
+    const more = names.length - shown.length;
+    const tail = more > 0 ? `, and ${more} more` : "";
+    return `Installed agents (${names.length}): ${shown.join(", ")}${tail}.`;
 }
