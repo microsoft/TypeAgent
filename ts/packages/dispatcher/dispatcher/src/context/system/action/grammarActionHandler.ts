@@ -48,7 +48,11 @@ export async function executeGrammarAction(
         if (systemHandlers === undefined) {
             throw new Error("System command handlers are unavailable.");
         }
-        return executeScanGrammarCollisionsAction(action, context, systemHandlers);
+        return executeScanGrammarCollisionsAction(
+            action,
+            context,
+            systemHandlers,
+        );
     }
 
     const chc = context.sessionContext.agentContext;

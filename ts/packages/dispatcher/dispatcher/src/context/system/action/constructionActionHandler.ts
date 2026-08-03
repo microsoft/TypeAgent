@@ -94,6 +94,8 @@ export function executeConstructionAction(
         case "setEntityWildcardMatching":
             return toggle(["wildcard", "entity"], p.enabled);
         default:
-            throw new Error(`Unknown construction action: ${action.actionName}`);
+            throw new Error(
+                `Unknown construction action: ${action.actionName}`,
+            );
     }
 }

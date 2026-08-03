@@ -194,8 +194,7 @@ function getConfigCommandParams(
 
     return {
         args: handler.parameters.args === undefined ? undefined : parsedArgs,
-        flags:
-            handler.parameters.flags === undefined ? undefined : parsedFlags,
+        flags: handler.parameters.flags === undefined ? undefined : parsedFlags,
     } as ParsedCommandParams<any>;
 }
 

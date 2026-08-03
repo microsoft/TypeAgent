@@ -64,8 +64,6 @@ export function executeFeedbackAction(
         case "countFeedback":
             return execute(["count"], undefined);
         default:
-            throw new Error(
-                `Unknown feedback action: ${action.actionName}`,
-            );
+            throw new Error(`Unknown feedback action: ${action.actionName}`);
     }
 }

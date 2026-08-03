@@ -206,7 +206,8 @@ function executeCollisionKeywordsAction(
     switch (actionName) {
         case "manageCollisionKeywords": {
             const operation =
-                p.operation ?? (p.target === undefined ? "listOverrides" : "show");
+                p.operation ??
+                (p.target === undefined ? "listOverrides" : "show");
             if (operation === "listOverrides") {
                 return execute(["keywords"], { args: {}, flags: {} });
             }
@@ -293,7 +294,9 @@ function executeCollisionOptimizeCoreAction(
                 flags: {
                     ...opt(p.patternsFile, "patterns-file"),
                     "min-attempts": p.minAttempts ?? 5,
-                    "surface-disagreement": String(p.surfaceDisagreement ?? 0.5),
+                    "surface-disagreement": String(
+                        p.surfaceDisagreement ?? 0.5,
+                    ),
                     ...opt(p.outputPath, "out"),
                     ...opt(p.outputHtmlPath, "out-html"),
                     ...opt(p.workdir, "workdir"),
@@ -399,10 +402,18 @@ export function executeCollisionAction(
         return executeCollisionKeywordsAction(action.actionName, p, execute);
     }
     if (OPTIMIZE_CORE_ACTIONS.has(action.actionName)) {
-        return executeCollisionOptimizeCoreAction(action.actionName, p, execute);
+        return executeCollisionOptimizeCoreAction(
+            action.actionName,
+            p,
+            execute,
+        );
     }
     if (OPTIMIZE_PIPELINE_ACTIONS.has(action.actionName)) {
-        return executeCollisionOptimizePipelineAction(action.actionName, p, execute);
+        return executeCollisionOptimizePipelineAction(
+            action.actionName,
+            p,
+            execute,
+        );
     }
     if (PREFERENCES_ACTIONS.has(action.actionName)) {
         return executeCollisionPreferencesAction(action.actionName, p, execute);
