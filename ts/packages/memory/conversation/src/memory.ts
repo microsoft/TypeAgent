@@ -279,6 +279,29 @@ export abstract class Memory<
     }
 
     /**
+     * Search this memory's messages by similarity to `queryText`, using the
+     * message-text embedding index. Unlike {@link searchWithLanguage} /
+     * {@link searchKnowledge}, this matches raw message text and does NOT
+     * depend on knowledge extraction having run - so literal / near-literal
+     * mentions are found even before (or without) extraction.
+     * @param queryText text to match message content against
+     * @param when optional scope filter
+     * @param options search options
+     */
+    public async searchByTextSimilarity(
+        queryText: string,
+        when?: kp.WhenFilter,
+        options?: kp.SearchOptions,
+    ): Promise<kp.ConversationSearchResult | undefined> {
+        return kp.searchConversationByTextSimilarity(
+            this.conversation,
+            queryText,
+            when,
+            options,
+        );
+    }
+
+    /**
      * Search knowledge extracted from this conversation
      * @param selectExpr
      * @param options

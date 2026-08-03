@@ -545,6 +545,23 @@ async function searchSongsAndGetUris(
     return { uris, notFound };
 }
 
+// A freshly started playback keeps its "Now playing" track list as the first
+// frame, then refreshes into the live now-playing panel (the "status" dynamic
+// display: album art + progress bar, updated each second) so the card follows
+// playback instead of sitting static. The track list is the right first frame
+// because it is built from the tracks we just queued: reading Spotify's
+// playback state immediately after play() can still report the previous track.
+// Generic in the result type so callers keep the concrete (success) shape they
+// pass in - annotating the return as ActionResult would widen it to include the
+// error variant and break callers that read success-only fields (e.g. entities).
+function withNowPlayingRefresh<T extends ActionResult>(actionResult: T): T {
+    if (actionResult.error === undefined) {
+        actionResult.dynamicDisplayId = "status";
+        actionResult.dynamicDisplayNextRefreshMs = 1000;
+    }
+    return actionResult;
+}
+
 async function playTrackCollection(
     trackCollection: ITrackCollection,
     clientContext: IClientContext,
@@ -573,7 +590,7 @@ async function playTrackCollection(
                 const singleTracks = singleTrackCollection.getTracks();
                 const uris = singleTracks.map((track) => track.uri);
                 await play(clientContext.service, deviceId, uris);
-                return actionResult;
+                return withNowPlayingRefresh(actionResult);
             } else {
                 const trackCollectionFromTrackNumber = new TrackCollection(
                     tracks.slice(trackIndex),
@@ -591,7 +608,7 @@ async function playTrackCollection(
                     playContext,
                     trackIndex,
                 );
-                return actionResult;
+                return withNowPlayingRefresh(actionResult);
             }
         } else {
             const actionResult = await htmlTrackNames(
@@ -601,7 +618,7 @@ async function playTrackCollection(
             updateTrackList(trackCollection, clientContext);
             const uris = tracks.map((track) => track.uri);
             await play(clientContext.service, deviceId, uris, playContext);
-            return actionResult;
+            return withNowPlayingRefresh(actionResult);
         }
     }
 }

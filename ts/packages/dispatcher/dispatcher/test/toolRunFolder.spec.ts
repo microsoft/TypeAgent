@@ -4,6 +4,7 @@
 import {
     ToolRunFolder,
     formatToolRun,
+    formatToolResult,
 } from "../src/reasoning/reasoningLoopBase.js";
 
 // Collect the strings the folder emits so each test can assert on the exact
@@ -12,13 +13,14 @@ import {
 // arguments vary independently (as real folded calls do).
 function makeFolder(
     format: (tool: string, args: unknown) => string = (t) => t,
-): { folder: ToolRunFolder; emitted: string[] } {
+): { folder: ToolRunFolder; emitted: string[]; errors: boolean[] } {
     const emitted: string[] = [];
-    const folder = new ToolRunFolder(
-        (content) => emitted.push(content),
-        format,
-    );
-    return { folder, emitted };
+    const errors: boolean[] = [];
+    const folder = new ToolRunFolder((content, isError) => {
+        emitted.push(content);
+        errors.push(isError);
+    }, format);
+    return { folder, emitted, errors };
 }
 
 // Every tool call (single or folded) renders as a native
@@ -170,6 +172,48 @@ describe("ToolRunFolder", () => {
         expectRun(emitted[0], "A x2", ["A", "A"]);
         expectRun(emitted[1], "A", ["A"]); // second run is a single call
     });
+
+    it("result() emits the buffered call and its result together in one block", () => {
+        const { folder, emitted, errors } = makeFolder();
+        folder.tool("search", { q: "fruit" });
+        expect(emitted).toEqual([]); // buffered until the result arrives
+        folder.result("Found 3 matches", false);
+        expect(emitted).toHaveLength(1);
+        // One emission carries both the call block and the result block.
+        expect(emitted[0]).toContain('<details class="reasoning-tool-call">');
+        expect(emitted[0]).toContain('<details class="reasoning-tool-result">');
+        expect(emitted[0]).toContain("Found 3 matches");
+        expect(errors[0]).toBe(false);
+    });
+
+    it("result() marks a failed tool as an error emission", () => {
+        const { folder, emitted, errors } = makeFolder();
+        folder.tool("shell", { cmd: "boom" });
+        folder.result("nonzero exit", true);
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0]).toContain("reasoning-tool-result-error");
+        expect(errors[0]).toBe(true);
+    });
+
+    it("result() with no buffered call emits just the result", () => {
+        const { folder, emitted } = makeFolder();
+        folder.result("orphan result", false);
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0]).not.toContain("reasoning-tool-call");
+        expect(emitted[0]).toContain('<details class="reasoning-tool-result">');
+    });
+
+    it("keeps the call and result separate when flush() splits them", () => {
+        const { folder, emitted } = makeFolder();
+        folder.tool("A", {});
+        folder.flush(); // e.g. a thinking block interrupts before the result
+        folder.result("late", false);
+        expect(emitted).toHaveLength(2);
+        expect(emitted[0]).toContain("reasoning-tool-call");
+        expect(emitted[0]).not.toContain("reasoning-tool-result");
+        expect(emitted[1]).toContain("reasoning-tool-result");
+        expect(emitted[1]).not.toContain("reasoning-tool-call");
+    });
 });
 
 describe("formatToolRun", () => {
@@ -212,5 +256,66 @@ describe("formatToolRun", () => {
         ]);
         expect(html).not.toContain("<script>alert(1)</script>");
         expect(html).toContain("&lt;script&gt;");
+    });
+});
+
+describe("formatToolResult", () => {
+    // Pull the summary line and the full body text out of a rendered result
+    // block for assertions.
+    function parseResult(html: string): { summary: string; body: string } {
+        const summary =
+            html.match(
+                /reasoning-tool-result-summary">([\s\S]*?)<\/summary>/,
+            )?.[1] ?? "";
+        const body =
+            html.match(/reasoning-tool-result-body">([\s\S]*?)<\/pre>/)?.[1] ??
+            "";
+        return { summary, body };
+    }
+
+    it("renders a success result as a collapsed block with a one-line preview and full body", () => {
+        const html = formatToolResult("Found 3 matches:\nalpha\nbeta", false);
+        expect(html).toContain('<details class="reasoning-tool-result">');
+        expect(html).not.toContain("reasoning-tool-result-error");
+        expect(html).toContain(
+            '<summary class="reasoning-tool-result-summary"><strong>\u21B3</strong>',
+        );
+        const { summary, body } = parseResult(html);
+        // The preview flattens newlines into a single line.
+        expect(summary).toContain("<code>Found 3 matches: alpha beta</code>");
+        // The body preserves the full text (newlines intact).
+        expect(body).toBe("Found 3 matches:\nalpha\nbeta");
+    });
+
+    it("marks a failed result with the error class and label", () => {
+        const html = formatToolResult("boom", true);
+        expect(html).toContain(
+            '<details class="reasoning-tool-result reasoning-tool-result-error">',
+        );
+        expect(html).toContain("<strong>Error:</strong>");
+        expect(parseResult(html).body).toBe("boom");
+    });
+
+    it("truncates the summary preview but keeps the full body for the viewer", () => {
+        const long = "x".repeat(300);
+        const html = formatToolResult(long, false);
+        const { summary, body } = parseResult(html);
+        // Preview is capped (…) so the summary line stays short...
+        expect(summary).toContain("\u2026");
+        expect(summary.length).toBeLessThan(long.length);
+        // ...but the full text is still available in the body.
+        expect(body).toBe(long);
+    });
+
+    it("HTML-escapes result content so markup cannot break out", () => {
+        const html = formatToolResult("<script>alert(1)</script>", false);
+        expect(html).not.toContain("<script>alert(1)</script>");
+        expect(html).toContain("&lt;script&gt;");
+    });
+
+    it("shows (empty) for a blank result", () => {
+        const html = formatToolResult("   ", false);
+        expect(html).toContain("<code>(empty)</code>");
+        expect(parseResult(html).body).toBe("(empty)");
     });
 });

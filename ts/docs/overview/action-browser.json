@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-29T14:39:02.927Z",
+  "generatedAt": "2026-07-31T18:27:52.640Z",
   "agents": [
     {
       "name": "browser",
@@ -2213,72 +2213,6 @@
               "parameters": [],
               "phrasings": [
                 "'show' 'settings'"
-              ]
-            }
-          ]
-        },
-        {
-          "schemaName": "code.code-vscode-shell",
-          "description": "Manage TypeAgent Shell conversations (chat tabs in the TypeAgent VS Code Shell extension): create a new conversation, rename the current conversation, or switch to an existing conversation by name.",
-          "defaultEnabled": false,
-          "transient": false,
-          "actions": [
-            {
-              "actionName": "deleteConversation",
-              "description": "Delete a TypeAgent Shell conversation by display name. The current active conversation cannot be deleted. The extension will prompt the user for confirmation before deleting. Example: User: delete the \"design review\" conversation Agent: { actionName: \"deleteConversation\", parameters: { name: \"design review\" } } Example: User: delete a conversation Agent: { actionName: \"deleteConversation\", parameters: {} }",
-              "parameters": [
-                {
-                  "name": "name",
-                  "type": "string",
-                  "optional": true,
-                  "description": "The display name of the conversation to delete. If omitted, the user will be shown a picker in the extension UI."
-                }
-              ],
-              "phrasings": [
-                "'delete' 'chat'"
-              ]
-            },
-            {
-              "actionName": "newConversation",
-              "description": "Create a brand-new TypeAgent Shell conversation (a new chat tab in the TypeAgent Shell VS Code extension) and switch the current tab to it. Example: User: start a new conversation Agent: { actionName: \"newConversation\", parameters: {} } Example: User: new conversation called \"design review\" Agent: { actionName: \"newConversation\", parameters: { name: \"design review\" } }",
-              "parameters": [
-                {
-                  "name": "name",
-                  "type": "string",
-                  "optional": true,
-                  "description": "Optional display name for the new conversation. If omitted, the user will be prompted in the extension UI."
-                }
-              ],
-              "phrasings": [
-                "'new' 'chat'"
-              ]
-            },
-            {
-              "actionName": "renameConversation",
-              "description": "Rename the TypeAgent Shell conversation that is currently active in this chat tab. Example: User: rename this conversation to \"vscode shell PR\" Agent: { actionName: \"renameConversation\", parameters: { newName: \"vscode shell PR\" } }",
-              "parameters": [
-                {
-                  "name": "newName",
-                  "type": "string",
-                  "optional": false,
-                  "description": "The new display name to apply to the current conversation."
-                }
-              ],
-              "phrasings": []
-            },
-            {
-              "actionName": "switchConversation",
-              "description": "Switch the current TypeAgent Shell chat tab to a different existing conversation, identified by its display name. If no conversation with that name exists, a new one will be created with that name and the current tab will switch to it. Example: User: switch to the \"design review\" conversation Agent: { actionName: \"switchConversation\", parameters: { name: \"design review\" } } Example: User: switch conversation Agent: { actionName: \"switchConversation\", parameters: {} }",
-              "parameters": [
-                {
-                  "name": "name",
-                  "type": "string",
-                  "optional": true,
-                  "description": "The display name of the conversation to switch to. If omitted, the user will be shown a picker in the extension UI. If the named conversation does not exist, a new one will be created."
-                }
-              ],
-              "phrasings": [
-                "'switch' 'chat'"
               ]
             }
           ]
@@ -9305,35 +9239,6 @@
       ]
     },
     {
-      "name": "selfhelp",
-      "category": "Other",
-      "emoji": "💡",
-      "description": "Help agent that answers questions about TypeAgent itself: what it is, how it works, how to set up and use its agents, commands, and features.",
-      "schemas": [
-        {
-          "schemaName": "selfhelp",
-          "description": "Answers questions the user is asking ABOUT the TypeAgent system they are using: what TypeAgent is, how it works, what its agents/commands/features do, how to install or configure something (e.g. the browser extension, internet lookup modes, enabling an agent), how to accomplish a task within TypeAgent, and why a TypeAgent feature is behaving a certain way. Use ONLY for meta questions about the TypeAgent product/app itself. Do NOT use for general-knowledge questions, web lookups, or performing a task in another domain such as playing music, sending email, editing code, or controlling a browser.",
-          "defaultEnabled": true,
-          "transient": false,
-          "actions": [
-            {
-              "actionName": "answerTypeAgentQuestion",
-              "description": "Answer a question the user is asking about TypeAgent itself - what it is, how it works, how to set up or use one of its agents/commands/features, or why a TypeAgent feature is behaving a certain way. Only use this for questions about the TypeAgent product; not for general knowledge or for performing a task in another domain.",
-              "parameters": [
-                {
-                  "name": "question",
-                  "type": "string",
-                  "optional": false,
-                  "description": "The user's original question about TypeAgent, verbatim."
-                }
-              ],
-              "phrasings": []
-            }
-          ]
-        }
-      ]
-    },
-    {
       "name": "settings",
       "category": "System & Devices",
       "emoji": "⚙️",
@@ -9502,7 +9407,7 @@
         },
         {
           "schemaName": "system.conversation",
-          "description": "System agent that manages TypeAgent shell conversations. Use this agent when the user wants to: CREATE a new conversation (e.g. 'create a new conversation', 'start a new conversation called test', 'new conversation named work', 'open a new conversation test'), LIST conversations (e.g. 'list our conversations', 'list my conversations', 'show all conversations', 'what conversations do I have'), SWITCH to an existing conversation by name (e.g. 'switch to conversation test', 'go to my work conversation', 'switch to test'), advance to the NEXT conversation (e.g. 'switch to next conversation', 'next conversation', 'go to the next conversation'), go to the PREVIOUS conversation (e.g. 'switch to previous conversation', 'previous conversation'), DELETE a conversation (e.g. 'delete conversation test', 'remove the work conversation'), RENAME the current conversation, or SHOW info about the current conversation. Use this for TypeAgent shell conversations only — NOT for media playlists, songs, files, or browser tabs.",
+          "description": "System agent that manages TypeAgent shell conversations. Use this agent when the user wants to: CREATE a new conversation (e.g. 'create a new conversation', 'start a new conversation called test', 'new conversation named work', 'open a new conversation test'), LIST conversations (e.g. 'list our conversations', 'list my conversations', 'show all conversations', 'what conversations do I have'), FIND a conversation by name (e.g. 'find the conversation about the workout playlist', 'which conversation was about taxes'), SEARCH the CONTENT of conversations (e.g. 'search my conversations for the docker command we used', 'search my chat history for the API key steps'), INDEX a conversation's history so its content becomes searchable (e.g. 'index this conversation', 'index all conversations', 'index the conversation about taxes'), SWITCH to an existing conversation by name (e.g. 'switch to conversation test', 'go to my work conversation', 'switch to test'), advance to the NEXT conversation (e.g. 'switch to next conversation', 'next conversation', 'go to the next conversation'), go to the PREVIOUS conversation (e.g. 'switch to previous conversation', 'previous conversation'), DELETE a conversation (e.g. 'delete conversation test', 'remove the work conversation'), RENAME the current conversation, SHOW info about the current conversation, or get HELP with conversation commands (e.g. 'conversation help', 'help with conversations'). Use this for TypeAgent shell conversations only — NOT for media playlists, songs, files, or browser tabs.",
           "defaultEnabled": true,
           "transient": false,
           "actions": [
@@ -9523,11 +9428,55 @@
               ]
             },
             {
+              "actionName": "findConversation",
+              "description": "Find existing conversations by approximate name or topic, WITHOUT switching. Use this when the user wants to find, search for, or locate a conversation by what it was about or roughly what it was named. Examples: \"find the conversation about the workout playlist\", \"search my conversations for taxes\", \"which conversation was about the trip to Paris\", \"locate the chat where we discussed the budget\". IMPORTANT: use switchConversation instead when the user wants to switch to it.",
+              "parameters": [
+                {
+                  "name": "query",
+                  "type": "string",
+                  "optional": false,
+                  "description": "The name or topic to search for"
+                }
+              ],
+              "phrasings": [
+                "{polite} find conversation {query}",
+                "{polite} which conversation about {query}"
+              ]
+            },
+            {
+              "actionName": "help",
+              "description": "Show help for conversation management: the available conversation commands and what they do. Use this when the user asks how to manage conversations or what conversation commands are available. Examples: \"conversation help\", \"help with conversations\", \"what conversation commands are there\", \"how do I manage conversations\".",
+              "parameters": [],
+              "phrasings": [
+                "{polite} conversation help",
+                "{polite} help conversation"
+              ]
+            },
+            {
+              "actionName": "indexConversation",
+              "description": "Index a conversation's history so its content becomes searchable across conversations. Use this when the user wants to index, reindex, or make a past conversation (or all conversations) searchable - i.e. add older messages that aren't in the content-search index yet. Examples: \"index this conversation\", \"index all conversations\", \"reindex my conversations\", \"index the conversation about the Paris trip\", \"make my conversations searchable\". IMPORTANT: use searchConversation to search existing content; use this only to ADD a conversation's history to the index.",
+              "parameters": [
+                {
+                  "name": "name",
+                  "type": "string",
+                  "optional": true,
+                  "description": "Which conversation to index: omit for the current conversation, use \"all\" for every conversation, or give a conversation's name/topic."
+                }
+              ],
+              "phrasings": [
+                "{polite} index this conversation",
+                "{polite} index {determiner} conversations",
+                "{polite} make {determiner} conversations searchable",
+                "{polite} index conversation called {name}",
+                "{polite} index {name} conversation"
+              ]
+            },
+            {
               "actionName": "listConversation",
               "description": "List all conversations in this TypeAgent shell session. Use this when the user wants to see, show, or list their TypeAgent conversations (NOT files, songs, or any other kind of list). Examples: \"list our conversations\", \"list my conversations\", \"show all conversations\", \"what conversations do I have\", \"show me my conversations\", \"show conversation list\".",
               "parameters": [],
               "phrasings": [
-                "{polite} list conversations",
+                "{polite} list {determiner} conversations",
                 "{polite} what conversations have"
               ]
             },
@@ -9590,6 +9539,23 @@
               ]
             },
             {
+              "actionName": "searchConversation",
+              "description": "Search the CONTENT of conversations (what was actually said or discussed inside them), not their names. Use this when the user wants to search across their conversation history for messages, topics, or details that were mentioned. Examples: \"search my conversations for the docker command we used\", \"search conversation content for what we decided about pricing\", \"search my chat history for the API key rotation steps\". IMPORTANT: use findConversation instead when the user wants to locate a conversation by its name/title rather than search what is inside it.",
+              "parameters": [
+                {
+                  "name": "query",
+                  "type": "string",
+                  "optional": false,
+                  "description": "The text or topic to search for within conversation content"
+                }
+              ],
+              "phrasings": [
+                "{polite} search through conversation {query}",
+                "{polite} search chat history {query}",
+                "{polite} search content of conversation {query}"
+              ]
+            },
+            {
               "actionName": "showConversationInfo",
               "description": "Show information about the current conversation. Use this when the user asks about the current conversation info. Examples: \"show conversation info\", \"what conversation am I in\", \"current conversation info\".",
               "parameters": [],
@@ -9601,67 +9567,22 @@
             },
             {
               "actionName": "switchConversation",
-              "description": "Switch to an existing conversation by name. Use this when the user wants to switch to, go to, open, or change to an EXISTING conversation identified by name.  For \"next\"/\"previous\" without a specific name, use NextConversationAction or PrevConversationAction instead. Examples: \"switch to conversation test\", \"go to my work conversation\", \"switch to test\", \"open conversation named work\", \"change to the test conversation\". IMPORTANT: use this only when switching to an already-existing conversation, not creating a new one.",
+              "description": "Switch to an existing conversation, identified either by its NAME or by what was DISCUSSED in it (its content/topic). Use this when the user wants to switch to, go to, open, or change to an EXISTING conversation. The switch tries an exact name, then a fuzzy name, then a content search over the conversations' messages - so \"switch to the conversation where we talked about spikes\" resolves to the conversation whose content is about spikes. For \"next\"/\"previous\" without a specific target, use NextConversationAction or PrevConversationAction instead. Examples: \"switch to conversation test\", \"go to my work conversation\", \"switch to test\", \"open conversation named work\", \"change to the test conversation\", \"switch to the conversation where we talked about spikes\". IMPORTANT: use this only when switching to an already-existing conversation, not creating a new one.",
               "parameters": [
                 {
                   "name": "name",
                   "type": "string",
                   "optional": false,
-                  "description": "The name of the conversation to switch to"
+                  "description": "The name of the conversation to switch to, or a topic/description of what was discussed in it."
                 }
               ],
               "phrasings": [
                 "{polite} switch to conversation {name}",
+                "{polite} switch to conversation where talked {name}",
                 "{polite} switch conversation to {name}",
                 "{polite} switch to {name} conversation",
                 "{polite} open conversation {name}"
               ]
-            }
-          ]
-        },
-        {
-          "schemaName": "system.describe",
-          "description": "Describe what an agent or action can do — capability discovery, not execution. Use this when the user wants to know WHAT an agent or action does, e.g. 'what can the spotify agent do', 'describe the calendar agent', 'show me all of spotify's actions', 'what does the play action do', 'describe spotify's play action'. This works even for installed-but-disabled agents. Do NOT use this to execute an action or to list all agents (that's a config command).",
-          "defaultEnabled": true,
-          "transient": false,
-          "actions": [
-            {
-              "actionName": "describeAction",
-              "description": "Explain a single action in detail, beyond its one-line schema description. Examples: \"what does the play action do\", \"describe spotify's play action\", \"describe the play action from spotify\".",
-              "parameters": [
-                {
-                  "name": "actionName",
-                  "type": "string",
-                  "optional": false,
-                  "description": "the action to describe"
-                },
-                {
-                  "name": "agentName",
-                  "type": "string",
-                  "optional": true,
-                  "description": "optional owning agent, when the user names one"
-                }
-              ],
-              "phrasings": []
-            },
-            {
-              "actionName": "describeAgent",
-              "description": "Describe what an agent can do: a natural-language summary plus its actions. Works for installed-but-disabled agents too — describing is informational and does not require the agent to be enabled. Examples: \"what can the spotify agent do\", \"describe spotify\", \"show me all of spotify's actions\", \"list everything calendar can do\".",
-              "parameters": [
-                {
-                  "name": "agentName",
-                  "type": "string",
-                  "optional": false,
-                  "description": "the agent to describe"
-                },
-                {
-                  "name": "all",
-                  "type": "boolean",
-                  "optional": true,
-                  "description": "true when the user asks for ALL actions, not the default set"
-                }
-              ],
-              "phrasings": []
             }
           ]
         },
@@ -9719,6 +9640,65 @@
                   "type": "number",
                   "optional": false,
                   "description": "Numeric ID of the rule to inspect, as shown in listRules output"
+                }
+              ],
+              "phrasings": []
+            }
+          ]
+        },
+        {
+          "schemaName": "system.help",
+          "description": "Answer questions about TypeAgent itself - capability discovery and help, not execution. Use this when the user wants to: FIND the command or action for a task ('what's the command for X', 'how do I X', 'can I X in TypeAgent'); EXPLAIN TypeAgent or one of its concepts/features ('what is TypeAgent', 'what can it do', 'how does translation/memory/the cache work', 'how do I set it up', 'give me more details about TypeAgent X'); or DESCRIBE a specific installed agent or action ('what can the spotify agent do', 'describe the calendar agent', 'what does the play action do'). Describing works even for installed-but-disabled agents. Do NOT use this to actually perform a task in another domain (playing music, sending email, editing code, controlling a browser), for general-knowledge questions, or to list all agents (that's the config command).",
+          "defaultEnabled": true,
+          "transient": false,
+          "actions": [
+            {
+              "actionName": "answerTypeAgentQuestion",
+              "description": "Answer any question about TypeAgent ITSELF that isn't about one specific named agent: find the command or action for a task (\"what's the command for X\", \"how do I X\", \"can I X in TypeAgent\"), OR explain a concept, feature, or setup topic (\"what is TypeAgent\", \"how does translation/memory/the cache work\", \"what keys do I need\", \"how do I install/configure/run it\"). Answers with a summary plus any matching @-command(s)/action(s). Not for general knowledge, not for performing a task in another domain, and not for describing a specific named agent (use describeAgent).",
+              "parameters": [
+                {
+                  "name": "question",
+                  "type": "string",
+                  "optional": false,
+                  "description": "The user's question about TypeAgent, verbatim."
+                }
+              ],
+              "phrasings": []
+            },
+            {
+              "actionName": "describeAction",
+              "description": "Explain a single action in detail, beyond its one-line schema description. Examples: \"what does the play action do\", \"describe spotify's play action\", \"describe the play action from spotify\".",
+              "parameters": [
+                {
+                  "name": "actionName",
+                  "type": "string",
+                  "optional": false,
+                  "description": "the action to describe"
+                },
+                {
+                  "name": "agentName",
+                  "type": "string",
+                  "optional": true,
+                  "description": "optional owning agent, when the user names one"
+                }
+              ],
+              "phrasings": []
+            },
+            {
+              "actionName": "describeAgent",
+              "description": "Describe what a SPECIFIC INSTALLED agent can do: a natural-language summary plus its actions. Use ONLY when the user names an actual agent (e.g. \"what can the spotify agent do\", \"describe the calendar agent\", \"show me all of spotify's actions\"). Works for installed-but-disabled agents too. Do NOT use this for a TypeAgent concept or feature that is not an installed agent (use explainTypeAgent), and do NOT use it to execute an action.",
+              "parameters": [
+                {
+                  "name": "agentName",
+                  "type": "string",
+                  "optional": false,
+                  "description": "the agent to describe"
+                },
+                {
+                  "name": "all",
+                  "type": "boolean",
+                  "optional": true,
+                  "description": "true when the user asks for ALL actions, not the default set"
                 }
               ],
               "phrasings": []
@@ -11672,21 +11652,6 @@
       "flags": []
     },
     {
-      "host": "selfhelp",
-      "path": "ask",
-      "description": "Ask a question about TypeAgent (what it is, how it works, how to set it up).",
-      "group": false,
-      "args": [
-        {
-          "name": "question",
-          "type": "string",
-          "optional": false,
-          "description": "Your question about TypeAgent."
-        }
-      ],
-      "flags": []
-    },
-    {
       "host": "system",
       "path": "action",
       "description": "Execute an action",
@@ -13627,6 +13592,30 @@
     },
     {
       "host": "system",
+      "path": "config execution reasoningForwardActions",
+      "description": "Toggle let the reasoning agent forward client actions (e.g. @conversation switch) to the client instead of capturing them",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "system",
+      "path": "config execution reasoningForwardActions off",
+      "description": "Turn off let the reasoning agent forward client actions (e.g. @conversation switch) to the client instead of capturing them",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "system",
+      "path": "config execution reasoningForwardActions on",
+      "description": "Turn on let the reasoning agent forward client actions (e.g. @conversation switch) to the client instead of capturing them",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "system",
       "path": "config execution reasoningHistory",
       "description": "Number of recent conversation turns included as context in the reasoning prompt",
       "group": false,
@@ -14984,11 +14973,50 @@
     },
     {
       "host": "system",
+      "path": "conversation find",
+      "description": "Fuzzy-find conversations by name (lexical + embedding)",
+      "group": false,
+      "args": [
+        {
+          "name": "query",
+          "type": "string",
+          "optional": false,
+          "description": "Name (or approximate name) to search for"
+        }
+      ],
+      "flags": [],
+      "action": {
+        "actionName": "findConversation"
+      }
+    },
+    {
+      "host": "system",
       "path": "conversation help",
       "description": "Show conversation command help",
       "group": false,
       "args": [],
-      "flags": []
+      "flags": [],
+      "action": {
+        "actionName": "help"
+      }
+    },
+    {
+      "host": "system",
+      "path": "conversation index",
+      "description": "Index conversation history so its content is searchable across conversations",
+      "group": false,
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "optional": true,
+          "description": "Conversation to index by name, or 'all' for every conversation. Omit to index the current conversation."
+        }
+      ],
+      "flags": [],
+      "action": {
+        "actionName": "indexConversation"
+      }
     },
     {
       "host": "system",
@@ -15074,6 +15102,24 @@
       "flags": [],
       "action": {
         "actionName": "renameConversation"
+      }
+    },
+    {
+      "host": "system",
+      "path": "conversation search",
+      "description": "Search conversation content (knowPro message index)",
+      "group": false,
+      "args": [
+        {
+          "name": "query",
+          "type": "string",
+          "optional": false,
+          "description": "Text to search for across conversation content"
+        }
+      ],
+      "flags": [],
+      "action": {
+        "actionName": "searchConversation"
       }
     },
     {
@@ -16398,8 +16444,8 @@
     }
   ],
   "counts": {
-    "agents": 33,
+    "agents": 32,
     "actions": 557,
-    "commands": 411
+    "commands": 416
   }
 }
