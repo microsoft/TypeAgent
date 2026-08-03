@@ -7,12 +7,13 @@ import {
     ToolSet,
     type AssistantUsageData,
     type CustomAgentConfig,
+    type MCPStdioServerConfig,
     type PermissionHandler,
     type SessionEvent,
 } from "@github/copilot-sdk";
 import { spawnSync } from "node:child_process";
 import { constants } from "node:fs";
-import { access, realpath } from "node:fs/promises";
+import { access, readFile, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -20,36 +21,62 @@ import {
     createCopilotExplorationTools,
     type CopilotExplorationTools,
 } from "./copilotTools.js";
-import {
-    baselineAnswerValidationError,
-    baselineDelegatedQueryValidationError,
-    baselineRelayValidationError,
-} from "./baselineValidation.js";
 import { readEnvFile, redact } from "./io.js";
 import { parseFinalAnswer } from "./score.js";
 import type {
     BenchmarkAgentConfig,
+    BenchmarkVariant,
     CopilotToolCallTrace,
     CopilotTraceItem,
     CopilotUsage,
+    ExploreInvocationTelemetry,
     ExploreTelemetry,
     ExplorerSubagentTrace,
+    McpServerConfig,
     McpToolCallTrace,
+    RunLatencyTimeline,
+    RunTrajectoryFiles,
     TokenUsage,
     TypeAgentUsage,
 } from "./types.js";
-import { BENCHMARK_TOOL_CALL_LIMIT } from "./types.js";
-
-export {
-    baselineAnswerValidationError,
-    baselineDelegatedQueryValidationError,
-    baselineRelayValidationError,
-};
+import type { TrajectoryExpectation } from "./trajectory.js";
+import { BENCHMARK_TOOL_CALL_LIMIT, isTypeAgentVariant } from "./types.js";
+import {
+    codeModeTrajectoryInvocationCount,
+    codeModeTrajectoryFiles,
+    mergeCopilotEvents,
+    normalizeCopilotTrajectory,
+    validateTrajectoryFile,
+    writeUnavailableTrajectoryFile,
+    writeTrajectoryFile,
+} from "./trajectory.js";
 
 // Copilot uses modelId only for its built-in agent behavior, tool, and token
 // limit profile. wireModel below is the exact Luna/Terra/Sol route sent to
 // LiteLLM for inference.
 const COPILOT_BEHAVIOR_MODEL_ID = "gpt-5";
+const TELEMETRY_SETTLE_TIMEOUT_MS = 90_000;
+const TELEMETRY_POLL_INTERVAL_MS = 250;
+const TREATMENT_REASONING_REQUEST_TIMEOUT_MS = 120_000;
+const BENCHMARK_OWNED_MCP_ARGUMENTS = new Set([
+    "--repo",
+    "--model",
+    "--base-url",
+    "--api-key-env",
+    "--max-tool-calls",
+    "--telemetry-file",
+    "--trajectory-file",
+    "--request-timeout-ms",
+    "--enable-lsp",
+    "--python-lsp-command",
+    "--python-lsp-arg",
+    "--typescript-lsp-command",
+    "--typescript-lsp-arg",
+    "--lsp-server-command",
+    "--lsp-server-arg",
+    "--disable-lsp-server",
+    "--lsp-only-server",
+]);
 
 export const COPILOT_SDK_VERSION = "1.0.4";
 
@@ -59,19 +86,26 @@ Your final response MUST be only this XML block, with no markdown and no prose o
 path/to/file.ext:10-20
 path/to/other.ext:5
 </final_answer>
-Return at most six repository-relative file paths with exact line or line ranges most likely needing changes. Include every evidence-indicated change-bearing source, test, configuration, or documentation block, preserving complete relevant blocks without adding unrelated surrounding lines.
+Return at most six repository-relative file paths with exact line or line ranges most likely needing changes.
 If evidence is weak, still output the closest file:line locations inside the block.`;
 
-export function buildBenchmarkSystemMessage(): string {
-    const requiredPath = `You are the default main agent in an evaluation benchmark.
-Your first assistant action MUST delegate to the \`explorer\` subagent with the \`task\` tool, and you must complete exactly one successful delegation. Provide every required task argument: \`description\`, \`prompt\`, \`agent_type: "explorer"\`, \`name\`, and \`mode: "sync"\`. If the task schema is rejected before the subagent starts, correct it and retry. Do not request another tool or include prose in the first action. Copy the complete user \`<query>\` block exactly into the task prompt without paraphrasing, summarizing, omitting, or reordering any content. You may add Explorer instructions before or after that exact block.
+export function buildBenchmarkSystemMessage(variant: BenchmarkVariant): string {
+    const requiredPath = isTypeAgentVariant(variant)
+        ? `You are the default main agent in an evaluation benchmark.
+The TypeAgent MCP explore tool is available. Your first assistant action MUST be exactly one call to it. Do not request another tool or include prose in that action. The host relays a successful result and ends the turn, so do not add prose or call another tool after explore.
+Call explore with no arguments. The server binds the complete current user message to this session. Historical lines are clues rather than guaranteed current locations.`
+        : `You are the default main agent in an evaluation benchmark.
+Your first assistant action MUST delegate to the \`explorer\` subagent with the \`task\` tool, and you must complete exactly one successful delegation. Provide every required task argument: \`description\`, \`prompt\`, \`agent_type: "explorer"\`, \`name\`, and \`mode: "sync"\`. If the task schema is rejected before the subagent starts, correct it and retry. Do not request another tool or include prose in the first action. Pass the complete query and problem statement to the subagent, including reproduction details, exact identifiers, errors, and historical line references.
+Copy the complete user message byte-for-byte into the task prompt argument. Do not add, remove, summarize, reformat, or paraphrase any character.
 Wait for the explorer subagent to finish. Do not inspect the repository yourself. Then return only the explorer's repository locations in the required output format.`;
     return `${requiredPath}\n${benchmarkOutputContract}`;
 }
 
-export function buildBenchmarkPrompt(query: string): string {
-    const instruction = "Use the explorer subagent.";
-    return `${instruction}\n\n<query>\n${query}\n</query>\n\nCopy the complete <query> block exactly into the explorer task prompt; do not paraphrase or omit any content. Remember: final response only, exactly <final_answer> path:line locations </final_answer>. Do not include analysis prose outside the block.`;
+export function buildBenchmarkPrompt(
+    variant: BenchmarkVariant,
+    query: string,
+): string {
+    return query;
 }
 
 export interface CopilotHarnessOptions {
@@ -81,15 +115,19 @@ export interface CopilotHarnessOptions {
 }
 
 export interface CopilotRunOptions {
+    rowName: string;
+    attempt: number;
     repoPath: string;
     prompt: string;
     model: string;
-    variant: "baseline";
+    variant: BenchmarkVariant;
     providerBaseUrl: string;
     apiKeyEnv: string;
     agent: BenchmarkAgentConfig;
     envFile?: string;
+    mcp: McpServerConfig;
     telemetryFile: string;
+    trajectoryFiles: RunTrajectoryFiles;
     timeoutMs: number;
     ripgrepPath: string;
 }
@@ -122,12 +160,14 @@ export interface AgentRoutingConfig {
 export interface CopilotRunOutput {
     ok: boolean;
     durationMs: number;
+    latencyTimeline: RunLatencyTimeline;
     finalAnswer: string;
     usage?: CopilotUsage;
     typeAgentUsage?: TypeAgentUsage;
     combinedUsage?: TokenUsage;
     exploreTelemetry?: ExploreTelemetry;
     telemetryFile: string;
+    trajectoryFiles: RunTrajectoryFiles;
     attemptedExploreCalls: number;
     completedExploreCalls: number;
     successfulExploreCalls: number;
@@ -140,6 +180,7 @@ export interface CopilotRunOutput {
     lspCallCount: number;
     lspResultCount: number;
     usedRepair: boolean;
+    outerLoopAbortedAfterExplore: boolean;
     mcpToolTrace: McpToolCallTrace[];
     toolTrace: CopilotToolCallTrace[];
     events: CopilotTraceItem[];
@@ -150,12 +191,183 @@ export interface CopilotRunOutput {
     successfulExplorerDelegations: number;
     failedExplorerDelegations: number;
     explorerRepositoryCalls: number;
+    firstAssistantActionExclusiveExplore: boolean;
+    exploreCompletedBeforeLaterAssistantAction: boolean;
     firstAssistantActionExclusiveExplorer: boolean;
     explorerCompletedBeforeLaterAssistantAction: boolean;
     mainAgentRepositoryInspection: boolean;
     explorerSubagentTrace: ExplorerSubagentTrace[];
     selectedAgentName?: string;
     error?: string;
+}
+
+export interface TypeAgentRelayResult {
+    finalAnswer: string;
+    outerLoopAbortedAfterExplore: true;
+}
+
+export interface TypeAgentRelaySession {
+    abort(): Promise<void>;
+    on(handler: (event: SessionEvent) => void): () => void;
+    send(options: { prompt: string }): Promise<string>;
+}
+
+export async function relayTypeAgentExplore(
+    session: TypeAgentRelaySession,
+    prompt: string,
+    timeoutMs: number,
+): Promise<TypeAgentRelayResult> {
+    const deadline = Date.now() + timeoutMs;
+    const remainingMs = () => Math.max(0, deadline - Date.now());
+    let exploreCallId: string | undefined;
+    let exploreContent: string | undefined;
+    let abortPromise: Promise<void> | undefined;
+    let abortObserved = false;
+    let laterAssistantProse = false;
+    let resolveRelay: (() => void) | undefined;
+    let rejectRelay: ((error: Error) => void) | undefined;
+    const relayComplete = new Promise<void>((resolve, reject) => {
+        resolveRelay = resolve;
+        rejectRelay = reject;
+    });
+    const unsubscribe = session.on((event) => {
+        if (event.type === "tool.execution_start") {
+            const data = recordValue(event.data);
+            if (
+                data?.mcpServerName === "typeagent" &&
+                data.mcpToolName === "explore"
+            ) {
+                const toolCallId = stringValue(data.toolCallId);
+                if (!toolCallId || exploreCallId) {
+                    rejectRelay?.(
+                        new Error(
+                            "TypeAgent relay observed an invalid or duplicate explore start",
+                        ),
+                    );
+                    return;
+                }
+                exploreCallId = toolCallId;
+            }
+            return;
+        }
+        if (event.type === "tool.execution_complete") {
+            if (event.data.toolCallId !== exploreCallId) {
+                return;
+            }
+            if (event.data.success !== true) {
+                rejectRelay?.(
+                    new Error(
+                        event.data.error?.message ??
+                            "TypeAgent explore completed without relay content",
+                    ),
+                );
+                return;
+            }
+            try {
+                exploreContent = exactNativeExploreText(event.data.result);
+            } catch (error) {
+                rejectRelay?.(error as Error);
+                return;
+            }
+            if (!abortPromise) {
+                abortPromise = session.abort();
+                void abortPromise.catch((error) => {
+                    rejectRelay?.(
+                        error instanceof Error
+                            ? error
+                            : new Error(String(error)),
+                    );
+                });
+            }
+            return;
+        }
+        if (event.type === "abort" && exploreContent !== undefined) {
+            abortObserved = true;
+            return;
+        }
+        if (
+            exploreContent !== undefined &&
+            ((event.type === "assistant.message" &&
+                event.data.content.trim().length > 0) ||
+                event.type === "assistant.message_delta" ||
+                event.type === "assistant.streaming_delta")
+        ) {
+            laterAssistantProse = true;
+            return;
+        }
+        if (event.type === "session.idle") {
+            if (
+                exploreContent !== undefined &&
+                abortObserved &&
+                event.data.aborted === true
+            ) {
+                resolveRelay?.();
+            } else {
+                rejectRelay?.(
+                    new Error(
+                        "TypeAgent relay reached idle without an observed abort after explore",
+                    ),
+                );
+            }
+        }
+    });
+
+    try {
+        await withTimeout(
+            session.send({ prompt }),
+            remainingMs(),
+            "TypeAgent explore send acknowledgement timed out",
+        );
+        await withTimeout(
+            relayComplete,
+            remainingMs(),
+            "TypeAgent explore relay timed out",
+        );
+        if (!abortPromise) {
+            throw new Error("TypeAgent explore abort was not requested");
+        }
+        await withTimeout(
+            abortPromise,
+            remainingMs(),
+            "TypeAgent explore abort acknowledgement timed out",
+        );
+        if (!exploreContent || laterAssistantProse) {
+            throw new Error(
+                laterAssistantProse
+                    ? "TypeAgent outer agent emitted prose after explore"
+                    : "TypeAgent explore relay content is missing",
+            );
+        }
+        return {
+            finalAnswer: `<final_answer>\n${exploreContent}\n</final_answer>`,
+            outerLoopAbortedAfterExplore: true,
+        };
+    } finally {
+        unsubscribe();
+    }
+}
+
+function exactNativeExploreText(
+    result:
+        | Extract<
+              SessionEvent,
+              { type: "tool.execution_complete" }
+          >["data"]["result"]
+        | undefined,
+): string {
+    const contents = result?.contents;
+    const block = contents?.length === 1 ? contents[0] : undefined;
+    if (
+        !block ||
+        block.type !== "text" ||
+        typeof block.text !== "string" ||
+        !block.text.trim()
+    ) {
+        throw new Error(
+            "TypeAgent explore must return exactly one non-empty native text block",
+        );
+    }
+    return block.text;
 }
 
 export async function resolveCopilotPath(preferred?: string): Promise<string> {
@@ -222,60 +434,92 @@ export async function runCopilot(
     client: CopilotClient,
     options: CopilotRunOptions,
 ): Promise<CopilotRunOutput> {
-    if (options.variant !== "baseline") {
-        throw new Error("Copilot runner supports only the baseline arm");
-    }
     const started = Date.now();
+    const elapsedMs = () => Math.max(0, Date.now() - started);
+    const latencyTimeline: RunLatencyTimeline = {
+        schemaVersion: 1,
+        runStartedAt: new Date(started).toISOString(),
+        completedMs: 0,
+    };
     const events: CopilotTraceItem[] = [];
     const usageEvents: AssistantUsageData[] = [];
+    const trajectoryEvents: SessionEvent[] = [];
     const toolTrace: CopilotToolCallTrace[] = [];
     let finalAnswer = "";
     let caughtError: string | undefined;
     let usage: CopilotUsage | undefined;
     let completionUsageComplete = true;
     let usedRepair = false;
+    let outerLoopAbortedAfterExplore = false;
+    let mcpServerReady = false;
+    let mcpAdvertisedTools: string[] = [];
     let selectedAgentName: string | undefined;
     let defaultMainAgent = false;
     let session:
         | Awaited<ReturnType<CopilotClient["createSession"]>>
         | undefined;
-    let tools: CopilotExplorationTools | undefined;
-    let providerValue = "";
+    let explorationTools: CopilotExplorationTools | undefined;
+    let secret = "";
+    let trajectorySecrets: string[] = [];
+    let trajectoryFiles = options.trajectoryFiles;
 
     try {
         const environment = await resolveEnvironment(
             options.apiKeyEnv,
             options.envFile,
         );
-        providerValue = environment[options.apiKeyEnv] ?? "";
-        tools = await createCopilotExplorationTools(
-            options.repoPath,
-            toolTrace,
-            BENCHMARK_TOOL_CALL_LIMIT,
-            options.ripgrepPath,
-        );
-        const routing = buildAgentRoutingConfig(options.agent);
+        secret = environment[options.apiKeyEnv] ?? "";
+        trajectorySecrets = [
+            ...new Set(
+                [options.apiKeyEnv, ...options.mcp.envVars]
+                    .map((name) => environment[name])
+                    .filter((value): value is string => Boolean(value)),
+            ),
+        ];
+        explorationTools =
+            options.variant === "baseline"
+                ? await createCopilotExplorationTools(
+                      options.repoPath,
+                      toolTrace,
+                      BENCHMARK_TOOL_CALL_LIMIT,
+                      options.ripgrepPath,
+                  )
+                : undefined;
+        const routing = buildAgentRoutingConfig(options.variant, options.agent);
+        const mcpServers = isTypeAgentVariant(options.variant)
+            ? {
+                  typeagent: buildMcpServerConfig(
+                      options,
+                      environment,
+                      options.ripgrepPath,
+                  ),
+              }
+            : undefined;
 
+        latencyTimeline.sessionCreateStartedMs = elapsedMs();
         session = await client.createSession({
             model: options.model,
-            reasoningEffort: "medium",
             provider: {
                 type: "openai",
                 baseUrl: options.providerBaseUrl,
-                apiKey: providerValue,
+                apiKey: secret,
                 wireApi: "responses",
                 modelId: COPILOT_BEHAVIOR_MODEL_ID,
                 wireModel: options.model,
             },
             workingDirectory: options.repoPath,
-            tools,
+            tools: explorationTools ?? [],
             ...routing,
+            ...(mcpServers ? { mcpServers } : {}),
             customAgentsLocalOnly: true,
-            onPermissionRequest: permissionHandler(),
-            onEvent: (event) => recordEvent(events, usageEvents, event),
+            onPermissionRequest: permissionHandler(options.variant),
+            onEvent: (event) => {
+                trajectoryEvents.push(event);
+                recordEvent(events, usageEvents, event, started);
+            },
             systemMessage: {
                 mode: "replace",
-                content: buildBenchmarkSystemMessage(),
+                content: buildBenchmarkSystemMessage(options.variant),
             },
             enableConfigDiscovery: false,
             skipCustomInstructions: true,
@@ -288,6 +532,7 @@ export async function runCopilot(
             infiniteSessions: { enabled: false },
             coauthorEnabled: false,
         });
+        latencyTimeline.sessionCreatedMs = elapsedMs();
 
         const selectedAgent = await session.rpc.agent.getCurrent();
         selectedAgentName = selectedAgent.agent?.name;
@@ -298,34 +543,79 @@ export async function runCopilot(
             );
         }
 
-        const agents = await session.rpc.agent.list();
-        const explorer = agents.agents.filter(
-            (agent) => agent.name === options.agent.name,
-        );
-        if (
-            explorer.length !== 1 ||
-            JSON.stringify(explorer[0].tools) !==
-                JSON.stringify(options.agent.tools)
-        ) {
-            throw new Error(
-                `Baseline must register exactly one explorer subagent with ${JSON.stringify(options.agent.tools)}; observed ${JSON.stringify(explorer)}`,
+        if (options.variant === "baseline") {
+            const agents = await session.rpc.agent.list();
+            const explorer = agents.agents.filter(
+                (agent) => agent.name === options.agent.name,
             );
+            if (
+                explorer.length !== 1 ||
+                JSON.stringify(explorer[0].tools) !==
+                    JSON.stringify(options.agent.tools)
+            ) {
+                throw new Error(
+                    `Baseline must register exactly one explorer subagent with ${JSON.stringify(options.agent.tools)}; observed ${JSON.stringify(explorer)}`,
+                );
+            }
         }
 
-        const prompt = buildBenchmarkPrompt(options.prompt);
-        try {
-            const reply = await session.sendAndWait(
-                { prompt },
-                options.timeoutMs,
-            );
-            finalAnswer = reply?.data.content ?? "";
-            if (shouldRepairFinalAnswer(finalAnswer, options.repoPath)) {
-                const repaired = await session.sendAndWait(
-                    {
-                        prompt: `Your previous answer did not use the required machine-readable localization format. Convert it now using only evidence already gathered. Do not call any tool. Return ONLY:\n<final_answer>\npath/to/file.py:line-or-start-end\n</final_answer>\nNo markdown, no bullets, no code blocks, no prose outside the XML block.`,
-                    },
-                    options.timeoutMs,
+        if (isTypeAgentVariant(options.variant)) {
+            await waitForMcpServer(session, "typeagent", 15_000);
+            mcpServerReady = true;
+            const listed = await session.rpc.mcp.listTools({
+                serverName: "typeagent",
+            });
+            mcpAdvertisedTools = listed.tools.map((tool) => tool.name).sort();
+            if (
+                mcpAdvertisedTools.length !== 1 ||
+                mcpAdvertisedTools[0] !== "explore"
+            ) {
+                throw new Error(
+                    `TypeAgent MCP must advertise only explore; observed ${JSON.stringify(mcpAdvertisedTools)}`,
                 );
+            }
+            latencyTimeline.mcpReadyMs = elapsedMs();
+        }
+
+        const prompt = buildBenchmarkPrompt(options.variant, options.prompt);
+        try {
+            latencyTimeline.primaryTurnStartedMs = elapsedMs();
+            try {
+                if (isTypeAgentVariant(options.variant)) {
+                    const relay = await relayTypeAgentExplore(
+                        session,
+                        prompt,
+                        options.timeoutMs,
+                    );
+                    finalAnswer = relay.finalAnswer;
+                    outerLoopAbortedAfterExplore =
+                        relay.outerLoopAbortedAfterExplore;
+                } else {
+                    const reply = await session.sendAndWait(
+                        { prompt },
+                        options.timeoutMs,
+                    );
+                    finalAnswer = reply?.data.content ?? "";
+                }
+            } finally {
+                latencyTimeline.primaryTurnCompletedMs = elapsedMs();
+            }
+            if (
+                options.variant === "baseline" &&
+                shouldRepairFinalAnswer(finalAnswer, options.repoPath)
+            ) {
+                latencyTimeline.repairTurnStartedMs = elapsedMs();
+                let repaired: Awaited<ReturnType<typeof session.sendAndWait>>;
+                try {
+                    repaired = await session.sendAndWait(
+                        {
+                            prompt: `Your previous answer did not use the required machine-readable localization format. Convert it now using only evidence already gathered. Do not call any tool. Return ONLY:\n<final_answer>\npath/to/file.py:line-or-start-end\n</final_answer>\nNo markdown, no bullets, no code blocks, no prose outside the XML block.`,
+                        },
+                        options.timeoutMs,
+                    );
+                } finally {
+                    latencyTimeline.repairTurnCompletedMs = elapsedMs();
+                }
                 finalAnswer = repaired?.data.content ?? finalAnswer;
                 usedRepair = true;
             }
@@ -334,7 +624,12 @@ export async function runCopilot(
             await abortQuietly(session);
             throw error;
         }
+        latencyTimeline.responseReadyMs =
+            latencyTimeline.repairTurnCompletedMs ??
+            latencyTimeline.primaryTurnCompletedMs;
+        latencyTimeline.usageReadStartedMs = elapsedMs();
         usage = await readSessionUsage(session, usageEvents);
+        latencyTimeline.usageReadCompletedMs = elapsedMs();
         if (!usage) {
             throw new Error("Copilot CLI returned no token usage");
         }
@@ -346,15 +641,59 @@ export async function runCopilot(
             throw new Error(usageModelError);
         }
     } catch (error) {
-        caughtError = redact((error as Error).message, [providerValue]);
+        caughtError = redact((error as Error).message, [secret]);
         if (session && !usage) {
-            usage = await readSessionUsage(session, usageEvents);
+            latencyTimeline.usageReadStartedMs ??= elapsedMs();
+            try {
+                usage = await readSessionUsage(session, usageEvents);
+            } catch (usageError) {
+                caughtError = [
+                    caughtError,
+                    redact((usageError as Error).message, [secret]),
+                ]
+                    .filter(Boolean)
+                    .join("\n");
+            }
+            latencyTimeline.usageReadCompletedMs = elapsedMs();
         }
         if (usage && !completionUsageComplete) {
             usage = { ...usage, usageComplete: false };
         }
     } finally {
+        try {
+            let persistedEvents: SessionEvent[] = [];
+            if (session) {
+                try {
+                    persistedEvents = await session.getEvents();
+                } catch {
+                    // Live events remain authoritative when session storage is disabled.
+                }
+            }
+            const trajectory = normalizeCopilotTrajectory(
+                mergeCopilotEvents(persistedEvents, trajectoryEvents),
+                options.model,
+                trajectorySecrets,
+                {
+                    system: buildBenchmarkSystemMessage(options.variant),
+                    user: buildBenchmarkPrompt(options.variant, options.prompt),
+                    ...(caughtError ? { failure: caughtError } : {}),
+                },
+            );
+            await writeTrajectoryFile(trajectoryFiles.main, trajectory);
+            await validateTrajectoryFile(
+                trajectoryFiles.main,
+                trajectoryExpectation(options, "main"),
+            );
+        } catch (error) {
+            caughtError = [
+                caughtError,
+                `Main trajectory capture failed: ${redact((error as Error).message, [secret])}`,
+            ]
+                .filter(Boolean)
+                .join("\n");
+        }
         if (session) {
+            latencyTimeline.disconnectStartedMs = elapsedMs();
             try {
                 await withTimeout(
                     session.disconnect(),
@@ -362,62 +701,165 @@ export async function runCopilot(
                     "Copilot session disconnect timed out",
                 );
             } catch (error) {
-                caughtError ??= redact((error as Error).message, [
-                    providerValue,
-                ]);
+                caughtError ??= redact((error as Error).message, [secret]);
+            } finally {
+                latencyTimeline.disconnectedMs = elapsedMs();
             }
         }
-        if (tools) {
-            try {
-                await tools.close();
-            } catch (error) {
-                caughtError ??= redact((error as Error).message, [
-                    providerValue,
-                ]);
-            }
+        try {
+            await explorationTools?.close();
+        } catch (error) {
+            caughtError ??= redact((error as Error).message, [secret]);
         }
+        latencyTimeline.cleanupCompletedMs = elapsedMs();
     }
 
     const inspection = inspectCopilotToolTrace(events);
-    const treatmentError = treatmentValidationError(inspection, options.prompt);
-    const answerError = finalAnswer
-        ? baselineAnswerValidationError(
-              finalAnswer,
-              toolTrace,
-              options.repoPath,
-          )
-        : undefined;
-    const relayError = finalAnswer
-        ? baselineRelayValidationError(
-              finalAnswer,
-              inspection.explorerSubagentTrace,
-              options.repoPath,
-          )
-        : undefined;
-    const error = [caughtError, treatmentError, answerError, relayError]
+    let exploreTelemetry: ExploreTelemetry | undefined;
+    let telemetryError: string | undefined;
+    let trajectoryError: string | undefined;
+    if (isTypeAgentVariant(options.variant)) {
+        latencyTimeline.telemetryReadStartedMs = elapsedMs();
+        try {
+            exploreTelemetry = await readExploreTelemetryEventually(
+                options.telemetryFile,
+                options.model,
+                caughtError && inspection.attemptedExploreCalls > 0
+                    ? Math.min(options.timeoutMs, TELEMETRY_SETTLE_TIMEOUT_MS)
+                    : 0,
+            );
+        } catch (error) {
+            telemetryError = (error as Error).message;
+        } finally {
+            latencyTimeline.telemetryReadCompletedMs = elapsedMs();
+        }
+        const codeModeFile = trajectoryFiles.codeMode;
+        if (codeModeFile) {
+            trajectoryFiles = {
+                ...trajectoryFiles,
+                codeModeInvocations: codeModeTrajectoryFiles(
+                    codeModeFile,
+                    codeModeTrajectoryInvocationCount(
+                        inspection.attemptedExploreCalls,
+                        exploreTelemetry?.invocations?.length,
+                    ),
+                ),
+            };
+        }
+        try {
+            if (!trajectoryFiles.codeMode) {
+                throw new Error("Code Mode trajectory path is missing");
+            }
+            const codeModeFiles = trajectoryFiles.codeModeInvocations ?? [
+                trajectoryFiles.codeMode,
+            ];
+            for (const [invocationIndex, file] of codeModeFiles.entries()) {
+                const expected = trajectoryExpectation(
+                    options,
+                    "codemode",
+                    invocationIndex,
+                );
+                try {
+                    await validateTrajectoryFile(file, expected);
+                } catch (error) {
+                    const originalError = error as NodeJS.ErrnoException;
+                    const invocation =
+                        exploreTelemetry?.invocations?.[invocationIndex];
+                    const missingInvocationMayBeUnavailable =
+                        invocation === undefined &&
+                        (invocationIndex < inspection.attemptedExploreCalls ||
+                            (invocationIndex === 0 &&
+                                !exploreTelemetry?.invocations?.length));
+                    const mayBeUnavailable =
+                        originalError.code === "ENOENT" &&
+                        (missingInvocationMayBeUnavailable ||
+                            (invocation?.status === "failed" &&
+                                invocation.usage.requestCount === 0));
+                    if (!mayBeUnavailable) {
+                        throw error;
+                    }
+                    await writeUnavailableTrajectoryFile(
+                        file,
+                        expected,
+                        options.prompt,
+                        invocation?.error ??
+                            caughtError ??
+                            "Code Mode did not start",
+                        trajectorySecrets,
+                    );
+                    await validateTrajectoryFile(file, expected);
+                }
+            }
+        } catch (error) {
+            trajectoryError = `Code Mode trajectory capture failed: ${(error as Error).message}`;
+        }
+    }
+    const treatmentError = treatmentValidationError(
+        options.variant,
+        inspection,
+        mcpServerReady,
+        mcpAdvertisedTools,
+        exploreTelemetry,
+        telemetryError,
+    );
+    const relayError = outerRelayValidationError(
+        options.variant,
+        outerLoopAbortedAfterExplore,
+        usedRepair,
+        usage?.requestCount,
+    );
+    const error = [caughtError, treatmentError, relayError, trajectoryError]
         .filter(Boolean)
         .join("\n");
-    const combinedUsage = usage?.usageComplete !== false ? usage : undefined;
+    const lspCalls =
+        exploreTelemetry?.toolTrace.calls.filter(
+            (call) => call.tool === "lsp",
+        ) ?? [];
+    const adoptedLspCalls = lspCalls.filter((call) => call.discarded !== true);
+    const lspResultCount = lspCalls.reduce(
+        (total, call) => total + call.resultCount,
+        0,
+    );
+    const combinedUsage =
+        usage &&
+        usage.usageComplete !== false &&
+        exploreTelemetry &&
+        exploreTelemetry.usage.usageComplete !== false
+            ? addUsage(usage, exploreTelemetry.usage)
+            : options.variant === "baseline" && usage?.usageComplete !== false
+              ? usage
+              : undefined;
     const ok = Boolean(finalAnswer) && !error;
 
+    latencyTimeline.completedMs = elapsedMs();
     return {
         ok,
-        durationMs: Date.now() - started,
+        durationMs: latencyTimeline.completedMs,
+        latencyTimeline,
         finalAnswer,
         ...(usage ? { usage } : {}),
+        ...(exploreTelemetry
+            ? {
+                  typeAgentUsage: exploreTelemetry.usage,
+                  exploreTelemetry,
+              }
+            : {}),
         ...(combinedUsage ? { combinedUsage } : {}),
         telemetryFile: options.telemetryFile,
+        trajectoryFiles,
         attemptedExploreCalls: inspection.attemptedExploreCalls,
         completedExploreCalls: inspection.completedExploreCalls,
         successfulExploreCalls: inspection.successfulExploreCalls,
         outsideExploreInspection: inspection.outsideExploreInspection,
-        mcpServerReady: false,
-        mcpAdvertisedTools: [],
+        mcpServerReady,
+        mcpAdvertisedTools,
+        ...(telemetryError ? { telemetryError } : {}),
         mcpAdopted: inspection.attemptedExploreCalls > 0,
-        lspAdopted: false,
-        lspCallCount: 0,
-        lspResultCount: 0,
+        lspAdopted: adoptedLspCalls.length > 0,
+        lspCallCount: lspCalls.length,
+        lspResultCount,
         usedRepair,
+        outerLoopAbortedAfterExplore,
         mcpToolTrace: inspection.mcpToolTrace,
         toolTrace,
         events,
@@ -428,6 +870,10 @@ export async function runCopilot(
         successfulExplorerDelegations: inspection.successfulExplorerDelegations,
         failedExplorerDelegations: inspection.failedExplorerDelegations,
         explorerRepositoryCalls: inspection.explorerRepositoryCalls,
+        firstAssistantActionExclusiveExplore:
+            inspection.firstAssistantActionExclusiveExplore,
+        exploreCompletedBeforeLaterAssistantAction:
+            inspection.exploreCompletedBeforeLaterAssistantAction,
         firstAssistantActionExclusiveExplorer:
             inspection.firstAssistantActionExclusiveExplorer,
         explorerCompletedBeforeLaterAssistantAction:
@@ -441,6 +887,21 @@ export async function runCopilot(
                       error || "Copilot CLI completed without a final answer",
               }
             : {}),
+    };
+}
+
+function trajectoryExpectation(
+    options: CopilotRunOptions,
+    system: TrajectoryExpectation["system"],
+    invocationIndex?: number,
+): TrajectoryExpectation {
+    return {
+        rowName: options.rowName,
+        model: options.model,
+        variant: options.variant,
+        attempt: options.attempt,
+        system,
+        ...(invocationIndex !== undefined ? { invocationIndex } : {}),
     };
 }
 
@@ -458,8 +919,14 @@ export function buildCustomAgentConfig(
 }
 
 export function buildAgentRoutingConfig(
+    variant: BenchmarkVariant,
     agent: BenchmarkAgentConfig,
 ): AgentRoutingConfig {
+    if (isTypeAgentVariant(variant)) {
+        return {
+            availableTools: new ToolSet().addMcp("*").toArray(),
+        };
+    }
     return {
         availableTools: new ToolSet()
             .addBuiltIn("task")
@@ -487,6 +954,107 @@ export function validateObservedUsageModels(
         : `Copilot usage models ${JSON.stringify(observed)} do not match requested route ${JSON.stringify(expectedModel)}`;
 }
 
+export function buildMcpServerConfig(
+    options: CopilotRunOptions,
+    environment: Record<string, string>,
+    ripgrepPath: string,
+): MCPStdioServerConfig {
+    validateBenchmarkMcpArguments(options.mcp);
+    const codeModeTrajectory = options.trajectoryFiles.codeMode;
+    if (!codeModeTrajectory) {
+        throw new Error("TypeAgent MCP requires a Code Mode trajectory path");
+    }
+    const names = [...new Set([...options.mcp.envVars, options.apiKeyEnv])];
+    const env = {
+        ...Object.fromEntries(
+            names.map((name) => {
+                const value = environment[name];
+                if (!value) {
+                    throw new Error(`Missing MCP environment variable ${name}`);
+                }
+                return [name, value];
+            }),
+        ),
+        TYPEAGENT_RIPGREP_PATH: ripgrepPath,
+        TYPEAGENT_EXPLORE_EXPECTED_QUERY: options.prompt,
+    };
+    return {
+        type: "stdio",
+        command: options.mcp.command,
+        args: [
+            ...options.mcp.args,
+            "--request-timeout-ms",
+            String(TREATMENT_REASONING_REQUEST_TIMEOUT_MS),
+            ...(options.variant === "typeagent-lsp"
+                ? [
+                      "--enable-lsp",
+                      "--python-lsp-command",
+                      requiredPythonLspCommand(options.mcp),
+                      ...requiredTypeScriptLspArguments(options.mcp),
+                      "--lsp-only-server",
+                      "pylsp",
+                      "--lsp-only-server",
+                      "typescript",
+                  ]
+                : []),
+            "--repo",
+            options.repoPath,
+            "--model",
+            options.model,
+            "--base-url",
+            options.providerBaseUrl,
+            "--api-key-env",
+            options.apiKeyEnv,
+            "--max-tool-calls",
+            String(BENCHMARK_TOOL_CALL_LIMIT),
+            "--telemetry-file",
+            options.telemetryFile,
+            "--trajectory-file",
+            codeModeTrajectory,
+        ],
+        env,
+        ...(options.mcp.cwd ? { workingDirectory: options.mcp.cwd } : {}),
+        tools: ["explore"],
+        timeout: Math.max(300_000, options.timeoutMs),
+    };
+}
+
+export function validateBenchmarkMcpArguments(mcp: McpServerConfig): void {
+    const conflicting = mcp.args.find((argument) =>
+        BENCHMARK_OWNED_MCP_ARGUMENTS.has(argument.split("=", 1)[0]),
+    );
+    if (conflicting) {
+        throw new Error(
+            `Benchmark-owned MCP argument ${JSON.stringify(conflicting)} cannot be overridden`,
+        );
+    }
+}
+
+function requiredPythonLspCommand(mcp: McpServerConfig): string {
+    if (!mcp.pythonLspCommand) {
+        throw new Error(
+            "TypeAgent with LSP requires a pinned Python language-server command",
+        );
+    }
+    return mcp.pythonLspCommand;
+}
+
+function requiredTypeScriptLspArguments(mcp: McpServerConfig): string[] {
+    if (!mcp.typescriptLspCommand || !mcp.typescriptLspArgs?.[0]) {
+        throw new Error(
+            "TypeAgent with LSP requires a pinned TypeScript language-server command and entrypoint",
+        );
+    }
+    return [
+        "--typescript-lsp-command",
+        mcp.typescriptLspCommand,
+        ...mcp.typescriptLspArgs.flatMap((argument) => [
+            "--typescript-lsp-arg",
+            argument,
+        ]),
+    ];
+}
+
 export function inspectCopilotToolTrace(
     events: CopilotTraceItem[],
 ): CopilotToolInspection {
@@ -495,6 +1063,7 @@ export function inspectCopilotToolTrace(
         server?: string;
         tool?: string;
         arguments?: unknown;
+        startedOffsetMs?: number;
     }> = [];
     const taskStarts: Array<{
         toolCallId: string;
@@ -502,7 +1071,12 @@ export function inspectCopilotToolTrace(
     }> = [];
     const completions = new Map<
         string,
-        { success: boolean; result?: unknown; error?: string }
+        {
+            success: boolean;
+            completedOffsetMs?: number;
+            result?: unknown;
+            error?: string;
+        }
     >();
     const subagentStarts = new Map<
         string,
@@ -529,11 +1103,17 @@ export function inspectCopilotToolTrace(
             const server = stringValue(data?.mcpServerName);
             const tool = stringValue(data?.mcpToolName);
             if (server === "typeagent" && tool === "explore") {
+                const startedOffsetMs = nonNegativeInteger(
+                    event.observedAtOffsetMs,
+                );
                 mcpStarts.push({
                     toolCallId,
                     server,
                     tool,
                     arguments: data?.arguments,
+                    ...(startedOffsetMs !== undefined
+                        ? { startedOffsetMs }
+                        : {}),
                 });
             } else if (
                 !stringValue(event.agentId) &&
@@ -551,8 +1131,14 @@ export function inspectCopilotToolTrace(
             if (!toolCallId) {
                 continue;
             }
+            const completedOffsetMs = nonNegativeInteger(
+                event.observedAtOffsetMs,
+            );
             completions.set(toolCallId, {
                 success: data?.success === true,
+                ...(completedOffsetMs !== undefined
+                    ? { completedOffsetMs }
+                    : {}),
                 ...(data?.result !== undefined ? { result: data.result } : {}),
                 ...(recordValue(data?.error)?.message
                     ? { error: String(recordValue(data?.error)?.message) }
@@ -605,6 +1191,14 @@ export function inspectCopilotToolTrace(
         return {
             toolCallId,
             ...details,
+            ...(completion?.completedOffsetMs !== undefined &&
+            start.startedOffsetMs !== undefined &&
+            completion.completedOffsetMs >= start.startedOffsetMs
+                ? {
+                      durationMs:
+                          completion.completedOffsetMs - start.startedOffsetMs,
+                  }
+                : {}),
             completed: Boolean(completion),
             ...(completion
                 ? {
@@ -683,7 +1277,7 @@ export function inspectCopilotToolTrace(
             !agentId && Boolean(toolCallId && explorerTaskIds.has(toolCallId));
         const isExplorerRepositoryTool =
             Boolean(agentId && explorerAgentIds.has(agentId)) &&
-            ["read", "grep", "glob", "ls"].includes(
+            ["read", "grep", "glob", "bash"].includes(
                 stringValue(data?.toolName) ?? "",
             );
         if (!isExplore) {
@@ -731,41 +1325,114 @@ export function inspectCopilotToolTrace(
 }
 
 export function treatmentValidationError(
+    variant: BenchmarkVariant,
     inspection: CopilotToolInspection,
-    expectedQuery?: string,
+    mcpServerReady: boolean,
+    mcpAdvertisedTools: string[],
+    telemetry?: ExploreTelemetry,
+    telemetryError?: string,
 ): string | undefined {
-    if (inspection.attemptedExploreCalls !== 0) {
-        return `Baseline unexpectedly invoked TypeAgent explore ${inspection.attemptedExploreCalls} time(s).`;
+    if (variant === "baseline") {
+        if (inspection.attemptedExploreCalls !== 0) {
+            return `Baseline unexpectedly invoked TypeAgent explore ${inspection.attemptedExploreCalls} time(s).`;
+        }
+        if (inspection.attemptedExplorerDelegations < 1) {
+            return "Baseline requires at least one explorer subagent attempt.";
+        }
+        if (
+            inspection.completedExplorerDelegations !== 1 ||
+            inspection.successfulExplorerDelegations !== 1
+        ) {
+            return "Baseline requires exactly one successful explorer subagent delegation.";
+        }
+        if (!inspection.firstAssistantActionExclusiveExplorer) {
+            return "Baseline requires the first assistant action to contain no prose and exactly one synchronous explorer task.";
+        }
+        if (!inspection.explorerCompletedBeforeLaterAssistantAction) {
+            return "Baseline requires the synchronous explorer task to start and complete before any later main-agent assistant action.";
+        }
+        if (inspection.mainAgentRepositoryInspection) {
+            return "Baseline default main agent inspected the repository instead of delegating exclusively to explorer.";
+        }
+        if (inspection.explorerRepositoryCalls < 1) {
+            return "Baseline explorer subagent completed without using a repository inspection tool.";
+        }
+        return undefined;
     }
-    if (inspection.attemptedExplorerDelegations < 1) {
-        return "Baseline requires at least one explorer subagent attempt.";
+    if (inspection.attemptedExplorerDelegations !== 0) {
+        return `TypeAgent treatment unexpectedly delegated to explorer ${inspection.attemptedExplorerDelegations} time(s).`;
+    }
+    if (!mcpServerReady) {
+        return "TypeAgent MCP server was not running before the treatment turn.";
     }
     if (
-        inspection.completedExplorerDelegations !== 1 ||
-        inspection.successfulExplorerDelegations !== 1
+        mcpAdvertisedTools.length !== 1 ||
+        mcpAdvertisedTools[0] !== "explore"
     ) {
-        return "Baseline requires exactly one successful explorer subagent delegation.";
+        return `TypeAgent MCP must advertise only explore; observed ${JSON.stringify(mcpAdvertisedTools)}.`;
     }
-    if (!inspection.firstAssistantActionExclusiveExplorer) {
-        return "Baseline requires the first assistant action to contain no prose and exactly one synchronous explorer task.";
+    if (inspection.attemptedExploreCalls !== 1) {
+        return `TypeAgent treatment requires exactly one explore attempt; observed ${inspection.attemptedExploreCalls}.`;
     }
-    if (!inspection.explorerCompletedBeforeLaterAssistantAction) {
-        return "Baseline requires the synchronous explorer task to start and complete before any later main-agent assistant action.";
+    if (inspection.completedExploreCalls !== 1) {
+        return `TypeAgent treatment requires exactly one completed explore invocation; observed ${inspection.completedExploreCalls}.`;
     }
-    if (inspection.mainAgentRepositoryInspection) {
-        return "Baseline default main agent inspected the repository instead of delegating exclusively to explorer.";
+    if (inspection.successfulExploreCalls !== 1) {
+        return `TypeAgent treatment requires one successful explore invocation; observed ${inspection.successfulExploreCalls}.`;
     }
-    if (inspection.explorerRepositoryCalls < 1) {
-        return "Baseline explorer subagent completed without using a repository inspection tool.";
+    if (!inspection.firstAssistantActionExclusiveExplore) {
+        return "TypeAgent treatment requires the first assistant action to contain no prose and exactly one TypeAgent explore request.";
     }
-    if (expectedQuery !== undefined) {
-        const queryError = baselineDelegatedQueryValidationError(
-            inspection.explorerSubagentTrace,
-            expectedQuery,
+    if (!inspection.exploreCompletedBeforeLaterAssistantAction) {
+        return "TypeAgent treatment requires explore to start and complete before any later assistant action.";
+    }
+    if (inspection.outsideExploreInspection) {
+        return "TypeAgent treatment used a repository inspection tool outside explore.";
+    }
+    if (telemetryError) {
+        return `TypeAgent explore telemetry is invalid: ${telemetryError}`;
+    }
+    if (!telemetry) {
+        return "TypeAgent explore telemetry is missing.";
+    }
+    if (telemetry.status !== "completed") {
+        return `TypeAgent explore telemetry status is ${telemetry.status}.`;
+    }
+    if (telemetry.usage.usageComplete === false) {
+        return "TypeAgent explore model usage is incomplete.";
+    }
+    if (telemetry.schemaVersion !== 1 && telemetry.invocations?.length !== 1) {
+        return `TypeAgent treatment requires telemetry for exactly one explore invocation; observed ${telemetry.invocations?.length ?? 0}.`;
+    }
+    if (variant === "typeagent-lsp") {
+        const adoptedLspNavigation = telemetry.toolTrace.calls.some(
+            (call) => call.tool === "lsp" && call.discarded !== true,
         );
-        if (queryError) return queryError;
+        if (!adoptedLspNavigation) {
+            return "TypeAgent with LSP requires at least one non-discarded language-server navigation attempt.";
+        }
     }
     return undefined;
+}
+
+export function outerRelayValidationError(
+    variant: BenchmarkVariant,
+    outerLoopAbortedAfterExplore: boolean,
+    usedRepair: boolean,
+    outerRequestCount: number | undefined,
+): string | undefined {
+    if (!isTypeAgentVariant(variant)) {
+        return undefined;
+    }
+    if (!outerLoopAbortedAfterExplore) {
+        return "TypeAgent treatment did not abort the outer loop after explore.";
+    }
+    if (usedRepair) {
+        return "TypeAgent treatment unexpectedly used an outer repair turn.";
+    }
+    return outerRequestCount === 1
+        ? undefined
+        : `TypeAgent treatment requires exactly one outer model request; observed ${outerRequestCount ?? 0}.`;
 }
 
 function inspectFirstExplorerTaskAction(events: CopilotTraceItem[]): {
@@ -881,7 +1548,8 @@ function inspectFirstExploreAction(events: CopilotTraceItem[]): {
         requests.length === 1 &&
         Boolean(toolCallId) &&
         request?.mcpServerName === "typeagent" &&
-        request.mcpToolName === "explore";
+        request.mcpToolName === "explore" &&
+        isSessionBoundExploreArguments(request.arguments);
     if (!exclusiveExploreRequest || !toolCallId) {
         return {
             exclusiveExploreRequest: false,
@@ -929,6 +1597,14 @@ function inspectFirstExploreAction(events: CopilotTraceItem[]): {
             (laterAnswerIndex < 0 ||
                 successfulCompletionIndex < laterAnswerIndex),
     };
+}
+
+function isSessionBoundExploreArguments(value: unknown): boolean {
+    const args = recordValue(value);
+    return (
+        args !== undefined &&
+        !Object.prototype.hasOwnProperty.call(args, "query")
+    );
 }
 
 export function summarizeCopilotUsage(
@@ -1013,26 +1689,619 @@ export function normalizeRpcUsage(value: unknown): CopilotUsage | undefined {
     };
 }
 
+export function reconcileCopilotUsage(
+    usageEvents: AssistantUsageData[],
+    rpcMetrics: unknown,
+): CopilotUsage {
+    const authoritative = normalizeRpcUsage(rpcMetrics);
+    if (!authoritative) {
+        throw new Error("Authoritative RPC metrics are missing");
+    }
+    const live = summarizeCopilotUsage(usageEvents);
+    if (live && !sameUsage(live, authoritative)) {
+        throw new Error(
+            "Live Copilot usage does not match authoritative RPC metrics",
+        );
+    }
+    return live ?? authoritative;
+}
+
+function sameUsage(left: CopilotUsage, right: CopilotUsage): boolean {
+    return (
+        left.requestCount === right.requestCount &&
+        JSON.stringify([...left.models].sort()) ===
+            JSON.stringify([...right.models].sort()) &&
+        left.inputTokens === right.inputTokens &&
+        left.cachedInputTokens === right.cachedInputTokens &&
+        left.cacheWriteTokens === right.cacheWriteTokens &&
+        left.outputTokens === right.outputTokens &&
+        left.reasoningOutputTokens === right.reasoningOutputTokens &&
+        left.totalTokens === right.totalTokens
+    );
+}
+
+export async function readExploreTelemetry(
+    telemetryFile: string,
+    expectedModel: string,
+): Promise<ExploreTelemetry> {
+    let value: unknown;
+    try {
+        value = JSON.parse(await readFile(telemetryFile, "utf8"));
+    } catch (error) {
+        throw new Error(
+            `Unable to read TypeAgent telemetry ${telemetryFile}: ${(error as Error).message}`,
+        );
+    }
+    const telemetry = recordValue(value);
+    if (!telemetry) {
+        throw new Error("TypeAgent telemetry must be a JSON object");
+    }
+    if (
+        telemetry.schemaVersion !== 1 &&
+        telemetry.schemaVersion !== 2 &&
+        telemetry.schemaVersion !== 3 &&
+        telemetry.schemaVersion !== 4
+    ) {
+        throw new Error(
+            "TypeAgent telemetry schemaVersion must be 1, 2, 3, or 4",
+        );
+    }
+    const schemaVersion = telemetry.schemaVersion;
+    const model = requiredString(telemetry, "model", "telemetry");
+    if (model !== expectedModel) {
+        throw new Error(
+            `TypeAgent telemetry model ${JSON.stringify(model)} does not match expected model ${JSON.stringify(expectedModel)}`,
+        );
+    }
+    if (telemetry.schemaVersion === 1) {
+        const invocation = parseExploreInvocation(telemetry, "telemetry", 0, 1);
+        return {
+            schemaVersion: 1,
+            model,
+            status: invocation.status,
+            usage: invocation.usage,
+            toolTrace: invocation.toolTrace,
+            ...(invocation.result ? { result: invocation.result } : {}),
+            ...(invocation.error ? { error: invocation.error } : {}),
+        };
+    }
+    if (!Array.isArray(telemetry.invocations)) {
+        throw new Error("telemetry.invocations must be an array");
+    }
+    if (telemetry.invocations.length === 0) {
+        throw new Error("telemetry.invocations must not be empty");
+    }
+    const invocations = telemetry.invocations.map((value, index) => {
+        const record = recordValue(value);
+        if (!record) {
+            throw new Error(
+                `telemetry.invocations[${index}] must be an object`,
+            );
+        }
+        const invocation = parseExploreInvocation(
+            record,
+            `telemetry.invocations[${index}]`,
+            index,
+            schemaVersion,
+        );
+        if (invocation.index !== index) {
+            throw new Error(
+                `telemetry.invocations[${index}].index must equal ${index}`,
+            );
+        }
+        return invocation;
+    });
+    const usage = invocations.reduce<TypeAgentUsage>(
+        (total, invocation) => ({
+            requestCount: total.requestCount + invocation.usage.requestCount,
+            usageComplete:
+                total.usageComplete !== false &&
+                invocation.usage.usageComplete !== false,
+            inputTokens: total.inputTokens + invocation.usage.inputTokens,
+            cachedInputTokens:
+                total.cachedInputTokens + invocation.usage.cachedInputTokens,
+            cacheWriteTokens:
+                total.cacheWriteTokens + invocation.usage.cacheWriteTokens,
+            outputTokens: total.outputTokens + invocation.usage.outputTokens,
+            reasoningOutputTokens:
+                total.reasoningOutputTokens +
+                invocation.usage.reasoningOutputTokens,
+            totalTokens: total.totalTokens + invocation.usage.totalTokens,
+        }),
+        {
+            requestCount: 0,
+            usageComplete: true,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            cacheWriteTokens: 0,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+            totalTokens: 0,
+        },
+    );
+    const calls = invocations.flatMap(
+        (invocation) => invocation.toolTrace.calls,
+    );
+    const failures = invocations.filter(
+        (invocation) => invocation.status === "failed",
+    );
+    return {
+        schemaVersion,
+        model,
+        status: failures.length === 0 ? "completed" : "failed",
+        usage,
+        toolTrace: {
+            calls,
+            totalCalls: calls.length,
+            totalOutputBytes: invocations.reduce(
+                (total, invocation) =>
+                    total + invocation.toolTrace.totalOutputBytes,
+                0,
+            ),
+        },
+        invocations,
+        ...(invocations.length === 1 && invocations[0].result
+            ? { result: invocations[0].result }
+            : {}),
+        ...(failures.length > 0
+            ? {
+                  error: failures
+                      .map((invocation) => invocation.error)
+                      .filter((error): error is string => Boolean(error))
+                      .join("; ")
+                      .slice(0, 2_000),
+              }
+            : {}),
+    };
+}
+
+export async function readExploreTelemetryEventually(
+    telemetryFile: string,
+    expectedModel: string,
+    waitMs: number,
+    pollIntervalMs = TELEMETRY_POLL_INTERVAL_MS,
+): Promise<ExploreTelemetry> {
+    const deadline = Date.now() + Math.max(0, waitMs);
+    while (waitMs > 0) {
+        try {
+            await access(telemetryFile, constants.R_OK);
+            break;
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+                throw error;
+            }
+            const remaining = deadline - Date.now();
+            if (remaining <= 0) {
+                break;
+            }
+            await delay(Math.min(Math.max(1, pollIntervalMs), remaining));
+        }
+    }
+    return readExploreTelemetry(telemetryFile, expectedModel);
+}
+
+function parseExploreInvocation(
+    telemetry: Record<string, unknown>,
+    context: string,
+    fallbackIndex: number,
+    schemaVersion: 1 | 2 | 3 | 4,
+): ExploreInvocationTelemetry {
+    const status = telemetry.status;
+    if (status !== "completed" && status !== "failed") {
+        throw new Error(`${context}.status must be 'completed' or 'failed'`);
+    }
+    const allowZeroUsage = status === "failed";
+    const usage = parseTypeAgentUsage(
+        requiredRecord(telemetry, "usage", context),
+        `${context}.usage`,
+        allowZeroUsage,
+    );
+    const translationUsage =
+        schemaVersion === 3
+            ? parseTypeAgentUsage(
+                  requiredRecord(telemetry, "translationUsage", context),
+                  `${context}.translationUsage`,
+                  true,
+              )
+            : undefined;
+    const codeModeUsage =
+        schemaVersion === 3
+            ? parseTypeAgentUsage(
+                  requiredRecord(telemetry, "codeModeUsage", context),
+                  `${context}.codeModeUsage`,
+                  allowZeroUsage,
+              )
+            : undefined;
+    const actionTranslationAndCodeGenerationUsage =
+        schemaVersion === 4
+            ? parseTypeAgentUsage(
+                  requiredRecord(
+                      telemetry,
+                      "actionTranslationAndCodeGenerationUsage",
+                      context,
+                  ),
+                  `${context}.actionTranslationAndCodeGenerationUsage`,
+                  allowZeroUsage,
+              )
+            : undefined;
+    if (
+        translationUsage &&
+        codeModeUsage &&
+        !usageEquals(usage, addTypeAgentUsage(translationUsage, codeModeUsage))
+    ) {
+        throw new Error(
+            `${context}.usage must equal translationUsage plus codeModeUsage`,
+        );
+    }
+    if (
+        actionTranslationAndCodeGenerationUsage &&
+        !usageEquals(usage, actionTranslationAndCodeGenerationUsage)
+    ) {
+        throw new Error(
+            `${context}.usage must equal actionTranslationAndCodeGenerationUsage`,
+        );
+    }
+    const toolTraceValue = requiredRecord(telemetry, "toolTrace", context);
+    const toolTraceContext = `${context}.toolTrace`;
+    if (!Array.isArray(toolTraceValue.calls)) {
+        throw new Error(`${toolTraceContext}.calls must be an array`);
+    }
+    const calls = toolTraceValue.calls.map((call, index) => {
+        const callContext = `${toolTraceContext}.calls[${index}]`;
+        const record = recordValue(call);
+        if (!record) {
+            throw new Error(`${callContext} must be an object`);
+        }
+        return parseTypeAgentToolCall(record, callContext);
+    });
+    const totalCalls = requiredNonNegativeNumber(
+        toolTraceValue,
+        "totalCalls",
+        toolTraceContext,
+    );
+    if (totalCalls !== calls.length) {
+        throw new Error(
+            `${toolTraceContext}.totalCalls must equal calls.length`,
+        );
+    }
+    const resultValue = recordValue(telemetry.result);
+    const result = resultValue
+        ? {
+              citationCount: requiredNonNegativeNumber(
+                  resultValue,
+                  "citationCount",
+                  `${context}.result`,
+              ),
+              truncated: requiredBoolean(
+                  resultValue,
+                  "truncated",
+                  `${context}.result`,
+              ),
+          }
+        : undefined;
+    const error =
+        typeof telemetry.error === "string" ? telemetry.error : undefined;
+    const reasoningTrace =
+        schemaVersion === 4 && telemetry.reasoningTrace !== undefined
+            ? parseReasoningTrace(telemetry.reasoningTrace, context)
+            : undefined;
+    const actionAttempts =
+        schemaVersion === 4 && telemetry.actionAttempts !== undefined
+            ? parseActionAttempts(telemetry.actionAttempts, context)
+            : undefined;
+    const hasStartedAt = telemetry.startedAt !== undefined;
+    const hasDurationMs = telemetry.durationMs !== undefined;
+    if (hasStartedAt !== hasDurationMs) {
+        throw new Error(
+            `${context}.startedAt and ${context}.durationMs must be present together`,
+        );
+    }
+    const startedAt = hasStartedAt
+        ? requiredString(telemetry, "startedAt", context)
+        : undefined;
+    if (startedAt) {
+        const timestamp = Date.parse(startedAt);
+        if (
+            Number.isNaN(timestamp) ||
+            new Date(timestamp).toISOString() !== startedAt
+        ) {
+            throw new Error(`${context}.startedAt must be an ISO timestamp`);
+        }
+    }
+    const durationMs = hasDurationMs
+        ? requiredNonNegativeNumber(telemetry, "durationMs", context)
+        : undefined;
+    const querySha256 =
+        schemaVersion === 4
+            ? requiredString(telemetry, "querySha256", context)
+            : undefined;
+    if (querySha256 && !/^[a-f0-9]{64}$/.test(querySha256)) {
+        throw new Error(
+            `${context}.querySha256 must be a lowercase SHA-256 digest`,
+        );
+    }
+    return {
+        index:
+            telemetry.index === undefined
+                ? fallbackIndex
+                : requiredNonNegativeNumber(telemetry, "index", context),
+        status,
+        ...(startedAt ? { startedAt } : {}),
+        ...(durationMs !== undefined ? { durationMs } : {}),
+        ...(querySha256 ? { querySha256 } : {}),
+        usage,
+        ...(translationUsage ? { translationUsage } : {}),
+        ...(codeModeUsage ? { codeModeUsage } : {}),
+        ...(actionTranslationAndCodeGenerationUsage
+            ? { actionTranslationAndCodeGenerationUsage }
+            : {}),
+        toolTrace: {
+            calls,
+            totalCalls,
+            totalOutputBytes: requiredNonNegativeNumber(
+                toolTraceValue,
+                "totalOutputBytes",
+                toolTraceContext,
+            ),
+        },
+        ...(reasoningTrace ? { reasoningTrace } : {}),
+        ...(actionAttempts ? { actionAttempts } : {}),
+        ...(result ? { result } : {}),
+        ...(error ? { error } : {}),
+    };
+}
+
+function parseReasoningTrace(
+    value: unknown,
+    context: string,
+): NonNullable<ExploreInvocationTelemetry["reasoningTrace"]> {
+    if (!Array.isArray(value)) {
+        throw new Error(`${context}.reasoningTrace must be an array`);
+    }
+    return value.map((item, index) => {
+        const itemContext = `${context}.reasoningTrace[${index}]`;
+        const record = recordValue(item);
+        if (!record) {
+            throw new Error(`${itemContext} must be an object`);
+        }
+        const status = requiredAttemptStatus(record, itemContext);
+        const actionName = optionalString(record.actionName);
+        const error = optionalString(record.error);
+        return {
+            index: requiredNonNegativeNumber(record, "index", itemContext),
+            tool: requiredString(record, "tool", itemContext),
+            status,
+            ...(actionName ? { actionName } : {}),
+            ...(error ? { error } : {}),
+        };
+    });
+}
+
+function parseActionAttempts(
+    value: unknown,
+    context: string,
+): NonNullable<ExploreInvocationTelemetry["actionAttempts"]> {
+    if (!Array.isArray(value)) {
+        throw new Error(`${context}.actionAttempts must be an array`);
+    }
+    return value.map((item, index) => {
+        const itemContext = `${context}.actionAttempts[${index}]`;
+        const record = recordValue(item);
+        if (!record) {
+            throw new Error(`${itemContext} must be an object`);
+        }
+        const error = optionalString(record.error);
+        return {
+            index: requiredNonNegativeNumber(record, "index", itemContext),
+            actionName: requiredString(record, "actionName", itemContext),
+            status: requiredAttemptStatus(record, itemContext),
+            ...(error ? { error } : {}),
+        };
+    });
+}
+
+function requiredAttemptStatus(
+    value: Record<string, unknown>,
+    context: string,
+): "completed" | "failed" {
+    if (value.status !== "completed" && value.status !== "failed") {
+        throw new Error(`${context}.status must be 'completed' or 'failed'`);
+    }
+    return value.status;
+}
+
+function optionalString(value: unknown): string | undefined {
+    return typeof value === "string" ? value : undefined;
+}
+
+function parseTypeAgentUsage(
+    usageValue: Record<string, unknown>,
+    usageContext: string,
+    allowZero = false,
+): TypeAgentUsage {
+    const usage: TypeAgentUsage = {
+        requestCount: requiredNonNegativeNumber(
+            usageValue,
+            "requestCount",
+            usageContext,
+            !allowZero,
+        ),
+        usageComplete:
+            usageValue.usageComplete === undefined
+                ? true
+                : requiredBoolean(usageValue, "usageComplete", usageContext),
+        inputTokens: requiredNonNegativeNumber(
+            usageValue,
+            "inputTokens",
+            usageContext,
+        ),
+        cachedInputTokens: optionalNonNegativeNumber(
+            usageValue,
+            "cachedInputTokens",
+            usageContext,
+        ),
+        cacheWriteTokens: 0,
+        outputTokens: requiredNonNegativeNumber(
+            usageValue,
+            "outputTokens",
+            usageContext,
+        ),
+        reasoningOutputTokens: optionalNonNegativeNumber(
+            usageValue,
+            "reasoningOutputTokens",
+            usageContext,
+        ),
+        totalTokens: requiredNonNegativeNumber(
+            usageValue,
+            "totalTokens",
+            usageContext,
+            !allowZero,
+        ),
+    };
+    if (usage.totalTokens !== usage.inputTokens + usage.outputTokens) {
+        throw new Error(
+            `${usageContext}.totalTokens must equal inputTokens plus outputTokens`,
+        );
+    }
+    if (
+        usage.requestCount === 0 &&
+        (usage.inputTokens !== 0 ||
+            usage.outputTokens !== 0 ||
+            usage.totalTokens !== 0)
+    ) {
+        throw new Error(
+            `${usageContext} with zero requests must have zero tokens`,
+        );
+    }
+    return usage;
+}
+
+function addTypeAgentUsage(
+    first: TypeAgentUsage,
+    second: TypeAgentUsage,
+): TypeAgentUsage {
+    return {
+        requestCount: first.requestCount + second.requestCount,
+        usageComplete:
+            first.usageComplete !== false && second.usageComplete !== false,
+        inputTokens: first.inputTokens + second.inputTokens,
+        cachedInputTokens: first.cachedInputTokens + second.cachedInputTokens,
+        cacheWriteTokens: first.cacheWriteTokens + second.cacheWriteTokens,
+        outputTokens: first.outputTokens + second.outputTokens,
+        reasoningOutputTokens:
+            first.reasoningOutputTokens + second.reasoningOutputTokens,
+        totalTokens: first.totalTokens + second.totalTokens,
+    };
+}
+
+function usageEquals(first: TypeAgentUsage, second: TypeAgentUsage): boolean {
+    return (
+        first.requestCount === second.requestCount &&
+        (first.usageComplete !== false) === (second.usageComplete !== false) &&
+        first.inputTokens === second.inputTokens &&
+        first.cachedInputTokens === second.cachedInputTokens &&
+        first.cacheWriteTokens === second.cacheWriteTokens &&
+        first.outputTokens === second.outputTokens &&
+        first.reasoningOutputTokens === second.reasoningOutputTokens &&
+        first.totalTokens === second.totalTokens
+    );
+}
+
+function parseTypeAgentToolCall(
+    record: Record<string, unknown>,
+    context: string,
+): ExploreInvocationTelemetry["toolTrace"]["calls"][number] {
+    const tool = requiredString(record, "tool", context);
+    if (!new Set(["ls", "glob", "grep", "read", "lsp"]).has(tool)) {
+        throw new Error(`${context}.tool is not a repository exploration tool`);
+    }
+    return {
+        tool,
+        ...(typeof record.startedAt === "string"
+            ? { startedAt: record.startedAt }
+            : {}),
+        durationMs: requiredNonNegativeNumber(record, "durationMs", context),
+        input: record.input,
+        resultCount: requiredNonNegativeNumber(record, "resultCount", context),
+        outputBytes: requiredNonNegativeNumber(record, "outputBytes", context),
+        truncated: requiredBoolean(record, "truncated", context),
+        ...(typeof record.error === "string" ? { error: record.error } : {}),
+        ...(record.discarded === true ? { discarded: true } : {}),
+    };
+}
+
+export function addUsage(outer: TokenUsage, inner: TypeAgentUsage): TokenUsage {
+    return {
+        inputTokens: outer.inputTokens + inner.inputTokens,
+        cachedInputTokens: outer.cachedInputTokens + inner.cachedInputTokens,
+        cacheWriteTokens: outer.cacheWriteTokens + inner.cacheWriteTokens,
+        outputTokens: outer.outputTokens + inner.outputTokens,
+        reasoningOutputTokens:
+            outer.reasoningOutputTokens + inner.reasoningOutputTokens,
+        totalTokens: outer.totalTokens + inner.totalTokens,
+    };
+}
+
+async function waitForMcpServer(
+    session: Awaited<ReturnType<CopilotClient["createSession"]>>,
+    serverName: string,
+    timeoutMs: number,
+): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    let lastStatus = "not configured";
+    do {
+        const state = await session.rpc.mcp.list();
+        const server = state.servers.find(
+            (candidate) => candidate.name === serverName,
+        );
+        lastStatus = server?.status ?? "not configured";
+        const failure =
+            server?.error ?? state.host?.failedServers[serverName]?.message;
+        if (failure) {
+            throw new Error(`TypeAgent MCP failed to connect: ${failure}`);
+        }
+        if (lastStatus === "connected") {
+            const running = await session.rpc.mcp.isServerRunning({
+                serverName,
+            });
+            if (running.running) {
+                return;
+            }
+        }
+        await delay(100);
+    } while (Date.now() < deadline);
+    throw new Error(
+        `TypeAgent MCP did not reach running state within ${timeoutMs}ms; last status=${lastStatus}`,
+    );
+}
+
 async function readSessionUsage(
     session: Awaited<ReturnType<CopilotClient["createSession"]>>,
     usageEvents: AssistantUsageData[],
 ): Promise<CopilotUsage | undefined> {
-    const live = summarizeCopilotUsage(usageEvents);
-    if (live) {
-        return live;
-    }
+    let metrics: unknown;
     try {
-        return normalizeRpcUsage(await session.rpc.usage.getMetrics());
+        metrics = await session.rpc.usage.getMetrics();
     } catch {
         return undefined;
     }
+    return reconcileCopilotUsage(usageEvents, metrics);
 }
 
-function permissionHandler(): PermissionHandler {
+function permissionHandler(variant: BenchmarkVariant): PermissionHandler {
     return (request) => {
         if (
+            isTypeAgentVariant(variant) &&
+            request.kind === "mcp" &&
+            request.serverName === "typeagent" &&
+            request.toolName === "explore"
+        ) {
+            return { kind: "approve-once" };
+        }
+        if (
+            variant === "baseline" &&
             request.kind === "custom-tool" &&
-            new Set(["read", "grep", "glob", "ls"]).has(request.toolName)
+            new Set(["read", "grep", "glob", "bash"]).has(request.toolName)
         ) {
             return { kind: "approve-once" };
         }
@@ -1048,22 +2317,30 @@ function recordEvent(
     events: CopilotTraceItem[],
     usageEvents: AssistantUsageData[],
     event: SessionEvent,
+    runStartedMs: number,
 ): void {
     if (event.type === "assistant.usage") {
         usageEvents.push(event.data);
     }
     if (
         event.type === "assistant.message" ||
+        event.type === "assistant.message_delta" ||
+        event.type === "assistant.streaming_delta" ||
         event.type === "assistant.usage" ||
         event.type === "tool.execution_start" ||
         event.type === "tool.execution_complete" ||
         event.type === "subagent.started" ||
         event.type === "subagent.completed" ||
         event.type === "subagent.failed" ||
+        event.type === "abort" ||
+        event.type === "session.idle" ||
         event.type === "session.mcp_servers_loaded" ||
         event.type === "session.error"
     ) {
-        events.push(compactValue(event) as CopilotTraceItem);
+        events.push({
+            ...(compactValue(event) as CopilotTraceItem),
+            observedAtOffsetMs: Math.max(0, Date.now() - runStartedMs),
+        });
     }
 }
 
@@ -1156,6 +2433,10 @@ async function abortQuietly(
     }
 }
 
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function withTimeout<T>(
     promise: Promise<T>,
     timeoutMs: number,
@@ -1218,4 +2499,76 @@ function stringValue(value: unknown): string | undefined {
 
 function numberValue(value: unknown): number {
     return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function nonNegativeInteger(value: unknown): number | undefined {
+    return typeof value === "number" && Number.isInteger(value) && value >= 0
+        ? value
+        : undefined;
+}
+
+function requiredRecord(
+    value: Record<string, unknown>,
+    key: string,
+    parent: string,
+): Record<string, unknown> {
+    const result = recordValue(value[key]);
+    if (!result) {
+        throw new Error(`${parent}.${key} must be an object`);
+    }
+    return result;
+}
+
+function requiredString(
+    value: Record<string, unknown>,
+    key: string,
+    parent: string,
+): string {
+    const result = value[key];
+    if (typeof result !== "string" || !result) {
+        throw new Error(`${parent}.${key} must be a non-empty string`);
+    }
+    return result;
+}
+
+function requiredBoolean(
+    value: Record<string, unknown>,
+    key: string,
+    parent: string,
+): boolean {
+    const result = value[key];
+    if (typeof result !== "boolean") {
+        throw new Error(`${parent}.${key} must be a boolean`);
+    }
+    return result;
+}
+
+function requiredNonNegativeNumber(
+    value: Record<string, unknown>,
+    key: string,
+    parent: string,
+    positive = false,
+): number {
+    const result = value[key];
+    if (
+        typeof result !== "number" ||
+        !Number.isFinite(result) ||
+        !Number.isInteger(result) ||
+        result < (positive ? 1 : 0)
+    ) {
+        throw new Error(
+            `${parent}.${key} must be a ${positive ? "positive" : "non-negative"} integer`,
+        );
+    }
+    return result;
+}
+
+function optionalNonNegativeNumber(
+    value: Record<string, unknown>,
+    key: string,
+    parent: string,
+): number {
+    return value[key] === undefined
+        ? 0
+        : requiredNonNegativeNumber(value, key, parent);
 }

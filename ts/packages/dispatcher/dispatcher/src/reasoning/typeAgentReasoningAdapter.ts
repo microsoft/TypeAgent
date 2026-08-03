@@ -8,6 +8,8 @@ import {
     type FunctionCallingJsonSchema,
 } from "@typeagent/aiclient";
 import { randomUUID } from "node:crypto";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import type { PromptSection } from "typechat";
 import type {
     ReasoningEvent,
@@ -28,6 +30,13 @@ export interface TypeAgentReasoningAdapterOptions {
     baseUrl: string;
     apiKey: string;
     requestTimeoutMs?: number;
+    trajectoryFile?: string;
+}
+
+export interface TypeAgentReasoningTrajectoryOptions {
+    file: string;
+    invocationIndex?: number;
+    redactedValues?: readonly string[];
 }
 
 export interface TypeAgentReasoningUsage {
@@ -50,9 +59,24 @@ export interface TypeAgentReasoningSession extends ReasoningSession {
  * instructions participate in the session.
  */
 export class TypeAgentReasoningAdapter implements ReasoningSDKAdapter {
+    private readonly trajectoryWriter: TypeAgentTrajectoryWriter | undefined;
+    private readonly trajectoryWriters = new Map<
+        number,
+        TypeAgentTrajectoryWriter
+    >();
+
     public constructor(
         private readonly options: TypeAgentReasoningAdapterOptions,
-    ) {}
+    ) {
+        this.trajectoryWriter = options.trajectoryFile
+            ? new TypeAgentTrajectoryWriter(options.trajectoryFile, undefined, [
+                  options.apiKey,
+              ])
+            : undefined;
+        if (this.trajectoryWriter) {
+            this.trajectoryWriters.set(0, this.trajectoryWriter);
+        }
+    }
 
     public async createSession(
         config: ReasoningLoopConfig,
@@ -67,7 +91,24 @@ export class TypeAgentReasoningAdapter implements ReasoningSDKAdapter {
             settings,
             TYPEAGENT_REASONING_COMPLETION_SETTINGS,
         );
-        return createTypeAgentReasoningSession(model, config);
+        const invocationIndex = config.trajectoryInvocationIndex ?? 0;
+        let trajectoryWriter = this.trajectoryWriters.get(invocationIndex);
+        if (!trajectoryWriter && this.options.trajectoryFile) {
+            trajectoryWriter = new TypeAgentTrajectoryWriter(
+                trajectoryFileForInvocation(
+                    this.options.trajectoryFile,
+                    invocationIndex,
+                ),
+                config.model,
+                [this.options.apiKey],
+            );
+            this.trajectoryWriters.set(invocationIndex, trajectoryWriter);
+        }
+        return new NativeTypeAgentReasoningSession(
+            model,
+            config,
+            trajectoryWriter,
+        );
     }
 }
 
@@ -102,8 +143,41 @@ export function buildTypeAgentResponsesApiSettings(
 export function createTypeAgentReasoningSession(
     model: ChatModel,
     config: ReasoningLoopConfig,
+    trajectory?: TypeAgentReasoningTrajectoryOptions,
 ): TypeAgentReasoningSession {
-    return new NativeTypeAgentReasoningSession(model, config);
+    return new NativeTypeAgentReasoningSession(
+        model,
+        config,
+        trajectory
+            ? new TypeAgentTrajectoryWriter(
+                  trajectoryFileForInvocation(
+                      trajectory.file,
+                      trajectory.invocationIndex ?? 0,
+                  ),
+                  config.model,
+                  trajectory.redactedValues ?? [],
+              )
+            : undefined,
+    );
+}
+
+export function trajectoryFileForInvocation(
+    file: string,
+    invocationIndex: number,
+): string {
+    if (!Number.isSafeInteger(invocationIndex) || invocationIndex < 0) {
+        throw new Error(
+            "Trajectory invocation index must be a non-negative integer",
+        );
+    }
+    if (invocationIndex === 0) {
+        return file;
+    }
+    const extension = path.extname(file);
+    return path.join(
+        path.dirname(file),
+        `${path.basename(file, extension)}-invocation-${invocationIndex + 1}${extension}`,
+    );
 }
 
 class NativeTypeAgentReasoningSession implements TypeAgentReasoningSession {
@@ -120,6 +194,7 @@ class NativeTypeAgentReasoningSession implements TypeAgentReasoningSession {
     public constructor(
         private readonly model: ChatModel,
         private readonly config: ReasoningLoopConfig,
+        private readonly trajectory?: TypeAgentTrajectoryWriter,
     ) {}
 
     public getSessionId(): undefined {
@@ -131,11 +206,13 @@ class NativeTypeAgentReasoningSession implements TypeAgentReasoningSession {
     }
 
     public async *execute(userMessage: string): AsyncIterable<ReasoningEvent> {
+        const trajectory = this.trajectory;
+        trajectory?.setModel(this.config.model);
         const tools = new Map(
             this.config.tools.map((tool) => [tool.name, tool] as const),
         );
         const schemas = this.config.tools.map(buildTypeAgentFunctionSchema);
-        const history: PromptSection[] = [
+        let history: PromptSection[] = [
             {
                 role: "system",
                 content:
@@ -145,26 +222,127 @@ class NativeTypeAgentReasoningSession implements TypeAgentReasoningSession {
             },
             { role: "user", content: userMessage },
         ];
+        let failedRepairHistoryStart: number | undefined;
+
+        await trajectory?.write({
+            role: "system",
+            content: history[0].content,
+        });
+        await trajectory?.write({
+            role: "user",
+            content: userMessage,
+        });
 
         for (let turn = 0; turn < this.config.maxTurns; turn++) {
-            const completion = await this.model.complete(
-                history,
-                (usage) => addUsage(this.usage, usage),
-                schemas,
+            const requestIndex = trajectory?.nextRequestIndex() ?? turn + 1;
+            const requestUsage = emptyRequestUsage();
+            const requestStartedMs = Date.now();
+            this.usage.requestCount++;
+            let completion: Awaited<ReturnType<ChatModel["complete"]>>;
+            try {
+                completion = await this.model.complete(
+                    history,
+                    (usage) => {
+                        addUsage(this.usage, usage);
+                        addRequestUsage(requestUsage, usage);
+                    },
+                    schemas,
+                );
+            } catch (error) {
+                requestUsage.durationMs = Math.max(
+                    0,
+                    Date.now() - requestStartedMs,
+                );
+                this.usage.usageComplete = false;
+                await trajectory?.write({
+                    role: "assistant",
+                    content:
+                        error instanceof Error ? error.message : String(error),
+                    usage: requestUsage,
+                    requestIndex,
+                    sourceEvent: "model.error",
+                });
+                throw error;
+            }
+            requestUsage.durationMs = Math.max(
+                0,
+                Date.now() - requestStartedMs,
             );
             if (!completion.success) {
                 this.usage.usageComplete = false;
+                await trajectory?.write({
+                    role: "assistant",
+                    content: completion.message,
+                    usage: requestUsage,
+                    requestIndex,
+                    sourceEvent: "model.error",
+                });
                 yield failed(completion.message);
                 return;
             }
-            const call = parseToolCall(completion.data);
+            let call: ReturnType<typeof parseToolCall>;
+            try {
+                call = parseToolCall(completion.data);
+            } catch (error) {
+                await trajectory?.write({
+                    role: "assistant",
+                    content: completion.data,
+                    usage: requestUsage,
+                    requestIndex,
+                    sourceEvent: "model.invalid_tool_call",
+                });
+                throw error;
+            }
             const tool = tools.get(call.name);
             if (!tool) {
-                yield failed(`Unknown reasoning tool: ${call.name}`);
+                const id = randomUUID();
+                const message = `Unknown reasoning tool: ${call.name}`;
+                await trajectory?.write({
+                    role: "assistant",
+                    content: "",
+                    tool_calls: [
+                        {
+                            id,
+                            type: "function",
+                            function: {
+                                name: call.name,
+                                arguments: call.arguments,
+                            },
+                        },
+                    ],
+                    usage: requestUsage,
+                    requestIndex,
+                    sourceEvent: "model.unknown_tool_call",
+                });
+                await trajectory?.write({
+                    role: "tool",
+                    content: message,
+                    tool_call_id: id,
+                    isError: true,
+                    sourceEvent: "tool.result",
+                });
+                yield failed(message);
                 return;
             }
 
             const id = randomUUID();
+            await trajectory?.write({
+                role: "assistant",
+                content: "",
+                tool_calls: [
+                    {
+                        id,
+                        type: "function",
+                        function: {
+                            name: call.name,
+                            arguments: call.arguments,
+                        },
+                    },
+                ],
+                usage: requestUsage,
+                requestIndex,
+                sourceEvent: "model.tool_call",
+            });
             yield {
                 type: "tool_call",
                 tool: call.name,
@@ -183,6 +361,13 @@ class NativeTypeAgentReasoningSession implements TypeAgentReasoningSession {
                 };
             }
             const text = result.content.map((item) => item.text).join("\n");
+            await trajectory?.write({
+                role: "tool",
+                content: text,
+                tool_call_id: id,
+                isError: result.isError === true,
+                sourceEvent: "tool.result",
+            });
             yield {
                 type: "tool_result",
                 id,
@@ -203,10 +388,21 @@ class NativeTypeAgentReasoningSession implements TypeAgentReasoningSession {
                 return;
             }
 
+            if (result.isError === true) {
+                failedRepairHistoryStart ??= history.length;
+            } else if (failedRepairHistoryStart !== undefined) {
+                history = history.slice(0, failedRepairHistoryStart);
+                failedRepairHistoryStart = undefined;
+            }
+
             history.push(
                 {
                     role: "assistant",
-                    content: describeToolCall(call.name, call.arguments),
+                    content: describeToolCall(
+                        call.name,
+                        call.arguments,
+                        result.isError === true,
+                    ),
                 },
                 {
                     role: "user",
@@ -221,6 +417,160 @@ class NativeTypeAgentReasoningSession implements TypeAgentReasoningSession {
     }
 }
 
+interface TypeAgentTrajectoryToolCall {
+    id: string;
+    type: "function";
+    function: {
+        name: string;
+        arguments: Record<string, unknown>;
+    };
+}
+
+interface TypeAgentTrajectoryUsage {
+    inputTokens: number;
+    cachedInputTokens: number;
+    outputTokens: number;
+    reasoningOutputTokens: number;
+    totalTokens: number;
+    durationMs?: number;
+}
+
+interface TypeAgentTrajectoryInput {
+    role: "system" | "user" | "assistant" | "tool";
+    content: unknown;
+    tool_call_id?: string | null;
+    tool_calls?: TypeAgentTrajectoryToolCall[];
+    usage?: TypeAgentTrajectoryUsage;
+    requestIndex?: number;
+    isError?: boolean;
+    sourceEvent?: string;
+}
+
+class TypeAgentTrajectoryWriter {
+    private sequence = 0;
+    private requestIndex = 0;
+    private initialized = false;
+    private writeQueue: Promise<void> = Promise.resolve();
+    public constructor(
+        private readonly file: string,
+        private model: string | undefined,
+        private readonly redactedValues: readonly string[],
+    ) {}
+
+    public setModel(model: string): void {
+        if (this.model && this.model !== model) {
+            throw new Error(
+                `Trajectory model changed from ${this.model} to ${model}`,
+            );
+        }
+        this.model = model;
+    }
+
+    public nextRequestIndex(): number {
+        return ++this.requestIndex;
+    }
+
+    public async write(input: TypeAgentTrajectoryInput): Promise<void> {
+        this.writeQueue = this.writeQueue.then(() => this.writeRecord(input));
+        await this.writeQueue;
+    }
+
+    private async writeRecord(input: TypeAgentTrajectoryInput): Promise<void> {
+        if (!this.model) {
+            throw new Error("Trajectory model is not initialized");
+        }
+        const record = redactDeep(
+            {
+                schemaVersion: 1,
+                sequence: ++this.sequence,
+                role: input.role,
+                content:
+                    typeof input.content === "string"
+                        ? input.content
+                        : JSON.stringify(input.content),
+                model: this.model,
+                tool_call_id: input.tool_call_id ?? null,
+                tool_calls: input.tool_calls ?? [],
+                usage: input.usage ?? {},
+                source: "typeagent-codemode",
+                ...(input.requestIndex !== undefined
+                    ? { requestIndex: input.requestIndex }
+                    : {}),
+                ...(input.isError !== undefined
+                    ? { isError: input.isError }
+                    : {}),
+                ...(input.sourceEvent
+                    ? { sourceEvent: input.sourceEvent }
+                    : {}),
+            },
+            this.redactedValues,
+        );
+        const line = `${JSON.stringify(record)}\n`;
+        if (!this.initialized) {
+            await mkdir(path.dirname(this.file), { recursive: true });
+            await writeFile(this.file, line, {
+                encoding: "utf8",
+                flag: "wx",
+                mode: 0o600,
+            });
+            this.initialized = true;
+            return;
+        }
+        await appendFile(this.file, line, "utf8");
+    }
+}
+
+function emptyRequestUsage(): TypeAgentTrajectoryUsage {
+    return {
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+    };
+}
+
+function addRequestUsage(
+    target: TypeAgentTrajectoryUsage,
+    usage: openai.CompletionUsageStats,
+): void {
+    const details = usage as openai.CompletionUsageStats & {
+        prompt_tokens_details?: { cached_tokens?: number };
+        completion_tokens_details?: { reasoning_tokens?: number };
+    };
+    target.inputTokens += usage.prompt_tokens;
+    target.cachedInputTokens +=
+        details.prompt_tokens_details?.cached_tokens ?? 0;
+    target.outputTokens += usage.completion_tokens;
+    target.reasoningOutputTokens +=
+        details.completion_tokens_details?.reasoning_tokens ?? 0;
+    target.totalTokens = target.inputTokens + target.outputTokens;
+}
+
+function redactDeep<T>(value: T, secrets: readonly string[]): T {
+    if (typeof value === "string") {
+        let redacted = String(value);
+        for (const secret of secrets) {
+            if (secret) {
+                redacted = redacted.split(secret).join("[REDACTED]");
+            }
+        }
+        return redacted as T;
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => redactDeep(item, secrets)) as T;
+    }
+    if (isRecord(value)) {
+        return Object.fromEntries(
+            Object.entries(value).map(([key, item]) => [
+                redactDeep(key, secrets),
+                redactDeep(item, secrets),
+            ]),
+        ) as T;
+    }
+    return value;
+}
+
 export function buildTypeAgentFunctionSchema(
     tool: ReasoningToolDefinition,
 ): FunctionCallingJsonSchema {
@@ -230,6 +580,7 @@ export function buildTypeAgentFunctionSchema(
             name: tool.name,
             description: tool.description,
             parameters: tool.inputSchema as Record<string, unknown>,
+            ...(tool.strict ? { strict: true } : {}),
         },
     };
 }
@@ -258,13 +609,17 @@ function parseToolCall(value: string): {
 function describeToolCall(
     toolName: string,
     args: Record<string, unknown>,
+    includeArguments: boolean,
 ): string {
     const action = isRecord(args.action) ? args.action : args;
     const actionName =
         typeof action?.actionName === "string"
             ? ` for ${action.actionName}`
             : "";
-    return `Called ${toolName}${actionName} with arguments:\n${JSON.stringify(args)}`;
+    const summary = `Called ${toolName}${actionName}`;
+    return includeArguments
+        ? `${summary} with arguments:\n${JSON.stringify(args)}`
+        : `${summary} successfully.`;
 }
 
 function addUsage(
@@ -276,7 +631,6 @@ function addUsage(
         completion_tokens_details?: { reasoning_tokens?: number };
         usage_complete?: boolean;
     };
-    target.requestCount++;
     target.usageComplete &&= details.usage_complete !== false;
     target.inputTokens += usage.prompt_tokens;
     target.cachedInputTokens +=

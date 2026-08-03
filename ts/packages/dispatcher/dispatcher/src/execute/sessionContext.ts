@@ -17,7 +17,6 @@ import { IAgentMessage, RequestId } from "@typeagent/dispatcher-types";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { IndexData } from "image-memory";
 import { IndexManager } from "../context/indexManager.js";
-import { validateGrammarPatternsImpl } from "../validation/grammarValidationService.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:dispatcher:sessionContext");
@@ -276,6 +275,9 @@ export function createSessionContext<T = unknown>(
 
             // Use command lock for thread safety
             return context.commandLock(async () => {
+                const { validateGrammarPatternsImpl } = await import(
+                    "../validation/grammarValidationService.mjs"
+                );
                 return await validateGrammarPatternsImpl(
                     name,
                     request,

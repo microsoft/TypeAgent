@@ -12,6 +12,8 @@ export const loopBaseDebug = registerDebug("typeagent:reasoning:loopBase");
 export interface ReasoningToolDefinition {
     name: string;
     description: string;
+    /** Request provider-enforced structured outputs for a closed JSON schema. */
+    strict?: true;
     inputSchema: object;
     handler: (args: Record<string, unknown>) => Promise<ToolResult>;
     /** Stop the loop immediately; an error result ends the session as failed. */
@@ -33,6 +35,8 @@ export interface ReasoningLoopConfig {
     onToolCall?: (tool: string, args: unknown) => void;
     onToolResult?: (tool: string, result: unknown, isError: boolean) => void;
     onText?: (text: string) => void;
+    /** Zero-based outer invocation whose model messages share one trajectory. */
+    trajectoryInvocationIndex?: number;
     /**
      * When set, the adapter resumes the prior session with this id rather
      * than starting a fresh conversation. Useful for subagents that need to

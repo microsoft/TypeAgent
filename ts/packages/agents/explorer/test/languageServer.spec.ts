@@ -23,10 +23,7 @@ import {
 } from "../src/script/languageServer.js";
 import { createRepositoryTools } from "../src/script/repositoryApi.js";
 import { generateSandboxDeclarations } from "../src/script/sandboxDeclarations.js";
-import {
-    hasExploreRepositoryCall,
-    validateExploreScript,
-} from "../src/script/scriptValidator.js";
+import { validateExploreScript } from "../src/script/scriptValidator.js";
 
 describe("repository language server", () => {
     const tempDirs: string[] = [];
@@ -52,7 +49,7 @@ describe("repository language server", () => {
             const locations = await tools.api.lsp!({
                 method: "definition",
                 path: "src/main.ts",
-                line: 12,
+                line: 4,
                 symbol: "target",
             });
 
@@ -147,6 +144,68 @@ describe("repository language server", () => {
                 { event: "exit" },
             ]),
         );
+    });
+
+    it("recovers a stale line hint from the nearest symbol occurrence", async () => {
+        const fixture = await makeFakeFixture();
+        const manager = createLanguageServerManager(
+            fixture.repoRoot,
+            fixture.files,
+            { servers: [fakeServer(fixture, "python-fake", [".py"])] },
+        );
+        try {
+            await expect(
+                manager.navigate({
+                    method: "definition",
+                    path: "packages/app/src/stale.py",
+                    line: 10,
+                    symbol: "target",
+                }),
+            ).resolves.toMatchObject({
+                serverId: "python-fake",
+                locations: [
+                    { path: "packages/app/src/target.py", startLine: 1 },
+                ],
+            });
+        } finally {
+            await manager.close();
+        }
+
+        const definition = (await readEvents(fixture.logFile)).find(
+            (event) => event.event === "definition",
+        );
+        expect(definition?.position).toEqual({ line: 0, character: 0 });
+    });
+
+    it("recovers an exact identifier when a historical line hint is beyond EOF", async () => {
+        const fixture = await makeFakeFixture();
+        const manager = createLanguageServerManager(
+            fixture.repoRoot,
+            fixture.files,
+            { servers: [fakeServer(fixture, "python-fake", [".py"])] },
+        );
+        try {
+            await expect(
+                manager.navigate({
+                    method: "definition",
+                    path: "packages/app/src/stale.py",
+                    line: 100,
+                    symbol: "target",
+                }),
+            ).resolves.toMatchObject({
+                serverId: "python-fake",
+                locations: [
+                    { path: "packages/app/src/target.py", startLine: 1 },
+                ],
+            });
+        } finally {
+            await manager.close();
+        }
+
+        const definition = (await readEvents(fixture.logFile)).find(
+            (event) => event.event === "definition",
+        );
+        expect(definition?.position).toEqual({ line: 0, character: 0 });
     });
 
     it("suppresses a broken backend and falls back without restarting it", async () => {
@@ -260,39 +319,6 @@ describe("repository language server", () => {
         });
     });
 
-    it("detects repository calls without accepting unused method references", () => {
-        expect(hasExploreRepositoryCall("repo.read('src/a.ts')", "read")).toBe(
-            true,
-        );
-        expect(
-            hasExploreRepositoryCall(
-                "repo['lsp']({ method: 'definition' })",
-                "lsp",
-            ),
-        ).toBe(true);
-        expect(
-            hasExploreRepositoryCall(
-                "const load = repo.read; await load('src/a.ts')",
-                "read",
-            ),
-        ).toBe(true);
-        expect(
-            hasExploreRepositoryCall(
-                "const { lsp: navigate } = repo; await navigate({ method: 'definition' })",
-                "lsp",
-            ),
-        ).toBe(true);
-        expect(
-            hasExploreRepositoryCall(
-                "const { read } = repo; await read('src/a.ts')",
-                "read",
-            ),
-        ).toBe(true);
-        expect(hasExploreRepositoryCall("const load = repo.read", "read")).toBe(
-            false,
-        );
-    });
-
     async function makeFixture(): Promise<string> {
         const repoRoot = await mkdtemp(
             path.join(os.tmpdir(), "typeagent-lsp-tools-"),
@@ -307,13 +333,6 @@ describe("repository language server", () => {
                 "}",
                 "",
                 "export const value = target();",
-                "// body clue 1",
-                "// body clue 2",
-                "// body clue 3",
-                "// body clue 4",
-                "// body clue 5",
-                "// body clue 6",
-                "// targetExtra body clue 7",
             ].join("\n"),
         );
         await writeFile(
@@ -357,6 +376,10 @@ describe("repository language server", () => {
                 "from .target import target\n\n\nvalue = target()\n",
             ],
             ["packages/app/src/target.py", "def target():\n    return 1\n"],
+            [
+                "packages/app/src/stale.py",
+                "target\n\n\n\n\n\ntargetValue\n\n\n# stale hint\n",
+            ],
         ]);
         await Promise.all(
             [...sources].map(async ([relativePath, text]) => {
@@ -472,7 +495,7 @@ function handle(message) {
         return;
     }
     if (message.method === "textDocument/definition") {
-        log({ event: "definition" });
+        log({ event: "definition", position: message.params.position });
         respond(message.id, [location()]);
         return;
     }

@@ -57,7 +57,6 @@ export interface ExplorerReasoningAttempt {
 
 export interface ExplorerSessionSnapshot {
     submitted: boolean;
-    submissionAction?: "refineRepository" | "submitExploration";
     programAttempts: number;
     observationCount: number;
     actionAttempts: ExplorerActionAttempt[];
@@ -72,17 +71,19 @@ export interface ExplorerSessionSnapshot {
 export interface ExploreInvocationTelemetry {
     index: number;
     status: "completed" | "failed";
+    startedAt: string;
+    durationMs: number;
+    querySha256: string;
     usage: ExploreUsage;
     /**
-     * The inner model calls both select typed actions and generate Code Mode
-     * programs in the same completion, so their tokens cannot be split without
-     * double-counting.
+     * Discovery, refinement, and submission are three dependent model turns in
+     * one Explorer execution. The first two turns also generate Code Mode
+     * programs, so their tokens remain one inseparable execution bucket.
      */
     actionTranslationAndCodeGenerationUsage: ExploreUsage;
     toolTrace: RepositoryToolTrace;
     reasoningTrace: ExplorerReasoningAttempt[];
     actionAttempts: ExplorerActionAttempt[];
-    submissionAction?: "refineRepository" | "submitExploration";
     result?: {
         citationCount: number;
         truncated: boolean;
@@ -109,7 +110,6 @@ export interface ExplorerReasoningSDKAdapter extends ReasoningSDKAdapter {
 
 export interface CodeModeExplorerOptions {
     repoRoot: string;
-    ripgrepPath?: string;
     reasoningAdapter: ExplorerReasoningSDKAdapter;
     modelName: string;
     telemetryFile?: string;

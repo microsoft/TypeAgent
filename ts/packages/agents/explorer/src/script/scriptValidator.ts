@@ -5,11 +5,11 @@ import {
     createScriptValidator,
     transpileScript as sharedTranspileScript,
 } from "@typeagent/agent-flows";
-import ts from "typescript";
 import {
     exploreFlowParameters,
     generateSandboxDeclarations,
 } from "./sandboxDeclarations.js";
+import ts from "typescript";
 
 const baseValidator = createExploreValidator(false);
 const lspValidator = createExploreValidator(true);
@@ -36,112 +36,39 @@ export function validateExploreScript(
     };
 }
 
-export function hasExploreRepositoryCall(
-    source: string,
-    method: "read" | "lsp",
-): boolean {
+export function callsRepositoryTool(source: string, tool: string): boolean {
     const sourceFile = ts.createSourceFile(
-        "explore-program.ts",
+        "script.ts",
         source,
         ts.ScriptTarget.ES2022,
         true,
     );
-    const aliases = collectRepositoryMethodAliases(sourceFile, method);
-    let called = false;
-    const findCall = (node: ts.Node): void => {
-        if (called) {
-            return;
-        }
-        if (
-            ts.isCallExpression(node) &&
-            (isRepositoryMethodExpression(node.expression, method) ||
-                isAliasCallExpression(node.expression, aliases))
-        ) {
-            called = true;
-            return;
-        }
-        ts.forEachChild(node, findCall);
-    };
-    findCall(sourceFile);
-    return called;
-}
-
-function collectRepositoryMethodAliases(
-    sourceFile: ts.SourceFile,
-    method: "read" | "lsp",
-): Set<string> {
-    const aliases = new Set<string>();
+    let found = false;
     const visit = (node: ts.Node): void => {
-        if (ts.isVariableDeclaration(node) && node.initializer) {
+        if (found) {
+            return;
+        }
+        if (ts.isCallExpression(node)) {
+            const expression = node.expression;
             if (
-                ts.isIdentifier(node.name) &&
-                isRepositoryMethodExpression(node.initializer, method)
+                (ts.isPropertyAccessExpression(expression) &&
+                    ts.isIdentifier(expression.expression) &&
+                    expression.expression.text === "repo" &&
+                    expression.name.text === tool) ||
+                (ts.isElementAccessExpression(expression) &&
+                    ts.isIdentifier(expression.expression) &&
+                    expression.expression.text === "repo" &&
+                    ts.isStringLiteralLike(expression.argumentExpression) &&
+                    expression.argumentExpression.text === tool)
             ) {
-                aliases.add(node.name.text);
-            } else if (
-                ts.isObjectBindingPattern(node.name) &&
-                isRepositoryExpression(node.initializer)
-            ) {
-                for (const element of node.name.elements) {
-                    const property = element.propertyName ?? element.name;
-                    if (
-                        ts.isIdentifier(property) &&
-                        property.text === method &&
-                        ts.isIdentifier(element.name)
-                    ) {
-                        aliases.add(element.name.text);
-                    }
-                }
+                found = true;
+                return;
             }
         }
         ts.forEachChild(node, visit);
     };
     visit(sourceFile);
-    return aliases;
-}
-
-function isAliasCallExpression(
-    expression: ts.Expression,
-    aliases: Set<string>,
-): boolean {
-    const unwrapped = unwrapExpression(expression);
-    return ts.isIdentifier(unwrapped) && aliases.has(unwrapped.text);
-}
-
-function isRepositoryExpression(expression: ts.Expression): boolean {
-    const unwrapped = unwrapExpression(expression);
-    return ts.isIdentifier(unwrapped) && unwrapped.text === "repo";
-}
-
-function isRepositoryMethodExpression(
-    rawExpression: ts.Expression,
-    method: "read" | "lsp",
-): boolean {
-    const expression = unwrapExpression(rawExpression);
-    if (
-        ts.isPropertyAccessExpression(expression) &&
-        ts.isIdentifier(expression.expression)
-    ) {
-        return (
-            expression.expression.text === "repo" &&
-            expression.name.text === method
-        );
-    }
-    return (
-        ts.isElementAccessExpression(expression) &&
-        ts.isIdentifier(expression.expression) &&
-        expression.expression.text === "repo" &&
-        ts.isStringLiteral(expression.argumentExpression) &&
-        expression.argumentExpression.text === method
-    );
-}
-
-function unwrapExpression(expression: ts.Expression): ts.Expression {
-    let current = expression;
-    while (ts.isParenthesizedExpression(current)) {
-        current = current.expression;
-    }
-    return current;
+    return found;
 }
 
 function createExploreValidator(enableLsp: boolean) {

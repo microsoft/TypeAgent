@@ -2,13 +2,13 @@
 
 This package runs a read-only SWE-bench Verified localization benchmark through the real GitHub Copilot CLI, controlled by `@github/copilot-sdk`, and a local LiteLLM gateway. Reports use these presentation labels:
 
-- **Copilot SDK (with explore agent)** (`baseline` internally): Copilot's default main agent must delegate once to the root `.copilot/agents/explorer.md` subagent. Only that subagent receives bounded immutable-snapshot `read`, `grep`, `glob`, and `ls` tools.
-- **TypeAgent** (`typeagent`): the raw task enters the canonical TypeAgent dispatcher, whose static grammar constructs exactly one `exploreRepository` action for its sole active Explorer application agent without an outer model request. Explorer then runs its bounded typed-action/Code Mode loop in process.
-- **TypeAgent with LSP** (`typeagent-lsp` internally): the same TypeAgent arm also exposes bounded `definition` and `references` navigation through the all-language, pre-provisioned server registry. LSP calls consume the shared eight-call repository budget, and returned locations must still be grounded with `repo.read` before submission. An error-free call counts as successful even when the language server returns no locations; reports show successful calls and returned locations separately.
+- **Copilot SDK (with explore agent)** (`baseline` internally): Copilot's default main agent must delegate once to the root `.copilot/agents/explorer.md` subagent. Only that subagent receives bounded custom `read`, `grep`, `glob`, and read-only `bash` tools.
+- **TypeAgent** (`typeagent`): Copilot's default main agent must invoke the session-bound `explore` MCP tool without copying the raw task into tool arguments. The MCP server passes the exact request to TypeAgent Explorer's bounded typed-action/Code Mode loop.
+- **TypeAgent with LSP** (`typeagent-lsp` internally): the same Copilot-to-MCP path also exposes bounded `definition` and `references` navigation inside Explorer through the all-language, pre-provisioned server registry. LSP uses a separate two-call allowance, and returned locations must still be grounded with repository evidence before submission.
 
 Legacy `typeagent-mcp` inputs are normalized when reading CLI arguments, manifests, or result JSONL. New manifests and result rows always write `typeagent`.
 
-The Copilot SDK row keeps Copilot's default main agent active and fails unless it completes exactly one synchronous `task` delegation to `explorer`, the subagent uses repository tools, and the main agent performs no direct inspection. The two TypeAgent arms do not start Copilot or MCP: the untouched natural-language task must cross the dispatcher through TypeAgent's static grammar without an outer model request, only Explorer may be active, exactly one outer action must carry that same request as a validated parameter (allowing only TypeAgent's CRLF-to-LF string normalization), and its output must become the final answer. Inside that action, Explorer may use multiple `ls`, `glob`, `grep`, `read`, and—only in the LSP arm—`lsp` operations up to the shared eight-call budget. All three arms use the same immutable filtered repository snapshot and the same repository-search implementation; grep executes the one resolved Copilot-packaged `rg` binary, whose digest is retained in runtime evidence, and TypeAgent also records the engine and executable name in tool telemetry.
+The baseline keeps Copilot's default main agent active and fails unless it completes exactly one synchronous `task` delegation to `explorer`, the subagent uses repository tools, and the main agent performs no direct inspection. The two TypeAgent arms also keep Copilot's default main agent active, but expose only the TypeAgent `explore` MCP tool: the per-session server binds the exact raw request, the model-authored call must omit `query`, Explorer telemetry must record the matching request SHA-256, exactly one invocation must succeed, no subagent or outside repository inspection is allowed, and the outer answer must relay Explorer's citations exactly. A successful treatment normally contains three dependent inner requests in one Explorer execution: `discoverRepository`, `refineRepository`, then `submitExploration`. The final turn selects locations after observing both repository programs; bounded repair turns are retained and charged. Inside the MCP call, Explorer may use multiple `ls`, `glob`, `grep`, and `read` operations up to the shared eight-call evidence budget. The LSP arm also has a separate two-call navigation allowance. Every arm uses the same packaged `rg` binary and canonical immutable repository search implementation; absolute path and SHA-256 provenance are retained per row.
 
 This is localization, not SWE-bench pass@1. It does not generate patches, edit repositories, or run tests. It scores cited files and source-side line ranges against the gold patch.
 
@@ -21,8 +21,8 @@ pnpm --filter @typeagent/explore-bench build
 pnpm --filter @typeagent/explore-bench test
 ```
 
-Prepare the pinned Python language server once before an LSP run. The direct
-harness resolves this venv executable by absolute path:
+Prepare the pinned Python language server once before an LSP run. Explorer
+resolves this venv executable by absolute path:
 
 ```bash
 uv sync --project packages/mcp/explore/python-lsp --frozen
@@ -72,7 +72,7 @@ exclusive so a run cannot silently mix selection modes.
 
 ## Run larger matrices and reuse results
 
-Compatible successful keys are automatically reused from prior runs under the same `.data/explore-bench/runs` directory. Reuse requires the same dataset, model route, variant, agent prompt, provider, harness compatibility revision, limits, and execution settings, plus an exact task/query/SWE-bench identity match. Revision 28 requires the outer TypeAgent action to capture the user request losslessly through TypeAgent's static grammar without an outer model request, three completed inner Explorer actions in order (`discoverRepository`, `refineRepository`, then explicit `submitExploration`), exact generated action arguments retained in TypeAgent reasoning history, bounded model-visible repository-call inputs, result counts, truncation and errors, visible grep truncation, and read-grounded final citations. Refinement locations are advisory; final submission independently selects every evidence-indicated change-bearing block from inspected read evidence. A whole read location is an evidence window rather than automatically the final change-bearing block, while every submitted range must remain wholly covered by a successful read observation. Unused discovery calls carry into refinement within the shared eight-call budget. Exact reads serialize before broad grep observations, the action-result character budget rather than a fixed grep-count cap bounds visible evidence, and `observationsTruncated` reports both pre-serialization compaction and final serialization truncation. Returned candidate ranges remain wholly visible through final response compaction, and host-validated refinement reads are retained for a no-I/O typed repair when candidate compaction consumes the eighth repository call. Preflight validation enforces mandatory refinement reads and LSP calls, submission repairs stay within the six-action reasoning limit, and error-free LSP calls count as successful even when they return zero locations. Successful baseline rows must preserve the complete delegated query, the Explorer result unchanged, and explanation-free final locations wholly covered by successful read evidence, including when rows are resumed or imported. Host-validated read and LSP evidence survives an advisory Code Mode `success: false` result, while VM failures and timeouts discard all evidence from that execution; host-owned rejection observers also keep detached late repository promises from becoming unhandled process failures. Consumed discarded calls remain visible as failed telemetry, including valid host-owned ripgrep execution provenance, while only error-free ripgrep calls prove successful search adoption; remaining-program counters describe the post-action state. Every arm exposes the same neutral filtered immutable-snapshot read/list/search primitives with Copilot's packaged ripgrep; broad searches receive the same actionable 20-second internal deadline before the outer execution deadline, custom shorter execution deadlines derive a still-shorter grep deadline, ripgrep execution provenance remains host-owned outside model-controlled input, and every imported row requires a verified direct-source manifest/runtime artifact. The imported `results.jsonl` rows retain their complete attempt history and a `reusedFrom` record; `cache-provenance.json` summarizes every source. Cache-of-cache rows are not imported, stale same-run task payloads are rejected, and failed or occupied target keys rerun normally.
+Compatible successful baseline keys may be reused under the same `.data/explore-bench/runs` directory; TypeAgent treatment keys always rerun. Baseline reuse requires the same dataset, model route, agent prompt, provider, limits, execution settings, and runtime binary fingerprints, plus an exact task/query/SWE-bench identity match, and every imported baseline row is revalidated under current integrity rules. A reusable successful row must also retain its parseable, matching-model trajectory JSONL; pre-trajectory rows rerun instead of being silently accepted. The current revision requires the session-bound zero-query MCP architecture, ordered native-text relay and abort, complete reconciled usage, Explorer request-digest proof, shared packaged-ripgrep provenance and process telemetry, the pinned Python LSP fingerprint, and a bounded successful `discoverRepository` → `refineRepository` → `submitExploration` sequence. The normal path uses exactly three inner requests in one Explorer execution; bounded repair turns are retained and charged. LSP adoption requires a non-discarded navigation attempt from its separate two-call allowance; empty results and retained navigation errors do not force a repair because only repository evidence grounds final locations. Baseline citation-format repair turns are recorded and fully charged; an outer TypeAgent treatment repair turn remains incompatible. Baseline revisions before 50 are incompatible because they do not prove the current Copilot, search, LSP, and integrity-contract bytes. Direct-dispatch, model-authored-query, outer retry, and reused-treatment rows remain incompatible. Imported baseline `results.jsonl` rows retain their complete attempt history and a `reusedFrom` record; `cache-provenance.json` summarizes every source. Failed keys and target keys that already have an attempt rerun normally.
 
 The first 30 deterministic tasks are an exact prefix of the 100-task selection, so the completed 30-row matrix can supply 180 successful keys (184 raw attempts) to a compatible 100-row run. From the repository root:
 
@@ -87,21 +87,21 @@ The default scheduler runs up to three executions independently for each model (
 
 SWE-bench Verified has exactly 500 rows. `just bench-1000` therefore exits during dataset loading before any model call. A real 1,000-row run requires an explicit switch to full SWE-bench; results from that dataset must not be labeled as or directly compared with SWE-bench Verified.
 
-## Run exactly one direct TypeAgent row
+## Run exactly one TypeAgent MCP row
 
-From `ts/`, after building `@typeagent/explore-bench`, this single command runs the first deterministic SWE-bench task through Luna and the direct TypeAgent arm only. `--max-attempts 1` guarantees exactly one raw JSONL result row even if the execution fails.
+From `ts/`, after building `@typeagent/explore-bench`, this single command runs the first deterministic SWE-bench task through Luna and the Copilot+TypeAgent MCP arm only. `--max-attempts 1` guarantees exactly one raw JSONL result row even if the execution fails.
 
 ```bash
 node packages/exploreBench/dist/src/cli.js run --limit 1 --model azure/gpt-5.6-luna --variant typeagent --max-attempts 1 --max-concurrency 1 --litellm-base-url http://127.0.0.1:4627/v1 --api-key-env LITELLM_MASTER_KEY --env-file /absolute/path/to/litellm.env
 ```
 
-Use `--model azure/gpt-5.6-terra` or `--model azure/gpt-5.6-sol` to select another allowed route. Omit `--variant` for the default paired baseline and direct TypeAgent comparison. `--model` and `--matrix` are mutually exclusive.
+Use `--model azure/gpt-5.6-terra` or `--model azure/gpt-5.6-sol` to select another allowed route. Omit `--variant` for the default paired baseline and TypeAgent MCP comparison. `--model` and `--matrix` are mutually exclusive.
 
 ## Record every model-server request and response
 
 The trace wrapper records any one canonical arm and routes every model call
-through a loopback proxy. For TypeAgent arms, the dispatcher grammar makes no
-model request, so the trace contains the inner Explorer calls. From `ts/`, this single command runs
+through a loopback proxy. For TypeAgent arms, this includes outer Copilot and
+inner Explorer calls. From `ts/`, this single command runs
 one Luna TypeAgent row and records each HTTP exchange:
 
 ```bash
@@ -120,12 +120,12 @@ sensitive.
 
 ## Harness isolation
 
-Only the baseline starts the packaged native Copilot executable over the SDK's stdio JSON-RPC connection. It records the runtime version and protocol in `copilot-runtime.json`. Each baseline session uses:
+Every arm starts the packaged native Copilot executable over the SDK's stdio JSON-RPC connection. It records the runtime version and protocol in `copilot-runtime.json`. Each session uses:
 
 - SDK `mode: "empty"` with a run-scoped Copilot home
 - config discovery, custom instructions, skills, memory, hooks, embeddings, and infinite sessions disabled
-- a source-qualified `task` tool for the baseline main agent
-- `defaultAgent.excludedTools` keeps baseline `read`/`grep`/`glob`/`ls` available to `explorer` but hidden from the main agent
+- a source-qualified `task` tool for the baseline, or the single TypeAgent `explore` MCP tool for treatment
+- `defaultAgent.excludedTools` keeps baseline `read`/`grep`/`glob`/`bash` available to `explorer` but hidden from the main agent
 - deny-by-default permissions
 - fixed absolute baseline command paths with a sanitized child `PATH`
 - a trimmed runtime environment that excludes the LiteLLM credential
@@ -133,7 +133,7 @@ Only the baseline starts the packaged native Copilot executable over the SDK's s
 
 The harness resolves Copilot in this order: `--copilot`, `COPILOT_CLI_PATH`, the platform package installed with `@github/copilot`, then platform-specific `PATH` and Bun locations. Node/npm shims are rejected.
 
-The LiteLLM credential defaults to `CUSTOM_PROVIDER_API_KEY`. Resolution order is inherited environment, `launchctl getenv`, then an explicit `--env-file` override. Secret values are never written to arguments, manifests, progress logs, or reports. The TypeAgent arms configure the same provider route directly in process.
+The LiteLLM credential defaults to `CUSTOM_PROVIDER_API_KEY`. Resolution order is inherited environment, `launchctl getenv`, then an explicit `--env-file` override. Secret values are never written to arguments, manifests, progress logs, or reports. The TypeAgent MCP server configures the same provider route for inner Explorer requests.
 
 Copilot's provider is configured per session as OpenAI-compatible with the Responses wire API. The default gateway URL is `http://localhost:4627/v1`; the LiteLLM route remains the wire model.
 
@@ -182,11 +182,29 @@ Default data layout:
   runs/<run-id>/manifest.json
   runs/<run-id>/results.jsonl
   runs/<run-id>/telemetry/*.json
+  runs/<run-id>/trajectories/<row-model-arm-attempt-uuid>/*.jsonl
   runs/<run-id>/report.json
   runs/<run-id>/report.md
 ```
 
-`results.jsonl` is the raw source of truth. Baseline rows record RPC proof that no custom main agent was selected plus correlated `task`, `subagent.started`, child repository-tool, `subagent.completed`, and root task-completion events. TypeAgent rows record the untouched submitted request, active application agent/schema, grammar-constructed action, executed output, zero dispatcher model usage, inner Explorer usage, combined usage, and schema-v4 repository-tool/action telemetry. Missing or repeated grammar dispatch/execution, Copilot/MCP evidence in a TypeAgent arm, malformed answers, inconsistent usage, invalid ripgrep evidence, wrong-mode LSP activity, failed telemetry, or model mismatch makes the row retryable.
+`results.jsonl` is the raw source of truth. Baseline rows record RPC proof that no custom main agent was selected plus correlated `task`, `subagent.started`, child repository-tool, `subagent.completed`, and root task-completion events. TypeAgent rows record MCP readiness/adoption, absence of a model-authored query, the Explorer request SHA-256 and relayed result, outer Copilot usage, inner Explorer usage, combined usage, and schema-v4 repository-tool/action telemetry. Missing or repeated MCP execution, request-digest mismatch, outside repository inspection, malformed answers, inconsistent usage, invalid ripgrep evidence, wrong-mode LSP activity, failed telemetry, or model mismatch makes the row retryable.
+
+Every attempted execution, including failed attempts and retries, records
+`trajectoryFiles`. Baseline writes
+`baseline-<row>-<model>.jsonl`, containing both main and Explorer-subagent
+messages distinguished by agent metadata. TypeAgent arms write separate
+`<arm>-main-<row>-<model>.jsonl` and
+`<arm>-codemode-<row>-<model>.jsonl` files. If an attempt invokes Code Mode more
+than once, later invocations use deterministic `-invocation-2`,
+`-invocation-3`, ... suffixes. Invocation count is the maximum of observed MCP
+executions and parsed telemetry entries, so missing or truncated telemetry
+cannot omit a later stream. Every retry gets a unique attempt directory, so the
+readable filenames never overwrite an earlier execution. If an observed Code
+Mode execution has no model messages, its file is a synthetic failure
+trajectory rather than being omitted.
+Records stay in message order and use stable `role`, `content`, `model`,
+`tool_call_id`, `tool_calls`, and `usage` fields; capture fails closed on
+missing, malformed, empty, wrong-model, unpaired, or usage-mismatched data.
 
 Regenerate reports with:
 
@@ -195,7 +213,7 @@ node dist/src/cli.js report \
   --input .data/explore-bench/runs/typeagent-verified-10/results.jsonl
 ```
 
-Both report formats include the raw per-variant leaderboard and an explicit `typeagent − baseline` delta table for every available 1/5/10/20/30/50/100/500/1000 prefix. Token columns report absolute dispatcher, inner Explorer, and combined counts; no token-saving percentage is substituted for token usage. Paired token deltas compare TypeAgent combined tokens against baseline Copilot tokens, which already include both the main and explorer subagent calls. Totals are input plus output without double-counting cache or reasoning subsets.
+Both report formats include the raw per-variant leaderboard and an explicit `typeagent − baseline` delta table for every available 1/5/10/20/30/50/100/500/1000 prefix. Token columns report absolute outer Copilot, inner Explorer, and combined counts; no token-saving percentage is substituted for token usage. Paired token deltas compare TypeAgent combined tokens against baseline Copilot tokens, which already include both the main and explorer subagent calls. Totals are input plus output without double-counting cache or reasoning subsets.
 
 The three-arm report shows latency as mean/p50/p95 over the same successful
 task intersection. Each task contributes its final successful execution only;

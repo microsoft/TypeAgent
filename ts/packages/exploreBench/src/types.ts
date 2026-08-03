@@ -69,6 +69,9 @@ export interface McpServerConfig {
     args: string[];
     cwd?: string;
     envVars: string[];
+    pythonLspCommand?: string;
+    typescriptLspCommand?: string;
+    typescriptLspArgs?: string[];
 }
 
 export interface BenchmarkAgentConfig {
@@ -110,7 +113,6 @@ export interface TypeAgentDispatchAction {
 export interface TypeAgentDispatchEvidence {
     ingress: "natural-language";
     submittedRequest: string;
-    dispatchMethod: "construction" | "grammar" | false;
     translationInvoked: boolean;
     translationRequestCount: number;
     activeAgentNames: string[];
@@ -128,14 +130,11 @@ export interface TypeAgentToolCallTrace {
     startedAt?: string;
     durationMs: number;
     input: unknown;
-    execution?: {
-        engine: string;
-        executable: string;
-    };
     resultCount: number;
     outputBytes: number;
     truncated: boolean;
     error?: string;
+    discarded?: true;
 }
 
 export interface TypeAgentToolTrace {
@@ -147,6 +146,9 @@ export interface TypeAgentToolTrace {
 export interface ExploreInvocationTelemetry {
     index: number;
     status: "completed" | "failed";
+    startedAt?: string;
+    durationMs?: number;
+    querySha256?: string;
     usage: TypeAgentUsage;
     translationUsage?: TypeAgentUsage;
     codeModeUsage?: TypeAgentUsage;
@@ -165,7 +167,6 @@ export interface ExploreInvocationTelemetry {
         status: "completed" | "failed";
         error?: string;
     }>;
-    submissionAction?: "refineRepository" | "submitExploration";
     result?: {
         citationCount: number;
         truncated: boolean;
@@ -190,12 +191,68 @@ export interface ExploreTelemetry {
 
 export type CopilotTraceItem = Record<string, unknown>;
 
+export interface NormalizedTrajectoryUsage {
+    inputTokens: number;
+    cachedInputTokens: number;
+    cacheWriteTokens?: number;
+    outputTokens: number;
+    reasoningOutputTokens: number;
+    totalTokens: number;
+    durationMs?: number;
+}
+
+export interface NormalizedTrajectoryToolCall {
+    id: string;
+    type: "function";
+    function: {
+        name: string;
+        arguments: Record<string, unknown>;
+    };
+}
+
+export interface NormalizedTrajectoryRecord {
+    schemaVersion: 1;
+    sequence: number;
+    role: "system" | "developer" | "user" | "assistant" | "tool";
+    content: string;
+    model: string;
+    tool_call_id: string | null;
+    tool_calls: NormalizedTrajectoryToolCall[];
+    usage: Partial<NormalizedTrajectoryUsage>;
+    source?: string;
+    sourceEvent?: string;
+    eventId?: string;
+    timestamp?: string;
+    agentId?: string;
+    apiCallId?: string;
+    requestIndex?: number;
+    observedModel?: string;
+    usageModel?: string;
+    isError?: boolean;
+    success?: boolean;
+    messageKind?: "reasoning" | "model_error" | "usage";
+}
+
+export interface RunTrajectoryFiles {
+    main: string;
+    codeMode?: string;
+    codeModeInvocations?: string[];
+}
+
 export interface CopilotToolCallTrace {
     tool: string;
     args: unknown;
     ok: boolean;
     durationMs: number;
     output: string;
+    execution?: {
+        engine: "ripgrep";
+        executable: string;
+        ripgrepSha256: string;
+        ripgrepProcessCount?: number;
+        resultCount?: number;
+        truncated?: boolean;
+    };
     readRange?: {
         path: string;
         startLine: number;
@@ -208,6 +265,8 @@ export interface McpToolCallTrace {
     server?: string;
     tool?: string;
     arguments?: unknown;
+    startedOffsetMs?: number;
+    durationMs?: number;
     completed: boolean;
     success?: boolean;
     result?: unknown;
@@ -258,6 +317,27 @@ export interface SwebenchScore {
     nOverlapLineCitation: number;
 }
 
+export interface RunLatencyTimeline {
+    schemaVersion: 1;
+    runStartedAt: string;
+    sessionCreateStartedMs?: number;
+    sessionCreatedMs?: number;
+    mcpReadyMs?: number;
+    primaryTurnStartedMs?: number;
+    primaryTurnCompletedMs?: number;
+    repairTurnStartedMs?: number;
+    repairTurnCompletedMs?: number;
+    responseReadyMs?: number;
+    usageReadStartedMs?: number;
+    usageReadCompletedMs?: number;
+    disconnectStartedMs?: number;
+    disconnectedMs?: number;
+    cleanupCompletedMs?: number;
+    telemetryReadStartedMs?: number;
+    telemetryReadCompletedMs?: number;
+    completedMs: number;
+}
+
 export interface SafeProviderMetadata {
     type: "openai-compatible";
     baseUrl: string;
@@ -279,9 +359,11 @@ export interface RunResult {
     swebench: SwebenchMeta;
     ok: boolean;
     durationMs: number;
+    latencyTimeline?: RunLatencyTimeline;
     attempt: number;
     maxAttempts: number;
     usedRepair?: boolean;
+    outerLoopAbortedAfterExplore?: boolean;
     finalAnswer: string;
     score: SwebenchScore;
     /** Outer GitHub Copilot CLI usage from SDK assistant.usage events. */
@@ -297,10 +379,15 @@ export interface RunResult {
     typeAgentToolTrace?: TypeAgentToolTrace;
     exploreTelemetry?: ExploreTelemetry;
     telemetryFile?: string;
+    trajectoryFiles?: RunTrajectoryFiles;
+    ripgrepPath?: string;
+    ripgrepSha256?: string;
     attemptedExploreCalls?: number;
     completedExploreCalls?: number;
     successfulExploreCalls?: number;
     outsideExploreInspection?: boolean;
+    firstAssistantActionExclusiveExplore?: boolean;
+    exploreCompletedBeforeLaterAssistantAction?: boolean;
     mcpServerReady?: boolean;
     mcpAdvertisedTools?: string[];
     telemetryError?: string;
@@ -332,9 +419,24 @@ export interface ResultReuseProvenance {
     originalRunId: string;
     sourceRunId: string;
     resultsPath: string;
-    manifestPath?: string;
-    runtimeEvidence?: string;
     importedAt: string;
+}
+
+export interface RuntimeFileFingerprint {
+    path: string;
+    sha256: string;
+}
+
+export interface RunRuntimeFingerprint {
+    copilot: RuntimeFileFingerprint;
+    ripgrep: RuntimeFileFingerprint;
+    mcpCommand: RuntimeFileFingerprint;
+    mcpEntrypoint?: RuntimeFileFingerprint;
+    pythonLsp?: RuntimeFileFingerprint;
+    pythonLspInterpreter?: RuntimeFileFingerprint;
+    pythonLspLock?: RuntimeFileFingerprint;
+    typescriptLspCommand?: RuntimeFileFingerprint;
+    typescriptLspEntrypoint?: RuntimeFileFingerprint;
 }
 
 export interface RunManifest {
@@ -356,6 +458,7 @@ export interface RunManifest {
     output: string;
     copilotPath: string;
     runtimeEvidence: string;
+    runtimeFingerprint?: RunRuntimeFingerprint;
     provider: Omit<SafeProviderMetadata, "hasApiKey">;
     mcp: McpServerConfig;
     agent: BenchmarkAgentConfig;

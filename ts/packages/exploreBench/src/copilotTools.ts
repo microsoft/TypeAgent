@@ -6,9 +6,15 @@ import {
     createRepositoryTools,
     type RepositoryTools,
 } from "explorer-typeagent";
-import { realpath } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { constants } from "node:fs";
+import { access, readFile, realpath, stat } from "node:fs/promises";
+import path from "node:path";
 import { resolvePackagedRipgrepPath } from "./ripgrep.js";
 import type { CopilotToolCallTrace } from "./types.js";
+
+export const TOOL_BUDGET_EXHAUSTED =
+    "TOOL_BUDGET_EXHAUSTED: answer now using the evidence already gathered.";
 
 interface ReadArgs {
     path: string;
@@ -29,10 +35,10 @@ interface GlobArgs {
     maxMatches?: number;
 }
 
-interface LsArgs {
-    path?: string;
-    depth?: number;
-    maxEntries?: number;
+interface BashArgs {
+    command: string;
+    cwd?: string;
+    timeoutMs?: number;
 }
 
 interface ToolBudget {
@@ -41,14 +47,26 @@ interface ToolBudget {
     exhaustedRecorded: boolean;
 }
 
-export type CopilotExplorationTools = Tool<any>[] & {
-    close(): Promise<void>;
-};
+type ReadOnlyExecutable = "pwd" | "ls" | "find" | "git";
+type ReadOnlyExecutables = Record<ReadOnlyExecutable, string>;
 
 const DEFAULT_MAX_TOOL_CALLS = 8;
 const MAX_TOOL_CALLS = 100;
+const MAX_READ_FILE_BYTES = 1024 * 1024;
 const MAX_TRACE_STRING = 2_000;
 const MAX_TRACE_OUTPUT = 12_000;
+const TRUSTED_SYSTEM_PATH = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"].join(
+    path.delimiter,
+);
+const TRUSTED_EXECUTABLE_CANDIDATES: Record<
+    ReadOnlyExecutable,
+    readonly string[]
+> = {
+    pwd: ["/usr/bin/pwd", "/bin/pwd"],
+    ls: ["/usr/bin/ls", "/bin/ls"],
+    find: ["/usr/bin/find", "/bin/find"],
+    git: ["/usr/bin/git", "/bin/git"],
+};
 
 export async function createCopilotExplorationTools(
     repoPath: string,
@@ -64,6 +82,7 @@ export async function createCopilotExplorationTools(
         maxCalls: MAX_TOOL_CALLS,
         ripgrepPath,
     });
+    const executables = await resolveReadOnlyExecutables();
     const limit = Number.isFinite(maxToolCalls)
         ? Math.min(MAX_TOOL_CALLS, Math.max(0, Math.floor(maxToolCalls)))
         : DEFAULT_MAX_TOOL_CALLS;
@@ -100,9 +119,7 @@ export async function createCopilotExplorationTools(
             overridesBuiltInTool: true,
             skipPermission: true,
             handler: (args) =>
-                traced(trace, "read", args, budget, () =>
-                    readTool(repositoryTools, args),
-                ),
+                traced(trace, "read", args, budget, () => readTool(root, args)),
         }),
         defineTool<GrepArgs>("grep", {
             description:
@@ -166,34 +183,35 @@ export async function createCopilotExplorationTools(
                     globTool(repositoryTools, args),
                 ),
         }),
-        defineTool<LsArgs>("ls", {
+        defineTool<BashArgs>("bash", {
             description:
-                "List files from the immutable filtered repository snapshot.",
+                "Run one allowlisted read-only repository command: pwd, ls, find, or a non-mutating git inspection command. Shell syntax is rejected.",
             parameters: {
                 type: "object",
                 properties: {
-                    path: {
+                    command: {
                         type: "string",
-                        description: "Optional repository-relative directory",
+                        description: "Read-only shell command",
+                    },
+                    cwd: {
+                        type: "string",
+                        description:
+                            "Optional repository-relative working directory",
                         default: ".",
                     },
-                    depth: {
+                    timeoutMs: {
                         type: "number",
-                        description: "Maximum directory depth",
-                        default: 2,
-                    },
-                    maxEntries: {
-                        type: "number",
-                        description: "Maximum paths to return",
-                        default: 200,
+                        description: "Timeout in milliseconds",
+                        default: 30000,
                     },
                 },
+                required: ["command"],
             },
             overridesBuiltInTool: true,
             skipPermission: true,
             handler: (args) =>
-                traced(trace, "ls", args, budget, () =>
-                    lsTool(repositoryTools, args),
+                traced(trace, "bash", args, budget, () =>
+                    bashTool(root, executables, args),
                 ),
         }),
     ];
@@ -206,35 +224,50 @@ export async function createCopilotExplorationTools(
     return tools as CopilotExplorationTools;
 }
 
-async function readTool(
-    repositoryTools: RepositoryTools,
-    args: ReadArgs,
-): Promise<string> {
+export type CopilotExplorationTools = Tool<any>[] & {
+    close(): Promise<void>;
+};
+
+async function readTool(root: string, args: ReadArgs): Promise<string> {
+    const file = await resolveInside(root, args.path);
+    rejectSensitivePath(root, file);
+    const info = await stat(file);
+    if (!info.isFile()) throw new Error(`${args.path} is not a file`);
+    if (info.size > MAX_READ_FILE_BYTES) {
+        throw new Error(`${args.path} exceeds the 1 MiB read limit`);
+    }
+
     const offset = Math.max(1, Math.floor(args.offset ?? 1));
     const limit = Math.min(1000, Math.max(1, Math.floor(args.limit ?? 200)));
-    const result = await repositoryTools.api.read(args.path, {
-        offset: offset - 1,
-        limit,
-    });
-    return result.text
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => `${args.path}:${line.replace("\t", ": ")}`)
+    const lines = (await readFile(file, "utf8")).split(/\r?\n/);
+    return lines
+        .slice(offset - 1, offset - 1 + limit)
+        .map(
+            (line, index) =>
+                `${args.path}:${offset + index}: ${line.slice(0, 500)}`,
+        )
         .join("\n");
 }
 
 async function grepTool(
     repositoryTools: RepositoryTools,
     args: GrepArgs,
-): Promise<string> {
-    const result = await repositoryTools.api.grep(args.pattern, args);
-    const matches =
-        result.matches
+): Promise<TracedValue<string>> {
+    const matches = await repositoryTools.api.grep(args.pattern, args);
+    const output =
+        matches
             .map((match) => `${match.path}:${match.line}:${match.text}`)
             .join("\n") || "No matches";
-    return result.truncated
-        ? `${matches}\n[Search results truncated; narrow the pattern or path.]`
-        : matches;
+    const call = repositoryTools.trace.calls.at(-1);
+    const input = call?.input;
+    return tracedValue(output, {
+        engine: "ripgrep",
+        executable: String(input?.ripgrepPath ?? ""),
+        ripgrepSha256: String(input?.ripgrepSha256 ?? ""),
+        ripgrepProcessCount: Number(input?.ripgrepProcessCount ?? 0),
+        resultCount: call?.resultCount ?? 0,
+        truncated: call?.truncated ?? false,
+    });
 }
 
 async function globTool(
@@ -245,12 +278,54 @@ async function globTool(
     return matches.join("\n") || "No matches";
 }
 
-async function lsTool(
-    repositoryTools: RepositoryTools,
-    args: LsArgs,
+const tracedValueMarker = Symbol("tracedValue");
+
+interface TracedValue<T> {
+    [tracedValueMarker]: true;
+    value: T;
+    execution: NonNullable<CopilotToolCallTrace["execution"]>;
+}
+
+function tracedValue<T>(
+    value: T,
+    execution: NonNullable<CopilotToolCallTrace["execution"]>,
+): TracedValue<T> {
+    return { [tracedValueMarker]: true, value, execution };
+}
+
+function isTracedValue<T>(value: T | TracedValue<T>): value is TracedValue<T> {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        tracedValueMarker in value
+    );
+}
+
+async function bashTool(
+    root: string,
+    executables: ReadOnlyExecutables,
+    args: BashArgs,
 ): Promise<string> {
-    const matches = await repositoryTools.api.ls(args.path, args);
-    return matches.join("\n") || "No matches";
+    const cwd = await resolveInside(root, args.cwd ?? ".");
+    if (cwd !== root) rejectSensitivePath(root, cwd);
+    const command = parseReadOnlyCommand(args.command);
+    const commandName = command[0] as ReadOnlyExecutable;
+    const commandArgs = command.slice(1);
+    await validateReadOnlyCommand(root, cwd, commandName, commandArgs);
+    const executable = executables[commandName];
+    const timeoutMs = Math.min(
+        120_000,
+        Math.max(1_000, Math.floor(args.timeoutMs ?? 30_000)),
+    );
+    const result = await runProcess(
+        executable,
+        commandArgs,
+        cwd,
+        timeoutMs,
+        12_000,
+        root,
+    );
+    return [`exit=${result.code}`, result.output.slice(0, 12_000)].join("\n");
 }
 
 async function traced<T>(
@@ -258,12 +333,11 @@ async function traced<T>(
     tool: string,
     args: unknown,
     budget: ToolBudget,
-    run: () => Promise<T>,
+    run: () => Promise<T | TracedValue<T>>,
 ): Promise<T | string> {
     const start = Date.now();
     if (budget.executed >= budget.limit) {
-        const output =
-            "TOOL_BUDGET_EXHAUSTED: answer now using the evidence already gathered.";
+        const output = TOOL_BUDGET_EXHAUSTED;
         if (!budget.exhaustedRecorded) {
             trace.push({
                 tool,
@@ -278,7 +352,8 @@ async function traced<T>(
     }
     budget.executed += 1;
     try {
-        const value = await run();
+        const result = await run();
+        const value = isTracedValue(result) ? result.value : result;
         const readRange =
             tool === "read" ? readRangeFromOutput(args, value) : undefined;
         trace.push({
@@ -287,6 +362,7 @@ async function traced<T>(
             ok: true,
             durationMs: Date.now() - start,
             output: String(value).slice(0, MAX_TRACE_OUTPUT),
+            ...(isTracedValue(result) ? { execution: result.execution } : {}),
             ...(readRange ? { readRange } : {}),
         });
         return value;
@@ -307,17 +383,17 @@ function readRangeFromOutput(
     args: unknown,
     value: unknown,
 ): CopilotToolCallTrace["readRange"] {
-    const pathValue =
+    const rawPath =
         args !== null &&
         typeof args === "object" &&
         !Array.isArray(args) &&
         typeof (args as Record<string, unknown>).path === "string"
             ? String((args as Record<string, unknown>).path)
             : "";
-    if (!pathValue || typeof value !== "string") {
+    if (!rawPath || typeof value !== "string") {
         return undefined;
     }
-    const prefix = `${pathValue}:`;
+    const prefix = `${rawPath}:`;
     const lines = value
         .split(/\r?\n/u)
         .filter((line) => line.startsWith(prefix))
@@ -336,10 +412,284 @@ function readRangeFromOutput(
         return undefined;
     }
     return {
-        path: pathValue,
+        path: rawPath,
         startLine: lines[0],
         endLine: lines.at(-1)!,
     };
+}
+
+async function resolveInside(
+    root: string,
+    input: string,
+    base = root,
+): Promise<string> {
+    const absolute = path.resolve(base, input);
+    const resolved = await realpath(absolute);
+    const relative = path.relative(root, resolved);
+    if (
+        relative === ".." ||
+        relative.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relative)
+    ) {
+        throw new Error(`Path escapes repo root: ${input}`);
+    }
+    return resolved;
+}
+
+function rejectSensitivePath(root: string, file: string): void {
+    const relative = path.relative(root, file).split(path.sep).join("/");
+    if (isSensitiveRelativePath(relative)) {
+        throw new Error(`Refusing to read likely secret file: ${relative}`);
+    }
+}
+
+function isSensitiveRelativePath(input: string): boolean {
+    const normalized = input.replaceAll("\\", "/").toLowerCase();
+    const parts = normalized.split("/").filter(Boolean);
+    const name = parts.at(-1) ?? "";
+    return (
+        parts.some((part) =>
+            new Set([".git", ".ssh", ".aws", ".azure", ".gnupg"]).has(part),
+        ) ||
+        /^\.env(?:\..*)?$/.test(name) ||
+        /^\.(?:npmrc|pypirc|netrc)(?:\..*)?$/.test(name) ||
+        name === "_netrc" ||
+        name === ".git-credentials" ||
+        /^(?:credentials|secrets)(?:\.json)?$/.test(name) ||
+        /^id_(?:rsa|dsa|ecdsa|ed25519)$/.test(name) ||
+        /\.(?:pem|key|p12|pfx)$/.test(name)
+    );
+}
+
+function parseReadOnlyCommand(input: string): string[] {
+    if (!input.trim() || /[\0\r\n;&|`$()<>{}]/.test(input)) {
+        throw rejectedCommand(
+            "shell operators, substitutions, redirects, and empty commands are not allowed",
+        );
+    }
+
+    const words: string[] = [];
+    let word = "";
+    let quote: "'" | '"' | undefined;
+    let escaped = false;
+    let active = false;
+    for (const character of input) {
+        if (escaped) {
+            word += character;
+            escaped = false;
+            active = true;
+        } else if (character === "\\" && quote !== "'") {
+            escaped = true;
+            active = true;
+        } else if (quote) {
+            if (character === quote) quote = undefined;
+            else word += character;
+        } else if (character === "'" || character === '"') {
+            quote = character;
+            active = true;
+        } else if (/\s/.test(character)) {
+            if (active) {
+                words.push(word);
+                word = "";
+                active = false;
+            }
+        } else {
+            word += character;
+            active = true;
+        }
+    }
+    if (escaped || quote) {
+        throw rejectedCommand("unterminated quoting or escaping");
+    }
+    if (active) words.push(word);
+    if (words.length === 0) throw rejectedCommand("empty command");
+    return words;
+}
+
+async function validateReadOnlyCommand(
+    root: string,
+    cwd: string,
+    executable: string,
+    args: string[],
+): Promise<void> {
+    switch (executable) {
+        case "pwd":
+            if (args.some((arg) => arg !== "-L" && arg !== "-P")) {
+                throw rejectedCommand("pwd accepts only -L or -P");
+            }
+            return;
+        case "ls":
+            await validateLsArgs(root, cwd, args);
+            return;
+        case "find":
+            await validateFindArgs(root, cwd, args);
+            return;
+        case "git":
+            validateGitArgs(args);
+            return;
+        default:
+            throw rejectedCommand(
+                `${JSON.stringify(executable)} is not an allowlisted command`,
+            );
+    }
+}
+
+async function validateLsArgs(
+    root: string,
+    cwd: string,
+    args: string[],
+): Promise<void> {
+    let optionsEnded = false;
+    for (const arg of args) {
+        if (!optionsEnded && arg === "--") {
+            optionsEnded = true;
+        } else if (!optionsEnded && arg.startsWith("-")) {
+            if (
+                arg.startsWith("--dereference") ||
+                (!arg.startsWith("--") && arg.slice(1).includes("L"))
+            ) {
+                throw rejectedCommand("ls may not follow symbolic links");
+            }
+            continue;
+        } else {
+            await validateCommandPath(root, cwd, arg);
+        }
+    }
+}
+
+async function validateFindArgs(
+    root: string,
+    cwd: string,
+    args: string[],
+): Promise<void> {
+    const forbidden =
+        /^(?:-delete|-exec|-execdir|-ok|-okdir|-fls|-fprint|-fprint0|-fprintf|-files0-from)$/;
+    const pathPredicates = new Set([
+        "-anewer",
+        "-cnewer",
+        "-newer",
+        "-samefile",
+    ]);
+    let index = 0;
+    while (
+        index < args.length &&
+        !args[index].startsWith("-") &&
+        args[index] !== "!"
+    ) {
+        await validateCommandPath(root, cwd, args[index]);
+        index += 1;
+    }
+    for (; index < args.length; index += 1) {
+        const arg = args[index];
+        if (arg === "-H" || arg === "-L" || arg === "-follow") {
+            throw rejectedCommand("find may not follow symbolic links");
+        }
+        if (forbidden.test(arg)) {
+            throw rejectedCommand(
+                `find predicate ${JSON.stringify(arg)} is not read-only`,
+            );
+        }
+        rejectOutsidePathSyntax(arg);
+        if (isSensitiveRelativePath(arg)) {
+            throw rejectedCommand("find may not inspect a likely secret path");
+        }
+        if (pathPredicates.has(arg)) {
+            const operand = args[index + 1];
+            if (!operand)
+                throw rejectedCommand(`${arg} requires a repository path`);
+            await validateCommandPath(root, cwd, operand);
+            index += 1;
+        }
+    }
+}
+
+function validateGitArgs(args: string[]): void {
+    const commandArgs = [...args];
+    const subcommandIndex = commandArgs[0] === "--no-pager" ? 1 : 0;
+    if (subcommandIndex === 1) commandArgs.shift();
+    const subcommand = commandArgs.shift();
+    const allowed = new Set([
+        "status",
+        "diff",
+        "log",
+        "show",
+        "ls-files",
+        "rev-parse",
+        "blame",
+        "branch",
+    ]);
+    if (!subcommand || !allowed.has(subcommand)) {
+        throw rejectedCommand(
+            `git subcommand ${JSON.stringify(subcommand)} is not read-only`,
+        );
+    }
+    if (
+        subcommand === "branch" &&
+        commandArgs.some(
+            (arg) =>
+                !new Set([
+                    "--show-current",
+                    "--list",
+                    "-a",
+                    "-r",
+                    "-v",
+                    "-vv",
+                ]).has(arg),
+        )
+    ) {
+        throw rejectedCommand("git branch may only list branches");
+    }
+    const forbiddenOption =
+        /^(?:-C|-c|--git-dir|--work-tree|--config-env|--no-index|--output|--ext-diff|--textconv|--contents|--open-files-in-pager)(?:=|$)/;
+    for (const arg of commandArgs) {
+        if (forbiddenOption.test(arg) || /pager/i.test(arg)) {
+            throw rejectedCommand(
+                `git option ${JSON.stringify(arg)} is not allowed`,
+            );
+        }
+        rejectOutsidePathSyntax(arg);
+        const treePath = arg.includes(":")
+            ? arg.slice(arg.indexOf(":") + 1)
+            : arg;
+        if (isSensitiveRelativePath(treePath)) {
+            throw rejectedCommand("git may not inspect a likely secret path");
+        }
+    }
+    if (new Set(["diff", "log", "show"]).has(subcommand)) {
+        args.splice(subcommandIndex + 1, 0, "--no-ext-diff", "--no-textconv");
+    }
+}
+
+async function validateCommandPath(
+    root: string,
+    cwd: string,
+    input: string,
+): Promise<void> {
+    rejectOutsidePathSyntax(input);
+    const resolved = await resolveInside(root, input, cwd);
+    rejectSensitivePath(root, resolved);
+}
+
+function rejectOutsidePathSyntax(input: string): void {
+    const normalized = input.replaceAll("\\", "/");
+    if (
+        path.isAbsolute(input) ||
+        path.win32.isAbsolute(input) ||
+        normalized === ".." ||
+        normalized.startsWith("../") ||
+        normalized.includes("/../") ||
+        normalized.startsWith("~")
+    ) {
+        throw rejectedCommand(
+            `outside path ${JSON.stringify(input)} is not allowed`,
+        );
+    }
+}
+
+function rejectedCommand(reason: string): Error {
+    return new Error(
+        `Rejected unsafe command: ${reason}. Use read/grep or one allowlisted read-only repository command.`,
+    );
 }
 
 function boundTraceValue(value: unknown, depth = 0): unknown {
@@ -368,4 +718,100 @@ function boundTraceValue(value: unknown, depth = 0): unknown {
         );
     }
     return String(value).slice(0, MAX_TRACE_STRING);
+}
+
+function safeChildEnv(root: string): NodeJS.ProcessEnv {
+    return {
+        PATH: TRUSTED_SYSTEM_PATH,
+        HOME: path.join(path.parse(root).root, "__typeagent_no_home__"),
+        LANG: process.env.LANG,
+        LC_ALL: process.env.LC_ALL,
+        TERM: process.env.TERM,
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: "core.fsmonitor",
+        GIT_CONFIG_VALUE_0: "false",
+        GIT_OPTIONAL_LOCKS: "0",
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_PAGER: "/bin/cat",
+        PAGER: "/bin/cat",
+    };
+}
+
+async function resolveReadOnlyExecutables(): Promise<ReadOnlyExecutables> {
+    if (process.platform !== "darwin" && process.platform !== "linux") {
+        throw new Error(
+            `Read-only baseline commands are unsupported on ${process.platform}`,
+        );
+    }
+    return Object.fromEntries(
+        await Promise.all(
+            (
+                Object.entries(TRUSTED_EXECUTABLE_CANDIDATES) as Array<
+                    [ReadOnlyExecutable, readonly string[]]
+                >
+            ).map(async ([name, candidates]) => [
+                name,
+                await resolveTrustedExecutable(name, candidates),
+            ]),
+        ),
+    ) as ReadOnlyExecutables;
+}
+
+async function resolveTrustedExecutable(
+    name: ReadOnlyExecutable,
+    candidates: readonly string[],
+): Promise<string> {
+    for (const candidate of candidates) {
+        try {
+            await access(candidate, constants.X_OK);
+            const resolved = await realpath(candidate);
+            if ((await stat(resolved)).isFile()) {
+                return resolved;
+            }
+        } catch {
+            // Try the other fixed system location.
+        }
+    }
+    throw new Error(
+        `Trusted system executable ${name} not found at ${candidates.join(" or ")}`,
+    );
+}
+
+function runProcess(
+    command: string,
+    args: string[],
+    cwd: string,
+    timeoutMs: number,
+    maxOutputChars: number,
+    root: string,
+): Promise<{ code: number | null; output: string }> {
+    return new Promise((resolve, reject) => {
+        const child = spawn(command, args, {
+            cwd,
+            stdio: ["ignore", "pipe", "pipe"],
+            env: safeChildEnv(root),
+        });
+        let output = "";
+        const timer = setTimeout(() => {
+            child.kill("SIGKILL");
+            reject(new Error(`${command} timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+
+        const append = (chunk: unknown) => {
+            const remaining = maxOutputChars - output.length;
+            if (remaining > 0) output += String(chunk).slice(0, remaining);
+        };
+        child.stdout.on("data", append);
+        child.stderr.on("data", append);
+        child.on("error", (error) => {
+            clearTimeout(timer);
+            reject(error);
+        });
+        child.on("close", (code) => {
+            clearTimeout(timer);
+            resolve({ code, output });
+        });
+    });
 }

@@ -20,10 +20,8 @@ interface GlobOptions {
 }
 
 interface ReadOptions {
-    // Zero-based line offset. Grep and LSP line numbers are 1-based, so
-    // subtract one when using a match or location as the first line to read.
     offset?: number;
-    // Host-clamped to 200 lines per read during Explorer execution.
+    // Host-clamped to 1000 lines per read.
     limit?: number;
 }
 
@@ -33,10 +31,14 @@ interface GrepMatch {
     text: string;
 }
 
-interface GrepResult {
-    matches: GrepMatch[];
-    truncated: boolean;
+interface RepositoryApi {
+    ls(relativePath?: string, options?: LsOptions): Promise<string[]>;
+    glob(pattern: string, options?: GlobOptions): Promise<string[]>;
+    grep(pattern: string, options?: GrepOptions): Promise<GrepMatch[]>;
+    read(relativePath: string, options?: ReadOptions): Promise<string>;
 }
+
+type ExploreParams = FlowParams;
 
 interface ExploreLocation {
     path: string;
@@ -44,34 +46,11 @@ interface ExploreLocation {
     endLine: number;
 }
 
-interface ReadResult {
-    text: string;
-    location?: ExploreLocation;
-}
-
-interface RepositoryApi {
-    ls(relativePath?: string, options?: LsOptions): Promise<string[]>;
-    glob(pattern: string, options?: GlobOptions): Promise<string[]>;
-    grep(pattern: string, options?: GrepOptions): Promise<GrepResult>;
-    read(relativePath: string, options?: ReadOptions): Promise<ReadResult>;
-}
-
-type ExploreParams = FlowParams;
-
 interface ExploreProgramResult {
     success: boolean;
     message?: string;
     error?: string;
-    // Discovery returns []; refinement returns repository-grounded candidates
-    // that the final typed submitExploration action reviews.
+    // Discovery and refinement may return advisory candidates derived from inspected evidence.
+    // Candidates never ground final submission or displace independent reads.
     locations?: ExploreLocation[];
-}
-
-interface DiscoveryProgramResult extends ExploreProgramResult {
-    locations: [];
-}
-
-interface RefinementProgramResult extends ExploreProgramResult {
-    // The host rejects an empty array at runtime.
-    locations: ExploreLocation[];
 }

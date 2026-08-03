@@ -26,11 +26,16 @@ export interface ExplorerReasoningState {
     trace: ExplorerReasoningAttempt[];
     toolCalls: number;
     maxToolCalls: number;
-    submitted: boolean;
 }
 
 export interface ExplorerReasoningTools {
     tools: ReasoningToolDefinition[];
+}
+
+export interface ExplorerReasoningToolOptions {
+    allowedActions: readonly ExplorerActionName[];
+    terminalActions: readonly ExplorerActionName[];
+    maxResults: number;
 }
 
 export class ExplorerReasoningLimitError extends Error {
@@ -45,19 +50,29 @@ export class ExplorerReasoningLimitError extends Error {
 export function createExplorerReasoningState(
     maxToolCalls: number,
 ): ExplorerReasoningState {
-    return { trace: [], toolCalls: 0, maxToolCalls, submitted: false };
+    return {
+        trace: [],
+        toolCalls: 0,
+        maxToolCalls,
+    };
 }
 
 export function createExplorerReasoningTools(
     dispatcher: ExplorerActionDispatcher,
     state: ExplorerReasoningState,
+    options: ExplorerReasoningToolOptions,
 ): ExplorerReasoningTools {
+    const allowedActions = new Set(options.allowedActions);
+    const terminalActions = new Set(options.terminalActions);
     return {
         tools: [
             {
                 name: EXECUTE_ACTION_TOOL,
                 description: `Execute the next ${EXPLORER_AGENT_NAME} typed action through the TypeAgent dispatcher.`,
-                inputSchema: reasoningInputSchema(),
+                inputSchema: reasoningInputSchema(
+                    options.allowedActions,
+                    options.maxResults,
+                ),
                 handler: async (args) => {
                     reserveReasoningToolCall(state);
                     const actionName = stringValue(args.actionName);
@@ -65,6 +80,11 @@ export function createExplorerReasoningTools(
                         if (!isExplorerActionName(actionName)) {
                             return failure(
                                 `Unknown Explorer action: ${actionName ?? "unnamed"}; ${describeArgumentShape(args)}`,
+                            );
+                        }
+                        if (!allowedActions.has(actionName)) {
+                            return failure(
+                                `Explorer action ${actionName} is not available in this reasoning phase`,
                             );
                         }
                         const parameters = recordValue(args.parameters);
@@ -78,20 +98,22 @@ export function createExplorerReasoningTools(
                             actionName,
                             parameters,
                         );
-                        state.submitted ||= result.submitted;
                         return result.isError
                             ? failure(result.text)
                             : success(result.text);
                     });
                 },
                 isTerminal: (args, result) => {
-                    const text = result.content
-                        .map((item) => item.text)
-                        .join("\n");
+                    if (result.isError === true) {
+                        return result.content
+                            .map((item) => item.text)
+                            .join("\n")
+                            .startsWith(REPOSITORY_BUDGET_EXHAUSTED);
+                    }
+                    const actionName = stringValue(args.actionName);
                     return (
-                        (result.isError !== true && state.submitted) ||
-                        (result.isError === true &&
-                            text.startsWith(REPOSITORY_BUDGET_EXHAUSTED))
+                        isExplorerActionName(actionName) &&
+                        terminalActions.has(actionName)
                     );
                 },
             },
@@ -133,17 +155,20 @@ async function traced(
     }
 }
 
-function reasoningInputSchema(): object {
-    return {
-        oneOf: [
-            actionSchema(DISCOVER_REPOSITORY_ACTION),
-            actionSchema(REFINE_REPOSITORY_ACTION),
-            actionSchema(SUBMIT_EXPLORATION_ACTION),
-        ],
-    };
+function reasoningInputSchema(
+    allowedActions: readonly ExplorerActionName[],
+    maxResults: number,
+): object {
+    const schemas = allowedActions.map((actionName) =>
+        actionSchema(actionName, maxResults),
+    );
+    return schemas.length === 1 ? schemas[0] : { oneOf: schemas };
 }
 
-function actionSchema(actionName: ExplorerActionName): object {
+function actionSchema(
+    actionName: ExplorerActionName,
+    maxResults: number,
+): object {
     const parameters =
         actionName === SUBMIT_EXPLORATION_ACTION
             ? {
@@ -153,14 +178,30 @@ function actionSchema(actionName: ExplorerActionName): object {
                       locations: {
                           type: "array",
                           minItems: 1,
-                          maxItems: 6,
+                          maxItems: maxResults,
+                          description:
+                              "The complete high-confidence set of independently evidenced change-bearing blocks. Include each grounded plausible site when evidence remains ambiguous, plus companion files or multiple blocks when the request or observed dependency indicates that they must change.",
                           items: {
                               type: "object",
                               additionalProperties: false,
                               properties: {
-                                  path: { type: "string" },
-                                  startLine: { type: "integer" },
-                                  endLine: { type: "integer" },
+                                  path: {
+                                      type: "string",
+                                      description:
+                                          "Repository-relative path containing the change-bearing block.",
+                                  },
+                                  startLine: {
+                                      type: "integer",
+                                      minimum: 1,
+                                      description:
+                                          "First line of the complete enclosing change-bearing block.",
+                                  },
+                                  endLine: {
+                                      type: "integer",
+                                      minimum: 1,
+                                      description:
+                                          "Last line of the complete enclosing change-bearing block.",
+                                  },
                               },
                               required: ["path", "startLine", "endLine"],
                           },

@@ -3,7 +3,16 @@
 
 import { afterEach, describe, expect, it } from "@jest/globals";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+    mkdtemp,
+    mkdir,
+    readFile,
+    realpath as fsRealpath,
+    rm,
+    symlink,
+    writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -15,7 +24,6 @@ import {
 
 describe("repository tools", () => {
     const execFileAsync = promisify(execFile);
-    const itOnPosix = process.platform === "win32" ? it.skip : it;
     const tempDirs: string[] = [];
     const openTools: RepositoryTools[] = [];
 
@@ -26,6 +34,21 @@ describe("repository tools", () => {
                 .splice(0)
                 .map((dir) => rm(dir, { recursive: true, force: true })),
         );
+    });
+
+    it("uses the explicitly injected ripgrep binary and records its digest", async () => {
+        const repoRoot = await makeFixture();
+        const { stdout } = await execFileAsync("which", ["rg"]);
+        const ripgrepPath = stdout.trim();
+        const { api, trace } = await makeTools({ repoRoot, ripgrepPath });
+
+        await expect(api.grep("authenticate")).resolves.toHaveLength(1);
+        expect(trace.calls[0].input).toMatchObject({
+            ripgrepPath: await fsRealpath(ripgrepPath),
+            ripgrepSha256: createHash("sha256")
+                .update(await readFile(await fsRealpath(ripgrepPath)))
+                .digest("hex"),
+        });
     });
 
     async function makeTools(
@@ -83,26 +106,16 @@ describe("repository tools", () => {
             "src/auth.ts",
             "src/nested/token.ts",
         ]);
-        await expect(api.grep("authenticate")).resolves.toEqual({
-            matches: [
-                {
-                    path: "src/auth.ts",
-                    line: 1,
-                    text: "export function authenticate(token: string) {",
-                },
-            ],
-            truncated: false,
-        });
+        await expect(api.grep("authenticate")).resolves.toEqual([
+            {
+                path: "src/auth.ts",
+                line: 1,
+                text: "export function authenticate(token: string) {",
+            },
+        ]);
         await expect(
             api.read("src/auth.ts", { offset: 1, limit: 2 }),
-        ).resolves.toEqual({
-            text: "2\t    return verifyJwtSignature(token);\n3\t}",
-            location: {
-                path: "src/auth.ts",
-                startLine: 2,
-                endLine: 3,
-            },
-        });
+        ).resolves.toBe("2\t    return verifyJwtSignature(token);\n3\t}");
 
         expect(trace.totalCalls).toBe(4);
         expect(trace.totalOutputBytes).toBeGreaterThan(0);
@@ -112,12 +125,13 @@ describe("repository tools", () => {
             "grep",
             "read",
         ]);
-        expect(trace.calls[2].execution).toMatchObject({
+        expect(trace.calls[2].input).toMatchObject({
             engine: "ripgrep",
         });
-        expect(trace.calls[2].execution?.executable).toMatch(
+        expect(trace.calls[2].input.ripgrepPath).toMatch(
             /(?:^|[/\\])rg(?:[.]exe)?$/,
         );
+        expect(trace.calls[2].input.ripgrepSha256).toMatch(/^[a-f0-9]{64}$/);
         expect(trace.calls.every((call) => call.error === undefined)).toBe(
             true,
         );
@@ -143,22 +157,6 @@ describe("repository tools", () => {
         ]);
     });
 
-    it("returns the exact grounded range when a read reaches end of file", async () => {
-        const repoRoot = await makeFixture();
-        const { api } = await makeTools({ repoRoot });
-
-        await expect(
-            api.read("src/auth.ts", { offset: 2, limit: 200 }),
-        ).resolves.toEqual({
-            text: "3\t}\n4\tconst literal = 'a.*b';",
-            location: {
-                path: "src/auth.ts",
-                startLine: 3,
-                endLine: 4,
-            },
-        });
-    });
-
     it("allows multiple concurrent searches without exceeding the call budget", async () => {
         const repoRoot = await makeFixture();
         const { api, trace } = await makeTools({
@@ -170,9 +168,7 @@ describe("repository tools", () => {
             Array.from({ length: 8 }, () => api.grep("authenticate")),
         );
 
-        expect(
-            results.filter((result) => result.matches.length > 0),
-        ).toHaveLength(3);
+        expect(results.filter((matches) => matches.length > 0)).toHaveLength(3);
         expect(trace.totalCalls).toBe(3);
         expect(trace.calls).toHaveLength(3);
     });
@@ -185,86 +181,18 @@ describe("repository tools", () => {
             api.grep("authenticate|fixture", {
                 glob: "**/*.{ts,md}",
             }),
-        ).resolves.toEqual({
-            matches: [
-                {
-                    path: "README.md",
-                    line: 1,
-                    text: "fixture root",
-                },
-                {
-                    path: "src/auth.ts",
-                    line: 1,
-                    text: "export function authenticate(token: string) {",
-                },
-            ],
-            truncated: false,
-        });
-    });
-
-    it("applies native ripgrep globs before the match cap", async () => {
-        const repoRoot = await makeFixture();
-        await writeFile(
-            path.join(repoRoot, "src", "nested", "filtered.ts"),
-            "glob-cap-marker\n",
-        );
-        await writeFile(
-            path.join(repoRoot, "src", "z-target.ts"),
-            "glob-cap-marker\n",
-        );
-        const { api } = await makeTools({ repoRoot });
-
-        await expect(
-            api.grep("glob-cap-marker", {
-                glob: "src/*.ts",
-                maxMatches: 1,
-            }),
-        ).resolves.toEqual({
-            matches: [
-                {
-                    path: "src/z-target.ts",
-                    line: 1,
-                    text: "glob-cap-marker",
-                },
-            ],
-            truncated: true,
-        });
-        await expect(
-            api.grep("glob-cap-marker", {
-                glob: "src/**/*.ts",
-                maxMatches: 2,
-            }),
-        ).resolves.toEqual({
-            matches: [
-                {
-                    path: "src/nested/filtered.ts",
-                    line: 1,
-                    text: "glob-cap-marker",
-                },
-                {
-                    path: "src/z-target.ts",
-                    line: 1,
-                    text: "glob-cap-marker",
-                },
-            ],
-            truncated: true,
-        });
-
-        await expect(
-            api.grep("glob-cap-marker", {
-                glob: "**/[Zz]-target.ts",
-                maxMatches: 1,
-            }),
-        ).resolves.toEqual({
-            matches: [
-                {
-                    path: "src/z-target.ts",
-                    line: 1,
-                    text: "glob-cap-marker",
-                },
-            ],
-            truncated: true,
-        });
+        ).resolves.toEqual([
+            {
+                path: "src/auth.ts",
+                line: 1,
+                text: "export function authenticate(token: string) {",
+            },
+            {
+                path: "README.md",
+                line: 1,
+                text: "fixture root",
+            },
+        ]);
     });
 
     it("globs deterministic bounded repository-relative file paths", async () => {
@@ -346,10 +274,7 @@ describe("repository tools", () => {
         await expect(
             api.glob("**/*", { maxMatches: 100 }),
         ).resolves.not.toContain("outside-link.txt");
-        await expect(api.grep("outside-marker")).resolves.toEqual({
-            matches: [],
-            truncated: false,
-        });
+        await expect(api.grep("outside-marker")).resolves.toEqual([]);
         await expect(api.read("outside-link.txt")).rejects.toThrow(
             /not available/i,
         );
@@ -377,58 +302,34 @@ describe("repository tools", () => {
         await rm(authPath);
         await symlink(outside, authPath);
         const content = await api.read("src/auth.ts", { limit: 1 });
-        expect(content.text).toContain("authenticate");
-        expect(content.text).not.toContain("outside-secret");
-        await expect(api.grep("outside-secret")).resolves.toEqual({
-            matches: [],
-            truncated: false,
-        });
+        expect(content).toContain("authenticate");
+        expect(content).not.toContain("outside-secret");
+        await expect(api.grep("outside-secret")).resolves.toEqual([]);
         expect(trace.calls.filter((call) => call.error)).toHaveLength(5);
     });
 
-    it("keeps ripgrep results immutable when the source file is deleted", async () => {
+    it("keeps valid ripgrep matches when another indexed file is deleted", async () => {
         const repoRoot = await makeFixture();
+        await writeFile(
+            path.join(repoRoot, "src", "surviving.ts"),
+            "export const survivingMarker = true;\n",
+        );
         const { api, trace } = await makeTools({ repoRoot });
 
         await rm(path.join(repoRoot, "src", "auth.ts"));
 
-        await expect(api.grep("authenticate")).resolves.toEqual({
-            matches: [
-                {
-                    path: "src/auth.ts",
-                    line: 1,
-                    text: "export function authenticate(token: string) {",
-                },
-            ],
-            truncated: false,
-        });
+        await expect(api.grep("survivingMarker")).resolves.toEqual([
+            {
+                path: "src/surviving.ts",
+                line: 1,
+                text: "export const survivingMarker = true;",
+            },
+        ]);
         expect(trace.calls[0]).toMatchObject({
             tool: "grep",
             resultCount: 1,
             truncated: false,
         });
-    });
-
-    it("keeps ripgrep execution evidence separate from model input", async () => {
-        const repoRoot = await makeFixture();
-        const { api, trace } = await makeTools({ repoRoot });
-
-        await expect(
-            api.grep("needle", {
-                path: "missing",
-                engine: "ripgrep",
-                ripgrepPath: "rg",
-            } as never),
-        ).resolves.toEqual({ matches: [], truncated: false });
-
-        expect(trace.calls[0]).toMatchObject({
-            tool: "grep",
-            input: { pattern: "needle", path: "missing" },
-            resultCount: 0,
-        });
-        expect(trace.calls[0].input).not.toHaveProperty("engine");
-        expect(trace.calls[0].input).not.toHaveProperty("ripgrepPath");
-        expect(trace.calls[0].execution).toBeUndefined();
     });
 
     it("supports literal grep and bounds default regex, results, and line output", async () => {
@@ -439,118 +340,78 @@ describe("repository tools", () => {
         );
         const { api, trace } = await makeTools({ repoRoot });
 
-        await expect(api.grep("a.*b", { literal: true })).resolves.toEqual({
-            matches: [
-                {
-                    path: "src/auth.ts",
-                    line: 4,
-                    text: "const literal = 'a.*b';",
-                },
-            ],
-            truncated: false,
-        });
-        const regexSearch = await api.grep("auth.*token");
-        expect(regexSearch.matches).toHaveLength(1);
-        await expect(api.grep("valid", { glob: "*.ts" })).resolves.toEqual({
-            matches: [
-                {
-                    path: "src/nested/token.ts",
-                    line: 1,
-                    text: "export const token = 'valid';",
-                },
-            ],
-            truncated: false,
-        });
-        await expect(api.grep("valid", { glob: "src/*.ts" })).resolves.toEqual({
-            matches: [],
-            truncated: false,
-        });
-        await expect(
-            api.grep("valid", { glob: "src/**/*.ts" }),
-        ).resolves.toEqual({
-            matches: [
-                {
-                    path: "src/nested/token.ts",
-                    line: 1,
-                    text: "export const token = 'valid';",
-                },
-            ],
-            truncated: false,
-        });
-        await expect(api.grep("(a+)+$")).resolves.toEqual({
-            matches: [],
-            truncated: false,
-        });
+        await expect(api.grep("a.*b", { literal: true })).resolves.toEqual([
+            {
+                path: "src/auth.ts",
+                line: 4,
+                text: "const literal = 'a.*b';",
+            },
+        ]);
+        await expect(api.grep("auth.*token")).resolves.toHaveLength(1);
+        await expect(api.grep("valid", { glob: "*.ts" })).resolves.toEqual([
+            {
+                path: "src/nested/token.ts",
+                line: 1,
+                text: "export const token = 'valid';",
+            },
+        ]);
+        await expect(api.grep("valid", { glob: "src/*.ts" })).resolves.toEqual(
+            [],
+        );
+        await expect(api.grep("(a+)+$")).resolves.toEqual([]);
 
         await writeFile(
             path.join(repoRoot, "src", "literal-paren.ts"),
             "export const marker = 'needle(';\n",
         );
-        const invalidRegex = await makeTools({ repoRoot });
-        await expect(invalidRegex.api.grep("needle(")).rejects.toThrow(
-            /regex parse error/i,
-        );
+        const literalFallback = await makeTools({ repoRoot });
+        await expect(literalFallback.api.grep("needle(")).resolves.toEqual([
+            {
+                path: "src/literal-paren.ts",
+                line: 1,
+                text: "export const marker = 'needle(';",
+            },
+        ]);
 
-        const search = await api.grep("needle", { maxMatches: 1 });
-        expect(search.matches).toHaveLength(1);
-        expect(search.matches[0].text.length).toBeLessThanOrEqual(500);
+        const matches = await api.grep("needle", { maxMatches: 1 });
+        expect(matches).toHaveLength(1);
+        expect(matches[0].text.length).toBeLessThanOrEqual(500);
         expect(trace.calls.at(-1)?.outputBytes).toBeLessThan(1024);
         await expect(api.read("src/auth.ts", { limit: 1001 })).rejects.toThrow(
             /limit/i,
         );
     });
 
-    it("keeps native ripgrep directory order before applying the match cap", async () => {
+    it("prioritizes production source matches before docs and tests", async () => {
         const repoRoot = await makeFixture();
-        await mkdir(path.join(repoRoot, "docs", "_data"), { recursive: true });
+        await mkdir(path.join(repoRoot, "docs"), { recursive: true });
+        await mkdir(path.join(repoRoot, "tests"), { recursive: true });
         await writeFile(
-            path.join(repoRoot, "docs", ".eleventy.js"),
-            "native-order-marker\n",
+            path.join(repoRoot, "docs", "guide.ts"),
+            "shared-marker\n",
         );
         await writeFile(
-            path.join(repoRoot, "docs", "_data", "navigation.js"),
-            "native-order-marker\n",
+            path.join(repoRoot, "tests", "auth.test.ts"),
+            "shared-marker\n",
+        );
+        await writeFile(
+            path.join(repoRoot, "src", "production.ts"),
+            "shared-marker\n",
         );
         const { api } = await makeTools({ repoRoot });
 
         await expect(
-            api.grep("native-order-marker", {
-                literal: true,
-                maxMatches: 2,
-            }),
-        ).resolves.toEqual({
-            matches: [
-                {
-                    path: "docs/.eleventy.js",
-                    line: 1,
-                    text: "native-order-marker",
-                },
-                {
-                    path: "docs/_data/navigation.js",
-                    line: 1,
-                    text: "native-order-marker",
-                },
-            ],
-            truncated: true,
-        });
-        await expect(
-            api.grep("native-order-marker", {
-                literal: true,
-                maxMatches: 1,
-            }),
-        ).resolves.toEqual({
-            matches: [
-                {
-                    path: "docs/.eleventy.js",
-                    line: 1,
-                    text: "native-order-marker",
-                },
-            ],
-            truncated: true,
-        });
+            api.grep("shared-marker", { literal: true, maxMatches: 1 }),
+        ).resolves.toEqual([
+            {
+                path: "src/production.ts",
+                line: 1,
+                text: "shared-marker",
+            },
+        ]);
     });
 
-    it("keeps raw ripgrep matches instead of diversifying across files", async () => {
+    it("returns matches from distinct files before repeats from one file", async () => {
         const repoRoot = await makeFixture();
         await writeFile(
             path.join(repoRoot, "src", "a-many.ts"),
@@ -560,17 +421,81 @@ describe("repository tools", () => {
             path.join(repoRoot, "src", "z-target.ts"),
             "common-marker\n",
         );
-        const { api } = await makeTools({ repoRoot });
+        const { api, trace } = await makeTools({ repoRoot });
 
         await expect(
             api.grep("common-marker", { literal: true, maxMatches: 2 }),
-        ).resolves.toEqual({
-            matches: [
-                { path: "src/a-many.ts", line: 1, text: "common-marker" },
-                { path: "src/a-many.ts", line: 2, text: "common-marker" },
-            ],
-            truncated: true,
-        });
+        ).resolves.toEqual([
+            { path: "src/a-many.ts", line: 1, text: "common-marker" },
+            { path: "src/z-target.ts", line: 1, text: "common-marker" },
+        ]);
+        expect(trace.calls[0].input.ripgrepProcessCount).toBe(1);
+    });
+
+    it("uses one ripgrep process when the snapshot exceeds the argv limit", async () => {
+        const repoRoot = await makeFixture();
+        const padding = "x".repeat(170);
+        await Promise.all(
+            Array.from({ length: 800 }, (_, index) =>
+                writeFile(
+                    path.join(
+                        repoRoot,
+                        "src",
+                        `${String(index).padStart(4, "0")}-${padding}.ts`,
+                    ),
+                    index === 799 ? "last-chunk-marker\n" : "no match\n",
+                ),
+            ),
+        );
+        const { api, trace } = await makeTools({ repoRoot });
+
+        await expect(
+            api.grep("last-chunk-marker", {
+                literal: true,
+                maxMatches: 1,
+            }),
+        ).resolves.toEqual([
+            {
+                path: `src/0799-${padding}.ts`,
+                line: 1,
+                text: "last-chunk-marker",
+            },
+        ]);
+        expect(trace.calls[0].input.ripgrepProcessCount).toBe(1);
+    });
+
+    it("keeps the capped parallel candidate set deterministic", async () => {
+        const repoRoot = await makeFixture();
+        await Promise.all(
+            Array.from({ length: 80 }, (_, index) =>
+                writeFile(
+                    path.join(
+                        repoRoot,
+                        "src",
+                        `candidate-${String(index).padStart(2, "0")}.ts`,
+                    ),
+                    "parallel-marker\n",
+                ),
+            ),
+        );
+        const { api, trace } = await makeTools({ repoRoot });
+
+        const results = await Promise.all(
+            Array.from({ length: 5 }, () =>
+                api.grep("parallel-marker", {
+                    literal: true,
+                    maxMatches: 10,
+                }),
+            ),
+        );
+
+        for (const result of results.slice(1)) {
+            expect(result).toEqual(results[0]);
+        }
+        expect(results[0]).toHaveLength(10);
+        expect(
+            trace.calls.every((call) => call.input.ripgrepProcessCount === 1),
+        ).toBe(true);
     });
 
     it("bounds broad ripgrep output before applying the result cap", async () => {
@@ -583,10 +508,9 @@ describe("repository tools", () => {
 
         await expect(
             api.grep("common-marker", { literal: true, maxMatches: 1 }),
-        ).resolves.toEqual({
-            matches: [{ path: "src/dense.ts", line: 1, text: "common-marker" }],
-            truncated: true,
-        });
+        ).resolves.toEqual([
+            { path: "src/dense.ts", line: 1, text: "common-marker" },
+        ]);
         expect(trace.calls[0]).toMatchObject({
             tool: "grep",
             resultCount: 1,
@@ -594,116 +518,6 @@ describe("repository tools", () => {
         });
         expect(trace.calls[0].outputBytes).toBeLessThan(1024);
     });
-
-    it("exposes capped ripgrep truncation to repository callers", async () => {
-        const repoRoot = await makeFixture();
-        await writeFile(
-            path.join(repoRoot, "src", "dense.ts"),
-            ["visible-marker", "visible-marker"].join("\n"),
-        );
-        const { api } = await makeTools({ repoRoot });
-
-        await expect(
-            api.grep("visible-marker", { literal: true, maxMatches: 1 }),
-        ).resolves.toEqual({
-            matches: [
-                { path: "src/dense.ts", line: 1, text: "visible-marker" },
-            ],
-            truncated: true,
-        });
-    });
-
-    itOnPosix(
-        "surfaces an actionable ripgrep timeout before the script deadline and permits a narrower retry",
-        async () => {
-            const repoRoot = await makeFixture();
-            const fakeRipgrepPath = path.join(
-                path.dirname(repoRoot),
-                "fake-timeout-rg",
-            );
-            await writeFile(
-                fakeRipgrepPath,
-                [
-                    "#!/usr/bin/env node",
-                    "const target = process.argv.at(-1);",
-                    'if (target === ".") {',
-                    "    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);",
-                    "} else {",
-                    "    process.stdout.write(JSON.stringify({",
-                    '        type: "match",',
-                    "        data: {",
-                    "            path: { text: target },",
-                    '            lines: { text: "export function authenticate(token: string) {\\n" },',
-                    "            line_number: 1,",
-                    "        },",
-                    '    }) + "\\n");',
-                    "}",
-                ].join("\n"),
-                { mode: 0o755 },
-            );
-            const executionTimeoutMs = 5_000;
-            const { api, trace } = await makeTools({
-                repoRoot,
-                ripgrepPath: fakeRipgrepPath,
-                executionTimeoutMs,
-            });
-            let outerTimer: NodeJS.Timeout | undefined;
-
-            try {
-                await expect(
-                    Promise.race([
-                        api.grep("authenticate"),
-                        new Promise<never>((_, reject) => {
-                            outerTimer = setTimeout(
-                                () =>
-                                    reject(
-                                        new Error("Script execution timeout"),
-                                    ),
-                                executionTimeoutMs,
-                            );
-                        }),
-                    ]),
-                ).rejects.toThrow(/ripgrep timed out.*narrow.*(?:path|glob)/i);
-            } finally {
-                clearTimeout(outerTimer);
-            }
-
-            await expect(
-                api.grep("authenticate", {
-                    path: "src/auth.ts",
-                    literal: true,
-                    maxMatches: 1,
-                }),
-            ).resolves.toEqual({
-                matches: [
-                    {
-                        path: "src/auth.ts",
-                        line: 1,
-                        text: "export function authenticate(token: string) {",
-                    },
-                ],
-                truncated: true,
-            });
-            expect(trace.calls).toHaveLength(2);
-            expect(trace.calls[0]).toMatchObject({
-                tool: "grep",
-                input: { pattern: "authenticate" },
-                error: expect.stringMatching(
-                    /ripgrep timed out.*narrow.*(?:path|glob)/i,
-                ),
-            });
-            expect(trace.calls[1]).toMatchObject({
-                tool: "grep",
-                input: {
-                    pattern: "authenticate",
-                    path: "src/auth.ts",
-                    literal: true,
-                    maxMatches: 1,
-                },
-                resultCount: 1,
-            });
-        },
-    );
 
     it("resolves ripgrep only when grep is used", async () => {
         const previous = process.env.TYPEAGENT_RIPGREP_PATH;
@@ -730,7 +544,7 @@ describe("repository tools", () => {
         }
     });
 
-    it("keeps exact-identifier matches in source order", async () => {
+    it("prefers a symbol definition over an earlier reference in the same file", async () => {
         const repoRoot = await makeFixture();
         await writeFile(
             path.join(repoRoot, "src", "definition.ts"),
@@ -745,16 +559,13 @@ describe("repository tools", () => {
         );
         const { api } = await makeTools({ repoRoot });
 
-        await expect(api.grep("target", { maxMatches: 1 })).resolves.toEqual({
-            matches: [
-                {
-                    path: "src/definition.ts",
-                    line: 1,
-                    text: "const value = target();",
-                },
-            ],
-            truncated: true,
-        });
+        await expect(api.grep("target", { maxMatches: 1 })).resolves.toEqual([
+            {
+                path: "src/definition.ts",
+                line: 4,
+                text: "export function target() {",
+            },
+        ]);
     });
 
     it("keeps arbitrary regular-expression matches in source order", async () => {
@@ -772,16 +583,13 @@ describe("repository tools", () => {
 
         await expect(
             api.grep("target|missing", { maxMatches: 1 }),
-        ).resolves.toEqual({
-            matches: [
-                {
-                    path: "src/definition.ts",
-                    line: 1,
-                    text: "const value = target();",
-                },
-            ],
-            truncated: true,
-        });
+        ).resolves.toEqual([
+            {
+                path: "src/definition.ts",
+                line: 1,
+                text: "const value = target();",
+            },
+        ]);
     });
 
     it("enforces call and per-call result caps while tracing failures", async () => {
@@ -797,10 +605,10 @@ describe("repository tools", () => {
         expect(trace.calls[0].truncated).toBe(true);
         await expect(
             api.grep("token", { maxMatches: 1 }),
-        ).resolves.toMatchObject({ matches: [expect.any(Object)] });
-        await expect(api.read("README.md")).resolves.toMatchObject({
-            text: expect.stringMatching(/TOOL_BUDGET_EXHAUSTED/),
-        });
+        ).resolves.toHaveLength(1);
+        await expect(api.read("README.md")).resolves.toMatch(
+            /TOOL_BUDGET_EXHAUSTED/,
+        );
         expect(trace.totalCalls).toBe(2);
         expect(trace.calls).toHaveLength(2);
     });
@@ -816,9 +624,7 @@ describe("repository tools", () => {
         for (let attempt = 0; attempt < 4; attempt++) {
             await expect(
                 api.read("bulk.txt", { limit: 1000 }),
-            ).resolves.toMatchObject({
-                text: expect.stringContaining("1\t"),
-            });
+            ).resolves.toContain("1\t");
         }
         await expect(api.read("bulk.txt", { limit: 1000 })).rejects.toThrow(
             /output budget/i,

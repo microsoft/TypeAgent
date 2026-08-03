@@ -15,13 +15,14 @@ import { validateAndFormatLocations } from "./citationFormatter.js";
 import {
     createRepositoryTools,
     type RepositoryObservation,
+    type RepositoryToolTrace,
     type RepositoryTools,
 } from "./script/repositoryApi.js";
 import type { LanguageServerOptions } from "./script/languageServer.js";
 import { generateSandboxDeclarations } from "./script/sandboxDeclarations.js";
 import { createExploreScriptExecutor } from "./script/scriptExecutor.js";
 import {
-    hasExploreRepositoryCall,
+    callsRepositoryTool,
     transpileExploreScript,
     validateExploreScript,
 } from "./script/scriptValidator.js";
@@ -41,12 +42,15 @@ const MIN_PROGRAM_EXECUTIONS = 2;
 const MAX_PROGRAM_EXECUTIONS = 2;
 export const REFINEMENT_RESERVED_CALLS = 4;
 export const MAX_REFINEMENT_READ_LINES = 200;
+const MAX_PROGRAM_READ_LINES = 1_000;
 const MAX_ACTION_RESULT_CHARS = 40_000;
-const MAX_DISCOVERY_READ_LINES = 200;
+const MAX_DISCOVERY_ACTION_RESULT_CHARS = 20_000;
+const MAX_SUBMISSION_CONTEXT_CHARS = 16_000;
+const MAX_SUBMISSION_CANDIDATE_CHARS = 4_000;
+const MAX_SUBMISSION_GREP_CHARS = 4_000;
 const MAX_RESULT_MESSAGE_CHARS = 1_000;
 const MAX_RESULT_PATH_CHARS = 1_000;
-const MAX_CALL_SUMMARY_STRING_CHARS = 1_000;
-const MAX_DISCOVERY_RESPONSE_LINES = 120;
+const MAX_DISCOVERY_RESPONSE_LINES = 240;
 const MAX_EXACT_RESPONSE_LINES = 400;
 const CONTEXT_LINES_AROUND_GREP = 4;
 
@@ -54,7 +58,6 @@ type RepositoryProgramPhase = "discover" | "refine";
 
 export interface ExplorerActionSessionOptions {
     repoRoot: string;
-    ripgrepPath?: string;
     query: string;
     maxResults: number;
     maxToolCalls: number;
@@ -72,11 +75,11 @@ export class ExplorerActionSession {
     private readonly actionAttempts: ExplorerActionAttempt[] = [];
     private programAttempts = 0;
     private groundingObservations: RepositoryObservation[] = [];
-    private carriedRefinementReads: RepositoryObservation[] = [];
-    private refinementRecoveryPending = false;
+    private visibleGroundingObservations: RepositoryObservation[] = [];
+    private candidateLocations: CompactProgramLocation[] = [];
+    private evidenceCompacted = false;
     private submitted:
         | {
-              actionName: typeof SUBMIT_EXPLORATION_ACTION;
               text: string;
               citationCount: number;
               truncated: boolean;
@@ -98,10 +101,6 @@ export class ExplorerActionSession {
             await createRepositoryTools({
                 repoRoot: options.repoRoot,
                 maxCalls: options.maxToolCalls,
-                ...(options.ripgrepPath
-                    ? { ripgrepPath: options.ripgrepPath }
-                    : {}),
-                executionTimeoutMs: options.executionTimeoutMs,
                 ...(options.lsp ? { lsp: options.lsp } : {}),
             }),
         );
@@ -159,26 +158,17 @@ export class ExplorerActionSession {
     }
 
     public snapshot(): ExplorerSessionSnapshot {
-        const calls = this.repository.trace.calls.map(
-            ({ discarded: _discarded, ...call }) => ({ ...call }),
-        );
         return {
             submitted: this.submitted !== undefined,
-            ...(this.submitted
-                ? { submissionAction: this.submitted.actionName }
-                : {}),
             programAttempts: this.programAttempts,
             observationCount: this.repository.observations.length,
             actionAttempts: this.actionAttempts.map((attempt) => ({
                 ...attempt,
             })),
             toolTrace: {
-                calls,
-                totalCalls: calls.length,
-                totalOutputBytes: calls.reduce(
-                    (total, call) => total + call.outputBytes,
-                    0,
-                ),
+                calls: this.repository.trace.calls.map((call) => ({ ...call })),
+                totalCalls: this.repository.trace.totalCalls,
+                totalOutputBytes: this.repository.trace.totalOutputBytes,
             },
             ...(this.submitted
                 ? {
@@ -190,6 +180,26 @@ export class ExplorerActionSession {
                   }
                 : {}),
         };
+    }
+
+    public submissionContext(): string {
+        if (this.programAttempts < MIN_PROGRAM_EXECUTIONS) {
+            throw new Error(
+                "Complete discovery and refinement before building submission evidence",
+            );
+        }
+        return formatSubmissionContext(
+            this.candidateLocations,
+            this.groundingObservations,
+        ).text;
+    }
+
+    public remainingRepositoryCalls(): number {
+        return Math.max(
+            0,
+            this.options.maxToolCalls -
+                repositoryEvidenceCallCount(this.repository.trace),
+        );
     }
 
     private async runRepositoryProgram(
@@ -214,8 +224,8 @@ export class ExplorerActionSession {
         }
         if (
             phase === "refine" &&
-            this.repository.trace.totalCalls >= this.options.maxToolCalls &&
-            this.carriedRefinementReads.length === 0
+            repositoryEvidenceCallCount(this.repository.trace) >=
+                this.options.maxToolCalls
         ) {
             return errorResult(
                 `${REPOSITORY_BUDGET_EXHAUSTED}: no calls remain for an exact candidate read`,
@@ -237,34 +247,21 @@ export class ExplorerActionSession {
         }
         if (
             phase === "refine" &&
-            this.carriedRefinementReads.length === 0 &&
-            !hasExploreRepositoryCall(rawProgram, "read")
-        ) {
-            return errorResult(
-                "The refine program must call repo.read before execution; it must read exact candidate context before submission",
-            );
-        }
-        if (
-            phase === "refine" &&
             this.options.lsp &&
-            !this.hasCompletedLspCall() &&
-            !hasExploreRepositoryCall(rawProgram, "lsp")
+            !this.hasAdoptedLspNavigation() &&
+            !callsRepositoryTool(rawProgram, "lsp")
         ) {
             return errorResult(
-                "The refine program must call repo.lsp before execution",
+                "The refine program must call repo.lsp before execution; no repository calls were consumed",
             );
         }
         const callLimit =
             phase === "discover"
                 ? this.options.maxToolCalls - REFINEMENT_RESERVED_CALLS
-                : this.refinementCallLimit();
-        const hadCarriedRefinementReads =
-            phase === "refine" && this.carriedRefinementReads.length > 0;
+                : this.options.maxToolCalls;
         this.repository.allowCallsThrough(
             Math.max(1, Math.min(this.options.maxToolCalls, callLimit)),
-            phase === "refine"
-                ? MAX_REFINEMENT_READ_LINES
-                : MAX_DISCOVERY_READ_LINES,
+            MAX_PROGRAM_READ_LINES,
             phase === "refine"
                 ? [
                       "ls",
@@ -274,11 +271,7 @@ export class ExplorerActionSession {
                       ...(this.options.lsp ? (["lsp"] as const) : []),
                   ]
                 : undefined,
-            phase === "refine"
-                ? { grep: 2, ...(this.options.lsp ? { lsp: 1 } : {}) }
-                : this.options.lsp
-                  ? { lsp: 1 }
-                  : undefined,
+            phase === "refine" && this.options.lsp ? { lsp: 1 } : undefined,
             phase === "refine" ? 6 : undefined,
         );
         const observationStart = this.repository.observations.length;
@@ -290,125 +283,131 @@ export class ExplorerActionSession {
             this.options.maxResults,
             this.options.executionTimeoutMs,
         );
-        const observations =
-            this.repository.observations.slice(observationStart);
-        const calls = this.repository.trace.calls
-            .slice(callStart)
-            .filter((call) => call.discarded !== true);
-        if (!execution.ok && execution.runtimeError) {
-            if (phase === "refine") {
-                this.refinementRecoveryPending = true;
+        if (!execution.ok) {
+            return errorResult(
+                execution.error ?? "Repository program execution failed",
+            );
+        }
+        let accepted = false;
+        try {
+            const observations =
+                this.repository.observations.slice(observationStart);
+            const calls = this.repository.trace.calls
+                .slice(callStart)
+                .filter((call) => call.discarded !== true);
+            const remainingRepositoryCalls = Math.max(
+                0,
+                this.options.maxToolCalls -
+                    repositoryEvidenceCallCount(this.repository.trace),
+            );
+            if (
+                phase === "refine" &&
+                !observations.some(
+                    (observation) => observation.source === "read",
+                )
+            ) {
+                const diagnostic = zeroLineReadDiagnostic(calls);
+                const message = `The ${phase} program must read exact candidate context before submission${diagnostic ? `; ${diagnostic}` : ""}`;
+                return errorResult(
+                    remainingRepositoryCalls === 0
+                        ? `${REPOSITORY_BUDGET_EXHAUSTED}: ${message}`
+                        : `${message}; ${remainingRepositoryCalls} repository calls remain`,
+                );
             }
-            return errorResult(
-                execution.error ?? "Repository program execution failed",
+            if (phase === "refine" && calls.length === 0) {
+                return errorResult(
+                    `The ${phase} program must inspect new repository evidence before submission`,
+                );
+            }
+            if (
+                phase === "refine" &&
+                this.options.lsp &&
+                !this.hasAdoptedLspNavigation()
+            ) {
+                const message =
+                    "The refine program must attempt language-server navigation before submission; retry refineRepository with a corrected program that calls repo.lsp";
+                return errorResult(
+                    remainingRepositoryCalls === 0
+                        ? `${REPOSITORY_BUDGET_EXHAUSTED}: ${message}`
+                        : `${message}; ${remainingRepositoryCalls} repository calls remain`,
+                );
+            }
+            const programResult = compactProgramResult(
+                execution.result,
+                this.options.maxResults,
             );
-        }
-        const remainingRepositoryCalls = Math.max(
-            0,
-            this.options.maxToolCalls - this.repository.trace.totalCalls,
-        );
-        const phaseObservations =
-            phase === "refine"
-                ? [...this.carriedRefinementReads, ...observations]
-                : observations;
-        if (!execution.ok && phaseObservations.length === 0) {
-            return errorResult(
-                execution.error ?? "Repository program execution failed",
+            const candidateLocations =
+                phase === "refine"
+                    ? mergeProgramLocations(
+                          programResult.locations ?? [],
+                          this.candidateLocations,
+                          this.options.maxResults * 2,
+                      )
+                    : (programResult.locations ?? []);
+            const compactedObservations = compactObservations(
+                observations,
+                phase,
+                this.repository.observations.slice(0, observationStart),
+                candidateLocations,
             );
-        }
-        if (
-            phase === "refine" &&
-            !phaseObservations.some(
-                (observation) => observation.source === "read",
-            )
-        ) {
-            this.refinementRecoveryPending = true;
-            this.prepareLspRecovery(phase, observations, calls);
-            const diagnostic = zeroLineReadDiagnostic(calls);
-            const message = `The ${phase} program must read exact candidate context before submission${diagnostic ? `; ${diagnostic}` : ""}`;
-            return errorResult(
-                remainingRepositoryCalls === 0
-                    ? `${REPOSITORY_BUDGET_EXHAUSTED}: ${message}`
-                    : `${message}; ${remainingRepositoryCalls} repository calls remain`,
+            const remainingProgramExecutions =
+                MAX_PROGRAM_EXECUTIONS - this.programAttempts - 1;
+            const payload = {
+                phase,
+                programResult,
+                repositoryCalls: this.repository.trace.totalCalls,
+                remainingRepositoryCalls,
+                remainingProgramExecutions,
+                nextAction: nextPhaseInstruction(
+                    phase,
+                    phase === "discover" &&
+                        this.options.lsp !== undefined &&
+                        !this.hasAdoptedLspNavigation(),
+                ),
+            };
+            let response = serializeActionPayload(
+                payload,
+                compactedObservations.observations,
+                compactedObservations.truncated,
+                phase === "discover"
+                    ? MAX_DISCOVERY_ACTION_RESULT_CHARS
+                    : MAX_ACTION_RESULT_CHARS,
             );
-        }
-        if (
-            phase === "refine" &&
-            calls.length === 0 &&
-            !hadCarriedRefinementReads
-        ) {
-            this.refinementRecoveryPending = true;
-            return errorResult(
-                `The ${phase} program must inspect new repository evidence before submission`,
+            let submissionContext: FormattedSubmissionContext | undefined;
+            if (
+                phase === "refine" &&
+                (this.evidenceCompacted || response.truncated)
+            ) {
+                submissionContext = formatSubmissionContext(
+                    candidateLocations,
+                    [...this.groundingObservations, ...observations],
+                );
+                response = serializeActionPayload(
+                    {
+                        ...payload,
+                        submissionEvidence: submissionContext.text,
+                    },
+                    compactedObservations.observations,
+                    compactedObservations.truncated,
+                    MAX_ACTION_RESULT_CHARS,
+                );
+            }
+            execution.accept();
+            accepted = true;
+            this.programAttempts++;
+            this.evidenceCompacted ||= response.truncated;
+            this.groundingObservations.push(...observations);
+            this.visibleGroundingObservations.push(
+                ...response.observations,
+                ...(submissionContext?.observations ?? []),
             );
+            this.candidateLocations = candidateLocations;
+            return createActionResult(response.text);
+        } finally {
+            if (!accepted) {
+                execution.discard();
+            }
         }
-        if (
-            phase === "refine" &&
-            this.options.lsp &&
-            !this.hasCompletedLspCall()
-        ) {
-            this.prepareLspRecovery(phase, observations, calls);
-            const message =
-                "The refine program must complete an error-free language-server call before submission; retry refineRepository with a program that calls repo.lsp";
-            return errorResult(
-                remainingRepositoryCalls === 0
-                    ? `${REPOSITORY_BUDGET_EXHAUSTED}: ${message}`
-                    : `${message}; ${remainingRepositoryCalls} repository calls remain`,
-            );
-        }
-        const programResult = compactProgramResult(
-            execution.result,
-            this.options.maxResults,
-        );
-        const compactedObservations = compactObservations(
-            phaseObservations,
-            phase,
-            this.repository.observations.slice(0, observationStart),
-            programResult.locations ?? [],
-        );
-        const remainingProgramExecutions =
-            MAX_PROGRAM_EXECUTIONS - (this.programAttempts + 1);
-        const payload = {
-            phase,
-            programResult,
-            repositoryCallResults: calls.map(compactRepositoryCall),
-            repositoryCalls: this.repository.trace.totalCalls,
-            remainingRepositoryCalls,
-            remainingProgramExecutions,
-            nextAction: nextPhaseInstruction(phase),
-        };
-        const response = serializeActionPayload(
-            payload,
-            compactedObservations.observations,
-            compactedObservations.truncated,
-        );
-        if (
-            phase === "refine" &&
-            programResult.locations?.some(
-                (location) =>
-                    hasProgramLocationReadOverlap(
-                        location,
-                        phaseObservations,
-                    ) &&
-                    !isProgramLocationVisible(location, [
-                        ...this.groundingObservations,
-                        ...response.observations,
-                    ]),
-            )
-        ) {
-            this.refinementRecoveryPending = true;
-            this.carryRefinementReads(phaseObservations);
-            return errorResult(
-                "The refine program returned a candidate range that could not remain fully visible in the bounded action result; retry with smaller exact candidate ranges. The validated reads are retained, so the repair program does not need another repository call",
-            );
-        }
-        this.programAttempts++;
-        this.groundingObservations.push(...response.observations);
-        if (phase === "refine") {
-            this.carriedRefinementReads = [];
-            this.refinementRecoveryPending = false;
-        }
-        return createActionResult(response.text);
     }
 
     private async submitExploration(
@@ -422,101 +421,26 @@ export class ExplorerActionSession {
                 "Complete discovery and refinement before submission",
             );
         }
-        if (this.options.lsp && !this.hasCompletedLspCall()) {
+        if (this.options.lsp && !this.hasAdoptedLspNavigation()) {
             return errorResult(
-                "TypeAgent with LSP must complete at least one error-free language-server call before submission",
+                "TypeAgent with LSP must attempt non-discarded language-server navigation before submission",
             );
         }
-        let formatted;
-        try {
-            formatted = await validateAndFormatLocations(
-                rawLocations,
-                this.options.repoRoot,
-                this.options.maxResults,
-                this.options.maxOutputChars,
-                this.groundingObservations,
-            );
-        } catch (error) {
-            const message =
-                error instanceof Error ? error.message : String(error);
-            const remainingRepositoryCalls = Math.max(
-                0,
-                this.options.maxToolCalls - this.repository.trace.totalCalls,
-            );
-            if (
-                message.startsWith("Invalid grounded location:") &&
-                remainingRepositoryCalls > 0 &&
-                this.programAttempts < MAX_PROGRAM_EXECUTIONS
-            ) {
-                throw new Error(
-                    `${message}. ${remainingRepositoryCalls} repository calls remain; invoke refineRepository to read the rejected range, then submit again`,
-                );
-            }
-            throw error;
-        }
-        this.submitted = {
-            actionName: SUBMIT_EXPLORATION_ACTION,
-            ...formatted,
-        };
+        const formatted = await validateAndFormatLocations(
+            rawLocations,
+            this.options.repoRoot,
+            this.options.maxResults,
+            this.options.maxOutputChars,
+            this.visibleGroundingObservations,
+        );
+        this.submitted = formatted;
         return createActionResult(formatted.text);
     }
 
-    private hasCompletedLspCall(): boolean {
+    public hasAdoptedLspNavigation(): boolean {
         return this.repository.trace.calls.some(
-            (call) =>
-                call.discarded !== true &&
-                call.tool === "lsp" &&
-                call.error === undefined,
+            (call) => call.discarded !== true && call.tool === "lsp",
         );
-    }
-
-    private refinementCallLimit(): number {
-        const requiredRecoveryCalls =
-            this.options.lsp && !this.hasCompletedLspCall()
-                ? this.carriedRefinementReads.length > 0
-                    ? 1
-                    : 2
-                : 1;
-        if (this.refinementRecoveryPending) {
-            return Math.min(
-                this.options.maxToolCalls,
-                this.repository.trace.totalCalls + requiredRecoveryCalls,
-            );
-        }
-        return this.options.maxToolCalls;
-    }
-
-    private prepareLspRecovery(
-        phase: RepositoryProgramPhase,
-        observations: RepositoryObservation[],
-        calls: ExplorerSessionSnapshot["toolTrace"]["calls"],
-    ): void {
-        if (
-            phase !== "refine" ||
-            !this.options.lsp ||
-            this.hasCompletedLspCall() ||
-            calls.length === 0
-        ) {
-            return;
-        }
-        this.carryRefinementReads(observations);
-        this.refinementRecoveryPending = true;
-    }
-
-    private carryRefinementReads(
-        observations: readonly RepositoryObservation[],
-    ): void {
-        for (const observation of observations) {
-            if (
-                observation.source === "read" &&
-                !this.carriedRefinementReads.some(
-                    (candidate) =>
-                        candidate.callIndex === observation.callIndex,
-                )
-            ) {
-                this.carriedRefinementReads.push(observation);
-            }
-        }
     }
 }
 
@@ -553,7 +477,7 @@ export function getExplorerActionSchema(): string {
 }
 
 export function getRepositorySandboxSchema(enableLsp = false): string {
-    return generateSandboxDeclarations(undefined, enableLsp, true);
+    return generateSandboxDeclarations(undefined, enableLsp);
 }
 
 function createAgent(initialSession?: ExplorerActionSession): AppAgent {
@@ -594,6 +518,233 @@ function compactObservation(observation: RepositoryObservation): {
     };
 }
 
+interface FormattedSubmissionContext {
+    text: string;
+    observations: RepositoryObservation[];
+}
+
+function formatSubmissionContext(
+    candidates: readonly CompactProgramLocation[],
+    observations: readonly RepositoryObservation[],
+): FormattedSubmissionContext {
+    const groups = groupSubmissionReadEvidence(observations, candidates);
+    if (groups.length === 0) {
+        throw new Error("Submission requires successful read evidence");
+    }
+    const candidateText = boundedJson(
+        candidates,
+        MAX_SUBMISSION_CANDIDATE_CHARS,
+    );
+    const basePrefix = `Advisory candidates (navigation only; they do not ground submission):\n${candidateText}\n\nSuccessful grep evidence (exact grep lines ground submission):`;
+    const readLabel =
+        "\n\nRead evidence (successful reads also ground submission):";
+    const readHeaderBudget = Math.max(
+        ...groups.map((group) => formatSubmissionReadHeader(group).length),
+    );
+    const grepBudget = Math.max(
+        0,
+        Math.min(
+            MAX_SUBMISSION_GREP_CHARS,
+            MAX_SUBMISSION_CONTEXT_CHARS -
+                basePrefix.length -
+                readLabel.length -
+                groups.length * (readHeaderBudget + 2),
+        ),
+    );
+    const grepEvidence = formatSubmissionGrepEvidence(
+        observations,
+        candidates,
+        grepBudget,
+    );
+    const prefix = `${basePrefix}\n${grepEvidence.text || "No successful grep evidence was available."}${readLabel}`;
+    const separatorChars = groups.length * 2;
+    const available =
+        MAX_SUBMISSION_CONTEXT_CHARS - prefix.length - separatorChars;
+    if (available < groups.length) {
+        throw new Error("Submission evidence metadata exceeds its size limit");
+    }
+    const groupBudget = Math.floor(available / groups.length);
+    const blocks = groups.map((group) =>
+        formatSubmissionReadGroup(group, groupBudget),
+    );
+    const result = `${prefix}\n\n${blocks.map((block) => block.text).join("\n\n")}`;
+    if (result.length > MAX_SUBMISSION_CONTEXT_CHARS) {
+        throw new Error("Submission evidence exceeds its size limit");
+    }
+    return {
+        text: result,
+        observations: [
+            ...grepEvidence.observations,
+            ...blocks.flatMap((block) => block.observations),
+        ],
+    };
+}
+
+interface SubmissionEvidenceLine {
+    path: string;
+    line: number;
+    text: string;
+    candidate: boolean;
+    order: number;
+}
+
+interface SubmissionReadGroup {
+    callIndex: number;
+    path: string;
+    lines: SubmissionEvidenceLine[];
+}
+
+function formatSubmissionGrepEvidence(
+    observations: readonly RepositoryObservation[],
+    candidates: readonly CompactProgramLocation[],
+    maxChars: number,
+): FormattedSubmissionContext {
+    const greps = observations
+        .map((observation, order) => ({ observation, order }))
+        .filter(({ observation }) => observation.source === "grep")
+        .sort(
+            (left, right) =>
+                Number(hasCandidateOverlap(right.observation, candidates)) -
+                    Number(hasCandidateOverlap(left.observation, candidates)) ||
+                submissionPathPriority(left.observation.path) -
+                    submissionPathPriority(right.observation.path) ||
+                left.order - right.order,
+        );
+    let result = "";
+    const visible: RepositoryObservation[] = [];
+    for (const { observation } of greps) {
+        const numberedLines = observation.lines
+            .map((line, index) => `${observation.startLine + index}\t${line}`)
+            .join("\n");
+        const block = `[grep callIndex=${observation.callIndex} path=${JSON.stringify(
+            observation.path,
+        )}]\n${numberedLines}`;
+        const separator = result ? "\n\n" : "";
+        if (result.length + separator.length + block.length > maxChars) {
+            continue;
+        }
+        result += separator + block;
+        visible.push(observation);
+    }
+    return { text: result, observations: visible };
+}
+
+function hasCandidateOverlap(
+    observation: RepositoryObservation,
+    candidates: readonly CompactProgramLocation[],
+): boolean {
+    return candidates.some(
+        (candidate) =>
+            candidate.path === observation.path &&
+            candidate.startLine <= observation.endLine &&
+            candidate.endLine >= observation.startLine,
+    );
+}
+
+function submissionPathPriority(fileName: string): number {
+    const parts = fileName.toLowerCase().split("/");
+    if (
+        parts.some((part) =>
+            ["doc", "docs", "example", "examples", "asset", "assets"].includes(
+                part,
+            ),
+        )
+    ) {
+        return 2;
+    }
+    return parts.some((part) =>
+        ["test", "tests", "testing", "spec", "specs"].includes(part),
+    ) ||
+        /(?:^|[._-])(test|spec)(?:[._-]|$)/iu.test(
+            path.posix.basename(fileName),
+        )
+        ? 1
+        : 0;
+}
+
+function groupSubmissionReadEvidence(
+    observations: readonly RepositoryObservation[],
+    candidates: readonly CompactProgramLocation[],
+): SubmissionReadGroup[] {
+    const groups = new Map<number, SubmissionReadGroup>();
+    let order = 0;
+    for (const observation of observations) {
+        if (observation.source !== "read") {
+            continue;
+        }
+        const group = groups.get(observation.callIndex) ?? {
+            callIndex: observation.callIndex,
+            path: observation.path,
+            lines: [],
+        };
+        const seen = new Set(group.lines.map((line) => line.line));
+        for (let index = 0; index < observation.lines.length; index++) {
+            const line = observation.startLine + index;
+            if (seen.has(line)) {
+                continue;
+            }
+            seen.add(line);
+            group.lines.push({
+                path: observation.path,
+                line,
+                text: observation.lines[index],
+                candidate: candidates.some(
+                    (candidate) =>
+                        candidate.path === observation.path &&
+                        candidate.startLine <= line &&
+                        candidate.endLine >= line,
+                ),
+                order: order++,
+            });
+        }
+        groups.set(observation.callIndex, group);
+    }
+    return [...groups.values()].sort(
+        (left, right) => left.callIndex - right.callIndex,
+    );
+}
+
+function formatSubmissionReadGroup(
+    group: SubmissionReadGroup,
+    maxChars: number,
+): FormattedSubmissionContext {
+    const header = formatSubmissionReadHeader(group);
+    if (header.length > maxChars) {
+        throw new Error(
+            `Read evidence header exceeds its per-call size limit for call ${group.callIndex}`,
+        );
+    }
+    let result = header;
+    const visible: RepositoryObservation[] = [];
+    const lines = [...group.lines].sort(
+        (left, right) =>
+            Number(right.candidate) - Number(left.candidate) ||
+            left.order - right.order,
+    );
+    for (const line of lines) {
+        const value = `\n${line.line}\t${line.text}`;
+        if (result.length + value.length > maxChars) {
+            break;
+        }
+        result += value;
+        visible.push({
+            source: "read",
+            callIndex: group.callIndex,
+            path: line.path,
+            startLine: line.line,
+            endLine: line.line,
+            lines: [line.text],
+        });
+    }
+    return { text: result, observations: visible };
+}
+
+function formatSubmissionReadHeader(group: SubmissionReadGroup): string {
+    return `[read callIndex=${group.callIndex} path=${JSON.stringify(
+        group.path,
+    )}]`;
+}
+
 function compactObservations(
     observations: RepositoryObservation[],
     phase: RepositoryProgramPhase,
@@ -613,31 +764,24 @@ function compactObservations(
     const readObservations = observations.filter(
         (observation) => observation.source === "read",
     );
-    const candidateAllocations = allocateCandidateLines(
-        readObservations,
-        candidateLocations,
-        lineBudget,
-    );
-    const readLineBudgets = distributeReadLineBudget(
-        readObservations,
-        candidateAllocations,
-        lineBudget,
+    const linesPerRead = Math.max(
+        20,
+        Math.floor(lineBudget / Math.max(1, readObservations.length)),
     );
     let truncated = false;
     const compacted = observations.flatMap((observation) => {
         if (observation.source === "grep") {
             return [compactObservation(observation)];
         }
-        const readLineBudget = readLineBudgets.get(observation) ?? 0;
-        if (observation.lines.length <= readLineBudget) {
+        if (observation.lines.length <= linesPerRead) {
             return [compactObservation(observation)];
         }
         const selected = compactReadAroundGreps(
             observation,
             relevantGreps,
-            readLineBudget,
+            linesPerRead,
             phase === "refine" ? 32 : 8,
-            candidateAllocations.get(observation),
+            candidateLocations,
         );
         if (
             selected.reduce((total, entry) => total + entry.lines.length, 0) <
@@ -654,139 +798,6 @@ function compactObservations(
         ],
         truncated,
     };
-}
-
-function allocateCandidateLines(
-    observations: RepositoryObservation[],
-    candidateLocations: readonly CompactProgramLocation[],
-    lineBudget: number,
-): Map<RepositoryObservation, CompactProgramLocation[]> {
-    const assignedLines = new Set<string>();
-    const linesByObservation = new Map<RepositoryObservation, number[]>();
-    for (const candidate of candidateLocations) {
-        for (
-            let line = candidate.startLine;
-            line <= candidate.endLine && assignedLines.size < lineBudget;
-            line++
-        ) {
-            const key = `${candidate.path}:${line}`;
-            if (assignedLines.has(key)) {
-                continue;
-            }
-            const observation = observations.find(
-                (entry) =>
-                    entry.path === candidate.path &&
-                    entry.startLine <= line &&
-                    entry.endLine >= line,
-            );
-            if (!observation) {
-                continue;
-            }
-            assignedLines.add(key);
-            const lines = linesByObservation.get(observation) ?? [];
-            lines.push(line);
-            linesByObservation.set(observation, lines);
-        }
-    }
-    return new Map(
-        [...linesByObservation].map(([observation, lines]) => [
-            observation,
-            contiguousRanges(
-                [...lines].sort((left, right) => left - right),
-            ).map(([start, end]) => ({
-                path: observation.path,
-                startLine: start,
-                endLine: end,
-            })),
-        ]),
-    );
-}
-
-function distributeReadLineBudget(
-    observations: RepositoryObservation[],
-    candidateAllocations: Map<RepositoryObservation, CompactProgramLocation[]>,
-    lineBudget: number,
-): Map<RepositoryObservation, number> {
-    const budgets = new Map(
-        observations.map((observation) => [
-            observation,
-            candidateAllocations
-                .get(observation)
-                ?.reduce(
-                    (total, location) =>
-                        total + location.endLine - location.startLine + 1,
-                    0,
-                ) ?? 0,
-        ]),
-    );
-    let remaining = Math.max(
-        0,
-        lineBudget -
-            [...budgets.values()].reduce((total, budget) => total + budget, 0),
-    );
-    while (remaining > 0) {
-        let allocated = false;
-        for (const observation of observations) {
-            const current = budgets.get(observation) ?? 0;
-            if (current >= observation.lines.length) {
-                continue;
-            }
-            budgets.set(observation, current + 1);
-            remaining--;
-            allocated = true;
-            if (remaining === 0) {
-                break;
-            }
-        }
-        if (!allocated) {
-            break;
-        }
-    }
-    return budgets;
-}
-
-function compactRepositoryCall(
-    call: ExplorerSessionSnapshot["toolTrace"]["calls"][number],
-): {
-    tool: ExplorerSessionSnapshot["toolTrace"]["calls"][number]["tool"];
-    input: Record<string, unknown>;
-    resultCount: number;
-    truncated: boolean;
-    error?: string;
-    inputTruncated?: true;
-    errorTruncated?: true;
-} {
-    const compactedInput = compactRepositoryCallInput(call.input);
-    const error = call.error?.slice(0, MAX_CALL_SUMMARY_STRING_CHARS);
-    return {
-        tool: call.tool,
-        input: compactedInput.value,
-        resultCount: call.resultCount,
-        truncated: call.truncated,
-        ...(error ? { error } : {}),
-        ...(compactedInput.truncated ? { inputTruncated: true } : {}),
-        ...(call.error !== error ? { errorTruncated: true } : {}),
-    };
-}
-
-function compactRepositoryCallInput(input: Record<string, unknown>): {
-    value: Record<string, unknown>;
-    truncated: boolean;
-} {
-    let truncated = false;
-    const value = Object.fromEntries(
-        Object.entries(input).map(([key, entry]) => {
-            if (typeof entry !== "string") {
-                return [key, entry];
-            }
-            const compacted = entry.slice(0, MAX_CALL_SUMMARY_STRING_CHARS);
-            if (compacted !== entry) {
-                truncated = true;
-            }
-            return [key, compacted];
-        }),
-    );
-    return { value, truncated };
 }
 
 function compactReadAroundGreps(
@@ -1029,6 +1040,58 @@ function compactProgramLocation(
     };
 }
 
+function mergeProgramLocations(
+    preferred: readonly CompactProgramLocation[],
+    fallback: readonly CompactProgramLocation[],
+    maxResults: number,
+): CompactProgramLocation[] {
+    const merged: CompactProgramLocation[] = [];
+    const seen = new Set<string>();
+    for (const location of [...preferred, ...fallback]) {
+        const identity = `${location.path}\0${location.startLine}\0${location.endLine}`;
+        if (seen.has(identity)) {
+            continue;
+        }
+        seen.add(identity);
+        merged.push(location);
+        if (merged.length >= maxResults) {
+            break;
+        }
+    }
+    return merged;
+}
+
+function boundedJson(value: unknown, maxChars: number): string {
+    try {
+        const serialized = JSON.stringify(value);
+        if (serialized.length <= maxChars) {
+            return serialized;
+        }
+        if (!Array.isArray(value)) {
+            return JSON.stringify({ truncated: true });
+        }
+        const items: unknown[] = [];
+        for (const item of value) {
+            const candidate = JSON.stringify({
+                items: [...items, item],
+                truncated: true,
+                totalItems: value.length,
+            });
+            if (candidate.length > maxChars) {
+                break;
+            }
+            items.push(item);
+        }
+        return JSON.stringify({
+            items,
+            truncated: true,
+            totalItems: value.length,
+        });
+    } catch {
+        return "unavailable";
+    }
+}
+
 function normalizeProgramLocationPath(value: string): string | undefined {
     const rawPath = value.trim().replaceAll("\\", "/");
     if (
@@ -1042,65 +1105,34 @@ function normalizeProgramLocationPath(value: string): string | undefined {
     return normalized === "." ? undefined : normalized;
 }
 
-function isProgramLocationVisible(
-    location: CompactProgramLocation,
-    observations: ReturnType<typeof compactObservation>[],
-): boolean {
-    let nextLine = location.startLine;
-    const ranges = observations
-        .filter(
-            (observation) =>
-                observation.source === "read" &&
-                observation.path === location.path,
-        )
-        .sort((left, right) => left.startLine - right.startLine);
-    for (const range of ranges) {
-        if (range.endLine < nextLine) {
-            continue;
-        }
-        if (range.startLine > nextLine) {
-            return false;
-        }
-        if (range.endLine >= location.endLine) {
-            return true;
-        }
-        nextLine = range.endLine + 1;
-    }
-    return false;
-}
-
-function hasProgramLocationReadOverlap(
-    location: CompactProgramLocation,
-    observations: RepositoryObservation[],
-): boolean {
-    return observations.some(
-        (observation) =>
-            observation.source === "read" &&
-            observation.path === location.path &&
-            observation.endLine >= location.startLine &&
-            observation.startLine <= location.endLine,
-    );
-}
-
-function nextPhaseInstruction(phase: RepositoryProgramPhase): string {
+function nextPhaseInstruction(
+    phase: RepositoryProgramPhase,
+    requireLsp = false,
+): string {
     switch (phase) {
         case "discover":
-            return `Invoke refineRepository using the remaining shared repository-call budget to read every evidence-indicated candidate, with at most ${MAX_REFINEMENT_READ_LINES} lines per read, and return grounded locations from that program`;
+            return requireLsp
+                ? `Invoke refineRepository with exactly one repo.lsp call followed by reads of at most ${MAX_REFINEMENT_READ_LINES} lines around the strongest candidate lines`
+                : `Invoke refineRepository with reads of at most ${MAX_REFINEMENT_READ_LINES} lines around the strongest candidate lines`;
         case "refine":
-            return "Invoke submitExploration with exact locations supported by repository reads; independently select every evidence-indicated change-bearing block and exclude unrelated surrounding lines.";
+            return "Invoke submitExploration with the exact locations most likely needing changes, wholly supported by successful repository grep or read observations.";
     }
+}
+
+function repositoryEvidenceCallCount(trace: RepositoryToolTrace): number {
+    return trace.calls.filter((call) => call.tool !== "lsp").length;
 }
 
 function serializeActionPayload(
     payload: Record<string, unknown>,
     observations: ReturnType<typeof compactObservation>[],
     initiallyTruncated = false,
+    maxChars = MAX_ACTION_RESULT_CHARS,
 ): {
     text: string;
     observations: ReturnType<typeof compactObservation>[];
+    truncated: boolean;
 } {
-    const visible: ReturnType<typeof compactObservation>[] = [];
-    let observationsTruncated = initiallyTruncated;
     const serialize = (
         values: ReturnType<typeof compactObservation>[],
         truncated: boolean,
@@ -1117,54 +1149,77 @@ function serializeActionPayload(
             observationsTruncated: truncated,
         });
 
-    if (serialize([], true).length > MAX_ACTION_RESULT_CHARS) {
+    if (serialize([], false).length > maxChars) {
         throw new Error(
-            `Explorer action metadata exceeds the ${MAX_ACTION_RESULT_CHARS}-character result limit`,
+            `Explorer action metadata exceeds the ${maxChars}-character result limit`,
         );
     }
 
-    for (const observation of observations) {
-        if (
-            serialize([...visible, observation], observationsTruncated)
-                .length <= MAX_ACTION_RESULT_CHARS
-        ) {
-            visible.push(observation);
-            continue;
-        }
-        observationsTruncated = true;
-        let low = 0;
-        let high = observation.lines.length;
-        while (low < high) {
-            const count = Math.ceil((low + high) / 2);
-            const partial = {
-                ...observation,
-                endLine: observation.startLine + count - 1,
-                lines: observation.lines.slice(0, count),
-            };
-            if (
-                serialize([...visible, partial], true).length <=
-                MAX_ACTION_RESULT_CHARS
-            ) {
-                low = count;
-            } else {
-                high = count - 1;
+    const observationsByPath = new Map<string, number[]>();
+    observations.forEach((observation, index) => {
+        const indices = observationsByPath.get(observation.path) ?? [];
+        indices.push(index);
+        observationsByPath.set(observation.path, indices);
+    });
+    const allocationOrder: number[] = [];
+    while (
+        [...observationsByPath.values()].some((indices) => indices.length > 0)
+    ) {
+        for (const indices of observationsByPath.values()) {
+            const index = indices.shift();
+            if (index !== undefined) {
+                allocationOrder.push(index);
             }
         }
-        if (low > 0) {
-            visible.push({
-                ...observation,
-                endLine: observation.startLine + low - 1,
-                lines: observation.lines.slice(0, low),
-            });
+    }
+    const visibleLineCounts = observations.map(() => 0);
+    const blocked = new Set<number>();
+    const buildVisible = () =>
+        observations.flatMap((observation, index) => {
+            const count = visibleLineCounts[index];
+            return count === 0
+                ? []
+                : [
+                      {
+                          ...observation,
+                          endLine: observation.startLine + count - 1,
+                          lines: observation.lines.slice(0, count),
+                      },
+                  ];
+        });
+    while (true) {
+        let progressed = false;
+        for (const index of allocationOrder) {
+            if (
+                blocked.has(index) ||
+                visibleLineCounts[index] >= observations[index].lines.length
+            ) {
+                continue;
+            }
+            visibleLineCounts[index]++;
+            if (serialize(buildVisible(), false).length <= maxChars) {
+                progressed = true;
+            } else {
+                visibleLineCounts[index]--;
+                blocked.add(index);
+            }
         }
-        break;
+        if (!progressed) {
+            break;
+        }
     }
-    if (visible.length < observations.length) {
-        observationsTruncated = true;
-    }
+
+    const visible = buildVisible();
+    const observationsTruncated =
+        initiallyTruncated ||
+        observations.some(
+            (observation, index) =>
+                visibleLineCounts[index] < observation.lines.length,
+        );
     return {
         text: serialize(visible, observationsTruncated),
         observations: visible,
+        truncated: observationsTruncated,
     };
 }
 
@@ -1173,7 +1228,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function errorResult(error: string): ActionResult {
-    return { error: error.slice(0, MAX_ACTION_RESULT_CHARS) };
+    return { error };
 }
 
 function sessionFromInitSettings(

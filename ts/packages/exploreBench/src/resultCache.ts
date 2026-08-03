@@ -1,7 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { readdir, rename, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import {
+    chmod,
+    copyFile,
+    mkdir,
+    readdir,
+    rename,
+    stat,
+} from "node:fs/promises";
 import path from "node:path";
 import { validateResultRows } from "./integrity.js";
 import {
@@ -12,13 +20,22 @@ import {
     resultKey,
     writeJsonAtomic,
 } from "./io.js";
-import type { BenchTask, RunManifest, RunResult } from "./types.js";
+import {
+    createTrajectoryFiles,
+    validateRunTrajectoryFiles,
+} from "./trajectory.js";
+import type {
+    BenchTask,
+    RunManifest,
+    RunResult,
+    RuntimeFileFingerprint,
+} from "./types.js";
 
-export const CACHE_COMPATIBILITY_REVISION = 28;
+export const CACHE_COMPATIBILITY_REVISION = 71;
+export const BASELINE_CACHE_MIN_REVISION = 50;
 
 export interface ResultCacheSource {
     manifest: RunManifest;
-    manifestPath?: string;
     resultsPath: string;
     rows: RunResult[];
 }
@@ -55,6 +72,18 @@ export function cacheManifestsCompatible(
     source: RunManifest,
     target: RunManifest,
 ): boolean {
+    const sourceRevision = source.cacheCompatibilityRevision;
+    if (
+        target.cacheCompatibilityRevision !== CACHE_COMPATIBILITY_REVISION ||
+        !hasValidRuntimeFingerprint(source) ||
+        !hasValidRuntimeFingerprint(target) ||
+        sourceRevision === undefined ||
+        !Number.isSafeInteger(sourceRevision) ||
+        sourceRevision < BASELINE_CACHE_MIN_REVISION ||
+        sourceRevision > CACHE_COMPATIBILITY_REVISION
+    ) {
+        return false;
+    }
     return (
         JSON.stringify(cacheManifestIdentity(source)) ===
         JSON.stringify(cacheManifestIdentity(target))
@@ -87,16 +116,27 @@ export function selectReusableAttempts(
         }
         const grouped = groupResults(source.rows);
         for (const [key, attempts] of grouped) {
-            if (occupied.has(key) || attempts.at(-1)?.ok !== true) {
+            if (
+                occupied.has(key) ||
+                !isReusableAttemptHistory(
+                    attempts,
+                    options.targetManifest.maxAttempts,
+                )
+            ) {
                 continue;
             }
             const latest = attempts.at(-1)!;
+            if (
+                latest.variant !== "baseline" ||
+                !latest.trajectoryFiles?.main
+            ) {
+                continue;
+            }
             const task = tasks.get(latest.taskId);
             if (
                 !task ||
                 attempts.some(
                     (row) =>
-                        row.reusedFrom !== undefined ||
                         models.get(row.matrixName) !== row.model ||
                         !variants.has(row.variant) ||
                         !taskMatchesResult(task, row),
@@ -118,13 +158,6 @@ export function selectReusableAttempts(
                             row.reusedFrom?.originalRunId ?? row.runId,
                         sourceRunId: source.manifest.runId,
                         resultsPath: source.resultsPath,
-                        manifestPath:
-                            source.manifestPath ??
-                            path.join(
-                                path.dirname(source.resultsPath),
-                                "manifest.json",
-                            ),
-                        runtimeEvidence: source.manifest.runtimeEvidence,
                         importedAt: options.importedAt,
                     },
                 })),
@@ -132,6 +165,18 @@ export function selectReusableAttempts(
         }
     }
     return reusable;
+}
+
+function isReusableAttemptHistory(
+    attempts: RunResult[],
+    maxAttempts: number,
+): boolean {
+    return attempts.every(
+        (row, index) =>
+            row.attempt === index + 1 &&
+            row.maxAttempts === maxAttempts &&
+            (index === attempts.length - 1 ? row.ok : !row.ok),
+    );
 }
 
 export async function seedResultsFromPriorRuns(
@@ -145,13 +190,16 @@ export async function seedResultsFromPriorRuns(
     );
     const importedAt = new Date().toISOString();
     const targetRows = await readResults(options.output);
-    const reused = selectReusableAttempts({
+    const selected = selectReusableAttempts({
         targetManifest: options.targetManifest,
         tasks: options.tasks,
         targetRows,
         sources,
         importedAt,
     });
+    await validateRunTrajectoryFiles(selected);
+    const reused = await copyReusableTrajectories(selected, options.output);
+    await validateRunTrajectoryFiles(reused);
     await appendResults(options.output, reused);
 
     const counts = new Map<string, { keys: Set<string>; rows: number }>();
@@ -199,6 +247,33 @@ export async function seedResultsFromPriorRuns(
         });
     }
     return summary;
+}
+
+async function copyReusableTrajectories(
+    rows: readonly RunResult[],
+    output: string,
+): Promise<RunResult[]> {
+    const copied: RunResult[] = [];
+    for (const row of rows) {
+        const source = row.trajectoryFiles?.main;
+        if (!source || row.variant !== "baseline") {
+            throw new Error(
+                "Only baseline attempts with a main trajectory may be reused",
+            );
+        }
+        const trajectoryFiles = createTrajectoryFiles(
+            output,
+            row.taskId,
+            row.model,
+            row.variant,
+            row.attempt,
+        );
+        await mkdir(path.dirname(trajectoryFiles.main), { recursive: true });
+        await copyFile(source, trajectoryFiles.main, constants.COPYFILE_EXCL);
+        await chmod(trajectoryFiles.main, 0o600);
+        copied.push({ ...row, trajectoryFiles });
+    }
+    return copied;
 }
 
 export async function archiveResultArtifacts(
@@ -255,17 +330,19 @@ async function loadCacheSources(
             ) {
                 continue;
             }
-            const rows = await readResults(manifest.output);
+            const rows = (await readResults(manifest.output)).filter(
+                (row) => row.variant === "baseline",
+            );
             validateResultRows(rows, {
                 runId: manifest.runId,
                 taskIds: manifest.taskIds,
                 matrix: manifest.matrix,
-                variants: manifest.variants,
+                variants: ["baseline"],
                 agent: manifest.agent,
+                maxAttempts: manifest.maxAttempts,
             });
             sources.push({
                 manifest,
-                manifestPath,
                 resultsPath: path.resolve(manifest.output),
                 rows,
             });
@@ -286,16 +363,74 @@ function isCacheableManifest(manifest: RunManifest): manifest is RunManifest {
         manifest.agent &&
             manifest.provider &&
             manifest.mcp &&
+            hasValidRuntimeFingerprint(manifest) &&
             Array.isArray(manifest.taskIds) &&
             Array.isArray(manifest.matrix) &&
             Array.isArray(manifest.variants),
     );
 }
 
+function hasValidRuntimeFingerprint(manifest: RunManifest): boolean {
+    const fingerprint = manifest.runtimeFingerprint;
+    const pythonLspCommand = manifest.mcp.pythonLspCommand;
+    const pythonLspPath = fingerprint?.pythonLsp?.path;
+    const typescriptLspCommand = manifest.mcp.typescriptLspCommand;
+    const typescriptLspEntrypoint = manifest.mcp.typescriptLspArgs?.[0];
+    if (
+        !fingerprint ||
+        (normalizedCommand(manifest.mcp.command) === "node" &&
+            !fingerprint.mcpEntrypoint) ||
+        (manifest.variants.includes("typeagent-lsp") &&
+            (!pythonLspCommand ||
+                !fingerprint.pythonLsp ||
+                !fingerprint.pythonLspInterpreter ||
+                !fingerprint.pythonLspLock ||
+                !typescriptLspCommand ||
+                !typescriptLspEntrypoint ||
+                !fingerprint.typescriptLspCommand ||
+                !fingerprint.typescriptLspEntrypoint ||
+                path.resolve(
+                    manifest.mcp.cwd ?? process.cwd(),
+                    pythonLspCommand,
+                ) !== pythonLspPath ||
+                path.resolve(
+                    manifest.mcp.cwd ?? process.cwd(),
+                    typescriptLspCommand,
+                ) !== fingerprint.typescriptLspCommand.path ||
+                path.resolve(
+                    manifest.mcp.cwd ?? process.cwd(),
+                    typescriptLspEntrypoint,
+                ) !== fingerprint.typescriptLspEntrypoint.path))
+    ) {
+        return false;
+    }
+    const files = fingerprint
+        ? [
+              fingerprint.copilot,
+              fingerprint.ripgrep,
+              fingerprint.mcpCommand,
+              fingerprint.mcpEntrypoint,
+              fingerprint.pythonLsp,
+              fingerprint.pythonLspInterpreter,
+              fingerprint.pythonLspLock,
+              fingerprint.typescriptLspCommand,
+              fingerprint.typescriptLspEntrypoint,
+          ].filter((file): file is RuntimeFileFingerprint => file !== undefined)
+        : [];
+    return Boolean(
+        files.length >= 3 &&
+            files.every(
+                (file) =>
+                    typeof file.path === "string" &&
+                    file.path.length > 0 &&
+                    /^[a-f0-9]{64}$/u.test(file.sha256),
+            ),
+    );
+}
+
 function cacheManifestIdentity(manifest: RunManifest): unknown {
     return {
         schemaVersion: manifest.schemaVersion,
-        cacheCompatibilityRevision: manifest.cacheCompatibilityRevision ?? 0,
         dataset: manifest.dataset,
         split: manifest.split,
         copilotPath: manifest.copilotPath,
@@ -305,18 +440,16 @@ function cacheManifestIdentity(manifest: RunManifest): unknown {
             apiKeyEnv: manifest.provider.apiKeyEnv,
             wireApi: manifest.provider.wireApi,
         },
-        mcp: {
-            command: normalizedCommand(manifest.mcp.command),
-            args: manifest.mcp.args,
-            cwd: manifest.mcp.cwd,
-            envVars: manifest.mcp.envVars,
-        },
         agent: {
             name: manifest.agent.name,
             description: manifest.agent.description,
             tools: manifest.agent.tools,
             prompt: manifest.agent.prompt,
             sha256: manifest.agent.sha256,
+        },
+        runtimeFingerprint: {
+            copilotSha256: manifest.runtimeFingerprint?.copilot.sha256,
+            ripgrepSha256: manifest.runtimeFingerprint?.ripgrep.sha256,
         },
         maxAttempts: manifest.maxAttempts,
         timeoutMs: manifest.timeoutMs,
@@ -342,7 +475,7 @@ function groupResults(rows: RunResult[]): Map<string, RunResult[]> {
     return grouped;
 }
 
-export function taskMatchesResult(task: BenchTask, row: RunResult): boolean {
+function taskMatchesResult(task: BenchTask, row: RunResult): boolean {
     return (
         row.taskId === task.id &&
         row.query === task.query &&

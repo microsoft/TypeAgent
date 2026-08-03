@@ -5,7 +5,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { validateResultRows } from "./integrity.js";
 import { readResults, readRunManifest, writeJsonAtomic } from "./io.js";
-import { translatedRequestMatchesIngress } from "./requestIdentity.js";
+import { responseReadyDurationMs } from "./latency.js";
 import { overallRecall, scoreSwebench } from "./score.js";
 import type {
     BenchmarkVariant,
@@ -34,10 +34,12 @@ export interface LeaderboardRow {
     file: MetricSummary;
     line: MetricSummary;
     avgDurationMs: number;
+    p50DurationMs: number;
+    p95DurationMs: number;
     avgToolCalls: number;
     avgTypeAgentToolCalls: number;
-    directExplorerAdoptionCount: number;
-    directExplorerAdoptionRate: number;
+    mcpAdoptionCount: number;
+    mcpAdoptionRate: number;
     subagentAdoptionCount: number;
     subagentAdoptionRate: number;
     mainAgentRepositoryInspectionCount: number;
@@ -45,7 +47,6 @@ export interface LeaderboardRow {
     outsideExploreInspectionCount: number;
     outsideExploreInspectionRate: number;
     copilotUsage?: TokenUsage;
-    dispatcherUsage?: TypeAgentUsage;
     typeAgentUsage?: TypeAgentUsage;
     combinedUsage?: TokenUsage;
     finalAttemptUsage?: TokenUsage;
@@ -56,11 +57,15 @@ interface PairedVariantSummary {
     file: MetricSummary;
     line: MetricSummary;
     finalAttemptTokens: number | null;
+    meanDurationMs: number;
+    p50DurationMs: number;
+    p95DurationMs: number;
 }
 
 interface ComparisonRow {
     matrixName: string;
     model: string;
+    treatmentVariant: "typeagent" | "typeagent-lsp";
     expectedPairs: number;
     pairedPairs: number;
     coverage: number;
@@ -68,17 +73,19 @@ interface ComparisonRow {
     missingBaselineTaskIds: string[];
     missingTreatmentTaskIds: string[];
     baseline: PairedVariantSummary | null;
-    typeagent: PairedVariantSummary | null;
+    treatment: PairedVariantSummary | null;
     overallRecallDelta: number | null;
     fileScoreDelta: number | null;
     fileRecallDelta: number | null;
     lineScoreDelta: number | null;
     lineRecallDelta: number | null;
     avgDurationMsDelta: number | null;
+    p50DurationMsDelta: number | null;
+    p95DurationMsDelta: number | null;
     totalTokensDelta: number | null;
     finalAttemptTokensDelta: number | null;
-    directExplorerAdoptionCount: number;
-    directExplorerAdoptionRate: number;
+    mcpAdoptionCount: number;
+    mcpAdoptionRate: number;
     subagentAdoptionCount: number;
     subagentAdoptionRate: number;
 }
@@ -96,9 +103,10 @@ interface PrefixReport {
 interface CompactTaskResult {
     ok: boolean;
     durationMs: number;
+    wallDurationMs: number;
     finalAnswer: string;
     score: SwebenchScore;
-    directExplorerAdopted: boolean;
+    mcpAdopted: boolean;
     lspAdopted?: boolean;
     lspCallCount?: number;
     lspResultCount?: number;
@@ -118,13 +126,11 @@ interface CompactTaskResult {
     mcpServerReady?: boolean;
     mcpAdvertisedTools?: string[];
     usage?: CopilotUsage;
-    dispatcherUsage?: TypeAgentUsage;
     typeAgentUsage?: TypeAgentUsage;
     combinedUsage?: TokenUsage;
     finalAttemptUsage?: TokenUsage;
     typeAgentToolTrace?: TypeAgentToolTrace;
     exploreTelemetry?: RunResult["exploreTelemetry"];
-    typeAgentDispatch?: RunResult["typeAgentDispatch"];
     telemetryFile?: string;
     telemetryError?: string;
     error?: string;
@@ -175,7 +181,10 @@ export async function writeReports(input: string): Promise<{
             manifest.matrix,
             taskIds,
         );
-        const expectedPairs = taskIds.length * manifest.matrix.length;
+        const expectedPairs = comparisons.reduce(
+            (total, comparison) => total + comparison.expectedPairs,
+            0,
+        );
         const pairedPairs = comparisons.reduce(
             (total, comparison) => total + comparison.pairedPairs,
             0,
@@ -214,10 +223,11 @@ export async function writeReports(input: string): Promise<{
             "results.jsonl is the raw source of truth; report scores are recomputed from finalAnswer and the embedded SWE-bench patch.",
             "Overall recall is 50% file recall plus 50% line recall; use file/line explore scores to account for over-citation.",
             "Comparison deltas use only task IDs with successful Copilot SDK and TypeAgent rows; incomplete coverage is reported explicitly.",
-            "Token deltas compare Copilot SDK usage against TypeAgent combined usage (dispatcher translation plus inner Explorer reasoning and Code Mode generation exactly once), accumulated across every raw attempt for each final row.",
-            `Final-attempt tokens cover the ${manifest.taskIds.length} requested tasks exactly when all rows complete. All-attempt tokens include retries and are shown only when every attempt emitted measurable usage; an unknown provider timeout is never treated as zero.`,
-            "Copilot SDK success requires one synchronous explorer-subagent delegation and no direct main-agent inspection; TypeAgent success requires untouched natural-language ingress, dispatcher translation, and one executed Explorer action whose output becomes the final answer.",
-            "The Copilot SDK arm exposes the task tool to its main agent and bounded immutable-snapshot read/grep/glob/ls tools only to its explorer subagent. The TypeAgent arm runs its dispatcher and Explorer application agent in-process without a Copilot session or transport wrapper.",
+            "Token and latency deltas use only each task's terminal execution. Latency runs from execution start through the final response-ready boundary and excludes post-response usage reads, disconnect, cleanup, and telemetry settling. Failed retries remain in results.jsonl for audit but are not charged to either arm.",
+            `Final-execution tokens cover the ${manifest.taskIds.length} requested tasks exactly when all rows complete; an unknown or incomplete provider usage record is never treated as zero.`,
+            "Baseline success requires one synchronous explorer-subagent delegation and no direct main-agent inspection; TypeAgent success requires the default Copilot main agent to invoke the session-bound Explorer MCP tool without a model-authored query and relay its citations unchanged. Explorer telemetry cryptographically binds the invocation to the exact raw request.",
+            "The baseline exposes the task tool to its main agent and bounded read/grep/glob/bash tools only to its explorer subagent. The TypeAgent arm exposes only the Explorer MCP tool to the same default main agent; repository inspection remains inside TypeAgent Code Mode.",
+            "A successful TypeAgent treatment normally contains exactly three dependent inner requests in one Explorer execution: discoverRepository, refineRepository, then submitExploration. The final turn selects locations only after observing both repository programs. Any bounded repair turn is retained and charged to the same treatment execution.",
             "Cached-input, cache-write, and reasoning tokens are subsets; total tokens are input plus output and do not double-count them. Schema-v4 records one inseparable inner usage bucket because the same model completions both translate state into typed actions and generate Code Mode programs; schema-v3 translation/codeMode fields remain readable only for backward compatibility.",
         ],
     };
@@ -244,56 +254,25 @@ export function dedupeAndRescore(rawRows: RunResult[]): RunResult[] {
     }
     return [...grouped.values()].map((attempts) => {
         const current = attempts[attempts.length - 1];
-        const finalAttemptUsage =
-            current.combinedUsage ??
-            (current.variant === "baseline" &&
-            current.usage?.usageComplete !== false
-                ? current.usage
-                : undefined);
+        const usage =
+            current.usage?.usageComplete === true ? current.usage : undefined;
+        const typeAgentUsage =
+            isTypeAgentVariant(current.variant) &&
+            current.typeAgentUsage?.usageComplete === true
+                ? current.typeAgentUsage
+                : undefined;
+        const combinedUsage =
+            current.variant === "baseline"
+                ? usage
+                : usage && typeAgentUsage
+                  ? current.combinedUsage
+                  : undefined;
         const {
             usage: _usage,
-            dispatcherUsage: _dispatcherUsage,
             typeAgentUsage: _typeAgentUsage,
             combinedUsage: _combinedUsage,
             ...latest
         } = current;
-        const copilotUsages = completeValues(
-            attempts.map((row) =>
-                row.usage?.usageComplete !== false ? row.usage : undefined,
-            ),
-        );
-        const typeAgentUsages = completeValues(
-            attempts.map((row) => {
-                if (row.variant === "baseline") {
-                    return undefined;
-                }
-                return row.typeAgentUsage?.usageComplete !== false
-                    ? row.typeAgentUsage
-                    : undefined;
-            }),
-        );
-        const dispatcherUsages = isTypeAgentVariant(current.variant)
-            ? completeValues(
-                  attempts.map((row) =>
-                      row.dispatcherUsage?.usageComplete !== false
-                          ? row.dispatcherUsage
-                          : undefined,
-                  ),
-              )
-            : undefined;
-        const combinedUsages = completeValues(
-            attempts.map((row) => {
-                if (row.variant === "baseline") {
-                    return row.usage?.usageComplete !== false
-                        ? row.usage
-                        : undefined;
-                }
-                if (row.combinedUsage) {
-                    return row.combinedUsage;
-                }
-                return undefined;
-            }),
-        );
         return {
             ...latest,
             score: scoreSwebench(
@@ -301,17 +280,10 @@ export function dedupeAndRescore(rawRows: RunResult[]): RunResult[] {
                 current.swebench.patch,
                 current.repoPath,
             ),
-            ...(copilotUsages ? { usage: sumCopilotUsage(copilotUsages) } : {}),
-            ...(dispatcherUsages
-                ? { dispatcherUsage: sumTypeAgentUsage(dispatcherUsages) }
-                : {}),
-            ...(typeAgentUsages && isTypeAgentVariant(current.variant)
-                ? { typeAgentUsage: sumTypeAgentUsage(typeAgentUsages) }
-                : {}),
-            ...(combinedUsages
-                ? { combinedUsage: sumUsage(combinedUsages) }
-                : {}),
-            ...(finalAttemptUsage ? { finalAttemptUsage } : {}),
+            ...(usage ? { usage } : {}),
+            ...(typeAgentUsage ? { typeAgentUsage } : {}),
+            ...(combinedUsage ? { combinedUsage } : {}),
+            ...(combinedUsage ? { finalAttemptUsage: combinedUsage } : {}),
         };
     });
 }
@@ -348,7 +320,7 @@ function buildComparisons(
     matrix: MatrixEntry[],
     taskIds: string[],
 ): ComparisonRow[] {
-    return matrix.map((entry) => {
+    return matrix.flatMap((entry) => {
         const matrixName = entry.name ?? entry.model;
         const modelRows = rows.filter((row) => row.matrixName === matrixName);
         const requestedTaskIds = new Set(taskIds);
@@ -356,109 +328,128 @@ function buildComparisons(
             (row) =>
                 row.variant === "baseline" && requestedTaskIds.has(row.taskId),
         );
-        const requestedTreatmentRows = modelRows.filter(
-            (row) =>
-                row.variant === "typeagent" && requestedTaskIds.has(row.taskId),
-        );
         const baseline = new Map(
             modelRows
                 .filter((row) => row.variant === "baseline" && row.ok)
                 .map((row) => [row.taskId, row]),
         );
-        const treatment = new Map(
-            modelRows
-                .filter((row) => row.variant === "typeagent" && row.ok)
-                .map((row) => [row.taskId, row]),
-        );
-        const pairedTaskIds = taskIds.filter(
-            (taskId) => baseline.has(taskId) && treatment.has(taskId),
-        );
-        const baselineRows = pairedTaskIds.map(
-            (taskId) => baseline.get(taskId)!,
-        );
-        const treatmentRows = pairedTaskIds.map(
-            (taskId) => treatment.get(taskId)!,
-        );
-        const baselineSummary = summarizeRows(baselineRows);
-        const treatmentSummary = summarizeRows(treatmentRows);
-        const expectedPairs = taskIds.length;
-        const pairedPairs = pairedTaskIds.length;
-        const directExplorerAdoptionCount = requestedTreatmentRows.filter(
-            hasValidDirectExplorerDispatch,
-        ).length;
-        const subagentAdoptionCount = requestedBaselineRows.filter(
-            (row) => row.subagentAdopted,
-        ).length;
-        const completeUsage =
-            pairedPairs > 0 &&
-            pairedTaskIds.every(
-                (taskId) =>
-                    baseline.get(taskId)?.usage !== undefined &&
-                    treatment.get(taskId)?.combinedUsage !== undefined,
+        const treatmentVariants = (
+            ["typeagent", "typeagent-lsp"] as const
+        ).filter((variant) => modelRows.some((row) => row.variant === variant));
+        return treatmentVariants.map((treatmentVariant) => {
+            const requestedTreatmentRows = modelRows.filter(
+                (row) =>
+                    row.variant === treatmentVariant &&
+                    requestedTaskIds.has(row.taskId),
             );
-        return {
-            matrixName,
-            model: entry.model,
-            expectedPairs,
-            pairedPairs,
-            coverage: expectedPairs > 0 ? pairedPairs / expectedPairs : 0,
-            complete: pairedPairs === expectedPairs,
-            missingBaselineTaskIds: taskIds.filter(
-                (taskId) => !baseline.has(taskId),
-            ),
-            missingTreatmentTaskIds: taskIds.filter(
-                (taskId) => !treatment.has(taskId),
-            ),
-            baseline: pairedVariantSummary(baselineSummary),
-            typeagent: pairedVariantSummary(treatmentSummary),
-            overallRecallDelta:
-                baselineSummary && treatmentSummary
-                    ? treatmentSummary.overallRecall -
-                      baselineSummary.overallRecall
-                    : null,
-            fileScoreDelta:
-                baselineSummary && treatmentSummary
-                    ? treatmentSummary.file.score - baselineSummary.file.score
-                    : null,
-            fileRecallDelta:
-                baselineSummary && treatmentSummary
-                    ? treatmentSummary.file.recall - baselineSummary.file.recall
-                    : null,
-            lineScoreDelta:
-                baselineSummary && treatmentSummary
-                    ? treatmentSummary.line.score - baselineSummary.line.score
-                    : null,
-            lineRecallDelta:
-                baselineSummary && treatmentSummary
-                    ? treatmentSummary.line.recall - baselineSummary.line.recall
-                    : null,
-            avgDurationMsDelta:
-                baselineSummary && treatmentSummary
-                    ? treatmentSummary.avgDurationMs -
-                      baselineSummary.avgDurationMs
-                    : null,
-            totalTokensDelta:
-                completeUsage &&
-                baselineSummary?.copilotUsage &&
-                treatmentSummary?.combinedUsage
-                    ? treatmentSummary.combinedUsage.totalTokens -
-                      baselineSummary.copilotUsage.totalTokens
-                    : null,
-            finalAttemptTokensDelta:
-                baselineSummary?.finalAttemptUsage &&
-                treatmentSummary?.finalAttemptUsage
-                    ? treatmentSummary.finalAttemptUsage.totalTokens -
-                      baselineSummary.finalAttemptUsage.totalTokens
-                    : null,
-            directExplorerAdoptionCount,
-            directExplorerAdoptionRate:
-                expectedPairs > 0
-                    ? directExplorerAdoptionCount / expectedPairs
-                    : 0,
-            subagentAdoptionCount,
-            subagentAdoptionRate:
-                expectedPairs > 0 ? subagentAdoptionCount / expectedPairs : 0,
-        };
+            const treatment = new Map(
+                modelRows
+                    .filter((row) => row.variant === treatmentVariant && row.ok)
+                    .map((row) => [row.taskId, row]),
+            );
+            const pairedTaskIds = taskIds.filter(
+                (taskId) => baseline.has(taskId) && treatment.has(taskId),
+            );
+            const baselineSummary = summarizeRows(
+                pairedTaskIds.map((taskId) => baseline.get(taskId)!),
+            );
+            const treatmentSummary = summarizeRows(
+                pairedTaskIds.map((taskId) => treatment.get(taskId)!),
+            );
+            const expectedPairs = taskIds.length;
+            const pairedPairs = pairedTaskIds.length;
+            const mcpAdoptionCount = requestedTreatmentRows.filter(
+                hasValidMcpExplorerAdoption,
+            ).length;
+            const subagentAdoptionCount = requestedBaselineRows.filter(
+                (row) => row.subagentAdopted,
+            ).length;
+            const completeUsage =
+                pairedPairs > 0 &&
+                pairedTaskIds.every(
+                    (taskId) =>
+                        baseline.get(taskId)?.usage !== undefined &&
+                        treatment.get(taskId)?.combinedUsage !== undefined,
+                );
+            return {
+                matrixName,
+                model: entry.model,
+                treatmentVariant,
+                expectedPairs,
+                pairedPairs,
+                coverage: expectedPairs > 0 ? pairedPairs / expectedPairs : 0,
+                complete: pairedPairs === expectedPairs,
+                missingBaselineTaskIds: taskIds.filter(
+                    (taskId) => !baseline.has(taskId),
+                ),
+                missingTreatmentTaskIds: taskIds.filter(
+                    (taskId) => !treatment.has(taskId),
+                ),
+                baseline: pairedVariantSummary(baselineSummary),
+                treatment: pairedVariantSummary(treatmentSummary),
+                overallRecallDelta:
+                    baselineSummary && treatmentSummary
+                        ? treatmentSummary.overallRecall -
+                          baselineSummary.overallRecall
+                        : null,
+                fileScoreDelta:
+                    baselineSummary && treatmentSummary
+                        ? treatmentSummary.file.score -
+                          baselineSummary.file.score
+                        : null,
+                fileRecallDelta:
+                    baselineSummary && treatmentSummary
+                        ? treatmentSummary.file.recall -
+                          baselineSummary.file.recall
+                        : null,
+                lineScoreDelta:
+                    baselineSummary && treatmentSummary
+                        ? treatmentSummary.line.score -
+                          baselineSummary.line.score
+                        : null,
+                lineRecallDelta:
+                    baselineSummary && treatmentSummary
+                        ? treatmentSummary.line.recall -
+                          baselineSummary.line.recall
+                        : null,
+                avgDurationMsDelta:
+                    baselineSummary && treatmentSummary
+                        ? treatmentSummary.avgDurationMs -
+                          baselineSummary.avgDurationMs
+                        : null,
+                p50DurationMsDelta:
+                    baselineSummary && treatmentSummary
+                        ? treatmentSummary.p50DurationMs -
+                          baselineSummary.p50DurationMs
+                        : null,
+                p95DurationMsDelta:
+                    baselineSummary && treatmentSummary
+                        ? treatmentSummary.p95DurationMs -
+                          baselineSummary.p95DurationMs
+                        : null,
+                totalTokensDelta:
+                    completeUsage &&
+                    baselineSummary?.copilotUsage &&
+                    treatmentSummary?.combinedUsage
+                        ? treatmentSummary.combinedUsage.totalTokens -
+                          baselineSummary.copilotUsage.totalTokens
+                        : null,
+                finalAttemptTokensDelta:
+                    baselineSummary?.finalAttemptUsage &&
+                    treatmentSummary?.finalAttemptUsage
+                        ? treatmentSummary.finalAttemptUsage.totalTokens -
+                          baselineSummary.finalAttemptUsage.totalTokens
+                        : null,
+                mcpAdoptionCount,
+                mcpAdoptionRate:
+                    expectedPairs > 0 ? mcpAdoptionCount / expectedPairs : 0,
+                subagentAdoptionCount,
+                subagentAdoptionRate:
+                    expectedPairs > 0
+                        ? subagentAdoptionCount / expectedPairs
+                        : 0,
+            };
+        });
     });
 }
 
@@ -467,9 +458,7 @@ export function summarizeRows(group: RunResult[]): LeaderboardRow | undefined {
         return undefined;
     }
     const first = group[0];
-    const directExplorerAdoptionCount = group.filter(
-        hasValidDirectExplorerDispatch,
-    ).length;
+    const mcpAdoptionCount = group.filter(hasValidMcpExplorerAdoption).length;
     const subagentAdoptionCount = group.filter(
         (row) => row.subagentAdopted,
     ).length;
@@ -479,29 +468,15 @@ export function summarizeRows(group: RunResult[]): LeaderboardRow | undefined {
     const outsideExploreInspectionCount = group.filter(
         (row) => row.outsideExploreInspection === true,
     ).length;
-    const copilotUsages =
-        first.variant === "baseline"
-            ? completeValues(
-                  group.map((row) =>
-                      row.usage?.usageComplete !== false
-                          ? row.usage
-                          : undefined,
-                  ),
-              )
-            : undefined;
-    const dispatcherUsages = isTypeAgentVariant(first.variant)
-        ? completeValues(
-              group.map((row) =>
-                  row.dispatcherUsage?.usageComplete !== false
-                      ? row.dispatcherUsage
-                      : undefined,
-              ),
-          )
-        : undefined;
+    const copilotUsages = completeValues(
+        group.map((row) =>
+            row.usage?.usageComplete === true ? row.usage : undefined,
+        ),
+    );
     const typeAgentUsages = isTypeAgentVariant(first.variant)
         ? completeValues(
               group.map((row) =>
-                  row.typeAgentUsage?.usageComplete !== false
+                  row.typeAgentUsage?.usageComplete === true
                       ? row.typeAgentUsage
                       : undefined,
               ),
@@ -511,8 +486,7 @@ export function summarizeRows(group: RunResult[]): LeaderboardRow | undefined {
         group.map(
             (row) =>
                 row.combinedUsage ??
-                (row.variant === "baseline" &&
-                row.usage?.usageComplete !== false
+                (row.variant === "baseline" && row.usage?.usageComplete === true
                     ? row.usage
                     : undefined),
         ),
@@ -537,13 +511,15 @@ export function summarizeRows(group: RunResult[]): LeaderboardRow | undefined {
         line: averageMetric(
             group.map((row) => effectiveMetric(row, row.score.line)),
         ),
-        avgDurationMs: average(group.map((row) => row.durationMs)),
+        avgDurationMs: average(group.map(responseReadyDurationMs)),
+        p50DurationMs: median(group.map(responseReadyDurationMs)),
+        p95DurationMs: percentile(group.map(responseReadyDurationMs), 0.95),
         avgToolCalls: average(group.map((row) => row.toolTrace.length)),
         avgTypeAgentToolCalls: average(
             group.map((row) => row.typeAgentToolTrace?.totalCalls ?? 0),
         ),
-        directExplorerAdoptionCount,
-        directExplorerAdoptionRate: directExplorerAdoptionCount / group.length,
+        mcpAdoptionCount,
+        mcpAdoptionRate: mcpAdoptionCount / group.length,
         subagentAdoptionCount,
         subagentAdoptionRate: subagentAdoptionCount / group.length,
         mainAgentRepositoryInspectionCount,
@@ -553,9 +529,6 @@ export function summarizeRows(group: RunResult[]): LeaderboardRow | undefined {
         outsideExploreInspectionRate:
             outsideExploreInspectionCount / group.length,
         ...(copilotUsages ? { copilotUsage: sumUsage(copilotUsages) } : {}),
-        ...(dispatcherUsages
-            ? { dispatcherUsage: sumTypeAgentUsage(dispatcherUsages) }
-            : {}),
         ...(typeAgentUsages
             ? { typeAgentUsage: sumTypeAgentUsage(typeAgentUsages) }
             : {}),
@@ -577,6 +550,9 @@ function pairedVariantSummary(
         file: summary.file,
         line: summary.line,
         finalAttemptTokens: summary.finalAttemptUsage?.totalTokens ?? null,
+        meanDurationMs: summary.avgDurationMs,
+        p50DurationMs: summary.p50DurationMs,
+        p95DurationMs: summary.p95DurationMs,
     };
 }
 
@@ -629,11 +605,11 @@ function buildTasks(
                 if (row) {
                     results[`${matrixName}:${variant}`] = {
                         ok: row.ok,
-                        durationMs: row.durationMs,
+                        durationMs: responseReadyDurationMs(row),
+                        wallDurationMs: row.durationMs,
                         finalAnswer: row.finalAnswer,
                         score: row.score,
-                        directExplorerAdopted:
-                            hasValidDirectExplorerDispatch(row),
+                        mcpAdopted: hasValidMcpExplorerAdoption(row),
                         ...(row.lspAdopted !== undefined
                             ? { lspAdopted: row.lspAdopted }
                             : {}),
@@ -709,12 +685,7 @@ function buildTasks(
                                   mcpAdvertisedTools: row.mcpAdvertisedTools,
                               }
                             : {}),
-                        ...(row.variant === "baseline" && row.usage
-                            ? { usage: row.usage }
-                            : {}),
-                        ...(row.dispatcherUsage
-                            ? { dispatcherUsage: row.dispatcherUsage }
-                            : {}),
+                        ...(row.usage ? { usage: row.usage } : {}),
                         ...(row.typeAgentUsage
                             ? { typeAgentUsage: row.typeAgentUsage }
                             : {}),
@@ -729,9 +700,6 @@ function buildTasks(
                             : {}),
                         ...(row.exploreTelemetry
                             ? { exploreTelemetry: row.exploreTelemetry }
-                            : {}),
-                        ...(row.typeAgentDispatch
-                            ? { typeAgentDispatch: row.typeAgentDispatch }
                             : {}),
                         ...(row.telemetryFile
                             ? { telemetryFile: row.telemetryFile }
@@ -781,21 +749,6 @@ function sumUsage(usages: TokenUsage[]): TokenUsage {
     };
 }
 
-function sumCopilotUsage(usages: CopilotUsage[]): CopilotUsage {
-    return {
-        ...sumUsage(usages),
-        source: usages.every((usage) => usage.source === "assistant.usage")
-            ? "assistant.usage"
-            : "rpc",
-        requestCount: usages.reduce(
-            (total, usage) => total + usage.requestCount,
-            0,
-        ),
-        usageComplete: usages.every((usage) => usage.usageComplete !== false),
-        models: [...new Set(usages.flatMap((usage) => usage.models))],
-    };
-}
-
 function sumTypeAgentUsage(usages: TypeAgentUsage[]): TypeAgentUsage {
     return {
         ...sumUsage(usages),
@@ -803,7 +756,7 @@ function sumTypeAgentUsage(usages: TypeAgentUsage[]): TypeAgentUsage {
             (total, usage) => total + usage.requestCount,
             0,
         ),
-        usageComplete: usages.every((usage) => usage.usageComplete !== false),
+        usageComplete: usages.every((usage) => usage.usageComplete === true),
     };
 }
 
@@ -819,37 +772,39 @@ function average(values: number[]): number {
         : 0;
 }
 
-function hasValidDirectExplorerDispatch(row: RunResult): boolean {
-    if (!isTypeAgentVariant(row.variant)) {
-        return false;
-    }
-    const evidence = row.typeAgentDispatch;
-    if (
-        !evidence ||
-        evidence.ingress !== "natural-language" ||
-        evidence.submittedRequest !== row.query ||
-        evidence.submittedRequest.trimStart().startsWith("@") ||
-        evidence.dispatchMethod !== "grammar" ||
-        evidence.translationInvoked ||
-        evidence.translationRequestCount !== 0 ||
-        evidence.activeAgentNames.length !== 1 ||
-        evidence.activeAgentNames[0] !== "explorer" ||
-        evidence.activeSchemaNames.length !== 1 ||
-        evidence.activeSchemaNames[0] !== "explorer" ||
-        evidence.translatedActions.length !== 1 ||
-        evidence.executionCount !== 1 ||
-        !evidence.outputMatchedExecution ||
-        !evidence.executionRequestMatchedIngress ||
-        evidence.usedCopilot ||
-        evidence.usedMcp
-    ) {
-        return false;
-    }
-    const action = evidence.translatedActions[0];
+function median(values: number[]): number {
+    const sorted = [...values].sort((left, right) => left - right);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+        ? (sorted[middle - 1] + sorted[middle]) / 2
+        : sorted[middle];
+}
+
+function percentile(values: number[], fraction: number): number {
+    const sorted = [...values].sort((left, right) => left - right);
+    return sorted[Math.ceil(sorted.length * fraction) - 1];
+}
+
+function hasValidMcpExplorerAdoption(row: RunResult): boolean {
     return (
-        action.schemaName === "explorer" &&
-        action.actionName === "exploreRepository" &&
-        translatedRequestMatchesIngress(action.parameters?.request, row.query)
+        isTypeAgentVariant(row.variant) &&
+        row.defaultMainAgent === true &&
+        row.mcpServerReady === true &&
+        row.mcpAdopted === true &&
+        row.successfulExploreCalls === 1 &&
+        row.firstAssistantActionExclusiveExplore === true &&
+        row.exploreCompletedBeforeLaterAssistantAction === true &&
+        row.mcpToolTrace.filter(
+            (call) =>
+                call.server === "typeagent" &&
+                call.tool === "explore" &&
+                call.completed === true &&
+                call.success === true &&
+                typeof call.arguments === "object" &&
+                call.arguments !== null &&
+                !Array.isArray(call.arguments) &&
+                !Object.prototype.hasOwnProperty.call(call.arguments, "query"),
+        ).length === 1
     );
 }
 
@@ -857,7 +812,7 @@ function renderMarkdown(report: EvalReport): string {
     const sections = Object.values(report.prefixes).map((prefix) => {
         const comparisons = prefix.comparisons.map((row) => {
             const baselineSummary = row.baseline;
-            const typeAgentSummary = row.typeagent;
+            const treatmentSummary = row.treatment;
             const baseline = prefix.leaderboard.find(
                 (entry) =>
                     entry.matrixName === row.matrixName &&
@@ -866,17 +821,17 @@ function renderMarkdown(report: EvalReport): string {
             const treatment = prefix.leaderboard.find(
                 (entry) =>
                     entry.matrixName === row.matrixName &&
-                    entry.variant === "typeagent",
+                    entry.variant === row.treatmentVariant,
             );
-            return `| ${row.matrixName} | ${row.pairedPairs}/${row.expectedPairs} | ${completed(baseline)}/${row.expectedPairs} | ${completed(treatment)}/${row.expectedPairs} | ${formatInteger(baselineSummary?.finalAttemptTokens)} | ${formatInteger(typeAgentSummary?.finalAttemptTokens)} | ${formatInteger(row.finalAttemptTokensDelta === null ? null : -row.finalAttemptTokensDelta)} | ${formatNumber(baselineSummary?.overallRecall)} | ${formatNumber(typeAgentSummary?.overallRecall)} | ${formatMetric(baselineSummary?.file)} | ${formatMetric(typeAgentSummary?.file)} | ${formatMetric(baselineSummary?.line)} | ${formatMetric(typeAgentSummary?.line)} | ${row.subagentAdoptionCount}/${row.expectedPairs} | ${row.directExplorerAdoptionCount}/${row.expectedPairs} |`;
+            return `| ${row.matrixName} | ${benchmarkVariantLabel(row.treatmentVariant)} | ${row.pairedPairs}/${row.expectedPairs} | ${completed(baseline)}/${row.expectedPairs} | ${completed(treatment)}/${row.expectedPairs} | ${formatInteger(baselineSummary?.finalAttemptTokens)} | ${formatInteger(treatmentSummary?.finalAttemptTokens)} | ${formatInteger(row.finalAttemptTokensDelta === null ? null : -row.finalAttemptTokensDelta)} | ${formatLatency(baselineSummary)} | ${formatLatency(treatmentSummary)} | ${formatNumber(baselineSummary?.overallRecall)} | ${formatNumber(treatmentSummary?.overallRecall)} | ${formatMetric(baselineSummary?.file)} | ${formatMetric(treatmentSummary?.file)} | ${formatMetric(baselineSummary?.line)} | ${formatMetric(treatmentSummary?.line)} | ${row.subagentAdoptionCount}/${row.expectedPairs} | ${row.mcpAdoptionCount}/${row.expectedPairs} |`;
         });
         return [
             `## Selected ${prefix.limit}-task prefix (${taskSelectionLabel(report.manifest)})`,
             "",
             `Paired coverage: ${prefix.pairedPairs}/${prefix.expectedPairs} (${prefix.complete ? "complete" : "INCOMPLETE"}).`,
             "",
-            "| Model | Paired | Copilot SDK completed | TypeAgent completed | Copilot SDK final tokens | TypeAgent final tokens (dispatcher + Explorer) | Final tokens saved | Copilot SDK recall | TypeAgent recall | Copilot SDK file P/R/F1 | TypeAgent file P/R/F1 | Copilot SDK line P/R/F1 | TypeAgent line P/R/F1 | Explore agent used | Direct Explorer dispatch used |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| Model | Treatment arm | Paired | Copilot SDK completed | Treatment completed | Copilot SDK final tokens | Treatment final tokens (outer Copilot + inner Explorer) | Final tokens saved | Copilot SDK latency mean/P50/P95 | Treatment latency mean/P50/P95 | Copilot SDK recall | Treatment recall | Copilot SDK file P/R/F1 | Treatment file P/R/F1 | Copilot SDK line P/R/F1 | Treatment line P/R/F1 | Explore agent used | TypeAgent MCP used |",
+            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
             ...comparisons,
         ].join("\n");
     });
@@ -885,8 +840,8 @@ function renderMarkdown(report: EvalReport): string {
         "",
         "SWE-bench localization only; this is not patch-generation pass@1.",
         "",
-        "Arms: Copilot SDK (with explore agent) and direct TypeAgent dispatcher. Token and quality columns compare the same successful paired tasks; completion and adoption columns cover every requested task. Token columns are absolute successful-final-attempt totals, and TypeAgent combines dispatcher translation with inner Explorer usage exactly once. Positive tokens saved means TypeAgent used fewer tokens.",
-        "All-attempt component totals remain in report.json when complete; a provider timeout without telemetry leaves them unknown instead of treating missing usage as zero.",
+        "Arms: Copilot SDK with the Explore subagent, Copilot SDK with the TypeAgent Explorer Code Mode MCP tool, and the same TypeAgent MCP arm with LSP enabled. Token and quality columns compare the same successful paired tasks; completion and adoption columns cover every requested task. Token columns use terminal successful executions only, and TypeAgent combines outer Copilot usage with inner Explorer usage exactly once. Positive tokens saved means TypeAgent used fewer tokens.",
+        "Each successful TypeAgent treatment normally contains exactly three dependent inner requests in one Explorer execution: discoverRepository, refineRepository, then submitExploration. The final turn selects locations only after observing both repository programs; bounded repair turns are retained and charged. Failed outer executions remain only in results.jsonl; a provider timeout without telemetry is never treated as zero.",
         "",
         ...sections.flatMap((section) => [section, ""]),
     ].join("\n");
@@ -939,6 +894,14 @@ function formatInteger(value: number | null | undefined): string {
     return value === null || value === undefined
         ? "—"
         : Math.round(value).toLocaleString("en-US");
+}
+
+function formatLatency(summary: PairedVariantSummary | null): string {
+    return summary
+        ? [summary.meanDurationMs, summary.p50DurationMs, summary.p95DurationMs]
+              .map((value) => `${(value / 1_000).toFixed(1)}s`)
+              .join("/")
+        : "—";
 }
 
 function formatMetric(metric: MetricSummary | undefined): string {

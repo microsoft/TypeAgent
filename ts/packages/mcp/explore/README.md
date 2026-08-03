@@ -10,9 +10,8 @@ actions through the dispatcher. MCP input maps directly to this loop; there is
 no redundant natural-language translation request. Generated Code Mode programs
 use the canonical `@typeagent/agent-flows` validator and executor and can call
 four read-only repository operations, plus optional LSP navigation. Unused
-semantic schema embeddings are disabled, and the reasoning layer hard-stops
-after eight `execute_action`
-attempts with at most three successful actions:
+semantic schema embeddings are disabled, and the reasoning layer exposes only
+the generic `execute_action` tool:
 
 - `ls`
 - `glob`
@@ -74,8 +73,9 @@ node packages/mcp/explore/dist/server.js \
 The TypeScript language server is a pinned dependency of `explorer-typeagent`.
 The all-language registry otherwise launches only servers already installed on
 `PATH`, unless a command is explicitly overridden. It performs no runtime
-downloads. LSP calls share the normal eight-call budget, and their locations
-must be read before the agent may submit them as grounded citations.
+downloads. LSP uses a separate two-call allowance and does not consume the
+normal eight-call repository evidence budget. Its locations must be verified
+with repository evidence before the agent may submit grounded citations.
 
 Supported flags and environment fallbacks:
 

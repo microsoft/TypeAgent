@@ -6,12 +6,16 @@ import {
     type ReasoningDisplaySink,
     type ReasoningLoopConfig,
 } from "agent-dispatcher/reasoning";
+import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
 import {
+    DISCOVER_REPOSITORY_ACTION,
     ExplorerActionSession,
     MAX_REFINEMENT_READ_LINES,
+    REFINE_REPOSITORY_ACTION,
     REFINEMENT_RESERVED_CALLS,
+    SUBMIT_EXPLORATION_ACTION,
     getRepositorySandboxSchema,
 } from "./actionHandler.js";
 import { createExplorerActionDispatcher } from "./reasoning/explorerActionDispatcher.js";
@@ -47,7 +51,7 @@ const MAX_RESULTS = 6;
 const DEFAULT_MAX_TOOL_CALLS = 8;
 const DEFAULT_EXECUTION_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_OUTPUT_CHARS = 8_000;
-const MAX_REASONING_TOOL_CALLS = 6;
+const MAX_REASONING_TOOL_CALLS = 5;
 
 export function createCodeModeExplorer(
     options: CodeModeExplorerOptions,
@@ -83,10 +87,15 @@ export function createCodeModeExplorer(
     async function exploreDetailed(
         request: Parameters<RepositoryExplorer["explore"]>[0],
     ): Promise<RepositoryExploreResult> {
-        const query = request.query.trim();
-        if (!query) {
+        const query = request.query;
+        if (!query.trim()) {
             throw new Error("query must not be empty");
         }
+        const invocationStartedMs = Date.now();
+        const invocationStartedAt = new Date(invocationStartedMs).toISOString();
+        const querySha256 = createHash("sha256")
+            .update(query, "utf8")
+            .digest("hex");
         const maxResults = Math.min(
             MAX_RESULTS,
             positiveInteger(
@@ -104,9 +113,6 @@ export function createCodeModeExplorer(
             const canonicalRepoRoot = await repoRoot;
             actionSession = await ExplorerActionSession.create({
                 repoRoot: canonicalRepoRoot,
-                ...(options.ripgrepPath
-                    ? { ripgrepPath: options.ripgrepPath }
-                    : {}),
                 query,
                 maxResults,
                 maxToolCalls,
@@ -117,8 +123,6 @@ export function createCodeModeExplorer(
             const actionDispatcher =
                 await createExplorerActionDispatcher(actionSession);
             try {
-                const actionSchema =
-                    await actionDispatcher.discoverActions("explorer");
                 const repositorySchema = getRepositorySandboxSchema(
                     options.lsp !== undefined,
                 );
@@ -130,7 +134,6 @@ export function createCodeModeExplorer(
                     buildExplorerSystemPrompt(
                         maxResults,
                         maxToolCalls,
-                        actionSchema,
                         repositorySchema,
                         options.lsp !== undefined,
                     ),
@@ -139,6 +142,35 @@ export function createCodeModeExplorer(
                     reasoningState,
                     options,
                     usage,
+                    {
+                        allowedActions: [
+                            DISCOVER_REPOSITORY_ACTION,
+                            REFINE_REPOSITORY_ACTION,
+                        ],
+                        terminalActions: [REFINE_REPOSITORY_ACTION],
+                        maxTurns: remainingReasoningTurns(reasoningState),
+                        maxResults,
+                        trajectoryInvocationIndex: invocationIndex,
+                    },
+                );
+                await runReasoningLoop(
+                    buildSubmissionSystemPrompt(maxResults),
+                    buildSubmissionUserPrompt(
+                        query,
+                        maxResults,
+                        actionSession.submissionContext(),
+                    ),
+                    actionDispatcher,
+                    reasoningState,
+                    options,
+                    usage,
+                    {
+                        allowedActions: [SUBMIT_EXPLORATION_ACTION],
+                        terminalActions: [SUBMIT_EXPLORATION_ACTION],
+                        maxTurns: remainingReasoningTurns(reasoningState),
+                        maxResults,
+                        trajectoryInvocationIndex: invocationIndex,
+                    },
                 );
             } catch (error) {
                 try {
@@ -165,11 +197,13 @@ export function createCodeModeExplorer(
             const invocation = createInvocation(
                 invocationIndex,
                 "completed",
+                invocationStartedAt,
+                invocationStartedMs,
+                querySha256,
                 usage,
                 snapshot.toolTrace,
                 reasoningTrace,
                 snapshot.actionAttempts,
-                snapshot.submissionAction,
                 snapshot.result,
             );
             await recordTelemetry(invocation);
@@ -196,11 +230,13 @@ export function createCodeModeExplorer(
                     createInvocation(
                         invocationIndex,
                         "failed",
+                        invocationStartedAt,
+                        invocationStartedMs,
+                        querySha256,
                         usage,
                         snapshot?.toolTrace ?? emptyToolTrace(),
                         reasoningTrace,
                         snapshot?.actionAttempts ?? [],
-                        snapshot?.submissionAction,
                         snapshot?.result,
                         message,
                     ),
@@ -216,13 +252,18 @@ export function createCodeModeExplorer(
         invocation: ExploreInvocationTelemetry,
     ): Promise<void> {
         invocationLedger[invocation.index] = invocation;
+        const firstPending = invocationLedger.indexOf(undefined);
+        const completedPrefix = invocationLedger.slice(
+            0,
+            firstPending === -1 ? invocationLedger.length : firstPending,
+        ) as ExploreInvocationTelemetry[];
+        if (completedPrefix.length === 0) {
+            return Promise.resolve();
+        }
         const telemetry: ExploreTelemetry = {
             schemaVersion: 4,
             model: options.modelName,
-            invocations: invocationLedger.filter(
-                (value): value is ExploreInvocationTelemetry =>
-                    value !== undefined,
-            ),
+            invocations: completedPrefix,
         };
         const write = telemetryWriteQueue.then(() =>
             writeExploreTelemetry(telemetryFile, telemetry),
@@ -239,29 +280,62 @@ async function runReasoningLoop(
     reasoningState: ExplorerReasoningState,
     options: CodeModeExplorerOptions,
     usage: ExploreInvocationTelemetry["usage"],
-): Promise<void> {
+    phase: {
+        allowedActions: readonly (
+            | typeof DISCOVER_REPOSITORY_ACTION
+            | typeof REFINE_REPOSITORY_ACTION
+            | typeof SUBMIT_EXPLORATION_ACTION
+        )[];
+        terminalActions: readonly (
+            | typeof DISCOVER_REPOSITORY_ACTION
+            | typeof REFINE_REPOSITORY_ACTION
+            | typeof SUBMIT_EXPLORATION_ACTION
+        )[];
+        maxTurns: number;
+        maxResults: number;
+        trajectoryInvocationIndex: number;
+    },
+): Promise<string> {
     const reasoningTools = createExplorerReasoningTools(
         dispatcher,
         reasoningState,
+        phase,
     );
     const config: ReasoningLoopConfig = {
         model: options.modelName,
         systemPrompt,
-        maxTurns: reasoningState.maxToolCalls,
+        maxTurns: phase.maxTurns,
         tools: reasoningTools.tools,
+        trajectoryInvocationIndex: phase.trajectoryInvocationIndex,
     };
     const reasoningSession =
         await options.reasoningAdapter.createSession(config);
     try {
-        await processReasoningSession(
+        const result = await processReasoningSession(
             reasoningSession,
             userPrompt,
             config,
             nullDisplay,
         );
+        if (result.result === undefined) {
+            throw new Error(
+                "Explorer reasoning phase returned no action result",
+            );
+        }
+        return result.result;
     } finally {
         addExploreUsage(usage, reasoningSession.getUsage());
     }
+}
+
+function remainingReasoningTurns(state: ExplorerReasoningState): number {
+    const remaining = state.maxToolCalls - state.toolCalls;
+    if (remaining <= 0) {
+        throw new Error(
+            `Explorer reasoning exhausted its ${state.maxToolCalls}-action budget`,
+        );
+    }
+    return remaining;
 }
 
 async function closeActionDispatcher(
@@ -286,78 +360,94 @@ async function closeActionDispatcher(
 function buildExplorerSystemPrompt(
     maxResults: number,
     maxToolCalls: number,
-    actionSchema: string,
     repositorySchema: string,
     enableLsp: boolean,
 ): string {
-    return `You are the TypeAgent repository Explorer. Complete this typed action sequence in one bounded reasoning session. Every action is validated and executed through the TypeAgent dispatcher:
+    const discoveryCalls = Math.max(
+        1,
+        maxToolCalls - REFINEMENT_RESERVED_CALLS,
+    );
+    return `You are the TypeAgent repository Explorer. Complete discovery and refinement in one bounded investigation session. A fresh evidence-only session will perform final selection after this session ends:
 
-1. Call execute_action with explorer.discoverRepository. Generate one complete read-only Code Mode program returning Promise<DiscoveryProgramResult> and using at most ${Math.max(1, maxToolCalls - REFINEMENT_RESERVED_CALLS)} repository calls because ${REFINEMENT_RESERVED_CALLS} calls are reserved for refinement. Return locations: [] from discovery. Use discovery to identify every plausible evidence-indicated site and read relevant context when grep results alone are insufficient.
-2. Inspect the returned repository-grounded evidence, then call execute_action with explorer.refineRepository. Generate one complete read-only Code Mode program returning Promise<RefinementProgramResult>. Refinement may use the remaining shared repository-call budget. Verify candidate sites with repo.read calls of at most ${MAX_REFINEMENT_READ_LINES} lines. You may use repo.ls or repo.glob to locate companion files and at most two targeted repo.grep calls to narrow discovery results. Return no more than ${maxResults} grounded candidate locations covering every evidence-indicated change-bearing source, test, configuration, or documentation block.
-3. Inspect the executed refinement evidence, then call explorer.submitExploration with the final exact repository-relative locations most likely needing changes. Every submitted range must be wholly visible in a successful read observation returned by the two executed programs; grep and LSP only locate candidates and never ground final ranges. Never submit a range remembered from the request or prior knowledge. A repo.read location is an evidence window, not automatically the final change-bearing block. Program-returned locations are advisory. Independently select every evidence-indicated change-bearing block from the visible read evidence and exclude unrelated surrounding lines. The host validates this typed action and the successful submission ends the loop. Do not run another repository program unless refinement explicitly reports missing required navigation and calls remain.
+1. Call execute_action with explorer.discoverRepository and one complete read-only Code Mode program using at most ${discoveryCalls} repository calls; ${REFINEMENT_RESERVED_CALLS} of the shared ${maxToolCalls}-call evidence budget are reserved for adaptive refinement.
+2. Inspect the returned repository evidence, then call execute_action with explorer.refineRepository exactly once. Use the remaining repository calls reported by discovery to verify missing production context and independently indicated companion sites.
 
-${buildProgramRules(maxResults, maxToolCalls, enableLsp)}${enableLsp ? buildLspRules() : ""}
+Correct a failed action only when its error explicitly permits repair. The action handler enforces discovery and refinement order. A successful refineRepository action ends this investigation session.
 
-Authoritative TypeAgent action schema:
-${actionSchema}
+Repository rules:
+- Static inspection only. Use repo.ls, repo.glob, repo.grep, and repo.read${enableLsp ? ", plus optional repo.lsp navigation" : ""}.
+- Begin exactly with async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> { and return { success: true }. Never send only the function body.
+- Make the first grep use the rarest exact clue in the request: a qualified symbol, quoted error, configuration key, or named file. Search bare identifiers until the repository language is confirmed.
+- Group matches by file, then read contextual blocks from 3-5 distinct likely source files. Use results to choose paths and offsets; do not hard-code guessed files.
+- Prioritize production implementation files. Inspect tests, configuration, or documentation when the request or an observed dependency indicates that they change, never instead of the implementation.
+- Read likely definitions through the end of their bodies. When relevant matches are far apart, reserve separate reads so a later function is not pushed outside the observed range.
+- After a broad symbol search identifies a long candidate, scope remaining grep calls to that file with an issue-specific expression and anchor reads on those body matches.
+- Trace evidence-indicated callers, helpers, and alternate implementations. Treat historical paths and line numbers only as clues.
+- Do not repeat broad searches during refinement. Prefer targeted repo.read calls of 80-${MAX_REFINEMENT_READ_LINES} lines, and use repo.grep only when discovery supplies a precise path and issue-specific expression.
+- Type empty accumulators explicitly, for example const matches: GrepMatch[] = [].
+- Discovery and refinement may return up to ${maxResults} focused advisory candidate locations supported by inspected evidence. Candidates guide final selection but never ground it.
+${enableLsp ? buildLspRules() : ""}
 
 Authoritative Code Mode repository schema:
 ${repositorySchema}`;
 }
 
-function buildLspRules(): string {
-    return `
-- This LSP treatment must call repo.lsp at least once. Use a grep result to supply its path, 1-based line hint, and source identifier as symbol. The host resolves the nearest exact identifier in that file when the hint points inside a function body or multiline call. Prefer definition; use references only after narrowing to a strong candidate.
-- Refinement cannot complete until at least one repo.lsp call finishes without an error. An empty location array is a valid language-server response and must not be retried solely because it is empty; LSP location counts remain visible in telemetry.
-- The server registry selects an available pre-provisioned language server from the file extension and nearest project root. Do not call repo.lsp when the repository has no configured server for that file type.
-- LSP locations are navigation clues, not submission evidence. Read the relevant returned locations with repo.read before submitting them.
-- At most two LSP calls are available across discovery and refinement.`;
+function buildSubmissionSystemPrompt(maxResults: number): string {
+    return `You are the TypeAgent repository Explorer final selector. Use only the original request and authoritative evidence in the user message, then call execute_action with explorer.submitExploration. No repository tools are available in this phase. If submission is rejected, correct only the reported grounding problem.
+
+Submission rules:
+- Submit at most ${maxResults} repository-relative locations most likely needing changes.
+- Submit the complete high-confidence set of independently evidenced change-bearing locations, not merely the single strongest site. When evidence remains ambiguous between plausible change sites, include each independently grounded plausible site within the location limit.
+- A definition, caller, test, or alternate implementation that only helps understanding is not itself change-bearing; omit it unless the request or observed dependency indicates that it must change.
+- Every submitted line from startLine through endLine must be wholly visible in contiguous successful grep or read evidence in the authoritative evidence. A grep line grounds only that exact line; never extend beyond a visible read interval or bridge a gap between visible lines. LSP results and advisory candidates are navigation clues only.
+- When contiguous read evidence exposes it, prefer complete behavior-bearing blocks over isolated interior statements without automatically submitting an entire read window. Usually select the complete relevant 5-200 line function, method, definition, or enclosing branch; do not clip a relevant block merely to keep it short.
+- Cover distinct production files when the request is cross-cutting. Include tests, configuration, or documentation only when the request or observed dependency makes them change-bearing.
+- Do not emit duplicate or overlapping locations and do not invent repository content.`;
 }
 
-function buildProgramRules(
-    maxResults: number,
-    maxToolCalls: number,
-    enableLsp = false,
-): string {
-    return `Repository rules:
-- Static inspection only. Use only repo.ls, repo.glob, repo.grep, and repo.read${enableLsp ? ", and repo.lsp" : ""} inside the generated program.
-- Every program must be a complete string beginning exactly with async function execute(repo: RepositoryApi, params: ExploreParams): Promise<DiscoveryProgramResult> { for discovery or async function execute(repo: RepositoryApi, params: ExploreParams): Promise<RefinementProgramResult> { for refinement, and ending with }. Never send only the function body or use ExploreProgramResult as the return type.
-- Discovery and all refinements share one budget of at most ${maxToolCalls} repository calls.
-- Start with exact task clues; narrow broad or truncated searches before reading; follow task- or evidence-indicated companion sites; read every submitted range; stop after all indicated sites are verified.
-- grep uses safe regular expressions by default; literal is only for fixed strings.
-- repo.grep returns { matches: GrepMatch[], truncated: boolean }. Use result.matches, and when result.truncated is true, narrow the pattern or path before treating the search as complete.
-- Each action result reports observationsTruncated. When observationsTruncated is true, narrow a follow-up search or read before treating the visible observations as complete.
-- Type empty accumulators explicitly, for example const matches: GrepMatch[] = []; never rely on inference from an untyped [].
-- repo.read offset is zero-based, while grep and LSP lines and returned location ranges are 1-based. Subtract one when reading from a grep or LSP line. repo.read returns { text, location }. Build every refinement location from defined read result.location values; grep and LSP locate candidates but do not ground final citation ranges. Never reconstruct a read range from its requested offset or limit because the file may end earlier.
-- Treat historical paths and line numbers as clues and verify them against current repository contents.
-- Repository call results are captured automatically. Discovery should return { success: true, locations: [] }. Refinement must return { success: true, locations: [...] } after inspection; derive candidate locations from its repository results when navigation changes the candidate.
-- Submit no more than ${maxResults} final locations for every evidence-indicated change-bearing source, test, configuration, or documentation block. Preserve complete relevant blocks without adding unrelated surrounding lines. Select final ranges from the inspected read evidence; do not fabricate repository contents or ranges.`;
+function buildLspRules(): string {
+    return `
+- For this LSP treatment, after grep identifies a supported Python or TypeScript symbol, make exactly one repo.lsp definition call during discovery using its path, 1-based line clue, and exact identifier. A non-discarded attempt satisfies adoption even when it returns no locations and retains an error for telemetry; do not repair or repeat it for that reason alone.
+- Do not repeat repo.lsp during refinement when discovery already attempted it. If discovery omitted it, the discovery result directs refinement to make exactly one attempt before reading. LSP results are navigation only; use repo.read to ground any returned location before final selection.
+- repo.lsp has a separate two-call safety allowance and does not consume the repository evidence-call budget.`;
 }
 
 function buildExplorerUserPrompt(query: string, maxResults: number): string {
-    return `Explore this repository request and submit at most ${maxResults} grounded change-bearing source, test, configuration, or documentation localizations:\n\n${query}`;
+    return `Explore this repository request and gather evidence for at most ${maxResults} final file/line localizations:\n\n<query>\n${query}\n</query>`;
+}
+
+function buildSubmissionUserPrompt(
+    query: string,
+    maxResults: number,
+    evidence: string,
+): string {
+    return `Select and submit at most ${maxResults} grounded file/line localizations for this request:\n\n<query>\n${query}\n</query>\n\n<authoritative_evidence>\n${evidence}\n</authoritative_evidence>`;
 }
 
 function createInvocation(
     index: number,
     status: "completed" | "failed",
+    startedAt: string,
+    startedMs: number,
+    querySha256: string,
     usage: ExploreInvocationTelemetry["usage"],
     toolTrace: RepositoryToolTrace,
     reasoningTrace: ExploreInvocationTelemetry["reasoningTrace"],
     actionAttempts: ExploreInvocationTelemetry["actionAttempts"],
-    submissionAction: ExploreInvocationTelemetry["submissionAction"],
     result?: ExploreInvocationTelemetry["result"],
     error?: string,
 ): ExploreInvocationTelemetry {
     return {
         index,
         status,
+        startedAt,
+        durationMs: Math.max(0, Date.now() - startedMs),
+        querySha256,
         usage: { ...usage },
         actionTranslationAndCodeGenerationUsage: { ...usage },
         toolTrace,
         reasoningTrace: reasoningTrace.map((attempt) => ({ ...attempt })),
         actionAttempts: actionAttempts.map((attempt) => ({ ...attempt })),
-        ...(submissionAction ? { submissionAction } : {}),
         ...(result ? { result } : {}),
         ...(error ? { error: error.slice(0, 2_000) } : {}),
     };

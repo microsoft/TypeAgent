@@ -1,27 +1,31 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
+import {
+    COPILOT_SDK_VERSION,
+    createCopilotClient,
+    runCopilot,
+    stopCopilotClient,
+} from "./copilot.js";
 import { ensureDockerRepo } from "./docker.js";
 import { validateResultRows, type RunIdentity } from "./integrity.js";
 import {
     appendResult,
-    readRunManifest,
     readResults,
     resultKey,
     safeRunId,
     writeJsonAtomic,
 } from "./io.js";
-import {
-    CACHE_COMPATIBILITY_REVISION,
-    taskMatchesResult,
-} from "./resultCache.js";
 import { scoreSwebench } from "./score.js";
-import { resolvePackagedRipgrepPath } from "./ripgrep.js";
-import { runTypeAgentDispatcher } from "./typeAgent.js";
+import {
+    createTrajectoryFiles,
+    validateRunTrajectoryFiles,
+} from "./trajectory.js";
+import { resolveRunRuntimeFingerprint } from "./runtimeFingerprint.js";
 import type {
     BenchTask,
     BenchmarkAgentConfig,
@@ -29,6 +33,7 @@ import type {
     MatrixEntry,
     McpServerConfig,
     RunResult,
+    RunRuntimeFingerprint,
 } from "./types.js";
 import { isTypeAgentVariant } from "./types.js";
 
@@ -37,6 +42,7 @@ export interface BenchmarkOptions {
     output: string;
     copilotPath: string;
     runtimeEvidence: string;
+    runtimeFingerprint: RunRuntimeFingerprint;
     providerBaseUrl: string;
     apiKeyEnv: string;
     agent: BenchmarkAgentConfig;
@@ -54,6 +60,7 @@ export interface WorkItem {
     task: BenchTask;
     entry: MatrixEntry;
     variant: BenchmarkVariant;
+    startAttempt: number;
 }
 
 export interface ResumeRow {
@@ -61,30 +68,17 @@ export interface ResumeRow {
     matrixName: string;
     variant: BenchmarkVariant;
     ok: boolean;
-}
-
-export interface RuntimeEvidenceExpectation {
-    ripgrepPath: string;
-    ripgrepSha256: string;
-    variants: readonly BenchmarkVariant[];
-    copilotPath: string;
-    allowCachedOnly?: boolean;
-}
-
-interface CachedRuntimeSources {
-    harnesses: Record<string, unknown>[];
-    sources: Array<{
-        runId: string;
-        resultsPath: string;
-        manifestPath: string;
-        runtimeEvidence: string;
-        variants: BenchmarkVariant[];
-        manifestSha256: string;
-        evidenceSha256: string;
-    }>;
+    attempt: number;
+    maxAttempts: number;
 }
 
 const defaultVariants: BenchmarkVariant[] = ["baseline", "typeagent"];
+
+export function executionHarnessForVariant(
+    variant: BenchmarkVariant,
+): "copilot-subagent" | "copilot-mcp" {
+    return variant === "baseline" ? "copilot-subagent" : "copilot-mcp";
+}
 
 export async function runBenchmark(
     tasks: BenchTask[],
@@ -92,9 +86,6 @@ export async function runBenchmark(
     options: BenchmarkOptions,
 ): Promise<void> {
     const variants = options.variants;
-    if (tasks.length === 0) {
-        throw new Error("Benchmark tasks must be non-empty");
-    }
     if (variants.length === 0 || new Set(variants).size !== variants.length) {
         throw new Error("Benchmark variants must be non-empty and unique");
     }
@@ -104,16 +95,19 @@ export async function runBenchmark(
         matrix,
         variants,
         agent: options.agent,
+        maxAttempts: options.maxAttempts,
+        tasks,
     };
     const previousRows = await readResults(options.output);
     validateResultRows(previousRows, identity);
-    validateResumeTaskRows(tasks, previousRows);
+    await validateRetainedTrajectories(previousRows);
     const pending = selectPendingWork(
         tasks,
         matrix,
         previousRows,
         variants,
         options.forceRerun,
+        options.maxAttempts,
     );
     const pendingKeys = new Set(
         pending.map((work) =>
@@ -124,13 +118,14 @@ export async function runBenchmark(
             ),
         ),
     );
+    const progressRows = createProgressRowLabels(tasks);
     for (const task of tasks) {
         for (const entry of matrix) {
             const matrixName = entry.name ?? entry.model;
             for (const variant of variants) {
                 if (!pendingKeys.has(resultKey(task.id, matrixName, variant))) {
                     process.stderr.write(
-                        `skip\t${task.id}\t${matrixName}\t${variant}\tcompleted\n`,
+                        `skip\t${progressRows.get(task.id) ?? "row-unknown"}\t${matrixName}\t${variant}\tcompleted\n`,
                     );
                 }
             }
@@ -138,6 +133,7 @@ export async function runBenchmark(
     }
 
     const repoPreparation = new Map<string, Promise<void>>();
+    const resultHistories = groupRowsByKey(previousRows);
     let writeQueue = Promise.resolve();
     const writeResult = async (result: RunResult): Promise<void> => {
         writeQueue = writeQueue.then(() =>
@@ -146,138 +142,89 @@ export async function runBenchmark(
         await writeQueue;
     };
 
-    const ripgrepPath = await resolvePackagedRipgrepPath();
-    const ripgrepSha256 = createHash("sha256")
-        .update(await readFile(ripgrepPath))
-        .digest("hex");
-    const cachedRuntimeSources = previousRows.some((row) => row.reusedFrom)
-        ? await validateCachedRuntimeSources(
-              previousRows,
-              ripgrepPath,
-              ripgrepSha256,
-          )
-        : undefined;
-    const existingRuntimeEvidence = options.forceRerun
-        ? undefined
-        : await readRuntimeEvidenceIfExists(options.runtimeEvidence);
-    if (existingRuntimeEvidence) {
-        validateRuntimeEvidence(existingRuntimeEvidence, {
-            ripgrepPath,
-            ripgrepSha256,
-            variants: variantsForRows(previousRows),
-            copilotPath: options.copilotPath,
-        });
-        validateCachedRuntimeMetadata(
-            existingRuntimeEvidence,
-            cachedRuntimeSources,
-        );
-        if (
-            existingRuntimeEvidence.cachedOnly === true &&
-            previousRows.some((row) => !row.reusedFrom)
-        ) {
-            throw new Error(
-                "Runtime evidence marked cached-only contains local result rows",
-            );
-        }
-    } else if (previousRows.some((row) => !row.reusedFrom)) {
-        throw new Error(
-            "Completed local rows are missing their runtime evidence artifact",
-        );
-    }
     if (pending.length === 0) {
-        if (!existingRuntimeEvidence) {
-            if (!cachedRuntimeSources) {
-                throw new Error(
-                    "Completed local rows are missing their runtime evidence artifact",
-                );
-            }
-            const evidence = {
-                schemaVersion: 1,
-                capturedAt: new Date().toISOString(),
-                cachedOnly: true,
-                repositorySearch: repositorySearchEvidence(
-                    ripgrepPath,
-                    ripgrepSha256,
-                ),
-                harnesses: cachedRuntimeSources.harnesses,
-                cachedSources: cachedRuntimeSources.sources,
-            };
-            validateRuntimeEvidence(evidence, {
-                ripgrepPath,
-                ripgrepSha256,
-                variants: variantsForRows(previousRows),
-                copilotPath: options.copilotPath,
-            });
-            await writeJsonAtomic(options.runtimeEvidence, evidence);
-        }
         return;
     }
 
-    const needsCopilot = pending.some((work) => work.variant === "baseline");
-    const copilot = needsCopilot ? await import("./copilot.js") : undefined;
-    const client = copilot
-        ? copilot.createCopilotClient({
-              copilotPath: options.copilotPath,
-              baseDirectory: path.join(
-                  path.dirname(options.output),
-                  ".copilot",
-              ),
-              workingDirectory: path.dirname(options.output),
-          })
-        : undefined;
-    if (client) {
-        await client.start();
+    const runtimeFingerprint = await resolveRunRuntimeFingerprint(
+        options.copilotPath,
+        options.mcp,
+    );
+    if (!isDeepStrictEqual(runtimeFingerprint, options.runtimeFingerprint)) {
+        throw new Error(
+            "Benchmark runtime binaries changed after the manifest was frozen",
+        );
     }
-    const runtimeStatus = client ? await client.getStatus() : undefined;
-    const harnesses = [
-        ...(client
-            ? [
-                  {
-                      name: "copilot-sdk",
-                      sdkVersion: copilot!.COPILOT_SDK_VERSION,
-                      copilotPath: options.copilotPath,
-                      ...runtimeStatus,
-                  },
-              ]
-            : []),
-        ...(pending.some((work) => isTypeAgentVariant(work.variant))
-            ? [
-                  {
-                      name: "typeagent-dispatcher",
-                      outerTranslation: "natural-language",
-                      applicationAgents: ["explorer"],
-                      mcp: false,
-                  },
-              ]
-            : []),
-    ];
-    const evidence = {
+    const ripgrep = runtimeFingerprint.ripgrep;
+    const client = createCopilotClient({
+        copilotPath: options.copilotPath,
+        baseDirectory: path.join(path.dirname(options.output), ".copilot"),
+        workingDirectory: path.dirname(options.output),
+    });
+    await client.start();
+    const runtimeStatus = await client.getStatus();
+    await writeJsonAtomic(options.runtimeEvidence, {
         schemaVersion: 1,
         capturedAt: new Date().toISOString(),
-        repositorySearch: repositorySearchEvidence(ripgrepPath, ripgrepSha256),
-        harnesses: mergeHarnessEvidence(
-            existingRuntimeEvidence ??
-                (cachedRuntimeSources
-                    ? { harnesses: cachedRuntimeSources.harnesses }
-                    : undefined),
-            harnesses,
-        ),
-        ...(cachedRuntimeSources
-            ? { cachedSources: cachedRuntimeSources.sources }
-            : {}),
-    };
-    validateRuntimeEvidence(evidence, {
-        ripgrepPath,
-        ripgrepSha256,
-        variants: [
-            ...new Set([
-                ...variantsForRows(previousRows),
-                ...pending.map((work) => work.variant),
-            ]),
+        harnesses: [
+            {
+                name: "copilot-sdk",
+                sdkVersion: COPILOT_SDK_VERSION,
+                copilotPath: runtimeFingerprint.copilot.path,
+                sha256: runtimeFingerprint.copilot.sha256,
+                ...runtimeStatus,
+            },
+            {
+                name: "packaged-ripgrep",
+                executable: ripgrep.path,
+                sha256: ripgrep.sha256,
+            },
+            ...(pending.some((work) => isTypeAgentVariant(work.variant))
+                ? [
+                      {
+                          name: "typeagent-mcp",
+                          command: options.mcp.command,
+                          commandSha256: runtimeFingerprint.mcpCommand.sha256,
+                          entrypoint: runtimeFingerprint.mcpEntrypoint?.path,
+                          entrypointSha256:
+                              runtimeFingerprint.mcpEntrypoint?.sha256,
+                          args: options.mcp.args,
+                          tool: "explore",
+                          outerHarness: "copilot-sdk",
+                      },
+                  ]
+                : []),
+            ...(pending.some((work) => work.variant === "typeagent-lsp") &&
+            runtimeFingerprint.pythonLsp
+                ? [
+                      {
+                          name: "python-lsp",
+                          executable: runtimeFingerprint.pythonLsp.path,
+                          sha256: runtimeFingerprint.pythonLsp.sha256,
+                          interpreter:
+                              runtimeFingerprint.pythonLspInterpreter?.path,
+                          interpreterSha256:
+                              runtimeFingerprint.pythonLspInterpreter?.sha256,
+                          lockFile: runtimeFingerprint.pythonLspLock?.path,
+                          lockFileSha256:
+                              runtimeFingerprint.pythonLspLock?.sha256,
+                      },
+                      {
+                          name: "typescript-lsp",
+                          executable:
+                              runtimeFingerprint.typescriptLspCommand?.path,
+                          sha256: runtimeFingerprint.typescriptLspCommand
+                              ?.sha256,
+                          entrypoint:
+                              runtimeFingerprint.typescriptLspEntrypoint?.path,
+                          entrypointSha256:
+                              runtimeFingerprint.typescriptLspEntrypoint
+                                  ?.sha256,
+                      },
+                  ]
+                : []),
         ],
-        copilotPath: options.copilotPath,
     });
-    await writeJsonAtomic(options.runtimeEvidence, evidence);
 
     try {
         await mapWithConcurrencyPerModel(
@@ -296,7 +243,7 @@ export async function runBenchmark(
 
                 const matrixName = work.entry.name ?? work.entry.model;
                 for (
-                    let attempt = 1;
+                    let attempt = work.startAttempt;
                     attempt <= options.maxAttempts;
                     attempt += 1
                 ) {
@@ -307,41 +254,38 @@ export async function runBenchmark(
                         work.variant,
                         attempt,
                     );
+                    const trajectoryFiles = createTrajectoryFiles(
+                        options.output,
+                        work.task.id,
+                        work.entry.model,
+                        work.variant,
+                        attempt,
+                    );
                     await mkdir(path.dirname(telemetryFile), {
                         recursive: true,
                     });
                     process.stderr.write(
-                        `start\t${work.task.id}\t${matrixName}\t${work.variant}\tattempt=${attempt}/${options.maxAttempts}\n`,
+                        `start\t${progressRows.get(work.task.id) ?? "row-unknown"}\t${matrixName}\t${work.variant}\tattempt=${attempt}/${options.maxAttempts}\n`,
                     );
-                    const output = isTypeAgentVariant(work.variant)
-                        ? await runTypeAgentDispatcher({
-                              repoPath: path.resolve(work.task.repoPath),
-                              ripgrepPath,
-                              prompt: work.task.query,
-                              model: work.entry.model,
-                              variant: work.variant,
-                              providerBaseUrl: options.providerBaseUrl,
-                              apiKeyEnv: options.apiKeyEnv,
-                              ...(options.envFile
-                                  ? { envFile: options.envFile }
-                                  : {}),
-                              telemetryFile,
-                          })
-                        : await copilot!.runCopilot(client!, {
-                              repoPath: path.resolve(work.task.repoPath),
-                              ripgrepPath,
-                              prompt: work.task.query,
-                              model: work.entry.model,
-                              variant: work.variant,
-                              providerBaseUrl: options.providerBaseUrl,
-                              apiKeyEnv: options.apiKeyEnv,
-                              agent: options.agent,
-                              ...(options.envFile
-                                  ? { envFile: options.envFile }
-                                  : {}),
-                              telemetryFile,
-                              timeoutMs: options.timeoutMs,
-                          });
+                    const output = await runCopilot(client, {
+                        rowName: work.task.id,
+                        attempt,
+                        repoPath: path.resolve(work.task.repoPath),
+                        prompt: work.task.query,
+                        model: work.entry.model,
+                        variant: work.variant,
+                        providerBaseUrl: options.providerBaseUrl,
+                        apiKeyEnv: options.apiKeyEnv,
+                        agent: options.agent,
+                        ...(options.envFile
+                            ? { envFile: options.envFile }
+                            : {}),
+                        mcp: options.mcp,
+                        telemetryFile,
+                        trajectoryFiles,
+                        timeoutMs: options.timeoutMs,
+                        ripgrepPath: ripgrep.path,
+                    });
                     const score = scoreSwebench(
                         output.finalAnswer,
                         work.task.swebench.patch,
@@ -352,7 +296,7 @@ export async function runBenchmark(
                     const error =
                         output.error ??
                         (output.ok && !usableFinalAnswer
-                            ? `${isTypeAgentVariant(work.variant) ? "TypeAgent Explorer" : "Copilot CLI"} completed without a parseable <final_answer> citation`
+                            ? "Copilot CLI completed without a parseable <final_answer> citation"
                             : undefined);
                     const result: RunResult = {
                         runId: options.runId,
@@ -373,22 +317,17 @@ export async function runBenchmark(
                         swebench: work.task.swebench,
                         ok,
                         durationMs: output.durationMs,
+                        latencyTimeline: output.latencyTimeline,
                         attempt,
                         maxAttempts: options.maxAttempts,
                         finalAnswer: output.finalAnswer,
                         score,
-                        ...("usedRepair" in output && output.usedRepair
-                            ? { usedRepair: true }
-                            : {}),
-                        ...("usage" in output && output.usage
-                            ? { usage: output.usage }
-                            : {}),
+                        ...(output.usedRepair ? { usedRepair: true } : {}),
+                        outerLoopAbortedAfterExplore:
+                            output.outerLoopAbortedAfterExplore,
+                        ...(output.usage ? { usage: output.usage } : {}),
                         ...(output.typeAgentUsage
                             ? { typeAgentUsage: output.typeAgentUsage }
-                            : {}),
-                        ...("dispatcherUsage" in output &&
-                        output.dispatcherUsage
-                            ? { dispatcherUsage: output.dispatcherUsage }
                             : {}),
                         ...(output.combinedUsage
                             ? { combinedUsage: output.combinedUsage }
@@ -401,104 +340,68 @@ export async function runBenchmark(
                               }
                             : {}),
                         telemetryFile: output.telemetryFile,
-                        attemptedExploreCalls:
-                            "attemptedExploreCalls" in output
-                                ? output.attemptedExploreCalls
-                                : 0,
-                        completedExploreCalls:
-                            "completedExploreCalls" in output
-                                ? output.completedExploreCalls
-                                : 0,
-                        successfulExploreCalls:
-                            "successfulExploreCalls" in output
-                                ? output.successfulExploreCalls
-                                : 0,
+                        trajectoryFiles: output.trajectoryFiles,
+                        ripgrepPath: ripgrep.path,
+                        ripgrepSha256: ripgrep.sha256,
+                        attemptedExploreCalls: output.attemptedExploreCalls,
+                        completedExploreCalls: output.completedExploreCalls,
+                        successfulExploreCalls: output.successfulExploreCalls,
                         outsideExploreInspection:
-                            "outsideExploreInspection" in output
-                                ? output.outsideExploreInspection
-                                : false,
-                        mcpServerReady:
-                            "mcpServerReady" in output
-                                ? output.mcpServerReady
-                                : false,
-                        mcpAdvertisedTools:
-                            "mcpAdvertisedTools" in output
-                                ? output.mcpAdvertisedTools
-                                : [],
-                        ...("telemetryError" in output && output.telemetryError
+                            output.outsideExploreInspection,
+                        mcpServerReady: output.mcpServerReady,
+                        mcpAdvertisedTools: output.mcpAdvertisedTools,
+                        ...(output.telemetryError
                             ? { telemetryError: output.telemetryError }
                             : {}),
-                        mcpAdopted:
-                            "mcpAdopted" in output ? output.mcpAdopted : false,
+                        mcpAdopted: output.mcpAdopted,
                         lspAdopted: output.lspAdopted,
                         lspCallCount: output.lspCallCount,
                         lspResultCount: output.lspResultCount,
-                        subagentAdopted:
-                            "subagentAdopted" in output
-                                ? output.subagentAdopted
-                                : false,
-                        defaultMainAgent:
-                            "defaultMainAgent" in output
-                                ? output.defaultMainAgent
-                                : false,
+                        subagentAdopted: output.subagentAdopted,
+                        defaultMainAgent: output.defaultMainAgent,
                         attemptedExplorerDelegations:
-                            "attemptedExplorerDelegations" in output
-                                ? output.attemptedExplorerDelegations
-                                : 0,
+                            output.attemptedExplorerDelegations,
                         completedExplorerDelegations:
-                            "completedExplorerDelegations" in output
-                                ? output.completedExplorerDelegations
-                                : 0,
+                            output.completedExplorerDelegations,
                         successfulExplorerDelegations:
-                            "successfulExplorerDelegations" in output
-                                ? output.successfulExplorerDelegations
-                                : 0,
+                            output.successfulExplorerDelegations,
                         failedExplorerDelegations:
-                            "failedExplorerDelegations" in output
-                                ? output.failedExplorerDelegations
-                                : 0,
-                        explorerRepositoryCalls:
-                            "explorerRepositoryCalls" in output
-                                ? output.explorerRepositoryCalls
-                                : 0,
+                            output.failedExplorerDelegations,
+                        explorerRepositoryCalls: output.explorerRepositoryCalls,
+                        firstAssistantActionExclusiveExplore:
+                            output.firstAssistantActionExclusiveExplore,
+                        exploreCompletedBeforeLaterAssistantAction:
+                            output.exploreCompletedBeforeLaterAssistantAction,
                         firstAssistantActionExclusiveExplorer:
-                            "firstAssistantActionExclusiveExplorer" in output
-                                ? output.firstAssistantActionExclusiveExplorer
-                                : false,
+                            output.firstAssistantActionExclusiveExplorer,
                         explorerCompletedBeforeLaterAssistantAction:
-                            "explorerCompletedBeforeLaterAssistantAction" in
-                            output
-                                ? output.explorerCompletedBeforeLaterAssistantAction
-                                : false,
+                            output.explorerCompletedBeforeLaterAssistantAction,
                         mainAgentRepositoryInspection:
-                            "mainAgentRepositoryInspection" in output
-                                ? output.mainAgentRepositoryInspection
-                                : false,
-                        explorerSubagentTrace:
-                            "explorerSubagentTrace" in output
-                                ? output.explorerSubagentTrace
-                                : [],
-                        mcpToolTrace:
-                            "mcpToolTrace" in output ? output.mcpToolTrace : [],
-                        toolTrace:
-                            "toolTrace" in output ? output.toolTrace : [],
-                        events: "events" in output ? output.events : [],
-                        ...("selectedAgentName" in output &&
-                        output.selectedAgentName
+                            output.mainAgentRepositoryInspection,
+                        explorerSubagentTrace: output.explorerSubagentTrace,
+                        mcpToolTrace: output.mcpToolTrace,
+                        toolTrace: output.toolTrace,
+                        events: output.events,
+                        ...(output.selectedAgentName
                             ? {
                                   selectedAgentName: output.selectedAgentName,
                               }
                             : {}),
-                        ...("dispatchEvidence" in output &&
-                        output.dispatchEvidence
-                            ? { typeAgentDispatch: output.dispatchEvidence }
-                            : {}),
                         ...(error ? { error } : {}),
                     };
-                    failClosedResultIntegrity(result, identity);
+                    const key = resultKey(
+                        result.taskId,
+                        result.matrixName,
+                        result.variant,
+                    );
+                    const history = resultHistories.get(key) ?? [];
+                    await validateAttemptTrajectories(result, history);
+                    failClosedResultIntegrity(result, identity, history);
                     await writeResult(result);
+                    history.push(result);
+                    resultHistories.set(key, history);
                     process.stderr.write(
-                        `${result.ok ? "ok" : "fail"}\t${work.task.id}\t${matrixName}\t${work.variant}\t${result.durationMs}ms\tdirect=${result.typeAgentDispatch?.executionCount ?? 0}\tsubagent=${result.attemptedExplorerDelegations ?? 0}/${result.successfulExplorerDelegations ?? 0}\tmainInspect=${result.mainAgentRepositoryInspection === true}\n`,
+                        `${result.ok ? "ok" : "fail"}\t${progressRows.get(work.task.id) ?? "row-unknown"}\t${matrixName}\t${work.variant}\t${result.durationMs}ms\tmcp=${result.attemptedExploreCalls ?? 0}/${result.successfulExploreCalls ?? 0}\tsubagent=${result.attemptedExplorerDelegations ?? 0}/${result.successfulExplorerDelegations ?? 0}\tmainInspect=${result.mainAgentRepositoryInspection === true}\n`,
                     );
                     if (result.ok) {
                         break;
@@ -508,369 +411,49 @@ export async function runBenchmark(
         );
         await writeQueue;
     } finally {
-        if (client) {
-            try {
-                await copilot!.stopCopilotClient(client);
-            } catch (error) {
-                process.stderr.write(
-                    `warning: Copilot CLI shutdown required force stop: ${(error as Error).message}\n`,
-                );
-            }
-        }
-    }
-}
-
-function repositorySearchEvidence(
-    ripgrepPath: string,
-    sha256: string,
-): Record<string, unknown> {
-    return {
-        engine: "ripgrep",
-        source: "copilot-packaged",
-        executable: path.basename(ripgrepPath),
-        sha256,
-        sharedAcrossArms: true,
-        snapshot: "filtered-immutable-directory",
-    };
-}
-
-async function readRuntimeEvidenceIfExists(
-    evidencePath: string,
-): Promise<Record<string, unknown> | undefined> {
-    try {
-        const parsed: unknown = JSON.parse(
-            await readFile(evidencePath, "utf8"),
-        );
-        if (!isRecord(parsed)) {
-            throw new Error("runtime evidence must be a JSON object");
-        }
-        return parsed;
-    } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-            return undefined;
-        }
-        throw error;
-    }
-}
-
-export function validateRuntimeEvidence(
-    evidence: Record<string, unknown>,
-    expected: RuntimeEvidenceExpectation,
-): void {
-    const repositorySearch = evidence.repositorySearch;
-    if (
-        evidence.schemaVersion !== 1 ||
-        typeof evidence.capturedAt !== "string" ||
-        !isRecord(repositorySearch) ||
-        repositorySearch.engine !== "ripgrep" ||
-        repositorySearch.source !== "copilot-packaged" ||
-        repositorySearch.executable !== path.basename(expected.ripgrepPath) ||
-        repositorySearch.sha256 !== expected.ripgrepSha256 ||
-        repositorySearch.sharedAcrossArms !== true ||
-        repositorySearch.snapshot !== "filtered-immutable-directory"
-    ) {
-        throw new Error(
-            "Runtime evidence does not match the current shared ripgrep snapshot runtime",
-        );
-    }
-
-    if (
-        evidence.cachedOnly !== undefined &&
-        typeof evidence.cachedOnly !== "boolean"
-    ) {
-        throw new Error("Runtime evidence has an invalid cachedOnly marker");
-    }
-    if (evidence.cachedOnly === true && expected.allowCachedOnly === false) {
-        throw new Error(
-            "Runtime evidence for a direct cache source cannot itself be cached-only",
-        );
-    }
-
-    if (
-        !Array.isArray(evidence.harnesses) ||
-        !evidence.harnesses.every(isRecord)
-    ) {
-        throw new Error("Runtime evidence must contain well-formed harnesses");
-    }
-    const harnesses = new Map<string, Record<string, unknown>>();
-    for (const harness of evidence.harnesses) {
-        if (typeof harness.name !== "string" || harnesses.has(harness.name)) {
-            throw new Error(
-                "Runtime evidence harness names must be present and unique",
-            );
-        }
-        if (harness.name === "copilot-sdk") {
-            if (
-                typeof harness.sdkVersion !== "string" ||
-                harness.sdkVersion.length === 0 ||
-                harness.copilotPath !== expected.copilotPath ||
-                typeof harness.version !== "string" ||
-                harness.version.length === 0 ||
-                !Number.isInteger(harness.protocolVersion)
-            ) {
-                throw new Error(
-                    "Runtime evidence has invalid Copilot SDK executable identity",
-                );
-            }
-        } else if (harness.name === "typeagent-dispatcher") {
-            if (
-                harness.outerTranslation !== "natural-language" ||
-                !isDeepStrictEqual(harness.applicationAgents, ["explorer"]) ||
-                harness.mcp !== false
-            ) {
-                throw new Error(
-                    "Runtime evidence has invalid TypeAgent dispatcher identity",
-                );
-            }
-        } else {
-            throw new Error(
-                `Runtime evidence contains unknown harness ${JSON.stringify(harness.name)}`,
-            );
-        }
-        harnesses.set(harness.name, harness);
-    }
-    const requiredHarnesses = new Set(
-        expected.variants.map((variant) =>
-            variant === "baseline" ? "copilot-sdk" : "typeagent-dispatcher",
-        ),
-    );
-    for (const name of requiredHarnesses) {
-        if (!harnesses.has(name)) {
-            throw new Error(
-                `Runtime evidence is missing required ${name} harness identity`,
-            );
-        }
-    }
-}
-
-export function validateResumeTaskRows(
-    tasks: BenchTask[],
-    rows: RunResult[],
-): void {
-    const tasksById = new Map(tasks.map((task) => [task.id, task]));
-    for (const row of rows) {
-        const task = tasksById.get(row.taskId);
-        if (
-            !task ||
-            row.repoPath !== task.repoPath ||
-            !taskMatchesResult(task, row)
-        ) {
-            throw new Error(
-                `Existing result row for ${JSON.stringify(row.taskId)} does not match the current task payload`,
-            );
-        }
-    }
-}
-
-function variantsForRows(rows: RunResult[]): BenchmarkVariant[] {
-    return [...new Set(rows.map((row) => row.variant))];
-}
-
-async function validateCachedRuntimeSources(
-    rows: RunResult[],
-    ripgrepPath: string,
-    ripgrepSha256: string,
-): Promise<CachedRuntimeSources> {
-    const groups = new Map<
-        string,
-        {
-            runId: string;
-            resultsPath: string;
-            manifestPath: string;
-            runtimeEvidence: string;
-            variants: Set<BenchmarkVariant>;
-            taskIds: Set<string>;
-            models: Map<string, string>;
-        }
-    >();
-    for (const row of rows) {
-        const source = row.reusedFrom;
-        if (!source) {
-            continue;
-        }
-        if (
-            source.originalRunId !== source.sourceRunId ||
-            typeof source.manifestPath !== "string" ||
-            typeof source.runtimeEvidence !== "string"
-        ) {
-            throw new Error(
-                "Cached source runtime evidence must identify one direct, non-cached source",
-            );
-        }
-        const existing = groups.get(source.sourceRunId);
-        if (
-            existing &&
-            (existing.resultsPath !== source.resultsPath ||
-                existing.manifestPath !== source.manifestPath ||
-                existing.runtimeEvidence !== source.runtimeEvidence)
-        ) {
-            throw new Error(
-                `Cached source runtime evidence has conflicting provenance for ${JSON.stringify(source.sourceRunId)}`,
-            );
-        }
-        const group = existing ?? {
-            runId: source.sourceRunId,
-            resultsPath: source.resultsPath,
-            manifestPath: source.manifestPath,
-            runtimeEvidence: source.runtimeEvidence,
-            variants: new Set<BenchmarkVariant>(),
-            taskIds: new Set<string>(),
-            models: new Map<string, string>(),
-        };
-        const priorModel = group.models.get(row.matrixName);
-        if (priorModel && priorModel !== row.model) {
-            throw new Error(
-                `Cached source runtime evidence has conflicting model identity for ${JSON.stringify(row.matrixName)}`,
-            );
-        }
-        group.variants.add(row.variant);
-        group.taskIds.add(row.taskId);
-        group.models.set(row.matrixName, row.model);
-        groups.set(source.sourceRunId, group);
-    }
-
-    const harnesses = new Map<string, Record<string, unknown>>();
-    const sources: CachedRuntimeSources["sources"] = [];
-    for (const group of groups.values()) {
-        let manifestText: string;
-        let evidenceText: string;
-        let manifest;
-        let evidence: Record<string, unknown>;
         try {
-            [manifestText, evidenceText, manifest] = await Promise.all([
-                readFile(group.manifestPath, "utf8"),
-                readFile(group.runtimeEvidence, "utf8"),
-                readRunManifest(group.manifestPath),
-            ]);
-            const parsed: unknown = JSON.parse(evidenceText);
-            if (!isRecord(parsed)) {
-                throw new Error("artifact must be a JSON object");
-            }
-            evidence = parsed;
+            await stopCopilotClient(client);
         } catch (error) {
-            throw new Error(
-                `Cached source runtime evidence could not be read: ${error instanceof Error ? error.message : String(error)}`,
+            process.stderr.write(
+                `warning: Copilot CLI shutdown required force stop: ${(error as Error).message}\n`,
             );
         }
-
-        const variants = [...group.variants].sort();
-        const manifestModels = new Map(
-            manifest.matrix.map((entry) => [
-                entry.name ?? entry.model,
-                entry.model,
-            ]),
-        );
-        if (
-            manifest.runId !== group.runId ||
-            path.resolve(manifest.output) !== path.resolve(group.resultsPath) ||
-            path.resolve(manifest.runtimeEvidence) !==
-                path.resolve(group.runtimeEvidence) ||
-            manifest.cacheCompatibilityRevision !==
-                CACHE_COMPATIBILITY_REVISION ||
-            [...group.taskIds].some(
-                (taskId) => !manifest.taskIds.includes(taskId),
-            ) ||
-            variants.some((variant) => !manifest.variants.includes(variant)) ||
-            [...group.models].some(
-                ([matrixName, model]) =>
-                    manifestModels.get(matrixName) !== model,
-            )
-        ) {
-            throw new Error(
-                `Cached source runtime evidence manifest does not match ${JSON.stringify(group.runId)}`,
-            );
-        }
-        validateRuntimeEvidence(evidence, {
-            ripgrepPath,
-            ripgrepSha256,
-            variants,
-            copilotPath: manifest.copilotPath,
-            allowCachedOnly: false,
-        });
-        for (const harness of evidence.harnesses as Record<string, unknown>[]) {
-            const name = harness.name as string;
-            const prior = harnesses.get(name);
-            if (prior && !isDeepStrictEqual(prior, harness)) {
-                throw new Error(
-                    `Cached source runtime evidence disagrees on ${JSON.stringify(name)} harness identity`,
-                );
-            }
-            harnesses.set(name, harness);
-        }
-        sources.push({
-            runId: group.runId,
-            resultsPath: group.resultsPath,
-            manifestPath: group.manifestPath,
-            runtimeEvidence: group.runtimeEvidence,
-            variants,
-            manifestSha256: createHash("sha256")
-                .update(manifestText)
-                .digest("hex"),
-            evidenceSha256: createHash("sha256")
-                .update(evidenceText)
-                .digest("hex"),
-        });
-    }
-    sources.sort((left, right) => left.runId.localeCompare(right.runId));
-    return { harnesses: [...harnesses.values()], sources };
-}
-
-function validateCachedRuntimeMetadata(
-    evidence: Record<string, unknown>,
-    cached: CachedRuntimeSources | undefined,
-): void {
-    if (cached) {
-        if (!isDeepStrictEqual(evidence.cachedSources, cached.sources)) {
-            throw new Error(
-                "Runtime evidence cached-source metadata does not match verified source artifacts",
-            );
-        }
-    } else if (evidence.cachedSources !== undefined) {
-        throw new Error(
-            "Runtime evidence contains cached-source metadata without reused rows",
-        );
     }
 }
 
-export function mergeHarnessEvidence(
-    existing: Record<string, unknown> | undefined,
-    current: Record<string, unknown>[],
-): Record<string, unknown>[] {
-    const merged = new Map<string, Record<string, unknown>>();
-    const prior = Array.isArray(existing?.harnesses)
-        ? existing.harnesses.filter(isRecord)
-        : [];
-    for (const harness of [...prior, ...current]) {
-        if (typeof harness.name === "string") {
-            const previous = merged.get(harness.name);
-            if (previous && !isDeepStrictEqual(previous, harness)) {
-                throw new Error(
-                    `Runtime harness identity changed for ${JSON.stringify(harness.name)}`,
-                );
-            }
-            merged.set(harness.name, harness);
-        }
-    }
-    return [...merged.values()];
+export function createProgressRowLabels(
+    tasks: readonly Pick<BenchTask, "id">[],
+): Map<string, string> {
+    return new Map(tasks.map((task, index) => [task.id, `row-${index + 1}`]));
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return Boolean(value && typeof value === "object" && !Array.isArray(value));
+export async function validateRetainedTrajectories(
+    rows: readonly RunResult[],
+): Promise<void> {
+    await validateRunTrajectoryFiles(rows);
+}
+
+export async function validateAttemptTrajectories(
+    result: RunResult,
+    history: readonly RunResult[] = [],
+): Promise<void> {
+    await validateRunTrajectoryFiles([...history, result]);
 }
 
 export function failClosedResultIntegrity(
     result: RunResult,
     identity: RunIdentity,
+    history: RunResult[] = [],
 ): void {
     try {
-        validateResultRows([result], identity);
+        validateResultRows([...history, result], identity);
     } catch (error) {
         if (!result.ok) {
             throw error;
         }
         result.ok = false;
         result.error = `Integrity validation failed: ${error instanceof Error ? error.message : String(error)}`;
-        validateResultRows([result], identity);
+        validateResultRows([...history, result], identity);
     }
 }
 
@@ -920,26 +503,102 @@ export function selectPendingWork(
     previousRows: ResumeRow[],
     variants: BenchmarkVariant[] = defaultVariants,
     forceRerun = false,
+    maxAttempts = 1,
 ): WorkItem[] {
     const latest = new Map<string, ResumeRow>();
     for (const row of previousRows) {
         latest.set(resultKey(row.taskId, row.matrixName, row.variant), row);
     }
     const pending: WorkItem[] = [];
-    for (const task of tasks) {
+    for (const [taskIndex, task] of tasks.entries()) {
+        const firstVariant = taskIndex % variants.length;
+        const orderedVariants = [
+            ...variants.slice(firstVariant),
+            ...variants.slice(0, firstVariant),
+        ];
         for (const entry of matrix) {
             const matrixName = entry.name ?? entry.model;
-            for (const variant of variants) {
+            for (const variant of orderedVariants) {
                 if (
                     forceRerun ||
-                    !latest.get(resultKey(task.id, matrixName, variant))?.ok
+                    shouldRetry(
+                        latest.get(resultKey(task.id, matrixName, variant)),
+                        maxAttempts,
+                    )
                 ) {
-                    pending.push({ task, entry, variant });
+                    const latestAttempt = forceRerun
+                        ? undefined
+                        : latest.get(resultKey(task.id, matrixName, variant));
+                    pending.push({
+                        task,
+                        entry,
+                        variant,
+                        startAttempt: (latestAttempt?.attempt ?? 0) + 1,
+                    });
                 }
             }
         }
     }
     return pending;
+}
+
+function shouldRetry(
+    latest: ResumeRow | undefined,
+    maxAttempts: number,
+): boolean {
+    return (
+        !latest ||
+        (!latest.ok &&
+            latest.maxAttempts === maxAttempts &&
+            latest.attempt < maxAttempts)
+    );
+}
+
+function groupRowsByKey(rows: RunResult[]): Map<string, RunResult[]> {
+    const grouped = new Map<string, RunResult[]>();
+    for (const row of rows) {
+        const key = resultKey(row.taskId, row.matrixName, row.variant);
+        const history = grouped.get(key) ?? [];
+        history.push(row);
+        grouped.set(key, history);
+    }
+    return grouped;
+}
+
+export function assertCompleteRun(
+    tasks: BenchTask[],
+    matrix: MatrixEntry[],
+    variants: BenchmarkVariant[],
+    rows: ResumeRow[],
+): void {
+    const latest = new Map<string, ResumeRow>();
+    for (const row of rows) {
+        latest.set(resultKey(row.taskId, row.matrixName, row.variant), row);
+    }
+    let successful = 0;
+    let failed = 0;
+    let missing = 0;
+    for (const task of tasks) {
+        for (const entry of matrix) {
+            const matrixName = entry.name ?? entry.model;
+            for (const variant of variants) {
+                const row = latest.get(resultKey(task.id, matrixName, variant));
+                if (!row) {
+                    missing += 1;
+                } else if (row.ok) {
+                    successful += 1;
+                } else {
+                    failed += 1;
+                }
+            }
+        }
+    }
+    const expected = tasks.length * matrix.length * variants.length;
+    if (successful !== expected) {
+        throw new Error(
+            `Benchmark run incomplete: expected=${expected} successful=${successful} failed=${failed} missing=${missing}`,
+        );
+    }
 }
 
 export function isUsableFinalAnswer(score: RunResult["score"]): boolean {

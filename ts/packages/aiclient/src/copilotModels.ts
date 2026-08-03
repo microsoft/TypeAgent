@@ -1,12 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
+import type {
     CopilotClient,
-    approveAll,
-    type SessionConfig,
-    type CopilotSession,
-    type AssistantMessageEvent,
+    SessionConfig,
+    CopilotSession,
+    AssistantMessageEvent,
 } from "@github/copilot-sdk";
 import {
     PromptSection,
@@ -107,6 +106,7 @@ const TRANSLATION_SYSTEM_PROMPT =
 
 let cachedClient: CopilotClient | undefined;
 let startPromise: Promise<CopilotClient> | undefined;
+let sdkPromise: Promise<typeof import("@github/copilot-sdk")> | undefined;
 let cachedCliPath: string | undefined;
 let cachedCliUrl: string | undefined;
 let exitHandlerInstalled = false;
@@ -136,6 +136,10 @@ function findCopilotPath(): string {
     }
 }
 
+function getCopilotSdk(): Promise<typeof import("@github/copilot-sdk")> {
+    return (sdkPromise ??= import("@github/copilot-sdk"));
+}
+
 async function getClient(
     options?: CopilotClientOptions,
 ): Promise<CopilotClient> {
@@ -152,6 +156,7 @@ async function getClient(
     cachedCliPath = cliPath;
 
     startPromise = (async () => {
+        const { CopilotClient } = await getCopilotSdk();
         const target = cliUrl ? `server ${cliUrl}` : `CLI ${cliPath}`;
         debug(`Starting CopilotClient (${target})`);
         const tStart = Date.now();
@@ -254,7 +259,7 @@ export async function warmupCopilotFromConfig(): Promise<void> {
     const settings = copilotApiSettingsFromConfig();
     await warmupCopilotClient(
         { cliPath: settings.cliPath, cliUrl: settings.cliUrl },
-        buildSessionConfig(settings, {}, false),
+        await buildSessionConfig(settings, {}, false),
     );
 }
 
@@ -316,11 +321,12 @@ function renderPrompt(prompt: string | PromptSection[]): string {
     return parts.join("\n\n");
 }
 
-function buildSessionConfig(
+async function buildSessionConfig(
     settings: CopilotApiSettings,
     completionSettings: CompletionSettings,
     streaming: boolean,
-): SessionConfig {
+): Promise<SessionConfig> {
+    const { approveAll } = await getCopilotSdk();
     const reasoningEffort =
         (completionSettings.reasoning_effort as
             | "low"
@@ -420,7 +426,7 @@ export function createCopilotChatModel(
         const tCreate = Date.now();
         try {
             session = await client.createSession(
-                buildSessionConfig(settings, completionSettings!, false),
+                await buildSessionConfig(settings, completionSettings!, false),
             );
         } catch (err) {
             return error(
@@ -507,7 +513,7 @@ export function createCopilotChatModel(
         const tCreate = Date.now();
         try {
             session = await client.createSession(
-                buildSessionConfig(settings, completionSettings!, true),
+                await buildSessionConfig(settings, completionSettings!, true),
             );
         } catch (err) {
             return error(

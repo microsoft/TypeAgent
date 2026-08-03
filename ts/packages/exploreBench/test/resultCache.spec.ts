@@ -2,28 +2,43 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
     archiveResultArtifacts,
+    BASELINE_CACHE_MIN_REVISION,
     CACHE_COMPATIBILITY_REVISION,
     cacheManifestsCompatible,
     seedResultsFromPriorRuns,
     selectReusableAttempts,
 } from "../src/resultCache.js";
 import { scoreSwebench } from "../src/score.js";
-import type { BenchTask, RunManifest, RunResult } from "../src/types.js";
+import {
+    createTrajectoryFiles,
+    validateRunTrajectoryFiles,
+    writeTrajectoryFile,
+} from "../src/trajectory.js";
+import type {
+    BenchTask,
+    NormalizedTrajectoryRecord,
+    RunManifest,
+    RunResult,
+} from "../src/types.js";
 
 const agent = {
     name: "explorer",
     description: "benchmark explorer",
-    tools: ["read", "grep", "glob", "ls"],
+    tools: ["read", "grep", "glob", "bash"],
     prompt: "explore only",
     file: "/repo/.copilot/agents/explorer.md",
     sha256: "a".repeat(64),
 };
+
+const ripgrepPath = "/copilot/ripgrep/bin/darwin-arm64/rg";
+const ripgrepSha256 = "b".repeat(64);
 
 const task: BenchTask = {
     id: "repo__repo-1",
@@ -56,6 +71,18 @@ function manifest(
         output: `/runs/${runId}/results.jsonl`,
         copilotPath: "/copilot",
         runtimeEvidence: `/runs/${runId}/copilot-runtime.json`,
+        runtimeFingerprint: {
+            copilot: { path: "/copilot", sha256: "c".repeat(64) },
+            ripgrep: { path: ripgrepPath, sha256: ripgrepSha256 },
+            mcpCommand: {
+                path: "/runtime/a/node",
+                sha256: "d".repeat(64),
+            },
+            mcpEntrypoint: {
+                path: "/repo/dist/server.js",
+                sha256: "e".repeat(64),
+            },
+        },
         provider: {
             type: "openai-compatible",
             baseUrl: "http://127.0.0.1:4627/v1",
@@ -78,6 +105,19 @@ function manifest(
 }
 
 function result(runId: string, overrides: Partial<RunResult> = {}): RunResult {
+    const finalAnswer = "<final_answer>\npkg/a.py:1\n</final_answer>";
+    const outerUsage = {
+        source: "assistant.usage" as const,
+        requestCount: 1,
+        usageComplete: true,
+        models: ["route-a"],
+        inputTokens: 100,
+        cachedInputTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 10,
+        reasoningOutputTokens: 0,
+        totalTokens: 110,
+    };
     return {
         runId,
         taskId: task.id,
@@ -99,16 +139,29 @@ function result(runId: string, overrides: Partial<RunResult> = {}): RunResult {
         durationMs: 1,
         attempt: 1,
         maxAttempts: 2,
-        finalAnswer: "<final_answer>\npkg/a.py:1\n</final_answer>",
+        finalAnswer,
         score: scoreSwebench("", ""),
+        usage: outerUsage,
+        combinedUsage: outerUsage,
+        trajectoryFiles: { main: "/runs/source/baseline.jsonl" },
+        ripgrepPath,
+        ripgrepSha256,
         mcpAdopted: false,
+        mcpServerReady: false,
+        mcpAdvertisedTools: [],
+        attemptedExploreCalls: 0,
+        completedExploreCalls: 0,
+        successfulExploreCalls: 0,
+        outsideExploreInspection: false,
+        firstAssistantActionExclusiveExplore: false,
+        exploreCompletedBeforeLaterAssistantAction: false,
         subagentAdopted: true,
         defaultMainAgent: true,
         attemptedExplorerDelegations: 1,
         completedExplorerDelegations: 1,
         successfulExplorerDelegations: 1,
         failedExplorerDelegations: 0,
-        explorerRepositoryCalls: 1,
+        explorerRepositoryCalls: 2,
         firstAssistantActionExclusiveExplorer: true,
         explorerCompletedBeforeLaterAssistantAction: true,
         mainAgentRepositoryInspection: false,
@@ -116,26 +169,87 @@ function result(runId: string, overrides: Partial<RunResult> = {}): RunResult {
             {
                 toolCallId: "task-1",
                 agentName: "explorer",
+                arguments: { prompt: task.query },
                 started: true,
                 completed: true,
                 success: true,
-                arguments: { prompt: task.query },
-                resultContent: "<final_answer>\npkg/a.py:1\n</final_answer>",
+                resultContent: finalAnswer,
             },
         ],
         mcpToolTrace: [],
         toolTrace: [
             {
+                tool: "grep",
+                args: { pattern: "bug" },
+                ok: true,
+                durationMs: 1,
+                output: "pkg/a.py:1:bug",
+                execution: {
+                    engine: "ripgrep",
+                    executable: ripgrepPath,
+                    ripgrepSha256,
+                },
+            },
+            {
                 tool: "read",
                 args: { path: "pkg/a.py", offset: 1, limit: 1 },
                 ok: true,
                 durationMs: 1,
-                output: "pkg/a.py:1: line 1",
+                output: "pkg/a.py:1: bug",
+                readRange: { path: "pkg/a.py", startLine: 1, endLine: 1 },
             },
         ],
         events: [],
         ...overrides,
     };
+}
+
+async function materializeBaselineTrajectory(
+    output: string,
+    row: RunResult,
+): Promise<void> {
+    assert.equal(row.variant, "baseline");
+    const files = createTrajectoryFiles(
+        output,
+        row.taskId,
+        row.model,
+        row.variant,
+        row.attempt,
+    );
+    row.trajectoryFiles = files;
+    const record = (
+        sequence: number,
+        role: NormalizedTrajectoryRecord["role"],
+        content: string,
+    ): NormalizedTrajectoryRecord => ({
+        schemaVersion: 1,
+        sequence,
+        role,
+        content,
+        model: row.model,
+        tool_call_id: null,
+        tool_calls: [],
+        usage: {},
+        source: "copilot-sdk",
+    });
+    await writeTrajectoryFile(files.main, [
+        record(1, "system", "system"),
+        record(2, "user", row.query),
+        {
+            ...record(3, "assistant", row.ok ? row.finalAnswer : "failed"),
+            observedModel: row.model,
+            usageModel: row.model,
+            usage: {
+                inputTokens: row.usage?.inputTokens ?? 0,
+                cachedInputTokens: row.usage?.cachedInputTokens ?? 0,
+                cacheWriteTokens: row.usage?.cacheWriteTokens ?? 0,
+                outputTokens: row.usage?.outputTokens ?? 0,
+                reasoningOutputTokens: row.usage?.reasoningOutputTokens ?? 0,
+                totalTokens: row.usage?.totalTokens ?? 0,
+            },
+            success: row.ok,
+        },
+    ]);
 }
 
 test("cache compatibility ignores run paths and Node interpreter location", () => {
@@ -174,29 +288,199 @@ test("cache compatibility ignores run paths and Node interpreter location", () =
     );
 });
 
-test("rejects revisionless caches instead of assuming current compatibility", () => {
-    const {
-        cacheCompatibilityRevision: _cacheCompatibilityRevision,
-        ...revisionless
-    } = manifest("revisionless");
-
+test("reuses only baseline-safe restored harness revisions", () => {
+    assert.equal(CACHE_COMPATIBILITY_REVISION, 71);
+    assert.equal(BASELINE_CACHE_MIN_REVISION, 50);
     assert.equal(
-        cacheManifestsCompatible(revisionless, manifest("current")),
+        cacheManifestsCompatible(
+            manifest("restored-baseline", {
+                cacheCompatibilityRevision: 50,
+            }),
+            manifest("current"),
+        ),
+        true,
+    );
+    assert.equal(
+        cacheManifestsCompatible(
+            manifest("previous-current-baseline", {
+                cacheCompatibilityRevision: 52,
+            }),
+            manifest("current"),
+        ),
+        true,
+    );
+    assert.equal(
+        cacheManifestsCompatible(
+            manifest("current-baseline", {
+                cacheCompatibilityRevision: 53,
+            }),
+            manifest("current"),
+        ),
+        true,
+    );
+    assert.equal(
+        cacheManifestsCompatible(
+            manifest("previous-treatment-revision-baseline", {
+                cacheCompatibilityRevision: 56,
+            }),
+            manifest("current"),
+        ),
+        true,
+    );
+    assert.equal(
+        cacheManifestsCompatible(
+            manifest("previous-revision-baseline", {
+                cacheCompatibilityRevision: 57,
+            }),
+            manifest("current"),
+        ),
+        true,
+    );
+    assert.equal(
+        cacheManifestsCompatible(
+            manifest("current-revision-baseline", {
+                cacheCompatibilityRevision: 58,
+            }),
+            manifest("current"),
+        ),
+        true,
+    );
+    assert.equal(
+        cacheManifestsCompatible(
+            manifest("changed-search-policy", {
+                cacheCompatibilityRevision: 49,
+            }),
+            manifest("current"),
+        ),
+        false,
+    );
+    assert.equal(
+        cacheManifestsCompatible(
+            manifest("future-revision", {
+                cacheCompatibilityRevision: CACHE_COMPATIBILITY_REVISION + 1,
+            }),
+            manifest("current"),
+        ),
         false,
     );
 });
 
-test("rejects frozen revision-27 cache after restoring shared refinement evidence", () => {
-    assert.equal(CACHE_COMPATIBILITY_REVISION, 28);
-    assert.equal(
-        cacheManifestsCompatible(
-            manifest("frozen-revision-27", {
-                cacheCompatibilityRevision: 27,
-            }),
-            manifest("direct-typeagent"),
-        ),
-        false,
-    );
+test("requires identical baseline runtime fingerprints for cache reuse", () => {
+    const source = manifest("source");
+    const target = manifest("target");
+    for (const field of ["copilot", "ripgrep"] as const) {
+        const changed = manifest("changed");
+        changed.runtimeFingerprint![field].sha256 = "f".repeat(64);
+        assert.equal(cacheManifestsCompatible(source, changed), false, field);
+    }
+
+    const missing = manifest("missing");
+    delete missing.runtimeFingerprint;
+    assert.equal(cacheManifestsCompatible(missing, target), false);
+
+    const malformed = manifest("malformed");
+    malformed.runtimeFingerprint!.copilot.sha256 = "not-a-digest";
+    assert.equal(cacheManifestsCompatible(malformed, target), false);
+});
+
+test("validates the pinned Python LSP command and fingerprint for LSP runs", () => {
+    const source = manifest("lsp-source");
+    source.variants = ["baseline", "typeagent", "typeagent-lsp"];
+    source.mcp.pythonLspCommand = "/runtime/python/bin/pylsp";
+    source.mcp.typescriptLspCommand = "/runtime/node";
+    source.mcp.typescriptLspArgs = ["/runtime/typescript/cli.mjs", "--stdio"];
+    source.runtimeFingerprint!.pythonLsp = {
+        path: "/runtime/python/bin/pylsp",
+        sha256: "f".repeat(64),
+    };
+    source.runtimeFingerprint!.pythonLspInterpreter = {
+        path: "/runtime/python/bin/python",
+        sha256: "1".repeat(64),
+    };
+    source.runtimeFingerprint!.pythonLspLock = {
+        path: "/runtime/python/uv.lock",
+        sha256: "2".repeat(64),
+    };
+    source.runtimeFingerprint!.typescriptLspCommand = {
+        path: "/runtime/node",
+        sha256: "3".repeat(64),
+    };
+    source.runtimeFingerprint!.typescriptLspEntrypoint = {
+        path: "/runtime/typescript/cli.mjs",
+        sha256: "4".repeat(64),
+    };
+    const target = structuredClone(source);
+    target.runId = "lsp-target";
+    target.output = "/runs/lsp-target/results.jsonl";
+    assert.equal(cacheManifestsCompatible(source, target), true);
+
+    const changed = structuredClone(target);
+    changed.runtimeFingerprint!.pythonLsp!.sha256 = "0".repeat(64);
+    assert.equal(cacheManifestsCompatible(source, changed), true);
+
+    const mismatchedPath = structuredClone(target);
+    mismatchedPath.runtimeFingerprint!.pythonLsp!.path =
+        "/other/python/bin/pylsp";
+    assert.equal(cacheManifestsCompatible(source, mismatchedPath), false);
+
+    const missingCommand = structuredClone(target);
+    delete missingCommand.mcp.pythonLspCommand;
+    assert.equal(cacheManifestsCompatible(source, missingCommand), false);
+
+    const missingFingerprint = structuredClone(target);
+    delete missingFingerprint.runtimeFingerprint!.pythonLsp;
+    assert.equal(cacheManifestsCompatible(source, missingFingerprint), false);
+});
+
+test("reuses baseline across treatment-only MCP and LSP runtime changes", () => {
+    const source = manifest("baseline-source", {
+        cacheCompatibilityRevision: 50,
+        variants: ["baseline"],
+    });
+    const target = manifest("three-arm-target", {
+        variants: ["baseline", "typeagent", "typeagent-lsp"],
+    });
+    target.mcp.command = "/different/node";
+    target.mcp.args = ["/different/server.js"];
+    target.mcp.pythonLspCommand = "/runtime/python/bin/pylsp";
+    target.mcp.typescriptLspCommand = "/different/node";
+    target.mcp.typescriptLspArgs = ["/different/typescript/cli.mjs", "--stdio"];
+    target.runtimeFingerprint!.mcpCommand = {
+        path: "/different/node",
+        sha256: "1".repeat(64),
+    };
+    target.runtimeFingerprint!.mcpEntrypoint = {
+        path: "/different/server.js",
+        sha256: "2".repeat(64),
+    };
+    target.runtimeFingerprint!.pythonLsp = {
+        path: "/runtime/python/bin/pylsp",
+        sha256: "3".repeat(64),
+    };
+    target.runtimeFingerprint!.pythonLspInterpreter = {
+        path: "/runtime/python/bin/python",
+        sha256: "4".repeat(64),
+    };
+    target.runtimeFingerprint!.pythonLspLock = {
+        path: "/runtime/python/uv.lock",
+        sha256: "5".repeat(64),
+    };
+    target.runtimeFingerprint!.typescriptLspCommand = {
+        path: "/different/node",
+        sha256: "6".repeat(64),
+    };
+    target.runtimeFingerprint!.typescriptLspEntrypoint = {
+        path: "/different/typescript/cli.mjs",
+        sha256: "7".repeat(64),
+    };
+
+    assert.equal(cacheManifestsCompatible(source, target), true);
+});
+
+test("treats a manifest without an explicit revision as incompatible", () => {
+    const source = manifest("legacy");
+    delete source.cacheCompatibilityRevision;
+    assert.equal(cacheManifestsCompatible(source, manifest("current")), false);
 });
 
 test("reuses the complete fail-to-success history with explicit provenance", () => {
@@ -239,10 +523,240 @@ test("reuses the complete fail-to-success history with explicit provenance", () 
         originalRunId: "run-30",
         sourceRunId: "run-30",
         resultsPath: sourceManifest.output,
-        manifestPath: "/runs/run-30/manifest.json",
-        runtimeEvidence: sourceManifest.runtimeEvidence,
         importedAt: "2026-07-17T01:00:00.000Z",
     });
+});
+
+test("reuses baseline rows only", () => {
+    const sourceManifest = manifest("run-30");
+    const targetManifest = manifest("run-100");
+    const treatment = result("run-30", {
+        variant: "typeagent",
+        subagentAdopted: false,
+    });
+
+    assert.deepEqual(
+        selectReusableAttempts({
+            targetManifest,
+            tasks: [task],
+            targetRows: [],
+            sources: [
+                {
+                    manifest: sourceManifest,
+                    resultsPath: sourceManifest.output,
+                    rows: [treatment],
+                },
+            ],
+            importedAt: "now",
+        }),
+        [],
+    );
+});
+
+test("does not reuse a successful baseline without a trajectory", () => {
+    const sourceManifest = manifest("run-30");
+    const targetManifest = manifest("run-100");
+    const baseline = result("run-30");
+    delete baseline.trajectoryFiles;
+
+    assert.deepEqual(
+        selectReusableAttempts({
+            targetManifest,
+            tasks: [task],
+            targetRows: [],
+            sources: [
+                {
+                    manifest: sourceManifest,
+                    resultsPath: sourceManifest.output,
+                    rows: [baseline],
+                },
+            ],
+            importedAt: "now",
+        }),
+        [],
+    );
+});
+
+test("imports a revision-50 baseline without validating obsolete treatment rows", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "result-cache-"));
+    const runsDir = path.join(directory, "runs");
+    const sourceOutput = path.join(runsDir, "source", "results.jsonl");
+    const targetOutput = path.join(runsDir, "target", "results.jsonl");
+    const sourceManifest = manifest("source", {
+        cacheCompatibilityRevision: 50,
+        output: sourceOutput,
+    });
+    const targetManifest = manifest("target", { output: targetOutput });
+    const failedBaseline = result("source", {
+        ok: false,
+        attempt: 1,
+        finalAnswer: "",
+    });
+    const successfulBaseline = result("source", { attempt: 2 });
+    const obsoleteTreatment = result("source", {
+        variant: "typeagent",
+        subagentAdopted: false,
+    });
+
+    try {
+        await materializeBaselineTrajectory(sourceOutput, failedBaseline);
+        await materializeBaselineTrajectory(sourceOutput, successfulBaseline);
+        await mkdir(path.dirname(sourceOutput), { recursive: true });
+        await writeFile(
+            path.join(path.dirname(sourceOutput), "manifest.json"),
+            JSON.stringify(sourceManifest),
+        );
+        await writeFile(
+            sourceOutput,
+            `${[failedBaseline, successfulBaseline, obsoleteTreatment]
+                .map((row) => JSON.stringify(row))
+                .join("\n")}\n`,
+        );
+
+        const summary = await seedResultsFromPriorRuns({
+            runsDir,
+            targetManifest,
+            tasks: [task],
+            output: targetOutput,
+        });
+        const imported = (await readFile(targetOutput, "utf8"))
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line) as RunResult);
+
+        assert.deepEqual(summary.warnings, []);
+        assert.equal(summary.importedKeys, 1);
+        assert.equal(summary.importedRows, 2);
+        assert.deepEqual(
+            imported.map((row) => [row.variant, row.attempt]),
+            [
+                ["baseline", 1],
+                ["baseline", 2],
+            ],
+        );
+        assert.ok(
+            imported.every(
+                (row) =>
+                    row.trajectoryFiles?.main.startsWith(
+                        path.join(path.dirname(targetOutput), "trajectories"),
+                    ) &&
+                    !row.trajectoryFiles.main.startsWith(
+                        path.dirname(sourceOutput),
+                    ),
+            ),
+        );
+        await rm(path.dirname(sourceOutput), {
+            recursive: true,
+            force: true,
+        });
+        await assert.doesNotReject(validateRunTrajectoryFiles(imported));
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+});
+
+test("rejects missing, malformed, or shared retry trajectories before cache append", async (t) => {
+    for (const fault of ["missing", "malformed", "shared"] as const) {
+        await t.test(fault, async () => {
+            const directory = await mkdtemp(
+                path.join(os.tmpdir(), "result-cache-trajectory-"),
+            );
+            const runsDir = path.join(directory, "runs");
+            const sourceOutput = path.join(runsDir, "source", "results.jsonl");
+            const targetOutput = path.join(runsDir, "target", "results.jsonl");
+            const sourceManifest = manifest("source", {
+                output: sourceOutput,
+            });
+            const targetManifest = manifest("target", {
+                output: targetOutput,
+            });
+            const failed = result("source", {
+                ok: false,
+                attempt: 1,
+                finalAnswer: "",
+            });
+            const succeeded = result("source", { attempt: 2 });
+
+            try {
+                await materializeBaselineTrajectory(sourceOutput, failed);
+                await materializeBaselineTrajectory(sourceOutput, succeeded);
+                if (fault === "missing") {
+                    delete failed.trajectoryFiles;
+                } else if (fault === "malformed") {
+                    await writeFile(failed.trajectoryFiles!.main, "not-json\n");
+                } else {
+                    assert.ok(failed.trajectoryFiles);
+                    succeeded.trajectoryFiles = failed.trajectoryFiles;
+                }
+                await writeFile(
+                    path.join(path.dirname(sourceOutput), "manifest.json"),
+                    JSON.stringify(sourceManifest),
+                );
+                await writeFile(
+                    sourceOutput,
+                    `${JSON.stringify(failed)}\n${JSON.stringify(succeeded)}\n`,
+                );
+
+                await assert.rejects(
+                    seedResultsFromPriorRuns({
+                        runsDir,
+                        targetManifest,
+                        tasks: [task],
+                        output: targetOutput,
+                    }),
+                    /trajectory|jsonl|path/i,
+                );
+                await assert.rejects(readFile(targetOutput, "utf8"), {
+                    code: "ENOENT",
+                });
+            } finally {
+                await rm(directory, { recursive: true, force: true });
+            }
+        });
+    }
+});
+
+test("rejects a revision-50 source with malformed baseline history", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "result-cache-"));
+    const runsDir = path.join(directory, "runs");
+    const sourceOutput = path.join(runsDir, "source", "results.jsonl");
+    const targetOutput = path.join(runsDir, "target", "results.jsonl");
+    const sourceManifest = manifest("source", {
+        cacheCompatibilityRevision: 50,
+        output: sourceOutput,
+    });
+    const targetManifest = manifest("target", { output: targetOutput });
+
+    try {
+        await mkdir(path.dirname(sourceOutput), { recursive: true });
+        await writeFile(
+            path.join(path.dirname(sourceOutput), "manifest.json"),
+            JSON.stringify(sourceManifest),
+        );
+        await writeFile(
+            sourceOutput,
+            `${JSON.stringify(result("source"))}\n${JSON.stringify(
+                result("source", { ok: false, attempt: 2 }),
+            )}\n`,
+        );
+
+        const summary = await seedResultsFromPriorRuns({
+            runsDir,
+            targetManifest,
+            tasks: [task],
+            output: targetOutput,
+        });
+
+        assert.equal(summary.importedKeys, 0);
+        assert.equal(summary.importedRows, 0);
+        assert.equal(summary.warnings.length, 1);
+        assert.match(
+            summary.warnings[0],
+            /successful attempt 1 is not terminal/,
+        );
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
 });
 
 test("does not replace target attempts or reuse failed and mismatched rows", () => {
@@ -269,21 +783,12 @@ test("does not replace target attempts or reuse failed and mismatched rows", () 
 
     for (const rows of [
         [result("run-30", { ok: false })],
+        [result("run-30", { attempt: 2 })],
+        [result("run-30"), result("run-30", { ok: false, attempt: 2 })],
+        [result("run-30", { ok: false }), result("run-30", { attempt: 1 })],
         [
             result("run-30", {
                 swebench: { ...task.swebench, patch: "different patch" },
-            }),
-        ],
-        [
-            result("run-30", {
-                reusedFrom: {
-                    originalRunId: "original-run",
-                    sourceRunId: "original-run",
-                    resultsPath: "/runs/original-run/results.jsonl",
-                    manifestPath: "/runs/original-run/manifest.json",
-                    runtimeEvidence: "/runs/original-run/copilot-runtime.json",
-                    importedAt: "now",
-                },
             }),
         ],
     ]) {
@@ -306,44 +811,7 @@ test("does not replace target attempts or reuse failed and mismatched rows", () 
     }
 });
 
-test("skips a compatible baseline cache that fails current integrity", async () => {
-    const directory = await mkdtemp(path.join(os.tmpdir(), "result-cache-"));
-    const runsDir = path.join(directory, "runs");
-    const sourceOutput = path.join(runsDir, "source", "results.jsonl");
-    const targetOutput = path.join(runsDir, "target", "results.jsonl");
-    const sourceManifest = manifest("source", { output: sourceOutput });
-    const targetManifest = manifest("target", { output: targetOutput });
-    const completeQuery =
-        "UNIQUE-PREFIX\n<problem_statement>find bug</problem_statement>\nUNIQUE-SUFFIX";
-    const completeTask = { ...task, query: completeQuery };
-    const invalid = result("source", { query: completeQuery });
-    invalid.explorerSubagentTrace[0].arguments = { prompt: "find bug" };
-
-    try {
-        await mkdir(path.dirname(sourceOutput), { recursive: true });
-        await writeFile(
-            path.join(path.dirname(sourceOutput), "manifest.json"),
-            JSON.stringify(sourceManifest),
-        );
-        await writeFile(sourceOutput, `${JSON.stringify(invalid)}\n`);
-
-        const summary = await seedResultsFromPriorRuns({
-            runsDir,
-            targetManifest,
-            tasks: [completeTask],
-            output: targetOutput,
-        });
-
-        assert.equal(summary.importedKeys, 0);
-        assert.equal(summary.importedRows, 0);
-        assert.equal(summary.warnings.length, 1);
-        assert.match(summary.warnings[0], /complete benchmark query/i);
-    } finally {
-        await rm(directory, { recursive: true, force: true });
-    }
-});
-
-test("imports the legacy TypeAgent variant alias without rewriting its source", async () => {
+test("does not reuse a legacy TypeAgent treatment row", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "result-cache-"));
     const runsDir = path.join(directory, "runs");
     const sourceOutput = path.join(runsDir, "legacy", "results.jsonl");
@@ -357,7 +825,7 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
         variants: ["typeagent"],
     });
     const usage = {
-        requestCount: 1,
+        requestCount: 2,
         inputTokens: 1,
         cachedInputTokens: 0,
         cacheWriteTokens: 0,
@@ -365,120 +833,123 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
         reasoningOutputTokens: 0,
         totalTokens: 2,
     };
-    const toolTrace = {
-        calls: [
-            {
-                tool: "grep" as const,
-                startedAt: "2026-07-17T00:00:00.000Z",
-                durationMs: 1,
-                input: { pattern: "needle" },
-                execution: {
-                    engine: "ripgrep",
-                    executable: "rg",
-                },
-                resultCount: 1,
-                outputBytes: 1,
-                truncated: false,
-            },
-        ],
-        totalCalls: 1,
-        totalOutputBytes: 1,
-    };
     const treatment = result("legacy", {
         variant: "typeagent",
-        mcpAdopted: false,
+        mcpAdopted: true,
         lspAdopted: false,
         lspCallCount: 0,
         lspResultCount: 0,
         subagentAdopted: false,
-        defaultMainAgent: false,
+        defaultMainAgent: true,
         attemptedExplorerDelegations: 0,
         completedExplorerDelegations: 0,
         successfulExplorerDelegations: 0,
         failedExplorerDelegations: 0,
+        explorerRepositoryCalls: 0,
+        firstAssistantActionExclusiveExplorer: false,
+        explorerCompletedBeforeLaterAssistantAction: false,
         mainAgentRepositoryInspection: false,
         explorerSubagentTrace: [],
-        attemptedExploreCalls: 0,
-        completedExploreCalls: 0,
-        successfulExploreCalls: 0,
+        attemptedExploreCalls: 1,
+        completedExploreCalls: 1,
+        successfulExploreCalls: 1,
         outsideExploreInspection: false,
-        mcpServerReady: false,
-        mcpAdvertisedTools: [],
-        mcpToolTrace: [],
+        firstAssistantActionExclusiveExplore: true,
+        exploreCompletedBeforeLaterAssistantAction: true,
+        mcpServerReady: true,
+        mcpAdvertisedTools: ["explore"],
+        mcpToolTrace: [
+            {
+                toolCallId: "mcp-1",
+                server: "typeagent",
+                tool: "explore",
+                arguments: {},
+                completed: true,
+                success: true,
+                result: { content: "pkg/a.py:1" },
+            },
+        ],
         toolTrace: [],
-        typeAgentToolTrace: toolTrace,
-        dispatcherUsage: {
-            requestCount: 0,
-            inputTokens: 0,
-            cachedInputTokens: 0,
-            cacheWriteTokens: 0,
-            outputTokens: 0,
-            reasoningOutputTokens: 0,
-            totalTokens: 0,
+        typeAgentToolTrace: {
+            calls: [
+                {
+                    tool: "grep",
+                    durationMs: 1,
+                    input: {
+                        pattern: "bug",
+                        engine: "ripgrep",
+                        ripgrepPath,
+                        ripgrepSha256,
+                    },
+                    resultCount: 1,
+                    outputBytes: 12,
+                    truncated: false,
+                },
+            ],
+            totalCalls: 1,
+            totalOutputBytes: 12,
         },
         typeAgentUsage: usage,
         combinedUsage: {
-            inputTokens: 1,
+            inputTokens: 101,
             cachedInputTokens: 0,
             cacheWriteTokens: 0,
-            outputTokens: 1,
+            outputTokens: 11,
             reasoningOutputTokens: 0,
-            totalTokens: 2,
-        },
-        typeAgentDispatch: {
-            ingress: "natural-language",
-            submittedRequest: task.query,
-            dispatchMethod: "grammar",
-            translationInvoked: false,
-            translationRequestCount: 0,
-            activeAgentNames: ["explorer"],
-            activeSchemaNames: ["explorer"],
-            translatedActions: [
-                {
-                    schemaName: "explorer",
-                    actionName: "exploreRepository",
-                    parameters: { request: task.query },
-                },
-            ],
-            executionCount: 1,
-            outputMatchedExecution: true,
-            executionRequestMatchedIngress: true,
-            usedCopilot: false,
-            usedMcp: false,
+            totalTokens: 112,
         },
         exploreTelemetry: {
             schemaVersion: 4,
             model: "route-a",
             status: "completed",
             usage,
-            toolTrace,
+            toolTrace: {
+                calls: [
+                    {
+                        tool: "grep",
+                        durationMs: 1,
+                        input: {
+                            pattern: "bug",
+                            engine: "ripgrep",
+                            ripgrepPath,
+                            ripgrepSha256,
+                        },
+                        resultCount: 1,
+                        outputBytes: 12,
+                        truncated: false,
+                    },
+                ],
+                totalCalls: 1,
+                totalOutputBytes: 12,
+            },
             invocations: [
                 {
                     index: 0,
                     status: "completed",
+                    querySha256: createHash("sha256")
+                        .update(task.query, "utf8")
+                        .digest("hex"),
                     usage,
                     actionTranslationAndCodeGenerationUsage: usage,
-                    toolTrace,
-                    reasoningTrace: [
-                        {
-                            index: 0,
-                            tool: "execute_action",
-                            actionName: "discoverRepository",
-                            status: "completed",
-                        },
-                        {
-                            index: 1,
-                            tool: "execute_action",
-                            actionName: "refineRepository",
-                            status: "completed",
-                        },
-                        {
-                            index: 2,
-                            tool: "execute_action",
-                            actionName: "submitExploration",
-                            status: "completed",
-                        },
-                    ],
+                    toolTrace: {
+                        calls: [
+                            {
+                                tool: "grep",
+                                durationMs: 1,
+                                input: {
+                                    pattern: "bug",
+                                    engine: "ripgrep",
+                                    ripgrepPath,
+                                    ripgrepSha256,
+                                },
+                                resultCount: 1,
+                                outputBytes: 12,
+                                truncated: false,
+                            },
+                        ],
+                        totalCalls: 1,
+                        totalOutputBytes: 12,
+                    },
                     actionAttempts: [
                         {
                             index: 0,
@@ -487,16 +958,10 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
                         },
                         {
                             index: 1,
-                            actionName: "refineRepository",
-                            status: "completed",
-                        },
-                        {
-                            index: 2,
-                            actionName: "submitExploration",
+                            actionName: "refineAndSubmitExploration",
                             status: "completed",
                         },
                     ],
-                    submissionAction: "submitExploration",
                     result: { citationCount: 1, truncated: false },
                 },
             ],
@@ -526,7 +991,7 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
             output: targetOutput,
         });
 
-        assert.equal(summary.importedKeys, 1);
+        assert.equal(summary.importedKeys, 0);
         assert.equal(
             await readFile(
                 path.join(path.dirname(sourceOutput), "manifest.json"),
@@ -535,11 +1000,9 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
             legacyManifestText,
         );
         assert.equal(await readFile(sourceOutput, "utf8"), legacyResultsText);
-        const imported = JSON.parse(
-            (await readFile(targetOutput, "utf8")).trim(),
-        ) as RunResult;
-        assert.equal(imported.variant, "typeagent");
-        assert.equal(imported.reusedFrom?.sourceRunId, "legacy");
+        await assert.rejects(readFile(targetOutput, "utf8"), {
+            code: "ENOENT",
+        });
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
@@ -584,15 +1047,14 @@ test("resume preserves provenance when it imports no additional rows", async () 
     const targetOutput = path.join(runsDir, "run-100", "results.jsonl");
     const targetManifest = manifest("run-100", { output: targetOutput });
     try {
+        const baseline = result(sourceManifest.runId);
+        await materializeBaselineTrajectory(sourceManifest.output, baseline);
         await mkdir(path.dirname(sourceManifest.output), { recursive: true });
         await writeFile(
             path.join(path.dirname(sourceManifest.output), "manifest.json"),
             JSON.stringify(sourceManifest),
         );
-        await writeFile(
-            sourceManifest.output,
-            `${JSON.stringify(result(sourceManifest.runId))}\n`,
-        );
+        await writeFile(sourceManifest.output, `${JSON.stringify(baseline)}\n`);
 
         const first = await seedResultsFromPriorRuns({
             runsDir,
@@ -608,6 +1070,7 @@ test("resume preserves provenance when it imports no additional rows", async () 
             output: targetOutput,
         });
 
+        assert.deepEqual(first.warnings, []);
         assert.equal(first.importedKeys, 1);
         assert.equal(second.importedKeys, 0);
         assert.equal(

@@ -15,6 +15,8 @@ export interface ExploreScriptExecution {
     error?: string;
     toolTrace: RepositoryToolTrace;
     observations: RepositoryObservation[];
+    accept(): void;
+    discard(): void;
 }
 
 export function createExploreScriptExecutor(defaultTimeout: number): {
@@ -40,6 +42,17 @@ export function createExploreScriptExecutor(defaultTimeout: number): {
             timeout = defaultTimeout,
         ) {
             const execution = tools.startExecution();
+            let finalized = false;
+            const finalize = (discard: boolean): void => {
+                if (finalized) {
+                    return;
+                }
+                finalized = true;
+                if (discard) {
+                    execution.discard();
+                }
+                execution.stop();
+            };
             try {
                 const result = await executor.execute(
                     script,
@@ -47,8 +60,8 @@ export function createExploreScriptExecutor(defaultTimeout: number): {
                     { query, maxResults },
                     { timeout },
                 );
-                if (!result.success && result.runtimeError === true) {
-                    execution.discard();
+                if (!result.success) {
+                    finalize(true);
                 }
                 return {
                     ok: result.success,
@@ -64,9 +77,12 @@ export function createExploreScriptExecutor(defaultTimeout: number): {
                           }),
                     toolTrace: tools.trace,
                     observations: tools.observations,
+                    accept: () => finalize(false),
+                    discard: () => finalize(true),
                 };
-            } finally {
-                execution.stop();
+            } catch (error) {
+                finalize(true);
+                throw error;
             }
         },
     };

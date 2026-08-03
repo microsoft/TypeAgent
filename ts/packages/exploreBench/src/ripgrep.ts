@@ -1,9 +1,25 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
+
+export interface RipgrepRuntime {
+    path: string;
+    sha256: string;
+}
+
+export async function resolvePackagedRipgrep(): Promise<RipgrepRuntime> {
+    const resolvedPath = await realpath(await resolvePackagedRipgrepPath());
+    return {
+        path: resolvedPath,
+        sha256: createHash("sha256")
+            .update(await readFile(resolvedPath))
+            .digest("hex"),
+    };
+}
 
 export async function resolvePackagedRipgrepPath(): Promise<string> {
     const localRequire = createRequire(import.meta.url);
@@ -24,8 +40,7 @@ export async function resolvePackagedRipgrepPath(): Promise<string> {
 
         const packageRoot = path.dirname(packageBinary);
         const binaryName = process.platform === "win32" ? "rg.exe" : "rg";
-        const binaryPlatforms = new Set([platformTag, process.platform]);
-        for (const binaryPlatform of binaryPlatforms) {
+        for (const binaryPlatform of new Set([platformTag, process.platform])) {
             const candidate = path.join(
                 packageRoot,
                 "ripgrep",
@@ -34,7 +49,9 @@ export async function resolvePackagedRipgrepPath(): Promise<string> {
                 binaryName,
             );
             try {
-                if ((await stat(candidate)).isFile()) return candidate;
+                if ((await stat(candidate)).isFile()) {
+                    return candidate;
+                }
             } catch {
                 // Try the other packaged platform layout.
             }

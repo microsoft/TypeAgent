@@ -121,11 +121,15 @@ export function createLanguageServerManager(
             request.line,
             undefined,
             1,
-            lines.length,
+            Number.MAX_SAFE_INTEGER,
             "line",
         );
         const symbol = validateSymbol(request.symbol);
-        const position = resolveSymbolPosition(lines, line - 1, symbol);
+        const position = resolveSymbolPosition(
+            lines,
+            Math.min(line - 1, lines.length - 1),
+            symbol,
+        );
         if (!position) {
             throw new Error(
                 `symbol ${JSON.stringify(symbol)} is not present in ${relativePath}`,

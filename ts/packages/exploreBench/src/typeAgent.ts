@@ -16,6 +16,7 @@ import {
     type AppAgentProvider,
     type ClientIO,
     type CompletionUsageStats,
+    type IAgentMessage,
     type RequestId,
 } from "agent-dispatcher";
 import { spawnSync } from "node:child_process";
@@ -33,9 +34,8 @@ import {
     type RepositoryExplorer,
     type LanguageServerOptions,
 } from "explorer-typeagent";
-import { readExploreTelemetry } from "./exploreTelemetry.js";
+import { readExploreTelemetry } from "./copilot.js";
 import { readEnvFile } from "./io.js";
-import { translatedRequestMatchesIngress } from "./requestIdentity.js";
 import type {
     ExploreTelemetry,
     TokenUsage,
@@ -48,15 +48,8 @@ export const TYPEAGENT_EXPLORER_ACTION = "exploreRepository";
 
 const explorerRequestSchema = `export type ExplorerRequestActions = {
     actionName: "exploreRepository";
-    parameters: {
-        // Copy the complete user request byte-for-byte without summarizing it.
-        request: string;
-    };
-};`;
-
-const explorerRequestGrammar = `<Start> [spacing=none] = $(request) -> {
-    actionName: "exploreRepository",
-    parameters: { request: request }
+    // The AppAgent reads the exact dispatcher ingress from its session context.
+    parameters: {};
 };`;
 
 const explorerManifest: AppAgentManifest = {
@@ -65,10 +58,9 @@ const explorerManifest: AppAgentManifest = {
     defaultEnabled: true,
     schema: {
         description:
-            "Explore a repository for the change-bearing source, test, configuration, or documentation locations requested by the user.",
+            "Explore a repository for the exact implementation locations requested by the user.",
         schemaType: "ExplorerRequestActions",
         schemaFile: { format: "ts", content: explorerRequestSchema },
-        grammarFile: { format: "agr", content: explorerRequestGrammar },
         cached: false,
     },
 };
@@ -82,7 +74,6 @@ export interface ExplorerExecution {
 
 export interface TypeAgentRunOptions {
     repoPath: string;
-    ripgrepPath: string;
     prompt: string;
     model: string;
     variant: "typeagent" | "typeagent-lsp";
@@ -144,7 +135,6 @@ export async function runTypeAgentDispatcher(
                 : undefined;
         explorer = createCodeModeExplorer({
             repoRoot: options.repoPath,
-            ripgrepPath: options.ripgrepPath,
             reasoningAdapter,
             modelName: options.model,
             maxToolCalls: 8,
@@ -153,20 +143,48 @@ export async function runTypeAgentDispatcher(
         });
         const provider = createTypeAgentExplorerProvider(
             explorer,
+            options.prompt,
             (execution) => executions.push(execution),
         );
-        const dispatchMethods = new Map<
-            string,
-            "construction" | "grammar" | false
-        >();
-        dispatcher = await createTypeAgentExplorerDispatcher(
-            provider,
-            options.model,
-            (requestId, method) => dispatchMethods.set(requestId, method),
-        );
+        const messages = new Map<string, IAgentMessage[]>();
+        dispatcher = await createDispatcher("typeagent-explore-benchmark", {
+            appAgentProviders: [provider],
+            agents: {
+                schemas: [TYPEAGENT_EXPLORER_AGENT],
+                actions: [TYPEAGENT_EXPLORER_AGENT],
+                commands: ["dispatcher"],
+            },
+            translation: {
+                enabled: true,
+                model: options.model,
+                stream: false,
+                switch: {
+                    fixed: TYPEAGENT_EXPLORER_AGENT,
+                    embedding: false,
+                    inline: false,
+                    search: false,
+                },
+                multiple: { enabled: false },
+                history: { enabled: false },
+            },
+            execution: { reasoning: "none" },
+            explainer: { enabled: false },
+            cache: { enabled: false },
+            enableActionSchemaSemanticMap: false,
+            clientIO: createClientIO(messages),
+            collectCommandResult: true,
+            metrics: true,
+            dblogging: false,
+            conversationMemorySettings: {
+                requestKnowledgeExtraction: false,
+                actionResultEntityStorage: false,
+                actionResultKnowledgeExtraction: false,
+            },
+        });
         const status = await dispatcher.getStatus();
         const schemas = await dispatcher.getAgentSchemas();
         const requestId = randomUUID();
+        messages.set(requestId, []);
         const commandResult = await awaitCommand(
             dispatcher,
             options.prompt,
@@ -199,7 +217,6 @@ export async function runTypeAgentDispatcher(
         dispatchEvidence = {
             ingress: "natural-language",
             submittedRequest: options.prompt,
-            dispatchMethod: dispatchMethods.get(requestId) ?? false,
             translationInvoked: dispatcherUsage.requestCount > 0,
             translationRequestCount: dispatcherUsage.requestCount,
             activeAgentNames: status.agents
@@ -227,10 +244,8 @@ export async function runTypeAgentDispatcher(
                         ? executions[0].actionResult.displayContent
                         : undefined,
                 ) === finalAnswer,
-            executionRequestMatchedIngress: translatedRequestMatchesIngress(
-                executions[0].request,
-                options.prompt,
-            ),
+            executionRequestMatchedIngress:
+                executions[0].request === options.prompt,
             usedCopilot: false,
             usedMcp: false,
         };
@@ -270,7 +285,7 @@ export async function runTypeAgentDispatcher(
         ...(exploreTelemetry ? { exploreTelemetry } : {}),
         telemetryFile: options.telemetryFile,
         ...(dispatchEvidence ? { dispatchEvidence } : {}),
-        lspAdopted: lspCalls.some((call) => call.error === undefined),
+        lspAdopted: lspCalls.some((call) => call.discarded !== true),
         lspCallCount: lspCalls.length,
         lspResultCount: lspCalls.reduce(
             (total, call) => total + call.resultCount,
@@ -282,6 +297,7 @@ export async function runTypeAgentDispatcher(
 
 export function createTypeAgentExplorerProvider(
     explorer: RepositoryExplorer,
+    request: string,
     onExecution?: (execution: ExplorerExecution) => void,
 ): AppAgentProvider {
     return {
@@ -292,62 +308,12 @@ export function createTypeAgentExplorerProvider(
         },
         loadAppAgent: async (appAgentName) => {
             requireExplorer(appAgentName);
-            return createExplorerAgent(explorer, onExecution);
+            return createExplorerAgent(explorer, request, onExecution);
         },
         unloadAppAgent: async (appAgentName) => {
             requireExplorer(appAgentName);
         },
     };
-}
-
-export async function createTypeAgentExplorerDispatcher(
-    provider: AppAgentProvider,
-    model: string,
-    onDispatchMethod?: (
-        requestId: string,
-        method: "construction" | "grammar" | false,
-    ) => void,
-): Promise<Awaited<ReturnType<typeof createDispatcher>>> {
-    return createDispatcher("typeagent-explore-benchmark", {
-        appAgentProviders: [provider],
-        agents: {
-            schemas: [TYPEAGENT_EXPLORER_AGENT],
-            actions: [TYPEAGENT_EXPLORER_AGENT],
-            commands: ["dispatcher"],
-        },
-        translation: {
-            enabled: true,
-            model,
-            stream: false,
-            switch: {
-                fixed: TYPEAGENT_EXPLORER_AGENT,
-                embedding: false,
-                inline: false,
-                search: false,
-            },
-            multiple: { enabled: false },
-            history: { enabled: false },
-        },
-        execution: { reasoning: "none" },
-        explainer: { enabled: false },
-        cache: {
-            enabled: true,
-            grammar: true,
-            grammarSystem: "completionBased",
-            autoSave: false,
-            builtInCache: false,
-        },
-        enableActionSchemaSemanticMap: false,
-        clientIO: createClientIO(onDispatchMethod),
-        collectCommandResult: true,
-        metrics: true,
-        dblogging: false,
-        conversationMemorySettings: {
-            requestKnowledgeExtraction: false,
-            actionResultEntityStorage: false,
-            actionResultKnowledgeExtraction: false,
-        },
-    });
 }
 
 export function combineTypeAgentUsage(
@@ -381,12 +347,11 @@ export function assertDirectDispatchEvidence(
         );
     }
     if (
-        evidence.dispatchMethod !== "grammar" ||
-        evidence.translationInvoked ||
-        evidence.translationRequestCount !== 0
+        !evidence.translationInvoked ||
+        evidence.translationRequestCount !== 1
     ) {
         throw new Error(
-            "TypeAgent dispatcher must construct the action through its lossless grammar without a model translation",
+            "TypeAgent dispatcher must make exactly one translation request",
         );
     }
     if (
@@ -403,15 +368,9 @@ export function assertDirectDispatchEvidence(
     const action = evidence.translatedActions[0];
     if (
         action.schemaName !== TYPEAGENT_EXPLORER_AGENT ||
-        action.actionName !== TYPEAGENT_EXPLORER_ACTION ||
-        !translatedRequestMatchesIngress(
-            action.parameters?.request,
-            expectedRequest,
-        )
+        action.actionName !== TYPEAGENT_EXPLORER_ACTION
     ) {
-        throw new Error(
-            "TypeAgent translated an unexpected Explorer action or mutated its request",
-        );
+        throw new Error("TypeAgent translated an unexpected Explorer action");
     }
     if (
         evidence.executionCount !== 1 ||
@@ -429,13 +388,16 @@ export function assertDirectDispatchEvidence(
 
 function createExplorerAgent(
     explorer: RepositoryExplorer,
+    request: string,
     onExecution?: (execution: ExplorerExecution) => void,
 ): AppAgent {
     return {
-        initializeAgentContext: async () => ({}),
-        executeAction: async (action) => {
+        initializeAgentContext: async () => ({ request }),
+        executeAction: async (action, context) => {
             requireExploreAction(action);
-            const exactRequest = requireExplorerRequest(action);
+            const exactRequest = requireExplorerRequest(
+                context.sessionContext.agentContext,
+            );
             if (!explorer.exploreDetailed) {
                 throw new Error(
                     "Direct TypeAgent Explorer requires detailed execution telemetry",
@@ -473,16 +435,16 @@ function requireExploreAction(action: TypeAgentAction): void {
     }
 }
 
-function requireExplorerRequest(action: TypeAgentAction): string {
-    const request = action.parameters?.request;
+function requireExplorerRequest(agentContext: unknown): string {
     if (
-        typeof request !== "string" ||
-        request.length === 0 ||
-        request.trim().length === 0
+        !agentContext ||
+        typeof agentContext !== "object" ||
+        typeof (agentContext as { request?: unknown }).request !== "string" ||
+        !(agentContext as { request: string }).request.trim()
     ) {
-        throw new Error("Explorer action is missing its typed request");
+        throw new Error("Explorer session is missing the dispatcher request");
     }
-    return request;
+    return (agentContext as { request: string }).request;
 }
 
 function requireExplorer(appAgentName: string): void {
@@ -599,20 +561,8 @@ function createBenchmarkLanguageServerOptions(): LanguageServerOptions {
 function normalizeDispatcherUsage(
     usage: CompletionUsageStats | undefined,
 ): TypeAgentUsage {
-    if (!usage) {
-        return {
-            requestCount: 0,
-            usageComplete: true,
-            inputTokens: 0,
-            cachedInputTokens: 0,
-            cacheWriteTokens: 0,
-            outputTokens: 0,
-            reasoningOutputTokens: 0,
-            totalTokens: 0,
-        };
-    }
-    if (usage.requestCount === undefined) {
-        throw new Error("TypeAgent dispatcher reported incomplete usage");
+    if (!usage || !usage.requestCount) {
+        throw new Error("TypeAgent dispatcher reported no translation usage");
     }
     return {
         requestCount: usage.requestCount,
@@ -681,12 +631,10 @@ function requireUsageEqual(
     }
 }
 
-function createClientIO(
-    onDispatchMethod?: (
-        requestId: string,
-        method: "construction" | "grammar" | false,
-    ) => void,
-): ClientIO {
+function createClientIO(messages: Map<string, IAgentMessage[]>): ClientIO {
+    const capture = (message: IAgentMessage): void => {
+        messages.get(message.requestId.requestId)?.push(message);
+    };
     return {
         clear: () => undefined,
         exit: () => {
@@ -697,8 +645,8 @@ function createClientIO(
         },
         setUserRequest: () => undefined,
         setDisplayInfo: () => undefined,
-        setDisplay: () => undefined,
-        appendDisplay: () => undefined,
+        setDisplay: capture,
+        appendDisplay: capture,
         appendDiagnosticData: () => undefined,
         setDynamicDisplay: () => undefined,
         question: async (
@@ -708,26 +656,7 @@ function createClientIO(
             defaultId?: number,
         ) => defaultId ?? 0,
         proposeAction: async () => undefined,
-        notify: (notificationId, event, data) => {
-            if (
-                event !== "explained" ||
-                !notificationId ||
-                typeof notificationId === "string" ||
-                !data ||
-                typeof data !== "object" ||
-                !("fromCache" in data)
-            ) {
-                return;
-            }
-            const method = data.fromCache;
-            if (
-                method === "construction" ||
-                method === "grammar" ||
-                method === false
-            ) {
-                onDispatchMethod?.(notificationId.requestId, method);
-            }
-        },
+        notify: () => undefined,
         openLocalView: async () => undefined,
         closeLocalView: async () => undefined,
         requestChoice: () => undefined,

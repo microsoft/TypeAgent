@@ -33,7 +33,7 @@ describe("citation formatter", () => {
         await rm(fixtureRoot, { recursive: true, force: true });
     });
 
-    it("rejects a grep-only citation despite an unrelated read", async () => {
+    it("accepts a grep-grounded citation despite an unrelated read", async () => {
         await expect(
             format(
                 [{ path: "src/target.ts", startLine: 3, endLine: 5 }],
@@ -42,7 +42,7 @@ describe("citation formatter", () => {
                     observation("grep", "src/target.ts", 3, 5),
                 ],
             ),
-        ).rejects.toThrow("no matching observed range from read");
+        ).resolves.toMatchObject({ text: "src/target.ts:3-5" });
     });
 
     it("rejects two citations when only one was read", async () => {
@@ -88,7 +88,7 @@ describe("citation formatter", () => {
         ).resolves.toMatchObject({ text: "src/target.ts:2-6" });
     });
 
-    it("rejects a gap between read ranges even when grep covers it", async () => {
+    it("accepts adjacent read and grep evidence covering one range", async () => {
         await expect(
             format(
                 [{ path: "src/target.ts", startLine: 2, endLine: 6 }],
@@ -98,7 +98,7 @@ describe("citation formatter", () => {
                     observation("read", "src/target.ts", 5, 6),
                 ],
             ),
-        ).rejects.toThrow("Invalid grounded location");
+        ).resolves.toMatchObject({ text: "src/target.ts:2-6" });
     });
 
     function format(locations: unknown, observations: RepositoryObservation[]) {

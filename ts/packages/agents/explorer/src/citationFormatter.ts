@@ -28,13 +28,11 @@ export async function validateAndFormatLocations(
     observations: RepositoryObservation[],
 ): Promise<FormattedLocations> {
     if (!Array.isArray(rawLocations) || rawLocations.length === 0) {
-        throw new Error(
-            "submitExploration requires a non-empty locations array",
-        );
+        throw new Error("finalSubmission requires a non-empty locations array");
     }
     if (rawLocations.length > maxResults) {
         throw new Error(
-            `submitExploration permits at most ${maxResults} locations`,
+            `finalSubmission permits at most ${maxResults} locations`,
         );
     }
 
@@ -99,10 +97,7 @@ function describeRejectedLocation(
         ? String(value.endLine)
         : "?";
     const observed = observations
-        .filter(
-            (observation) =>
-                observation.source === "read" && observation.path === rawPath,
-        )
+        .filter((observation) => observation.path === rawPath)
         .slice(0, MAX_REPORTED_OBSERVATIONS)
         .map(
             (observation) =>
@@ -110,8 +105,8 @@ function describeRejectedLocation(
         );
     return `${rawPath}:${startLine}-${endLine} rejected; ${
         observed.length > 0
-            ? `observed read ranges ${observed.join(", ")}`
-            : "no matching observed range from read"
+            ? `observed ranges ${observed.join(", ")}`
+            : "no matching observed range"
     }`;
 }
 
@@ -191,11 +186,7 @@ function isRangeGrounded(
 ): boolean {
     let nextLine = startLine;
     const ranges = observations
-        .filter(
-            (observation) =>
-                observation.source === "read" &&
-                observation.path === relativePath,
-        )
+        .filter((observation) => observation.path === relativePath)
         .sort((left, right) => left.startLine - right.startLine);
     for (const range of ranges) {
         if (range.endLine < nextLine) {

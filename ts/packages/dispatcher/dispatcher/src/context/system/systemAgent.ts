@@ -20,9 +20,6 @@ import {
 } from "../commandHandlerContext.js";
 import { setActivityContext } from "../../execute/activityContext.js";
 import { DispatcherActivityName } from "../dispatcher/dispatcherUtils.js";
-import { clearReasoningSession as clearClaudeReasoningSession } from "../../reasoning/claude.js";
-import { clearReasoningSession as clearCopilotReasoningSession } from "../../reasoning/copilot.js";
-
 import {
     getSystemTemplateCompletion,
     getSystemTemplateSchema,
@@ -83,8 +80,12 @@ class ClearDeepCommandHandler implements CommandHandlerNoParams {
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         systemContext.chatHistory.clear();
-        clearClaudeReasoningSession(systemContext);
-        clearCopilotReasoningSession(systemContext);
+        (await import("../../reasoning/claude.js")).clearReasoningSession(
+            systemContext,
+        );
+        (await import("../../reasoning/copilot.js")).clearReasoningSession(
+            systemContext,
+        );
         setActivityContext(DispatcherActivityName, null, systemContext);
         systemContext.displayLog.clear();
         systemContext.displayLog.saveQueued();

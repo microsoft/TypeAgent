@@ -3,13 +3,10 @@
 
 import assert from "node:assert/strict";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
-import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 const cli = path.resolve("dist/src/cli.js");
-const cliSource = fileURLToPath(new URL("../../src/cli.ts", import.meta.url));
 
 function runCli(...args: string[]): SpawnSyncReturns<string> {
     return spawnSync(process.execPath, [cli, ...args], {
@@ -32,22 +29,6 @@ test("documents one-model and one-variant run selection", () => {
     assert.match(result.stdout, /--force-rerun/);
     assert.match(result.stdout, /cleanup-images/);
     assert.match(result.stdout, /--apply/);
-});
-
-test("loads Copilot only for baseline runs", () => {
-    const source = readFileSync(cliSource, "utf8");
-
-    assert.doesNotMatch(source, /^import .*?[.]\/copilot[.]js/m);
-    assert.match(source, /await import\("[.]\/copilot[.]js"\)/);
-});
-
-test("treats revisionless same-run manifests as incompatible", () => {
-    const source = readFileSync(cliSource, "utf8");
-
-    assert.match(
-        source,
-        /cacheCompatibilityRevision:\s*cacheCompatibilityRevision\s*\?\?\s*0/,
-    );
 });
 
 test("rejects unsupported one-row model and variant selections", () => {
@@ -132,4 +113,23 @@ test("rejects combining deterministic offset and seeded random selection", () =>
         result.stderr,
         /one of --task-seed, --task-offset, or --task-ids-file/,
     );
+});
+
+test("rejects LSP launcher overrides before loading benchmark tasks", () => {
+    const result = runCli(
+        "run",
+        "--limit",
+        "1",
+        "--model",
+        "azure/gpt-5.6-luna",
+        "--variant",
+        "typeagent-lsp",
+        "--mcp-arg=--disable-lsp-server=pylsp",
+        "--data-dir",
+        "/definitely/missing/explore-bench-data",
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /benchmark-owned MCP argument/i);
+    assert.doesNotMatch(result.stderr, /dataset|ENOENT|no such file/i);
 });

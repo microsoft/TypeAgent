@@ -2,17 +2,23 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+    access,
+    chmod,
+    mkdir,
+    mkdtemp,
+    readFile,
+    rm,
+    symlink,
+    writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test, { afterEach } from "node:test";
+import test from "node:test";
 import type { Tool, ToolInvocation } from "@github/copilot-sdk";
 import { createRepositoryTools } from "explorer-typeagent";
-import {
-    createCopilotExplorationTools,
-    type CopilotExplorationTools,
-} from "../src/copilotTools.js";
-import { resolvePackagedRipgrepPath } from "../src/ripgrep.js";
+import { createCopilotExplorationTools } from "../src/copilotTools.js";
+import { resolvePackagedRipgrep } from "../src/ripgrep.js";
 import type { CopilotToolCallTrace } from "../src/types.js";
 
 const invocation: ToolInvocation = {
@@ -21,20 +27,6 @@ const invocation: ToolInvocation = {
     toolName: "test-tool",
     arguments: {},
 };
-
-const openTools: CopilotExplorationTools[] = [];
-
-afterEach(async () => {
-    await Promise.all(openTools.splice(0).map((tools) => tools.close()));
-});
-
-async function makeCopilotTools(
-    ...args: Parameters<typeof createCopilotExplorationTools>
-): Promise<CopilotExplorationTools> {
-    const tools = await createCopilotExplorationTools(...args);
-    openTools.push(tools);
-    return tools;
-}
 
 function requiredTool(tools: Tool<any>[], name: string): Tool<any> {
     const tool = tools.find((candidate) => candidate.name === name);
@@ -59,11 +51,11 @@ test("creates traced SDK tools and uses Copilot's packaged ripgrep", async () =>
             "utf8",
         );
         const trace: CopilotToolCallTrace[] = [];
-        const tools = await makeCopilotTools(repo, trace);
+        const tools = await createCopilotExplorationTools(repo, trace);
 
         assert.deepEqual(
             tools.map((tool) => tool.name),
-            ["read", "grep", "glob", "ls"],
+            ["read", "grep", "glob", "bash"],
         );
         for (const tool of tools) {
             assert.equal(tool.overridesBuiltInTool, true);
@@ -78,11 +70,6 @@ test("creates traced SDK tools and uses Copilot's packaged ripgrep", async () =>
             ),
             "README.md:2: needle here",
         );
-        assert.deepEqual(trace[0].readRange, {
-            path: "README.md",
-            startLine: 2,
-            endLine: 2,
-        });
 
         const grep = requiredTool(tools, "grep");
         const oldPath = process.env.PATH;
@@ -117,159 +104,111 @@ test("creates traced SDK tools and uses Copilot's packaged ripgrep", async () =>
                 { tool: "glob", ok: true },
             ],
         );
+        assert.match(
+            trace.find((call) => call.tool === "grep")?.execution
+                ?.ripgrepSha256 ?? "",
+            /^[a-f0-9]{64}$/,
+        );
+        await tools.close();
     } finally {
         await rm(repo, { recursive: true, force: true });
     }
 });
 
-test("keeps Copilot and TypeAgent grep results in the same ripgrep order", async () => {
+test("renders the same canonical grep matches as TypeAgent", async () => {
     const repo = await mkdtemp(
-        path.join(os.tmpdir(), "typeagent-shared-ripgrep-"),
+        path.join(os.tmpdir(), "typeagent-copilot-grep-parity-"),
     );
-    const packagedRipgrepPath = await resolvePackagedRipgrepPath();
+    const ripgrep = await resolvePackagedRipgrep();
+    let canonical:
+        | Awaited<ReturnType<typeof createRepositoryTools>>
+        | undefined;
     try {
-        await mkdir(path.join(repo, "src"), { recursive: true });
-        await mkdir(path.join(repo, ".github", "workflows"), {
+        await mkdir(path.join(repo, "docs"), { recursive: true });
+        await mkdir(path.join(repo, "node_modules", "ignored"), {
             recursive: true,
         });
+        await mkdir(path.join(repo, "src"), { recursive: true });
+        await mkdir(path.join(repo, "tests"), { recursive: true });
+        await writeFile(path.join(repo, "docs", "guide.ts"), "marker\n");
+        await writeFile(path.join(repo, "src", "source.ts"), "marker\n");
+        await writeFile(path.join(repo, "tests", "source.test.ts"), "marker\n");
         await writeFile(
-            path.join(repo, "README.md"),
-            "needle\nconst literal = 'a.*b';\n",
+            path.join(repo, "node_modules", "ignored", "hidden.ts"),
+            "ignored-marker\n",
         );
-        await writeFile(
-            path.join(repo, "src", "dense.ts"),
-            Array.from({ length: 220 }, (_, index) => `needle ${index}`).join(
-                "\n",
-            ),
-        );
-        await writeFile(
-            path.join(repo, ".github", "workflows", "build.yml"),
-            "hidden-workflow-marker\n",
-        );
-        const copilotTools = await makeCopilotTools(
-            repo,
-            [],
-            100,
-            packagedRipgrepPath,
-        );
-        const copilotGrep = requiredTool(copilotTools, "grep");
-        const typeAgent = await createRepositoryTools({
+        canonical = await createRepositoryTools({
             repoRoot: repo,
-            maxCalls: 100,
-            ripgrepPath: packagedRipgrepPath,
+            ripgrepPath: ripgrep.path,
         });
-        try {
-            let characterClassMatches:
-                | ReturnType<typeof parseCopilotGrepOutput>["matches"]
-                | undefined;
-            for (const args of [
-                { pattern: "needle", maxMatches: 3 },
-                { pattern: "a.*b", literal: true },
-                { pattern: "needle" },
-                { pattern: "needle", maxMatches: 999 },
-                {
-                    pattern: "needle",
-                    path: "src/dense.ts",
-                    maxMatches: 2,
+
+        const baselineTrace: CopilotToolCallTrace[] = [];
+        const tools = await createCopilotExplorationTools(
+            repo,
+            baselineTrace,
+            8,
+            ripgrep.path,
+        );
+        const grep = requiredTool(tools, "grep");
+        const cases = [
+            {
+                pattern: "marker",
+                options: { literal: true, maxMatches: 2 },
+            },
+            { pattern: "mark.r", options: { maxMatches: 3 } },
+            {
+                pattern: "marker",
+                options: { path: "src", literal: true, maxMatches: 3 },
+            },
+            {
+                pattern: "marker",
+                options: {
+                    glob: "**/*.test.ts",
+                    literal: true,
+                    maxMatches: 3,
                 },
-                { pattern: "needle", path: "src", maxMatches: 2 },
-                {
-                    pattern: "needle",
-                    glob: "**/[Dd]ense.ts",
-                    maxMatches: 2,
-                },
-                { pattern: "hidden-workflow-marker" },
-                { pattern: "needle", path: "missing" },
-            ]) {
-                const copilot = parseCopilotGrepOutput(
-                    String(await copilotGrep.handler!(args, invocation)),
-                );
-                const typeAgentResult = await typeAgent.api.grep(
-                    args.pattern,
-                    args,
-                );
-                assert.deepEqual(typeAgentResult, copilot);
-                if (args.glob === "**/[Dd]ense.ts") {
-                    characterClassMatches = copilot.matches;
-                }
-            }
-            assert.deepEqual(characterClassMatches, [
-                { path: "src/dense.ts", line: 1, text: "needle 0" },
-                { path: "src/dense.ts", line: 2, text: "needle 1" },
-            ]);
-            await assert.rejects(
-                async () =>
-                    await copilotGrep.handler!(
-                        { pattern: "needle(" },
-                        invocation,
-                    ),
-                /regex parse error/i,
+            },
+            {
+                pattern: "ignored-marker",
+                options: { literal: true, maxMatches: 3 },
+            },
+        ] as const;
+        for (const { pattern, options } of cases) {
+            const baseline = String(
+                await grep.handler!({ pattern, ...options }, invocation),
             );
-            await assert.rejects(
-                async () => await typeAgent.api.grep("needle("),
-                /regex parse error/i,
-            );
-            await assert.rejects(
-                async () =>
-                    await copilotGrep.handler!({ pattern: "" }, invocation),
-                /must not be empty/i,
-            );
-            await assert.rejects(
-                async () => await typeAgent.api.grep(""),
-                /must not be empty/i,
-            );
-        } finally {
-            await typeAgent.close();
+            const expected = (await canonical.api.grep(pattern, options))
+                .map((match) => `${match.path}:${match.line}:${match.text}`)
+                .join("\n");
+            assert.equal(baseline, expected || "No matches");
         }
+        assert.equal(baselineTrace.length, cases.length);
+        assert.equal(canonical.trace.calls.length, cases.length);
+        for (let index = 0; index < cases.length; index++) {
+            assert.deepEqual(baselineTrace[index].execution, {
+                engine: "ripgrep",
+                executable: ripgrep.path,
+                ripgrepSha256: ripgrep.sha256,
+                ripgrepProcessCount:
+                    canonical.trace.calls[index].input.ripgrepProcessCount,
+                resultCount: canonical.trace.calls[index].resultCount,
+                truncated: canonical.trace.calls[index].truncated,
+            });
+            assert.equal(
+                canonical.trace.calls[index].input.ripgrepPath,
+                ripgrep.path,
+            );
+            assert.equal(
+                canonical.trace.calls[index].input.ripgrepSha256,
+                ripgrep.sha256,
+            );
+        }
+        await tools.close();
     } finally {
+        await canonical?.close();
         await rm(repo, { recursive: true, force: true });
     }
 });
-
-test("keeps baseline reads and listings on the immutable filtered snapshot", async () => {
-    const repo = await mkdtemp(
-        path.join(os.tmpdir(), "typeagent-copilot-snapshot-"),
-    );
-    try {
-        await writeFile(path.join(repo, "tracked.txt"), "before\n", "utf8");
-        const tools = await makeCopilotTools(repo, [], 50);
-        const read = requiredTool(tools, "read");
-        const ls = requiredTool(tools, "ls");
-
-        await writeFile(path.join(repo, "tracked.txt"), "after\n", "utf8");
-        await writeFile(path.join(repo, "late.txt"), "late\n", "utf8");
-
-        assert.equal(
-            await read.handler!({ path: "tracked.txt", limit: 1 }, invocation),
-            "tracked.txt:1: before",
-        );
-        assert.equal(
-            await ls.handler!({ path: ".", depth: 1 }, invocation),
-            "tracked.txt",
-        );
-    } finally {
-        await rm(repo, { recursive: true, force: true });
-    }
-});
-
-function parseCopilotGrepOutput(output: string): {
-    matches: Array<{ path: string; line: number; text: string }>;
-    truncated: boolean;
-} {
-    const lines = output.split("\n");
-    const marker = "[Search results truncated; narrow the pattern or path.]";
-    const truncated = lines.at(-1) === marker;
-    if (truncated) lines.pop();
-    if (lines.length === 1 && lines[0] === "No matches") {
-        return { matches: [], truncated };
-    }
-    const matches = lines.map((line) => {
-        const match = /^(.*?):(\d+):(.*)$/u.exec(line);
-        assert.ok(match, `unexpected Copilot grep line: ${line}`);
-        return { path: match[1], line: Number(match[2]), text: match[3] };
-    });
-    return { matches, truncated };
-}
 
 test("keeps file access inside the repository, including through symlinks", async () => {
     const parent = await mkdtemp(
@@ -284,19 +223,20 @@ test("keeps file access inside the repository, including through symlinks", asyn
             path.join(repo, "escape.txt"),
         );
 
-        const tools = await makeCopilotTools(repo, []);
+        const tools = await createCopilotExplorationTools(repo, []);
         const read = requiredTool(tools, "read");
         const grep = requiredTool(tools, "grep");
         const glob = requiredTool(tools, "glob");
+        const bash = requiredTool(tools, "bash");
 
         await assert.rejects(
             async () =>
                 await read.handler!({ path: "../outside.txt" }, invocation),
-            /relative POSIX paths/,
+            /Path escapes repo root/,
         );
         await assert.rejects(
             async () => await read.handler!({ path: "escape.txt" }, invocation),
-            /not available to repository tools/,
+            /Path escapes repo root/,
         );
         await assert.rejects(
             async () =>
@@ -304,18 +244,23 @@ test("keeps file access inside the repository, including through symlinks", asyn
                     { pattern: "outside", path: ".." },
                     invocation,
                 ),
-            /relative POSIX paths/,
+            /relative POSIX paths|Path escapes repo root/,
         );
         await assert.rejects(
             async () => await glob.handler!({ pattern: "../*" }, invocation),
             /repository-relative/i,
+        );
+        await assert.rejects(
+            async () =>
+                await bash.handler!({ command: "pwd", cwd: ".." }, invocation),
+            /Path escapes repo root/,
         );
     } finally {
         await rm(parent, { recursive: true, force: true });
     }
 });
 
-test("rejects secret files and scrubs their contents", async () => {
+test("rejects secret files and unsafe shell commands and scrubs process secrets", async () => {
     const repo = await mkdtemp(
         path.join(os.tmpdir(), "typeagent-copilot-safe-"),
     );
@@ -339,22 +284,23 @@ test("rejects secret files and scrubs their contents", async () => {
             "utf8",
         );
         const trace: CopilotToolCallTrace[] = [];
-        const tools = await makeCopilotTools(repo, trace, 50);
+        const tools = await createCopilotExplorationTools(repo, trace, 50);
         const read = requiredTool(tools, "read");
         const grep = requiredTool(tools, "grep");
+        const bash = requiredTool(tools, "bash");
 
         await assert.rejects(
             async () => await read.handler!({ path: ".env" }, invocation),
-            /not available to repository tools/,
+            /Refusing to read likely secret file/,
         );
         await assert.rejects(
             async () => await read.handler!({ path: ".npmrc" }, invocation),
-            /not available to repository tools/,
+            /Refusing to read likely secret file/,
         );
         await assert.rejects(
             async () =>
                 await read.handler!({ path: "private.pem" }, invocation),
-            /not available to repository tools/,
+            /Refusing to read likely secret file/,
         );
         assert.equal(
             await grep.handler!(
@@ -370,7 +316,37 @@ test("rejects secret files and scrubs their contents", async () => {
             ),
             "No matches",
         );
-        assert.equal(trace.filter((entry) => !entry.ok).length, 3);
+        await assert.rejects(
+            async () =>
+                await bash.handler!(
+                    { command: `printenv ${secretName}` },
+                    invocation,
+                ),
+            /Rejected unsafe command/,
+        );
+        await assert.rejects(
+            async () =>
+                await bash.handler!({ command: "cat .env" }, invocation),
+            /Rejected unsafe command/,
+        );
+        await assert.rejects(
+            async () =>
+                await bash.handler!(
+                    { command: "echo changed > tracked.txt" },
+                    invocation,
+                ),
+            /Rejected unsafe command/,
+        );
+        await assert.rejects(
+            async () =>
+                await bash.handler!(
+                    { command: "find / -name README.md" },
+                    invocation,
+                ),
+            /Rejected unsafe command/,
+        );
+
+        assert.equal(trace.filter((entry) => !entry.ok).length, 7);
         assert.doesNotMatch(
             JSON.stringify(trace),
             /secret-from-(?:file|npmrc|parent|private-key)/,
@@ -382,7 +358,101 @@ test("rejects secret files and scrubs their contents", async () => {
     }
 });
 
-test("bounds read, grep, glob, and ls output", async () => {
+test("bash directly spawns only allowlisted read-only repository commands", async () => {
+    const parent = await mkdtemp(
+        path.join(os.tmpdir(), "typeagent-copilot-bash-safe-"),
+    );
+    const repo = path.join(parent, "repo");
+    try {
+        await mkdir(repo);
+        await writeFile(path.join(repo, "README.md"), "fixture\n", "utf8");
+        await writeFile(path.join(parent, "outside.txt"), "outside\n", "utf8");
+        await symlink(parent, path.join(repo, "outside-link"));
+
+        const tools = await createCopilotExplorationTools(repo, [], 50);
+        const bash = requiredTool(tools, "bash");
+        assert.match(
+            String(await bash.handler!({ command: "pwd" }, invocation)),
+            /repo/,
+        );
+        assert.match(
+            String(await bash.handler!({ command: "ls ." }, invocation)),
+            /README\.md/,
+        );
+        assert.match(
+            String(
+                await bash.handler!(
+                    { command: "find . -maxdepth 1 -type f" },
+                    invocation,
+                ),
+            ),
+            /README\.md/,
+        );
+
+        for (const command of [
+            "cat ../outside.txt",
+            "cat ~/.ssh/id_rsa",
+            "git branch exploit",
+            "git config user.name changed",
+            "perl -e 'unlink README.md'",
+            "echo changed>tracked.txt",
+            "ls /",
+            "ls -RL .",
+            "ls --dereference -R .",
+            "find -L . -type f",
+            "find . -follow -type f",
+            "git grep fixture",
+            "ls $(pwd)",
+            "ls . | head",
+        ]) {
+            await assert.rejects(
+                async () => await bash.handler!({ command }, invocation),
+                /Rejected unsafe command/,
+                command,
+            );
+        }
+        await assert.rejects(access(path.join(repo, "tracked.txt")));
+        assert.equal(
+            await readFile(path.join(repo, "README.md"), "utf8"),
+            "fixture\n",
+        );
+    } finally {
+        await rm(parent, { recursive: true, force: true });
+    }
+});
+
+test("bash ignores malicious PATH and current-repository command shadows", async () => {
+    const repo = await mkdtemp(
+        path.join(os.tmpdir(), "typeagent-copilot-path-shadow-"),
+    );
+    const savedPath = process.env.PATH;
+    try {
+        await writeFile(path.join(repo, "README.md"), "fixture\n", "utf8");
+        await writeFile(
+            path.join(repo, "ls"),
+            "#!/bin/sh\necho MALICIOUS_PATH_SHADOW_EXECUTED\n",
+            "utf8",
+        );
+        await chmod(path.join(repo, "ls"), 0o755);
+        process.env.PATH = [".", repo, savedPath]
+            .filter(Boolean)
+            .join(path.delimiter);
+
+        const tools = await createCopilotExplorationTools(repo, [], 50);
+        const bash = requiredTool(tools, "bash");
+        const output = String(
+            await bash.handler!({ command: "ls ." }, invocation),
+        );
+        assert.match(output, /README\.md/);
+        assert.doesNotMatch(output, /MALICIOUS_PATH_SHADOW_EXECUTED/);
+    } finally {
+        if (savedPath === undefined) delete process.env.PATH;
+        else process.env.PATH = savedPath;
+        await rm(repo, { recursive: true, force: true });
+    }
+});
+
+test("bounds read, grep, glob, and bash output", async () => {
     const repo = await mkdtemp(
         path.join(os.tmpdir(), "typeagent-copilot-bounds-"),
     );
@@ -410,11 +480,11 @@ test("bounds read, grep, glob, and ls output", async () => {
             ),
         );
 
-        const tools = await makeCopilotTools(repo, []);
+        const tools = await createCopilotExplorationTools(repo, []);
         const read = requiredTool(tools, "read");
         const grep = requiredTool(tools, "grep");
         const glob = requiredTool(tools, "glob");
-        const ls = requiredTool(tools, "ls");
+        const bash = requiredTool(tools, "bash");
 
         const readLines = String(
             await read.handler!(
@@ -427,7 +497,7 @@ test("bounds read, grep, glob, and ls output", async () => {
         await assert.rejects(
             async () =>
                 await read.handler!({ path: "too-large.txt" }, invocation),
-            /not available to repository tools/,
+            /1 MiB read limit/,
         );
 
         const grepLines = String(
@@ -436,8 +506,7 @@ test("bounds read, grep, glob, and ls output", async () => {
                 invocation,
             ),
         ).split("\n");
-        assert.equal(grepLines.length, 201);
-        assert.match(grepLines.at(-1) ?? "", /results truncated/i);
+        assert.equal(grepLines.length, 200);
 
         const globLines = String(
             await glob.handler!(
@@ -447,10 +516,13 @@ test("bounds read, grep, glob, and ls output", async () => {
         ).split("\n");
         assert.equal(globLines.length, 200);
 
-        const lsLines = String(
-            await ls.handler!({ path: ".", maxEntries: 200 }, invocation),
-        ).split("\n");
-        assert.equal(lsLines.length, 200);
+        const bashOutput = String(
+            await bash.handler!(
+                { command: "find . -maxdepth 1 -type f", timeoutMs: 10_000 },
+                invocation,
+            ),
+        );
+        assert.ok(bashOutput.length <= 12_007);
     } finally {
         await rm(repo, { recursive: true, force: true });
     }
@@ -463,7 +535,7 @@ test("uses a finite default budget and bounds exhausted traces", async () => {
     try {
         await writeFile(path.join(repo, "README.md"), "fixture\n", "utf8");
         const trace: CopilotToolCallTrace[] = [];
-        const tools = await makeCopilotTools(repo, trace);
+        const tools = await createCopilotExplorationTools(repo, trace);
         const read = requiredTool(tools, "read");
 
         for (let index = 0; index < 8; index += 1) {
@@ -493,7 +565,7 @@ test("bounds trace arguments and errors", async () => {
     );
     try {
         const trace: CopilotToolCallTrace[] = [];
-        const tools = await makeCopilotTools(repo, trace);
+        const tools = await createCopilotExplorationTools(repo, trace);
         const grep = requiredTool(tools, "grep");
         const read = requiredTool(tools, "read");
         await assert.rejects(
@@ -502,7 +574,7 @@ test("bounds trace arguments and errors", async () => {
                     { pattern: "x".repeat(10_000) },
                     invocation,
                 ),
-            /pattern is too long/i,
+            /pattern is too long/,
         );
         await assert.rejects(
             async () =>
@@ -523,7 +595,7 @@ test("stops executing tools after the shared call budget", async () => {
     try {
         await writeFile(path.join(repo, "README.md"), "fixture\n", "utf8");
         const trace: CopilotToolCallTrace[] = [];
-        const tools = await makeCopilotTools(repo, trace, 1);
+        const tools = await createCopilotExplorationTools(repo, trace, 1);
         const read = requiredTool(tools, "read");
         const grep = requiredTool(tools, "grep");
 

@@ -24,6 +24,9 @@ try {
         ...(options.reasoningRequestTimeoutMs !== undefined
             ? { requestTimeoutMs: options.reasoningRequestTimeoutMs }
             : {}),
+        ...(options.trajectoryFile
+            ? { trajectoryFile: options.trajectoryFile }
+            : {}),
     });
     const explorer = createCodeModeExplorer({
         repoRoot: options.repoRoot,
@@ -35,7 +38,7 @@ try {
             : {}),
         ...(options.lsp ? { lsp: options.lsp } : {}),
     });
-    const server = new ExploreServer(explorer);
+    const server = new ExploreServer(explorer, options.expectedQuery);
     await server.start();
     console.error(
         `TypeAgent agentic Code Mode explore MCP ready for ${options.repoRoot} using ${options.model}`,

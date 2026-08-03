@@ -5,7 +5,13 @@
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { defaultTypeScriptLanguageServerCommand } from "explorer-typeagent";
 import { loadBenchmarkAgent } from "./agent.js";
+import { assertAcceptanceGate } from "./acceptance.js";
+import {
+    resolveCopilotPath,
+    validateBenchmarkMcpArguments,
+} from "./copilot.js";
 import { loadVerifiedTasks, verifiedDataset } from "./dataset.js";
 import {
     cleanupProcessedImages,
@@ -14,19 +20,21 @@ import {
 } from "./imageCleanup.js";
 import {
     readJsonFile,
+    readResults,
     readRunManifest,
     readRunManifestIfExists,
     safeRunId,
     writeJsonAtomic,
 } from "./io.js";
 import { writeReports } from "./report.js";
+import { resolveRunRuntimeFingerprint } from "./runtimeFingerprint.js";
 import { writeThreeArmReport } from "./threeArmReport.js";
 import {
     archiveResultArtifacts,
     CACHE_COMPATIBILITY_REVISION,
     seedResultsFromPriorRuns,
 } from "./resultCache.js";
-import { runBenchmark } from "./runner.js";
+import { assertCompleteRun, runBenchmark } from "./runner.js";
 import type {
     BenchmarkVariant,
     MatrixEntry,
@@ -221,11 +229,7 @@ async function runCommand(args: Map<string, string[]>): Promise<void> {
             `Benchmark agent must be named explorer; observed ${JSON.stringify(agent.name)}`,
         );
     }
-    const copilotPath = variants.includes("baseline")
-        ? await (
-              await import("./copilot.js")
-          ).resolveCopilotPath(value(args, "copilot"))
-        : "";
+    const copilotPath = await resolveCopilotPath(value(args, "copilot"));
     const runtimeEvidence = path.join(runDir, "copilot-runtime.json");
     const providerBaseUrl =
         value(args, "litellm-base-url") ?? "http://localhost:4627/v1";
@@ -245,7 +249,15 @@ async function runCommand(args: Map<string, string[]>): Promise<void> {
         "max-attempts",
     );
     const dockerPlatform = value(args, "docker-platform") ?? "linux/amd64";
-    const mcp = mcpConfig(args);
+    const mcp = {
+        ...mcpConfig(args),
+        ...(variants.includes("typeagent-lsp") ? pinnedLspConfig() : {}),
+    };
+    validateBenchmarkMcpArguments(mcp);
+    const runtimeFingerprint = await resolveRunRuntimeFingerprint(
+        copilotPath,
+        mcp,
+    );
     const tasks = await loadVerifiedTasks({
         dataDir,
         limit,
@@ -280,6 +292,7 @@ async function runCommand(args: Map<string, string[]>): Promise<void> {
         output,
         copilotPath,
         runtimeEvidence,
+        runtimeFingerprint,
         provider: {
             type: "openai-compatible",
             baseUrl: providerBaseUrl,
@@ -326,6 +339,7 @@ async function runCommand(args: Map<string, string[]>): Promise<void> {
         output,
         copilotPath,
         runtimeEvidence,
+        runtimeFingerprint,
         providerBaseUrl,
         apiKeyEnv,
         ...(envFile ? { envFile } : {}),
@@ -338,6 +352,11 @@ async function runCommand(args: Map<string, string[]>): Promise<void> {
         variants,
         forceRerun,
     });
+    const completedRows = await readResults(output);
+    assertCompleteRun(tasks, matrix, variants, completedRows);
+    if (tasks.length === 10 || tasks.length === 100) {
+        assertAcceptanceGate(completedRows, manifest);
+    }
     const artifacts = await writeReports(output);
     process.stdout.write(
         `runId=${runId}\nresults=${output}\nreport=${artifacts.jsonPath}\nmarkdown=${artifacts.markdownPath}\n`,
@@ -440,7 +459,14 @@ function selectedLanguages(
 function mcpConfig(args: Map<string, string[]>): McpServerConfig {
     const commandValue = value(args, "mcp-command");
     if (!commandValue) {
-        return { command: "", args: [], envVars: [] };
+        return {
+            command: process.execPath,
+            args: [
+                path.resolve(packageRoot, "../mcp/explore/dist/server.js"),
+                ...(args.get("mcp-arg") ?? []),
+            ],
+            envVars: args.get("mcp-env") ?? [],
+        };
     }
     const command =
         commandValue === "node"
@@ -454,6 +480,24 @@ function mcpConfig(args: Map<string, string[]>): McpServerConfig {
         args: args.get("mcp-arg") ?? [],
         ...(cwdValue ? { cwd: path.resolve(cwdValue) } : {}),
         envVars: args.get("mcp-env") ?? [],
+    };
+}
+
+function pinnedLspConfig(): Pick<
+    McpServerConfig,
+    "pythonLspCommand" | "typescriptLspCommand" | "typescriptLspArgs"
+> {
+    const typescript = defaultTypeScriptLanguageServerCommand();
+    const pythonLspCommand = path.resolve(
+        packageRoot,
+        "../mcp/explore/python-lsp/.venv",
+        process.platform === "win32" ? "Scripts" : "bin",
+        process.platform === "win32" ? "pylsp.exe" : "pylsp",
+    );
+    return {
+        pythonLspCommand,
+        typescriptLspCommand: typescript.command,
+        typescriptLspArgs: typescript.args,
     };
 }
 
@@ -484,7 +528,8 @@ function manifestIdentity(manifest: RunManifest): unknown {
     } = manifest;
     return {
         ...identity,
-        cacheCompatibilityRevision: cacheCompatibilityRevision ?? 0,
+        cacheCompatibilityRevision:
+            cacheCompatibilityRevision ?? CACHE_COMPATIBILITY_REVISION,
     };
 }
 
@@ -585,6 +630,10 @@ Run options:
   --language <name>             python or typescript; repeatable; defaults to both for typeagent-lsp
   --agent-file <file>           Default: root .copilot/agents/explorer.md
   --copilot <file>              Native Copilot executable; otherwise auto-resolved
+  --mcp-command <file>          Explore MCP executable; defaults to the workspace server
+  --mcp-arg <value>             Extra MCP launcher argument; repeatable
+  --mcp-cwd <dir>               Optional MCP working directory
+  --mcp-env <name>              Extra environment variable forwarded to MCP; repeatable
   --litellm-base-url <url>      Default: http://localhost:4627/v1
   --api-key-env <name>          Default: CUSTOM_PROVIDER_API_KEY
   --env-file <file>             Explicit env file; overrides inherited/launchctl values

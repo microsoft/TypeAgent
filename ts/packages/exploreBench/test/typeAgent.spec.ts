@@ -2,14 +2,11 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import test from "node:test";
 import type { TypeAgentAction } from "@typeagent/agent-sdk";
-import { awaitCommand } from "agent-dispatcher";
 import {
     assertDirectDispatchEvidence,
     combineTypeAgentUsage,
-    createTypeAgentExplorerDispatcher,
     createTypeAgentExplorerProvider,
 } from "../src/typeAgent.js";
 import type {
@@ -21,122 +18,61 @@ const query =
     "Find the implementation that maps source => target incorrectly for empty cache entries.";
 
 test("exposes one Explorer application agent with one natural-language entry action", async () => {
-    const provider = createTypeAgentExplorerProvider({
-        explore: async () =>
-            "<final_answer>\nsrc/cache.ts:10-20\n</final_answer>",
-    });
+    const provider = createTypeAgentExplorerProvider(
+        {
+            explore: async () =>
+                "<final_answer>\nsrc/cache.ts:10-20\n</final_answer>",
+        },
+        query,
+    );
 
     assert.deepEqual(provider.getAppAgentNames(), ["explorer"]);
     const manifest = await provider.getAppAgentManifest("explorer");
     const schemaFile = manifest.schema?.schemaFile;
-    const grammarFile = manifest.schema?.grammarFile;
     const schema =
         typeof schemaFile === "string"
             ? schemaFile
             : (schemaFile?.content ?? "");
-    const grammar =
-        typeof grammarFile === "string"
-            ? grammarFile
-            : (grammarFile?.content ?? "");
     assert.equal(manifest.defaultEnabled, true);
-    assert.match(
-        manifest.schema?.description ?? "",
-        /change-bearing source, test, configuration, or documentation locations/i,
-    );
     assert.match(schema, /actionName: "exploreRepository"/);
-    assert.match(schema, /parameters:\s*\{[^}]*request: string/s);
-    assert.doesNotMatch(schema, /parameters: \{\}/);
+    assert.match(schema, /parameters: \{\}/);
+    assert.doesNotMatch(schema, /request: string/);
     assert.doesNotMatch(
         schema,
-        /discoverRepository|refineRepository|submitExploration/,
+        /discoverRepository|refineRepository|submitExploration|refineAndSubmitExploration/,
     );
-    assert.match(grammar, /\[spacing=none\]/);
-    assert.match(grammar, /parameters:\s*\{\s*request:\s*request\s*\}/);
 });
 
-test("dispatcher grammar carries arbitrary natural-language ingress byte-for-byte", async () => {
-    const received: string[] = [];
-    const dispatchMethods: Array<"construction" | "grammar" | false> = [];
-    const provider = createTypeAgentExplorerProvider({
-        explore: async () => {
-            throw new Error("exploreDetailed must be used");
-        },
-        exploreDetailed: async ({ query }) => {
-            received.push(query);
-            return {
-                text: "src/cache.ts:10-20",
-                usage: usage(0, 0, 0),
-                toolTrace: {
-                    calls: [],
-                    totalCalls: 0,
-                    totalOutputBytes: 0,
-                },
-                result: { citationCount: 1, truncated: false },
-            };
-        },
-    });
-    const dispatcher = await createTypeAgentExplorerDispatcher(
-        provider,
-        "unused-model",
-        (_requestId, method) => dispatchMethods.push(method),
-    );
-    const request =
-        "Explore the repository exactly.\r\n" +
-        "\t```ts\nconst edge = 'source => target';\n```\r" +
-        "<query>Unicode π repeated repeated</query>";
-    try {
-        const commandResult = await awaitCommand(
-            dispatcher,
-            request,
-            undefined,
-            { noReasoning: true },
-            undefined,
-            randomUUID(),
-        );
-
-        assert.equal(commandResult?.lastError, undefined);
-        assert.deepEqual(commandResult?.tokenUsage, {
-            requestCount: 0,
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
-        });
-        assert.equal(commandResult?.actions?.length, 1);
-        assert.equal(commandResult?.actions?.[0].parameters?.request, request);
-        assert.deepEqual(received, [request]);
-        assert.deepEqual(dispatchMethods, ["grammar"]);
-    } finally {
-        await dispatcher.close();
-    }
-});
-
-test("Explorer action executes its typed request parameter and reports inner usage", async () => {
+test("Explorer action executes the exact session request and reports inner usage", async () => {
     let received: unknown;
-    const provider = createTypeAgentExplorerProvider({
-        explore: async () => {
-            throw new Error("exploreDetailed must be used");
+    const provider = createTypeAgentExplorerProvider(
+        {
+            explore: async () => {
+                throw new Error("exploreDetailed must be used");
+            },
+            exploreDetailed: async (request) => {
+                received = request;
+                return {
+                    text: "src/cache.ts:10-20",
+                    usage: usage(2, 100, 20),
+                    toolTrace: {
+                        calls: [],
+                        totalCalls: 0,
+                        totalOutputBytes: 0,
+                    },
+                    result: { citationCount: 1, truncated: false },
+                };
+            },
         },
-        exploreDetailed: async (request) => {
-            received = request;
-            return {
-                text: "src/cache.ts:10-20",
-                usage: usage(2, 100, 20),
-                toolTrace: {
-                    calls: [],
-                    totalCalls: 0,
-                    totalOutputBytes: 0,
-                },
-                result: { citationCount: 1, truncated: false },
-            };
-        },
-    });
+        query,
+    );
     const agent = await provider.loadAppAgent("explorer");
     const agentContext = await agent.initializeAgentContext?.();
     const result = await agent.executeAction?.(
         {
             schemaName: "explorer",
             actionName: "exploreRepository",
-            parameters: { request: query },
+            parameters: { request: "translation-model mutation" },
         } as TypeAgentAction,
         { sessionContext: { agentContext } } as never,
     );
@@ -154,84 +90,26 @@ test("Explorer action executes its typed request parameter and reports inner usa
     });
 });
 
-test("Explorer action rejects a missing or empty typed request", async () => {
-    const provider = createTypeAgentExplorerProvider({
-        explore: async () => {
-            throw new Error("exploreDetailed must be used");
-        },
-        exploreDetailed: async () => {
-            throw new Error("invalid request reached Explorer");
-        },
-    });
-    const agent = await provider.loadAppAgent("explorer");
-    const agentContext = await agent.initializeAgentContext?.();
-
-    for (const parameters of [{}, { request: "   " }]) {
-        await assert.rejects(
-            async () =>
-                await agent.executeAction?.(
-                    {
-                        schemaName: "explorer",
-                        actionName: "exploreRepository",
-                        parameters,
-                    } as TypeAgentAction,
-                    { sessionContext: { agentContext } } as never,
-                ),
-            /request/i,
-        );
-    }
-});
-
 test("direct-dispatch evidence fails closed on every bypass", () => {
     const valid = evidence();
     assert.doesNotThrow(() => assertDirectDispatchEvidence(valid, query));
-    const crlfRequest = "first\r\nsecond";
-    assert.doesNotThrow(() =>
+    assert.throws(() =>
         assertDirectDispatchEvidence(
             {
                 ...valid,
-                submittedRequest: crlfRequest,
-                translatedActions: [
-                    {
-                        schemaName: "explorer",
-                        actionName: "exploreRepository",
-                        parameters: { request: "first\nsecond" },
-                    },
-                ],
+                submittedRequest: "first\nsecond",
             },
-            crlfRequest,
+            "first\r\nsecond",
         ),
     );
 
     const invalid: TypeAgentDispatchEvidence[] = [
         { ...valid, submittedRequest: `@action explorer exploreRepository` },
-        { ...valid, dispatchMethod: false },
-        { ...valid, dispatchMethod: "construction" },
-        { ...valid, translationInvoked: true },
-        { ...valid, translationRequestCount: 1 },
+        { ...valid, translationInvoked: false },
+        { ...valid, translationRequestCount: 2 },
         { ...valid, activeAgentNames: ["explorer", "chat"] },
         { ...valid, activeSchemaNames: ["explorer", "chat"] },
         { ...valid, translatedActions: [] },
-        {
-            ...valid,
-            translatedActions: [
-                {
-                    schemaName: "explorer",
-                    actionName: "exploreRepository",
-                    parameters: {},
-                },
-            ],
-        },
-        {
-            ...valid,
-            translatedActions: [
-                {
-                    schemaName: "explorer",
-                    actionName: "exploreRepository",
-                    parameters: { request: "translation-model mutation" },
-                },
-            ],
-        },
         {
             ...valid,
             translatedActions: [
@@ -288,16 +166,15 @@ function evidence(): TypeAgentDispatchEvidence {
     return {
         ingress: "natural-language",
         submittedRequest: query,
-        dispatchMethod: "grammar",
-        translationInvoked: false,
-        translationRequestCount: 0,
+        translationInvoked: true,
+        translationRequestCount: 1,
         activeAgentNames: ["explorer"],
         activeSchemaNames: ["explorer"],
         translatedActions: [
             {
                 schemaName: "explorer",
                 actionName: "exploreRepository",
-                parameters: { request: query },
+                parameters: {},
             },
         ],
         executionCount: 1,

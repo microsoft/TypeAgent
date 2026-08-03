@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { readFileSync } from "node:fs";
 import path from "node:path";
 import type {
     SwebenchCitation,
@@ -42,7 +41,7 @@ export function scoreSwebench(
     workspace?: string,
 ): SwebenchScore {
     const parsed = parseFinalAnswer(finalAnswer, workspace);
-    const patchFiles = parsePatch(patch, workspace);
+    const patchFiles = parsePatch(patch);
     const file = calculateFileScore(patchFiles, parsed.citations);
     const line = calculateLineScore(patchFiles, parsed.citations);
     return {
@@ -103,7 +102,7 @@ export function parseFinalAnswer(
     return { valid: true, citations, nBrokenLines };
 }
 
-export function parsePatch(text: string, workspace?: string): PatchEdit[] {
+export function parsePatch(text: string): PatchEdit[] {
     const edits: PatchEdit[] = [];
     const sections = text.split(/(?=^diff --git a\/)/m).filter(Boolean);
     for (const section of sections) {
@@ -114,13 +113,9 @@ export function parsePatch(text: string, workspace?: string): PatchEdit[] {
         ) {
             continue;
         }
-        const hunks = Array.from(
-            section.matchAll(
-                /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@.*$/gm,
-            ),
-        );
-        for (let index = 0; index < hunks.length; index += 1) {
-            const hunk = hunks[index];
+        for (const hunk of section.matchAll(
+            /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm,
+        )) {
             const startLine = Number(hunk[1]);
             const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
             const endLine = startLine + count - 1;
@@ -135,85 +130,14 @@ export function parsePatch(text: string, workspace?: string): PatchEdit[] {
             if (startLine === 0 && count === 0) {
                 continue;
             }
-            const oldLines = extractOldHunkLines(
-                section,
-                hunk,
-                hunks[index + 1],
-                count,
-            );
-            const relocatedStart = workspace
-                ? locateUniqueSequence(
-                      path.join(workspace, fileMatch[1]),
-                      oldLines,
-                  )
-                : undefined;
             edits.push({
                 path: fileMatch[1],
-                startLine: relocatedStart ?? startLine,
-                endLine:
-                    relocatedStart === undefined
-                        ? endLine
-                        : relocatedStart + count - 1,
+                startLine,
+                endLine,
             });
         }
     }
     return edits;
-}
-
-function extractOldHunkLines(
-    section: string,
-    hunk: RegExpMatchArray,
-    nextHunk: RegExpMatchArray | undefined,
-    count: number,
-): string[] {
-    if (count === 0 || hunk.index === undefined) {
-        return [];
-    }
-    const start = hunk.index + hunk[0].length;
-    const end = nextHunk?.index ?? section.length;
-    const lines: string[] = [];
-    for (const line of section.slice(start, end).split(/\r?\n/)) {
-        if (line.startsWith(" ") || line.startsWith("-")) {
-            lines.push(line.slice(1));
-            if (lines.length === count) {
-                return lines;
-            }
-        }
-    }
-    return [];
-}
-
-function locateUniqueSequence(
-    filePath: string,
-    expectedLines: string[],
-): number | undefined {
-    if (expectedLines.length === 0) {
-        return undefined;
-    }
-    let actualLines: string[];
-    try {
-        actualLines = readFileSync(filePath, "utf8").split(/\r?\n/);
-    } catch {
-        return undefined;
-    }
-    let match: number | undefined;
-    for (
-        let start = 0;
-        start + expectedLines.length <= actualLines.length;
-        start += 1
-    ) {
-        if (
-            expectedLines.every(
-                (line, offset) => actualLines[start + offset] === line,
-            )
-        ) {
-            if (match !== undefined) {
-                return undefined;
-            }
-            match = start + 1;
-        }
-    }
-    return match;
 }
 
 export function overallRecall(score: SwebenchScore): number {

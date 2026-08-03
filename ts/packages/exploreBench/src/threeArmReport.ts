@@ -3,9 +3,11 @@
 
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
+import { assertAcceptanceGate } from "./acceptance.js";
 import { patchLanguages } from "./dataset.js";
 import { validateResultRows } from "./integrity.js";
 import { readResults, readRunManifest, writeJsonAtomic } from "./io.js";
+import { responseReadyDurationMs } from "./latency.js";
 import {
     benchmarkVariantLabel,
     dedupeAndRescore,
@@ -110,6 +112,27 @@ export async function writeThreeArmReport(options: {
     const lspRaw = await readResults(lspInput);
     validateResultRows(pairedRaw, pairedManifest);
     validateResultRows(lspRaw, lspManifest);
+    if (
+        pairedManifest.taskIds.length === 10 ||
+        pairedManifest.taskIds.length === 100
+    ) {
+        const acceptanceRunId = `${pairedManifest.runId}+${lspManifest.runId}`;
+        assertAcceptanceGate(
+            [
+                ...pairedRaw.filter(
+                    (row) =>
+                        row.variant === "baseline" ||
+                        row.variant === "typeagent",
+                ),
+                ...lspRaw.filter((row) => row.variant === "typeagent-lsp"),
+            ].map((row) => ({ ...row, runId: acceptanceRunId })),
+            {
+                ...pairedManifest,
+                runId: acceptanceRunId,
+                variants: ["baseline", "typeagent", "typeagent-lsp"],
+            },
+        );
+    }
     const pairedRows = dedupeAndRescore(pairedRaw).filter(
         (row) => row.variant === "baseline" || row.variant === "typeagent",
     );
@@ -185,10 +208,11 @@ export async function writeThreeArmReport(options: {
         })),
         notes: [
             "Metrics compare only the three-way intersection of successful rows for the same task and model; completion counts cover the full requested cohort.",
-            "Latency reports one final successful execution per common task; failed retry attempts are excluded from mean, p50, and p95.",
+            "Latency measures run start through the final response-ready boundary for one successful execution per common task; post-response usage reads, disconnect, cleanup, and telemetry settling are excluded, as are failed retries.",
+            "Each successful TypeAgent treatment normally contains exactly three dependent inner requests in one Explorer execution: discoverRepository, refineRepository, then submitExploration. The final turn selects locations only after observing both repository programs; bounded repair turns are retained and charged to one treatment execution.",
             "All three arms are read from the supplied current-harness result files; report generation does not issue model requests.",
-            "LSP navigation is charged against the same eight-call repository budget, and every successful TypeAgent with LSP row must contain an error-free language-server call and repository-grounded reads before submission.",
-            "The successful LSP call total counts error-free calls, including valid empty responses; LSP locations are reported separately and may be zero, while failed attempts remain available in raw TypeAgent tool telemetry.",
+            "LSP navigation uses a separate two-call allowance, and every successful TypeAgent with LSP row must contain a non-discarded language-server attempt plus repository-grounded evidence before submission.",
+            "The LSP call total counts every traced navigation attempt, including attempts that retain errors or are discarded; errors remain available in raw TypeAgent tool telemetry.",
             "SWE-bench Verified is Python-only at the gold-patch level in this cohort, so TypeScript language-server benchmark coverage is reported explicitly and may be zero.",
         ],
     };
@@ -256,11 +280,7 @@ function armSummary(
         successfulExecutionLatency: summarizeExecutionLatency(commonRows),
         lspAdoptionCount: requestedRows.filter((row) => row.lspAdopted).length,
         lspCallCount: requestedRows.reduce(
-            (total, row) =>
-                total +
-                (row.typeAgentToolTrace?.calls.filter(
-                    (call) => call.tool === "lsp" && call.error === undefined,
-                ).length ?? 0),
+            (total, row) => total + (row.lspCallCount ?? 0),
             0,
         ),
         lspResultCount: requestedRows.reduce(
@@ -293,9 +313,10 @@ function renderMarkdown(report: ThreeArmReport): string {
         "",
         `Tasks: ${report.taskCount}; Python coverage: ${report.languageCoverage.python}; TypeScript coverage: ${report.languageCoverage.typescript}.`,
         "",
-        "Quality, final-attempt token, and latency columns use only the successful three-way task intersection for each model. Latency counts one final successful execution per task and excludes failed retries. Completion and LSP adoption cover all requested tasks.",
+        "Quality, final-attempt token, and latency columns use only the successful three-way task intersection for each model. Latency runs from execution start through the final response-ready boundary, excludes post-response accounting/cleanup and failed retries, and counts one final successful execution per task. Completion and LSP adoption cover all requested tasks.",
+        "Each successful TypeAgent treatment normally contains exactly three dependent inner requests in one Explorer execution: discoverRepository, refineRepository, then submitExploration. The final turn selects locations only after observing both repository programs; bounded repair turns are retained and charged.",
         "",
-        "| Model | Three-way paired | Copilot SDK (with explore agent) completed | TypeAgent completed | TypeAgent with LSP completed | Copilot SDK recall | TypeAgent recall | TypeAgent with LSP recall | Copilot SDK file P/R/F1 | TypeAgent file P/R/F1 | TypeAgent with LSP file P/R/F1 | Copilot SDK line P/R/F1 | TypeAgent line P/R/F1 | TypeAgent with LSP line P/R/F1 | Copilot SDK final-attempt tokens | TypeAgent final-attempt tokens | TypeAgent with LSP final-attempt tokens | Copilot SDK latency mean/p50/p95 | TypeAgent latency mean/p50/p95 | TypeAgent with LSP latency mean/p50/p95 | LSP adopted | Successful LSP calls | LSP locations |",
+        "| Model | Three-way paired | Copilot SDK (with explore agent) completed | TypeAgent completed | TypeAgent with LSP completed | Copilot SDK recall | TypeAgent recall | TypeAgent with LSP recall | Copilot SDK file P/R/F1 | TypeAgent file P/R/F1 | TypeAgent with LSP file P/R/F1 | Copilot SDK line P/R/F1 | TypeAgent line P/R/F1 | TypeAgent with LSP line P/R/F1 | Copilot SDK final-attempt tokens | TypeAgent final-attempt tokens | TypeAgent with LSP final-attempt tokens | Copilot SDK latency mean/p50/p95 | TypeAgent latency mean/p50/p95 | TypeAgent with LSP latency mean/p50/p95 | LSP adopted | LSP attempts | LSP locations |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ...rows,
         "",
@@ -321,6 +342,14 @@ function assertCompatibleManifests(
     ) {
         throw new Error(
             "Three-arm inputs must use the same dataset, split, and model matrix",
+        );
+    }
+    if (
+        !Number.isSafeInteger(paired.cacheCompatibilityRevision) ||
+        paired.cacheCompatibilityRevision !== lsp.cacheCompatibilityRevision
+    ) {
+        throw new Error(
+            "Three-arm inputs must use the same explicit treatment revision",
         );
     }
     if (
@@ -403,7 +432,7 @@ function summarizeExecutionLatency(
     if (rows.length === 0) {
         return null;
     }
-    const durations = rows.map((row) => row.durationMs);
+    const durations = rows.map(responseReadyDurationMs);
     return {
         executions: rows.length,
         meanMs:

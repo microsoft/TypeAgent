@@ -30,20 +30,17 @@ runtime. Python and TypeScript retain pinned defaults, while every other server
 must already be on `PATH` or have an explicit command override. Failed
 server/root pairs are suppressed for the rest of the session and the next
 matching server is tried. Definition/reference results are navigation hints
-only: the model must still ground every submitted location with `repo.read`,
-and each LSP request consumes the shared repository-call budget.
+only: the model must still ground every submitted location with successful
+grep or read evidence, while LSP uses a separate two-call allowance and does
+not consume the shared repository evidence-call budget.
 
-Both programs share one repository snapshot, observation ledger, call budget,
-and bounded TypeAgent reasoning session. The model sees the compact grounded
-result of discovery before generating refinement, then sees refinement evidence
-before invoking the typed `submitExploration` action. Final locations are
-validated against that ledger; an invalid submission receives bounded observed
-ranges so the same session can repair it. Predictable refinements that omit a
-mandatory read or LSP call are rejected before consuming repository budget, and
-the bounded sixth reasoning action permits one final correction. Each action
-result includes bounded repository-call inputs, counts, truncation, and errors;
-candidate ranges returned by Code Mode remain visible through read compaction.
-Host-validated evidence survives an advisory program result, while runtime
-failures remain errors and repository calls completing after a timeout are
-discarded. The MCP transport remains in `packages/mcp/explore`; the benchmark
-remains separately packaged in `packages/exploreBench`.
+Both programs share one repository snapshot, observation ledger, and evidence
+call budget. The normal path completes three dependent requests in one Explorer
+execution: `discoverRepository`, `refineRepository`, then
+`submitExploration`. The final turn sees the accepted results of both Code Mode
+programs before selecting locations and read dispositions. The host validates
+the model-authored set without narrowing, ranking, adding, or repairing it.
+Failed program executions discard their observations; bounded action repairs
+remain part of the same fully charged execution. The MCP transport remains in
+`packages/mcp/explore`; the benchmark remains separately packaged in
+`packages/exploreBench`.

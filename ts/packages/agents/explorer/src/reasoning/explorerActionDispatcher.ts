@@ -24,7 +24,7 @@ export interface ExplorerActionDispatcher {
         schemaName: string,
         actionName: string,
         parameters: Record<string, unknown>,
-    ): Promise<{ text: string; isError: boolean; submitted: boolean }>;
+    ): Promise<{ text: string; isError: boolean }>;
     close(): Promise<void>;
 }
 
@@ -32,7 +32,7 @@ export async function createExplorerActionDispatcher(
     session: ExplorerActionSession,
 ): Promise<ExplorerActionDispatcher> {
     const messages = new Map<string, IAgentMessage[]>();
-    const dispatcher = await createDispatcher("typeagent-explorer", {
+    const dispatcher = await createDispatcher("typeagent-explorer-mcp", {
         appAgentProviders: [createSessionProvider()],
         agents: {
             schemas: [EXPLORER_AGENT_NAME],
@@ -80,7 +80,6 @@ export async function createExplorerActionDispatcher(
                 return {
                     text: `Invalid Explorer action name: ${actionName}`,
                     isError: true,
-                    submitted: false,
                 };
             }
             const requestId = randomUUID();
@@ -99,11 +98,7 @@ export async function createExplorerActionDispatcher(
                     requestId,
                 );
                 if (result?.lastError) {
-                    return {
-                        text: result.lastError,
-                        isError: true,
-                        submitted: false,
-                    };
+                    return { text: result.lastError, isError: true };
                 }
                 const text = (messages.get(requestId) ?? [])
                     .filter((message) => message.source === schemaName)
@@ -111,15 +106,10 @@ export async function createExplorerActionDispatcher(
                     .filter(Boolean)
                     .join("\n");
                 return text
-                    ? {
-                          text,
-                          isError: false,
-                          submitted: session.snapshot().submitted,
-                      }
+                    ? { text, isError: false }
                     : {
                           text: `Explorer action ${actionName} returned no result`,
                           isError: true,
-                          submitted: false,
                       };
             } finally {
                 messages.delete(requestId);

@@ -44,14 +44,6 @@ import { getHistoryContext } from "../../translation/interpretRequest.js";
 import { processCommandNoLock } from "../../command/command.js";
 import { PreferenceMember } from "../collisionPreferences.js";
 import { ReasoningAction } from "./schema/reasoningActionSchema.js";
-import {
-    executeReasoningAction as executeClaudeReasoningAction,
-    executeReasoning as executeClaudeReasoning,
-} from "../../reasoning/claude.js";
-import {
-    executeReasoningAction as executeCopilotReasoningAction,
-    executeReasoning as executeCopilotReasoning,
-} from "../../reasoning/copilot.js";
 import { ReasonCommandHandler } from "./handlers/reasonCommandHandler.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
@@ -112,12 +104,20 @@ async function executeDispatcherAction(
                             };
                             systemContext.reasoningSourceIcon =
                                 reasoningIcons[engine] ?? undefined;
-                            const reason =
-                                engine === "copilot"
-                                    ? executeCopilotReasoning
-                                    : executeClaudeReasoning;
                             try {
-                                return await reason(
+                                if (engine === "copilot") {
+                                    const { executeReasoning } = await import(
+                                        "../../reasoning/copilot.js"
+                                    );
+                                    return await executeReasoning(
+                                        action.parameters.originalRequest,
+                                        context,
+                                    );
+                                }
+                                const { executeReasoning } = await import(
+                                    "../../reasoning/claude.js"
+                                );
+                                return await executeReasoning(
                                     action.parameters.originalRequest,
                                     context,
                                 );
@@ -187,15 +187,13 @@ async function executeDispatcherAction(
                 try {
                     switch (engine) {
                         case "claude":
-                            return await executeClaudeReasoningAction(
-                                action,
-                                context,
-                            );
+                            return await (
+                                await import("../../reasoning/claude.js")
+                            ).executeReasoningAction(action, context);
                         case "copilot":
-                            return await executeCopilotReasoningAction(
-                                action,
-                                context,
-                            );
+                            return await (
+                                await import("../../reasoning/copilot.js")
+                            ).executeReasoningAction(action, context);
                         default:
                             throw new Error(
                                 `Unsupported reasoning engine: ${engine}`,

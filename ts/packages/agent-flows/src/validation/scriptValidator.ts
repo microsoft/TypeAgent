@@ -195,19 +195,18 @@ function walkForSecurityViolations(
             }
         }
 
-        // Block computed property access on identifiers (e.g., obj["__proto__"])
-        if (
-            ts.isElementAccessExpression(node) &&
-            ts.isStringLiteral(node.argumentExpression) &&
-            BLOCKED_PROPERTIES.has(node.argumentExpression.text)
-        ) {
-            errors.push(
-                createError(
-                    sourceFile,
-                    node.argumentExpression,
-                    `Computed access to '${node.argumentExpression.text}' is not allowed`,
-                ),
-            );
+        if (ts.isElementAccessExpression(node)) {
+            const argument = node.argumentExpression;
+            const propertyName = staticStringValue(argument);
+            if (propertyName && BLOCKED_PROPERTIES.has(propertyName)) {
+                errors.push(
+                    createError(
+                        sourceFile,
+                        argument,
+                        `Computed access to '${propertyName}' is not allowed`,
+                    ),
+                );
+            }
         }
 
         // Block with statements
@@ -237,6 +236,26 @@ function walkForSecurityViolations(
 
     visit(sourceFile);
     return errors;
+}
+
+function staticStringValue(node: ts.Expression): string | undefined {
+    if (ts.isStringLiteralLike(node)) {
+        return node.text;
+    }
+    if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === ts.SyntaxKind.PlusToken
+    ) {
+        const left = staticStringValue(node.left);
+        const right = staticStringValue(node.right);
+        return left === undefined || right === undefined
+            ? undefined
+            : left + right;
+    }
+    if (ts.isParenthesizedExpression(node)) {
+        return staticStringValue(node.expression);
+    }
+    return undefined;
 }
 
 function validateEntryPoint(

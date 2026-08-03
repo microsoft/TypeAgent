@@ -44,9 +44,6 @@ import {
     DispatcherName,
     isUnknownAction,
 } from "../dispatcherUtils.js";
-import { executeReasoning as executeClaudeReasoning } from "../../../reasoning/claude.js";
-import { executeReasoning as executeCopilotReasoning } from "../../../reasoning/copilot.js";
-
 type ReasoningFallbackContext = {
     failedSchema: string;
     failedAction: string;
@@ -68,12 +65,14 @@ async function runConfiguredReasoning(
     try {
         switch (engine) {
             case "copilot":
-                await executeCopilotReasoning(request, context, {
-                    engine: "copilot",
-                });
+                await (
+                    await import("../../../reasoning/copilot.js")
+                ).executeReasoning(request, context, { engine: "copilot" });
                 return;
             case "claude":
-                await executeClaudeReasoning(request, context, {
+                await (
+                    await import("../../../reasoning/claude.js")
+                ).executeReasoning(request, context, {
                     engine: "claude",
                     ...(options?.fallbackContext
                         ? { fallbackContext: options.fallbackContext }

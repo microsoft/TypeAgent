@@ -9,9 +9,6 @@ import {
     CompletionGroups,
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
-import { executeReasoning as executeClaudeReasoning } from "../../../reasoning/claude.js";
-import { executeReasoning as executeCopilotReasoning } from "../../../reasoning/copilot.js";
-
 const validEngines = ["claude", "copilot", "none"];
 
 export class ReasonCommandHandler implements CommandHandler {
@@ -54,11 +51,13 @@ export class ReasonCommandHandler implements CommandHandler {
             // Route to the appropriate reasoning engine
             switch (engine) {
                 case "claude":
-                    return await executeClaudeReasoning(request, context, {
-                        engine: "claude",
-                    });
+                    return await (
+                        await import("../../../reasoning/claude.js")
+                    ).executeReasoning(request, context, { engine: "claude" });
                 case "copilot":
-                    return await executeCopilotReasoning(request, context, {
+                    return await (
+                        await import("../../../reasoning/copilot.js")
+                    ).executeReasoning(request, context, {
                         engine: "copilot",
                     });
                 case "none":

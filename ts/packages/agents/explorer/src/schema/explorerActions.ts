@@ -17,7 +17,6 @@ export type DiscoverRepositoryAction = {
 export type RefineRepositoryAction = {
     actionName: "refineRepository";
     parameters: {
-        // Complete async function execute(repo: RepositoryApi, params: ExploreParams).
         program: string;
     };
 };
@@ -25,12 +24,14 @@ export type RefineRepositoryAction = {
 export type SubmitExplorationAction = {
     actionName: "submitExploration";
     parameters: {
-        locations: {
-            path: string;
-            // First line of a change-bearing source, test, configuration, or documentation block.
-            startLine: number;
-            // Last line of the complete change-bearing block.
-            endLine: number;
-        }[];
+        // Complete highest-confidence set of independently evidenced
+        // change-bearing blocks, including companion files.
+        locations: ExploreLocation[];
     };
+};
+
+export type ExploreLocation = {
+    path: string;
+    startLine: number;
+    endLine: number;
 };

@@ -23,6 +23,8 @@ describe("explore server configuration", () => {
                     "--max-tool-calls=8",
                     "--telemetry-file",
                     "./usage.json",
+                    "--trajectory-file",
+                    "./messages.jsonl",
                 ],
                 {},
                 "/workspace",
@@ -34,6 +36,7 @@ describe("explore server configuration", () => {
             apiKeyEnv: "CUSTOM_PROVIDER_API_KEY",
             maxToolCalls: 8,
             telemetryFile: path.resolve("/workspace/usage.json"),
+            trajectoryFile: path.resolve("/workspace/messages.jsonl"),
         });
     });
 
@@ -47,6 +50,9 @@ describe("explore server configuration", () => {
                     TYPEAGENT_EXPLORE_BASE_URL: "http://localhost:4627/v1/",
                     TYPEAGENT_EXPLORE_API_KEY_ENV: "LITELLM_KEY",
                     TYPEAGENT_EXPLORE_TELEMETRY_FILE: "/tmp/usage.json",
+                    TYPEAGENT_EXPLORE_TRAJECTORY_FILE: "/tmp/messages.jsonl",
+                    TYPEAGENT_EXPLORE_EXPECTED_QUERY:
+                        "  exact request\nwith trailing space ",
                 },
                 "/workspace",
             ),
@@ -57,7 +63,23 @@ describe("explore server configuration", () => {
             apiKeyEnv: "LITELLM_KEY",
             maxToolCalls: 8,
             telemetryFile: "/tmp/usage.json",
+            trajectoryFile: "/tmp/messages.jsonl",
+            expectedQuery: "  exact request\nwith trailing space ",
         });
+    });
+
+    it("rejects malformed session-bound requests", () => {
+        expect(() =>
+            parseExploreServerOptions(
+                [],
+                {
+                    TYPEAGENT_EXPLORE_MODEL: "azure/gpt-5.6-terra",
+                    TYPEAGENT_EXPLORE_BASE_URL: "http://localhost:4627/v1",
+                    TYPEAGENT_EXPLORE_EXPECTED_QUERY: "   ",
+                },
+                "/workspace",
+            ),
+        ).toThrow(/EXPECTED_QUERY/i);
     });
 
     it("enables both language servers with repeatable process arguments", () => {
@@ -93,15 +115,15 @@ describe("explore server configuration", () => {
             options.lsp?.servers.find((server) => server.id === "pylsp")
                 ?.command,
         ).toEqual({
-                command: "/tools/uvx",
-                args: ["--from", "python-lsp-server", "pylsp"],
+            command: "/tools/uvx",
+            args: ["--from", "python-lsp-server", "pylsp"],
         });
         expect(
             options.lsp?.servers.find((server) => server.id === "typescript")
                 ?.command,
         ).toEqual({
-                command: "/tools/typescript-language-server",
-                args: ["--stdio"],
+            command: "/tools/typescript-language-server",
+            args: ["--stdio"],
         });
         expect(options.lsp?.servers.length).toBeGreaterThan(30);
         expect(
@@ -115,6 +137,27 @@ describe("explore server configuration", () => {
             options.lsp?.servers.some((server) => server.id === "eslint"),
         ).toBe(false);
         expect(options.reasoningRequestTimeoutMs).toBe(120_000);
+
+        const restricted = parseExploreServerOptions(
+            [
+                "--model",
+                "azure/gpt-5.6-luna",
+                "--base-url",
+                "http://localhost:4627/v1",
+                "--enable-lsp",
+                "--lsp-only-server",
+                "pylsp",
+                "--lsp-only-server",
+                "typescript",
+            ],
+            {},
+            "/workspace",
+        );
+        expect(restricted.lsp?.servers.map((server) => server.id)).toEqual([
+            "typescript",
+            "pylsp",
+        ]);
+
         expect(() =>
             parseExploreServerOptions(
                 [

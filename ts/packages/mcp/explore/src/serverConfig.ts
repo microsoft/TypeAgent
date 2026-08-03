@@ -17,6 +17,8 @@ export interface ExploreServerOptions {
     maxToolCalls: number;
     reasoningRequestTimeoutMs?: number;
     telemetryFile?: string | undefined;
+    trajectoryFile?: string | undefined;
+    expectedQuery?: string | undefined;
     lsp?: LanguageServerOptions;
 }
 
@@ -86,6 +88,18 @@ export function parseExploreServerOptions(
     const telemetry =
         flag(flags, "--telemetry-file") ??
         env.TYPEAGENT_EXPLORE_TELEMETRY_FILE?.trim();
+    const trajectory =
+        flag(flags, "--trajectory-file") ??
+        env.TYPEAGENT_EXPLORE_TRAJECTORY_FILE?.trim();
+    const expectedQuery = env.TYPEAGENT_EXPLORE_EXPECTED_QUERY;
+    if (
+        expectedQuery !== undefined &&
+        (expectedQuery.trim().length === 0 || expectedQuery.length > 12_000)
+    ) {
+        throw new Error(
+            "TYPEAGENT_EXPLORE_EXPECTED_QUERY must contain 1 to 12000 characters",
+        );
+    }
     const reasoningRequestTimeout = flag(flags, "--request-timeout-ms");
     const reasoningRequestTimeoutMs = reasoningRequestTimeout
         ? Number(reasoningRequestTimeout)
@@ -113,6 +127,10 @@ export function parseExploreServerOptions(
             ? { reasoningRequestTimeoutMs }
             : {}),
         ...(telemetry ? { telemetryFile: path.resolve(cwd, telemetry) } : {}),
+        ...(trajectory
+            ? { trajectoryFile: path.resolve(cwd, trajectory) }
+            : {}),
+        ...(expectedQuery !== undefined ? { expectedQuery } : {}),
         ...(lsp ? { lsp } : {}),
     };
 }
@@ -148,6 +166,7 @@ const SUPPORTED_FLAGS = new Set([
     "--api-key-env",
     "--max-tool-calls",
     "--telemetry-file",
+    "--trajectory-file",
     "--request-timeout-ms",
     "--enable-lsp",
     "--python-lsp-command",
@@ -157,6 +176,7 @@ const SUPPORTED_FLAGS = new Set([
     "--lsp-server-command",
     "--lsp-server-arg",
     "--disable-lsp-server",
+    "--lsp-only-server",
 ]);
 
 const BOOLEAN_FLAGS = new Set(["--enable-lsp"]);
@@ -195,10 +215,12 @@ function languageServerOptions(
         true,
     );
     const disabled = new Set(flags.get("--disable-lsp-server") ?? []);
+    const only = new Set(flags.get("--lsp-only-server") ?? []);
     for (const id of [
         ...commandOverrides.keys(),
         ...argumentOverrides.keys(),
         ...disabled,
+        ...only,
     ]) {
         if (!known.has(id)) {
             throw new Error(`Unknown LSP server ID: ${id}`);
@@ -207,7 +229,11 @@ function languageServerOptions(
     return {
         requestTimeoutMs: 30_000,
         servers: servers
-            .filter((server) => !disabled.has(server.id))
+            .filter(
+                (server) =>
+                    !disabled.has(server.id) &&
+                    (only.size === 0 || only.has(server.id)),
+            )
             .map((server) => ({
                 ...server,
                 command: {
@@ -233,11 +259,7 @@ function keyedValues(
         const separator = value.indexOf("=");
         const id = value.slice(0, separator);
         const item = value.slice(separator + 1);
-        if (
-            separator < 1 ||
-            !/^[a-z0-9-]+$/.test(id) ||
-            item.trim() === ""
-        ) {
+        if (separator < 1 || !/^[a-z0-9-]+$/.test(id) || item.trim() === "") {
             throw new Error(`${flagName} expects <server-id>=<value>`);
         }
         if (!repeatable && result.has(id)) {
