@@ -71,6 +71,10 @@ export function resolveAgentServerUrl(): string {
  * Go up 5 levels to reach `ts/`, then into the commandExecutor package.
  */
 function getCommandExecutorEntry(): string {
+    const runtimeRoot = process.env.TYPEAGENT_RUNTIME_ROOT;
+    if (runtimeRoot) {
+        return path.join(runtimeRoot, "bin", "command-executor.js");
+    }
     const thisFile = fileURLToPath(import.meta.url);
     const repoRoot = path.resolve(path.dirname(thisFile), "../../../../..");
     return path.join(

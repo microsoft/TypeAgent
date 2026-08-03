@@ -52,7 +52,9 @@ param(
     [switch]$SkipTypeAgentCheck,
     # Extra arguments splatted to install-typeagent.ps1 when the agent-server is
     # missing (e.g. @{ Provider = "copilot"; BootstrapPrereqs = $true }).
-    [hashtable]$TypeAgentArgs = @{}
+    [hashtable]$TypeAgentArgs = @{},
+    [ValidateSet("All", "Download", "Install", "Verify")]
+    [string]$Phase = "All"
 )
 
 $ErrorActionPreference = "Stop"
@@ -238,51 +240,56 @@ function Get-PackagePathFromYml {
     return $value
 }
 
-Initialize-Log -Path $LogPath
+$dest = Join-Path $env:TEMP "typeagent-install-shell"
+$statePath = Join-Path $dest "install-state.json"
 
-# The shipped shell is connect-only: it auto-spawns and connects to a separately
-# installed TypeAgent agent-server. Ensure that server is installed first so the
-# shell has something to connect to, mirroring the MSI ordering (agent service
-# before shell). The agent-server install lays down typeagent-serve.mjs at its
-# InstallDir root (see install-typeagent.ps1).
-if (-not $SkipTypeAgentCheck) {
+if ($Phase -in @("All", "Download")) {
+    Initialize-Log -Path $LogPath
+} elseif ($LogPath -and -not (Test-Path $LogPath)) {
+    Initialize-Log -Path $LogPath
+}
+
+function Confirm-AgentServer {
+    if ($SkipTypeAgentCheck) {
+        return
+    }
     $agentServerMarker = Join-Path $env:LOCALAPPDATA "TypeAgent\agent-server\typeagent-serve.mjs"
     if (Test-Path $agentServerMarker) {
         Write-Log "Found TypeAgent agent-server at $agentServerMarker."
-    } else {
-        Write-Log "TypeAgent agent-server not found at $agentServerMarker; installing it first via install-typeagent.ps1."
-        $installTypeAgent = Join-Path $PSScriptRoot "install-typeagent.ps1"
-        if (-not (Test-Path $installTypeAgent)) {
-            Fail "Cannot find install-typeagent.ps1 next to install-shell.ps1 to satisfy the agent-server dependency. Re-run with -SkipTypeAgentCheck to bypass."
-        }
-        & $installTypeAgent @TypeAgentArgs
-        if ($LASTEXITCODE -ne 0) {
-            Fail "Agent-server install (install-typeagent.ps1) failed with exit code $LASTEXITCODE; aborting shell install."
-        }
-        if (-not (Test-Path $agentServerMarker)) {
-            Fail "install-typeagent.ps1 completed but agent-server marker still missing at $agentServerMarker."
-        }
-        Write-Log "TypeAgent agent-server installed."
+        return
     }
+
+    Write-Log "TypeAgent agent-server not found at $agentServerMarker; installing it first via install-typeagent.ps1."
+    $installTypeAgent = Join-Path $PSScriptRoot "install-typeagent.ps1"
+    if (-not (Test-Path $installTypeAgent)) {
+        Fail "Cannot find install-typeagent.ps1 next to install-shell.ps1 to satisfy the agent-server dependency. Re-run with -SkipTypeAgentCheck to bypass."
+    }
+    & $installTypeAgent @TypeAgentArgs
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Agent-server install (install-typeagent.ps1) failed with exit code $LASTEXITCODE; aborting shell install."
+    }
+    if (-not (Test-Path $agentServerMarker)) {
+        Fail "install-typeagent.ps1 completed but agent-server marker still missing at $agentServerMarker."
+    }
+    Write-Log "TypeAgent agent-server installed."
 }
 
-if (-not $BlobBaseUrl -and -not $Storage -and -not ($Feed -and $FeedPackage)) {
-    Fail "Provide a shell source: -Storage (with optional -Container), -BlobBaseUrl, or -Feed with -FeedPackage/-Organization."
-}
+function Download-ShellPayload {
+    if (-not $BlobBaseUrl -and -not $Storage -and -not ($Feed -and $FeedPackage)) {
+        Fail "Provide a shell source: -Storage (with optional -Container), -BlobBaseUrl, or -Feed with -FeedPackage/-Organization."
+    }
 
-$arch = Get-Arch
-$channelArch = "$Channel-$arch"
-$ymlName = "$channelArch.yml"
+    Confirm-AgentServer
+    $arch = Get-Arch
+    $channelArch = "$Channel-$arch"
+    $ymlName = "$channelArch.yml"
+    Write-Log "Downloading TypeAgent Shell (channel '$Channel', arch '$arch')"
 
-Write-Log "Installing TypeAgent Shell (channel '$Channel', arch '$arch')"
+    if (Test-Path $dest) {
+        Remove-Item -Recurse -Force $dest
+    }
+    New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
-$dest = Join-Path $env:TEMP "typeagent-install-shell"
-if (Test-Path $dest) {
-    Remove-Item -Recurse -Force $dest
-}
-New-Item -ItemType Directory -Force -Path $dest | Out-Null
-
-try {
     $ymlPath = Join-Path $dest $ymlName
     $script:packagePath = $null
 
@@ -347,26 +354,94 @@ try {
         Fail "Shell package not found after download: $packagePath"
     }
 
+    [pscustomobject]@{ packagePath = $packagePath } |
+        ConvertTo-Json |
+        Set-Content -Path $statePath -Encoding utf8
+    Write-Log "Shell download phase complete."
+}
+
+function Get-DownloadedShellPackage {
+    if (-not (Test-Path $statePath)) {
+        Fail "Shell download state not found at $statePath."
+    }
+    $state = Get-Content -Path $statePath -Raw | ConvertFrom-Json
+    $packagePath = [string]$state.packagePath
+    if (-not $packagePath -or -not (Test-Path $packagePath)) {
+        Fail "Downloaded Shell package is missing: $packagePath"
+    }
+    return $packagePath
+}
+
+function Install-ShellPayload {
+    $packagePath = Get-DownloadedShellPackage
     Write-Log "Running silent install: $packagePath /S"
     $proc = Start-Process -FilePath $packagePath -ArgumentList "/S" -Wait -PassThru
     if ($proc.ExitCode -ne 0) {
         Fail "Shell installer exited with code $($proc.ExitCode)."
     }
-
     Write-Log "TypeAgent Shell installed successfully."
+}
 
+function Find-ShellExecutable {
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\typeagentshell\typeagentshell.exe"),
+        (Join-Path $env:LOCALAPPDATA "Programs\TypeAgent Shell\TypeAgent Shell.exe"),
+        (Join-Path $env:LOCALAPPDATA "Programs\typeagent-shell\typeagent-shell.exe")
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+    $programs = Join-Path $env:LOCALAPPDATA "Programs"
+    if (Test-Path $programs) {
+        return Get-ChildItem -Path $programs -Recurse -File -Filter "*.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match "typeagent.*shell|shell.*typeagent" } |
+            Select-Object -First 1 -ExpandProperty FullName
+    }
+    return $null
+}
+
+function Verify-ShellInstallation {
+    $exe = Find-ShellExecutable
+    if ($exe) {
+        Write-Log "Verified TypeAgent Shell executable: $exe"
+    } else {
+        Write-Log "WARNING: TypeAgent Shell executable was not found under $env:LOCALAPPDATA\Programs."
+    }
     if (-not $NoStart) {
-        $exe = Join-Path $env:LOCALAPPDATA "Programs\typeagentshell\typeagentshell.exe"
-        if (Test-Path $exe) {
+        if ($exe) {
             Write-Log "Launching TypeAgent Shell."
             Start-Process -FilePath $exe | Out-Null
         } else {
-            Write-Log "Shell executable not found at $exe; skipping launch."
+            Write-Log "Shell executable not found; skipping launch."
+        }
+    }
+    Write-Log "Shell verification phase complete."
+}
+
+try {
+    switch ($Phase) {
+        "Download" {
+            Download-ShellPayload
+        }
+        "Install" {
+            Install-ShellPayload
+        }
+        "Verify" {
+            Verify-ShellInstallation
+        }
+        "All" {
+            Download-ShellPayload
+            Install-ShellPayload
+            Verify-ShellInstallation
         }
     }
 } finally {
-    if (Test-Path $dest) {
-        Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
+    if ($Phase -in @("All", "Verify")) {
+        if (Test-Path $dest) {
+            Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
+        }
     }
 }
 

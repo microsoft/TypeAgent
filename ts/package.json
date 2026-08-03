@@ -17,6 +17,8 @@
     "build": "fluid-build . -t build",
     "build:ext:vscode": "fluid-build . -t build:ext:vscode",
     "build:shell": "fluid-build agent-shell -t build --dep",
+    "bundle:agent-server": "node tools/scripts/bundleAgentServer.mjs",
+    "bundle:copilot-plugin": "node tools/scripts/stageCopilotPlugin.mjs",
     "check:dep": "node tools/scripts/fix-dependabot-alerts.mjs --dry-run",
     "check:dep:fix": "node tools/scripts/fix-dependabot-alerts.mjs",
     "check:link": "git ls-tree -r --name-only HEAD .. | grep \\.md | xargs  markdown-link-check",
@@ -84,6 +86,7 @@
   "devDependencies": {
     "@fluidframework/build-tools": "^0.57.0",
     "@types/node": "^22.0.0",
+    "esbuild": "0.28.1",
     "eslint": "^10.6.0",
     "eslint-plugin-sonarjs": "^4.1.0",
     "jscpd": "^4.2.5",

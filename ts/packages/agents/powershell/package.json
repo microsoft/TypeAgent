@@ -288,6 +288,15 @@
     }
   },
   "typeagent": {
-    "defaultAgentName": "powershell"
+    "defaultAgentName": "powershell",
+    "bundle": {
+      "assetMappings": [
+        {
+          "package": "@typeagent/powershell-typeagent",
+          "source": "scripts/scriptHost.ps1",
+          "destination": "scripts/scriptHost.ps1"
+        }
+      ]
+    }
   }
 }
