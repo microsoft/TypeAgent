@@ -62,7 +62,9 @@ function resolveObjectType(
  */
 function getObjectUnionDiscriminator(
     types: readonly ActionParamType[],
-): { fieldName: string; values: string[]; arms: ActionParamObject[] } | undefined {
+):
+    | { fieldName: string; values: string[]; arms: ActionParamObject[] }
+    | undefined {
     if (types.length < 2) {
         return undefined;
     }
@@ -128,7 +130,10 @@ function toTemplateTypeObject(
             // Skip undefined fields.
             continue;
         }
-        templateType.fields[key] = { optional: field.optional, type: fieldType };
+        templateType.fields[key] = {
+            optional: field.optional,
+            type: fieldType,
+        };
     }
     return templateType;
 }
@@ -139,7 +144,8 @@ function toTemplateTypeArray(
     data: unknown,
 ) {
     // Use the first element as a shape hint when present.
-    const elementData = Array.isArray(data) && data.length > 0 ? data[0] : undefined;
+    const elementData =
+        Array.isArray(data) && data.length > 0 ? data[0] : undefined;
     const elementType = toTemplateType(type.elementType, visited, elementData);
     if (elementType === undefined) {
         // Skip undefined fields.

@@ -183,7 +183,10 @@ describe("getSystemTemplateSchema discriminated type-union", () => {
                 schemaName,
                 actionName,
                 parameters: {
-                    target: { kind: "album", albumName: "A Night at the Opera" },
+                    target: {
+                        kind: "album",
+                        albumName: "A Night at the Opera",
+                    },
                 },
             },
             makeContext(musicTargetUnion()),
