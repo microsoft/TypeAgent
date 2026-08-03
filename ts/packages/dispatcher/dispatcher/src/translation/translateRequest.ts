@@ -16,7 +16,7 @@ import {
     HistoryContext,
     ParamObjectType,
     RequestAction,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import { DispatcherClarifyName } from "../context/dispatcher/dispatcherUtils.js";
 import { AgentMatchCandidate } from "../context/dispatcher/schema/clarifyActionSchema.js";
 import { buildClarifyMultipleAgentMatches } from "./clarifyHelpers.js";
@@ -37,7 +37,7 @@ import { PreferenceMember } from "../context/collisionPreferences.js";
 import {
     CachedImageWithDetails,
     IncrementalJsonValueCallBack,
-} from "typechat-utils";
+} from "@typeagent/typechat-utils";
 import {
     isMultipleAction,
     isPendingRequest,
@@ -166,15 +166,13 @@ export function getTranslatorForSchema(
             .map((actionConfig) => actionConfig.schemaName)
             .join(",")}`,
     );
-    const generateOptions = config.schema.generation.enabled
-        ? {
-              exact: !config.schema.optimize.enabled,
-              jsonSchema: config.schema.generation.jsonSchema,
-              jsonSchemaFunction: config.schema.generation.jsonSchemaFunction,
-              jsonSchemaWithTs: config.schema.generation.jsonSchemaWithTs,
-              jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
-          }
-        : null;
+    const generateOptions = {
+        exact: !config.schema.optimize.enabled,
+        jsonSchema: config.schema.generation.jsonSchema,
+        jsonSchemaFunction: config.schema.generation.jsonSchemaFunction,
+        jsonSchemaWithTs: config.schema.generation.jsonSchemaWithTs,
+        jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
+    };
     const newTranslator = loadAgentJsonTranslator(
         actionConfigs,
         switchActionConfigs,
@@ -1190,6 +1188,9 @@ export type TranslationResult = {
     type: "translate" | "construction" | "grammar";
     config: any;
     allMatches?: any;
+    // The matched construction/rule pattern text (construction cache hits
+    // only), surfaced for the explained popover.
+    ruleText?: string | undefined;
 };
 
 // null means cancelled because of replacement parse error.

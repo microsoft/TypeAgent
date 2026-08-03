@@ -4,7 +4,7 @@
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./browserActions.mjs";
 import { ContentService } from "./contentService.mjs";
-import * as website from "website-memory";
+import * as website from "@typeagent/website-memory";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:content-extractor");

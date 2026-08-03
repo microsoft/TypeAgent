@@ -28,6 +28,8 @@ import {
     DispatcherConnectOptions,
     CreateConversationOptions,
     ConversationInfo,
+    ConversationMatch,
+    ConversationContentMatch,
     JoinConversationResult,
     RenameConversationOptions,
     SpeechToken,
@@ -115,6 +117,24 @@ export type AgentServerConnection = {
         options?: CreateConversationOptions,
     ): Promise<ConversationInfo>;
     listConversations(name?: string): Promise<ConversationInfo[]>;
+    /**
+     * Fuzzy-find conversations by name (lexical + embedding). Results are
+     * sorted by descending relevance score.
+     */
+    findConversations(
+        query: string,
+        maxMatches?: number,
+    ): Promise<ConversationMatch[]>;
+    /**
+     * Search conversation *content* (the knowPro unified message index) and
+     * rank conversations by how well their messages match. Distinct from
+     * {@link findConversations}, which matches on names. Returns [] when the
+     * content index has no model provider configured.
+     */
+    searchConversationContent(
+        query: string,
+        maxMatches?: number,
+    ): Promise<ConversationContentMatch[]>;
     renameConversation(
         conversationId: string,
         newName: string,
@@ -306,7 +326,27 @@ export function createAgentServerConnection(
             currentChannel.deleteChannel(
                 getClientIOChannelName(conversationId),
             );
-            await rpc.invoke("leaveConversation", conversationId);
+            try {
+                await rpc.invoke("leaveConversation", conversationId);
+            } catch (e) {
+                // The local channels are already torn down above, so from the
+                // client's side we've left. The rpc call only notifies the
+                // server; when the control channel is already disconnected
+                // (e.g. the server dropped before the shell shuts down) that
+                // notification can't be delivered and is moot. Swallow only
+                // that case so close()/session-switch don't surface a spurious
+                // "Agent channel disconnected". Real failures still propagate.
+                if (
+                    !(e instanceof Error) ||
+                    !e.message.includes("Agent channel disconnected")
+                ) {
+                    throw e;
+                }
+                debug(
+                    "leaveConversation: control channel already disconnected; skipped server notification for %s",
+                    conversationId,
+                );
+            }
         },
 
         async createConversation(
@@ -318,6 +358,20 @@ export function createAgentServerConnection(
 
         async listConversations(name?: string): Promise<ConversationInfo[]> {
             return rpc.invoke("listConversations", name);
+        },
+
+        async findConversations(
+            query: string,
+            maxMatches?: number,
+        ): Promise<ConversationMatch[]> {
+            return rpc.invoke("findConversations", query, maxMatches);
+        },
+
+        async searchConversationContent(
+            query: string,
+            maxMatches?: number,
+        ): Promise<ConversationContentMatch[]> {
+            return rpc.invoke("searchConversationContent", query, maxMatches);
         },
 
         async renameConversation(

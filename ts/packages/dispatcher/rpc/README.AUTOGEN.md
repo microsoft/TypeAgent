@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=970a06a8ce3153174d604c8d817bdfc619436a392e1b733e218d3213467b5758 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d6766b428cdb1f5dad218fc5fcc2c5906acaa9824c42c400a1bc153217943546 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/dispatcher-rpc — AI-generated documentation
@@ -12,33 +12,33 @@
 
 ## Overview
 
-The `@typeagent/dispatcher-rpc` package provides Remote Procedure Call (RPC) functionality for the TypeAgent dispatcher. It serves as a bridge for communication between different components of the TypeAgent system, enabling them to invoke methods and exchange data over RPC channels. This package is a core part of the TypeAgent architecture, facilitating both user-facing interactions and backend command processing.
+The `@typeagent/dispatcher-rpc` package provides Remote Procedure Call (RPC) functionality for the TypeAgent dispatcher. It acts as a communication layer between different components of the TypeAgent system, enabling them to interact and exchange data over RPC channels. This package is a core part of the TypeAgent architecture, supporting both user-facing interactions and backend command processing.
 
 ## What it does
 
-This package implements RPC clients and servers for two primary components: `ClientIO` and `Dispatcher`. These components are responsible for distinct but complementary roles within the TypeAgent system.
+The `@typeagent/dispatcher-rpc` package implements RPC clients and servers for two main components: `ClientIO` and `Dispatcher`. These components serve distinct roles within the TypeAgent system.
 
 ### ClientIO
 
-The `ClientIO` component handles user interactions and display updates. It supports a range of actions, including:
+The `ClientIO` component is responsible for managing user interactions and updating the display. It supports a variety of actions, including:
 
-- **Session Management**: Actions like `clear`, `exit`, and `shutdown` manage the session state.
-- **User Input**: The `setUserRequest` action processes user commands or inputs.
+- **Session Management**: Actions like `clear`, `exit`, and `shutdown` manage the session lifecycle.
+- **User Input Handling**: The `setUserRequest` action processes user commands or inputs.
 - **Display Updates**: Actions such as `setDisplayInfo`, `setDisplay`, and `appendDisplay` update the user interface with new information.
-- **Diagnostics and Dynamic Displays**: Actions like `appendDiagnosticData` and `setDynamicDisplay` manage diagnostic information and dynamic display elements.
+- **Diagnostics and Dynamic Displays**: Actions like `appendDiagnosticData` and `setDynamicDisplay` handle diagnostic information and dynamic display elements.
 
-These actions enable `ClientIO` to act as the interface between the user and the system, ensuring a responsive and interactive experience.
+These actions allow `ClientIO` to function as the interface between the user and the system, ensuring a responsive and interactive experience.
 
 ### Dispatcher
 
-The `Dispatcher` component is focused on command processing and dynamic display management. Key actions include:
+The `Dispatcher` component focuses on command processing and dynamic display management. Key actions include:
 
-- **Command Submission**: The `submitCommand` action allows clients to send commands to the dispatcher for processing.
+- **Command Submission**: The `submitCommand` action enables clients to send commands to the dispatcher for processing.
 - **Display and Template Management**: Actions like `getDynamicDisplay`, `getTemplateSchema`, and `getTemplateCompletion` provide access to display and template-related data.
 - **Command Execution and Caching**: The `getCommandCompletion` and `checkCache` actions manage the execution of commands and their caching.
 - **Lifecycle Management**: Actions such as `close` and `getStatus` handle the lifecycle and status of the dispatcher.
 
-The `Dispatcher` is a central component for coordinating command execution and managing templates, ensuring that the system operates efficiently and effectively.
+The `Dispatcher` serves as a central hub for coordinating command execution and managing templates, ensuring efficient operation of the system.
 
 ## Setup
 
@@ -120,6 +120,7 @@ External: _None at runtime._
 
 - [@typeagent/agent-server-client](../../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../../packages/agentServer/protocol/README.md)
+- [@typeagent/browser-extension](../../../packages/agents/browserExtension/README.md)
 - [agent-api](../../../packages/api/README.md)
 - [agent-server](../../../packages/agentServer/server/README.md)
 - [agent-shell](../../../packages/shell/README.md)
@@ -140,6 +141,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-rpc docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-rpc docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

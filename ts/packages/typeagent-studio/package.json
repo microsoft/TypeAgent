@@ -41,6 +41,12 @@
         "icon": "$(graph)"
       },
       {
+        "command": "typeagent-studio.newAgent",
+        "title": "New Agent…",
+        "category": "TypeAgent Studio",
+        "icon": "$(sparkle)"
+      },
+      {
         "command": "typeagent-studio.startOnboardingSession",
         "title": "Start onboarding session",
         "category": "TypeAgent Studio"
@@ -331,6 +337,11 @@
       ],
       "view/title": [
         {
+          "command": "typeagent-studio.newAgent",
+          "when": "view == typeagentStudioSandboxes",
+          "group": "navigation@0"
+        },
+        {
           "command": "typeagent-studio.startSandbox",
           "when": "view == typeagentStudioSandboxes",
           "group": "navigation@1"
@@ -522,7 +533,7 @@
     "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.0",

@@ -3,7 +3,7 @@
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
 import { readExplanationTestData } from "agent-dispatcher/internal";
-import { RequestAction, fromJsonActions } from "agent-cache";
+import { RequestAction, fromJsonActions } from "@typeagent/agent-cache";
 import { glob } from "glob";
 
 const dataFiles = ["test/data/explanations/**/**/*.json"];

@@ -5,7 +5,7 @@ import {
     MessageSourceRole,
     PromptSectionProvider,
     SearchOptions,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import {
     Conversation,
     ConversationSearchOptions,

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { resolveEntityPlaceholders } from "../src/execute/pendingActions.js";
-import { PromptEntity } from "agent-cache";
+import { PromptEntity } from "@typeagent/agent-cache";
 
 function makeMap(entries: Array<[string, string]>): Map<string, PromptEntity> {
     return new Map(

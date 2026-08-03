@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { conversation as kpLib } from "knowledge-processor";
-import * as kp from "knowpro";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
+import * as kp from "@typeagent/knowpro";
 import { queue, QueueObject } from "async";
 import { parseTranscript } from "./transcript.js";
 import registerDebug from "debug";
@@ -233,7 +233,17 @@ export class ConversationMemory
     }
 
     public async waitForPendingTasks(): Promise<void> {
+        // async's queue.drain() promise only resolves on the NEXT drain event;
+        // when the queue is already idle no such event ever fires and awaiting
+        // it would hang forever. idle() short-circuits that. It is checked
+        // synchronously right before drain(), so no task can settle in the gap.
+        if (this.updatesTaskQueue.idle()) {
+            debugLogger("waitForPendingTasks: queue idle, nothing to drain");
+            return;
+        }
+        debugLogger("waitForPendingTasks: draining queue");
         await this.updatesTaskQueue.drain();
+        debugLogger("waitForPendingTasks: drained");
     }
 
     public async serialize(): Promise<ConversationMemoryData> {

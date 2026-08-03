@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { conversation } from "knowledge-processor";
+import { conversation } from "@typeagent/knowledge-processor";
 import {
     ConversationMemory,
     ConversationMessage,
     ConversationMessageMeta,
     createConversationMemory,
-} from "conversation-memory";
+} from "@typeagent/conversation-memory";
 
 import {
     changeContextConfig,
@@ -17,11 +17,12 @@ import type {
     ActionContext,
     ActionResult,
     ActionResultActivityContext,
+    AppAction,
     Entity,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
-import { ExecutableAction, getFullActionName } from "agent-cache";
-import { CachedImageWithDetails } from "typechat-utils";
+import { ExecutableAction, getFullActionName } from "@typeagent/agent-cache";
+import { CachedImageWithDetails } from "@typeagent/typechat-utils";
 import { getAppAgentName } from "../internal.js";
 import {
     CommandHandler,
@@ -42,7 +43,7 @@ import {
     AnswerResponse,
     ConversationSearchResult,
     SearchSelectExpr,
-} from "knowpro";
+} from "@typeagent/knowpro";
 
 const debug = registerDebug("typeagent:dispatcher:memory");
 
@@ -104,6 +105,15 @@ export function addUserMessageToHistory(
     cachedAttachments?: CachedImageWithDetails[],
 ): void {
     context.chatHistory.addUserEntry(request, cachedAttachments);
+    // Mirror the user turn into the host's cross-conversation content index.
+    // Fires regardless of the knowledge-extraction flags (which connected mode
+    // disables), so the unified index still populates there. The request id
+    // keys the turn so a later history backfill won't index it a second time.
+    context.conversationContentSink?.(
+        request,
+        "user",
+        context.currentRequestId?.requestId,
+    );
 }
 
 // Queue the user's turn for knowledge extraction into conversation memory.
@@ -134,6 +144,7 @@ export function addResultToMemory(
     entities?: Entity[],
     additionalInstructions?: string[],
     activityContext?: ActionResultActivityContext,
+    action?: AppAction,
 ) {
     context.chatHistory.addAssistantEntry(
         message,
@@ -141,6 +152,15 @@ export function addResultToMemory(
         entities,
         additionalInstructions,
         activityContext,
+        action,
+    );
+
+    // Mirror the assistant turn into the host's cross-conversation content
+    // index (ungated by knowledge extraction, like the user turn).
+    context.conversationContentSink?.(
+        message,
+        "assistant",
+        context.currentRequestId?.requestId,
     );
 
     if (context.actionResultKnowledgeExtraction) {
@@ -216,6 +236,7 @@ export function addActionResultToMemory(
             combinedEntities,
             result.additionalInstructions,
             result.activityContext,
+            executableAction.action,
         );
     }
 }
@@ -248,8 +269,59 @@ export async function lookupAndAnswerFromMemory(
             // Don't display error here; caller decides whether to show error or fall back to reasoning
         }
     }
+
+    // The current conversation had no answer. Fall back to the unified
+    // cross-conversation content index (host-injected in connected mode) so a
+    // question whose answer lives in another conversation still gets one.
+    if (!answered) {
+        const fallback = await lookupAnswerFromOtherConversations(
+            systemContext,
+            question,
+            context,
+        );
+        if (fallback !== undefined) {
+            // Replace the per-conversation "no answer" reasons with the
+            // cross-conversation result so the caller reports the answer, not
+            // the current-conversation miss.
+            historyText.length = 0;
+            historyText.push(fallback);
+            answered = true;
+        }
+    }
     // TODO: how about entities?
     return { historyText, answered };
+}
+
+// Search every conversation's content (the unified index) for the question and
+// render the best-matching conversations and their snippets as a single answer.
+// Returns undefined when the host has no unified index or nothing matched, so
+// the caller can fall through to its normal not-answered handling.
+async function lookupAnswerFromOtherConversations(
+    systemContext: CommandHandlerContext,
+    question: string,
+    context: ActionContext<CommandHandlerContext>,
+): Promise<string | undefined> {
+    const search = systemContext.searchConversations;
+    if (search === undefined) {
+        return undefined;
+    }
+    const matches = await search({ question }, 3);
+    if (matches.length === 0) {
+        return undefined;
+    }
+    const lines: string[] = [
+        "I didn't find that in the current conversation, but found related content in other conversations:",
+    ];
+    for (const match of matches) {
+        lines.push("");
+        lines.push(`**${match.name}**`);
+        for (const snippet of match.snippets) {
+            lines.push(`- ${snippet}`);
+        }
+    }
+    const text = lines.join("\n");
+    displayResult(text, context);
+    return text;
 }
 
 function ensureMemory(context: ActionContext<CommandHandlerContext>) {

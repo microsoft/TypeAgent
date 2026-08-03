@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=2385207bbde41f16376dc1708c5beff133e4cbfb26904b372d50785f4a838c9b -->
+<!-- AUTOGEN:DOCS:HASH:sha256=62aeb6a269910a273ebbe0cfcdf3428c3ec051123ac9d2b7b75b54085469b63a -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # desktop-automation — AI-generated documentation
@@ -166,6 +166,6 @@ _32 actions declared in the schema, none yet implemented in [`./src/actionHandle
 
 ---
 
-_Auto-generated against commit `de9d1d44c33525463327199c8f244a24ddfdd874` on `2026-07-21T11:18:03.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter desktop-automation docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter desktop-automation docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

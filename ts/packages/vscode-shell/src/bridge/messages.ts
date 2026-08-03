@@ -15,10 +15,12 @@ import type {
 import type {
     CompletionDirection,
     DisplayAppendMode,
+    QuestionForm,
+    QuestionFormResponse,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import type { CompletionState } from "agent-dispatcher/helpers/completion";
-import type { ConnectionActionId } from "chat-ui";
+import type { ConnectionActionId } from "@typeagent/chat-ui";
 import type { SpeechToken } from "@typeagent/agent-server-protocol";
 
 /**
@@ -57,6 +59,11 @@ export type BridgeToWebviewMessage =
           actionIndex?: number;
           action?: TypeAgentAction | string[];
           seq?: number;
+      }
+    | {
+          type: "appendDiagnosticData";
+          requestId?: string;
+          data: unknown;
       }
     | {
           type: "setUserRequest";
@@ -201,6 +208,10 @@ export type BridgeToWebviewMessage =
               metrics?: any;
               tokenUsage?: any;
               actionTokenUsage?: any;
+              // notify (persisted "explained")
+              event?: string;
+              data?: unknown;
+              notificationId?: string;
           }>;
       }
     | {
@@ -233,6 +244,19 @@ export type BridgeToWebviewMessage =
           choices: string[];
           source: string;
           checkboxLabel?: string;
+          requestId?: string;
+      }
+    | {
+          // Non-blocking multi-question form card from an agent action
+          // (createQuestionFormResult / createSingleChoiceResult ->
+          // ClientIO.requestForm). Like requestChoice, the heading is already
+          // shown as the action's `displayContent`, so the webview renders
+          // ONLY the form controls, anchored to the request's agent bubble via
+          // `requestId`, and replies with a `choiceResponse`.
+          type: "requestForm";
+          choiceId: string;
+          form: QuestionForm;
+          source: string;
           requestId?: string;
       }
     | {
@@ -307,6 +331,8 @@ export type BridgeFromWebviewMessage =
     // Double-Esc gesture: cancel every queued + running entry on the session.
     | { type: "cancelAllQueuedAndRunning" }
     | { type: "openExternal"; href: string }
+    // Open a message's content in a new editor panel (a movable window).
+    | { type: "openMessageWindow"; html: string; title?: string }
     // Request a fresh Azure Speech authorization token from the server
     // (relayed via the bridge). Correlated by `id`.
     | { type: "getSpeechToken"; id: number }
@@ -337,15 +363,16 @@ export type BridgeFromWebviewMessage =
     // Reply to a `requestChoice` card. Forwarded to the dispatcher via
     // respondToChoice, which resolves the pending choice route so the
     // agent's handleChoice callback runs. `response` is boolean (yesNo),
-    // number[] of selected indices (multiChoice), or { selected, remember }
-    // (pickRemember).
+    // number[] of selected indices (multiChoice), { selected, remember }
+    // (pickRemember), or a QuestionFormResponse (requestForm).
     | {
           type: "choiceResponse";
           choiceId: string;
           response:
               | boolean
               | number[]
-              | { selected: number; remember: boolean };
+              | { selected: number; remember: boolean }
+              | QuestionFormResponse;
       }
     | {
           // Submit a user feedback rating (thumbs up/down + optional category /

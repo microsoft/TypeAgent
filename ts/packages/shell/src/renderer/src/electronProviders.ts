@@ -15,7 +15,7 @@ import type {
     SpeechState,
     TtsMetrics,
     TtsProvider,
-} from "chat-ui";
+} from "@typeagent/chat-ui";
 import type {
     SpeechToken,
     ShellUserSettings,

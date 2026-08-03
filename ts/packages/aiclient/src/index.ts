@@ -10,6 +10,7 @@ export * from "./auth.js";
 export * from "./tokenCounter.js";
 export {
     getCopilotClient,
+    getCopilotCliPath,
     warmupCopilotClient,
     warmupCopilotFromConfig,
     type CopilotClientOptions,

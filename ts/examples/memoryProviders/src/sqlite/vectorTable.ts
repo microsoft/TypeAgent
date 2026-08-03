@@ -11,8 +11,8 @@ import {
     createTopNList,
     dotProduct,
     similarity,
-} from "typeagent";
-import { ValueType, ValueDataType } from "knowledge-processor";
+} from "@typeagent/agent-runtime";
+import { ValueType, ValueDataType } from "@typeagent/knowledge-processor";
 
 export interface VectorTable<TKeyId extends ValueType = string>
     extends VectorStore<TKeyId> {}

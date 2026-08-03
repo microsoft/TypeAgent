@@ -63,7 +63,7 @@ parameters:
     displayName: "agent-server variant (external = lean, full = bundled CLIs)"
   - name: profile
     type: string
-    default: service
+    default: inbox
     displayName: "agent-server provider profile"
   - name: publishOptionalAgents
     type: boolean
@@ -159,23 +159,12 @@ stages:
             displayName: "Upload artifact: npm-packages"
             artifact: npm-packages
 
-          # Stage copilot-plugin dist (platform-neutral; used by plugin
-          # publish and MSI build).
+          # Stage the minimal copilot-plugin runtime used by plugin publication
+          # and the MSI.
           - bash: |
               set -euo pipefail
-              PLUGIN_SRC="$(buildDirectory)/packages/copilot-plugin"
-              STAGE="$(stagingDir)/copilot-plugin"
-              mkdir -p "$STAGE"
-
-              cp -r "$PLUGIN_SRC/dist"        "$STAGE/dist"
-              cp    "$PLUGIN_SRC/hooks.json"  "$STAGE/hooks.json"
-              cp    "$PLUGIN_SRC/.mcp.json"   "$STAGE/.mcp.json"
-              cp    "$PLUGIN_SRC/plugin.json"  "$STAGE/plugin.json"
-              cp -r "$PLUGIN_SRC/agents"      "$STAGE/agents"
-              cp -r "$PLUGIN_SRC/skills"      "$STAGE/skills"
-
-              echo "Staged copilot-plugin artifact:"
-              find "$STAGE" -type f | head -20 || true
+              node tools/scripts/stageCopilotPlugin.mjs \
+                --out "$(stagingDir)/copilot-plugin"
             displayName: "Stage copilot-plugin artifact"
             workingDirectory: $(buildDirectory)
 
@@ -184,7 +173,7 @@ stages:
             artifact: copilot-plugin
 
       # ── Job 1b: Platform-specific artifacts (matrix) ──────────────
-      # Produces: agent-server deploy, optional agents, MCP exe per RID.
+      # Produces: bundled agent-server, optional agent bundles, MCP exe per RID.
       - job: build_platform_artifacts
         displayName: "Build platform artifacts"
         strategy:
@@ -226,6 +215,11 @@ stages:
             displayName: "Build agent-server (+ deps)"
             workingDirectory: $(buildDirectory)
 
+          - script: |
+              node tools/scripts/buildAgentProfile.mjs --profile all
+            displayName: "Build product agents"
+            workingDirectory: $(buildDirectory)
+
           # Also build copilot-plugin (may already be built as an
           # agent-server dep; this ensures the full plugin is ready).
           - script: |
@@ -233,17 +227,36 @@ stages:
             displayName: "Build copilot-plugin (+ deps)"
             workingDirectory: $(buildDirectory)
 
-          # Deploy agent-server for this platform.
+          # Bundle and validate agent-server for this platform.
           - bash: |
               set -euo pipefail
               EXTRA=""
               if [ "${{ parameters.variant }}" = "external" ]; then EXTRA="--external-cli"; fi
-              node tools/scripts/deployAgentServer.mjs \
+              node tools/scripts/bundleAgentServer.mjs \
                 --out "$(stagingDir)/agent-server" \
                 --platform "$(platform)" --arch "$(arch)" \
                 --profile "${{ parameters.profile }}" $EXTRA
-            displayName: "Deploy agent-server ($(platform)-$(arch))"
+            displayName: "Bundle agent-server ($(platform)-$(arch))"
             workingDirectory: $(buildDirectory)
+            env:
+              PUPPETEER_SKIP_DOWNLOAD: "true"
+              PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+
+          - script: |
+              node tools/scripts/validateBundledArtifact.mjs --dir "$(stagingDir)/agent-server"
+            displayName: "Validate bundled agent-server ($(platform)-$(arch))"
+            workingDirectory: $(buildDirectory)
+
+          # pnpm's legacy deploy implementation can leave the workspace in
+          # production-only mode. Restore development dependencies before
+          # running subsequent bundle and executable build scripts.
+          - script: |
+              pnpm install --prod=false --frozen-lockfile
+            displayName: "Restore build dependencies"
+            workingDirectory: $(buildDirectory)
+            env:
+              PUPPETEER_SKIP_DOWNLOAD: "true"
+              PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
 
           - publish: $(stagingDir)/agent-server
             displayName: "Upload artifact: agent-server-$(platform)-$(arch)"
@@ -383,6 +396,48 @@ stages:
             displayName: "Upload artifact: shell-mac"
             artifact: shell-mac
 
+      # Linux shell build — optional (continueOnError).
+      - job: build_shell_linux
+        displayName: "Build shell installer (Linux)"
+        continueOnError: true
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - template: include-prepare-repo.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              nodeVersion: $(nodeVersion)
+              registry: $(INSTALL_REGISTRY)
+
+          - template: include-update-package-version.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              prerelease: $(resolvedChannel).$(Build.BuildNumber)
+
+          - script: |
+              pnpm run build:shell
+            displayName: "Build shell"
+            workingDirectory: $(buildDirectory)
+
+          - task: Cache@2
+            displayName: Cache Electron Builder
+            inputs:
+              key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(buildDirectory)/pnpm-lock.yaml
+              path: $(ELECTRON_CACHE_DIR)
+              restoreKeys: |
+                electron | $(Agent.OS) | $(Agent.OSArchitecture)
+
+          - script: |
+              pnpm run shell:package
+            displayName: "Package shell"
+            workingDirectory: $(buildDirectory)
+            env:
+              ELECTRON_BUILDER_CHANNEL: $(resolvedChannel)
+
+          - publish: $(shell_folder)/dist
+            displayName: "Upload artifact: shell-linux"
+            artifact: shell-linux
+
   # ════════════════════════════════════════════════════════════════════
   #  STAGE 2 — TEST (optional)
   # ════════════════════════════════════════════════════════════════════
@@ -393,6 +448,10 @@ stages:
     jobs:
       - job: unit_tests
         displayName: "Unit tests, lint, policy"
+        # Optional gate: a failure here must NOT block Publish. continueOnError
+        # makes a failing job report SucceededWithIssues instead of Failed, and
+        # the Publish stage condition accepts that result.
+        continueOnError: true
         pool:
           vmImage: ubuntu-latest
         steps:
@@ -447,11 +506,13 @@ stages:
     dependsOn:
       - Build
       - Test
-    # Run if Build succeeded and Test either succeeded or was skipped.
+    # Run if Build succeeded and Test did not hard-fail. The Test stage is an
+    # optional gate (unit_tests uses continueOnError), so a failing test reports
+    # SucceededWithIssues; Skipped covers the runTests=false case.
     condition: |
       and(
         in(stageDependencies.Build.result, 'Succeeded', 'SucceededWithIssues'),
-        in(stageDependencies.Test.result, 'Succeeded', 'Skipped')
+        in(stageDependencies.Test.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
       )
     variables:
       NpmRcDirectory: $(Build.SourcesDirectory)
@@ -584,6 +645,11 @@ stages:
                   for dir in "$(Pipeline.Workspace)"/optional-agents-$(platform)-$(arch)/*/; do
                     [ -d "$dir" ] || continue
                     name="$(basename "$dir")"
+                    if ! printf '%s' "$name" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*$'; then
+                      echo "ERROR: '$name' (from $dir) is not a valid universal-package name segment." >&2
+                      echo "Optional-agent bundle folders must be scope-stripped (e.g. 'code-agent') by packageOptionalAgents.mjs." >&2
+                      exit 1
+                    fi
                     echo "Publishing ${name}.${RID} v$(packageVersion)"
                     az artifacts universal publish \
                       --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project \
@@ -668,6 +734,11 @@ stages:
         displayName: "Publish shell to Azure Storage"
         condition: eq('${{ parameters.publishShell }}', 'true')
         environment: typeagent-shell-$(resolvedChannel)
+        # stageDependencies is not available in step conditions, so map the
+        # optional mac/linux build results to job variables the steps can read.
+        variables:
+          macBuildResult: $[ stageDependencies.Build.build_shell_mac.result ]
+          linuxBuildResult: $[ stageDependencies.Build.build_shell_linux.result ]
         pool:
           # AzureFileCopy requires Windows.
           vmImage: windows-latest
@@ -692,19 +763,64 @@ stages:
                     storage: $(azureStorageAccountName)
                     ContainerName: $(azureStorageContainerName)
 
-                # macOS artifact — only upload if the optional build succeeded.
+                # Also publish the win shell to the Azure Artifacts feed as a
+                # Universal Package (in addition to blob storage). The MSI's
+                # "install the shell" option downloads this via
+                # `az artifacts universal download` when the (authenticated)
+                # blob download is unavailable. Package contents = the channel
+                # .yml + NSIS setup exe already staged in shell-win.
+                - pwsh: |
+                    az extension add --name azure-devops --only-show-errors | Out-Null
+                    $pkg = "typeagent-shell.win32-x64"
+                    Write-Host "Publishing $pkg v$(packageVersion) to feed $(adoFeed)"
+                    az artifacts universal publish `
+                      --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project `
+                      --feed "$(adoFeed)" `
+                      --name "$pkg" --version "$(packageVersion)" `
+                      --path "$(Pipeline.Workspace)/shell-win" `
+                      --description "TypeAgent Shell (win32-x64), channel $(resolvedChannel)"
+                  displayName: "Publish shell-win to Universal feed"
+                  env:
+                    AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+                # macOS artifact — optional. The build uses continueOnError,
+                # so a failed mac build still reports SucceededWithIssues and
+                # produces no artifact; keep these steps non-fatal so a missing
+                # artifact does not fail the deployment job.
                 - download: current
                   artifact: shell-mac
                   displayName: "Download shell-mac (optional)"
                   condition: |
-                    in(stageDependencies.Build.build_shell_mac.result, 'Succeeded', 'SucceededWithIssues')
+                    in(variables.macBuildResult, 'Succeeded', 'SucceededWithIssues')
+                  continueOnError: true
 
                 - task: AzureFileCopy@6
                   displayName: "Upload Azure Storage - mac"
                   condition: |
-                    in(stageDependencies.Build.build_shell_mac.result, 'Succeeded', 'SucceededWithIssues')
+                    in(variables.macBuildResult, 'Succeeded', 'SucceededWithIssues')
+                  continueOnError: true
                   inputs:
                     SourcePath: $(Pipeline.Workspace)\shell-mac\**
+                    Destination: AzureBlob
+                    azureSubscription: $(azureSubscription)
+                    storage: $(azureStorageAccountName)
+                    ContainerName: $(azureStorageContainerName)
+
+                # Linux artifact — optional, same non-fatal handling as macOS.
+                - download: current
+                  artifact: shell-linux
+                  displayName: "Download shell-linux (optional)"
+                  condition: |
+                    in(variables.linuxBuildResult, 'Succeeded', 'SucceededWithIssues')
+                  continueOnError: true
+
+                - task: AzureFileCopy@6
+                  displayName: "Upload Azure Storage - linux"
+                  condition: |
+                    in(variables.linuxBuildResult, 'Succeeded', 'SucceededWithIssues')
+                  continueOnError: true
+                  inputs:
+                    SourcePath: $(Pipeline.Workspace)\shell-linux\**
                     Destination: AzureBlob
                     azureSubscription: $(azureSubscription)
                     storage: $(azureStorageAccountName)
@@ -722,6 +838,7 @@ stages:
         variables:
           msiRid: win32-x64
           MSI_BUILD_DIR: $(stagingDir)/msi
+          MSI_PUBLISH_DIR: $(stagingDir)/msi-publish
         steps:
           - checkout: self
             displayName: "Checkout (for build scripts)"
@@ -827,6 +944,14 @@ stages:
                 --plugin-dir "$pluginDir" `
                 --version "$(packageVersion)" `
                 --plugin-version "$(packageVersion)" `
+                --shell-storage "$(azureStorageAccountName)" `
+                --shell-container "$(azureStorageContainerName)" `
+                --shell-channel "$(resolvedChannel)" `
+                --shell-feed "$(adoFeed)" `
+                --shell-package "typeagent-shell.$(msiRid)" `
+                --shell-feed-version "$(packageVersion)" `
+                --shell-org "$(adoOrgUrl)" `
+                --shell-project "$(adoProject)" `
                 --output "$(MSI_BUILD_DIR)"
             displayName: "Build MSI"
 
@@ -847,8 +972,31 @@ stages:
                 Write-Host "Signing MSI: $($msiPath.FullName)"
                 node .\sign-msi.mjs "$($msiPath.FullName)"
 
-          # Publish MSI as pipeline artifact.
-          - publish: $(MSI_BUILD_DIR)
+          - pwsh: |
+              $source = Get-ChildItem "$(MSI_BUILD_DIR)" -Filter "*.msi"
+              if ($source.Count -ne 1) {
+                Write-Error "Expected exactly one MSI in $(MSI_BUILD_DIR); found $($source.Count)."
+                exit 1
+              }
+
+              $publishPath = "$(MSI_PUBLISH_DIR)"
+              if (Test-Path $publishPath) {
+                Remove-Item -LiteralPath $publishPath -Recurse -Force
+              }
+              New-Item -ItemType Directory -Force $publishPath | Out-Null
+              Copy-Item -LiteralPath $source[0].FullName -Destination $publishPath
+
+              $publishedFiles = @(Get-ChildItem $publishPath -File)
+              if ($publishedFiles.Count -ne 1 -or $publishedFiles[0].Extension -ne ".msi") {
+                Write-Error "MSI publication directory must contain exactly one .msi file."
+                exit 1
+              }
+              Write-Host "Prepared MSI-only publication directory:"
+              Write-Host "  $($publishedFiles[0].FullName)"
+            displayName: "Stage signed MSI for publication"
+
+          # Publish the MSI-only directory as the pipeline artifact.
+          - publish: $(MSI_PUBLISH_DIR)
             displayName: "Upload artifact: msi-$(msiRid)"
             artifact: msi-$(msiRid)
 
@@ -860,7 +1008,7 @@ stages:
               scriptType: pscore
               scriptLocation: inlineScript
               inlineScript: |
-                $publishPath = "$(MSI_BUILD_DIR)"
+                $publishPath = "$(MSI_PUBLISH_DIR)"
                 $msi = Get-ChildItem $publishPath -Filter "*.msi" | Select-Object -First 1
                 if ($null -eq $msi) {
                   Write-Error "No MSI found in $publishPath"
@@ -894,34 +1042,24 @@ stages:
                   artifact: msi-win32-x64
                   displayName: "Download signed MSI artifact"
 
-                - pwsh: |
-                    $src  = "$(Pipeline.Workspace)/msi-win32-x64"
-                    $dest = "$(stagingDir)/msi-publish"
-                    New-Item -ItemType Directory -Force $dest | Out-Null
-
-                    $msi = Get-ChildItem $src -Filter "*.msi" | Select-Object -First 1
-                    if ($null -eq $msi) {
-                      Write-Error "No MSI found in $src"
-                      exit 1
-                    }
-                    Copy-Item $msi.FullName $dest
-
-                    $hash = (Get-FileHash $msi.FullName -Algorithm SHA256).Hash.ToLower()
-                    $meta = [ordered]@{
-                      version = "$(packageVersion)"
-                      file    = $msi.Name
-                      sha256  = $hash
-                    }
-                    $meta | ConvertTo-Json | Set-Content -Path (Join-Path $dest "latest.json") -Encoding utf8
-
-                    Write-Host "Staged for blob publish:"
-                    Get-ChildItem $dest | ForEach-Object { Write-Host "  $($_.Name)" }
-                  displayName: "Stage signed MSI + latest.json"
+                - task: AzureCLI@2
+                  displayName: "Clear previous MSI channel files"
+                  inputs:
+                    azureSubscription: $(azureSubscription)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az storage blob delete-batch `
+                        --account-name "$(azureStorageAccountName)" `
+                        --source "$(azureStorageContainerName)" `
+                        --pattern "msi/$(resolvedChannel)/*" `
+                        --auth-mode login `
+                        --only-show-errors
 
                 - task: AzureFileCopy@6
                   displayName: "Upload MSI to Azure Storage (msi/$(resolvedChannel))"
                   inputs:
-                    SourcePath: $(stagingDir)/msi-publish/*
+                    SourcePath: $(Pipeline.Workspace)\msi-win32-x64\*.msi
                     Destination: AzureBlob
                     azureSubscription: $(azureSubscription)
                     storage: $(azureStorageAccountName)

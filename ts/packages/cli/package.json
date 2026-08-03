@@ -54,13 +54,15 @@
     "@oclif/plugin-help": "^6",
     "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-schema": "workspace:*",
+    "@typeagent/agent-cache": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
-    "agent-cache": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
@@ -71,9 +73,7 @@
     "marked": "^15.0.0",
     "marked-terminal": "^7.3.0",
     "open": "^10.1.0",
-    "telemetry": "workspace:*",
-    "ts-node": "^10.9.1",
-    "typechat-utils": "workspace:*"
+    "ts-node": "^10.9.1"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

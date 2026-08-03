@@ -42,6 +42,21 @@ function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function makeFormRequest(
+    overrides: Partial<PendingInteractionRequest & { type: "form" }> = {},
+): PendingInteractionRequest & { type: "form" } {
+    return {
+        interactionId: overrides.interactionId ?? `form-${Date.now()}`,
+        type: "form",
+        form: {
+            fields: [{ id: "ok", kind: "yesNo", prompt: "OK?" }],
+        },
+        source: "test",
+        timestamp: Date.now(),
+        ...overrides,
+    };
+}
+
 describe("PendingInteractionManager", () => {
     let manager: PendingInteractionManager;
 
@@ -106,6 +121,26 @@ describe("PendingInteractionManager", () => {
             expect(manager.cancel("nonexistent", new Error("gone"))).toBe(
                 false,
             );
+        });
+
+        // A form cancel resolves gracefully with an explicit cancelled
+        // response (no partial answers) rather than rejecting, so the awaiting
+        // reasoning tool can report the dismissal without a throw.
+        it("form cancel resolves with a cancelled response instead of rejecting", async () => {
+            const request = makeFormRequest({ interactionId: "form-cancel-1" });
+            const promise = manager.create(request);
+
+            const cancelled = manager.cancel(
+                "form-cancel-1",
+                new Error("disconnected"),
+            );
+
+            expect(cancelled).toBe(true);
+            await expect(promise).resolves.toEqual({
+                answers: {},
+                cancelled: true,
+            });
+            expect(manager.has("form-cancel-1")).toBe(false);
         });
 
         // ---------------------------------------------------------------

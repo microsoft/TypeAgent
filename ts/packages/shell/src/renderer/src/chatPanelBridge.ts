@@ -26,7 +26,7 @@ import {
     parseStatusNotice,
     type TemplateEditServices,
     type ConnectionStatus,
-} from "chat-ui";
+} from "@typeagent/chat-ui";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import {
     ClientIO,
@@ -48,7 +48,6 @@ import {
 } from "agent-dispatcher/helpers/completion";
 import {
     Client,
-    NotifyCommands,
     SearchMenuItem,
     ShellUserSettings,
     SpeechToken,
@@ -66,15 +65,6 @@ import {
 import { CameraView } from "./cameraView";
 import { getTTSProviders, getTTSVoices } from "./tts/tts";
 import { enumerateMicrophones } from "./speech";
-
-// Buffered @notify entries surfaced via `@notify show`.
-type NotificationEntry = {
-    event: string;
-    source: string;
-    data: any;
-    read: boolean;
-    requestId: RequestId | string | undefined;
-};
 
 /**
  * Normalize a dispatcher RequestId (object or string) to the string key the
@@ -197,6 +187,19 @@ function toHistoryEntries(entries: any[]): HistoryEntry[] {
                     requestId: ridStr(e.requestId),
                 });
                 break;
+            case "notify": {
+                // Persisted "explained" notifications restore the roadrunner
+                // icon + click-to-open popover on replayed user bubbles.
+                const rid = ridStr(e.notificationId ?? e.requestId);
+                if (e.event === "explained" && rid) {
+                    out.push({
+                        kind: "explained",
+                        requestId: rid,
+                        data: e.data,
+                    });
+                }
+                break;
+            }
             case "command-result": {
                 const m = e.metrics;
                 const actions: any[] | undefined = m?.actions;
@@ -252,7 +255,6 @@ export function createChatPanelClient(
         requestId: string;
     }> = [];
     let settings: ShellUserSettings = defaultUserSettings;
-    const notifications: NotificationEntry[] = [];
 
     // Replay gate: history replay (triggered by `dispatcher-initialized`)
     // runs asynchronously while the main process may already be streaming
@@ -684,6 +686,23 @@ export function createChatPanelClient(
             // permanent=false is a recoverable soft delete (trash).
             void dispatcher?.recordUserHide(requestId, true, target, permanent);
         },
+        // Live-updating displays (an agent's ActionResult.dynamicDisplayId,
+        // e.g. the player's now-playing "status" card). ChatPanel arms a
+        // refresh timer on setDynamicDisplay and calls this each tick to pull
+        // fresh content; it also only registers the bubble with the top rail
+        // once a refresh returns. Without this callback setDynamicDisplay is a
+        // no-op, so the card never updates and never pins. Read the dispatcher
+        // closure per call so it stays reconnect-safe; "html" because the shell
+        // renders HTML display content.
+        getDynamicDisplay: async (source, displayId) => {
+            const d = dispatcher;
+            if (d === undefined) {
+                throw new Error(
+                    "Dispatcher not ready for dynamic display refresh",
+                );
+            }
+            return d.getDynamicDisplay(source, "html", displayId);
+        },
         speechProvider,
         ttsProvider,
         imageCaptureProvider,
@@ -857,17 +876,30 @@ export function createChatPanelClient(
                 );
             });
         },
-        appendDiagnosticData: () => {
-            // Diagnostic data has no ChatPanel surface yet (deferred).
+        appendDiagnosticData: (requestId, data) => {
+            afterReplay(() => {
+                if (isCancelledRequest(ridStr(requestId))) return;
+                chatPanel.appendDiagnosticData(ridStr(requestId), data);
+            });
         },
         setDynamicDisplay: (
-            _requestId,
+            requestId,
             source,
             _actionIndex,
             displayId,
             nextRefreshMs,
         ) => {
-            chatPanel.setDynamicDisplay(source, displayId, nextRefreshMs);
+            afterReplay(() => {
+                if (isCancelledRequest(ridStr(requestId))) return;
+                // Pass the requestId so chat-ui refreshes the action's own
+                // bubble in place instead of a separate globe-icon card.
+                chatPanel.setDynamicDisplay(
+                    source,
+                    displayId,
+                    nextRefreshMs,
+                    ridStr(requestId),
+                );
+            });
         },
         question: async (requestId, message, choices, defaultId) => {
             if (requestId === undefined) {
@@ -889,6 +921,12 @@ export function createChatPanelClient(
                 templateServices,
             );
         },
+        askForm: async (_requestId, form, _source) => {
+            // In-process (standalone shell) blocking form interaction. In
+            // connected mode the SharedDispatcher intercepts askForm and drives
+            // this via requestInteraction instead.
+            return chatPanel.addQuestionForm(form);
+        },
         notify: (requestId, event, data, source) => {
             switch (event) {
                 case "explained":
@@ -908,7 +946,7 @@ export function createChatPanelClient(
                     );
                     break;
                 case "showNotifications":
-                    handleShowNotifications(data);
+                    chatPanel.showNotifications(data);
                     break;
                 case STATUS_NOTICE_EVENT: {
                     // Persistent, dismissible server/status notice rendered as
@@ -923,13 +961,7 @@ export function createChatPanelClient(
                 case AppAgentEvent.Error:
                 case AppAgentEvent.Warning:
                 case AppAgentEvent.Info:
-                    notifications.push({
-                        event,
-                        source,
-                        data,
-                        read: false,
-                        requestId,
-                    });
+                    chatPanel.recordNotification(event, source, data);
                     break;
                 case AppAgentEvent.Inline:
                     if (source === "osNotifications") {
@@ -945,13 +977,7 @@ export function createChatPanelClient(
                         break;
                     }
                     chatPanel.showInline(data, source);
-                    notifications.push({
-                        event,
-                        source,
-                        data,
-                        read: false,
-                        requestId,
-                    });
+                    chatPanel.recordNotification(event, source, data);
                     break;
                 case AppAgentEvent.Toast:
                     if (source === "osNotifications") {
@@ -963,13 +989,7 @@ export function createChatPanelClient(
                         break;
                     }
                     chatPanel.showToast(data, source);
-                    notifications.push({
-                        event,
-                        source,
-                        data,
-                        read: false,
-                        requestId,
-                    });
+                    chatPanel.recordNotification(event, source, data);
                     break;
                 case "osDismiss":
                     // The OS notification left the action center — drop the
@@ -1034,6 +1054,22 @@ export function createChatPanelClient(
                 console.error("[requestChoice] failed", e, requestId),
             );
         },
+        requestForm: (requestId, choiceId, form, _source) => {
+            void (async () => {
+                // form.message is already rendered as the agent's
+                // displayContent (emitActionResult appends it before requesting
+                // the form), so suppress the duplicate and anchor the controls
+                // onto that agent bubble via requestId.
+                const rid = ridStr(requestId);
+                const response = await chatPanel.addQuestionForm(form, {
+                    showMessage: false,
+                    requestId: rid,
+                });
+                await dispatcher?.respondToChoice(choiceId, response);
+            })().catch((e) =>
+                console.error("[requestForm] failed", e, requestId),
+            );
+        },
         requestInteraction: (interaction: PendingInteractionRequest) => {
             const ac = new AbortController();
             activeInteractions.set(interaction.interactionId, ac);
@@ -1055,6 +1091,16 @@ export function createChatPanelClient(
                         response = {
                             interactionId: interaction.interactionId,
                             type: "question",
+                            value,
+                        };
+                    } else if (interaction.type === "form") {
+                        const value = await chatPanel.addQuestionForm(
+                            interaction.form,
+                            { signal: ac.signal },
+                        );
+                        response = {
+                            interactionId: interaction.interactionId,
+                            type: "form",
                             value,
                         };
                     } else {
@@ -1099,8 +1145,8 @@ export function createChatPanelClient(
                 chatPanel.addSystemMessage("Interaction cancelled.");
             }
         },
-        takeAction: (_requestId, action, data) => {
-            handleTakeAction(action, data);
+        takeAction: (requestId, action, data) => {
+            handleTakeAction(requestId, action, data);
         },
         onUserFeedback: (entry) => {
             chatPanel.applyFeedback(entry);
@@ -1186,43 +1232,11 @@ export function createChatPanelClient(
         },
     };
 
-    function handleShowNotifications(data: NotifyCommands) {
-        switch (data) {
-            case NotifyCommands.Clear:
-                notifications.length = 0;
-                break;
-            case NotifyCommands.ShowAll:
-            case NotifyCommands.ShowUnread: {
-                const showAll = data === NotifyCommands.ShowAll;
-                const items = notifications.filter((n) => showAll || !n.read);
-                const html = items.length
-                    ? `<ul>${items
-                          .map((n) => {
-                              n.read = true;
-                              return `<li class="notification-${n.event}">${n.event} ${String(n.data)}</li>`;
-                          })
-                          .join("")}</ul>`
-                    : "No notifications.";
-                chatPanel.showInline({ type: "html", content: html }, "shell");
-                break;
-            }
-            case NotifyCommands.ShowSummary: {
-                const unread = notifications.filter((n) => !n.read).length;
-                chatPanel.showInline(
-                    {
-                        type: "html",
-                        content: `There are <b>${unread}</b> unread and <b>${notifications.length}</b> total notifications.`,
-                    },
-                    "shell",
-                );
-                break;
-            }
-            default:
-                break;
-        }
-    }
-
-    function handleTakeAction(action: string, data: unknown) {
+    function handleTakeAction(
+        requestId: RequestId,
+        action: string,
+        data: unknown,
+    ) {
         try {
             const d: any = data;
             switch (action) {
@@ -1245,14 +1259,16 @@ export function createChatPanelClient(
                     getClientAPI().openFolder(data as string);
                     break;
                 case "manage-conversation":
-                    void handleManageConversation(d).catch((e) =>
-                        chatPanel.showInline(
+                    void handleManageConversation(requestId, d).catch((e) =>
+                        chatPanel.replaceAgentMessage(
                             {
-                                type: "html",
+                                type: "text",
                                 content: `❌ ${e?.message ?? String(e)}`,
                                 kind: "warning",
                             },
                             "conversation",
+                            chatPanel.iconForSource("conversation"),
+                            ridStr(requestId),
                         ),
                     );
                     break;
@@ -1267,12 +1283,15 @@ export function createChatPanelClient(
     }
 
     async function handleManageConversation(
+        requestId: RequestId,
         payload: ManageConversationPayload,
     ) {
         const result = await getClientAPI().conversationManageAction(payload);
-        chatPanel.showInline(
-            { type: "html", content: result.html, kind: result.kind },
+        chatPanel.replaceAgentMessage(
+            result.content,
             "conversation",
+            chatPanel.iconForSource("conversation"),
+            ridStr(requestId),
         );
     }
 
@@ -1483,6 +1502,21 @@ export function createChatPanelClient(
             chatPanel.setDemoPaused(state === "paused");
         },
         reconnectStatusChanged(status: ConnectionStatus | undefined): void {
+            // Retract the "stale-build" notice when the connection drops
+            // (status defined), not when it returns. The notice describes the
+            // server we were connected to, so a stuck "Restarting..." toast
+            // must not outlive that link. Clearing on disconnect keeps the
+            // reconnected server's join-time push authoritative: a fresh
+            // successor stays silent (nothing to show) and a still-stale one
+            // re-pushes the notice, which arrives after this retract and
+            // renders correctly. Doing it here rather than on reconnect avoids
+            // racing that push - the Electron shell reuses its connection
+            // across reconnects (unlike vscode-shell's fresh connect), so the
+            // server's join-time retract can be dropped, and this makes the
+            // clear independent of it. Idempotent once the notice is gone.
+            if (status !== undefined) {
+                chatPanel.clearStatusNotice("stale-build");
+            }
             chatPanel.setConnectionStatus(status, (action) => {
                 // Manual recovery from the "stopped" banner — main owns the
                 // retry / server-start logic.

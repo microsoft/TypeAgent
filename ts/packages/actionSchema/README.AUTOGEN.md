@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d494b35f1afeca79ee3f94044319e5eed00e3b7fbe511f65a2b7e551290f102d -->
+<!-- AUTOGEN:DOCS:HASH:sha256=55e6ffb00c62a3fcec5bb40240f7f7c3983a3043dff75abadb418c2bf7e81a73 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/action-schema — AI-generated documentation
@@ -12,23 +12,23 @@
 
 ## Overview
 
-The `@typeagent/action-schema` package is a TypeScript library that provides tools for parsing, generating, and validating action schemas within the TypeAgent framework. Action schemas are used to define the structure, types, and constraints of actions, ensuring consistency and type safety across the system. This package is a core utility in the TypeAgent ecosystem and is widely used by other packages in the monorepo.
+The `@typeagent/action-schema` package is a TypeScript library designed to parse, generate, and validate action schemas within the TypeAgent framework. Action schemas define the structure, types, and constraints of actions, ensuring type safety and consistency across the system. This package is a foundational component of the TypeAgent ecosystem and is utilized by numerous other packages in the monorepo.
 
 ## What it does
 
-The primary purpose of the `@typeagent/action-schema` package is to facilitate the creation, management, and validation of action schemas. Its key capabilities include:
+The `@typeagent/action-schema` package provides a comprehensive set of tools for working with action schemas. Its primary functionalities include:
 
 - **Parsing Action Schemas**: Extract schema definitions from TypeScript source files using functions like `parseActionSchemaSource` and `parseSchemaSource`.
 - **Schema Generation**: Generate schema definitions from TypeScript types with utilities such as `generateActionSchema` and `generateSchemaTypeDefinition`.
-- **JSON Schema Support**: Convert TypeScript schemas to JSON schemas and vice versa using tools like `generateActionJsonSchema` and `parseToolsJsonSchema`.
+- **JSON Schema Conversion**: Convert TypeScript schemas to JSON schemas and vice versa using tools like `generateActionJsonSchema` and `parseToolsJsonSchema`.
 - **Validation**: Validate actions against their schemas using the `validateAction` function to ensure they conform to the defined structure and constraints.
 - **Serialization**: Serialize and deserialize parsed action schemas with `toJSONParsedActionSchema` and `fromJSONParsedActionSchema`.
 
-These features make the package essential for defining and enforcing structured action schemas, which are critical for interoperability and reliability in the TypeAgent framework. It is used by other packages such as `@typeagent/action-grammar`, `@typeagent/action-grammar-compiler`, and `@typeagent/core`.
+These capabilities make the package essential for defining and enforcing structured action schemas, which are critical for interoperability and reliability in the TypeAgent framework. It is widely used by other packages, including `@typeagent/action-grammar`, `@typeagent/action-grammar-compiler`, and `@typeagent/core`.
 
 ## Setup
 
-To use the `@typeagent/action-schema` package, install it along with its external dependencies:
+To use the `@typeagent/action-schema` package, you need to install it along with its external dependencies:
 
 ```sh
 pnpm install @typeagent/action-schema debug typescript
@@ -97,20 +97,20 @@ External: `debug`, `typescript`
 - [@typeagent/action-grammar](../../packages/actionGrammar/README.md)
 - [@typeagent/action-grammar-compiler](../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../packages/actionSchemaCompiler/README.md)
+- [@typeagent/agent-cache](../../packages/cache/README.md)
+- [@typeagent/browser](../../packages/agents/browser/README.md)
 - [@typeagent/core](../../packages/typeagent-core/README.md)
-- [agent-cache](../../packages/cache/README.md)
 - [agent-cli](../../packages/cli/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [agent-sdk-wrapper](../../packages/agentSdkWrapper/README.md)
-- [browser-typeagent](../../packages/agents/browser/README.md)
-- _…and 6 more workspace consumers._
+- _…and 7 more workspace consumers._
 
 ### Files of interest
 
-`./src/index.ts`, `./src/creator.ts`, `./src/generator.ts`, …and 12 more under `./src/`.
+`./src/index.ts`, `./src/creator.ts`, `./src/entryTypeComment.ts`, …and 13 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `ddfb77106202f41382a9a5df525ac5b296c74a4b` on `2026-07-21T05:29:53.699Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-schema docs:verify-links` to spot-check._
+_Auto-generated against commit `44f918824a1d64848984e5a5a84f67531972ca97` on `2026-07-30T06:32:49.035Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-schema docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

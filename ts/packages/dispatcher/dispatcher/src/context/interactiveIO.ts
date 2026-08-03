@@ -127,6 +127,7 @@ export const nullClientIO: ClientIO = {
     openLocalView: async () => {},
     closeLocalView: async () => {},
     requestChoice: () => {},
+    requestForm: () => {},
     requestInteraction: () => {},
     interactionResolved: () => {},
     interactionCancelled: () => {},

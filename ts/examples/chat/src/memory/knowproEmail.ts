@@ -13,9 +13,9 @@ import {
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import * as cm from "conversation-memory";
+import * as cm from "@typeagent/conversation-memory";
 import path from "path";
-import { ensureDir, isFilePath, readJsonFile } from "typeagent";
+import { ensureDir, isFilePath, readJsonFile } from "@typeagent/agent-runtime";
 import {
     createIndexingEventHandler,
     loadEmailMemory,

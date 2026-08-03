@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { composeTranslatorSchemas } from "typechat-utils";
+import { composeTranslatorSchemas } from "@typeagent/typechat-utils";
 import {
     getAssistantSelectionSchemas,
     getFullSchemaText,
@@ -37,11 +37,6 @@ export default class Schema extends Command {
         assistant: Flags.boolean({
             description: "Show all assistant selection schema",
             default: false,
-        }),
-        generated: Flags.boolean({
-            description: "Generated schema",
-            allowNo: true,
-            default: true,
         }),
         activity: Flags.boolean({
             description: "Show activity schema",
@@ -92,7 +87,7 @@ export default class Schema extends Command {
                         activity: flags.activity,
                         multiple: flags.multiple,
                     },
-                    flags.generated ? { exact: true } : undefined,
+                    { exact: true },
                 ),
             );
         } else {

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Catalog } from "./types.js";
+import type { Catalog, CommandInfo } from "./types.js";
 import { orderedCategories } from "./categories.js";
 import { escapeHtml } from "./util.js";
 
@@ -10,14 +10,21 @@ import { escapeHtml } from "./util.js";
 //
 // The browser is a zoomable treemap over two hierarchies:
 //   Agents:   Category -> Agent -> Action (leaf)
-//   Commands: Group    -> Command (leaf)
+//   Commands: Host     -> Group -> Command (leaf)
 // We build plain data objects here and embed them as JSON; the client renders
 // and lays them out (a viewport-aware squarified treemap), so nothing here
 // depends on a DOM.
 // ---------------------------------------------------------------------------
 
 interface TreeNode {
-    kind: "root" | "category" | "agent" | "action" | "group" | "command";
+    kind:
+        | "root"
+        | "category"
+        | "agent"
+        | "action"
+        | "host"
+        | "group"
+        | "command";
     name: string;
     emoji?: string;
     description?: string;
@@ -34,7 +41,11 @@ interface TreeNode {
     }[];
     phrasings?: string[];
     // command-only
-    group?: boolean;
+    host?: string;
+    // Full invocation path minus the leading `@` (e.g. `config agent enable`).
+    full?: string;
+    // actionName of the equivalent agent action, when the handler declares one.
+    actionName?: string;
     args?: { name: string; optional: boolean; description: string }[];
     flags?: {
         name: string;
@@ -91,41 +102,114 @@ function buildAgentsTree(catalog: Catalog): TreeNode {
     return { kind: "root", name: "Agents", children };
 }
 
+// Order hosts so the layout is stable and readable: the built-in "system" host
+// leads, then every agent host alphabetically.
+function hostRank(host: string): number {
+    return host === "system" ? 0 : 1;
+}
+
+// Full invocation path (minus the leading `@`) for a command: system commands
+// stand alone (`config agent`); an agent's commands are prefixed with the host
+// (`dispatcher reason`), collapsing to just the host for a bare `@<host>`.
+function commandDisplayPath(host: string, path: string): string {
+    if (host === "system") {
+        return path;
+    }
+    return path ? `${host} ${path}` : host;
+}
+
 function buildCommandsTree(catalog: Catalog): TreeNode {
-    const groups = new Map<string, TreeNode[]>();
-    for (const command of catalog.systemCommands) {
-        const first = command.path.split(" ")[0] || command.path;
-        let list = groups.get(first);
+    // Group by host, then expand each host's flat command list into a deep tree
+    // keyed by the command path so `config` -> `agent` -> `enable` become
+    // nested, zoomable boxes instead of one flat wall of commands.
+    const byHost = new Map<string, CommandInfo[]>();
+    for (const command of catalog.commands) {
+        let list = byHost.get(command.host);
         if (list === undefined) {
             list = [];
-            groups.set(first, list);
+            byHost.set(command.host, list);
         }
-        list.push({
-            kind: "command",
-            name: command.path,
-            description: command.description,
-            group: command.group,
-            args: command.args.map((a) => ({
-                name: a.name,
-                optional: a.optional,
-                description: a.description,
-            })),
-            flags: command.flags.map((f) => ({
-                name: f.name,
-                char: f.char,
-                default: f.default,
-                description: f.description,
-            })),
-        });
+        list.push(command);
     }
-    const children: TreeNode[] = [...groups.entries()]
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([name, commands]) => ({
-            kind: "group" as const,
-            name,
-            children: commands.sort((a, b) => a.name.localeCompare(b.name)),
+    const children = [...byHost.entries()]
+        .sort(
+            (a, b) =>
+                hostRank(a[0]) - hostRank(b[0]) || a[0].localeCompare(b[0]),
+        )
+        .map(([host, commands]) => buildHostTree(host, commands));
+    return { kind: "root", name: "Commands", children };
+}
+
+// Expand one host's commands into a nested tree. Each path segment becomes a
+// node; a node that ends up with sub-commands is a zoomable group, otherwise a
+// leaf command. The dispatcher also emits every intermediate node, so a group's
+// own description/parameters land on the matching node.
+function buildHostTree(host: string, commands: CommandInfo[]): TreeNode {
+    const hostNode: TreeNode = { kind: "host", name: host, children: [] };
+    const nodeByKey = new Map<string, TreeNode>([["", hostNode]]);
+
+    function ensureNode(segments: string[]): TreeNode {
+        if (segments.length === 0) {
+            return hostNode;
+        }
+        const key = segments.join("\n");
+        let node = nodeByKey.get(key);
+        if (node === undefined) {
+            node = {
+                kind: "command",
+                name: segments[segments.length - 1],
+                host,
+                full: commandDisplayPath(host, segments.join(" ")),
+                children: [],
+            };
+            nodeByKey.set(key, node);
+            ensureNode(segments.slice(0, -1)).children!.push(node);
+        }
+        return node;
+    }
+
+    for (const command of commands) {
+        // A bare `@<host>` command (no sub-path) becomes a single leaf named
+        // for the host.
+        const segments = command.path === "" ? [host] : command.path.split(" ");
+        const node = ensureNode(segments);
+        node.host = host;
+        node.full = commandDisplayPath(host, command.path);
+        if (command.action) {
+            node.actionName = command.action.actionName;
+        }
+        node.description = command.description;
+        node.args = command.args.map((a) => ({
+            name: a.name,
+            optional: a.optional,
+            description: a.description,
         }));
-    return { kind: "root", name: "System commands", children };
+        node.flags = command.flags.map((f) => ({
+            name: f.name,
+            char: f.char,
+            default: f.default,
+            description: f.description,
+        }));
+    }
+
+    // A node with children is a group; one without is a leaf command.
+    function finalize(node: TreeNode): void {
+        const kids = node.children;
+        if (kids !== undefined && kids.length > 0) {
+            if (node.kind !== "host") {
+                node.kind = "group";
+            }
+            kids.sort((a, b) => a.name.localeCompare(b.name));
+            kids.forEach(finalize);
+        } else {
+            if (node.kind !== "host") {
+                node.kind = "command";
+            }
+            delete node.children;
+        }
+    }
+    finalize(hostNode);
+    return hostNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +253,9 @@ h1{margin:0;font-size:17px;}
 .cell.k-action,.cell.k-command{cursor:pointer;}
 .lbl{position:absolute;inset:0;padding:10px 12px;display:flex;flex-direction:column;gap:3px;
   justify-content:flex-start;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none;}
-.lbl-name{font-weight:650;line-height:1.15;word-break:break-word;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+/* line-height leaves room for emoji glyphs (taller than text); flex-shrink:0 keeps the
+   name at full line height on short tiles instead of squashing and clipping the glyphs. */
+.lbl-name{font-weight:650;line-height:1.3;flex-shrink:0;word-break:break-word;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 .lbl-sub{opacity:.85;font-weight:500;}
 .cell.sm .lbl{padding:4px 6px;gap:1px;}
 .cell.tiny .lbl{display:none;}
@@ -205,6 +291,14 @@ h1{margin:0;font-size:17px;}
 .p-list{margin:0;padding-left:18px;}
 .p-list li{margin:3px 0;}
 .p-list code{background:#0c111b;padding:1px 5px;border-radius:5px;}
+/* cross-links between a command and its equivalent action */
+.p-xlink{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 12px;}
+.p-xlabel{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+.p-link{appearance:none;border:1px solid var(--line);background:var(--chip);color:var(--chip-fg);font-family:ui-monospace,Consolas,monospace;font-size:13px;padding:3px 10px;border-radius:999px;cursor:pointer;}
+.p-link:hover{border-color:var(--accent);}
+.p-xnote{color:var(--muted);font-family:ui-monospace,Consolas,monospace;font-size:13px;}
+.cov-chip{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap;align-self:center;}
+.cell.linked::after{content:'\\21c4';position:absolute;top:4px;right:6px;font-size:11px;color:#fff;opacity:.75;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.6);}
 /* nested containers (root view: agents shown inside their category) */
 .cell.container{cursor:pointer;}
 .cell .lbl.hdr{position:absolute;left:0;right:0;top:0;bottom:auto;height:auto;flex-direction:row;flex-wrap:nowrap;align-items:baseline;gap:8px;padding:5px 11px;overflow:hidden;}
@@ -281,6 +375,15 @@ const APP = `
   computeValue(DATA.agents); computeValue(DATA.commands);
   assignHues(DATA.agents); assignHues(DATA.commands);
 
+  // Cross-reference actions with the commands declared equivalent to them, and
+  // tally how many commands carry a natural-language action.
+  var actionIndex={}, commandsForAction={}, commandLeafCount=0, commandLinkedCount=0;
+  (function walk(n){ if(n.kind==='action'){ actionIndex[n.agent+'\\n'+n.name]=n; } if(n.children) n.children.forEach(walk); })(DATA.agents);
+  (function walk(n){
+    if(n.kind==='command'){ commandLeafCount++; if(n.actionName){ commandLinkedCount++; var k=n.host+'\\n'+n.actionName; (commandsForAction[k]||(commandsForAction[k]=[])).push(n); } }
+    if(n.children) n.children.forEach(walk);
+  })(DATA.commands);
+
   var state = { mode:'agents', path:[DATA.agents], query:'' };
 
   function currentNode(){ return state.path[state.path.length-1]; }
@@ -288,7 +391,7 @@ const APP = `
   function colorFor(node, idx, n){
     var h = node._hue==null?210:node._hue;
     var sat = (node.kind==='action'||node.kind==='command')?40:58;
-    var base = (node.kind==='category'||node.kind==='group')?42:(node.kind==='agent')?52:66;
+    var base = (node.kind==='category'||node.kind==='host')?42:(node.kind==='agent'||node.kind==='group')?52:66;
     var jitter = n>1 ? ((idx/(n-1))-0.5)*12 : 0;
     return 'hsl('+h+','+sat+'%,'+(base+jitter)+'%)';
   }
@@ -330,15 +433,20 @@ const APP = `
   }
 
   function displayName(node){
-    if(node.kind==='command') return '@'+node.name;
+    if(node.kind==='command' || node.kind==='group'){
+      // Browsing shows the path segment (the breadcrumb carries the context);
+      // search shows the full '@command' since results have no breadcrumb.
+      return (state.query && node.full) ? '@'+node.full : node.name;
+    }
     if(node.kind==='action' && state.query && node.agent) return node.agent+' · '+node.name;
     return (node.emoji?node.emoji+' ':'')+node.name;
   }
   function subLabel(node){
     var c = node.children?node.children.length:0;
     if(node.kind==='category') return c+(c===1?' agent':' agents');
+    if(node.kind==='host'){ var n=node._value||c; return n+(n===1?' command':' commands'); }
     if(node.kind==='agent') return c+(c===1?' action':' actions');
-    if(node.kind==='group') return c+(c===1?' command':' commands');
+    if(node.kind==='group'){ var g=node._value||c; return g+(g===1?' command':' commands'); }
     return '';
   }
 
@@ -359,7 +467,7 @@ const APP = `
   function buildCell(c, role, idx, n){
     var node=c.node;
     var el=document.createElement('div');
-    el.className='cell '+role+' k-'+node.kind;
+    el.className='cell '+role+' k-'+node.kind+(node.actionName?' linked':'');
     el._layout=c;
     if(role==='container'){
       var h=node._hue==null?210:node._hue;
@@ -380,7 +488,8 @@ const APP = `
     var nameHtml='<span class="lbl-name" style="font-size:'+Math.round(sz.name)+'px">'+esc(displayName(node))+'</span>';
     var subHtml=(sub && sz.showSub)?'<span class="lbl-sub" style="font-size:'+Math.round(sz.sub)+'px">'+esc(sub)+'</span>':'';
     el.innerHTML='<div class="'+lblCls+'">'+nameHtml+subHtml+'</div>';
-    var t = node.kind==='action'&&node.agent ? node.agent+' · '+node.name : displayName(node);
+    var t = node.kind==='action'&&node.agent ? node.agent+' · '+node.name
+      : (node.full ? '@'+node.full : displayName(node));
     el.title = t + (node.description?' — '+node.description:'');
     if(role==='tile'){
       if(vertical){ el.classList.add('vert'); }
@@ -394,10 +503,10 @@ const APP = `
   }
 
   function onCellClick(node, el){
-    // Agents and command groups open a details dialog (a treemap of their
-    // actions/commands would be meaningless without usage data); categories
-    // zoom in; leaves (reached via search) open the side panel.
-    if(node.kind==='agent' || node.kind==='group'){ openActionsDialog(node); return; }
+    // Agents open a details dialog (their actions have no sub-structure to zoom
+    // into). Categories, command hosts, and command groups zoom in; leaves
+    // open the side panel.
+    if(node.kind==='agent'){ openActionsDialog(node); return; }
     if(node.children && node.children.length){
       var r=el._layout;
       state.path.push(node);
@@ -439,10 +548,13 @@ const APP = `
       e.textContent = state.query ? 'No matches for “'+state.query+'”.' : 'Nothing to show here.';
       mapEl.appendChild(e); renderBreadcrumb(); return;
     }
-    // At the top level (agents mode), promote agents: draw each category as a
-    // labelled container with its agent tiles nested inside (one level deep).
-    var nested = !state.query && state.path.length===1 && state.mode==='agents';
-    var HEADER=26, PAD=7;
+    // At the top level, promote the top grouping (categories in agents mode,
+    // hosts in commands mode): draw each as a labelled container with its
+    // child tiles nested inside (one level deep).
+    var nested = !state.query && state.path.length===1;
+    // HEADER must clear the container's rendered header label (~33px at the largest
+    // font/line-height) so the first row of nested tiles isn't drawn under it.
+    var HEADER=36, PAD=7;
     var top=squarify(kids.map(function(k){return {node:k,value:sizeValue(k._value||1)};}),0,0,W,H);
     var pending=[];
     function add(el,c){ startPlace(el,c,fromRect,W,H); pending.push({el:el,c:c}); }
@@ -479,10 +591,15 @@ const APP = `
       if(i<state.path.length-1 || state.query){ var s=document.createElement('span'); s.className='crumb-sep'; s.textContent='›'; crumbEl.appendChild(s); }
     });
     if(state.query){ var r=document.createElement('span'); r.className='crumb crumb-static'; r.textContent='Results: “'+state.query+'”'; crumbEl.appendChild(r); }
+    if(state.mode==='commands' && !state.query){
+      var cov=document.createElement('span'); cov.className='cov-chip';
+      cov.textContent=commandLinkedCount+' / '+commandLeafCount+' commands have an action';
+      crumbEl.appendChild(cov);
+    }
   }
 
   function buildHay(node){
-    var parts=[node.name, node.description||'', node.agent||''];
+    var parts=[node.name, node.full||'', node.description||'', node.agent||''];
     if(node.parameters) node.parameters.forEach(function(p){parts.push(p.name,p.description||'');});
     if(node.phrasings) parts=parts.concat(node.phrasings);
     if(node.args) node.args.forEach(function(a){parts.push(a.name,a.description||'');});
@@ -567,11 +684,35 @@ const APP = `
     return html;
   }
 
+  // Cross-link chips between a command and its equivalent action. Targets are
+  // stashed by index because the panel body is set via innerHTML.
+  var panelLinkTargets=[];
+  function panelLinkChip(node){
+    var i=panelLinkTargets.push(node)-1;
+    var label=node.kind==='command'?'@'+(node.full||node.name):node.name;
+    return '<button class="p-link" data-link="'+i+'">'+esc(label)+'</button>';
+  }
+  function crossLinkHtml(node){
+    if(node.kind==='command' && node.actionName){
+      var a=actionIndex[node.host+'\\n'+node.actionName];
+      return '<div class="p-xlink"><span class="p-xlabel">Same as action</span>'+(a?panelLinkChip(a):'<span class="p-xnote">'+esc(node.actionName)+'</span>')+'</div>';
+    }
+    if(node.kind==='action'){
+      var cs=commandsForAction[node.agent+'\\n'+node.name];
+      if(cs&&cs.length){
+        var chips=''; for(var i=0;i<cs.length;i++){ chips+=panelLinkChip(cs[i]); }
+        return '<div class="p-xlink"><span class="p-xlabel">Same as command'+(cs.length>1?'s':'')+'</span>'+chips+'</div>';
+      }
+    }
+    return '';
+  }
+
   function openPanel(node){
     if(node.kind!=='action' && node.kind!=='command') return;
-    var kicker = node.kind==='action' ? esc(node.agent||'')+' · '+esc(node.schema||'') : 'system command';
-    var title = node.kind==='command' ? '@'+esc(node.name) : esc(node.name);
-    document.getElementById('panelBody').innerHTML='<div class="p-kicker">'+kicker+'</div><h2 class="p-title">'+title+'</h2>'+detailHtml(node);
+    panelLinkTargets=[];
+    var kicker = node.kind==='action' ? esc(node.agent||'')+' · '+esc(node.schema||'') : esc(node.host||'system')+' command';
+    var title = node.kind==='command' ? '@'+esc(node.full||node.name) : esc(node.name);
+    document.getElementById('panelBody').innerHTML='<div class="p-kicker">'+kicker+'</div><h2 class="p-title">'+title+'</h2>'+crossLinkHtml(node)+detailHtml(node);
     document.getElementById('panel').classList.add('open');
     document.getElementById('backdrop').classList.add('show');
   }
@@ -653,6 +794,10 @@ const APP = `
 
   document.getElementById('panelClose').addEventListener('click', closePanel);
   document.getElementById('backdrop').addEventListener('click', closePanel);
+  document.getElementById('panelBody').addEventListener('click', function(ev){
+    var b=ev.target.closest?ev.target.closest('.p-link[data-link]'):null;
+    if(b){ var t=panelLinkTargets[+b.getAttribute('data-link')]; if(t) openPanel(t); }
+  });
 
   // actions dialog wiring
   document.getElementById('dlgClose').addEventListener('click', closeDialog);
@@ -728,12 +873,12 @@ export function renderHtml(catalog: Catalog): string {
         "<header>",
         '<div class="titlebar">',
         "<h1>🧭 TypeAgent Action Browser</h1>",
-        `<span class="meta">${counts.agents} agents · ${counts.actions} actions · ${counts.commands} system commands · generated ${generated}</span>`,
+        `<span class="meta">${counts.agents} agents · ${counts.actions} actions · ${counts.commands} commands · generated ${generated}</span>`,
         "</div>",
         '<div class="controls">',
         '<div class="tabs">',
         '<button class="tab active" data-mode="agents">Agents</button>',
-        '<button class="tab" data-mode="commands">System commands</button>',
+        '<button class="tab" data-mode="commands">Commands</button>',
         "</div>",
         '<nav id="breadcrumb" class="breadcrumb"></nav>',
         '<input id="q" class="search" type="search" autocomplete="off" placeholder="Search actions, parameters, phrasings…" />',

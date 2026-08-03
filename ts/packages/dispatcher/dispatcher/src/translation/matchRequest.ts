@@ -7,7 +7,7 @@ import {
     MatchResult,
     ParamObjectType,
     RequestAction,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ActionContext, ActivityContext } from "@typeagent/agent-sdk";
 import { TranslationResult } from "./translateRequest.js";
@@ -420,6 +420,7 @@ export async function matchRequest(
         type: chosen.type,
         requestAction: chosen.match,
         elapsedMs,
+        ruleText: chosen.ruleText,
         config: {
             ...matchConfig,
             explainerName: systemContext.agentCache.explainerName,

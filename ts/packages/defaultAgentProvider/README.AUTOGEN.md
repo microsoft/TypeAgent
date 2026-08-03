@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=f66d060c2d28196c6ce519d1f47eae3a71746ffdfb788d747d9c0f0657ff6ce1 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b28003e6c4c8501102f31e8885510564113a2d15c1675e91dbe5659772a10e75 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # default-agent-provider — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent framework. It is a core component used by the shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents and configurations are available to support the TypeAgent ecosystem, including test agents and dispatcher configurations.
+The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent framework. It is a core component used by the TypeAgent shell and CLI to initialize, manage, and configure both built-in and external agents. This package ensures that the necessary agents and dispatcher configurations are available to support the broader TypeAgent ecosystem.
 
 ## What it does
 
-The `default-agent-provider` package provides a centralized mechanism for managing agents and their configurations. Its primary responsibilities include:
+The `default-agent-provider` package provides a centralized mechanism for managing agents, their configurations, and dispatcher settings. Its primary responsibilities include:
 
 - **Default Agent Providers**: Functions like `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` supply pre-configured agent providers and construction mechanisms for initializing agents.
 - **Agent Source Management**: The `getDefaultAppAgentSource` function manages the connected app-agent source, including the installed-agent record store and the host-owned `@package` agent.
@@ -27,13 +27,13 @@ The `default-agent-provider` package provides a centralized mechanism for managi
 
 The package includes test agents, such as the `vampire` agent, which are used to evaluate dispatcher subsystems like action collision detection. These agents are disabled by default in production but can be enabled for testing purposes via session configuration.
 
-### Collision Testing
-
-The package also includes operational scripts for testing dispatcher functionality and agent behavior under various scenarios, such as action collision detection and optimization pipelines. These scripts are located in the `collisions` directory and are primarily used for internal testing and debugging.
-
 ### Managing Non-Bundled Agents
 
-Some agents, such as `androidMobile` and `vampire`, are not included in the default provider profile. These agents can be installed on demand using the `@package` commands. The catalog source entries for these agents are defined in [../agents/agents.catalog.json](../agents/agents.catalog.json).
+Some agents, such as `androidMobile` and `vampire`, are not included in the default provider profile. These agents can be installed on demand using the `@package` commands. Catalog source entries for these agents are defined in [../agents/agents.catalog.json](../agents/agents.catalog.json).
+
+### Collision Testing
+
+The package includes operational scripts for testing dispatcher functionality and agent behavior under various scenarios, such as action collision detection and optimization pipelines. These scripts are located in the `collisions` directory and are primarily used for internal testing and debugging.
 
 ## Setup
 
@@ -48,6 +48,7 @@ To set up and use the `default-agent-provider` package, follow these steps:
 
    - `CS_BENCH_MAX_OLD_SPACE_MB`: Configure this variable to control the maximum old space memory allocation for the V8 engine.
    - `CS_NEGATION_GUARD`: Set this variable to enable or disable negation guard functionality.
+   - `TYPEAGENT_FEED_DISCOVERY_REGISTRIES`: Specifies the registries for feed discovery.
    - `TYPEAGENT_FEED_REGISTRY`: Specifies the registry for the agent feed. This value should be set in your environment. Refer to the hand-written README for details on how to configure this variable.
    - `TYPEAGENT_FEED_SCOPES`: Defines the scopes for the agent feed. Ensure this variable is set appropriately for your environment.
 
@@ -122,47 +123,49 @@ Workspace:
 
 - [@typeagent/action-grammar](../../packages/actionGrammar/README.md)
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
+- [@typeagent/agent-cache](../../packages/cache/README.md)
 - [@typeagent/agent-rpc](../../packages/agentRpc/README.md)
+- [@typeagent/agent-runtime](../../packages/typeagent/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/aiclient](../../packages/aiclient/README.md)
+- [@typeagent/browser](../../packages/agents/browser/README.md)
+- [@typeagent/calendar](../../packages/agents/calendar/README.md)
+- [@typeagent/chat-agent](../../packages/agents/chat/README.md)
+- [@typeagent/code-agent](../../packages/agents/code/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/config](../../packages/config/README.md)
-- [agent-cache](../../packages/cache/README.md)
+- [@typeagent/desktop-automation](../../packages/agents/desktop/README.md)
+- [@typeagent/discord-agent](../../packages/agents/discord/README.md)
+- [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
+- [@typeagent/email](../../packages/agents/email/README.md)
+- [@typeagent/github-cli-agent](../../packages/agents/github-cli/README.md)
+- [@typeagent/image-agent](../../packages/agents/image/README.md)
+- [@typeagent/ipconfig-agent](../../packages/agents/ipconfig/README.md)
+- [@typeagent/knowledge-processor](../../packages/knowledgeProcessor/README.md)
+- [@typeagent/list-agent](../../packages/agents/list/README.md)
+- [@typeagent/markdown-agent](../../packages/agents/markdown/README.md)
+- [@typeagent/montage-agent](../../packages/agents/montage/README.md)
+- [@typeagent/music](../../packages/agents/player/README.md)
+- [@typeagent/music-local](../../packages/agents/playerLocal/README.md)
+- [@typeagent/os-notifications-agent](../../packages/agents/osNotifications/README.md)
+- [@typeagent/photo-agent](../../packages/agents/photo/README.md)
+- [@typeagent/powershell-typeagent](../../packages/agents/powershell/README.md)
+- [@typeagent/screencapture-agent](../../packages/agents/screencapture/README.md)
+- [@typeagent/selfhelp-agent](../../packages/agents/selfhelp/README.md)
+- [@typeagent/studio-agent](../../packages/agents/studio/README.md)
+- [@typeagent/taskflow-typeagent](../../packages/agents/taskflow/README.md)
+- [@typeagent/telemetry](../../packages/telemetry/README.md)
+- [@typeagent/timer-agent](../../packages/agents/timer/README.md)
+- [@typeagent/typechat-utils](../../packages/utils/typechatUtils/README.md)
+- [@typeagent/utility-typeagent](../../packages/agents/utility/README.md)
+- [@typeagent/video-agent](../../packages/agents/video/README.md)
+- [@typeagent/visualstudio-agent](../../packages/agents/visualStudio/README.md)
+- [@typeagent/weather-agent](../../packages/agents/weather/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
-- [browser-typeagent](../../packages/agents/browser/README.md)
-- [calendar](../../packages/agents/calendar/README.md)
-- [chat-agent](../../packages/agents/chat/README.md)
-- [code-agent](../../packages/agents/code/README.md)
-- [desktop-automation](../../packages/agents/desktop/README.md)
-- [discord-agent](../../packages/agents/discord/README.md)
 - [dispatcher-node-providers](../../packages/dispatcher/nodeProviders/README.md)
-- [email](../../packages/agents/email/README.md)
-- [github-cli-agent](../../packages/agents/github-cli/README.md)
 - [greeting-agent](../../packages/agents/greeting/README.md)
-- [image-agent](../../packages/agents/image/README.md)
-- ipconfig-agent
-- [knowledge-processor](../../packages/knowledgeProcessor/README.md)
-- [list-agent](../../packages/agents/list/README.md)
-- [markdown-agent](../../packages/agents/markdown/README.md)
-- [montage-agent](../../packages/agents/montage/README.md)
-- [music](../../packages/agents/player/README.md)
-- [music-local](../../packages/agents/playerLocal/README.md)
 - [onboarding-agent](../../packages/agents/onboarding/README.md)
-- [os-notifications-agent](../../packages/agents/osNotifications/README.md)
-- [photo-agent](../../packages/agents/photo/README.md)
-- powershell-typeagent
-- [screencapture-agent](../../packages/agents/screencapture/README.md)
 - [settings-agent](../../packages/agents/settings/README.md)
-- studio-agent
-- taskflow-typeagent
-- [telemetry](../../packages/telemetry/README.md)
-- [timer-agent](../../packages/agents/timer/README.md)
-- [typeagent](../../packages/typeagent/README.md)
-- [typechat-utils](../../packages/utils/typechatUtils/README.md)
-- utility-typeagent
-- [video-agent](../../packages/agents/video/README.md)
-- [visualstudio-agent](../../packages/agents/visualStudio/README.md)
-- weather-agent
 - windowsclock-agent
 - workflow-agent
 
@@ -182,19 +185,20 @@ External: `@modelcontextprotocol/sdk`, `@modelcontextprotocol/server-filesystem`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/collisions/expandedCorpusRunner.ts`, `./src/collisions/listModels.ts`, …and 45 more under `./src/`.
+`./src/index.ts`, `./src/collisions/expandedCorpusRunner.ts`, `./src/collisions/listModels.ts`, …and 48 more under `./src/`.
 
 ### Environment variables
 
-_4 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_5 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `CS_BENCH_MAX_OLD_SPACE_MB`
 - `CS_NEGATION_GUARD`
+- `TYPEAGENT_FEED_DISCOVERY_REGISTRIES`
 - `TYPEAGENT_FEED_REGISTRY`
 - `TYPEAGENT_FEED_SCOPES`
 
 ---
 
-_Auto-generated against commit `5fc3c615e8d9fa175d635713c0ef64d7bda1ae1d` on `2026-07-15T22:53:07.031Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
+_Auto-generated against commit `84e4ab4096d5c3ad29bc106810cdf15e6a3138f6` on `2026-07-30T20:00:37.259Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

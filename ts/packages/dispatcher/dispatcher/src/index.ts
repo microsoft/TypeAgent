@@ -3,7 +3,13 @@
 
 export { createDispatcher } from "./dispatcher.js";
 export { IndexManager } from "./context/indexManager.js";
-export type { DispatcherOptions } from "./context/commandHandlerContext.js";
+export type {
+    DispatcherOptions,
+    ConversationIndexTarget,
+    ConversationIndexResult,
+    ConversationIndexProgress,
+    ConversationSummaryResult,
+} from "./context/commandHandlerContext.js";
 export {
     PortRegistrar,
     SYSTEM_SESSION_CONTEXT_ID,
@@ -22,6 +28,7 @@ export type {
     AppAgentProviderSetController,
     AppAgentSource,
     AppAgentConnection,
+    InstallableAgentSummary,
     ConstructionProvider,
 } from "./agentProvider/agentProvider.js";
 export type {

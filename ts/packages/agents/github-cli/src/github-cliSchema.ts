@@ -24,6 +24,7 @@ export type GithubCliActions =
     | OrgViewAction
     | PrCreateAction
     | PrCloseAction
+    | PrMergedStatusAction
     | PrMergeAction
     | PrListAction
     | PrViewAction
@@ -281,6 +282,28 @@ export type PrCloseAction = {
     actionName: "prClose";
     parameters: {
         number?: number;
+    };
+};
+
+// Check whether a branch has already been merged into a base branch.
+//
+// Example:
+// User: did dev/robgruen/dogfooding7 get merged into main?
+// Agent: { actionName: "prMergedStatus", parameters: { branch: "dev/robgruen/dogfooding7", base: "main" } }
+export type PrMergedStatusAction = {
+    actionName: "prMergedStatus";
+    parameters: {
+        // Source branch to check (PR head branch).
+        branch: string;
+
+        // Target base branch. Defaults to "main" when omitted.
+        base?: string;
+
+        // OWNER/REPO slug (e.g. "microsoft/TypeAgent"). Omit to use current repo.
+        repo?: string;
+
+        // Maximum number of merged PR matches to inspect.
+        limit?: number;
     };
 };
 

@@ -21,6 +21,7 @@ import { clearReasoningSession as clearCopilotReasoningSession } from "../../../
 
 class HistoryListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List history";
+    public readonly action = "listHistory";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const history = systemContext.chatHistory;
@@ -30,6 +31,7 @@ class HistoryListCommandHandler implements CommandHandlerNoParams {
 
 class HistoryClearCommandHandler implements CommandHandler {
     public readonly description = "Clear the history";
+    public readonly action = "clearHistory";
     public readonly parameters = {
         flags: {
             activity: {
@@ -59,6 +61,7 @@ class HistoryClearCommandHandler implements CommandHandler {
 class HistoryDeleteCommandHandler implements CommandHandler {
     public readonly description =
         "Delete a specific message from the chat history";
+    public readonly action = "deleteHistory";
     public readonly parameters = {
         args: {
             index: {

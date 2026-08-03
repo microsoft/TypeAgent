@@ -61,6 +61,17 @@ export function toHistoryReplayMessage(
                         tokenUsage: (e as any).tokenUsage,
                         actionTokenUsage: (e as any).actionTokenUsage,
                     };
+                case "notify":
+                    // Persisted "explained" notifications restore the
+                    // roadrunner icon + popover on replayed user bubbles.
+                    return {
+                        type: "notify",
+                        seq: e.seq,
+                        timestamp: e.timestamp,
+                        notificationId: clientIdOf(e.notificationId),
+                        event: e.event,
+                        data: e.data,
+                    };
                 default:
                     return { type: "skip", seq: e.seq };
             }

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { openai as ai } from "@typeagent/aiclient";
-import { HistoryContext, RequestAction } from "agent-cache";
+import { HistoryContext, RequestAction } from "@typeagent/agent-cache";
 import {
     getActivityActiveSchemas,
     getActivityCacheSpec,
@@ -16,7 +16,7 @@ import {
     requestIdToString,
 } from "../context/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
-import { CachedImageWithDetails } from "typechat-utils";
+import { CachedImageWithDetails } from "@typeagent/typechat-utils";
 import { unicodeChar } from "../command/command.js";
 import { confirmTranslation } from "./confirmTranslation.js";
 import {
@@ -53,10 +53,16 @@ export function createHistoryContext(
         .additionalInstructions
         ? context.chatHistory.getCurrentInstructions()
         : undefined;
+    const actions = translateConfig.promptConfig.recentActions
+        ? context.chatHistory.getRecentActions(
+              translateConfig.promptConfig.recentActionsLimit,
+          )
+        : undefined;
     return {
         promptSections,
         entities,
         additionalInstructions,
+        actions,
         activityContext: context.activityContext,
     };
 }
@@ -67,6 +73,9 @@ export type InterpretResult = {
     fromUser: boolean;
     fromCache: "construction" | "grammar" | false;
     tokenUsage?: ai.CompletionUsageStats | undefined;
+    // The matched construction/rule pattern text (cache hits only), surfaced
+    // for the explained popover.
+    ruleText?: string | undefined;
 };
 
 export function getCannotUseCacheReason(
@@ -327,5 +336,6 @@ export async function interpretRequest(
         fromCache:
             translateResult.type === "translate" ? false : translateResult.type,
         tokenUsage,
+        ruleText: translateResult.ruleText,
     };
 }

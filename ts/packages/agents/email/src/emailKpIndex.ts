@@ -32,8 +32,8 @@ import {
     IndexState,
     generateAnswer,
     AnswerResult,
-} from "kp";
-import { IEmailProvider, EmailMessage } from "graph-utils";
+} from "@typeagent/kp";
+import { IEmailProvider, EmailMessage } from "@typeagent/graph-utils";
 import { emailsToChunks } from "./emailKpBridge.js";
 import * as path from "path";
 import * as os from "os";

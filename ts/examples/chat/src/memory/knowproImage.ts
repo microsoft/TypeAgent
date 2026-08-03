@@ -13,8 +13,8 @@ import {
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import * as kp from "knowpro";
-import * as im from "image-memory";
+import * as kp from "@typeagent/knowpro";
+import * as im from "@typeagent/image-memory";
 import fs from "fs";
 import path from "path";
 import {
@@ -23,7 +23,7 @@ import {
     sourcePathToMemoryIndexPath,
 } from "./knowproCommon.js";
 import { argDestFile, argSourceFile } from "../common.js";
-import { ensureDir, getFileName } from "typeagent";
+import { ensureDir, getFileName } from "@typeagent/agent-runtime";
 
 export type KnowproImageContext = {
     printer: KnowProPrinter;

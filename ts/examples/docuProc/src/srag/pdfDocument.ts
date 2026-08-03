@@ -1,12 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import {
     conversation as kpLib,
     createEmbeddingCache,
     TextEmbeddingModelWithCache,
-} from "knowledge-processor";
+} from "@typeagent/knowledge-processor";
 
 import { openai } from "@typeagent/aiclient";
 import registerDebug from "debug";

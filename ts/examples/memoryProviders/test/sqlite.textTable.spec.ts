@@ -23,8 +23,8 @@ import {
     testIf,
     uniqueSourceIds,
 } from "./testCore.js";
-import * as knowLib from "knowledge-processor";
-import { asyncArray, ScoredItem } from "typeagent";
+import * as knowLib from "@typeagent/knowledge-processor";
+import { asyncArray, ScoredItem } from "@typeagent/agent-runtime";
 
 import {
     createTemporalLogTable,

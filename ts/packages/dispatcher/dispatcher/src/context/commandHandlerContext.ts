@@ -18,9 +18,9 @@ import {
     PromptLogger,
     createPromptLogger,
     PromptLoggerOptions,
-} from "telemetry";
+} from "@typeagent/telemetry";
 import { DevTrace } from "./devTrace.js";
-import { AgentCache } from "agent-cache";
+import { AgentCache } from "@typeagent/agent-cache";
 import { randomUUID } from "crypto";
 import {
     DispatcherConfig,
@@ -56,9 +56,13 @@ import {
     AppAgentEvent,
     ActivityContext,
 } from "@typeagent/agent-sdk";
-import { Profiler } from "telemetry";
-import { conversation as Conversation } from "knowledge-processor";
-import { ConversationMemory } from "conversation-memory";
+import { Profiler } from "@typeagent/telemetry";
+import { conversation as Conversation } from "@typeagent/knowledge-processor";
+import { ConversationMemory } from "@typeagent/conversation-memory";
+// Type-only import: the reasoning modules statically import this file, so a
+// runtime import here would create a cycle. subagentManager.ts is a leaf, and
+// `import type` is erased at compile time, so this stays cycle-free.
+import type { SubagentManager } from "../reasoning/subagentManager.js";
 import {
     AppAgentManager,
     AppAgentStateInitSettings,
@@ -123,7 +127,7 @@ import {
 } from "@typeagent/action-grammar";
 import fs from "node:fs";
 import { CosmosClient, PartitionKeyBuilder } from "@azure/cosmos";
-import { CosmosPartitionKeyBuilder } from "telemetry";
+import { CosmosPartitionKeyBuilder } from "@typeagent/telemetry";
 import { DefaultAzureCredential } from "@azure/identity";
 import { DisplayLog } from "../displayLog.js";
 import {
@@ -188,6 +192,103 @@ export type CopilotImporter = (
     onProgress?: (progress: CopilotImportProgress) => void,
 ) => Promise<CopilotImportSummary>;
 
+/**
+ * Host-provided sink that mirrors each conversation turn (user request or
+ * assistant result) into a cross-conversation content index, tagged by the
+ * host's conversation id. Injected per-conversation by the agent-server;
+ * undefined for standalone hosts. Called independently of the knowledge-
+ * extraction flags (which connected mode disables), so the unified index still
+ * populates there.
+ */
+export type ConversationContentSink = (
+    text: string,
+    sender: "user" | "assistant",
+    turnKey?: string,
+) => void;
+
+/**
+ * Host-provided cross-conversation content search over the unified message
+ * index. Returns the best-matching conversations (id + name) with a relevance
+ * score in [0, 1] and representative snippets, best first. Injected by the
+ * agent-server; undefined for hosts without a unified content index.
+ */
+export type ConversationSearcher = (
+    query: { question?: string | undefined; terms?: string[] | undefined },
+    maxMatches?: number,
+) => Promise<
+    {
+        conversationId: string;
+        name: string;
+        score: number;
+        snippets: string[];
+    }[]
+>;
+
+/**
+ * The result of summarizing a conversation (see {@link ConversationSummarizer}):
+ * the summary text, or why one could not be produced.
+ */
+export type ConversationSummaryResult =
+    | { kind: "ok"; conversationId: string; name: string; summary: string }
+    | { kind: "not-found"; query: string }
+    | { kind: "empty"; conversationId: string; name: string }
+    | { kind: "unavailable"; reason: string };
+
+/**
+ * Host-provided conversation summarizer. Resolves a conversation by name or
+ * topic (or the current one when omitted), reads its stored transcript, and
+ * returns an LLM-written summary. Injected by the agent-server; undefined for
+ * hosts without stored conversations.
+ */
+export type ConversationSummarizer = (
+    nameOrTopic?: string | undefined,
+) => Promise<ConversationSummaryResult>;
+
+/**
+ * Which conversations a content-index backfill should cover: the one the
+ * command ran in (`current`), a specific one (`named`), or every conversation
+ * (`all`).
+ */
+export type ConversationIndexTarget =
+    | { scope: "current" }
+    | { scope: "all" }
+    | { scope: "named"; name: string };
+
+/** Per-conversation outcome of a content-index backfill. */
+export type ConversationIndexResult = {
+    indexed: {
+        name: string;
+        /** User turns newly added to the index by this backfill. */
+        newlyIndexed: number;
+        /** Total user turns in the conversation (already-indexed + new). */
+        totalMessages: number;
+    }[];
+    /** Set to the requested name when a `named` target matched nothing. */
+    notFound?: string;
+};
+
+/** Progress of an in-flight content-index backfill (user turns). */
+export type ConversationIndexProgress = {
+    /** User turns indexed and persisted so far. */
+    done: number;
+    /** Total user turns this backfill will index. */
+    total: number;
+    /** Name of the conversation whose turns are currently being indexed. */
+    name: string;
+};
+
+/**
+ * Host-provided backfill of conversation history into the unified content
+ * index (see {@link ConversationSearcher}). Indexes the user turns not already
+ * present so past conversations become searchable. `onProgress` (optional) is
+ * called as turns are indexed, for a live progress display. Injected by the
+ * agent-server; undefined for hosts without a unified content index.
+ */
+export type ConversationIndexer = (
+    target: ConversationIndexTarget,
+    onProgress?: (progress: ConversationIndexProgress) => void,
+) => Promise<ConversationIndexResult>;
+
 // A request-scoped route chosen by the registry-first contextSelector tier
 // (§11.4) when the topical winner is a neighborhood sibling with no cache
 // MatchResult. Unlike `collisionOneShotPicks` (durable, cross-turn, explicit
@@ -211,6 +312,10 @@ export type CommandHandlerContext = {
     // teardown, which deregisters this host from each source's registry without
     // tearing down the shared provider instances.
     readonly appAgentConnections: AppAgentConnection[];
+    // The injected dynamic (installed) agent sources, retained after connect so
+    // read-only consumers (e.g. reasoning's install suggestions) can enumerate
+    // installable agents via each source's optional `listAvailableAgents`.
+    readonly appAgentSources: AppAgentSource[];
     session: Session;
 
     readonly persistDir: string | undefined;
@@ -241,6 +346,30 @@ export type CommandHandlerContext = {
      * mode).
      */
     readonly copilotImport?: CopilotImporter | undefined;
+    /**
+     * Host-provided sink mirroring each turn into the cross-conversation
+     * content index (see {@link ConversationContentSink}). Undefined for hosts
+     * without a unified index.
+     */
+    readonly conversationContentSink?: ConversationContentSink | undefined;
+    /**
+     * Host-provided cross-conversation content search (see
+     * {@link ConversationSearcher}). Injected by the agent-server; undefined
+     * for hosts without a unified content index.
+     */
+    readonly searchConversations?: ConversationSearcher | undefined;
+    /**
+     * Host-provided conversation summarizer (see {@link ConversationSummarizer}).
+     * Injected by the agent-server; undefined for hosts without stored
+     * conversations.
+     */
+    readonly summarizeConversation?: ConversationSummarizer | undefined;
+    /**
+     * Host-provided backfill of conversation history into the unified content
+     * index (see {@link ConversationIndexer}). Injected by the agent-server;
+     * undefined for hosts without a unified content index.
+     */
+    readonly indexConversations?: ConversationIndexer | undefined;
     // Per activation configs
     developerMode?: boolean;
     // When true, each translated request is confirmed via the client
@@ -272,7 +401,17 @@ export type CommandHandlerContext = {
     noReasoning: boolean;
     isInsideReasoningLoop: boolean; // true while the MCP execute_action handler is dispatching a sub-action
     reasoningSourceIcon?: string | undefined; // engine-specific icon override while inside a reasoning loop
+    // Lazily created by the reasoning loop when execution.subagents is enabled;
+    // owns the spawned command-executor subagent processes for this session and
+    // is disposed on session close.
+    subagentManager?: SubagentManager | undefined;
     commandResult?: CommandResult | undefined;
+    // Monotonic count of non-transient display output sent to the client this
+    // session. executeAction snapshots it around an agent's executeAction call
+    // to tell whether the action (or a command it delegated to) already showed
+    // visible output, so it can skip the redundant "Action ... completed."
+    // bubble. Transient status (appendDisplay mode "temporary") does not count.
+    displayCount: number;
     chatHistory: ChatHistory;
     constructionProvider?: ConstructionProvider | undefined;
     displayLog: DisplayLog;
@@ -313,10 +452,13 @@ export type CommandHandlerContext = {
     // The registry path the loaded `collisionRegistry` was built from, so we
     // can detect config changes and reload.
     collisionRegistryPath: string;
-    // Drives the interactive `preference-clarify` card (candidate pick +
-    // "remember this" checkbox). The dispatcher AppAgent's handleChoice
-    // delegates back to this manager.
-    collisionChoiceManager: ChoiceManager;
+    // Shared per-context ChoiceManager for the built-in agents' interactive
+    // choice/form cards. The dispatcher AppAgent's handleChoice uses it for the
+    // collision `preference-clarify` card (candidate pick + "remember this"
+    // checkbox); the system AppAgent's handleChoice uses it for the `@demo`
+    // walkthrough. Callbacks are keyed by unique choiceId, so both agents can
+    // share one manager.
+    choiceManager: ChoiceManager;
     // One-shot resolution overrides as a set of chosen member ids
     // ("schema.action"). Set just before re-running the original request from
     // a clarify pick so the re-translation resolves deterministically to the
@@ -471,6 +613,34 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
      * agent-server; omitted by hosts without a ConversationManager.
      */
     copilotImport?: CopilotImporter | undefined;
+
+    /**
+     * Sink mirroring each turn into the host's cross-conversation content
+     * index (see {@link ConversationContentSink}). Injected per-conversation
+     * by the agent-server; omitted by standalone hosts.
+     */
+    conversationContentSink?: ConversationContentSink | undefined;
+
+    /**
+     * Cross-conversation content search over the host's unified message index
+     * (see {@link ConversationSearcher}). Injected by the agent-server;
+     * omitted by standalone hosts without a unified index.
+     */
+    searchConversations?: ConversationSearcher | undefined;
+
+    /**
+     * Conversation summarizer over the host's stored transcripts (see
+     * {@link ConversationSummarizer}). Injected by the agent-server; omitted by
+     * standalone hosts.
+     */
+    summarizeConversation?: ConversationSummarizer | undefined;
+
+    /**
+     * Backfill of conversation history into the host's unified content index
+     * (see {@link ConversationIndexer}). Injected by the agent-server; omitted
+     * by standalone hosts without a unified index.
+     */
+    indexConversations?: ConversationIndexer | undefined;
 };
 
 async function getSession(
@@ -1060,6 +1230,7 @@ export async function initializeCommandHandlerContext(
             appAgentProviderSetController:
                 undefined as unknown as AppAgentProviderSetControllerImpl,
             appAgentConnections: [],
+            appAgentSources: options?.appAgentSources ?? [],
             session,
             persistDir,
             instanceDir,
@@ -1073,6 +1244,10 @@ export async function initializeCommandHandlerContext(
             clientIO,
             getConversationList: options?.getConversationList,
             copilotImport: options?.copilotImport,
+            conversationContentSink: options?.conversationContentSink,
+            searchConversations: options?.searchConversations,
+            summarizeConversation: options?.summarizeConversation,
+            indexConversations: options?.indexConversations,
 
             // Runtime context
             commandLock: createLimiter(1), // Make sure we process one command at a time.
@@ -1083,6 +1258,7 @@ export async function initializeCommandHandlerContext(
             noReasoning: false,
             isInsideReasoningLoop: false,
             reasoningSourceIcon: undefined,
+            subagentManager: undefined,
             pendingToggleTransientAgents: [],
             agentCache: await getAgentCache(
                 session,
@@ -1104,6 +1280,7 @@ export async function initializeCommandHandlerContext(
             promptLogger,
             devTrace,
             batchMode: false,
+            displayCount: 0,
             pendingChoiceRoutes: new Map(),
             instanceDirLock,
             constructionProvider,
@@ -1131,7 +1308,7 @@ export async function initializeCommandHandlerContext(
             ),
             collisionRegistryPath:
                 session.getConfig().collision.preference.registryPath,
-            collisionChoiceManager: new ChoiceManager(),
+            choiceManager: new ChoiceManager(),
             collisionOneShotPicks: new Set(),
             pendingTopicalRoute: undefined,
             conversationSignal: new RingBufferSignalSource(
@@ -1703,6 +1880,16 @@ export async function closeCommandHandlerContext(
 ) {
     // Stop accepting exclusive mutations in this closing session.
     context.appAgentProviderSetController.dispose();
+    // Tear down any reasoning subagents (spawned command-executor processes and
+    // their isolated conversations) before the rest of the session unwinds.
+    if (context.subagentManager) {
+        try {
+            await context.subagentManager.dispose();
+        } catch (e) {
+            debugError(`Failed to dispose subagent manager: ${e}`);
+        }
+        context.subagentManager = undefined;
+    }
     // Drain in-flight/queued entries before tearing down agents.
     try {
         await context.requestQueue.drainAndStop();

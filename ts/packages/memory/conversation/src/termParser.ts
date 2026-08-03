@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kp from "knowpro";
-import { split } from "knowledge-processor";
+import * as kp from "@typeagent/knowpro";
+import { split } from "@typeagent/knowledge-processor";
 import { addNoiseWordsFromFile } from "./memory.js";
-import { getAbsolutePathFromUrl } from "memory-storage";
+import { getAbsolutePathFromUrl } from "@typeagent/memory-storage";
 
 export class SearchTermParser {
     public noiseTerms: Set<string>;

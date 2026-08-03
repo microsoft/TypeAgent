@@ -10,7 +10,8 @@ import type {
 } from "agent-dispatcher";
 import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
 import type { ConversationInfo } from "@typeagent/agent-server-client";
-import type { ConnectionStatus } from "chat-ui";
+import type { ConnectionStatus } from "@typeagent/chat-ui";
+import type { DisplayContent } from "@typeagent/agent-sdk";
 
 export type { ShellUserSettings };
 
@@ -107,8 +108,7 @@ export interface ClientAPI {
         { conversationId: string; name: string } | undefined
     >;
     conversationManageAction(payload: ManageConversationPayload): Promise<{
-        html: string;
-        kind: "info" | "warning" | "error";
+        content: DisplayContent;
         switched?: boolean;
     }>;
 

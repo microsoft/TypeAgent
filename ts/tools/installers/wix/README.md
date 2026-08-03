@@ -20,7 +20,10 @@ ts/tools/scripts/
   └── getCert.mjs            # (existing) Manage dev certs in Key Vault
 
 ts/tools/installers/wix/
-  └── TypeAgent-AgentServer.wxs   # WiX project definition
+  ├── TypeAgent-AgentServer.wxs   # WiX project definition
+  ├── extract-payload.ps1         # Deferred CA: unpack payload/*.zip at install time
+  ├── install-prereqs.ps1         # Deferred CA: npm i -g claude+copilot, warn on Node<22
+  └── register-plugin.ps1         # Deferred CA: register/unregister the Copilot CLI plugin
 
 pipelines/
   └── azure-build-publish-all.yml   # ADO pipeline (build_sign_publish_msi job)
@@ -72,7 +75,7 @@ The pipeline handles this automatically via:
 
 ## Local Build & Test
 
-Use the local source build to validate WiX changes before pushing to CI. This is the recommended path for catching `LGHT`/`CANDLE` errors early — it runs the same WiX heat → candle → light pipeline that CI does, but stages the artifacts from your local repo build instead of downloading from the ADO feed. No Azure CLI login required.
+Use the local source build to validate WiX changes before pushing to CI. This is the recommended path for catching `LGHT`/`CANDLE` errors early — it runs the same WiX zip → candle → light pipeline that CI does, but stages the artifacts from your local repo build instead of downloading from the ADO feed. No Azure CLI login required.
 
 ### Option A: Build from local repo (recommended for WiX development)
 
@@ -90,7 +93,8 @@ pnpm run build
 node tools/scripts/deployAgentServer.mjs `
   --out "$env:TEMP\typeagent-msi-stage\agent-server" `
   --platform win32 --arch x64 `
-  --profile service
+  --profile inbox `
+  --external-cli
 ```
 
 #### 3. Stage copilot-plugin
@@ -232,11 +236,39 @@ The UI is a custom scheme (`WixUI_TypeAgent`): WelcomeDlg → LicenseAgreementDl
 custom action runs `node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider
 [PROVIDER] --embedding [EMBEDDING] --ollama-host [OLLAMAHOST] --force` as the
 installing user, writing `config.local.yaml` to `~/.typeagent`. For `AISYSTEMS`
-(the default), config provisioning remains an interactive post-install step
-(`az login` + `getKeys`), since it requires browser/device authentication that a
-silent installer cannot perform. Fine-grained overrides (chat model, embedding
-endpoint, API keys) are available on the `provision`/`generate-selfhost-config`
-CLI; re-run provisioning post-install to adjust them.
+(the default), the MSI **attempts** provisioning during install via a deferred,
+impersonated (interactive) custom action `ProvisionAiSystemsConfig` that runs
+`node "[INSTALLFOLDER]typeagent-serve.mjs" provision` (browser/device sign-in as
+the installing user). It is **non-fatal**: if sign-in is unavailable during the
+install, the final page (ExitDialog) reminds the user to run `provision`
+manually. Because the embedding config for `AISYSTEMS` comes from Key Vault, the
+embedding radio and Ollama host field are **disabled** in the dialog when
+`PROVIDER=AISYSTEMS` (they apply only to the self-host providers). Fine-grained
+overrides (chat model, embedding endpoint, API keys) are available on the
+`provision`/`generate-selfhost-config` CLI; re-run provisioning post-install to
+adjust them.
+
+## Agent-server prerequisites & lifecycle
+
+The MSI ships the **external** agent-server variant, which resolves the `claude`
+and `copilot` CLIs from `PATH` at runtime. After extracting the payload the MSI
+runs these deferred, impersonated custom actions (each **non-fatal** so a hiccup
+never rolls back the agent-server install; issues surface as warnings + the
+ExitDialog reminder):
+
+| Action             | Property gate             | What it does                                                                                                                                                                                        |
+| ------------------ | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `InstallPrereqs`   | —                         | Runs `install-prereqs.ps1`: installs `claude` (`@anthropic-ai/claude-code`) and `copilot` (`@github/copilot`) via `npm i -g` when missing, and warns if Node < 22. Mirrors `install-typeagent.ps1`. |
+| `StartAgentServer` | `STARTSERVER=1` (default) | `node typeagent-serve.mjs start` — starts the daemon.                                                                                                                                               |
+| `EnableAutostart`  | `AUTOSTART=1` (default)   | `node typeagent-serve.mjs autostart enable` — registers a per-user logon Scheduled Task. Removed on uninstall (`DisableAutostart`).                                                                 |
+
+```powershell
+# Skip starting/autostarting the daemon (e.g. provisioning happens later)
+msiexec /i TypeAgent-<version>-win32-x64.msi STARTSERVER=0 AUTOSTART=0
+```
+
+Both CLIs require a one-time interactive sign-in (`claude`, then `copilot`)
+before agent actions work; the ExitDialog reminds the user of this.
 
 ## Optional: install the TypeAgent Shell (desktop app)
 
@@ -244,15 +276,25 @@ The MSI can optionally download and silently install the **TypeAgent Shell**
 (the Electron desktop app) from the same Azure Blob Storage container used by the
 shell's auto-update feed. This is off by default. During an interactive install
 a checkbox on **ProviderDlg** ("Also install the TypeAgent Shell desktop app")
-enables it; silently, set the public properties:
+enables it; silently, set the public properties. **The download location is
+baked at build time** (`build-msi.mjs --shell-storage/--shell-container`; the
+pipeline overrides the local CI defaults with its storage account/container),
+so the checkbox works on a fresh machine without extra input. If a build ships
+with neither a blob location nor a complete feed configuration and `SHELL=1` is
+requested, the `ShellLocationMissing` action **aborts loudly** with a clear
+message rather than silently skipping. Blob access is not required when the
+feed fallback is configured.
 
-| Property         | Values / example                                      | Default | Notes                                                                        |
-| ---------------- | ----------------------------------------------------- | ------- | ---------------------------------------------------------------------------- |
-| `SHELL`          | `0`, `1`                                              | `0`     | `1` enables the optional shell download + silent install.                    |
-| `SHELLCHANNEL`   | `lkg`, `test`, `ci`                                   | `lkg`   | electron-updater channel to read (`<channel>-<arch>.yml`).                   |
-| `SHELLSTORAGE`   | Azure Storage account name                            | —       | Used with the Azure CLI (`az login`) to read the shell blobs.                |
-| `SHELLCONTAINER` | Azure Storage container name                          | —       | Defaults to `SHELLSTORAGE` if omitted.                                       |
-| `SHELLBASEURL`   | `https://<account>.blob.core.windows.net/<container>` | —       | Anonymous HTTPS base for a **public** container; when set, `az` is not used. |
+| Property           | Values / example                                      | Default                                        | Notes                                                                        |
+| ------------------ | ----------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- |
+| `SHELL`            | `0`, `1`                                              | `0`                                            | `1` enables the optional shell download + silent install.                    |
+| `SHELLCHANNEL`     | `lkg`, `test`, `ci`                                   | local build: `ci`; pipeline: release channel   | electron-updater channel to read (`<channel>-<arch>.yml`).                   |
+| `SHELLSTORAGE`     | Azure Storage account name                            | local build: `typeagentshell`                  | Used with the Azure CLI (`az login`) to read the shell blobs.                |
+| `SHELLCONTAINER`   | Azure Storage container name                          | local build: `typeagentshell`                  | Defaults to `SHELLSTORAGE` if omitted.                                       |
+| `SHELLBASEURL`     | `https://<account>.blob.core.windows.net/<container>` | build default (derived from storage/container) | Anonymous HTTPS base for a **public** container; when set, `az` is not used. |
+| `SHELLFEED`        | Azure Artifacts feed name                             | local build: `typeagent`                       | Fallback source when blob download fails.                                    |
+| `SHELLPACKAGE`     | Universal Package name                                | local build: `typeagent-shell.win32-x64`       | Package containing channel metadata and the setup executable.                |
+| `SHELLFEEDVERSION` | Exact package version                                 | latest listed version                          | When omitted, prerelease versions are included in latest-version resolution. |
 
 ```powershell
 # Authenticated (az login) blob read from a private container
@@ -271,7 +313,14 @@ the per-user shell install target resolve correctly. The action is **non-fatal**
 `%LOCALAPPDATA%\TypeAgent\logs\msi-install-shell.log` but does not roll back the
 agent-server install. Because the shell shares `~/.typeagent/config.local.yaml`,
 no extra config step is needed. `install-shell.ps1` is the Windows sibling of
-`install-shell.sh` and can also be run standalone.
+`install-shell.sh` and can also be run standalone. If no feed version is baked
+into the MSI, the script queries Azure Artifacts and downloads the latest listed
+version, including prerelease versions. Any blob metadata or installer download
+failure is logged and automatically falls back to the package feed.
+
+Local MSI packaging resolves the latest listed shell Universal Package version
+and bakes that exact version into the MSI. Pipeline builds continue to pass the
+version produced by the current pipeline run.
 
 ## Pipeline Usage
 
@@ -390,7 +439,15 @@ az account show  # Verify
 
 ### WiX Best Practices
 
-- Use `heat.exe dir` to auto-generate component trees (currently manual)
+- The agent-server and copilot-plugin payloads ship as single zip files
+  (`payload\*.zip`) that a deferred custom action (`extract-payload.ps1`) unpacks
+  at install time. This avoids harvesting a flat `node_modules` into tens of
+  thousands of components, which made the installer's "Computing space
+  requirements" (CostFinalize) step take minutes. Do **not** reintroduce
+  `heat.exe dir` harvesting for these trees.
+- Payload extraction uses Windows inbox `tar.exe`, with separate custom actions
+  for the agent-server and Copilot plugin so the progress dialog identifies each
+  stage.
 - Store WiX includes (`.wxi`) in `ts/tools/installers/wix/includes/`
 - Keep `.wxs` files simple; delegate complexity to `.wxi` includes
 - Test locally before pushing to main (MSI builds are slow)

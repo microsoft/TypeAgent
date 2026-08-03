@@ -47,13 +47,13 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *
  *   <Expression> ::= ( <StringExpr> | <VariableExpr> | <RuleRefExpr> | <GroupExpr> )+
  *
- *   // <Char> is any character except special chars (| ( ) < > $ - ; { } [ ]) and backslash,
- *   // and not the start of a comment sequence ("//" or "/*").
- *   // A "flex space" is a separator position in the grammar source, created by any unescaped
- *   // whitespace or comment between sub-expressions.
- *   // When matching input, a flex space accepts any run of whitespace or punctuation characters.
- *   // The minimum number required is controlled by the per-rule spacing mode
- *   // annotation (see SpacingMode type above for the full semantics of each mode).
+ *   // A "flex space" is a boundary where input separators may occur. A boundary exists:
+ *   //   - between adjacent sub-expressions, even without source whitespace (e.g. hello$(x));
+ *   //   - between literal segments separated by unescaped whitespace; and
+ *   //   - where a comment splits literal text.
+ *   // A run of source whitespace creates one boundary. At runtime, a boundary matches
+ *   // JavaScript whitespace or Unicode punctuation. The spacing mode determines whether
+ *   // it matches exactly zero, zero or more, or one or more characters (see SpacingMode above).
  *   //
  *   // The spacing mode is set per-rule via a [spacing=<mode>] annotation immediately
  *   // after the rule name: <rule> [spacing=required] = ...;
@@ -61,8 +61,10 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   // Per-alternate annotations override the definition-level setting.
  *   // Omitting the annotation is equivalent to [spacing=auto].
  *   //
+ *   // <Char> is any character except special chars (| ( ) < > $ - ; { } [ ]) and backslash,
+ *   // and not the start of a comment sequence ("//" or "/*"). Escape a special character
+ *   // or comment opener to make it literal (e.g. \|, \//, or \/*).
  *   // An escaped space (e.g. "\ ") is treated as a literal character, not a flex space.
- *   // Special chars must be escaped with backslash to appear as literal text.
  *   <StringExpr> ::= ( <EscapeSequence> | <WS> | <Char> )+
  *   <EscapeSequence> ::= "\\"<EscapedChar>
  *   <EscapedChar> ::= "0"                        // null character \0
@@ -83,7 +85,6 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <UnicodeCodePoint> ::= [0-9A-Fa-f]+
  *   <VariableExpr> ::= "$(" <VariableSpecifier> ( ")" | ")?" )
  *
- *    // TODO: Support nested instead of just Rule Ref
  *   <VariableSpecifier> ::= <VarName> (":" (<TypeName> | <RuleName>))?
  *
  *   <RuleRefExpr> ::= <RuleName>
@@ -393,11 +394,11 @@ export type GrammarParseResult = {
 export function isWhitespace(char: string) {
     return /^\s$/.test(char);
 }
-function isIdStart(char: string) {
+export function isIdStart(char: string) {
     return /^\p{ID_Start}$/u.test(char);
 }
 
-function isIdContinue(char: string) {
+export function isIdContinue(char: string) {
     return /^\p{ID_Continue}$/u.test(char);
 }
 // Even some of these are not used yet, include them for future use.

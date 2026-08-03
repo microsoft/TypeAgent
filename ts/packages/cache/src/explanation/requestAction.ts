@@ -17,6 +17,10 @@ export type HistoryContext = {
     promptSections: PromptSection[];
     entities: PromptEntity[];
     additionalInstructions?: string[] | undefined;
+    // Structured action(s) executed in the recent chat history window, oldest
+    // first. Rendered into the translation prompt so the model can see which
+    // requests were already carried out and avoid re-issuing them.
+    actions?: AppAction[] | undefined;
     activityContext?: ActivityContext | undefined;
 };
 

@@ -4,7 +4,7 @@
 import { ActionSchemaFileCache } from "../src/translation/actionSchemaFileCache.js";
 import { ActionConfig } from "../src/translation/actionConfig.js";
 import { SchemaContent } from "@typeagent/agent-sdk";
-import { computeActionSchemaFileHash } from "agent-cache";
+import { computeActionSchemaFileHash } from "@typeagent/agent-cache";
 
 function makePasActionConfig(content: string): ActionConfig {
     const schemaFile: SchemaContent = {

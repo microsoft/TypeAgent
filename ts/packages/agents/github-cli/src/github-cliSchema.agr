@@ -141,6 +141,52 @@
     }
 };
 
+<PrMergedStatus> = did (the)? $(branch:word) (branch)? get merged into $(base:word) -> {
+    actionName: "prMergedStatus",
+    parameters: {
+        branch,
+        base
+    }
+}
+  | did (the)? $(branch:word) (branch)? get merged into $(base:word) in $(repo:wildcard) -> {
+    actionName: "prMergedStatus",
+    parameters: {
+        branch,
+        base,
+        repo
+    }
+}
+  | has (the)? $(branch:word) (branch)? been merged into $(base:word) -> {
+    actionName: "prMergedStatus",
+    parameters: {
+        branch,
+        base
+    }
+}
+  | has (the)? $(branch:word) (branch)? been merged into $(base:word) in $(repo:wildcard) -> {
+    actionName: "prMergedStatus",
+    parameters: {
+        branch,
+        base,
+        repo
+    }
+}
+  | is (the)? $(branch:word) (branch)? merged into $(base:word) -> {
+    actionName: "prMergedStatus",
+    parameters: {
+        branch,
+        base
+    }
+}
+  | is (the)? $(branch:word) (branch)? merged into $(base:word) in $(repo:wildcard) -> {
+    actionName: "prMergedStatus",
+    parameters: {
+        branch,
+        base,
+        repo
+    }
+};
+
 <PrMerge> = merge PR $(number:number) -> {
     actionName: "prMerge",
     parameters: {
@@ -446,6 +492,7 @@ import { GithubCliActions } from "./github-cliSchema.ts";
   | <IssueView>
   | <PrCreate>
   | <PrClose>
+  | <PrMergedStatus>
   | <PrMerge>
   | <PrList>
   | <PrView>

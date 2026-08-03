@@ -5,7 +5,7 @@ import {
     getAttachmentFileName,
     isImageAttachment,
     rehydrateImageAttachments,
-} from "typechat-utils";
+} from "@typeagent/typechat-utils";
 import {
     ChatResponseAction,
     Entity,

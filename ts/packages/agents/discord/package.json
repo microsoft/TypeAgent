@@ -1,8 +1,7 @@
 {
-  "name": "discord-agent",
+  "name": "@typeagent/discord-agent",
   "version": "0.0.1",
-  "private": true,
-  "description": "TypeAgent agent for discord",
+  "description": "Discord chat agent — send messages, draft messages from intent, list channels, browse channel history, manage server/channel invites.",
   "keywords": [
     "typeagent-agent"
   ],
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/discordManifest.json",
     "./agent/handlers": "./dist/discordActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/discordSchema.agr -o ./dist/discordSchema.ag.json",
     "asc": "asc -i ./src/discordSchema.ts -o ./dist/discordSchema.pas.json -t DiscordActions",

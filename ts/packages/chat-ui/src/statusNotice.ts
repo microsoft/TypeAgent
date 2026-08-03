@@ -5,8 +5,8 @@
  * Host-neutral model for a persistent, dismissible status notice.
  *
  * Rendered by {@link ChatPanel.showStatusNotice} as a corner toast that the
- * user can collapse to a small pinned pill (and re-expand) - it stays until
- * dismissed rather than auto-hiding like {@link ChatPanel.showToast}. Used for
+ * user can collapse into a bell (and re-expand) - it stays until dismissed
+ * rather than auto-hiding like {@link ChatPanel.showToast}. Used for
  * durable, state-y conditions such as "the agent server is running
  * out-of-date code" (pushed by the server on connect). Shared by every chat
  * host (Electron shell, VS Code webview) so the UX is identical.

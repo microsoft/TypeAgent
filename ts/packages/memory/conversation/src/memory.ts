@@ -2,13 +2,13 @@
 // Licensed under the MIT License.
 
 import { ChatModel, openai } from "@typeagent/aiclient";
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import {
     conversation as kpLib,
     TextEmbeddingModelWithCache,
     TextEmbeddingCache,
-} from "knowledge-processor";
-import * as ms from "memory-storage";
+} from "@typeagent/knowledge-processor";
+import * as ms from "@typeagent/memory-storage";
 import { error, PromptSection, Result, success } from "typechat";
 import { createEmbeddingModelWithCache } from "./common.js";
 
@@ -274,6 +274,29 @@ export abstract class Memory<
             this.conversation,
             selectExpr.searchTermGroup,
             selectExpr.when,
+            options,
+        );
+    }
+
+    /**
+     * Search this memory's messages by similarity to `queryText`, using the
+     * message-text embedding index. Unlike {@link searchWithLanguage} /
+     * {@link searchKnowledge}, this matches raw message text and does NOT
+     * depend on knowledge extraction having run - so literal / near-literal
+     * mentions are found even before (or without) extraction.
+     * @param queryText text to match message content against
+     * @param when optional scope filter
+     * @param options search options
+     */
+    public async searchByTextSimilarity(
+        queryText: string,
+        when?: kp.WhenFilter,
+        options?: kp.SearchOptions,
+    ): Promise<kp.ConversationSearchResult | undefined> {
+        return kp.searchConversationByTextSimilarity(
+            this.conversation,
+            queryText,
+            when,
             options,
         );
     }

@@ -27,19 +27,43 @@ import {
     composeActionSchema,
     createActionSchemaJsonValidator,
 } from "../translation/actionSchemaJsonTranslator.js";
-import { TypeAgentJsonValidator } from "typechat-utils";
+import { TypeAgentJsonValidator } from "@typeagent/typechat-utils";
 import { executeAction } from "../execute/actionHandlers.js";
 import {
     ConversationMessage,
     ConversationMessageMeta,
-} from "conversation-memory";
+} from "@typeagent/conversation-memory";
 import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { createLimiter } from "@typeagent/common-utils";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
+import {
+    SUBAGENT_TOOL_DESCRIPTIONS,
+    handleCreateSubagent,
+    handleInvokeSubagent,
+    handleListSubagents,
+    handleStopSubagent,
+} from "./subagentTools.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 import { formatUserContextForPrompt } from "./userContextPrompt.js";
+import { ToolRunFolder } from "./reasoningLoopBase.js";
+import {
+    buildReasoningActionResult,
+    estimateReasoningTokens,
+    formatThinkingDisplay,
+    reasoningTokenUsage,
+} from "./reasoningLoopBase.js";
+import {
+    buildReasoningForm,
+    formatReasoningFormResponse,
+    presentReasoningForm,
+    type ReasoningFormArgs,
+} from "./askUserForm.js";
+import {
+    findInstallableAgents,
+    formatInstallableAgents,
+} from "./installableAgents.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -455,24 +479,6 @@ function buildPromptWithContext(
     return parts.join("\n\n");
 }
 
-/**
- * Format thinking block display with collapsible details
- * (Matches Claude implementation styling exactly)
- */
-function formatThinkingDisplay(thinking: string): string {
-    const escaped = thinking
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-
-    return [
-        `<details class="reasoning-thinking" open>`,
-        `<summary>Thinking</summary>`,
-        `<pre>${escaped}</pre>`,
-        `</details>`,
-    ].join("");
-}
-
 type ToolInput = Record<string, unknown>;
 
 function asToolInput(value: unknown): ToolInput | undefined {
@@ -514,7 +520,7 @@ function formatExecuteActionDisplay(input: unknown): string {
     // actionName out directly so the label shows the real action, not "?".
     const action = parseActionInput(toolInput?.action);
     const actionName = getStringProp(action, "actionName") ?? "?";
-    return `**Tool:** execute_action — \`${schema}.${actionName}\``;
+    return `**Tool:** \`execute_action\` — \`${schema}.${actionName}\``;
 }
 
 function getPrimaryToolArg(input: unknown): string | undefined {
@@ -536,27 +542,54 @@ function formatToolCallDisplay(toolName: string, input: unknown): string {
         case "discover_actions": {
             const schema =
                 getStringProp(toolInput, "schemaName") ?? JSON.stringify(input);
-            return `**Tool:** discover_actions — schema: \`${schema}\``;
+            return `**Tool:** \`discover_actions\` — schema: \`${schema}\``;
         }
         case "execute_action":
             return formatExecuteActionDisplay(input);
         case "search_memory": {
             const question =
                 getStringProp(toolInput, "question") ?? JSON.stringify(input);
-            return `**Tool:** search_memory — \`${question}\``;
+            return `**Tool:** \`search_memory\` — \`${question}\``;
         }
         case "remember":
-            return `**Tool:** remember`;
+            return `**Tool:** \`remember\``;
     }
 
     // Built-in tools (shell, github/fs/*, github/search/*, ...): show the
     // primary argument so parallel or similar calls are distinguishable
-    // instead of rendering as identical "Tool: <name>" bubbles.
+    // instead of rendering as identical "Tool: <name>" bubbles. The tool name
+    // is rendered as inline code so it reads as a highlighted chip (matching a
+    // single tool call and the folded-batch summary).
     const primaryArg = getPrimaryToolArg(input);
     if (primaryArg) {
-        return `**Tool:** ${toolName} — \`${primaryArg}\``;
+        return `**Tool:** \`${toolName}\` — \`${primaryArg}\``;
     }
-    return `**Tool:** ${toolName}`;
+    return `**Tool:** \`${toolName}\``;
+}
+
+// Extract the UI display text and error state from a Copilot
+// `tool.execution_complete` event. The SDK reports the full result meant for
+// display in result.detailedContent (falling back to the model-facing, possibly
+// truncated result.content), and failures in error.message.
+function copilotToolResultDisplay(event: {
+    data?: {
+        success?: boolean;
+        error?: { message?: string };
+        result?: { detailedContent?: string; content?: string };
+    };
+}): {
+    content: string;
+    isError: boolean;
+} {
+    const data = event?.data ?? {};
+    const isError = data.success === false;
+    const content = isError
+        ? (data.error?.message ??
+          data.result?.detailedContent ??
+          data.result?.content ??
+          "")
+        : (data.result?.detailedContent ?? data.result?.content ?? "");
+    return { content: String(content ?? ""), isError };
 }
 
 /**
@@ -564,6 +597,30 @@ function formatToolCallDisplay(toolName: string, input: unknown): string {
  */
 function generateRequestId(): string {
     return `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/**
+ * Adapt a text-returning (or throwing) subagent handler into the Copilot tool
+ * result shape.
+ */
+async function copilotSubagentResult(
+    fn: () => Promise<string> | string,
+): Promise<{
+    textResultForLlm: string;
+    resultType: "success" | "failure";
+    error?: string;
+}> {
+    try {
+        const text = await fn();
+        return { textResultForLlm: text, resultType: "success" as const };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+            textResultForLlm: message,
+            resultType: "failure" as const,
+            error: message,
+        };
+    }
 }
 
 /**
@@ -711,6 +768,13 @@ function getCopilotSessionConfig(
 
                 // Capture action execution results (same as Claude)
                 const result: IAgentMessage[] = [];
+                const savedClientIO = systemContext.clientIO;
+                // When enabled, client-forwarding actions (e.g. @conversation
+                // switch's manage-conversation) reach the real client instead
+                // of nullClientIO's "not supported"; off keeps capture-only.
+                const forwardActions =
+                    systemContext.session.getConfig().execution
+                        .reasoningForwardActions;
                 const capturingClientIO: ClientIO = {
                     ...nullClientIO,
                     setDisplay: (message) => {
@@ -721,12 +785,18 @@ function getCopilotSessionConfig(
                             result.push(message);
                         }
                     },
+                    ...(forwardActions
+                        ? {
+                              takeAction: (
+                                  ...args: Parameters<ClientIO["takeAction"]>
+                              ) => savedClientIO.takeAction(...args),
+                          }
+                        : {}),
                 };
 
-                const savedClientIO = systemContext.clientIO;
                 try {
                     systemContext.clientIO = capturingClientIO;
-                    await executeAction(
+                    const actionResult = await executeAction(
                         {
                             action: {
                                 schemaName,
@@ -738,10 +808,20 @@ function getCopilotSessionConfig(
                     );
                     systemContext.clientIO = savedClientIO;
 
-                    // Return result in Copilot SDK format
+                    // Surface the action's history text (its full, model-facing
+                    // output - e.g. the page text webFetch/webSearch carry
+                    // there) to the reasoning model, not just the brief display
+                    // summary the capture above collects.
+                    const { text, isError } = buildReasoningActionResult(
+                        actionResult,
+                        result,
+                    );
                     return {
-                        textResultForLlm: JSON.stringify(result),
-                        resultType: "success" as const,
+                        textResultForLlm: text,
+                        resultType: isError
+                            ? ("failure" as const)
+                            : ("success" as const),
+                        ...(isError && { error: text }),
                     };
                 } catch (error) {
                     systemContext.clientIO = savedClientIO;
@@ -842,11 +922,12 @@ function getCopilotSessionConfig(
         },
     });
 
-    // TODO (deferred): cross-conversation browsing. get_conversation_info /
-    // read_conversation are scoped to the CURRENT conversation only. To help a
-    // user who is unsure which conversation they were in, add
-    // list_conversations / read_conversation(conversationId) backed by the
-    // agent-server ConversationManager (getConversationList). Not implemented yet.
+    // get_conversation_info / read_conversation are scoped to the CURRENT
+    // conversation. Cross-conversation browsing is provided by
+    // list_conversations (id + name) and search_conversations (content search
+    // with snippets), both backed by the agent-server ConversationManager.
+    // TODO (deferred): read_conversation(conversationId) to page another
+    // conversation's full transcript, not just its search snippets.
     const getConversationInfoTool = defineTool("get_conversation_info", {
         description: [
             "Get metadata about the current conversation transcript: total message count and which agents have responded.",
@@ -929,6 +1010,101 @@ function getCopilotSessionConfig(
         },
     });
 
+    const listConversationsTool = defineTool("list_conversations", {
+        description: [
+            "List ALL of the user's conversations (id + name), across the whole session store — not just the current one.",
+            "Use this to resolve a conversation the user names (e.g. 'the CLI conversation') to its id before reading or searching it.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {},
+            required: [],
+        },
+        handler: async () => {
+            const list = systemContext.getConversationList?.() ?? [];
+            if (list.length === 0) {
+                return {
+                    textResultForLlm:
+                        "No other conversations are available in this host.",
+                    resultType: "success" as const,
+                };
+            }
+            return {
+                textResultForLlm: JSON.stringify(list, null, 2),
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const searchConversationsTool = defineTool("search_conversations", {
+        description: [
+            "Search the CONTENT of ALL the user's conversations (not just the current one) and return the best-matching conversations with representative snippets.",
+            "Use this to answer questions like 'what did we discuss in the CLI conversation' or to find where a topic was talked about across conversations.",
+            "Provide a natural-language `question` and/or a list of keyword `terms` - they are blended (NL/semantic + literal message-text match), so put distinctive keywords (e.g. proper nouns) in `terms` to catch literal mentions.",
+            "This reads matching content back to you - unlike the conversation find/search *actions*, which only render in the UI.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                question: {
+                    type: "string",
+                    description:
+                        "A natural-language question to match against conversation content",
+                },
+                terms: {
+                    type: "array",
+                    items: { type: "string" },
+                    description:
+                        "Keyword/phrase terms to match literally against message text (names, distinctive words)",
+                },
+                maxMatches: {
+                    type: "number",
+                    description:
+                        "Maximum number of conversations to return (default 10)",
+                },
+            },
+            required: [],
+        },
+        handler: async (args: Record<string, unknown>) => {
+            const search = systemContext.searchConversations;
+            if (search === undefined) {
+                return {
+                    textResultForLlm:
+                        "Cross-conversation content search is not available in this host.",
+                    resultType: "success" as const,
+                };
+            }
+            const question =
+                typeof args?.question === "string" ? args.question : undefined;
+            const terms = Array.isArray(args?.terms)
+                ? args.terms.map((t: unknown) => String(t))
+                : undefined;
+            if (!question && (terms === undefined || terms.length === 0)) {
+                return {
+                    textResultForLlm:
+                        "Provide a `question` and/or `terms` to search for.",
+                    resultType: "success" as const,
+                };
+            }
+            const maxMatches =
+                typeof args?.maxMatches === "number"
+                    ? args.maxMatches
+                    : undefined;
+            const matches = await search({ question, terms }, maxMatches);
+            if (matches.length === 0) {
+                const what = question ?? (terms ?? []).join(", ");
+                return {
+                    textResultForLlm: `No conversations with content matching "${what}" found.`,
+                    resultType: "success" as const,
+                };
+            }
+            return {
+                textResultForLlm: JSON.stringify(matches, null, 2),
+                resultType: "success" as const,
+            };
+        },
+    });
+
     const getUserContextTool = defineTool("get_user_context", {
         description: [
             "Get a fresh, coarse snapshot of the user's current editor context:",
@@ -960,8 +1136,263 @@ function getCopilotSessionConfig(
         },
     });
 
+    const findInstallableAgentTool = defineTool("find_installable_agent", {
+        description: [
+            "List agents that are NOT currently installed but can be installed on demand from the configured sources.",
+            "Call this when no active agent (from discover_actions) can fulfill the user's request, to check whether an installable agent could.",
+            "Returns each candidate's name, description, and exact `@package install` command.",
+            "If one clearly matches the request, tell the user it exists and give them the install command - do NOT install it yourself.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {},
+            required: [],
+        },
+        handler: async () => {
+            const agents = await findInstallableAgents(systemContext);
+            return {
+                textResultForLlm: formatInstallableAgents(agents),
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const askUserTool = defineTool("ask_user", {
+        description: [
+            "Ask the user ONE multiple-choice question and block until they answer.",
+            "Use ONLY when you are genuinely blocked on a decision that only the user",
+            "can make - an ambiguous choice among concrete options, or a confirmation",
+            "before a destructive or irreversible action. Put the exact options in",
+            '`choices` (for a yes/no question use ["Yes", "No"]). Returns the option the',
+            "user picked. Prefer acting autonomously; do not ask when a reasonable safe",
+            "default exists.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                question: {
+                    type: "string",
+                    description: "The question to ask the user.",
+                },
+                choices: {
+                    type: "array",
+                    items: { type: "string" },
+                    description:
+                        'The options to choose from (at least 2). For a yes/no question use ["Yes", "No"].',
+                },
+            },
+            required: ["question", "choices"],
+        },
+        handler: async (args: Record<string, unknown>) => {
+            const question =
+                typeof args?.question === "string" ? args.question : "";
+            const choices = Array.isArray(args?.choices)
+                ? args.choices.map((c: unknown) => String(c))
+                : [];
+            if (choices.length < 2) {
+                return {
+                    textResultForLlm:
+                        'ask_user requires at least 2 choices (e.g. ["Yes", "No"]).',
+                    resultType: "failure" as const,
+                };
+            }
+            // Use the stable clientIO ref (execute_action transiently swaps
+            // systemContext.clientIO). question() blocks on the answer via the
+            // async-interaction path (respondToInteraction), which does not take
+            // the command lock, so it is safe while reasoning holds it.
+            const selected = await baseClientIO.question(
+                originatorRequestId,
+                question,
+                choices,
+                undefined,
+                "reasoning",
+            );
+            const answer = choices[selected] ?? choices[0] ?? "";
+            return {
+                textResultForLlm: `The user selected: "${answer}" (choice index ${selected}).`,
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const askUserFormTool = defineTool("ask_user_form", {
+        description: [
+            "Ask the user SEVERAL questions at once in a single form and block",
+            "until they submit. Prefer this over multiple `ask_user` calls when you",
+            "need more than one answer. Each question has an `id`, a `kind`",
+            '("pick" = choose one, "multiChoice" = choose any, "yesNo"), a `prompt`,',
+            "and (for pick/multiChoice) at least 2 `choices`. Set `allowFreeText`",
+            'to let the user type an "Other" value. Returns every answer keyed to its',
+            "question. Use ONLY when genuinely blocked on decisions only the user can",
+            "make; prefer acting autonomously when a safe default exists.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                message: {
+                    type: "string",
+                    description: "Optional heading shown above the questions.",
+                },
+                questions: {
+                    type: "array",
+                    description: "One or more questions to present together.",
+                    items: {
+                        type: "object",
+                        properties: {
+                            id: {
+                                type: "string",
+                                description:
+                                    "Unique id for this question; answers are keyed by it.",
+                            },
+                            kind: {
+                                type: "string",
+                                enum: ["pick", "multiChoice", "yesNo"],
+                                description:
+                                    '"pick" = choose one, "multiChoice" = choose any, "yesNo" = yes/no.',
+                            },
+                            prompt: {
+                                type: "string",
+                                description: "The question text.",
+                            },
+                            choices: {
+                                type: "array",
+                                items: { type: "string" },
+                                description:
+                                    "Options for pick/multiChoice (at least 2). Omit for yesNo.",
+                            },
+                            allowFreeText: {
+                                type: "boolean",
+                                description:
+                                    'Allow an "Other: ___" free-text option (pick/multiChoice).',
+                            },
+                        },
+                        required: ["id", "kind", "prompt"],
+                    },
+                },
+                paged: {
+                    type: "boolean",
+                    description:
+                        "Present the questions as a step-by-step wizard instead of all at once.",
+                },
+            },
+            required: ["questions"],
+        },
+        handler: async (args: ReasoningFormArgs) => {
+            const built = buildReasoningForm(args);
+            if ("error" in built) {
+                return {
+                    textResultForLlm: built.error,
+                    resultType: "failure" as const,
+                };
+            }
+            const response = await presentReasoningForm(
+                baseClientIO,
+                originatorRequestId,
+                built.form,
+            );
+            return {
+                textResultForLlm: formatReasoningFormResponse(
+                    built.form,
+                    response,
+                ),
+                resultType: "success" as const,
+            };
+        },
+    });
+
     const model = resolveModel(context);
     const reasoningEffort = resolveReasoningEffort(context);
+
+    // Optional subagent tools: spawn/manage isolated command-executor workers.
+    // Gated behind `@config execution subagents` since it spawns processes.
+    const subagentsEnabled =
+        systemContext.session.getConfig().execution.subagents;
+    const subagentTools = subagentsEnabled
+        ? [
+              defineTool<{ name: string; instructions?: string }>(
+                  "create_subagent",
+                  {
+                      description: SUBAGENT_TOOL_DESCRIPTIONS.create_subagent,
+                      parameters: {
+                          type: "object",
+                          properties: {
+                              name: {
+                                  type: "string",
+                                  description: "Short name for the subagent",
+                              },
+                              instructions: {
+                                  type: "string",
+                                  description:
+                                      "Optional standing instructions given to the subagent on its first task",
+                              },
+                          },
+                          required: ["name"],
+                      },
+                      handler: async (args) =>
+                          copilotSubagentResult(() =>
+                              handleCreateSubagent(systemContext, {
+                                  name: args.name,
+                                  instructions: args.instructions,
+                              }),
+                          ),
+                  },
+              ),
+              defineTool<{ id: string; task: string }>("invoke_subagent", {
+                  description: SUBAGENT_TOOL_DESCRIPTIONS.invoke_subagent,
+                  parameters: {
+                      type: "object",
+                      properties: {
+                          id: {
+                              type: "string",
+                              description:
+                                  "Id of the subagent returned by create_subagent",
+                          },
+                          task: {
+                              type: "string",
+                              description:
+                                  "The task, in natural language, for the subagent to perform",
+                          },
+                      },
+                      required: ["id", "task"],
+                  },
+                  handler: async (args) =>
+                      copilotSubagentResult(() =>
+                          handleInvokeSubagent(systemContext, {
+                              id: args.id,
+                              task: args.task,
+                          }),
+                      ),
+              }),
+              defineTool("list_subagents", {
+                  description: SUBAGENT_TOOL_DESCRIPTIONS.list_subagents,
+                  parameters: {
+                      type: "object",
+                      properties: {},
+                  },
+                  handler: async () =>
+                      copilotSubagentResult(() =>
+                          handleListSubagents(systemContext),
+                      ),
+              }),
+              defineTool<{ id: string }>("stop_subagent", {
+                  description: SUBAGENT_TOOL_DESCRIPTIONS.stop_subagent,
+                  parameters: {
+                      type: "object",
+                      properties: {
+                          id: {
+                              type: "string",
+                              description: "Id of the subagent to stop",
+                          },
+                      },
+                      required: ["id"],
+                  },
+                  handler: async (args) =>
+                      copilotSubagentResult(() =>
+                          handleStopSubagent(systemContext, { id: args.id }),
+                      ),
+              }),
+          ]
+        : [];
 
     return {
         clientName: "TypeAgent",
@@ -975,7 +1406,13 @@ function getCopilotSessionConfig(
             rememberTool,
             getConversationInfoTool,
             readConversationTool,
+            listConversationsTool,
+            searchConversationsTool,
             getUserContextTool,
+            ...subagentTools,
+            findInstallableAgentTool,
+            askUserTool,
+            askUserFormTool,
         ],
         availableTools: [
             "discover_actions",
@@ -984,7 +1421,20 @@ function getCopilotSessionConfig(
             "remember",
             "get_conversation_info",
             "read_conversation",
+            "list_conversations",
+            "search_conversations",
             "get_user_context",
+            ...(subagentsEnabled
+                ? [
+                      "create_subagent",
+                      "invoke_subagent",
+                      "list_subagents",
+                      "stop_subagent",
+                  ]
+                : []),
+            "find_installable_agent",
+            "ask_user",
+            "ask_user_form",
             "github/fs/*",
             "github/search/*",
             "shell",
@@ -1009,16 +1459,39 @@ function getCopilotSessionConfig(
                 "For TypeAgent-specific actions like music playback, calendar management, email:",
                 "- `discover_actions`: Find available TypeAgent actions by schema name",
                 "- `execute_action`: Execute TypeAgent actions conforming to discovered schemas",
+                "- `find_installable_agent`: List agents not installed yet that can be installed on demand. Call it when no active agent can fulfill the request; if a candidate matches, tell the user the exact `@package install` command (never install it yourself)",
                 "",
                 "## Conversation Memory Tools",
                 "- `search_memory`: Recall information from earlier in this or prior conversations",
                 "- `remember`: Durably save a new memory so it can be recalled later",
                 "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
                 "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
+                "- `list_conversations`: List ALL conversations (id + name) across the session store — use to resolve a conversation the user names",
+                "- `search_conversations`: Search the CONTENT of ALL conversations and read back matching snippets (use for 'what did we discuss in X')",
                 "",
                 "## Editor Context Tools",
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file path, language, cursor/selection ranges, workspace, diagnostic counts). Contains NO file or selection text.",
                 "- For actual file/selection **text**, use the code agent's read actions (getActiveEditor, getSelection, getFileContent, getDiagnostics) via discover_actions/execute_action.",
+                "",
+                ...(subagentsEnabled
+                    ? [
+                          "## Subagent Tools",
+                          "You can delegate self-contained sub-tasks to subagents. Each subagent is a",
+                          "separate worker with its own command-executor instance running in an isolated",
+                          "conversation, so its work does not disturb this conversation.",
+                          "- `create_subagent`: create a subagent (name, optional instructions) → returns an id",
+                          "- `invoke_subagent`: give an existing subagent a task (id, task) → returns its result",
+                          "- `list_subagents`: list the subagents you have created",
+                          "- `stop_subagent`: stop a subagent and free its resources (id)",
+                          "Use subagents for focused, independent lines of work: create one, invoke it",
+                          "with the sub-task, use its result, then stop it when done. Do NOT create",
+                          "subagents for trivial single-step actions you can do directly.",
+                          "",
+                      ]
+                    : []),
+                "## User Interaction",
+                '- `ask_user`: Ask the user ONE multiple-choice question and block for their answer. Strongly prefer to act autonomously with a safe default; use this ONLY when genuinely blocked on a decision only the user can make (an ambiguous choice among concrete options, or confirmation before a destructive/irreversible action). Provide the exact options (for yes/no use ["Yes", "No"]), and ask at most one such question.',
+                "- `ask_user_form`: Ask SEVERAL questions at once (pick / multiChoice / yesNo, optional free-text) in one form and block for all answers. Prefer this over multiple `ask_user` calls when a single blocking moment needs more than one answer.",
                 "",
                 "## Guidelines",
                 '- **For follow-up questions** that refer to earlier turns (e.g. "those", "it", "mine"), consult the [Recent conversation context] block first; use `search_memory` only for older history not shown there',
@@ -1030,6 +1503,34 @@ function getCopilotSessionConfig(
             ].join("\n"),
         },
     };
+}
+
+// The Copilot runtime raises this when a reasoning session has no usable
+// credentials (no logged-in user, no token, no BYOK provider). Auth is handled
+// by the external `copilot`/`gh` CLI, so the fix is to sign in.
+const COPILOT_LOGIN_HINT =
+    "GitHub Copilot isn't signed in, so the reasoning session couldn't " +
+    "authenticate. Run `@copilot login` to sign in (or `copilot login` in a " +
+    "terminal), then try your request again.";
+
+function isCopilotAuthError(message: string): boolean {
+    const m = message.toLowerCase();
+    return (
+        m.includes("authentication info or custom provider") ||
+        m.includes("not created with authentication")
+    );
+}
+
+/**
+ * If `error` is the Copilot "not authenticated / no provider" failure, return a
+ * clear, actionable Error pointing at `@copilot login`; otherwise return
+ * undefined so the caller keeps the original error.
+ */
+function copilotAuthError(error: unknown): Error | undefined {
+    const message = error instanceof Error ? error.message : String(error);
+    return isCopilotAuthError(message)
+        ? new Error(COPILOT_LOGIN_HINT)
+        : undefined;
 }
 
 /**
@@ -1063,27 +1564,6 @@ async function createCopilotSession(
 }
 
 /**
- * Build the reasoning token-usage record reported to the dispatcher (surfaced
- * as "Action Tokens" in the UI). Returns undefined when no tokens were counted
- * so the UI shows "not reported" rather than a misleading zero.
- */
-function reasoningTokenUsage(
-    inputTokens: number,
-    outputTokens: number,
-    cachedTokens: number,
-) {
-    const total = inputTokens + outputTokens + cachedTokens;
-    return total > 0
-        ? {
-              prompt_tokens: inputTokens,
-              completion_tokens: outputTokens,
-              total_tokens: total,
-              ...(cachedTokens > 0 && { cached_tokens: cachedTokens }),
-          }
-        : undefined;
-}
-
-/**
  * Execute reasoning action without planning
  * Uses session ID resumption for multi-turn conversations
  */
@@ -1094,6 +1574,22 @@ async function executeReasoningWithoutPlanning(
     debug(`Executing reasoning request: ${originalRequest}`);
     context.actionIO.appendDisplay("Thinking...", "temporary");
     const displayMode = resolveReasoningDisplayMode(context);
+    // A tool call and its result share one reasoning-step bubble: the call is
+    // buffered at execution_start and emitted with its result at
+    // execution_complete (toolFolder.result). A failed result is styled as a
+    // warning bubble.
+    const toolFolder = new ToolRunFolder(
+        (content, isError) =>
+            context.actionIO.appendDisplay(
+                {
+                    type: "markdown",
+                    content,
+                    kind: isError ? "warning" : "info",
+                },
+                displayMode,
+            ),
+        formatToolCallDisplay,
+    );
 
     const client = await getCopilotClient(context.sessionContext.agentContext);
     const config = getCopilotSessionConfig(context);
@@ -1130,6 +1626,10 @@ async function executeReasoningWithoutPlanning(
             setSessionId(context, sessionId);
         } catch (err) {
             debug("Failed to create session:", err);
+            const authErr = copilotAuthError(err);
+            if (authErr) {
+                throw authErr;
+            }
             throw new Error(
                 `Failed to create Copilot session.\n` +
                     `Error: ${err instanceof Error ? err.message : String(err)}`,
@@ -1148,17 +1648,29 @@ async function executeReasoningWithoutPlanning(
     let usageInputTokens = 0;
     let usageOutputTokens = 0;
     let usageCachedTokens = 0;
+    // Per-turn reasoning ("thinking") token counts, tabulated one entry per
+    // turn that reported any, so the UI can show a per-block "Thinking Tokens"
+    // breakdown. These are a subset of usageOutputTokens (not added again).
+    const usageThinkingTokens: number[] = [];
+    // Reasoning text per thinking block. Used to estimate thinking tokens when
+    // the provider reports no billed reasoningTokens (Anthropic-backed sessions
+    // fold thinking into output_tokens), so the UI still shows an approximation.
+    const reasoningBlockTexts: string[] = [];
 
     // Subscribe to reasoning events (thinking blocks)
     const unsubscribeReasoningDelta = session.on(
         "assistant.reasoning_delta",
         (event: any) => {
             if (event.data?.deltaContent) {
+                toolFolder.flush();
                 currentReasoning += event.data.deltaContent;
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
-                        content: formatThinkingDisplay(currentReasoning),
+                        content: formatThinkingDisplay(
+                            currentReasoning,
+                            estimateReasoningTokens(currentReasoning),
+                        ),
                     },
                     "temporary",
                 );
@@ -1174,11 +1686,16 @@ async function executeReasoningWithoutPlanning(
                 event.data.content !== lastReasoningContent
             ) {
                 // Final reasoning content - display as permanent thinking block
+                toolFolder.flush();
                 lastReasoningContent = event.data.content;
+                reasoningBlockTexts.push(event.data.content);
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
-                        content: formatThinkingDisplay(event.data.content),
+                        content: formatThinkingDisplay(
+                            event.data.content,
+                            estimateReasoningTokens(event.data.content),
+                        ),
                     },
                     displayMode,
                 );
@@ -1192,6 +1709,7 @@ async function executeReasoningWithoutPlanning(
         "assistant.message_delta",
         (event: any) => {
             if (event.data?.deltaContent) {
+                toolFolder.flush();
                 currentContent += event.data.deltaContent;
                 context.actionIO.appendDisplay(
                     {
@@ -1222,14 +1740,7 @@ async function executeReasoningWithoutPlanning(
                 event.data?.parameters ||
                 {};
             debug(`Tool execution started: ${toolName}`);
-            context.actionIO.appendDisplay(
-                {
-                    type: "markdown",
-                    content: formatToolCallDisplay(toolName, parameters),
-                    kind: "info",
-                },
-                displayMode,
-            );
+            toolFolder.tool(toolName, parameters);
         },
     );
 
@@ -1242,6 +1753,11 @@ async function executeReasoningWithoutPlanning(
                 event.name ||
                 "unknown";
             debug(`Tool execution completed: ${toolName}`);
+            // Emit the buffered call and its result together in one bubble so
+            // the output the model acted on sits with the call that produced it
+            // (and can be opened in a viewer).
+            const { content, isError } = copilotToolResultDisplay(event);
+            toolFolder.result(content, isError);
         },
     );
 
@@ -1256,13 +1772,27 @@ async function executeReasoningWithoutPlanning(
     );
 
     // Track cache read/write tokens separately from fresh input tokens so the
-    // UI can report them as a distinct "cached" figure.
+    // UI can report them as a distinct "cached" figure. reasoningTokens (a
+    // subset of outputTokens) is tabulated per turn so the UI can show a
+    // distinct "Thinking Tokens" figure.
     const unsubscribeUsage = session.on("assistant.usage", (event: any) => {
+        debug(
+            "assistant.usage in=%d out=%d cacheR=%d cacheW=%d reasoning=%s",
+            event.data?.inputTokens ?? 0,
+            event.data?.outputTokens ?? 0,
+            event.data?.cacheReadTokens ?? 0,
+            event.data?.cacheWriteTokens ?? 0,
+            event.data?.reasoningTokens ?? "absent",
+        );
         usageInputTokens += event.data?.inputTokens ?? 0;
         usageOutputTokens += event.data?.outputTokens ?? 0;
         usageCachedTokens +=
             (event.data?.cacheReadTokens ?? 0) +
             (event.data?.cacheWriteTokens ?? 0);
+        const reasoningTokens = event.data?.reasoningTokens ?? 0;
+        if (reasoningTokens > 0) {
+            usageThinkingTokens.push(reasoningTokens);
+        }
     });
 
     try {
@@ -1291,6 +1821,7 @@ async function executeReasoningWithoutPlanning(
         // streaming display). Prefer the authoritative final message over the
         // streamed accumulation, which can be stale/truncated when the model
         // interleaves tool calls mid-turn (which produced an "unfinished" answer).
+        toolFolder.flush();
         const displayContent = finalResult || currentContent;
         if (displayContent) {
             context.actionIO.appendDisplay(
@@ -1308,22 +1839,39 @@ async function executeReasoningWithoutPlanning(
             return undefined;
         }
         const result = createActionResultNoDisplay(finalResult);
+        // Prefer the provider's billed reasoning-token count; when it is not
+        // reported (Anthropic-backed sessions fold thinking into output_tokens),
+        // fall back to a rough per-block estimate from the reasoning text so the
+        // UI can still show an approximate figure.
+        const thinkingEstimated =
+            usageThinkingTokens.length === 0 && reasoningBlockTexts.length > 0;
+        const thinkingTokens = thinkingEstimated
+            ? reasoningBlockTexts
+                  .map(estimateReasoningTokens)
+                  .filter((n) => n > 0)
+            : usageThinkingTokens;
         result.tokenUsage = reasoningTokenUsage(
             usageInputTokens,
             usageOutputTokens,
             usageCachedTokens,
+            thinkingTokens,
+            thinkingEstimated,
         );
         return result;
     } catch (error) {
         debug("Error during reasoning:", error);
+        toolFolder.flush();
+        const authErr = copilotAuthError(error);
         context.actionIO.appendDisplay(
             {
                 type: "text",
-                content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+                content: authErr
+                    ? authErr.message
+                    : `Error: ${error instanceof Error ? error.message : String(error)}`,
             },
             displayMode,
         );
-        throw error;
+        throw authErr ?? error;
     } finally {
         // Unsubscribe from all events
         unsubscribeReasoningDelta();
@@ -1340,6 +1888,7 @@ async function executeReasoningWithoutPlanning(
  * Execute reasoning action with trace capture
  * Captures execution traces for plan generation
  */
+// code-complexity-allow: reasoning-session orchestration with event subscriptions and per-turn token tracking
 async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
@@ -1368,6 +1917,22 @@ async function executeReasoningWithTracing(
         debug(`Executing reasoning with tracing: ${originalRequest}`);
         context.actionIO.appendDisplay("Thinking...", "temporary");
         const displayMode = resolveReasoningDisplayMode(context);
+        // A tool call and its result share one reasoning-step bubble: the call
+        // is buffered at execution_start and emitted with its result at
+        // execution_complete (toolFolder.result). A failed result is styled as a
+        // warning bubble.
+        const toolFolder = new ToolRunFolder(
+            (content, isError) =>
+                context.actionIO.appendDisplay(
+                    {
+                        type: "markdown",
+                        content,
+                        kind: isError ? "warning" : "info",
+                    },
+                    displayMode,
+                ),
+            formatToolCallDisplay,
+        );
 
         const client = await getCopilotClient(
             context.sessionContext.agentContext,
@@ -1424,17 +1989,31 @@ async function executeReasoningWithTracing(
         let usageInputTokens = 0;
         let usageOutputTokens = 0;
         let usageCachedTokens = 0;
+        // Per-turn reasoning ("thinking") token counts, tabulated one entry per
+        // turn that reported any, so the UI can show a per-block "Thinking
+        // Tokens" breakdown. These are a subset of usageOutputTokens (not added
+        // again).
+        const usageThinkingTokens: number[] = [];
+        // Reasoning text per thinking block. Used to estimate thinking tokens
+        // when the provider reports no billed reasoningTokens (Anthropic-backed
+        // sessions fold thinking into output_tokens), so the UI still shows an
+        // approximation.
+        const reasoningBlockTexts: string[] = [];
 
         // Subscribe to reasoning events and record thinking
         const unsubscribeReasoningDelta = session.on(
             "assistant.reasoning_delta",
             (event: any) => {
                 if (event.data?.deltaContent) {
+                    toolFolder.flush();
                     currentReasoning += event.data.deltaContent;
                     context.actionIO.appendDisplay(
                         {
                             type: "markdown",
-                            content: formatThinkingDisplay(currentReasoning),
+                            content: formatThinkingDisplay(
+                                currentReasoning,
+                                estimateReasoningTokens(currentReasoning),
+                            ),
                         },
                         "temporary",
                     );
@@ -1450,6 +2029,7 @@ async function executeReasoningWithTracing(
                     event.data.content !== lastReasoningContent
                 ) {
                     lastReasoningContent = event.data.content;
+                    reasoningBlockTexts.push(event.data.content);
                     // Record thinking for trace
                     tracer.recordThinking({
                         content: [
@@ -1457,10 +2037,14 @@ async function executeReasoningWithTracing(
                         ],
                     });
 
+                    toolFolder.flush();
                     context.actionIO.appendDisplay(
                         {
                             type: "markdown",
-                            content: formatThinkingDisplay(event.data.content),
+                            content: formatThinkingDisplay(
+                                event.data.content,
+                                estimateReasoningTokens(event.data.content),
+                            ),
                         },
                         displayMode,
                     );
@@ -1473,6 +2057,7 @@ async function executeReasoningWithTracing(
             "assistant.message_delta",
             (event: any) => {
                 if (event.data?.deltaContent) {
+                    toolFolder.flush();
                     currentContent += event.data.deltaContent;
                     context.actionIO.appendDisplay(
                         {
@@ -1508,14 +2093,7 @@ async function executeReasoningWithTracing(
                 // Record tool call for trace
                 tracer.recordToolCall(toolName, parameters);
 
-                context.actionIO.appendDisplay(
-                    {
-                        type: "markdown",
-                        content: formatToolCallDisplay(toolName, parameters),
-                        kind: "info",
-                    },
-                    displayMode,
-                );
+                toolFolder.tool(toolName, parameters);
             },
         );
 
@@ -1528,6 +2106,14 @@ async function executeReasoningWithTracing(
                     event.name ||
                     "unknown";
                 debug(`Tool execution completed: ${toolName}`);
+                const { content, isError } = copilotToolResultDisplay(event);
+                tracer.recordToolResult(
+                    toolName,
+                    content,
+                    isError ? content : undefined,
+                );
+                // Emit the buffered call and its result together in one bubble.
+                toolFolder.result(content, isError);
             },
         );
 
@@ -1542,13 +2128,27 @@ async function executeReasoningWithTracing(
         );
 
         // Track cache read/write tokens separately from fresh input tokens so
-        // the UI can report them as a distinct "cached" figure.
+        // the UI can report them as a distinct "cached" figure. reasoningTokens
+        // (a subset of outputTokens) is tabulated per turn so the UI can show a
+        // distinct "Thinking Tokens" figure.
         const unsubscribeUsage = session.on("assistant.usage", (event: any) => {
+            debug(
+                "assistant.usage in=%d out=%d cacheR=%d cacheW=%d reasoning=%s",
+                event.data?.inputTokens ?? 0,
+                event.data?.outputTokens ?? 0,
+                event.data?.cacheReadTokens ?? 0,
+                event.data?.cacheWriteTokens ?? 0,
+                event.data?.reasoningTokens ?? "absent",
+            );
             usageInputTokens += event.data?.inputTokens ?? 0;
             usageOutputTokens += event.data?.outputTokens ?? 0;
             usageCachedTokens +=
                 (event.data?.cacheReadTokens ?? 0) +
                 (event.data?.cacheWriteTokens ?? 0);
+            const reasoningTokens = event.data?.reasoningTokens ?? 0;
+            if (reasoningTokens > 0) {
+                usageThinkingTokens.push(reasoningTokens);
+            }
         });
 
         try {
@@ -1570,6 +2170,7 @@ async function executeReasoningWithTracing(
             // streaming display). Prefer the authoritative final message over
             // the streamed accumulation, which can be stale/truncated when the
             // model interleaves tool calls mid-turn.
+            toolFolder.flush();
             const displayContent = finalResult || currentContent;
             if (displayContent) {
                 context.actionIO.appendDisplay(
@@ -1627,13 +2228,33 @@ async function executeReasoningWithTracing(
                 return undefined;
             }
             const result = createActionResultNoDisplay(finalResult);
+            // Prefer the provider's billed reasoning-token count; when it is not
+            // reported (Anthropic-backed sessions fold thinking into
+            // output_tokens), fall back to a rough per-block estimate from the
+            // reasoning text so the UI can still show an approximate figure.
+            const thinkingEstimated =
+                usageThinkingTokens.length === 0 &&
+                reasoningBlockTexts.length > 0;
+            const thinkingTokens = thinkingEstimated
+                ? reasoningBlockTexts
+                      .map(estimateReasoningTokens)
+                      .filter((n) => n > 0)
+                : usageThinkingTokens;
             result.tokenUsage = reasoningTokenUsage(
                 usageInputTokens,
                 usageOutputTokens,
                 usageCachedTokens,
+                thinkingTokens,
+                thinkingEstimated,
             );
             return result;
         } finally {
+            // Emit any tool run still buffered when the inner try exits. On
+            // success the final-content flush above already drained it (no-op
+            // here); on an error thrown before that point (e.g. sendAndWait),
+            // this is the last chance to render it, since the outer catch is a
+            // separate scope and cannot see toolFolder.
+            toolFolder.flush();
             unsubscribeReasoningDelta();
             unsubscribeReasoning();
             unsubscribeMessageDelta();
@@ -1643,9 +2264,11 @@ async function executeReasoningWithTracing(
             unsubscribeUsage();
         }
     } catch (error) {
-        tracer.markFailed(error instanceof Error ? error : String(error));
+        const authErr = copilotAuthError(error);
+        const toThrow = authErr ?? error;
+        tracer.markFailed(toThrow instanceof Error ? toThrow : String(toThrow));
         await tracer.saveTrace();
-        throw error;
+        throw toThrow;
     }
 }
 

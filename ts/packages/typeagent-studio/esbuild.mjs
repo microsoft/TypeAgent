@@ -169,15 +169,33 @@ const traceViewerConfig = {
     minify: !watch,
 };
 
+/**
+ * The New Agent wizard webview client bundle. Same browser-only constraints as
+ * the other webview clients; hosts the seven onboarding phases.
+ * @type {import('esbuild').BuildOptions}
+ */
+const wizardConfig = {
+    entryPoints: ["src/webviewKit/client/wizard.ts"],
+    bundle: true,
+    outfile: "dist/webview/wizard.js",
+    format: "iife",
+    platform: "browser",
+    target: "es2020",
+    sourcemap: true,
+    minify: !watch,
+};
+
 if (watch) {
     const ctx = await esbuild.context(extensionConfig);
     const serviceCtx = await esbuild.context(serviceConfig);
     const webviewCtx = await esbuild.context(webviewConfig);
     const traceViewerCtx = await esbuild.context(traceViewerConfig);
+    const wizardCtx = await esbuild.context(wizardConfig);
     await ctx.watch();
     await serviceCtx.watch();
     await webviewCtx.watch();
     await traceViewerCtx.watch();
+    await wizardCtx.watch();
     copyRuntimeAssets();
     console.log("typeagent-studio: watching…");
 } else {
@@ -185,5 +203,6 @@ if (watch) {
     await esbuild.build(serviceConfig);
     await esbuild.build(webviewConfig);
     await esbuild.build(traceViewerConfig);
+    await esbuild.build(wizardConfig);
     copyRuntimeAssets();
 }

@@ -36,7 +36,7 @@
     "dotenv": "^16.3.1",
     "find-config": "^1.0.0",
     "isomorphic-ws": "^5.0.0",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

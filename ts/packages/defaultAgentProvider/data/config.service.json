@@ -2,28 +2,28 @@
   "description": "Service profile — lean agent set for the headless agent-server / Copilot-plugin scenario (calendar, email, music, browser + conversational/system/PowerShell). Omits heavy media/dev agents (code, photo, image, markdown, montage, video, screencapture, github-cli, visualStudio, discord); those remain installable on demand. Select with: agent-server --config service.",
   "agents": {
     "player": {
-      "name": "music"
+      "name": "@typeagent/music"
     },
     "localPlayer": {
-      "name": "music-local"
+      "name": "@typeagent/music-local"
     },
     "calendar": {
-      "name": "calendar"
+      "name": "@typeagent/calendar"
     },
     "email": {
-      "name": "email"
+      "name": "@typeagent/email"
     },
     "list": {
-      "name": "list-agent"
+      "name": "@typeagent/list-agent"
     },
     "browser": {
-      "name": "browser-typeagent"
+      "name": "@typeagent/browser"
     },
     "desktop": {
-      "name": "desktop-automation"
+      "name": "@typeagent/desktop-automation"
     },
     "chat": {
-      "name": "chat-agent",
+      "name": "@typeagent/chat-agent",
       "execMode": "dispatcher"
     },
     "greeting": {
@@ -35,35 +35,35 @@
       "execMode": "dispatcher"
     },
     "weather": {
-      "name": "weather-agent"
+      "name": "@typeagent/weather-agent"
     },
     "taskflow": {
-      "name": "taskflow-typeagent",
+      "name": "@typeagent/taskflow-typeagent",
       "execMode": "dispatcher"
     },
     "powershell": {
-      "name": "powershell-typeagent"
+      "name": "@typeagent/powershell-typeagent"
     },
     "workflow": {
       "name": "workflow-agent"
     },
     "utility": {
-      "name": "utility-typeagent"
+      "name": "@typeagent/utility-typeagent"
     },
     "onboarding": {
       "name": "onboarding-agent"
     },
     "osNotifications": {
-      "name": "os-notifications-agent"
+      "name": "@typeagent/os-notifications-agent"
     },
     "timer": {
-      "name": "timer-agent"
+      "name": "@typeagent/timer-agent"
     },
     "windowsClock": {
       "name": "windowsclock-agent"
     },
     "ipconfig": {
-      "name": "ipconfig-agent"
+      "name": "@typeagent/ipconfig-agent"
     }
   },
   "mcpServers": {

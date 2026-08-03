@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { KnowproContext } from "./knowproContext.js";
-import { dateTime, readJsonFile } from "typeagent";
+import { dateTime, readJsonFile } from "@typeagent/agent-runtime";
 import { error, Result, success } from "typechat";
 import {
     BatchCallback,
@@ -25,7 +25,7 @@ import {
 import { getLangSearchResult } from "./knowproCommands.js";
 import { parseTypedArguments } from "interactive-app";
 import { execSearchRequest } from "./knowproCommands.js";
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import { TestRunReport } from "./logging.js";
 
 export type LangSearchResults = {

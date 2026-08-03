@@ -24,6 +24,7 @@ const handlers = {
     commands: {
         run: {
             description: "Run a task",
+            action: "runTask",
             parameters: {
                 args: {
                     task: {
@@ -163,6 +164,46 @@ describe("collectCommandReferenceMarkdown", () => {
 
     it("recurses into nested subcommand groups", () => {
         expect(markdown).toContain("## @doctest group leaf - A leaf command");
+    });
+
+    it("renders the equivalent action when a command declares one", () => {
+        const runIdx = markdown.indexOf("## @doctest run - Run a task");
+        const nextSection = markdown.indexOf("\n## ", runIdx + 1);
+        const runBlock = markdown.slice(
+            runIdx,
+            nextSection === -1 ? undefined : nextSection,
+        );
+        expect(runBlock).toContain("Equivalent action: `runTask`");
+    });
+
+    it("omits the equivalent action line when a command declares none", () => {
+        const leafIdx = markdown.indexOf("## @doctest group leaf");
+        const nextSection = markdown.indexOf("\n## ", leafIdx + 1);
+        const leafBlock = markdown.slice(
+            leafIdx,
+            nextSection === -1 ? undefined : nextSection,
+        );
+        expect(leafBlock).not.toContain("Equivalent action:");
+    });
+
+    it("renders a fully-qualified, linked action when a resolver is supplied", async () => {
+        const resolved = await collectCommandReferenceMarkdown(context, {
+            resolveAction: (agentName, actionName) =>
+                agentName === "doctest" && actionName === "runTask"
+                    ? {
+                          qualifiedName: "doctest.tasks.runTask",
+                          link: "../foo/tasksSchema.ts",
+                      }
+                    : undefined,
+        });
+        const runIdx = resolved.indexOf("## @doctest run - Run a task");
+        const runBlock = resolved.slice(
+            runIdx,
+            resolved.indexOf("\n## ", runIdx + 1),
+        );
+        expect(runBlock).toContain(
+            "Equivalent action: [`doctest.tasks.runTask`](../foo/tasksSchema.ts)",
+        );
     });
 
     it("omits Flags/Arguments sections for parameter-less commands", () => {

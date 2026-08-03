@@ -322,7 +322,7 @@ async function runCommandReference(
         await import("./commandReference.js");
 
     if (opts.dryRun) {
-        const markdown = await generateCommandReferenceMarkdown();
+        const markdown = await generateCommandReferenceMarkdown(monorepoRoot);
         process.stdout.write(markdown);
         return 0;
     }

@@ -9,7 +9,16 @@ import type {
     ReplayResolutionTraceResult,
     StudioCorpusImportRequest,
     StudioCorpusImportResult,
+    PackagingHealthGateResult,
+    ProveUtteranceOptions,
+    UtteranceProofResult,
 } from "@typeagent/core/runtime";
+import type {
+    OnboardingState,
+    OnboardingPhaseName,
+    PhaseStatus,
+    RestorePhaseResult,
+} from "@typeagent/core/onboardingBridge";
 import type { CorpusEntry, ExternalSourceSpec } from "@typeagent/core/corpus";
 import type { FeedbackRecordInput } from "@typeagent/core/feedback";
 import type { SandboxStatus } from "@typeagent/core/sandbox";
@@ -30,6 +39,63 @@ export interface HealthSource {
     listSandboxes(): Promise<SandboxStatus[]>;
 }
 
+/**
+ * The onboarding surface the New Agent wizard and the onboarding command
+ * palette consume. It mirrors the onboarding subset of the service's
+ * `StudioRuntime`, but every method is **async** — onboarding now runs in the
+ * standalone Studio service (where the real sandboxes live, so installs no
+ * longer split-brain), reached over the channel. `listPhases`/`routeConversation`
+ * are async here (they are sync on the in-process `StudioRuntime`).
+ */
+export interface OnboardingRuntime {
+    startOnboarding(seed: {
+        description: string;
+        agentName?: string;
+    }): Promise<OnboardingState>;
+    getActiveOnboardingSession(): Promise<OnboardingState>;
+    clearActiveOnboardingSession(): Promise<void>;
+    listPhases(): Promise<readonly OnboardingPhaseName[]>;
+    getDefaultInputsForPhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<unknown>;
+    runPhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+        inputs?: unknown,
+    ): Promise<OnboardingState>;
+    getPhaseStatusOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<PhaseStatus>;
+    listStalePhasesOnActiveSession(): Promise<OnboardingPhaseName[]>;
+    runRemainingPhasesOnActiveSession(): Promise<{
+        state: OnboardingState;
+        completedPhases: OnboardingPhaseName[];
+    }>;
+    rerunPhasesOnActiveSession(phases: OnboardingPhaseName[]): Promise<{
+        state: OnboardingState;
+        rerunPhases: OnboardingPhaseName[];
+    }>;
+    restorePhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<RestorePhaseResult>;
+    resolveInstallArtifactPathForActiveSession(): Promise<string>;
+    evaluatePackagingHealthGateForActiveSession(): Promise<PackagingHealthGateResult>;
+    enforcePackagingHealthGateForActiveSession(): Promise<PackagingHealthGateResult>;
+    installLastSessionToSandbox(
+        sandboxId?: string,
+        options?: { skipHealthGate?: boolean },
+    ): Promise<{ sessionId: string; artifactPath: string }>;
+    installArtifactToSandbox(
+        artifactPath: string,
+        sandboxId?: string,
+    ): Promise<{ sessionId: string; artifactPath: string }>;
+    routeConversation(
+        prompt: string,
+    ): Promise<{ target: "onboarding" | "schemaAuthor"; reason: string }>;
+    proveActiveSessionUtterance(
+        options?: ProveUtteranceOptions,
+    ): Promise<UtteranceProofResult>;
+}
+
 const NOT_CONNECTED =
     "Studio service is not connected. Open the workspace so Studio can launch it, or run `typeagent-studio serve`.";
 
@@ -41,7 +107,9 @@ const NOT_CONNECTED =
  * needed); everything else routes to the service. Reads return empty when
  * momentarily disconnected; mutations reject with a clear message.
  */
-export class StudioServiceRuntimeFacade implements CorpusSource, HealthSource {
+export class StudioServiceRuntimeFacade
+    implements CorpusSource, HealthSource, OnboardingRuntime
+{
     constructor(
         private readonly connection: StudioServiceConnection,
         private readonly repoRootInfo: RepoRootResolution,
@@ -111,5 +179,111 @@ export class StudioServiceRuntimeFacade implements CorpusSource, HealthSource {
         request: ReplayResolutionTraceRequest,
     ): Promise<ReplayResolutionTraceResult> {
         return this.require().replayResolutionTrace(request);
+    }
+
+    // --- Onboarding / New Agent wizard. All route to the service, whose
+    // injected phaseRunner runs the onboarding agent in that process. Mutations
+    // (and reads) reject with a clear "not connected" message when the service
+    // socket is momentarily down — the wizard treats a failed snapshot as "no
+    // active session" (start screen) and surfaces other errors inline. ---
+
+    async startOnboarding(seed: {
+        description: string;
+        agentName?: string;
+    }): Promise<OnboardingState> {
+        return this.require().startOnboarding(seed);
+    }
+
+    async getActiveOnboardingSession(): Promise<OnboardingState> {
+        return this.require().getActiveOnboardingSession();
+    }
+
+    async clearActiveOnboardingSession(): Promise<void> {
+        return this.require().clearActiveOnboardingSession();
+    }
+
+    async listPhases(): Promise<readonly OnboardingPhaseName[]> {
+        return this.require().listPhases();
+    }
+
+    async getDefaultInputsForPhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<unknown> {
+        return this.require().getDefaultInputsForPhaseOnActiveSession(phase);
+    }
+
+    async runPhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+        inputs?: unknown,
+    ): Promise<OnboardingState> {
+        return this.require().runPhaseOnActiveSession(phase, inputs);
+    }
+
+    async getPhaseStatusOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<PhaseStatus> {
+        return this.require().getPhaseStatusOnActiveSession(phase);
+    }
+
+    async listStalePhasesOnActiveSession(): Promise<OnboardingPhaseName[]> {
+        return this.require().listStalePhasesOnActiveSession();
+    }
+
+    async runRemainingPhasesOnActiveSession(): Promise<{
+        state: OnboardingState;
+        completedPhases: OnboardingPhaseName[];
+    }> {
+        return this.require().runRemainingPhasesOnActiveSession();
+    }
+
+    async rerunPhasesOnActiveSession(phases: OnboardingPhaseName[]): Promise<{
+        state: OnboardingState;
+        rerunPhases: OnboardingPhaseName[];
+    }> {
+        return this.require().rerunPhasesOnActiveSession(phases);
+    }
+
+    async restorePhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<RestorePhaseResult> {
+        return this.require().restorePhaseOnActiveSession(phase);
+    }
+
+    async resolveInstallArtifactPathForActiveSession(): Promise<string> {
+        return this.require().resolveInstallArtifactPathForActiveSession();
+    }
+
+    async evaluatePackagingHealthGateForActiveSession(): Promise<PackagingHealthGateResult> {
+        return this.require().evaluatePackagingHealthGateForActiveSession();
+    }
+
+    async enforcePackagingHealthGateForActiveSession(): Promise<PackagingHealthGateResult> {
+        return this.require().enforcePackagingHealthGateForActiveSession();
+    }
+
+    async installLastSessionToSandbox(
+        sandboxId?: string,
+        options?: { skipHealthGate?: boolean },
+    ): Promise<{ sessionId: string; artifactPath: string }> {
+        return this.require().installLastSessionToSandbox(sandboxId, options);
+    }
+
+    async installArtifactToSandbox(
+        artifactPath: string,
+        sandboxId?: string,
+    ): Promise<{ sessionId: string; artifactPath: string }> {
+        return this.require().installArtifactToSandbox(artifactPath, sandboxId);
+    }
+
+    async routeConversation(
+        prompt: string,
+    ): Promise<{ target: "onboarding" | "schemaAuthor"; reason: string }> {
+        return this.require().routeConversation(prompt);
+    }
+
+    async proveActiveSessionUtterance(
+        options?: ProveUtteranceOptions,
+    ): Promise<UtteranceProofResult> {
+        return this.require().proveActiveSessionUtterance(options);
     }
 }

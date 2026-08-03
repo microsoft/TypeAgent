@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kpLib from "knowledge-processor";
+import * as kpLib from "@typeagent/knowledge-processor";
 import {
     AnswerContext,
     RelevantKnowledge,

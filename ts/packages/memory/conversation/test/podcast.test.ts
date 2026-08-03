@@ -7,7 +7,7 @@ import {
     loadTestPodcast,
     // getTestTranscriptSmall,
 } from "./testCommon.js";
-import { buildSemanticRefIndex } from "knowpro";
+import { buildSemanticRefIndex } from "@typeagent/knowpro";
 import {
     verifyCompletedUpto,
     verifyConversationBasic,

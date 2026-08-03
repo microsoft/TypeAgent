@@ -10,7 +10,7 @@ import {
 } from "interactive-app";
 import { SchemaStudio } from "./studio.js";
 import { appendFileSync, existsSync, readFileSync, unlinkSync } from "fs";
-import { createTypeChat, loadSchema } from "typeagent";
+import { createTypeChat, loadSchema } from "@typeagent/agent-runtime";
 import {
     ChatModelWithStreaming,
     CompletionSettings,

@@ -1,8 +1,7 @@
 {
-  "name": "powershell-typeagent",
+  "name": "@typeagent/powershell-typeagent",
   "version": "0.0.1",
-  "private": true,
-  "description": "TypeAgent PowerShell — reusable PowerShell scripts from reasoning traces",
+  "description": "Agent to create and execute PowerShell workflows",
   "keywords": [
     "typeagent-agent"
   ],
@@ -20,6 +19,11 @@
     "./agent/handlers": "./dist/actionHandler.mjs",
     "./recipe": "./dist/types/scriptRecipe.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/powershellSchema.agr -o ./dist/powershellSchema.ag.json",
     "agc:all": "concurrently npm:agc npm:agc:files npm:agc:processes npm:agc:system npm:agc:services npm:agc:network npm:agc:data npm:agc:archives",
@@ -74,7 +78,8 @@
             "src/powershellSchema.agr"
           ],
           "outputGlobs": [
-            "dist/powershellSchema.ag.json"
+            "dist/powershellSchema.ag.json",
+            "dist/powershellSchema.ag.map.json"
           ]
         }
       },
@@ -87,7 +92,8 @@
             "src/namespaces/files/filesSchema.agr"
           ],
           "outputGlobs": [
-            "dist/filesSchema.ag.json"
+            "dist/filesSchema.ag.json",
+            "dist/filesSchema.ag.map.json"
           ]
         }
       },
@@ -100,7 +106,8 @@
             "src/namespaces/processes/processesSchema.agr"
           ],
           "outputGlobs": [
-            "dist/processesSchema.ag.json"
+            "dist/processesSchema.ag.json",
+            "dist/processesSchema.ag.map.json"
           ]
         }
       },
@@ -113,7 +120,8 @@
             "src/namespaces/system/systemSchema.agr"
           ],
           "outputGlobs": [
-            "dist/systemSchema.ag.json"
+            "dist/systemSchema.ag.json",
+            "dist/systemSchema.ag.map.json"
           ]
         }
       },
@@ -126,7 +134,8 @@
             "src/namespaces/services/servicesSchema.agr"
           ],
           "outputGlobs": [
-            "dist/servicesSchema.ag.json"
+            "dist/servicesSchema.ag.json",
+            "dist/servicesSchema.ag.map.json"
           ]
         }
       },
@@ -139,7 +148,8 @@
             "src/namespaces/network/networkSchema.agr"
           ],
           "outputGlobs": [
-            "dist/networkSchema.ag.json"
+            "dist/networkSchema.ag.json",
+            "dist/networkSchema.ag.map.json"
           ]
         }
       },
@@ -152,7 +162,8 @@
             "src/namespaces/data/dataSchema.agr"
           ],
           "outputGlobs": [
-            "dist/dataSchema.ag.json"
+            "dist/dataSchema.ag.json",
+            "dist/dataSchema.ag.map.json"
           ]
         }
       },
@@ -165,7 +176,8 @@
             "src/namespaces/archives/archivesSchema.agr"
           ],
           "outputGlobs": [
-            "dist/archivesSchema.ag.json"
+            "dist/archivesSchema.ag.json",
+            "dist/archivesSchema.ag.map.json"
           ]
         }
       },
@@ -276,6 +288,15 @@
     }
   },
   "typeagent": {
-    "defaultAgentName": "powershell"
+    "defaultAgentName": "powershell",
+    "bundle": {
+      "assetMappings": [
+        {
+          "package": "@typeagent/powershell-typeagent",
+          "source": "scripts/scriptHost.ps1",
+          "destination": "scripts/scriptHost.ps1"
+        }
+      ]
+    }
   }
 }

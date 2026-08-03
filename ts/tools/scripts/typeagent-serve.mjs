@@ -141,8 +141,8 @@ function spawnDaemon(port) {
     const idle = arg("--idle-timeout");
     const args = [serverEntry, "--port", String(port)];
     if (idle) args.push("--idle-timeout", idle);
-    // Agent profile: a reduced provider config (e.g. "service" ->
-    // data/config.service.json) so the daemon loads only the agents this
+    // Agent profile: a reduced provider config (e.g. "inbox" ->
+    // data/config.inbox.json) so the daemon loads only the agents this
     // deployment ships. Precedence: --config arg > env > the .typeagent-profile
     // marker written by deployAgentServer when the artifact was profile-pruned
     // (the pruned artifact CANNOT load excluded agents, so this default is

@@ -1,8 +1,7 @@
 {
-  "name": "desktop-automation",
+  "name": "@typeagent/desktop-automation",
   "version": "0.0.1",
-  "private": true,
-  "description": "",
+  "description": "Agent to control the desktop",
   "keywords": [
     "typeagent-agent"
   ],
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/manifest.json",
     "./agent/handlers": "./dist/actionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/desktopSchema.agr -o ./dist/desktopSchema.ag.json",
     "agc:all": "concurrently npm:agc npm:agc:display npm:agc:personalization npm:agc:taskbar npm:agc:input npm:agc:privacy npm:agc:power npm:agc:system",
@@ -48,19 +52,19 @@
     "tsc": "tsc -b src test"
   },
   "dependencies": {
+    "@typeagent/agent-cache": "workspace:*",
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
-    "agent-cache": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*",
     "body-parser": "^1.20.6",
     "chalk": "^5.4.1",
     "cors": "^2.8.5",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "find-config": "^1.0.0",
-    "typeagent": "workspace:*",
     "typechat": "^0.1.1",
-    "typechat-utils": "workspace:*",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
@@ -91,7 +95,8 @@
             "src/desktopSchema.agr"
           ],
           "outputGlobs": [
-            "dist/desktopSchema.ag.json"
+            "dist/desktopSchema.ag.json",
+            "dist/desktopSchema.ag.map.json"
           ]
         }
       },
@@ -104,7 +109,8 @@
             "src/windows/displaySchema.agr"
           ],
           "outputGlobs": [
-            "dist/displaySchema.ag.json"
+            "dist/displaySchema.ag.json",
+            "dist/displaySchema.ag.map.json"
           ]
         }
       },
@@ -117,7 +123,8 @@
             "src/windows/inputSchema.agr"
           ],
           "outputGlobs": [
-            "dist/inputSchema.ag.json"
+            "dist/inputSchema.ag.json",
+            "dist/inputSchema.ag.map.json"
           ]
         }
       },
@@ -130,7 +137,8 @@
             "src/windows/personalizationSchema.agr"
           ],
           "outputGlobs": [
-            "dist/personalizationSchema.ag.json"
+            "dist/personalizationSchema.ag.json",
+            "dist/personalizationSchema.ag.map.json"
           ]
         }
       },
@@ -143,7 +151,8 @@
             "src/windows/powerSchema.agr"
           ],
           "outputGlobs": [
-            "dist/powerSchema.ag.json"
+            "dist/powerSchema.ag.json",
+            "dist/powerSchema.ag.map.json"
           ]
         }
       },
@@ -156,7 +165,8 @@
             "src/windows/privacySchema.agr"
           ],
           "outputGlobs": [
-            "dist/privacySchema.ag.json"
+            "dist/privacySchema.ag.json",
+            "dist/privacySchema.ag.map.json"
           ]
         }
       },
@@ -169,7 +179,8 @@
             "src/windows/systemSchema.agr"
           ],
           "outputGlobs": [
-            "dist/systemSchema.ag.json"
+            "dist/systemSchema.ag.json",
+            "dist/systemSchema.ag.map.json"
           ]
         }
       },
@@ -182,7 +193,8 @@
             "src/windows/taskbarSchema.agr"
           ],
           "outputGlobs": [
-            "dist/taskbarSchema.ag.json"
+            "dist/taskbarSchema.ag.json",
+            "dist/taskbarSchema.ag.map.json"
           ]
         }
       },

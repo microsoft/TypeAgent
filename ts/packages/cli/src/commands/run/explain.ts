@@ -3,7 +3,7 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import chalk from "chalk";
-import { RequestAction, fromJsonActions } from "agent-cache";
+import { RequestAction, fromJsonActions } from "@typeagent/agent-cache";
 import {
     connectAgentServer,
     ensureAgentServer,

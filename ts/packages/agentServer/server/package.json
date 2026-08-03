@@ -41,21 +41,25 @@
   "dependencies": {
     "@azure/identity": "^4.10.0",
     "@typeagent/agent-rpc": "workspace:*",
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
+    "@typeagent/conversation-memory": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*",
+    "@typeagent/websocket-channel-server": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "better-sqlite3": "12.6.2",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dispatcher-node-providers": "workspace:*",
     "dotenv": "^16.3.1",
-    "websocket-channel-server": "workspace:*",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

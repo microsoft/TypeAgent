@@ -20,7 +20,7 @@ import {
     ExplanationData,
     toJsonActions,
     createExecutableAction,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import {
     getElapsedString,
     createLimiter,

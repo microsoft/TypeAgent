@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7c4e6ad34c5147f429539978bbc54753b1344fede45208b9bb8b28686bf44a5e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=34b5b28ead0637c1b759115ee2598b52b3c9d19cfe6ea078210d89f014080717 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # onboarding-agent — AI-generated documentation
@@ -12,18 +12,18 @@
 
 ## Overview
 
-The `onboarding-agent` is a TypeAgent application agent that automates the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each managed by a sub-agent. This agent is designed to streamline the onboarding process by generating the necessary artifacts and configurations for new integrations. It is particularly effective when used with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
+The `onboarding-agent` is a TypeAgent application agent that automates the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each producing specific artifacts and configurations. This agent is particularly effective when used with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
 
 ## What it does
 
-The `onboarding-agent` provides a structured, multi-phase approach to integrating new applications or APIs into the TypeAgent ecosystem. It supports the following actions:
+The `onboarding-agent` provides a structured, multi-phase approach to onboarding new integrations. It supports the following actions:
 
 - **`startOnboarding`**: Initiates the onboarding process for a new integration by specifying the integration name and optional details such as a description or API type.
 - **`resumeOnboarding`**: Resumes an in-progress onboarding process, optionally starting from a specific phase such as discovery, schema generation, or testing.
 - **`getOnboardingStatus`**: Retrieves the current status of an ongoing integration, including the current phase and progress.
 - **`listIntegrations`**: Lists all integrations, optionally filtered by their status (e.g., in-progress or complete).
 
-The onboarding process is divided into seven phases, each producing specific artifacts saved to a structured workspace directory (`~/.typeagent/onboarding/<integration-name>/`). These phases are:
+The onboarding process is divided into seven phases:
 
 1. **Discovery**: Crawls documentation, parses OpenAPI specs, or analyzes CLI `--help` output to enumerate the API surface.
 2. **Phrase Generation**: Generates natural language sample phrases for each discovered action.
@@ -33,16 +33,16 @@ The onboarding process is divided into seven phases, each producing specific art
 6. **Testing**: Creates test cases and validates the generated artifacts through a phrase-to-action testing loop.
 7. **Packaging**: Packages the completed agent for distribution and registration within the TypeAgent ecosystem.
 
-Each phase is designed to produce specific outputs that are stored in a dedicated workspace directory, allowing the process to be paused and resumed as needed.
+Each phase produces specific outputs stored in a structured workspace directory (`~/.typeagent/onboarding/<integration-name>/`), allowing the process to be paused and resumed as needed.
 
 ## Setup
 
 To use the `onboarding-agent`, you need to configure the following environment variables:
 
-- **`TYPEAGENT_UIA_HELPER`**: This variable is required for the experimental UI Automation crawling feature, which is used to discover actions in Windows desktop applications. Refer to the hand-written README for more details on how to set this up.
+- **`TYPEAGENT_UIA_HELPER`**: Required for the experimental UI Automation crawling feature, which discovers actions in Windows desktop applications. Refer to the hand-written README for details on setting this up.
 - **`__PORT_ENV__`**: Specifies the port environment for the agent. Ensure this is set to the appropriate value for your environment.
 
-Additionally, for optimal usage, it is recommended to set up TypeAgent as an MCP server. This allows AI clients like Claude Code or GitHub Copilot to communicate directly with the TypeAgent dispatcher. The hand-written README provides detailed instructions for this setup.
+For optimal usage, it is recommended to set up TypeAgent as an MCP server. This allows AI clients like Claude Code or GitHub Copilot to communicate directly with the TypeAgent dispatcher. The hand-written README provides detailed instructions for this setup, including building the workspace, configuring `.mcp.json`, and starting the dispatcher.
 
 ## Key Files
 
@@ -108,13 +108,14 @@ By following these steps, you can enhance the `onboarding-agent` to support addi
 Workspace:
 
 - [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
+- [@typeagent/action-schema](../../../packages/actionSchema/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
+- [@typeagent/agent-runtime](../../../packages/typeagent/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 - [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [@typeagent/dispatcher-types](../../../packages/dispatcher/types/README.md)
 - [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
 - [dispatcher-node-providers](../../../packages/dispatcher/nodeProviders/README.md)
-- [typeagent](../../../packages/typeagent/README.md)
 
 External: `debug`, `typechat`
 
@@ -135,7 +136,7 @@ External: `debug`, `typechat`
 - [./src/discovery/discoverySchema.ts](./src/discovery/discoverySchema.ts)
 - [./src/grammarGen/grammarGenHandler.ts](./src/grammarGen/grammarGenHandler.ts)
 - [./src/grammarGen/grammarGenSchema.agr](./src/grammarGen/grammarGenSchema.agr)
-- _…and 85 more under `./src/`._
+- _…and 86 more under `./src/`._
 
 ### Agent surface
 
@@ -164,6 +165,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/onboa
 
 ---
 
-_Auto-generated against commit `c97eb42726a9196c7ac72138faa0777c5cbc1aab` on `2026-07-18T09:48:36.613Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44f918824a1d64848984e5a5a84f67531972ca97` on `2026-07-30T06:32:49.035Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

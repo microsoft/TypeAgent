@@ -1,8 +1,7 @@
 {
-  "name": "utility-typeagent",
+  "name": "@typeagent/utility-typeagent",
   "version": "0.0.1",
-  "private": true,
-  "description": "TypeAgent Utility — web search, web fetch, and file I/O for compiled task flows",
+  "description": "Utility agent — web search, web fetch, and file I/O for compiled task flows",
   "keywords": [
     "typeagent-agent"
   ],
@@ -16,9 +15,14 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    "./agent/manifest": "./manifest.json",
+    "./agent/manifest": "./src/manifest.json",
     "./agent/handlers": "./dist/actionHandler.mjs"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/utilitySchema.agr -o ./dist/utilitySchema.ag.json",
     "asc": "asc -i ./src/utilitySchema.mts -o ./dist/utilitySchema.pas.json -t UtilityAction",
@@ -63,7 +67,8 @@
             "src/utilitySchema.agr"
           ],
           "outputGlobs": [
-            "dist/utilitySchema.ag.json"
+            "dist/utilitySchema.ag.json",
+            "dist/utilitySchema.ag.map.json"
           ]
         }
       },

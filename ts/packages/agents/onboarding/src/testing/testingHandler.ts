@@ -533,6 +533,7 @@ function createCapturingClientIO(buffer: string[]): ClientIO {
         openLocalView: async () => {},
         closeLocalView: async () => {},
         requestChoice: noop,
+        requestForm: noop,
         requestInteraction: noop,
         interactionResolved: noop,
         interactionCancelled: noop,

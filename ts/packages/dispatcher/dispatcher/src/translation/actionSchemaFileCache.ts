@@ -18,7 +18,10 @@ import { AppAction, SchemaFormat, SchemaTypeNames } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined, simpleStarRegex } from "@typeagent/common-utils";
 import fs from "node:fs";
 import registerDebug from "debug";
-import { SchemaInfoProvider, computeActionSchemaFileHash } from "agent-cache";
+import {
+    SchemaInfoProvider,
+    computeActionSchemaFileHash,
+} from "@typeagent/agent-cache";
 import {
     getActionSchemaTypeName,
     getActivitySchemaTypeName,

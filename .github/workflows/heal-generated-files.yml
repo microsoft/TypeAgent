@@ -92,11 +92,19 @@ jobs:
         with:
           package_json_file: ts/package.json
 
+      # No pnpm store cache here.  This job never runs a full `pnpm install`:
+      # it only trial-merges main and, when the lockfile conflicts, runs
+      # `pnpm install --lockfile-only` (dependency-graph resolution that writes
+      # the lockfile without populating the store).  With `cache: pnpm`,
+      # setup-node's post-step tries to save the pnpm store on a cache miss and
+      # fails with "Path(s) specified in the action for caching do(es) not
+      # exist" because nothing ever populated it - so the job passed or failed
+      # purely on whether another workflow had already cached that lockfile
+      # hash.  The store cache gives no benefit to a lockfile-only resolve, so
+      # dropping it makes the job deterministic.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: "pnpm"
-          cache-dependency-path: ts/pnpm-lock.yaml
 
       - name: Heal conflicted generated files
         if: env.HAS_APP_CREDS == 'true'

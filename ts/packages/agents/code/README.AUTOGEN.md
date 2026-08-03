@@ -3,20 +3,20 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=568ef3ec7687aa53aed3c928bb6d97782f3056afa486bd3990ec219bfa442753 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=875a9ba71f7159b20afff0a1f7eb08f3d629d5c93a71d166bac8248b42ddb1a3 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# code-agent — AI-generated documentation
+# @typeagent/code-agent — AI-generated documentation
 
 > 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
-The `code-agent` package is a TypeAgent application agent designed to automate tasks within Visual Studio Code (VSCode). It acts as a dispatcher for code-related actions, enabling users to interact with VSCode through natural language commands. This agent is integrated with the [coda](../../coda/README.md) VSCode extension, which must be deployed for the `code-agent` to function. The agent is not enabled by default and requires explicit configuration to activate.
+The `@typeagent/code-agent` package is a TypeAgent application agent designed to automate tasks in Visual Studio Code (VSCode). It enables users to interact with VSCode through natural language commands, facilitating workflows such as launching the editor, managing files, and customizing the development environment. This agent integrates with the [coda](../../coda/README.md) VSCode extension, which must be deployed for the `code-agent` to function. The agent is not enabled by default and requires explicit configuration to activate.
 
 ## What it does
 
-The `code-agent` currently implements the `launchVSCode` action, which allows users to launch or start VSCode in different modes:
+The `code-agent` currently implements the `launchVSCode` action, which allows users to start or open VSCode in various modes:
 
 - **last**: Opens the last session.
 - **folder**: Opens a specific folder (requires a `path` parameter).
@@ -121,9 +121,9 @@ Workspace:
 - [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
+- [@typeagent/telemetry](../../../packages/telemetry/README.md)
+- [@typeagent/websocket-channel-server](../../../packages/utils/webSocketChannelServer/README.md)
 - [@typeagent/websocket-utils](../../../packages/utils/webSocketUtils/README.md)
-- [telemetry](../../../packages/telemetry/README.md)
-- [websocket-channel-server](../../../packages/utils/webSocketChannelServer/README.md)
 
 External: `better-sqlite3`, `chalk`, `debug`, `ws`
 
@@ -150,7 +150,7 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ### Actions
 
-_1 action implemented by this agent, parsed deterministically from `./src/codeActionsSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature. 12 additional actions are declared in the schema but not yet implemented; not shown._
+_1 action implemented by this agent, parsed deterministically from `./src/codeActionsSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature. 13 additional actions are declared in the schema but not yet implemented; not shown._
 
 | User says                | Action                                |
 | ------------------------ | ------------------------------------- |
@@ -158,6 +158,6 @@ _1 action implemented by this agent, parsed deterministically from `./src/codeAc
 
 ---
 
-_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `5a7bdd3625eef42d75702c9fd9f0dadb7cb10410` on `2026-07-29T05:15:39.538Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/code-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

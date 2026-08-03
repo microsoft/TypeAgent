@@ -38,6 +38,11 @@ export type CommandDescriptor = {
     description: string;
     help?: string;
     parameters?: ParameterDefinitions | undefined;
+    // The agent action this command is equivalent to, if any. Lets tooling
+    // cross-reference a typed command with its natural-language action (and
+    // track which commands still lack one). `schema` is optional when the
+    // `actionName` is unambiguous within the agent.
+    action?: string | { schema: string; actionName: string } | undefined;
 };
 
 export type CommandDescriptorTable = {

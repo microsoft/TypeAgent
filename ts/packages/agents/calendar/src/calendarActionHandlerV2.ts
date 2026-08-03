@@ -13,8 +13,8 @@ import {
     CalendarClient,
     GraphEntity,
     ErrorResponse,
-} from "graph-utils";
-import { getTimeZoneName, getUniqueLocalId } from "typechat-utils";
+} from "@typeagent/graph-utils";
+import { getTimeZoneName, getUniqueLocalId } from "@typeagent/typechat-utils";
 import chalk from "chalk";
 import {
     CalendarAction,

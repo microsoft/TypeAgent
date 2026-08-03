@@ -1,8 +1,7 @@
 {
-  "name": "music",
+  "name": "@typeagent/music",
   "version": "0.0.1",
-  "private": true,
-  "description": "",
+  "description": "Agent to play music",
   "keywords": [
     "typeagent-agent"
   ],
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/agent/playerManifest.json",
     "./agent/handlers": "./dist/agent/playerHandlers.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/agent/playerSchema.agr -o ./dist/agent/playerSchema.ag.json",
     "asc": "asc -i ./src/agent/playerSchema.ts -o ./dist/agent/playerSchema.pas.json -t PlayerActions -e PlayerEntities",
@@ -64,7 +68,8 @@
             "src/agent/playerSchema.agr"
           ],
           "outputGlobs": [
-            "dist/agent/playerSchema.ag.json"
+            "dist/agent/playerSchema.ag.json",
+            "dist/agent/playerSchema.ag.map.json"
           ]
         }
       },

@@ -1,8 +1,7 @@
 {
-  "name": "taskflow-typeagent",
+  "name": "@typeagent/taskflow-typeagent",
   "version": "0.0.1",
-  "private": true,
-  "description": "TypeAgent TaskFlow — user-taught macros over TypeAgent actions",
+  "description": "User-taught macros over TypeAgent actions",
   "keywords": [
     "typeagent-agent"
   ],
@@ -40,6 +39,15 @@
     "rimraf": "^6.0.1"
   },
   "typeagent": {
-    "defaultAgentName": "taskflow"
+    "defaultAgentName": "taskflow",
+    "bundle": {
+      "assetMappings": [
+        {
+          "package": "@typeagent/taskflow-typeagent",
+          "source": "src/script/taskFlowSandbox.d.ts",
+          "destination": "src/script/taskFlowSandbox.d.ts"
+        }
+      ]
+    }
   }
 }

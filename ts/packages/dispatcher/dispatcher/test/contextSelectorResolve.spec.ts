@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { MatchResult } from "agent-cache";
+import { MatchResult } from "@typeagent/agent-cache";
 import type { CommandHandlerContext } from "../src/context/commandHandlerContext.js";
 import { resolveContextSelector } from "../src/translation/matchContextSelector.js";
 import { toCandidate } from "../src/translation/matchCollision.js";

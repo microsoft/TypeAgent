@@ -8,7 +8,7 @@ import {
 import { PageDescription } from "../discovery/schema/pageSummary.mjs";
 import { UnifiedActionsList } from "../discovery/schema/unifiedActions.mjs";
 import { DetectedAction } from "./schema/knowledgeExtraction.mjs";
-import { ExtractionMode } from "website-memory";
+import { ExtractionMode } from "@typeagent/website-memory";
 
 /**
  * ActionDetectionAdapter bridges knowledge extraction and discovery agent systems.

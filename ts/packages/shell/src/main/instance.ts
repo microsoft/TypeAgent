@@ -52,7 +52,7 @@ import {
 } from "@typeagent/agent-server-client";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import { joinNamedOrFallback } from "@typeagent/agent-server-client/conversation";
-import type { ConnectionStatus } from "chat-ui";
+import type { ConnectionStatus } from "@typeagent/chat-ui";
 import {
     loadUserSettings,
     saveUserSettings,
@@ -113,6 +113,7 @@ async function initializeDispatcher(
         ipcMain.on("clientio-rpc-reply", onClientIORpcReply);
 
         const newClientIO = createClientIORpcClient(clientIOChannel.channel);
+        let exitRequested = false;
         const clientIO: ClientIO = {
             ...newClientIO,
             // Main process intercepted clientIO calls
@@ -172,7 +173,7 @@ async function initializeDispatcher(
                 }
             },
             exit: () => {
-                app.quit();
+                exitRequested = true;
             },
             shutdown: () => {
                 if (connection !== undefined) {
@@ -639,6 +640,7 @@ async function initializeDispatcher(
                     shutdown: () => {
                         app.quit();
                     },
+                    testMode: isTest,
                 },
             );
             connection = inProcessServer.connection;
@@ -733,6 +735,11 @@ async function initializeDispatcher(
                 return submit;
             }
             const completion = submit.entry.completion.then(async (result) => {
+                if (exitRequested) {
+                    exitRequested = false;
+                    setImmediate(() => app.quit());
+                    return result;
+                }
                 shellWindow.chatView.webContents.send(
                     "send-demo-event",
                     "CommandProcessed",

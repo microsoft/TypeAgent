@@ -5,6 +5,8 @@ import {
     AgentMessageKind,
     DisplayAppendMode,
     DisplayContent,
+    QuestionForm,
+    QuestionFormResponse,
     TemplateSchema,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
@@ -47,11 +49,46 @@ export interface IAgentMessage {
     kind?: AgentMessageKind | undefined;
 }
 
+// One row of the "how the phrase mapped to the action" table shown in the
+// explained popover: a parameter (dotted path) and the value extracted for it.
+export type ExplainedMapping = {
+    name: string;
+    value: string;
+};
+
+// One sub-phrase of the original request as the explainer broke it down: the
+// original words and the category the explainer assigned (e.g. "politeness",
+// "action", "entity"). Drives per-category coloring so a phrase word and its
+// matching generalized-form marker share a color.
+export type ExplainedSegment = {
+    text: string;
+    category: string;
+};
+
+// Rich detail backing the popover shown when the user clicks the roadrunner.
+// `source` distinguishes a cache hit (an existing construction/grammar rule
+// was triggered) from a fresh model translation the explainer generalized.
+// `rule` is the construction/grammar rule text (the generalized form for the
+// model case); `mapping` lists the extracted parameter values; `segments` is
+// the per-category sub-phrase breakdown; `generalizations` are example
+// same-meaning rephrasings, each broken into the same per-category segments so
+// they can be colored consistently.
+export type ExplainedDetail = {
+    source: "construction" | "grammar" | "model";
+    phrase: string;
+    action: string;
+    rule?: string | undefined;
+    mapping?: ExplainedMapping[] | undefined;
+    segments?: ExplainedSegment[] | undefined;
+    generalizations?: ExplainedSegment[][] | undefined;
+};
+
 export type NotifyExplainedData = {
     error?: string | undefined;
     fromCache: "construction" | "grammar" | false;
     fromUser: boolean;
     time: string;
+    detail?: ExplainedDetail | undefined;
 };
 
 // Options for ClientIO.notify. All notifications are ephemeral by default and
@@ -113,6 +150,25 @@ export interface ClientIO {
     ): Promise<unknown>;
 
     /**
+     * Blocking multi-question form interaction. Presents a full
+     * {@link QuestionForm} (one or more pick / multiChoice / yesNo questions,
+     * optionally with free-text escapes, optionally paged) and resolves with
+     * the user's {@link QuestionFormResponse} once submitted or cancelled.
+     *
+     * Unlike {@link requestForm} (a non-blocking choice card answered via
+     * {@link Dispatcher.respondToChoice}), this uses the async deferred
+     * interaction pattern (requestInteraction / respondToInteraction) so it is
+     * safe to await from code holding the command lock - e.g. the reasoning
+     * loop. Optional: only interactive hosts implement it; callers must fall
+     * back to {@link question} when it is absent.
+     */
+    askForm?(
+        requestId: RequestId | undefined,
+        form: QuestionForm,
+        source: string,
+    ): Promise<QuestionFormResponse>;
+
+    /**
      * Return a fresh, coarse snapshot of the host editor state (no file or
      * selection text). Optional: only editor-hosted clients (e.g. the VS Code
      * shell) implement it. Others omit it and the reasoning `get_user_context`
@@ -159,6 +215,18 @@ export interface ClientIO {
         choices: string[],
         source: string,
         checkboxLabel?: string,
+    ): void;
+
+    // Non-blocking multi-question form request. `form.fields` holds one or more
+    // questions (pick / multiChoice / yesNo, optionally with a free-text
+    // "Other" escape) answered together and submitted once. The response (a
+    // QuestionFormResponse) is delivered back via Dispatcher.respondToChoice,
+    // keyed by `choiceId` - the same return path as requestChoice.
+    requestForm(
+        requestId: RequestId,
+        choiceId: string,
+        form: QuestionForm,
+        source: string,
     ): void;
 
     // Non-blocking interaction requests (async deferred pattern)

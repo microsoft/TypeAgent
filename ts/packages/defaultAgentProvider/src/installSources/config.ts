@@ -77,6 +77,7 @@ export interface AvailableInstallRow {
     readonly ref: string; // internal durable/identity handle; dedup key only
     readonly defaultAgentName?: string | undefined; // shown as the install name
     readonly packageName?: string | undefined; // shown as the package; absent for path-only
+    readonly description?: string | undefined; // one-line summary from package metadata, when published
 }
 
 /**
@@ -312,6 +313,14 @@ export interface FeedSourceConfig {
     // TYPEAGENT_FEED_REGISTRY / TYPEAGENT_FEED_SCOPES.
     registry?: string; // Azure Artifacts npm registry URL
     scopes?: string[]; // e.g. ["@typeagent"]
+    // Additional Azure Artifacts npm registry URLs whose package INVENTORY is
+    // also enumerated for discovery (`@package available`). Packages found only
+    // in a discovery registry are still resolved/installed via the primary
+    // `registry` (which pulls them through its upstream). This lets agents that
+    // live only in an upstream feed be discovered without re-publishing them
+    // into the primary feed. Resolves from TYPEAGENT_FEED_DISCOVERY_REGISTRIES
+    // (comma-separated) when omitted.
+    discoveryRegistries?: string[];
 }
 
 /**

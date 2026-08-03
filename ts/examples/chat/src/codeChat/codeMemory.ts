@@ -48,7 +48,7 @@ import {
     loadTypescriptCode,
     TypeScriptCode,
 } from "./common.js";
-import { asyncArray, removeDir, writeAllLines } from "typeagent";
+import { asyncArray, removeDir, writeAllLines } from "@typeagent/agent-runtime";
 import ts from "typescript";
 import chalk from "chalk";
 import { createCommandTransformer } from "./commandTransformer.js";

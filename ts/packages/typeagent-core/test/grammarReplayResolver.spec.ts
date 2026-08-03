@@ -28,7 +28,7 @@ import {
     type ReplayValidatableAgent,
     type WildcardMatchValidator,
 } from "../src/replay/wildcardValidator.js";
-import type { MatchResult } from "agent-cache";
+import type { MatchResult } from "@typeagent/agent-cache";
 
 const GRAMMAR_V1 = [
     "<Start> = <Pause> | <Resume>;",

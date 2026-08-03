@@ -4,23 +4,18 @@
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai as ai } from "@typeagent/aiclient";
-import { ExtractionMode } from "website-memory";
+import { ExtractionMode } from "@typeagent/website-memory";
 import registerDebug from "debug";
 import { PageSummary } from "./schema/summarization.mjs";
-import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
+import { getBrowserPackageFilePath } from "../utils/packageFilePath.mjs";
 const debug = registerDebug("typeagent:browser:indexing");
 
 function getSchemaFileContents(fileName: string): string {
-    const packageRoot = path.join("..", "..", "..");
-
     return fs.readFileSync(
-        fileURLToPath(
-            new URL(
-                path.join(packageRoot, "./src/agent/indexing/schema", fileName),
-                import.meta.url,
-            ),
+        getBrowserPackageFilePath(
+            path.join("src", "agent", "indexing", "schema", fileName),
         ),
         "utf8",
     );

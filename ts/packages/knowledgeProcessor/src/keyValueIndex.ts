@@ -6,7 +6,7 @@ import {
     createObjectFolder,
     FileSystem,
     ObjectFolderSettings,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { removeUndefined, union } from "./setOperations.js";
 
 /**
