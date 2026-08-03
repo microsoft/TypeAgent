@@ -1337,18 +1337,24 @@ function createGrammarRule(
                     );
                     // PhraseSetPart cannot carry optional/repeat; wrap so bare
                     // <Polite>? / <Polite>* / <Polite>+ match the grouped form.
+                    // Inherit parent spacingMode on the synthetic rule so bare
+                    // and grouped (<Polite>)? lower to the same boundary mode
+                    // (grouped goes through createGrammarRules(..., spacingMode)).
                     if (optional || repeat) {
                         const q = repeat ? (optional ? "*" : "+") : "?";
                         parts.push(
-                            createRulesPart([{ parts: [phrasePart] }], {
-                                optional,
-                                repeat,
-                                partId: allocPartId(
-                                    context,
-                                    expr.pos,
-                                    `<${expr.refName.name}>${q}`,
-                                ),
-                            }),
+                            createRulesPart(
+                                [{ parts: [phrasePart], spacingMode }],
+                                {
+                                    optional,
+                                    repeat,
+                                    partId: allocPartId(
+                                        context,
+                                        expr.pos,
+                                        `<${expr.refName.name}>${q}`,
+                                    ),
+                                },
+                            ),
                         );
                     } else {
                         parts.push(phrasePart);

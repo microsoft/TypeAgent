@@ -858,12 +858,20 @@ class GrammarRuleParser implements ValueExprParserContext {
                 attach(v);
                 expNodes.push(v);
                 // Captures only support optional today ($(x)?). Use ($(x))* / ($(x))+
-                // for repetition (group form). Bare )* / )+ after $() is rejected below
-                // if someone writes $(x)* without grouping — variables lack repeat.
+                // for repetition (group form).
                 if (this.isAt(")?")) {
                     v.optional = true;
                     this.skipWhitespace(2);
                     continue;
+                }
+                // $(x)* / $(x)+ look like "after )" but captures have no repeat flag —
+                // reject with an actionable message before the generic bare-quantifier error.
+                if (this.isAt(")*") || this.isAt(")+")) {
+                    const q = this.content[this.curr + 1];
+                    this.throwError(
+                        `Capture $(...) only supports optional via )? . ` +
+                            `Use ($(...))${q} for repetition (group form).`,
+                    );
                 }
                 this.consume(")", "at end of variable");
                 continue;

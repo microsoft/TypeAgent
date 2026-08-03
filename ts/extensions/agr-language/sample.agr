@@ -165,8 +165,11 @@ export <PublicRule> = hello | goodbye;
   | (item)+ // one-or-more group
   | (prefix)* suffix; // zero-or-more group
   // Literal "?" must be escaped (bare ?/*/+ are quantifiers after ) or > only):
-  //   what is the time\?
-  //   who sings song <SongName>\?
+  //   what is the time\?                 // literal trailing ?
+  //   who sings song <SongName>\?        // required Song + literal ?
+  //   who sings song <SongName>?         // OPTIONAL Song, NO literal "?" (silent pitfall)
+  //   who sings song (<SongName>)?\?     // optional Song + literal ?
+  // Writer prefers (<Name>)? over bare <Name>?.
 
 // ─── Optional capture quantifiers ────────────────────────────────────────────
 

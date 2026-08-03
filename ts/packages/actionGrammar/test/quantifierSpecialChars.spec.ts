@@ -1,10 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseGrammarRules } from "../src/grammarRuleParser.js";
 import { writeGrammarRules } from "../src/grammarRuleWriter.js";
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { describeForEachMatcher } from "./testUtils.js";
+
+const testDir = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Proposal (CurtisM): postfix ? / * / + are quantifiers only after ")" or ">".
@@ -37,6 +42,38 @@ describe("Quantifier special chars (? * +)", () => {
             expectParseError(
                 `<Start> = one+ two -> "x";`,
                 /Unexpected quantifier '\+'/,
+            );
+        });
+
+        it("errors on $(x)* / $(x)+ with actionable group-form message", () => {
+            expectParseError(
+                `<Start> = measure $(u:word)* -> "x";`,
+                /Capture \$\(\.\.\.\) only supports optional via \)\?/,
+            );
+            expectParseError(
+                `<Start> = measure $(u:word)+ -> "x";`,
+                /Use \(\$\(\.\.\.\)\)\+/,
+            );
+            // Group form still works
+            expect(() =>
+                parse(`<Start> = measure ($(u:word))+ -> "x";`),
+            ).not.toThrow();
+        });
+
+        it("errors on bare the?/one?/music? (word + quantifier, no group)", () => {
+            // Historical silent-wrong forms that used to mean "optional word".
+            // Now they are hard parse errors; use (the)? / (one)? / (music)?.
+            expectParseError(
+                `<Start> = pause the? music -> "x";`,
+                /Unexpected quantifier '\?'/,
+            );
+            expectParseError(
+                `<Start> = one? two -> "x";`,
+                /Unexpected quantifier '\?'/,
+            );
+            expectParseError(
+                `<Start> = pause (the)? music? -> "x";`,
+                /Unexpected quantifier '\?'/,
             );
         });
 
@@ -300,6 +337,162 @@ describe("Quantifier special chars (? * +)", () => {
                 `<Start> = $(h:number) pm -> { hours: h < 12 ? h + 12 : h };`,
             );
             expect(ast.definitions[0].rules[0].value).toBeDefined();
+        });
+
+        it("keeps optional chaining ?. and nullish coalescing in values", () => {
+            const ast = parse(
+                `<Start> = lookup $(obj:word) -> obj.value?.name;`,
+            );
+            expect(ast.definitions[0].rules[0].value).toBeDefined();
+            const ast2 = parse(
+                `<Start> = get $(x:word) -> x ?? "default";`,
+            );
+            expect(ast2.definitions[0].rules[0].value).toBeDefined();
+        });
+    });
+
+    describe("import * and $(x)? still work", () => {
+        it("parses wildcard import * from without treating * as quantifier", () => {
+            const ast = parse(
+                `import * from "other.agr";\n<Start> = hi -> "x";`,
+            );
+            expect(ast.imports).toHaveLength(1);
+            expect(ast.imports[0].names).toBe("*");
+            expect(ast.imports[0].source).toBe("other.agr");
+            expect(ast.definitions[0].definitionName.name).toBe("Start");
+        });
+
+        it("keeps $(x)? optional capture", () => {
+            const ast = parse(`<Start> = measure $(units:word)? -> "cap";`);
+            const cap = ast.definitions[0].rules[0].expressions[1] as {
+                type: string;
+                optional?: boolean;
+            };
+            expect(cap).toMatchObject({ type: "variable", optional: true });
+        });
+    });
+
+    describe("pitfall docs: bare <Song>? is optional, no literal ?", () => {
+        it("parses who sings song <Song>? as optional Song (no trailing ? string)", () => {
+            const ast = parse(`
+                <Song> = hello | goodbye;
+                <Start> = who sings song <Song>? -> "hit";
+            `);
+            const exprs = ast.definitions.find(
+                (d) => d.definitionName.name === "Start",
+            )!.rules[0].expressions;
+            expect(exprs).toHaveLength(2);
+            expect(exprs[0]).toMatchObject({
+                type: "string",
+                value: ["who", "sings", "song"],
+            });
+            expect(exprs[1]).toMatchObject({
+                type: "ruleReference",
+                optional: true,
+            });
+            // No third expression for a literal "?"
+        });
+    });
+
+    describe("schema→grammar generator prompts use legal quantifiers", () => {
+        // LLM prompts that ship illegal bare ?/*/+ CORRECT examples cause the
+        // generator to emit unparseable .agr. Guard both package copies.
+        // Tests execute from dist/test/*.js — climb to package root / sibling package.
+        const promptSources = [
+            join(
+                testDir,
+                "../../src/generation/schemaToGrammarGenerator.ts",
+            ),
+            join(
+                testDir,
+                "../../../agentSdkWrapper/src/schemaToGrammarGenerator.ts",
+            ),
+        ];
+
+        function loadPromptSource(path: string): string {
+            return readFileSync(path, "utf8");
+        }
+
+        /** Lines that teach CORRECT syntax (not WRONG counter-examples). */
+        function correctLines(src: string): string[] {
+            return src
+                .split("\n")
+                .filter((l) => /^\s*CORRECT:/i.test(l) || /^\s*Example:/i.test(l));
+        }
+
+        it("CORRECT/Example lines never use bare quantifier after a word or string", () => {
+            // Illegal: word?  'str'?  "str"?  (quantifier not after ) or >)
+            const bareAfterAtom =
+                /(?:^|[^)>\s\\])(['"][^'"]*['"]|[A-Za-z_][\w-]*)\s*[?*+]/;
+            for (const path of promptSources) {
+                const src = loadPromptSource(path);
+                for (const line of correctLines(src)) {
+                    expect(line).not.toMatch(bareAfterAtom);
+                }
+            }
+        });
+
+        it("both generators document quantifier special-char rules", () => {
+            for (const path of promptSources) {
+                const src = loadPromptSource(path);
+                expect(src).toMatch(/Quantifiers \? \* \+ are SPECIAL/i);
+                expect(src).toMatch(/immediately after "\)" or ">"/i);
+                expect(src).toMatch(/PARSE ERROR/);
+                expect(src).toMatch(/\(<Name>\)\?/);
+                // Shared Polite vocab must not use bare optional words
+                expect(src).toMatch(
+                    /<Polite>\s*=\s*can you\s*\|\s*please\s*\|\s*would you\s*;/,
+                );
+                expect(src).toMatch(/\(<Polite>\)\? open outlook/);
+                // Old illegal Polite forms must not appear outside WRONG lines
+                const nonWrong = src
+                    .split("\n")
+                    .filter((l) => !/\bWRONG\b/i.test(l))
+                    .join("\n");
+                expect(nonWrong).not.toMatch(/'can you'\?/);
+                expect(nonWrong).not.toMatch(/'please'\?/);
+                expect(nonWrong).not.toMatch(/"please"\?/);
+                expect(nonWrong).not.toMatch(/Optional elements: element\?/);
+            }
+        });
+
+        it("literal-escape examples keep a real backslash in the runtime prompt", () => {
+            // Prompt bodies are TS template literals. A single \? in source
+            // collapses to bare "?" at runtime and teaches the silent pitfall
+            // (who sings song <Song>? = optional Song). Source must use \\?
+            // so the model sees a real backslash-question sequence.
+            for (const path of promptSources) {
+                const src = loadPromptSource(path);
+                // File text must contain time\\? and <Song>\\? (two backslashes)
+                expect(src).toMatch(/time\\\\\?/);
+                expect(src).toMatch(/<Song>\\\\\?/);
+                expect(src).toMatch(/\)\?\\\\\?/); // (<Song>)?\?
+                // Simulate template evaluation of those escape sequences
+                expect(Function("return `time\\\\?`")()).toBe("time\\?");
+                expect(Function("return `time\\?`")()).toBe("time?"); // the bug
+            }
+        });
+
+        it("prompt CORRECT fragments actually parse", () => {
+            // Fragments taught as CORRECT in both generators.
+            const fragments = [
+                `<Start> = (((can you)? add) | include) -> "x";`,
+                `<Start> = (please)? open -> "x";`,
+                `<Start> = (can you)? open -> "x";`,
+                `<Polite> = can you | please | would you;\n` +
+                    `<Start> = (<Polite>)? open outlook -> "ok";`,
+                `<Song> = hello;\n` +
+                    `<Start> = who sings song <Song>? -> "opt";`,
+                `<Song> = hello;\n` +
+                    `<Start> = who sings song <Song>\\? -> "req";`,
+                `<Song> = hello;\n` +
+                    `<Start> = who sings song (<Song>)?\\? -> "both";`,
+                `<Start> = (a|b)* c -> "x";`,
+                `<Start> = measure $(x:word)? -> "cap";`,
+            ];
+            for (const frag of fragments) {
+                expect(() => parse(frag)).not.toThrow();
+            }
         });
     });
 });
