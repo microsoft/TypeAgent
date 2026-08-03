@@ -5,15 +5,22 @@
 // This file contains common patterns for user requests
 // Types: wildcard = 1+ words, word = exactly 1 word
 
-// addItems - add one or more items to a *named* list only.
+// ---------------------------------------------------------------------------
+// Named-list only. Bare / ambiguous references are intentionally unmatched so
+// translation (LLM + history) resolves them — e.g. "add ham to the list",
+// "put cheese on the list", "add cheese to both", "add ham to my list".
 //
-// Rules require a real name between a fixed determiner ("the"/"my") and the
-// trailing "list" word, e.g. "add milk to the grocery list". Bare references
-// are intentionally unmatched so translation can resolve them from history or
-// clarify — "add ham to the list", "add cheese to both", "put cheese on the
-// list". Do not reintroduce optional (the)?/(my)? before $(listName): those
-// let the determiner itself become listName. See schema-tuning.md note #5.
-<AddItems> = (can you)? add $(item:wildcard) to the $(listName:wildcard) list -> {
+// Safe shape: fixed "the"/"my" + real name + trailing "list". That way the
+// determiner cannot be captured as listName. Do not reintroduce optional
+// (the)?/(my)? before $(listName), or "to $(listName)" without trailing list.
+// Determinerless "add milk to grocery list" also falls through to the LLM
+// (same as bare refs); that is not a functional regression — only grammar
+// speed — and avoids reopening determiner capture via "to $(listName) list".
+// ---------------------------------------------------------------------------
+
+// addItems
+<AddItems> =
+    (can you)? add $(item:wildcard) to the $(listName:wildcard) list -> {
     actionName: "addItems",
     parameters: {
         items: [item],
@@ -41,14 +48,14 @@
         listName
     }
 }
-  | add $(item1:wildcard) and $(item2:wildcard) to the $(listName:wildcard) list -> {
+  | (can you)? add $(item1:wildcard) and $(item2:wildcard) to the $(listName:wildcard) list -> {
     actionName: "addItems",
     parameters: {
         items: [item1, item2],
         listName
     }
 }
-  | add $(item1:wildcard) and $(item2:wildcard) to my $(listName:wildcard) list -> {
+  | (can you)? add $(item1:wildcard) and $(item2:wildcard) to my $(listName:wildcard) list -> {
     actionName: "addItems",
     parameters: {
         items: [item1, item2],
@@ -56,8 +63,9 @@
     }
 };
 
-// removeItems - remove one or more items from a named list (same named-only rule)
-<RemoveItems> = remove $(item:wildcard) from the $(listName:wildcard) list -> {
+// removeItems
+<RemoveItems> =
+    remove $(item:wildcard) from the $(listName:wildcard) list -> {
     actionName: "removeItems",
     parameters: {
         items: [item],
@@ -100,9 +108,8 @@
     }
 };
 
-// createList - create a new list
-// listName may be any word(s), including "my"; reference resolution belongs
-// in translation, not the list agent.
+// createList — any listName including "my" is fine; reference resolution is
+// translation's job, not the list agent.
 <CreateList> = create (a)? (new)? $(listName:wildcard) list -> {
     actionName: "createList",
     parameters: {
@@ -122,9 +129,9 @@
     }
 };
 
-// getList - show what's on a named list
-// Require a real name before trailing "list" (not bare "the list" / "my list").
-<GetList> = what's on the $(listName:wildcard) list -> {
+// getList — same named-only shape (not bare "the list" / "my list")
+<GetList> =
+    what's on the $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
         listName
@@ -185,8 +192,10 @@
     }
 };
 
-// clearList - clear all items from a named list
-<ClearList> = clear the $(listName:wildcard) list -> {
+// clearList — require a clear intent word so this does not steal
+// "delete <item> from the <name> list" from removeItems.
+<ClearList> =
+    clear the $(listName:wildcard) list -> {
     actionName: "clearList",
     parameters: {
         listName
@@ -210,22 +219,32 @@
         listName
     }
 }
-  | delete (everything)? (all items)? from the $(listName:wildcard) list -> {
+  | delete everything from the $(listName:wildcard) list -> {
     actionName: "clearList",
     parameters: {
         listName
     }
 }
-  | delete (everything)? (all items)? from my $(listName:wildcard) list -> {
+  | delete everything from my $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+}
+  | delete all items from the $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+}
+  | delete all items from my $(listName:wildcard) list -> {
     actionName: "clearList",
     parameters: {
         listName
     }
 };
 
-// listLists - show which lists exist
-// The literal word "lists" anchors these rules so they beat wildcard-heavy
-// patterns and the system.conversation listConversation rule.
+// listLists
 <ListLists> = (can you)? (list | show | display) (me)? (all | my | the)? lists -> {
     actionName: "listLists",
     parameters: {}
@@ -237,9 +256,11 @@
 
 import { ListAction } from "./listSchema.ts";
 
+// ClearList before RemoveItems so "delete everything|all items from … list"
+// is not stolen by removeItems with item="everything".
 <Start> : ListAction = <AddItems>
-  | <RemoveItems>
   | <CreateList>
   | <GetList>
   | <ClearList>
+  | <RemoveItems>
   | <ListLists>;
