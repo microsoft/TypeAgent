@@ -686,6 +686,23 @@ export function createChatPanelClient(
             // permanent=false is a recoverable soft delete (trash).
             void dispatcher?.recordUserHide(requestId, true, target, permanent);
         },
+        // Live-updating displays (an agent's ActionResult.dynamicDisplayId,
+        // e.g. the player's now-playing "status" card). ChatPanel arms a
+        // refresh timer on setDynamicDisplay and calls this each tick to pull
+        // fresh content; it also only registers the bubble with the top rail
+        // once a refresh returns. Without this callback setDynamicDisplay is a
+        // no-op, so the card never updates and never pins. Read the dispatcher
+        // closure per call so it stays reconnect-safe; "html" because the shell
+        // renders HTML display content.
+        getDynamicDisplay: async (source, displayId) => {
+            const d = dispatcher;
+            if (d === undefined) {
+                throw new Error(
+                    "Dispatcher not ready for dynamic display refresh",
+                );
+            }
+            return d.getDynamicDisplay(source, "html", displayId);
+        },
         speechProvider,
         ttsProvider,
         imageCaptureProvider,
@@ -866,13 +883,23 @@ export function createChatPanelClient(
             });
         },
         setDynamicDisplay: (
-            _requestId,
+            requestId,
             source,
             _actionIndex,
             displayId,
             nextRefreshMs,
         ) => {
-            chatPanel.setDynamicDisplay(source, displayId, nextRefreshMs);
+            afterReplay(() => {
+                if (isCancelledRequest(ridStr(requestId))) return;
+                // Pass the requestId so chat-ui refreshes the action's own
+                // bubble in place instead of a separate globe-icon card.
+                chatPanel.setDynamicDisplay(
+                    source,
+                    displayId,
+                    nextRefreshMs,
+                    ridStr(requestId),
+                );
+            });
         },
         question: async (requestId, message, choices, defaultId) => {
             if (requestId === undefined) {

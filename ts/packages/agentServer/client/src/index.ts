@@ -24,6 +24,7 @@ export type * from "@typeagent/dispatcher-rpc/types";
 export type {
     ConversationInfo,
     ConversationMatch,
+    ConversationContentMatch,
     JoinConversationResult,
     DispatcherConnectOptions,
     SpeechToken,

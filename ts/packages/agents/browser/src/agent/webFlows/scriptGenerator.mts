@@ -6,12 +6,12 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai as ai } from "@typeagent/aiclient";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "node:url";
 import { WebFlowDefinition } from "./types.js";
 import { BrowserReasoningTrace } from "./reasoning/browserReasoningTypes.mjs";
 import { validateWebFlowScript } from "./scriptValidator.mjs";
 import { WebFlowGenerationResult } from "./schema/webFlowGeneration.mjs";
 import registerDebug from "debug";
+import { getBrowserPackageFilePath } from "../utils/packageFilePath.mjs";
 
 const debug = registerDebug("typeagent:browser:webflows:scriptgen");
 
@@ -27,13 +27,9 @@ export interface ScriptGenerationOptions {
 }
 
 async function getSchemaFileContents(fileName: string): Promise<string> {
-    const packageRoot = path.join("..", "..", "..");
     return await fs.promises.readFile(
-        fileURLToPath(
-            new URL(
-                path.join(packageRoot, "./src/agent/webFlows/schema", fileName),
-                import.meta.url,
-            ),
+        getBrowserPackageFilePath(
+            path.join("src", "agent", "webFlows", "schema", fileName),
         ),
         "utf8",
     );

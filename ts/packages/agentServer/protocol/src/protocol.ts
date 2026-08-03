@@ -31,6 +31,13 @@ export type ConversationInfo = {
      */
     messageCount: number;
     /**
+     * How many of this conversation's user turns are in the cross-conversation
+     * content index. Compared with {@link messageCount} it shows how completely
+     * the conversation is indexed (0 = not indexed; == messageCount = fully).
+     * Omitted by hosts without a unified content index.
+     */
+    indexedMessageCount?: number;
+    /**
      * Where this conversation came from. Omitted for native TypeAgent
      * conversations; set to `"copilot"` for imported mirrors. Clients use it to
      * badge the conversation and (together with {@link readOnly}) decide whether
@@ -52,6 +59,17 @@ export type ConversationInfo = {
 export type ConversationMatch = {
     conversation: ConversationInfo;
     score: number;
+};
+
+/**
+ * A conversation whose message *content* matched a search, with a relevance
+ * score in [0, 1] and representative snippets (best match first). Distinct
+ * from {@link ConversationMatch}, which matches on the conversation name.
+ */
+export type ConversationContentMatch = {
+    conversation: ConversationInfo;
+    score: number;
+    snippets: string[];
 };
 
 export type ConversationNameCollisionBehavior = "error" | "appendNumber";
@@ -129,6 +147,16 @@ export type AgentServerInvokeFunctions = {
         query: string,
         maxMatches?: number,
     ) => Promise<ConversationMatch[]>;
+    /**
+     * Search conversation *content* (the knowPro unified message index) and
+     * rank conversations by how well their messages match the query. Distinct
+     * from {@link findConversations}, which matches on conversation names.
+     * Returns [] when the content index has no model provider configured.
+     */
+    searchConversationContent: (
+        query: string,
+        maxMatches?: number,
+    ) => Promise<ConversationContentMatch[]>;
     renameConversation: (
         conversationId: string,
         newName: string,

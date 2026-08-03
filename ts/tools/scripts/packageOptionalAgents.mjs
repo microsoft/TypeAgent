@@ -4,16 +4,15 @@
 
 /**
  * Package the optional agents (those omitted from a server profile) as
- * self-contained, installable bundles — Option 3 from
+ * self-contained, installable bundles - Option 3 from
  * codeDocs .../2026-06-11_typeagent-plugin-agent-distribution.
  *
  * The lean inbox profile (config.<profile>.json) drops some agents; this packs
  * each dropped agent so users can reinstall it on demand. Each agent is produced
- * via `pnpm deploy` (a folder with the agent + its full dep closure bundled in
- * node_modules, and its manifest/grammar data files intact), then foreign-arch
- * pruned. Because the repo deliberately does NOT publish its internal libraries
- * (aiclient, telemetry, knowpro, ...), bundling them per-agent avoids publishing
- * them or renaming them to the @typeagent/ scope (see the Option 2 design doc).
+ * by `bundleAgentPackage()`, with only declared runtime externals installed in
+ * an adjacent node_modules directory, then foreign-architecture files are
+ * pruned. Internal TypeAgent libraries are included in the generated handler
+ * bundle and do not need to be published independently.
  *
  * An extracted bundle is loadable by the dispatcher's existing path-based
  * `@install <name> <folder>` (npmAppAgentProvider resolves the agent's
@@ -30,9 +29,11 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { pathToFileURL } from "node:url";
+import { bundleAgentPackage } from "./bundleAgent.mjs";
+import { readJson, tsRoot, workspacePackages } from "./bundleUtils.mjs";
 
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
-const tsRoot = path.resolve(scriptsDir, "..", "..");
 
 function parseArgs(argv) {
     const args = { profile: "inbox", skipPrune: false };
@@ -53,19 +54,34 @@ function parseArgs(argv) {
     return args;
 }
 
-function run(cmd, cmdArgs, cwd) {
+function run(cmd, cmdArgs, cwd, env = process.env) {
     console.log(`  > ${cmd} ${cmdArgs.join(" ")}`);
     const res = spawnSync(cmd, cmdArgs, {
         cwd,
         stdio: "inherit",
         shell: process.platform === "win32",
+        env,
     });
     if (res.status !== 0)
         throw new Error(`Command failed (${res.status}): ${cmd}`);
 }
 
-function readJson(f) {
-    return JSON.parse(fs.readFileSync(f, "utf8"));
+function writeRuntimeInstallWorkspace(directory) {
+    const content = [
+        'packages: ["."]',
+        "allowBuilds:",
+        '  "@azure/msal-node-extensions": true',
+        '  "@azure/msal-node-runtime": true',
+        "  better-sqlite3: true",
+        "  keytar: true",
+        "  onnxruntime-node: true",
+        "  puppeteer: false",
+        "  sharp: true",
+        "",
+    ].join("\n");
+    const workspace = path.join(directory, "pnpm-workspace.yaml");
+    fs.writeFileSync(workspace, content, "utf8");
+    return workspace;
 }
 
 function agentNames(cfg) {
@@ -87,33 +103,6 @@ function toBundleName(npmName) {
         .toLowerCase();
 }
 
-// Workspace packages keyed by npm name -> { path, private }. Used to decide
-// which agents are published to the npm feed.
-function workspacePackages() {
-    const res = spawnSync("pnpm", ["ls", "-r", "--depth", "-1", "--json"], {
-        cwd: tsRoot,
-        encoding: "utf8",
-        maxBuffer: 1 << 26,
-        shell: process.platform === "win32",
-    });
-    if (res.status !== 0)
-        throw new Error(`pnpm ls failed (${res.status}): ${res.stderr ?? ""}`);
-    const map = new Map();
-    for (const p of JSON.parse(res.stdout)) if (p.name) map.set(p.name, p);
-    return map;
-}
-
-// An agent published to the npm feed is installed via its npm specifier (M1),
-// so it must NOT also be shipped as a universal package. The npm publish step
-// packs '@typeagent/*' packages that aren't private, so mirror that filter.
-function isNpmPublished(npmName, pkgs) {
-    if (!npmName.startsWith("@typeagent/")) return false;
-    const p = pkgs.get(npmName);
-    if (!p) return false;
-    const pj = readJson(path.join(p.path, "package.json"));
-    return pj.private !== true;
-}
-
 // Resolve an exports subpath target from a package.json (handles string or
 // conditional-object export entries).
 function exportTarget(pkg, key) {
@@ -125,7 +114,7 @@ function exportTarget(pkg, key) {
 
 // Confirm the deployed agent is loadable: the agent/manifest and agent/handlers
 // exports must point at files that exist in the bundle.
-function validateAgentBundle(dir, npmName) {
+async function validateAgentBundle(dir, npmName) {
     const pkg = readJson(path.join(dir, "package.json"));
     const checks = ["./agent/manifest", "./agent/handlers"];
     for (const key of checks) {
@@ -138,19 +127,17 @@ function validateAgentBundle(dir, npmName) {
             );
         }
     }
-    // The handler module must be present with deps resolvable: at least confirm
-    // node_modules exists and the agent SDK is bundled.
-    if (
-        !fs.existsSync(
-            path.join(dir, "node_modules", "@typeagent", "agent-sdk"),
-        )
-    ) {
-        throw new Error(`${npmName}: @typeagent/agent-sdk not bundled`);
+    const handlerTarget = exportTarget(pkg, "./agent/handlers");
+    const handler = await import(
+        `${pathToFileURL(path.join(dir, handlerTarget)).href}?validate=${Date.now()}`
+    );
+    if (typeof handler.instantiate !== "function") {
+        throw new Error(`${npmName}: handler does not export instantiate().`);
     }
     return true;
 }
 
-function main() {
+async function main() {
     const args = parseArgs(process.argv);
     const dataDir = path.join(
         tsRoot,
@@ -169,21 +156,7 @@ function main() {
                 args.agents.includes(toBundleName(n)),
         );
 
-    // Agents published to the npm feed are installed via their npm specifier,
-    // so don't also ship them as universal packages. Only bundle agents that
-    // can't be npm-published. An explicit `--agents` list overrides this (for
-    // local testing of a specific bundle).
-    if (!args.agents && excluded.length) {
-        const pkgs = workspacePackages();
-        const npmPublished = excluded.filter((n) => isNpmPublished(n, pkgs));
-        if (npmPublished.length)
-            console.warn(
-                `Skipping ${npmPublished.length} npm-published agent(s) ` +
-                    `(installed via the npm feed, not as universal packages): ` +
-                    npmPublished.join(", "),
-            );
-        excluded = excluded.filter((n) => !npmPublished.includes(n));
-    }
+    const pkgs = workspacePackages();
 
     // Universal-package names must be unique after scope stripping.
     const seen = new Map();
@@ -207,20 +180,35 @@ function main() {
     for (const npmName of excluded) {
         const bundleName = toBundleName(npmName);
         const dest = path.join(args.out, bundleName);
-        console.log(`\n[${npmName}] deploying -> ${bundleName}/ ...`);
-        fs.rmSync(dest, { recursive: true, force: true });
-        run(
-            "pnpm",
-            [
-                "--filter",
-                npmName,
-                "--config.node-linker=hoisted",
-                "deploy",
-                "--prod",
-                dest,
-            ],
-            tsRoot,
-        );
+        const source = pkgs.get(npmName);
+        if (!source) {
+            throw new Error(`Workspace package '${npmName}' was not found.`);
+        }
+        console.log(`\n[${npmName}] bundling -> ${bundleName}/ ...`);
+        await bundleAgentPackage(source.directory, dest);
+        const generatedPackage = readJson(path.join(dest, "package.json"));
+        if (Object.keys(generatedPackage.dependencies ?? {}).length > 0) {
+            const workspace = writeRuntimeInstallWorkspace(dest);
+            try {
+                run(
+                    "pnpm",
+                    [
+                        "install",
+                        "--prod",
+                        "--config.node-linker=hoisted",
+                        "--lockfile=false",
+                    ],
+                    dest,
+                    {
+                        ...process.env,
+                        PUPPETEER_SKIP_DOWNLOAD: "true",
+                        PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true",
+                    },
+                );
+            } finally {
+                fs.rmSync(workspace, { force: true });
+            }
+        }
         if (!args.skipPrune) {
             run(
                 "node",
@@ -236,10 +224,8 @@ function main() {
                 tsRoot,
             );
         }
-        validateAgentBundle(dest, npmName);
-        console.log(
-            `[${npmName}] validated (manifest + handlers + agent-sdk present).`,
-        );
+        await validateAgentBundle(dest, npmName);
+        console.log(`[${npmName}] validated (manifest + handler import).`);
         results.push(bundleName);
     }
 
@@ -253,10 +239,7 @@ function main() {
                 platform: args.platform,
                 arch: args.arch,
                 bundles: results,
-                note:
-                    "npm-published agents ('@typeagent/*', not private) are " +
-                    "installed from the npm feed and are intentionally not " +
-                    "bundled as universal packages.",
+                format: "bundleAgentPackage",
             },
             null,
             2,
@@ -271,4 +254,4 @@ function main() {
     );
 }
 
-main();
+await main();

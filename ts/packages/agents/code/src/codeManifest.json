@@ -65,16 +65,6 @@
         "grammarFile": "../dist/extensionSchema.ag.json",
         "schemaType": "CodeWorkbenchExtensionActions"
       }
-    },
-    "code-vscode-shell": {
-      "defaultEnabled": false,
-      "schema": {
-        "description": "Manage TypeAgent Shell conversations (chat tabs in the TypeAgent VS Code Shell extension): create a new conversation, rename the current conversation, or switch to an existing conversation by name.",
-        "originalSchemaFile": "./vscode/vscodeConversationActionsSchema.ts",
-        "schemaFile": "../dist/vscodeShellSchema.pas.json",
-        "grammarFile": "../dist/vscodeShellSchema.ag.json",
-        "schemaType": "VSCodeConversationActions"
-      }
     }
   }
 }
