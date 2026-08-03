@@ -7,6 +7,14 @@ import { fileURLToPath } from "node:url";
 import { parseGrammarRules } from "../src/grammarRuleParser.js";
 import { writeGrammarRules } from "../src/grammarRuleWriter.js";
 import { loadGrammarRules } from "../src/grammarLoader.js";
+import { compileGrammarToNFA } from "../src/nfaCompiler.js";
+import { compileNFAToDFA } from "../src/dfaCompiler.js";
+import {
+    matchGrammarWithNFA,
+    tokenizeRequest,
+    tokenizeRequestKeepingTrailingPunct,
+} from "../src/nfaMatcher.js";
+import { matchDFAWithSplitting } from "../src/dfaMatcher.js";
 import { describeForEachMatcher } from "./testUtils.js";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
@@ -408,6 +416,42 @@ describe("Quantifier special chars (? * +)", () => {
             return readFileSync(path, "utf8");
         }
 
+        /**
+         * Evaluate schema→grammar prompt template literals the way Node does
+         * at runtime. Source text checks alone miss `\?` → `?`
+         * NonEscapeCharacter collapse. Includes EXTENSION (used when
+         * generateGrammar({ existingGrammar }) is selected alone) and FIX.
+         */
+        function loadRuntimePrompts(path: string): string[] {
+            const src = loadPromptSource(path);
+            const prompts: string[] = [];
+            const re =
+                /const\s+(SCHEMA_GRAMMAR_PROMPT|SCHEMA_GRAMMAR_EXTENSION_PROMPT|FIX_GRAMMAR_PROMPT)\s*=\s*(`[\s\S]*?`);/g;
+            let m: RegExpExecArray | null;
+            while ((m = re.exec(src)) !== null) {
+                prompts.push(Function(`return ${m[2]}`)() as string);
+            }
+            if (prompts.length === 0) {
+                throw new Error(`No prompt templates found in ${path}`);
+            }
+            return prompts;
+        }
+
+        function loadRuntimePromptByName(
+            path: string,
+            name: string,
+        ): string {
+            const src = loadPromptSource(path);
+            const re = new RegExp(
+                `const\\s+${name}\\s*=\\s*(\`[\\s\\S]*?\`);`,
+            );
+            const m = re.exec(src);
+            if (!m) {
+                throw new Error(`${name} not found in ${path}`);
+            }
+            return Function(`return ${m[1]}`)() as string;
+        }
+
         /** Lines that teach CORRECT syntax (not WRONG counter-examples). */
         function correctLines(src: string): string[] {
             return src
@@ -419,37 +463,68 @@ describe("Quantifier special chars (? * +)", () => {
 
         it("CORRECT/Example lines never use bare quantifier after a word or string", () => {
             // Illegal: word?  'str'?  "str"?  (quantifier not after ) or >)
+            // Check RUNTIME prompt text (not just source) so a single-backslash
+            // template bug that collapses \\? → ? is caught.
             const bareAfterAtom =
                 /(?:^|[^)>\s\\])(['"][^'"]*['"]|[A-Za-z_][\w-]*)\s*[?*+]/;
             for (const path of promptSources) {
-                const src = loadPromptSource(path);
-                for (const line of correctLines(src)) {
-                    expect(line).not.toMatch(bareAfterAtom);
+                for (const prompt of loadRuntimePrompts(path)) {
+                    for (const line of correctLines(prompt)) {
+                        expect(line).not.toMatch(bareAfterAtom);
+                    }
                 }
             }
         });
 
         it("both generators document quantifier special-char rules", () => {
             for (const path of promptSources) {
-                const src = loadPromptSource(path);
-                expect(src).toMatch(/Quantifiers \? \* \+ are SPECIAL/i);
-                expect(src).toMatch(/immediately after "\)" or ">"/i);
-                expect(src).toMatch(/PARSE ERROR/);
-                expect(src).toMatch(/\(<Name>\)\?/);
-                // Shared Polite vocab must not use bare optional words
-                expect(src).toMatch(
+                for (const prompt of loadRuntimePrompts(path)) {
+                    expect(prompt).toMatch(/Quantifiers \? \* \+ are SPECIAL/i);
+                    expect(prompt).toMatch(/immediately after "\)" or ">"/i);
+                    expect(prompt).toMatch(/PARSE ERROR/);
+                    expect(prompt).toMatch(/\(<Name>\)\?/);
+                    // Old illegal Polite forms must not appear outside WRONG lines
+                    const nonWrong = prompt
+                        .split("\n")
+                        .filter((l) => !/\bWRONG\b/i.test(l))
+                        .join("\n");
+                    expect(nonWrong).not.toMatch(/'can you'\?/);
+                    expect(nonWrong).not.toMatch(/'please'\?/);
+                    expect(nonWrong).not.toMatch(/"please"\?/);
+                    expect(nonWrong).not.toMatch(/Optional elements: element\?/);
+                }
+                // Main SCHEMA prompt also teaches shared Polite vocab
+                const main = loadRuntimePromptByName(
+                    path,
+                    "SCHEMA_GRAMMAR_PROMPT",
+                );
+                expect(main).toMatch(
                     /<Polite>\s*=\s*can you\s*\|\s*please\s*\|\s*would you\s*;/,
                 );
-                expect(src).toMatch(/\(<Polite>\)\? open outlook/);
-                // Old illegal Polite forms must not appear outside WRONG lines
-                const nonWrong = src
-                    .split("\n")
-                    .filter((l) => !/\bWRONG\b/i.test(l))
-                    .join("\n");
-                expect(nonWrong).not.toMatch(/'can you'\?/);
-                expect(nonWrong).not.toMatch(/'please'\?/);
-                expect(nonWrong).not.toMatch(/"please"\?/);
-                expect(nonWrong).not.toMatch(/Optional elements: element\?/);
+                expect(main).toMatch(/\(<Polite>\)\? open outlook/);
+            }
+        });
+
+        it("EXTENSION prompt documents quantifier rules (existingGrammar path)", () => {
+            // generateGrammar({ existingGrammar }) uses EXTENSION alone —
+            // it must not rely on "see above" for quantifier specials.
+            for (const path of promptSources) {
+                const ext = loadRuntimePromptByName(
+                    path,
+                    "SCHEMA_GRAMMAR_EXTENSION_PROMPT",
+                );
+                expect(ext).toMatch(/Quantifiers \? \* \+ are SPECIAL/i);
+                expect(ext).toMatch(/immediately after "\)" or ">"/i);
+                expect(ext).toMatch(/PARSE ERROR/);
+                expect(ext).toContain("time\\?");
+                expect(ext).toContain("<Song>\\?");
+                expect(ext).toContain(")?\\?");
+                expect(ext).not.toContain("(<Song>)??");
+                // Source must use double-backslash so runtime keeps \
+                const src = loadPromptSource(path);
+                expect(src).toMatch(
+                    /SCHEMA_GRAMMAR_EXTENSION_PROMPT[\s\S]*?time\\\\\?/,
+                );
             }
         });
 
@@ -464,9 +539,16 @@ describe("Quantifier special chars (? * +)", () => {
                 expect(src).toMatch(/time\\\\\?/);
                 expect(src).toMatch(/<Song>\\\\\?/);
                 expect(src).toMatch(/\)\?\\\\\?/); // (<Song>)?\?
-                // Simulate template evaluation of those escape sequences
-                expect(Function("return `time\\\\?`")()).toBe("time\\?");
-                expect(Function("return `time\\?`")()).toBe("time?"); // the bug
+                // Runtime prompt must still contain a real backslash before ?
+                for (const prompt of loadRuntimePrompts(path)) {
+                    expect(prompt).toContain("time\\?");
+                    expect(prompt).toContain("<Song>\\?");
+                    expect(prompt).toContain(")?\\?");
+                    // Collapsed pitfall forms must NOT appear as the taught escape
+                    expect(prompt).not.toMatch(/time\?(?!\\)/);
+                    // (<Song>)?? would be the collapsed form of (<Song>)?\?
+                    expect(prompt).not.toContain("(<Song>)??");
+                }
             }
         });
 
@@ -486,6 +568,8 @@ describe("Quantifier special chars (? * +)", () => {
                     `<Start> = who sings song (<Song>)?\\? -> "both";`,
                 `<Start> = (a|b)* c -> "x";`,
                 `<Start> = measure $(x:word)? -> "cap";`,
+                // Group-form repetition of captures (bare $(x)* is rejected)
+                `<Start> = add ($(item:word))+ to list -> "x";`,
             ];
             for (const frag of fragments) {
                 expect(() => parse(frag)).not.toThrow();
@@ -603,7 +687,7 @@ describeForEachMatcher(
             expect(testMatchGrammar(g, "what is the time")).toStrictEqual([]);
         });
 
-        it("<Polite>? open app — optional polite prefix", () => {
+        it("<Polite>? open app — optional polite prefix (local rule)", () => {
             const g = loadGrammarRules(
                 "polite.agr",
                 `
@@ -619,6 +703,44 @@ describeForEachMatcher(
                 "ok",
             ]);
             expect(testMatchGrammar(g, "open notepad")).toStrictEqual([]);
+        });
+
+        it("built-in phrase-set <Polite>? (no local rule) consumes polite phrases", () => {
+            // Unbound <Polite> compiles to PhraseSetPart. Canonical matcher
+            // must consume the phrase (not skip the part) — otherwise
+            // "please open outlook" fails while bare "open outlook" works.
+            const g = loadGrammarRules(
+                "builtin-polite.agr",
+                `<Start> = <Polite>? open outlook -> "ok";`,
+            );
+            expect(testMatchGrammar(g, "open outlook")).toStrictEqual(["ok"]);
+            expect(testMatchGrammar(g, "please open outlook")).toStrictEqual([
+                "ok",
+            ]);
+            expect(testMatchGrammar(g, "can you open outlook")).toStrictEqual([
+                "ok",
+            ]);
+            expect(
+                testMatchGrammar(g, "could you open outlook"),
+            ).toStrictEqual(["ok"]);
+            expect(
+                testMatchGrammar(g, "would you please open outlook"),
+            ).toStrictEqual(["ok"]);
+            expect(testMatchGrammar(g, "open notepad")).toStrictEqual([]);
+        });
+
+        it("grouped ($(item:word))+ accepts repeated captures", () => {
+            const g = loadGrammarRules(
+                "cap-plus.agr",
+                `<Start> = add ($(item:word))+ to list -> "x";`,
+            );
+            expect(testMatchGrammar(g, "add milk to list")).toStrictEqual([
+                "x",
+            ]);
+            expect(
+                testMatchGrammar(g, "add milk eggs to list"),
+            ).toStrictEqual(["x"]);
+            expect(testMatchGrammar(g, "add to list")).toStrictEqual([]);
         });
 
         it("bare <Owner>* / <Owner>+ match zero-or-more / one-or-more", () => {
@@ -664,3 +786,163 @@ describeForEachMatcher(
         });
     },
 );
+
+/**
+ * NFA/DFA always-on guards for trailing literal `?`.
+ * describeForEachMatcher defaults to grammar-only in CI; these lock the
+ * token peel fallback that lets standalone `\?` match glued questions.
+ */
+describe("Quantifier special chars — NFA/DFA trailing literal ?", () => {
+    const songQSrc = `
+        <Song> = hello | goodbye;
+        <Start> = who sings song <Song>\\? -> "hit";
+    `;
+    const optSongQSrc = `
+        <Song> = hello | goodbye;
+        <Start> = who sings song (<Song>)?\\? -> "hit";
+    `;
+    const timeSepSrc = `<Start> = what is the time \\? -> "q";`;
+    const timeGluedSrc = `<Start> = what is the time\\? -> "q";`;
+
+    it("tokenizeRequest strips trailing ?; KeepingTrailingPunct peels it", () => {
+        expect(tokenizeRequest("who sings song hello?")).toEqual([
+            "who",
+            "sings",
+            "song",
+            "hello",
+        ]);
+        expect(
+            tokenizeRequestKeepingTrailingPunct("who sings song hello?"),
+        ).toEqual(["who", "sings", "song", "hello", "?"]);
+        // All-punct tokens stay intact under both modes
+        expect(tokenizeRequest("?")).toEqual(["?"]);
+        expect(tokenizeRequestKeepingTrailingPunct("?")).toEqual(["?"]);
+    });
+
+    it("NFA matches required Song + \\? on glued hello?", () => {
+        const g = loadGrammarRules("nfa-q.agr", songQSrc);
+        const nfa = compileGrammarToNFA(g);
+        expect(
+            matchGrammarWithNFA(g, nfa, "who sings song hello?").map(
+                (m) => m.match,
+            ),
+        ).toEqual(["hit"]);
+        expect(
+            matchGrammarWithNFA(g, nfa, "who sings song goodbye?").map(
+                (m) => m.match,
+            ),
+        ).toEqual(["hit"]);
+        expect(
+            matchGrammarWithNFA(g, nfa, "who sings song hello").map(
+                (m) => m.match,
+            ),
+        ).toEqual([]);
+        expect(
+            matchGrammarWithNFA(g, nfa, "who sings song?").map((m) => m.match),
+        ).toEqual([]);
+    });
+
+    it("DFA matches required Song + \\? on glued hello?", () => {
+        const g = loadGrammarRules("dfa-q.agr", songQSrc);
+        const nfa = compileGrammarToNFA(g);
+        const dfa = compileNFAToDFA(nfa);
+        const tokens = tokenizeRequest("who sings song hello?");
+        const hit = matchDFAWithSplitting(dfa, tokens, false, {
+            request: "who sings song hello?",
+            grammar: g,
+        });
+        expect(hit.matched).toBe(true);
+        expect(hit.actionValue).toBe("hit");
+
+        const miss = matchDFAWithSplitting(
+            dfa,
+            tokenizeRequest("who sings song hello"),
+            false,
+            { request: "who sings song hello", grammar: g },
+        );
+        expect(miss.matched).toBe(false);
+
+        // Without request context, strip-only tokens cannot see the glued ?
+        const noCtx = matchDFAWithSplitting(dfa, tokens, false);
+        expect(noCtx.matched).toBe(false);
+    });
+
+    it("NFA/DFA optional Song + \\? matches who sings song? and hello?", () => {
+        const g = loadGrammarRules("opt-q.agr", optSongQSrc);
+        const nfa = compileGrammarToNFA(g);
+        const dfa = compileNFAToDFA(nfa);
+        for (const req of [
+            "who sings song?",
+            "who sings song hello?",
+            "who sings song ?",
+        ]) {
+            expect(
+                matchGrammarWithNFA(g, nfa, req).map((m) => m.match),
+            ).toEqual(["hit"]);
+            const dfaHit = matchDFAWithSplitting(
+                dfa,
+                tokenizeRequest(req),
+                false,
+                { request: req, grammar: g },
+            );
+            expect(dfaHit.matched).toBe(true);
+            expect(dfaHit.actionValue).toBe("hit");
+        }
+    });
+
+    it("NFA matches separate time \\? on glued time?", () => {
+        const g = loadGrammarRules("time-sep.agr", timeSepSrc);
+        const nfa = compileGrammarToNFA(g);
+        expect(
+            matchGrammarWithNFA(g, nfa, "what is the time?").map(
+                (m) => m.match,
+            ),
+        ).toEqual(["q"]);
+        expect(
+            matchGrammarWithNFA(g, nfa, "what is the time ?").map(
+                (m) => m.match,
+            ),
+        ).toEqual(["q"]);
+        expect(
+            matchGrammarWithNFA(g, nfa, "what is the time").map(
+                (m) => m.match,
+            ),
+        ).toEqual([]);
+    });
+
+    it("NFA still matches glued time\\? (display-punct path, strip pass)", () => {
+        const g = loadGrammarRules("time-glued.agr", timeGluedSrc);
+        const nfa = compileGrammarToNFA(g);
+        expect(
+            matchGrammarWithNFA(g, nfa, "what is the time?").map(
+                (m) => m.match,
+            ),
+        ).toEqual(["q"]);
+        // Space-separated ? is not the glued form
+        expect(
+            matchGrammarWithNFA(g, nfa, "what is the time ?").map(
+                (m) => m.match,
+            ),
+        ).toEqual([]);
+    });
+
+    it("NFA strip pass still treats trailing ? as flex-space when grammar has no literal ?", () => {
+        const g = loadGrammarRules(
+            "flex.agr",
+            `
+            <Song> = hello | goodbye;
+            <Start> = who sings song <Song>? -> "hit";
+            `,
+        );
+        const nfa = compileGrammarToNFA(g);
+        // optional Song, no literal ? — "hello?" strips to hello and matches
+        expect(
+            matchGrammarWithNFA(g, nfa, "who sings song hello?").map(
+                (m) => m.match,
+            ),
+        ).toEqual(["hit"]);
+        expect(
+            matchGrammarWithNFA(g, nfa, "who sings song").map((m) => m.match),
+        ).toEqual(["hit"]);
+    });
+});

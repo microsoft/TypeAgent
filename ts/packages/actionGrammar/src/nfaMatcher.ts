@@ -45,6 +45,24 @@ export interface NFAGrammarMatchResult {
 }
 
 /**
+ * Sentence-level trailing punctuation peeled/stripped from word tokens.
+ * Kept as a shared constant so strip and peel stay in lockstep.
+ */
+const TRAILING_PUNCTUATION = "?!.,;:";
+
+/**
+ * Find the index where trailing sentence punctuation begins on a token.
+ * Returns `token.length` when there is none; `0` when the token is all punct.
+ */
+function trailingPunctuationStart(token: string): number {
+    let end = token.length;
+    while (end > 0 && TRAILING_PUNCTUATION.includes(token[end - 1])) {
+        end--;
+    }
+    return end;
+}
+
+/**
  * Strip trailing punctuation from a token (linear time).
  *
  * Punctuation-only tokens (e.g. `"..."`, `"!?"`) are PRESERVED — the strip is
@@ -54,11 +72,7 @@ export interface NFAGrammarMatchResult {
  * normalize to just `done`.
  */
 function stripTrailingPunctuation(token: string): string {
-    const punctuation = "?!.,;:";
-    let end = token.length;
-    while (end > 0 && punctuation.includes(token[end - 1])) {
-        end--;
-    }
+    const end = trailingPunctuationStart(token);
     if (end === 0) {
         // Token is all punctuation — return as-is.
         return token;
@@ -114,6 +128,13 @@ export function parseNumberToken(token: string): number | undefined {
  * original case so that wildcard captures retain the user's casing.
  * Normalization (lowercasing) for fixed-token comparisons is done
  * separately at match time via normalizeToken().
+ *
+ * Trailing sentence punctuation on word tokens is discarded here so that
+ * natural utterances like `"pause?"` still match a grammar written without
+ * an explicit `?` (canonical treats leftover punct as flex-space).  When the
+ * grammar *requires* a standalone literal `?` / `!` / etc. (e.g.
+ * `who sings song <Song>\?`), {@link matchGrammarWithNFA} retries with
+ * {@link tokenizeRequestKeepingTrailingPunct}.
  */
 export function tokenizeRequest(request: string): string[] {
     return request
@@ -121,6 +142,27 @@ export function tokenizeRequest(request: string): string[] {
         .split(/\s+/)
         .map(stripTrailingPunctuation)
         .filter((token) => token.length > 0);
+}
+
+/**
+ * Tokenize like {@link tokenizeRequest}, but peel trailing sentence
+ * punctuation off word-bearing tokens into their own tokens instead of
+ * discarding it.
+ *
+ * Examples:
+ *   `"hello?"`  → `["hello", "?"]`
+ *   `"time!?"`  → `["time", "!?"]`
+ *   `"?"`       → `["?"]`   (all-punct tokens stay intact)
+ *
+ * Used as a fallback pass so grammars with a standalone escaped literal
+ * (`\?`, `\!`, …) after a word/rule can match natural glued questions
+ * (`"who sings song hello?"`) the same way the char-based canonical matcher
+ * does.  Callers that already have a successful strip-tokenized match should
+ * prefer that result (trailing punct as flex-space).
+ */
+export function tokenizeRequestKeepingTrailingPunct(request: string): string[] {
+    const { tokens } = tokenizeRequestWithOffsetsKeepingTrailingPunct(request);
+    return tokens;
 }
 
 /**
@@ -156,6 +198,55 @@ export function tokenizeRequestWithOffsets(request: string): {
         ends.push(start + raw.length);
     }
     return { tokens, starts, ends };
+}
+
+/**
+ * Offset-aware variant of {@link tokenizeRequestKeepingTrailingPunct}.
+ * Peeled punctuation becomes its own token with offsets covering only the
+ * punct run; the base word's `ends` stops before the punct.
+ */
+export function tokenizeRequestWithOffsetsKeepingTrailingPunct(request: string): {
+    tokens: string[];
+    starts: number[];
+    ends: number[];
+} {
+    const tokens: string[] = [];
+    const starts: number[] = [];
+    const ends: number[] = [];
+    const re = /\S+/g;
+    for (const m of request.matchAll(re)) {
+        const raw = m[0];
+        const start = m.index ?? 0;
+        const punctAt = trailingPunctuationStart(raw);
+        if (punctAt === 0) {
+            // All punctuation — keep as a single token.
+            tokens.push(raw);
+            starts.push(start);
+            ends.push(start + raw.length);
+        } else if (punctAt === raw.length) {
+            tokens.push(raw);
+            starts.push(start);
+            ends.push(start + raw.length);
+        } else {
+            // Word + trailing punct → two tokens.
+            tokens.push(raw.slice(0, punctAt));
+            starts.push(start);
+            ends.push(start + punctAt);
+            tokens.push(raw.slice(punctAt));
+            starts.push(start + punctAt);
+            ends.push(start + raw.length);
+        }
+    }
+    return { tokens, starts, ends };
+}
+
+/** True when two token arrays are identical (same length and elements). */
+function tokenArraysEqual(a: string[], b: string[]): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +385,63 @@ export function matchGrammarWithNFA(
                 bestResult = splitResult;
             } else {
                 [bestResult] = sortNFAMatches([origResult, splitResult]);
+            }
+        }
+    }
+
+    // Pass 3: peel glued trailing sentence punctuation into its own tokens.
+    // Default tokenization strips `"hello?"` → `"hello"` so incidental
+    // trailing punct acts like flex-space (canonical finalizeState).  That
+    // discards a standalone grammar literal `\?` after a word/rule, so
+    // `"who sings song hello?"` fails against `who sings song <Song>\?`.
+    // Retry with peeled tokens only when earlier passes missed — prefer the
+    // strip pass when both would match (trailing punct as flex-space).
+    if (!bestResult.matched) {
+        const punctOffsets =
+            tokenizeRequestWithOffsetsKeepingTrailingPunct(request);
+        const punctTokens = punctOffsets.tokens;
+        if (
+            punctTokens.length > 0 &&
+            !tokenArraysEqual(punctTokens, tokens)
+        ) {
+            debug(
+                `Trailing-punct tokens: [${punctTokens.join(", ")}] (${punctTokens.length} tokens)`,
+            );
+            const punctCtx = {
+                request,
+                starts: punctOffsets.starts,
+                ends: punctOffsets.ends,
+            };
+            let punctBest = matchNFAWithIndex(
+                nfa,
+                index,
+                punctTokens,
+                false,
+                punctCtx,
+            );
+            const punctSplit = applySplitToTokens(
+                punctTokens,
+                splitCandidates,
+            );
+            if (punctSplit !== null) {
+                const punctSplitResult = matchNFAWithIndex(
+                    nfa,
+                    index,
+                    punctSplit,
+                );
+                if (punctSplitResult.matched) {
+                    if (!punctBest.matched) {
+                        punctBest = punctSplitResult;
+                    } else {
+                        [punctBest] = sortNFAMatches([
+                            punctBest,
+                            punctSplitResult,
+                        ]);
+                    }
+                }
+            }
+            if (punctBest.matched) {
+                bestResult = punctBest;
             }
         }
     }

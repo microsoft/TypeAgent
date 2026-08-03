@@ -210,7 +210,13 @@ export class GrammarStoreImpl implements GrammarStore {
             let grammarMatches;
             if (this.useDFA && entry.dfa) {
                 const tokens = tokenizeRequest(request);
-                const dfaResult = matchDFAWithSplitting(entry.dfa, tokens);
+                // Pass request so matchDFAWithSplitting can retry with trailing
+                // sentence punctuation peeled into its own tokens (e.g. hello?
+                // against a grammar ending in standalone \?).
+                const dfaResult = matchDFAWithSplitting(entry.dfa, tokens, false, {
+                    request,
+                    grammar: entry.grammar,
+                });
                 grammarMatches = dfaResult.matched
                     ? [
                           {

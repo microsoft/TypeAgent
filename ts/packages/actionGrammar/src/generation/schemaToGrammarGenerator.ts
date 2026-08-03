@@ -211,6 +211,19 @@ IMPROVEMENT INSTRUCTIONS:
 AVAILABLE ENTITY TYPES AND CONVERTERS:
 {entityTypes}
 
+CRITICAL SYNTAX RULES (must follow when extending):
+1. Quantifiers ? * + are SPECIAL characters in patterns:
+   - Valid ONLY immediately after ")" or ">" : (<Polite>)?, <Song>?, $(x)?, (a|b)*
+   - Bare "?" after a word is a PARSE ERROR. Escape literals: what is the time\\?
+   - Required name + question mark: who sings song <Song>\\?
+   - Optional name + question mark: who sings song (<Song>)?\\?
+   - Do NOT write <Polite>? intending a literal "?"; that makes Polite optional.
+   - The writer/prettier prefers the grouped form (<Name>)? over bare <Name>?.
+   CORRECT: (please)?  (can you)?  (<Polite>)?  <Song>?  $(x)?
+   WRONG:   please?  can you?  'can you'?  "please"?  word*
+2. Comments use // not #
+3. Action rule names MUST match the exact action name (not capitalized)
+
 Your task:
 1. Analyze the existing grammar and identify areas for improvement
 2. Incorporate the new examples by extending or refining existing rules
@@ -218,7 +231,7 @@ Your task:
 4. Maintain consistency with existing patterns and style
 5. Ensure all actions in the schema are covered
 6. Keep shared sub-rules and don't duplicate patterns
-7. Follow all AGR syntax rules (see above)
+7. Follow all AGR syntax rules above (especially quantifier special-char rules)
 8. IMPORTANT: Use exact action names for action rules (e.g., <scheduleEvent> = ... ;, not <ScheduleEvent> = ... ;)
    This enables easy targeting of specific actions when extending grammars incrementally
 
