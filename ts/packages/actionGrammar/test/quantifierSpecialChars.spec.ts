@@ -344,9 +344,7 @@ describe("Quantifier special chars (? * +)", () => {
                 `<Start> = lookup $(obj:word) -> obj.value?.name;`,
             );
             expect(ast.definitions[0].rules[0].value).toBeDefined();
-            const ast2 = parse(
-                `<Start> = get $(x:word) -> x ?? "default";`,
-            );
+            const ast2 = parse(`<Start> = get $(x:word) -> x ?? "default";`);
             expect(ast2.definitions[0].rules[0].value).toBeDefined();
         });
     });
@@ -399,10 +397,7 @@ describe("Quantifier special chars (? * +)", () => {
         // generator to emit unparseable .agr. Guard both package copies.
         // Tests execute from dist/test/*.js — climb to package root / sibling package.
         const promptSources = [
-            join(
-                testDir,
-                "../../src/generation/schemaToGrammarGenerator.ts",
-            ),
+            join(testDir, "../../src/generation/schemaToGrammarGenerator.ts"),
             join(
                 testDir,
                 "../../../agentSdkWrapper/src/schemaToGrammarGenerator.ts",
@@ -417,7 +412,9 @@ describe("Quantifier special chars (? * +)", () => {
         function correctLines(src: string): string[] {
             return src
                 .split("\n")
-                .filter((l) => /^\s*CORRECT:/i.test(l) || /^\s*Example:/i.test(l));
+                .filter(
+                    (l) => /^\s*CORRECT:/i.test(l) || /^\s*Example:/i.test(l),
+                );
         }
 
         it("CORRECT/Example lines never use bare quantifier after a word or string", () => {
