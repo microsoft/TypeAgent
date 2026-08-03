@@ -48,7 +48,7 @@ import { Ordinal, CalendarDate };
             artists: [artist]
         }
     }
-  | pause (the)? music? -> { actionName: "pause" };
+  | pause (the)? (music)? -> { actionName: "pause" };
 
 // ─── Exported rule ────────────────────────────────────────────────────────────
 
@@ -160,15 +160,18 @@ export <PublicRule> = hello | goodbye;
 // ─── Operators and grouping ──────────────────────────────────────────────────
 
 <Operators> =
-    one? two* three+ four  // optional, zero-or-more, one-or-more
+    (one)? (two)* (three)+ four  // optional, zero-or-more, one-or-more
   | (first | second | third)  // alternation with grouping
   | (item)+ // one-or-more group
   | (prefix)* suffix; // zero-or-more group
+  // Literal "?" must be escaped (bare ?/*/+ are quantifiers after ) or > only):
+  //   what is the time\?
+  //   who sings song <SongName>\?
 
 // ─── Optional capture quantifiers ────────────────────────────────────────────
 
 <ItemList> =
-    add $(item:word)+ to $(list:string) -> {
+    add ($(item:word))+ to $(list:string) -> {
         actionName: "addItems",
         parameters: { items: [item], listName: list }
     };

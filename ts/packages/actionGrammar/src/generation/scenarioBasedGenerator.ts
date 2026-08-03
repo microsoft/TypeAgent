@@ -856,13 +856,13 @@ export class ScenarioBasedGrammarGenerator {
 
     /**
      * Escape special characters in quoted string literals
-     * Special chars: \, @, |, (, ), <, >, $, -, {, }, [, ], '
+     * Special chars: \, @, |, (, ), <, >, $, -, {, }, [, ], ?, *, +, '
      * Backslashes must be escaped first to avoid double-escaping
      */
     private escapeSpecialChars(text: string): string {
         return text
             .replace(/\\/g, "\\\\")
-            .replace(/[@|()\[\]<>$\-{}']/g, "\\$&");
+            .replace(/[@|()\[\]<>$\-{}?*+']/g, "\\$&");
     }
 
     /**

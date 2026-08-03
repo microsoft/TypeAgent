@@ -42,6 +42,10 @@ import { Helper } from "./other.agr";                 // Grammar imports
 <SkipTrack> = (skip | next) (track | song)?            // Optionals, alternation
     -> { actionName: "skip" };
 <Items> = $(item:string) (, $(item:string))*;          // Repetition (Kleene star)
+// Quantifiers ? * + are special: valid only after ")" or ">" (e.g. (<Polite>)?, <Song>?).
+// Bare ? elsewhere is a parse error — escape literals as \?
+// what is the time\?                                 // literal trailing ?
+// who sings song <Song>\?                            // required Song + literal ?
 ```
 
 ## Exports

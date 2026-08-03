@@ -61,10 +61,17 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   // Per-alternate annotations override the definition-level setting.
  *   // Omitting the annotation is equivalent to [spacing=auto].
  *   //
- *   // <Char> is any character except special chars (| ( ) < > $ - ; { } [ ]) and backslash,
- *   // and not the start of a comment sequence ("//" or "/*"). Escape a special character
- *   // or comment opener to make it literal (e.g. \|, \//, or \/*).
+ *   // <Char> is any character except special chars (| ( ) < > $ - ; { } [ ] ? * +) and
+ *   // backslash, and not the start of a comment sequence ("//" or "/*"). Escape a special
+ *   // character or comment opener to make it literal (e.g. \|, \?, \//, or \/*).
  *   // An escaped space (e.g. "\ ") is treated as a literal character, not a flex space.
+ *   //
+ *   // Quantifiers ? * + are special characters. They are postfix operators only when
+ *   // immediately after ")" or ">" (group, capture, or rule-ref). Anywhere else in a
+ *   // pattern expression they are a parse error — use \? / \* / \+ for literals.
+ *   // Colon ":" is intentionally NOT special: it only appears inside $() type specs, so
+ *   // there is no ambiguity with pattern text (CurtisM). Quotes are also not string
+ *   // syntax in patterns — " and ' are ordinary literal characters.
  *   <StringExpr> ::= ( <EscapeSequence> | <WS> | <Char> )+
  *   <EscapeSequence> ::= "\\"<EscapedChar>
  *   <EscapedChar> ::= "0"                        // null character \0
@@ -87,7 +94,9 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *
  *   <VariableSpecifier> ::= <VarName> (":" (<TypeName> | <RuleName>))?
  *
- *   <RuleRefExpr> ::= <RuleName>
+ *   <RuleRefExpr> ::= <RuleName> ( "?" | "*" | "+" )?
+ *   // Bare <Name>? / <Name>* / <Name>+ are equivalent to (<Name>)? / (<Name>)* / (<Name>)+.
+ *   // The writer/prettier always prefers the grouped form for clarity.
  *   <GroupExpr> ::= "(" <Rules> ( ")" | ")?" | ")*" | ")+" )
  *
  *   // ── Value (basic mode: enableValueExpressions=false) ──────────────────────────
@@ -232,6 +241,10 @@ export type CommentedName = {
 export type RuleRefExpr = {
     type: "ruleReference";
     refName: CommentedName;
+    /** True when postfix `?` or `*` follows the rule name (`<Name>?` / `<Name>*`). */
+    optional?: boolean | undefined;
+    /** True when postfix `*` or `+` follows the rule name (`<Name>*` / `<Name>+`). */
+    repeat?: boolean | undefined;
     pos?: number | undefined;
     leadingComments?: Comment[] | undefined;
 };
@@ -403,7 +416,7 @@ export function isIdContinue(char: string) {
 }
 // Even some of these are not used yet, include them for future use.
 export const expressionsSpecialChar = [
-    // Must escape
+    // Must escape in pattern expressions
     "|",
     "(",
     ")",
@@ -417,6 +430,13 @@ export const expressionsSpecialChar = [
     "}",
     "[",
     "]",
+    // Postfix quantifiers: only valid immediately after ")" or ">".
+    // Elsewhere they are a parse error; escape as \? / \* / \+ for literals.
+    // Colon ":" is intentionally omitted — it only appears inside $() type
+    // positions, so there is no ambiguity with ordinary pattern text.
+    "?",
+    "*",
+    "+",
 ];
 
 export function isExpressionSpecialChar(char: string) {
@@ -689,6 +709,29 @@ class GrammarRuleParser implements ValueExprParserContext {
         }
     }
 
+
+    /**
+     * Apply a postfix quantifier immediately after a rule reference (`>`).
+     * Sets optional/repeat on `target` and advances past the quantifier char.
+     * No-op when the next char is not one of: ? * +
+     */
+    private applyPostfixQuantifier(target: {
+        optional?: boolean | undefined;
+        repeat?: boolean | undefined;
+    }): void {
+        if (this.isAt("?")) {
+            target.optional = true;
+            this.skipWhitespace(1);
+        } else if (this.isAt("*")) {
+            target.optional = true;
+            target.repeat = true;
+            this.skipWhitespace(1);
+        } else if (this.isAt("+")) {
+            target.repeat = true;
+            this.skipWhitespace(1);
+        }
+    }
+
     // INVARIANT EXCEPTION: does not skip trailing whitespace — whitespace is
     // semantically significant here (flex-space boundaries).  The caller
     // (parseExpression) manages whitespace skipping in its loop.
@@ -803,6 +846,9 @@ class GrammarRuleParser implements ValueExprParserContext {
                     refName: this.parseRuleName(),
                     pos,
                 };
+                // Postfix quantifiers after ">": <Name>?, <Name>*, <Name>+
+                // (equivalent to (<Name>)?, (<Name>)*, (<Name>)+).
+                this.applyPostfixQuantifier(node);
                 attach(node);
                 expNodes.push(node);
                 continue;
@@ -812,6 +858,9 @@ class GrammarRuleParser implements ValueExprParserContext {
                 const v = this.parseVariableSpecifier();
                 attach(v);
                 expNodes.push(v);
+                // Captures only support optional today ($(x)?). Use ($(x))* / ($(x))+
+                // for repetition (group form). Bare )* / )+ after $() is rejected below
+                // if someone writes $(x)* without grouping — variables lack repeat.
                 if (this.isAt(")?")) {
                     v.optional = true;
                     this.skipWhitespace(2);
@@ -841,6 +890,18 @@ class GrammarRuleParser implements ValueExprParserContext {
                 }
                 this.skipWhitespace(2);
                 continue;
+            }
+
+            // Bare quantifier not attached to ")" or ">" — always a parse error.
+            // CurtisM: this must be a hard error, not a lint warning.
+            if (this.isAt("?") || this.isAt("*") || this.isAt("+")) {
+                const q = this.content[this.curr];
+                this.throwError(
+                    `Unexpected quantifier '${q}'. ` +
+                        `Postfix quantifiers (?, *, +) are only valid immediately after ')' or '>' ` +
+                        `(e.g. (<Rule>)?, <Rule>?, $(x)?). ` +
+                        `Escape as \\${q} for a literal '${q}' in the pattern.`,
+                );
             }
 
             const s = this.parseStrExpr();

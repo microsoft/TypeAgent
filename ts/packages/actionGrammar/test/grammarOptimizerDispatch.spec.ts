@@ -1078,7 +1078,7 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
     // or `@`, dropping the match entirely.
     describe("regression: separator char inside required-mode literal", () => {
         it("matches a required-mode alternation whose first token embeds '?'", () => {
-            const text = `<Start> [spacing=required] = d? b@ a% -> "first"
+            const text = `<Start> [spacing=required] = d\\? b@ a% -> "first"
                                                 | b d d d@ -> "second";`;
             const baseline = loadGrammarRules("t.grammar", text);
             const optimized = loadGrammarRules("t.grammar", text, {
@@ -1113,12 +1113,12 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
                 | x. a -> "dot"
                 | x: a -> "colon"
                 | x! a -> "bang"
-                | x? a -> "qmark"
+                | x\\? a -> "qmark"
                 | x@ a -> "at"
                 | x# a -> "hash"
                 | x% a -> "pct"
                 | x& a -> "amp"
-                | x+ a -> "plus"
+                | x\\+ a -> "plus"
                 | x= a -> "eq"
                 | x' a -> "apos"
                 | x" a -> "quot";`;
@@ -1156,7 +1156,7 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
             // dispatch can't bucket this rule (peek would never
             // return a key matching `?x`), so it must land in the
             // fallback subset and still match correctly.
-            const text = `<Start> [spacing=required] = ?x -> "lead-sep"
+            const text = `<Start> [spacing=required] = \\?x -> "lead-sep"
                                                 | yy -> "normal";`;
             const baseline = loadGrammarRules("t.grammar", text);
             const optimized = loadGrammarRules("t.grammar", text, {

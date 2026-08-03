@@ -115,7 +115,15 @@ CRITICAL SYNTAX RULES:
    CORRECT: // This is a comment
    WRONG:   # This is a comment
 
-10. Hyphenated and apostrophe string literals:
+10. Quantifiers ? * + are SPECIAL characters in patterns:
+    - Valid ONLY immediately after ")" or ">" : (<Polite>)?, <Song>?, $(x)?, (a|b)*
+    - Bare "?" after a word is a PARSE ERROR. Escape literals: what is the time\?
+    - Required name + question mark: who sings song <Song>\?
+    - Optional name + question mark: who sings song (<Song>)?\?
+    - Do NOT write <Polite>? intending a literal "?"; that makes Polite optional.
+    - The writer/prettier prefers the grouped form (<Name>)? over bare <Name>?.
+
+11. Hyphenated and apostrophe string literals:
     a) Apostrophes/contractions: "don't" "it's" "let's"  (NOT 'don\'t' or 'it\'s' — use double quotes)
     b) Hyphenated words like 'auto-reload' or "auto-generate" CANNOT appear in any quoted string
        (hyphens are special characters even inside double-quoted strings).
@@ -124,13 +132,13 @@ CRITICAL SYNTAX RULES:
        CORRECT: ('auto' 'generate' | 'autogenerate')?
        WRONG:   'auto-generate' or "auto-generate"  (both cause parse errors!)
 
-11. Action body values must be SIMPLE variable names only — no dot notation, array access, or expressions:
+12. Action body values must be SIMPLE variable names only — no dot notation, array access, or expressions:
     CORRECT: -> { actionName: "create", parameters: { name: name, language: language } }
     WRONG:   -> { actionName: "create", parameters: { declaration: details.declaration, body: details.body } }
     If a TypeScript schema parameter has nested fields, just capture it as a single string wildcard.
     Grammar rules capture flat key/value pairs; don't model nested object structures.
 
-12. When using a CUSTOM SUB-RULE (not a built-in entity type) as a wildcard type, wrap the rule name in angle brackets:
+13. When using a CUSTOM SUB-RULE (not a built-in entity type) as a wildcard type, wrap the rule name in angle brackets:
     CORRECT: $(location:<LocationSpec>)   — rule reference in wildcard (angle brackets required)
     CORRECT: $(days:<DaysSpec>)?          — optional rule-typed capture
     WRONG:   $(location:LocationSpec)     — rule name without angle brackets (will cause "Undefined type" error)
