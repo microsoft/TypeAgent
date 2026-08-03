@@ -184,10 +184,7 @@ describe("PhraseSetPart variable capture", () => {
         ],
     };
 
-    function bestGrammarActionValue(
-        g: Grammar,
-        request: string,
-    ): unknown {
+    function bestGrammarActionValue(g: Grammar, request: string): unknown {
         const results = matchGrammar(g, request);
         if (results.length === 0) return undefined;
         return results[0].match;

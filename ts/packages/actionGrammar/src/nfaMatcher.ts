@@ -205,7 +205,9 @@ export function tokenizeRequestWithOffsets(request: string): {
  * Peeled punctuation becomes its own token with offsets covering only the
  * punct run; the base word's `ends` stops before the punct.
  */
-export function tokenizeRequestWithOffsetsKeepingTrailingPunct(request: string): {
+export function tokenizeRequestWithOffsetsKeepingTrailingPunct(
+    request: string,
+): {
     tokens: string[];
     starts: number[];
     ends: number[];
@@ -400,10 +402,7 @@ export function matchGrammarWithNFA(
         const punctOffsets =
             tokenizeRequestWithOffsetsKeepingTrailingPunct(request);
         const punctTokens = punctOffsets.tokens;
-        if (
-            punctTokens.length > 0 &&
-            !tokenArraysEqual(punctTokens, tokens)
-        ) {
+        if (punctTokens.length > 0 && !tokenArraysEqual(punctTokens, tokens)) {
             debug(
                 `Trailing-punct tokens: [${punctTokens.join(", ")}] (${punctTokens.length} tokens)`,
             );
@@ -419,10 +418,7 @@ export function matchGrammarWithNFA(
                 false,
                 punctCtx,
             );
-            const punctSplit = applySplitToTokens(
-                punctTokens,
-                splitCandidates,
-            );
+            const punctSplit = applySplitToTokens(punctTokens, splitCandidates);
             if (punctSplit !== null) {
                 const punctSplitResult = matchNFAWithIndex(
                     nfa,

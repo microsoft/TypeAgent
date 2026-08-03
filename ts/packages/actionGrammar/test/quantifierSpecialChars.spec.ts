@@ -437,14 +437,9 @@ describe("Quantifier special chars (? * +)", () => {
             return prompts;
         }
 
-        function loadRuntimePromptByName(
-            path: string,
-            name: string,
-        ): string {
+        function loadRuntimePromptByName(path: string, name: string): string {
             const src = loadPromptSource(path);
-            const re = new RegExp(
-                `const\\s+${name}\\s*=\\s*(\`[\\s\\S]*?\`);`,
-            );
+            const re = new RegExp(`const\\s+${name}\\s*=\\s*(\`[\\s\\S]*?\`);`);
             const m = re.exec(src);
             if (!m) {
                 throw new Error(`${name} not found in ${path}`);
@@ -491,7 +486,9 @@ describe("Quantifier special chars (? * +)", () => {
                     expect(nonWrong).not.toMatch(/'can you'\?/);
                     expect(nonWrong).not.toMatch(/'please'\?/);
                     expect(nonWrong).not.toMatch(/"please"\?/);
-                    expect(nonWrong).not.toMatch(/Optional elements: element\?/);
+                    expect(nonWrong).not.toMatch(
+                        /Optional elements: element\?/,
+                    );
                 }
                 // Main SCHEMA prompt also teaches shared Polite vocab
                 const main = loadRuntimePromptByName(
@@ -720,9 +717,9 @@ describeForEachMatcher(
             expect(testMatchGrammar(g, "can you open outlook")).toStrictEqual([
                 "ok",
             ]);
-            expect(
-                testMatchGrammar(g, "could you open outlook"),
-            ).toStrictEqual(["ok"]);
+            expect(testMatchGrammar(g, "could you open outlook")).toStrictEqual(
+                ["ok"],
+            );
             expect(
                 testMatchGrammar(g, "would you please open outlook"),
             ).toStrictEqual(["ok"]);
@@ -737,9 +734,9 @@ describeForEachMatcher(
             expect(testMatchGrammar(g, "add milk to list")).toStrictEqual([
                 "x",
             ]);
-            expect(
-                testMatchGrammar(g, "add milk eggs to list"),
-            ).toStrictEqual(["x"]);
+            expect(testMatchGrammar(g, "add milk eggs to list")).toStrictEqual([
+                "x",
+            ]);
             expect(testMatchGrammar(g, "add to list")).toStrictEqual([]);
         });
 
@@ -904,9 +901,7 @@ describe("Quantifier special chars — NFA/DFA trailing literal ?", () => {
             ),
         ).toEqual(["q"]);
         expect(
-            matchGrammarWithNFA(g, nfa, "what is the time").map(
-                (m) => m.match,
-            ),
+            matchGrammarWithNFA(g, nfa, "what is the time").map((m) => m.match),
         ).toEqual([]);
     });
 
