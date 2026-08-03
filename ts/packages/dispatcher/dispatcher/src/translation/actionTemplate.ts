@@ -44,9 +44,6 @@ function getDefaultActionTemplate(
     return template;
 }
 
-/**
- * Resolve a schema type through references to a concrete object, or undefined.
- */
 function resolveObjectType(
     type: ActionParamType,
 ): ActionParamObject | undefined {
@@ -54,12 +51,7 @@ function resolveObjectType(
     return resolved?.type === "object" ? resolved : undefined;
 }
 
-/**
- * For a discriminated object union (each arm is an object with the same
- * single-value string-union field, e.g. `kind: "track" | …`), return the
- * shared field name and every arm's discriminator value. Returns undefined
- * when the union is not a clean discriminated object union.
- */
+// Discriminated object union: shared single-value kind field.
 function getObjectUnionDiscriminator(
     types: readonly ActionParamType[],
 ):
@@ -77,8 +69,6 @@ function getObjectUnionDiscriminator(
         arms.push(obj);
     }
 
-    // Candidate discriminator fields: present on every arm as a single-value
-    // string-union (or single-enum string-union).
     const firstFields = Object.keys(arms[0].fields);
     for (const fieldName of firstFields) {
         const values: string[] = [];
@@ -99,7 +89,7 @@ function getObjectUnionDiscriminator(
         if (!ok) {
             continue;
         }
-        // All values must be unique so kind uniquely selects an arm.
+        // Kind values must be unique per arm.
         if (new Set(values).size !== values.length) {
             continue;
         }
@@ -143,7 +133,7 @@ function toTemplateTypeArray(
     visited: ReadonlySet<string>,
     data: unknown,
 ) {
-    // Use the first element as a shape hint when present.
+    // First array element shapes nested templates.
     const elementData =
         Array.isArray(data) && data.length > 0 ? data[0] : undefined;
     const elementType = toTemplateType(type.elementType, visited, elementData);
@@ -158,18 +148,7 @@ function toTemplateTypeArray(
     return templateType;
 }
 
-/**
- * Convert a type-union into a template field.
- *
- * Discriminated object unions (MusicTarget-style `kind: "track" | "artist" | …`)
- * become an object template for the arm matching `data`, with the discriminator
- * field expanded to the full string-union so the editor can switch arms via
- * `getTemplateSchema` refresh.
- *
- * Non-discriminated unions fall back to the arm that validates against `data`,
- * or the first arm when data is absent — same as the historical first-arm
- * behavior for empty templates.
- */
+// Expand discriminated unions; else first-arm fallback.
 function toTemplateTypeUnion(
     types: readonly ActionParamType[],
     visited: ReadonlySet<string>,
@@ -195,7 +174,7 @@ function toTemplateTypeUnion(
         }
         const selectedArm = arms[selectedIndex];
         const template = toTemplateTypeObject(selectedArm, visited, data);
-        // Full enum so the UI can switch arms; discriminator triggers schema refresh.
+        // Full kind enum; arm fields from data.
         template.fields[fieldName] = {
             optional: false,
             type: {
@@ -207,12 +186,11 @@ function toTemplateTypeUnion(
         return template;
     }
 
-    // Non-discriminated: prefer an arm that structurally matches current data.
+    // Prefer arm that matches current data shape.
     if (data !== undefined) {
         for (const t of types) {
             const resolved = resolveTypeReference(t) ?? t;
             try {
-                // Lightweight structural probe — prefer object when data is object, etc.
                 if (
                     resolved.type === "object" &&
                     data !== null &&
@@ -323,8 +301,7 @@ function toTemplate(
 
     const actionParametersType = actionSchema.type.fields.parameters?.type;
     if (actionParametersType) {
-        // Pass current parameter values so discriminated unions (e.g. MusicTarget)
-        // expand to the arm matching data and expose the full kind enum.
+        // Pass data so union arms resolve correctly.
         const type = toTemplateType(
             actionParametersType,
             new Set(),
