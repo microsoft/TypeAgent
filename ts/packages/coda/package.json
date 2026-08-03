@@ -29,8 +29,8 @@
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "pretest": "pnpm run build",
-    "test:full": "vscode-test",
     "test-compile": "tsc -p ./src",
+    "test:full": "vscode-test",
     "vscode:prepublish": "pnpm run esbuild-base --minify",
     "watch": "tsc -w"
   },
