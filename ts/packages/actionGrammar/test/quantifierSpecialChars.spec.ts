@@ -30,8 +30,14 @@ describe("Quantifier special chars (? * +)", () => {
         });
 
         it("errors on bare '*' and '+' after words", () => {
-            expectParseError(`<Start> = one* two -> "x";`, /Unexpected quantifier '\*'/);
-            expectParseError(`<Start> = one+ two -> "x";`, /Unexpected quantifier '\+'/);
+            expectParseError(
+                `<Start> = one* two -> "x";`,
+                /Unexpected quantifier '\*'/,
+            );
+            expectParseError(
+                `<Start> = one+ two -> "x";`,
+                /Unexpected quantifier '\+'/,
+            );
         });
 
         it("errors on bare '?' after a string group close that already consumed )?", () => {
@@ -42,7 +48,7 @@ describe("Quantifier special chars (? * +)", () => {
             );
         });
 
-        it("errors on \"please\"?  (quotes are literal chars; ? is bare)", () => {
+        it('errors on "please"?  (quotes are literal chars; ? is bare)', () => {
             // Quotes have no special meaning in patterns — "please" is chars
             // including the quote glyphs, then bare ? is illegal.
             expectParseError(
@@ -60,9 +66,18 @@ describe("Quantifier special chars (? * +)", () => {
         });
 
         it("errors on standalone quantifier token", () => {
-            expectParseError(`<Start> = ? -> "x";`, /Unexpected quantifier '\?'/);
-            expectParseError(`<Start> = * -> "x";`, /Unexpected quantifier '\*'/);
-            expectParseError(`<Start> = + -> "x";`, /Unexpected quantifier '\+'/);
+            expectParseError(
+                `<Start> = ? -> "x";`,
+                /Unexpected quantifier '\?'/,
+            );
+            expectParseError(
+                `<Start> = * -> "x";`,
+                /Unexpected quantifier '\*'/,
+            );
+            expectParseError(
+                `<Start> = + -> "x";`,
+                /Unexpected quantifier '\+'/,
+            );
         });
     });
 
@@ -148,9 +163,7 @@ describe("Quantifier special chars (? * +)", () => {
             expect(exprs[1]).toMatchObject({
                 type: "ruleReference",
             });
-            expect(
-                (exprs[1] as { optional?: boolean }).optional,
-            ).toBeFalsy();
+            expect((exprs[1] as { optional?: boolean }).optional).toBeFalsy();
             expect(exprs[2]).toMatchObject({
                 type: "string",
                 value: ["?"],
@@ -335,9 +348,9 @@ describeForEachMatcher(
             expect(testMatchGrammar(g, "who sings song hello?")).toStrictEqual([
                 "hit",
             ]);
-            expect(testMatchGrammar(g, "who sings song goodbye?")).toStrictEqual([
-                "hit",
-            ]);
+            expect(
+                testMatchGrammar(g, "who sings song goodbye?"),
+            ).toStrictEqual(["hit"]);
             // missing song
             expect(testMatchGrammar(g, "who sings song?")).toStrictEqual([]);
             // missing ?
@@ -436,9 +449,9 @@ describeForEachMatcher(
             expect(testMatchGrammar(star, "show files")).toStrictEqual([
                 "star",
             ]);
-            expect(testMatchGrammar(star, "show alice bob files")).toStrictEqual(
-                ["star"],
-            );
+            expect(
+                testMatchGrammar(star, "show alice bob files"),
+            ).toStrictEqual(["star"]);
             expect(testMatchGrammar(plus, "show files")).toStrictEqual([]);
             expect(testMatchGrammar(plus, "show alice files")).toStrictEqual([
                 "plus",
@@ -450,7 +463,9 @@ describeForEachMatcher(
                 "tesla.agr",
                 `<Start> = is Tesla the best car(\\?)? -> "ok";`,
             );
-            expect(testMatchGrammar(g, "is Tesla the best car")).toContain("ok");
+            expect(testMatchGrammar(g, "is Tesla the best car")).toContain(
+                "ok",
+            );
             // May yield multiple matches (optional group taken vs skipped with
             // trailing punct as flex-space) — both are successful hits.
             const withQ = testMatchGrammar(g, "is Tesla the best car?");

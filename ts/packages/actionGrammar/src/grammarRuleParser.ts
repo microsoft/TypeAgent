@@ -709,7 +709,6 @@ class GrammarRuleParser implements ValueExprParserContext {
         }
     }
 
-
     /**
      * Apply a postfix quantifier immediately after a rule reference (`>`).
      * Sets optional/repeat on `target` and advances past the quantifier char.
