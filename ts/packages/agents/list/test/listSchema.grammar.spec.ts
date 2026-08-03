@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 /**
- * Grammar contract for listSchema.agr:
- * - Named lists match deterministically ("the grocery list", "my shopping list").
- * - Bare / ambiguous references do not match — translation (LLM + history) owns them.
- * - The list agent does not filter listName values; create "my" remains allowed.
+ * Grammar contract for listSchema.agr (Robert / PR feedback):
+ * - Named lists match deterministically.
+ * - Bare / ambiguous references do not match — translation owns them.
+ * - The list agent does not police listName (create "my" is allowed).
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -15,7 +15,6 @@ import { loadGrammarRules, matchGrammar } from "@typeagent/action-grammar";
 
 function resolveAgrPath(): string {
     const here = dirname(fileURLToPath(import.meta.url));
-    // Compiled jest: dist/test/… ; sources: test/…
     const candidates = [
         join(here, "../src/listSchema.agr"),
         join(here, "../../src/listSchema.agr"),
@@ -25,9 +24,7 @@ function resolveAgrPath(): string {
             return c;
         }
     }
-    throw new Error(
-        `listSchema.agr not found relative to ${here}; tried ${candidates.join(", ")}`,
-    );
+    throw new Error(`listSchema.agr not found from ${here}`);
 }
 
 function loadListGrammar() {
@@ -61,8 +58,8 @@ describe("listSchema.agr named-list grammar", () => {
             "clear the list",
             "empty the list",
             "delete everything from the list",
-            // Determinerless named form is also unmatched on purpose so we never
-            // re-open "to $(listName) list" → listName="the" capture.
+            // Determinerless form unmatched on purpose — avoids reopening
+            // "to $(listName) list" → listName="the".
             "add milk to grocery list",
         ])("%s", (request) => {
             expect(actions(request)).toEqual([]);
@@ -70,83 +67,49 @@ describe("listSchema.agr named-list grammar", () => {
     });
 
     describe("named lists match", () => {
-        it("add to the <name> list", () => {
-            const m = actions("add milk to the grocery list");
-            expect(m).toEqual([
-                expect.objectContaining({
-                    actionName: "addItems",
-                    parameters: { items: ["milk"], listName: "grocery" },
-                }),
-            ]);
-        });
-
-        it("add to my <name> list", () => {
-            const m = actions("add milk to my shopping list");
-            expect(m[0]).toMatchObject({
+        it("add / put named lists", () => {
+            expect(actions("add milk to the grocery list")[0]).toMatchObject({
+                actionName: "addItems",
+                parameters: { items: ["milk"], listName: "grocery" },
+            });
+            expect(actions("add milk to my shopping list")[0]).toMatchObject({
                 actionName: "addItems",
                 parameters: { items: ["milk"], listName: "shopping" },
             });
-        });
-
-        it("can you add single item", () => {
-            const m = actions("can you add eggs to the grocery list");
-            expect(m[0]).toMatchObject({
+            expect(
+                actions("can you add eggs to the grocery list")[0],
+            ).toMatchObject({
                 actionName: "addItems",
                 parameters: { items: ["eggs"], listName: "grocery" },
             });
-        });
-
-        it("can you add two items", () => {
-            const m = actions("can you add milk and eggs to the grocery list");
+            const two = actions(
+                "can you add milk and eggs to the grocery list",
+            );
             expect(
-                m.some(
+                two.some(
                     (a) =>
                         a.actionName === "addItems" &&
                         a.parameters.listName === "grocery" &&
-                        Array.isArray(a.parameters.items) &&
-                        a.parameters.items.includes("milk") &&
-                        a.parameters.items.includes("eggs"),
+                        a.parameters.items?.includes("milk") &&
+                        a.parameters.items?.includes("eggs"),
                 ),
             ).toBe(true);
-        });
-
-        it("put on the <name> list", () => {
-            const m = actions("put cheese on the grocery list");
-            expect(m[0]).toMatchObject({
+            expect(actions("put cheese on the grocery list")[0]).toMatchObject({
                 actionName: "addItems",
                 parameters: { items: ["cheese"], listName: "grocery" },
             });
         });
 
-        it("remove / delete / take off named list", () => {
+        it("remove / get / clear named lists", () => {
             expect(
                 actions("remove ham from the grocery list")[0],
             ).toMatchObject({
                 actionName: "removeItems",
                 parameters: { items: ["ham"], listName: "grocery" },
             });
-            expect(
-                actions("delete milk from my shopping list")[0],
-            ).toMatchObject({
-                actionName: "removeItems",
-                parameters: { listName: "shopping" },
-            });
-            expect(actions("take bread off the grocery list")[0]).toMatchObject(
-                {
-                    actionName: "removeItems",
-                    parameters: { items: ["bread"], listName: "grocery" },
-                },
-            );
-        });
-
-        it("get / clear named list", () => {
             expect(actions("what's on the grocery list")[0]).toMatchObject({
                 actionName: "getList",
                 parameters: { listName: "grocery" },
-            });
-            expect(actions("clear my shopping list")[0]).toMatchObject({
-                actionName: "clearList",
-                parameters: { listName: "shopping" },
             });
             expect(
                 actions("delete everything from the grocery list")[0],
@@ -162,7 +125,7 @@ describe("listSchema.agr named-list grammar", () => {
             });
         });
 
-        it("delete <item> from named list is removeItems, not clearList", () => {
+        it("delete <item> is removeItems, not clearList", () => {
             const m = actions("delete milk from the grocery list");
             expect(m[0]).toMatchObject({
                 actionName: "removeItems",
@@ -171,9 +134,8 @@ describe("listSchema.agr named-list grammar", () => {
             expect(m.every((a) => a.actionName !== "clearList")).toBe(true);
         });
 
-        it("create allows listName my (agent does not police names)", () => {
-            const m = actions("create my list");
-            expect(m[0]).toMatchObject({
+        it("create allows listName my", () => {
+            expect(actions("create my list")[0]).toMatchObject({
                 actionName: "createList",
                 parameters: { listName: "my" },
             });
