@@ -13,83 +13,59 @@ import {
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { FeedbackAction } from "../schema/feedbackActionSchema.js";
 
+/** Returns `{ [key]: value }` when value is defined, `{}` otherwise. */
+function opt(value: unknown, key: string): Record<string, unknown> {
+    return value !== undefined ? { [key]: value } : {};
+}
+
 export function executeFeedbackAction(
     action: TypeAgentAction<FeedbackAction, "system.feedback">,
     context: ActionContext<CommandHandlerContext>,
     handlers: CommandHandlerTable,
 ): Promise<ActionResult | undefined> {
+    const execute = (commands: string[], params?: any) =>
+        executeCommandFromHandlers(handlers, commands, params, context);
+    const p: any = action.parameters;
+
     switch (action.actionName) {
         case "listFeedback":
-            return executeCommandFromHandlers(
-                handlers,
-                ["list"],
-                {
-                    args: {},
-                    flags: {
-                        limit: action.parameters?.limit ?? 20,
-                        all: action.parameters?.includeAllEntries ?? false,
-                    },
+            return execute(["list"], {
+                args: {},
+                flags: {
+                    limit: p.limit ?? 20,
+                    all: p.includeAllEntries ?? false,
                 },
-                context,
-            );
+            });
         case "summarizeFeedback":
-            return executeCommandFromHandlers(
-                handlers,
-                ["top"],
-                {
-                    args: {},
-                    flags: {
-                        limit: action.parameters?.categoryLimit ?? 10,
-                    },
-                },
-                context,
-            );
+            return execute(["top"], {
+                args: {},
+                flags: { limit: p.categoryLimit ?? 10 },
+            });
         case "filterFeedback":
-            return executeCommandFromHandlers(
-                handlers,
-                ["filter"],
-                {
-                    args: {},
-                    flags: {
-                        ...(action.parameters?.rating === undefined
-                            ? {}
-                            : { rating: action.parameters.rating }),
-                        ...(action.parameters?.category === undefined
-                            ? {}
-                            : { category: action.parameters.category }),
-                        ...(action.parameters?.since === undefined
-                            ? {}
-                            : { since: action.parameters.since }),
-                        ...(action.parameters?.until === undefined
-                            ? {}
-                            : { until: action.parameters.until }),
-                        limit: action.parameters?.limit ?? 50,
-                        all: action.parameters?.includeAllEntries ?? false,
-                    },
+            return execute(["filter"], {
+                args: {},
+                flags: {
+                    ...opt(p.rating, "rating"),
+                    ...opt(p.category, "category"),
+                    ...opt(p.since, "since"),
+                    ...opt(p.until, "until"),
+                    limit: p.limit ?? 50,
+                    all: p.includeAllEntries ?? false,
                 },
-                context,
-            );
+            });
         case "exportFeedback":
-            return executeCommandFromHandlers(
-                handlers,
-                ["export"],
-                {
-                    args: { file: action.parameters.file },
-                    flags: {
-                        ...(action.parameters.format === undefined
-                            ? {}
-                            : { format: action.parameters.format }),
-                        all: action.parameters.includeAllEntries ?? false,
-                    },
+            return execute(["export"], {
+                args: { file: p.file },
+                flags: {
+                    ...opt(p.format, "format"),
+                    all: p.includeAllEntries ?? false,
                 },
-                context,
-            );
+            });
         case "countFeedback":
-            return executeCommandFromHandlers(
-                handlers,
-                ["count"],
-                undefined,
-                context,
+            return execute(["count"], undefined);
+        default:
+            throw new Error(
+                `Unknown feedback action: ${action.actionName}`,
             );
     }
 }

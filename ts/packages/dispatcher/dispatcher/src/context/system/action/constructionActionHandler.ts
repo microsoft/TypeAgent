@@ -14,6 +14,31 @@ import {
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { ConstructionAction } from "../schema/constructionActionSchema.js";
 
+/** Returns `{ [key]: value }` when value is defined, `{}` otherwise. */
+function opt(value: unknown, key: string): Record<string, unknown> {
+    return value !== undefined ? { [key]: value } : {};
+}
+
+const STORE_CMDS: Record<string, string> = {
+    newConstructionStore: "new",
+    loadConstructionStore: "load",
+    saveConstructionStore: "save",
+};
+
+function executeConstructionStoreAction(
+    actionName: string,
+    p: any,
+    execute: (
+        commands: string[],
+        params?: ParsedCommandParams<any>,
+    ) => Promise<ActionResult | undefined>,
+): Promise<ActionResult | undefined> {
+    return execute([STORE_CMDS[actionName]], {
+        args: { ...opt(p.file, "file") },
+        flags: {},
+    });
+}
+
 export function executeConstructionAction(
     action: TypeAgentAction<ConstructionAction, "system.construction">,
     context: ActionContext<CommandHandlerContext>,
@@ -23,30 +48,15 @@ export function executeConstructionAction(
         executeCommandFromHandlers(handlers, commands, params, context);
     const toggle = (commands: string[], enabled: boolean) =>
         execute([...commands, enabled ? "on" : "off"]);
+    const p: any = action.parameters;
+
+    if (action.actionName in STORE_CMDS) {
+        return executeConstructionStoreAction(action.actionName, p, execute);
+    }
 
     switch (action.actionName) {
-        case "newConstructionStore":
-        case "loadConstructionStore":
-        case "saveConstructionStore":
-            return execute(
-                [
-                    action.actionName === "newConstructionStore"
-                        ? "new"
-                        : action.actionName === "loadConstructionStore"
-                          ? "load"
-                          : "save",
-                ],
-                {
-                    args: {
-                        ...(action.parameters?.file === undefined
-                            ? {}
-                            : { file: action.parameters.file }),
-                    },
-                    flags: {},
-                },
-            );
         case "setConstructionAutoSave":
-            return toggle(["auto"], action.parameters.enabled);
+            return toggle(["auto"], p.enabled);
         case "disableConstructionStore":
             return execute(["off"]);
         case "showConstructionInfo":
@@ -55,48 +65,35 @@ export function executeConstructionAction(
             return execute(["list"], {
                 args: {},
                 flags: {
-                    verbose: action.parameters?.verbose ?? false,
-                    all: action.parameters?.allMatchStrings ?? false,
-                    builtin: action.parameters?.builtIn ?? false,
-                    ...(action.parameters?.match === undefined
-                        ? {}
-                        : { match: action.parameters.match }),
-                    ...(action.parameters?.part === undefined
-                        ? {}
-                        : { part: action.parameters.part }),
-                    ...(action.parameters?.ids === undefined
-                        ? {}
-                        : { id: action.parameters.ids }),
+                    verbose: p.verbose ?? false,
+                    all: p.allMatchStrings ?? false,
+                    builtin: p.builtIn ?? false,
+                    ...opt(p.match, "match"),
+                    ...opt(p.part, "part"),
+                    ...opt(p.ids, "id"),
                 },
             } as unknown as ParsedCommandParams<any>);
         case "importConstructions":
             return execute(["import"], {
-                args: {
-                    ...(action.parameters?.files === undefined
-                        ? {}
-                        : { file: action.parameters.files }),
-                },
-                flags: {
-                    extended: action.parameters?.extended ?? false,
-                },
+                args: { ...opt(p.files, "file") },
+                flags: { extended: p.extended ?? false },
             } as unknown as ParsedCommandParams<any>);
         case "pruneConstructions":
             return execute(["prune"]);
         case "deleteConstruction":
             return execute(["delete"], {
-                args: {
-                    namespace: action.parameters.namespace,
-                    id: action.parameters.id,
-                },
+                args: { namespace: p.namespace, id: p.id },
                 flags: {},
             });
         case "setBuiltInConstructionCache":
-            return toggle(["builtin"], action.parameters.enabled);
+            return toggle(["builtin"], p.enabled);
         case "setConstructionMerge":
-            return toggle(["merge"], action.parameters.enabled);
+            return toggle(["merge"], p.enabled);
         case "setWildcardMatching":
-            return toggle(["wildcard"], action.parameters.enabled);
+            return toggle(["wildcard"], p.enabled);
         case "setEntityWildcardMatching":
-            return toggle(["wildcard", "entity"], action.parameters.enabled);
+            return toggle(["wildcard", "entity"], p.enabled);
+        default:
+            throw new Error(`Unknown construction action: ${action.actionName}`);
     }
 }

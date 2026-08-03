@@ -37,6 +37,50 @@ function defaultOutPath(): string {
     return path.join(tsDir, "docs", "overview", "action-browser.html");
 }
 
+async function runCheckMode(
+    catalog: Awaited<ReturnType<typeof collectCatalog>>,
+    allowMissing: boolean,
+): Promise<void> {
+    const issues = catalog.commandActionLinkIssues;
+    const missing = catalog.missingCommandActions;
+    process.stdout.write(
+        `Command action coverage: ${catalog.counts.linkedCommandEndpoints} / ` +
+            `${catalog.counts.commandEndpoints} endpoints ` +
+            `(${missing.length} missing, ${issues.length} invalid)\n`,
+    );
+    for (const issue of issues) {
+        const command =
+            issue.host === "system"
+                ? `@${issue.path}`
+                : issue.path.length > 0
+                  ? `@${issue.host} ${issue.path}`
+                  : `@${issue.host}`;
+        const action = issue.schema
+            ? `${issue.schema}.${issue.actionName}`
+            : issue.actionName;
+        process.stderr.write(`${command} -> ${action}: ${issue.message}\n`);
+    }
+    if (!allowMissing) {
+        for (const gap of missing) {
+            const command =
+                gap.host === "system"
+                    ? `@${gap.path}`
+                    : gap.path.length > 0
+                      ? `@${gap.host} ${gap.path}`
+                      : `@${gap.host}`;
+            process.stderr.write(`${command}: no equivalent action\n`);
+        }
+    }
+    if (catalog.runtimeOnlySchemas.length > 0) {
+        process.stdout.write(
+            `Runtime-only schemas omitted: ${catalog.runtimeOnlySchemas.join(", ")}\n`,
+        );
+    }
+    if (issues.length > 0 || (missing.length > 0 && !allowMissing)) {
+        process.exitCode = 1;
+    }
+}
+
 async function main(): Promise<void> {
     const { values } = parseArgs({
         options: {
@@ -63,51 +107,7 @@ async function main(): Promise<void> {
     const catalog = await collectCatalog({ strict: values.check });
 
     if (values.check) {
-        const issues = catalog.commandActionLinkIssues;
-        const missing = catalog.missingCommandActions;
-        process.stdout.write(
-            `Command action coverage: ${catalog.counts.linkedCommandEndpoints} / ` +
-                `${catalog.counts.commandEndpoints} endpoints ` +
-                `(${missing.length} missing, ${issues.length} invalid)\n`,
-        );
-        if (issues.length > 0) {
-            for (const issue of issues) {
-                const command =
-                    issue.host === "system"
-                        ? `@${issue.path}`
-                        : issue.path.length > 0
-                          ? `@${issue.host} ${issue.path}`
-                          : `@${issue.host}`;
-                const action = issue.schema
-                    ? `${issue.schema}.${issue.actionName}`
-                    : issue.actionName;
-                process.stderr.write(
-                    `${command} -> ${action}: ${issue.message}\n`,
-                );
-            }
-        }
-        if (!values["allow-missing"]) {
-            for (const gap of missing) {
-                const command =
-                    gap.host === "system"
-                        ? `@${gap.path}`
-                        : gap.path.length > 0
-                          ? `@${gap.host} ${gap.path}`
-                          : `@${gap.host}`;
-                process.stderr.write(`${command}: no equivalent action\n`);
-            }
-        }
-        if (catalog.runtimeOnlySchemas.length > 0) {
-            process.stdout.write(
-                `Runtime-only schemas omitted: ${catalog.runtimeOnlySchemas.join(", ")}\n`,
-            );
-        }
-        if (
-            issues.length > 0 ||
-            (missing.length > 0 && !values["allow-missing"])
-        ) {
-            process.exitCode = 1;
-        }
+        await runCheckMode(catalog, values["allow-missing"] ?? false);
         return;
     }
 

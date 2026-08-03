@@ -14,6 +14,11 @@ import {
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { SystemOperationsAction } from "../schema/systemOperationsActionSchema.js";
 
+/** Returns `{ [key]: value }` when value is defined, `{}` otherwise. */
+function opt(value: unknown, key: string): Record<string, unknown> {
+    return value !== undefined ? { [key]: value } : {};
+}
+
 export function executeSystemOperationsAction(
     action: TypeAgentAction<SystemOperationsAction, "system.operations">,
     context: ActionContext<CommandHandlerContext>,
@@ -21,28 +26,22 @@ export function executeSystemOperationsAction(
 ): Promise<ActionResult | undefined> {
     const execute = (commands: string[], params?: ParsedCommandParams<any>) =>
         executeCommandFromHandlers(systemHandlers, commands, params, context);
+    const p: any = action.parameters;
 
     switch (action.actionName) {
         case "executeTypedAction": {
             const actionParameters =
-                action.parameters.actionParametersJson === undefined
+                p.actionParametersJson === undefined
                     ? undefined
-                    : JSON.parse(action.parameters.actionParametersJson);
+                    : JSON.parse(p.actionParametersJson);
             return execute(["action"], {
                 args: {
-                    schemaName: action.parameters.schemaName,
-                    actionName: action.parameters.actionName,
+                    schemaName: p.schemaName,
+                    actionName: p.actionName,
                 },
                 flags: {
-                    ...(actionParameters === undefined
-                        ? {}
-                        : { parameters: actionParameters }),
-                    ...(action.parameters.naturalLanguage === undefined
-                        ? {}
-                        : {
-                              naturalLanguage:
-                                  action.parameters.naturalLanguage,
-                          }),
+                    ...opt(actionParameters, "parameters"),
+                    ...opt(p.naturalLanguage, "naturalLanguage"),
                 },
             } as unknown as ParsedCommandParams<any>);
         }
@@ -55,38 +54,34 @@ export function executeSystemOperationsAction(
         case "showQuestionCards":
             return execute(["demo", "questionCards"], {
                 args: {},
-                flags: { paged: action.parameters?.paged ?? false },
+                flags: { paged: p.paged ?? false },
             });
         case "displayContent":
             return execute(["display"], {
-                args: { text: action.parameters.content },
+                args: { text: p.content },
                 flags: {
-                    speak: action.parameters.speak ?? false,
-                    type: action.parameters.type ?? "text",
-                    inline: action.parameters.inline ?? false,
+                    speak: p.speak ?? false,
+                    type: p.type ?? "text",
+                    inline: p.inline ?? false,
                 },
             } as unknown as ParsedCommandParams<any>);
         case "exitTypeAgent":
             return execute(["exit"]);
         case "showCommandHelp":
             return execute(["help"], {
-                args: {
-                    ...(action.parameters?.command === undefined
-                        ? {}
-                        : { command: action.parameters.command }),
-                },
-                flags: { all: action.parameters?.all ?? false },
+                args: { ...opt(p.command, "command") },
+                flags: { all: p.all ?? false },
             });
         case "openFolder":
             return execute(["open"], {
-                args: { folder: action.parameters.folder },
+                args: { folder: p.folder },
                 flags: {},
             });
         case "listRegisteredPorts":
             return execute(["ports"], { args: {}, flags: {} });
         case "runCommandScript":
             return execute(["run"], {
-                args: { input: action.parameters.input },
+                args: { input: p.input },
                 flags: {},
             });
         case "restartAgentServer":
@@ -95,12 +90,12 @@ export function executeSystemOperationsAction(
             return execute(["shutdown"]);
         case "configureTrace":
             return execute(["trace"], {
-                args: {
-                    ...(action.parameters?.namespaces === undefined
-                        ? {}
-                        : { namespaces: action.parameters.namespaces }),
-                },
-                flags: { clear: action.parameters?.clear ?? false },
+                args: { ...opt(p.namespaces, "namespaces") },
+                flags: { clear: p.clear ?? false },
             } as unknown as ParsedCommandParams<any>);
+        default:
+            throw new Error(
+                `Unknown system operations action: ${action.actionName}`,
+            );
     }
 }

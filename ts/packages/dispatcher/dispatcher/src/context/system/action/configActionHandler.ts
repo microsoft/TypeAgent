@@ -67,28 +67,22 @@ function parseConfigValue(
     return parsed;
 }
 
-function getConfigCommandParams(
-    action: RunConfigCommandAction,
-    handlers: CommandHandlerTable,
-): ParsedCommandParams<any> | undefined {
-    const { command, arguments: args = [], flags } = action.parameters;
-    const handler = getCommandHandler(handlers, command.split(" "));
-    if (handler.parameters === undefined || handler.parameters === false) {
-        const hasFlagValue =
-            flags !== undefined &&
-            Object.values(flags).some((value) => value !== undefined);
-        if (args.length > 0 || hasFlagValue) {
-            throw new Error(`Config command '${command}' takes no parameters.`);
-        }
-        return undefined;
-    }
-
+function parseConfigArgs(
+    command: string,
+    args: string[],
+    argDefs: Record<
+        string,
+        { type?: string; multiple?: boolean; optional?: boolean }
+    >,
+): Record<string, unknown> {
     const parsedArgs: Record<string, unknown> = {};
     let argumentIndex = 0;
-    for (const [name, definition] of Object.entries(
-        handler.parameters.args ?? {},
-    )) {
-        const type = definition.type ?? "string";
+    for (const [name, definition] of Object.entries(argDefs)) {
+        const type = (definition.type ?? "string") as
+            | "string"
+            | "number"
+            | "boolean"
+            | "json";
         if (definition.multiple) {
             const values = args.slice(argumentIndex);
             if (values.length === 0 && !definition.optional) {
@@ -115,20 +109,29 @@ function getConfigCommandParams(
     if (argumentIndex !== args.length) {
         throw new Error(`Too many arguments for config command '${command}'.`);
     }
+    return parsedArgs;
+}
 
-    const flagDefinitions = handler.parameters.flags ?? {};
-    const suppliedFlags = flags ?? {};
+function parseConfigFlags(
+    command: string,
+    suppliedFlags: Record<string, unknown>,
+    flagDefs: Record<string, { multiple?: boolean; default?: unknown }>,
+): Record<string, unknown> {
     for (const [name, value] of Object.entries(suppliedFlags)) {
-        if (value !== undefined && flagDefinitions[name] === undefined) {
+        if (value !== undefined && flagDefs[name] === undefined) {
             throw new Error(
                 `Config command '${command}' does not accept flag '${name}'.`,
             );
         }
     }
     const parsedFlags: Record<string, unknown> = {};
-    for (const [name, definition] of Object.entries(flagDefinitions)) {
-        const value = suppliedFlags[name as keyof typeof suppliedFlags];
-        const type = getFlagType(definition);
+    for (const [name, definition] of Object.entries(flagDefs)) {
+        const value = suppliedFlags[name];
+        const type = getFlagType(definition as any) as
+            | "string"
+            | "number"
+            | "boolean"
+            | "json";
         if (value === undefined) {
             if (definition.default !== undefined) {
                 parsedFlags[name] = structuredClone(definition.default);
@@ -139,20 +142,60 @@ function getConfigCommandParams(
             if (!Array.isArray(value)) {
                 throw new Error(`Config flag '${name}' expects an array.`);
             }
-            parsedFlags[name] = value.map((item) =>
+            parsedFlags[name] = value.map((item: any) =>
                 parseConfigValue(item, type, name),
             );
         } else {
             if (Array.isArray(value)) {
                 throw new Error(`Config flag '${name}' is not repeatable.`);
             }
-            parsedFlags[name] = parseConfigValue(value, type, name);
+            parsedFlags[name] = parseConfigValue(
+                value as string | boolean,
+                type,
+                name,
+            );
         }
     }
+    return parsedFlags;
+}
+
+function getConfigCommandParams(
+    action: RunConfigCommandAction,
+    handlers: CommandHandlerTable,
+): ParsedCommandParams<any> | undefined {
+    const { command, arguments: args = [], flags } = action.parameters;
+    const handler = getCommandHandler(handlers, command.split(" "));
+    if (handler.parameters === undefined || handler.parameters === false) {
+        const hasFlagValue =
+            flags !== undefined &&
+            Object.values(flags).some((value) => value !== undefined);
+        if (args.length > 0 || hasFlagValue) {
+            throw new Error(`Config command '${command}' takes no parameters.`);
+        }
+        return undefined;
+    }
+
+    const parsedArgs = parseConfigArgs(
+        command,
+        args,
+        (handler.parameters.args ?? {}) as Record<
+            string,
+            { type?: string; multiple?: boolean; optional?: boolean }
+        >,
+    );
+    const parsedFlags = parseConfigFlags(
+        command,
+        (flags ?? {}) as Record<string, unknown>,
+        (handler.parameters.flags ?? {}) as Record<
+            string,
+            { multiple?: boolean; default?: unknown }
+        >,
+    );
 
     return {
         args: handler.parameters.args === undefined ? undefined : parsedArgs,
-        flags: handler.parameters.flags === undefined ? undefined : parsedFlags,
+        flags:
+            handler.parameters.flags === undefined ? undefined : parsedFlags,
     } as ParsedCommandParams<any>;
 }
 
