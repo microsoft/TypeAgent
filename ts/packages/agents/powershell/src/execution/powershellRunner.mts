@@ -2,10 +2,34 @@
 // Licensed under the MIT License.
 
 import { spawn } from "child_process";
+import fs from "node:fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function findPackageRoot(): string {
+    let current = __dirname;
+    while (true) {
+        const packageJson = join(current, "package.json");
+        if (
+            fs.existsSync(packageJson) &&
+            JSON.parse(fs.readFileSync(packageJson, "utf8")).name ===
+                "@typeagent/powershell-typeagent"
+        ) {
+            return current;
+        }
+        const parent = dirname(current);
+        if (parent === current) {
+            throw new Error(
+                "Unable to locate the @typeagent/powershell-typeagent package.",
+            );
+        }
+        current = parent;
+    }
+}
+
+const packageRoot = findPackageRoot();
 
 const MAX_OUTPUT_SIZE = 1024 * 1024; // 1MB
 
@@ -34,13 +58,7 @@ export interface ScriptExecutionResult {
 export async function executeScript(
     request: ScriptExecutionRequest,
 ): Promise<ScriptExecutionResult> {
-    const scriptHostPath = join(
-        __dirname,
-        "..",
-        "..",
-        "scripts",
-        "scriptHost.ps1",
-    );
+    const scriptHostPath = join(packageRoot, "scripts", "scriptHost.ps1");
 
     const args = [
         "-NoProfile",

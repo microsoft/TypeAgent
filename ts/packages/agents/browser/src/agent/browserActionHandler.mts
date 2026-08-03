@@ -314,8 +314,8 @@ async function cleanupBrowserSession(
 const dynamicDisplayRetryCounters = new Map<string, number>();
 const MAX_RETRY_CYCLES = 2;
 
-// Set up periodic cleanup for running extractions cache and retry counters
-setInterval(
+// Do not keep short-lived hosts alive solely for cache cleanup.
+const cacheCleanupTimer = setInterval(
     () => {
         runningExtractionsCache.cleanup();
 
@@ -330,6 +330,7 @@ setInterval(
     },
     5 * 60 * 1000,
 ); // Clean up every 5 minutes
+cacheCleanupTimer.unref();
 
 async function getDynamicDisplayImpl(
     type: DisplayType,
