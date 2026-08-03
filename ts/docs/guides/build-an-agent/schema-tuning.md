@@ -109,13 +109,17 @@ not to re-add**, combined with note #2 so there is no loose item entity to grab.
 ## 5. Grammar can mask the LLM — measure with grammar OFF
 
 Authored `.agr` grammars intercept requests before the LLM: fast and
-deterministic, but over-broad rules hide the model. List grammar only matches
-_named_ lists (`add milk to the grocery list`). Bare references (`the list`,
-`both`, `my list`) are left unmatched so translation can resolve them from
-history or clarify — the list agent never sees grammar/caching details.
+deterministic, but they can carry bugs. Example: `listSchema.agr` `<AddItems>`
+**captures the determiner** — "put cheese on the list" grammar-matches with
+`listName = "the"`. With grammar **off** (same phrase via the LLM) it resolves
+`listName = "grocery"` from context **10/10**.
 
-When measuring _model_ behavior, disable grammar for the step (`skipGrammar` in
-the translate tests) so authored-grammar interception doesn't hide it.
+So:
+
+- When measuring _model_ behavior, disable grammar for the step (`skipGrammar` in
+  the translate tests) so grammar interception doesn't hide it.
+- A grammar bug gets a `skipGrammar` stopgap in the stability tests; fixing the
+  rule lets you drop the stopgap.
 
 ## Measuring
 
