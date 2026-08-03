@@ -70,20 +70,12 @@ describe("executeConversationAction delegates to @conversation commands", () => 
         expectCommand('@conversation new "my work project"');
     });
 
-    it("uses single-quoted tokens when names contain double quotes", async () => {
+    it("escapes embedded quotes in conversation names", async () => {
         await run({
             actionName: "newConversation",
             parameters: { name: 'fix "bug"' },
         });
-        expectCommand(`@conversation new 'fix "bug"'`);
-    });
-
-    it("escapes when names contain both quote types", async () => {
-        await run({
-            actionName: "newConversation",
-            parameters: { name: `Sam's "playlist"` },
-        });
-        expectCommand(`@conversation new "Sam's \\"playlist\\""`);
+        expectCommand('@conversation new "fix \\"bug\\""');
     });
 
     it("listConversation runs list", async () => {
@@ -144,5 +136,60 @@ describe("executeConversationAction delegates to @conversation commands", () => 
             parameters: { name: "old-project" },
         });
         expectCommand('@conversation delete "old-project"');
+    });
+
+    it("findConversation runs find with the query", async () => {
+        await run({
+            actionName: "findConversation",
+            parameters: { query: "the workout playlist" },
+        });
+        expectCommand("@conversation find the workout playlist");
+    });
+
+    it("searchConversation runs search with the query", async () => {
+        await run({
+            actionName: "searchConversation",
+            parameters: { query: "the docker command" },
+        });
+        expectCommand("@conversation search the docker command");
+    });
+
+    it("indexConversation (current) runs a bare index command", async () => {
+        await run({ actionName: "indexConversation", parameters: {} });
+        expectCommand("@conversation index");
+    });
+
+    it("indexConversation with 'all' runs index all (unquoted)", async () => {
+        await run({
+            actionName: "indexConversation",
+            parameters: { name: "all" },
+        });
+        expectCommand("@conversation index all");
+    });
+
+    it("indexConversation with a name runs a quoted index", async () => {
+        await run({
+            actionName: "indexConversation",
+            parameters: { name: "my work project" },
+        });
+        expectCommand('@conversation index "my work project"');
+    });
+
+    it("summarizeConversation (current) runs a bare summarize command", async () => {
+        await run({ actionName: "summarizeConversation", parameters: {} });
+        expectCommand("@conversation summarize");
+    });
+
+    it("summarizeConversation with a name runs a quoted summarize", async () => {
+        await run({
+            actionName: "summarizeConversation",
+            parameters: { name: "Paris trip" },
+        });
+        expectCommand('@conversation summarize "Paris trip"');
+    });
+
+    it("help runs help", async () => {
+        await run({ actionName: "help" });
+        expectCommand("@conversation help");
     });
 });

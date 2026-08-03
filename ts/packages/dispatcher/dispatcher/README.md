@@ -129,8 +129,9 @@ enabling it.
 - `@describe <agent> <action>` — detailed explanation of one action, including its parameters.
 - `@describe <action>` — same as above when the action name alone is unambiguous across agents.
 
-Also reachable via natural language (the `system.describe` schema), e.g. "what can the spotify
-agent do", "show me all of spotify's actions", "what does the play action do".
+Also reachable via natural language (the `system.help` schema's `describeAgent`/`describeAction`
+actions), e.g. "what can the spotify agent do", "show me all of spotify's actions", "what does the
+play action do".
 
 ### Conversations
 

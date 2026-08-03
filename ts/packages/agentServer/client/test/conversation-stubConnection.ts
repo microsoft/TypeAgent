@@ -13,6 +13,7 @@ import type {
     ConversationDispatcher,
     ConversationInfo,
     ConversationMatch,
+    ConversationContentMatch,
 } from "../src/index.js";
 
 export function makeInfo(
@@ -52,6 +53,14 @@ export type StubConnectionOptions = {
             maxMatches: number | undefined,
             callIndex: number,
         ) => ConversationMatch[] | Promise<ConversationMatch[]> | undefined;
+        searchConversationContent?: (
+            query: string,
+            maxMatches: number | undefined,
+            callIndex: number,
+        ) =>
+            | ConversationContentMatch[]
+            | Promise<ConversationContentMatch[]>
+            | undefined;
         createConversation?: (
             name: string,
             callIndex: number,
@@ -142,6 +151,31 @@ export function makeStubConnection(
             const matched = state
                 .filter((c) => c.name.toLowerCase().includes(norm))
                 .map((conversation) => ({ conversation, score: 1 }));
+            return maxMatches !== undefined
+                ? matched.slice(0, maxMatches)
+                : matched;
+        },
+
+        async searchConversationContent(query: string, maxMatches?: number) {
+            const idx = nextCount("searchConversationContent");
+            calls.push({
+                method: "searchConversationContent",
+                args: [query, maxMatches],
+            });
+            const override = await opts.intercept?.searchConversationContent?.(
+                query,
+                maxMatches,
+                idx,
+            );
+            if (override !== undefined) return override;
+            const norm = query.trim().toLowerCase();
+            const matched = state
+                .filter((c) => c.name.toLowerCase().includes(norm))
+                .map((conversation) => ({
+                    conversation,
+                    score: 1,
+                    snippets: [] as string[],
+                }));
             return maxMatches !== undefined
                 ? matched.slice(0, maxMatches)
                 : matched;
