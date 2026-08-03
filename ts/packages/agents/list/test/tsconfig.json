@@ -4,14 +4,9 @@
     "composite": true,
     "rootDir": ".",
     "outDir": "../dist/test",
-    "types": [
-      "node",
-      "jest"
-    ]
+    "types": ["node", "jest"]
   },
-  "include": [
-    "./**/*"
-  ],
+  "include": ["./**/*"],
   "ts-node": {
     "esm": true
   },
