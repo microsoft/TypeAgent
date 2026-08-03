@@ -9,6 +9,23 @@ export function getPackageFilePath(packageRootRelativePath: string) {
         return packageRootRelativePath;
     }
 
+    const runtimeRoot = process.env.TYPEAGENT_RUNTIME_ROOT;
+    if (runtimeRoot) {
+        if (
+            packageRootRelativePath === "node_modules" ||
+            packageRootRelativePath.startsWith("node_modules/") ||
+            packageRootRelativePath.startsWith("node_modules\\") ||
+            packageRootRelativePath.startsWith("./node_modules/") ||
+            packageRootRelativePath.startsWith(".\\node_modules\\")
+        ) {
+            return path.resolve(
+                runtimeRoot,
+                packageRootRelativePath.replace(/^\.?[\\/]/, ""),
+            );
+        }
+        return path.resolve(runtimeRoot, "dispatcher", packageRootRelativePath);
+    }
+
     // From dispatcher/dispatcher/dist/utils/ (where this compiled file lives):
     // - For agent paths (agents/*): go up 4 levels to reach packages/
     //   dispatcher/dispatcher/dist/utils/ -> ../../../../ -> packages/

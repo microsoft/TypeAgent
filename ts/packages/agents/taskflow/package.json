@@ -39,6 +39,15 @@
     "rimraf": "^6.0.1"
   },
   "typeagent": {
-    "defaultAgentName": "taskflow"
+    "defaultAgentName": "taskflow",
+    "bundle": {
+      "assetMappings": [
+        {
+          "package": "@typeagent/taskflow-typeagent",
+          "source": "src/script/taskFlowSandbox.d.ts",
+          "destination": "src/script/taskFlowSandbox.d.ts"
+        }
+      ]
+    }
   }
 }
