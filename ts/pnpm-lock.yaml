@@ -2082,6 +2082,9 @@ importers:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
+      '@typeagent/browser-extension':
+        specifier: workspace:*
+        version: link:../browserExtension
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -2746,6 +2749,9 @@ importers:
         specifier: workspace:*
         version: link:../../agentSdk
     devDependencies:
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../../actionGrammar
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
         version: link:../../actionGrammarCompiler
