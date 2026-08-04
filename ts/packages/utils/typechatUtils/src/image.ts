@@ -17,9 +17,13 @@ import {
     ReverseGeocodeAddressLookup,
 } from "./location.js";
 import { openai } from "@typeagent/aiclient";
+import { getMimeTypeFromFileExtension } from "./mimeTypes.js";
 import fs from "node:fs";
 import path from "node:path";
 import { parse } from "date-fns";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:typechat-utils:image");
 
 export class CachedImageWithDetails {
     constructor(
@@ -37,6 +41,72 @@ export type ImagePromptDetails = {
 
 export function getImageElement(imgData: string): string {
     return `<img class="chat-input-image" src="${imgData}" />`;
+}
+
+// Strip an attachment path down to its bare file name. The path can arrive with
+// Windows (\) or POSIX (/) separators depending on its origin (an uploaded
+// attachment vs. a highlighted editor file), so cut at whichever comes last.
+export function getAttachmentFileName(file: string): string {
+    const sep = Math.max(file.lastIndexOf("\\"), file.lastIndexOf("/"));
+    return sep > -1 ? file.substring(sep + 1) : file;
+}
+
+// The image MIME type for a file name, or undefined when the extension is not a
+// supported image type (or has no extension). Used to tell an embeddable image
+// attachment apart from a non-image reference without touching storage.
+function imageMimeType(fileName: string): string | undefined {
+    const ext = fileName.substring(fileName.lastIndexOf("."));
+    try {
+        const mime = getMimeTypeFromFileExtension(ext);
+        return mime.startsWith("image/") ? mime : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+export function isImageAttachment(fileName: string): boolean {
+    return imageMimeType(fileName) !== undefined;
+}
+
+// Build an HTML block of inline <img> data URLs for uploaded image attachments.
+// Each name in `files` is read from the session's user_files staging directory
+// (one level up from the calling agent's storage). Non-image references (e.g. a
+// highlighted .yml from editor context) are skipped with no read, and an image
+// name missing from user_files is skipped when the read fails.
+export async function rehydrateImageAttachments(
+    storage: Storage | undefined,
+    files: (string | undefined)[],
+): Promise<string> {
+    let html = "<div>";
+
+    for (const file of files) {
+        if (!file) {
+            continue;
+        }
+        const name = getAttachmentFileName(file);
+        const mimeType = imageMimeType(name);
+        if (mimeType === undefined) {
+            continue;
+        }
+
+        try {
+            // Build the path with path.join so the separators match the host;
+            // a literal "\\..\\" only resolves correctly on Windows.
+            const data = await storage?.read(
+                path.join("..", "user_files", name),
+                "base64",
+            );
+            if (data) {
+                html += getImageElement(`data:${mimeType};base64,${data}`);
+            }
+        } catch (e) {
+            debug(`skipping image attachment ${name}: ${e}`);
+        }
+    }
+
+    html += "</div>";
+
+    return html;
 }
 
 export function extractRelevantExifTags(exifTags: ExifReader.Tags | undefined) {
