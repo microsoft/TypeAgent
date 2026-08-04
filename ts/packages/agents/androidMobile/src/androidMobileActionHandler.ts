@@ -17,6 +17,7 @@ import {
     SearchNearbyAction,
     SendSMSAction,
     SetAlarmAction,
+    SetTimerAction,
 } from "./androidMobileSchema.js";
 
 export function instantiate(): AppAgent {
@@ -85,6 +86,26 @@ async function handlePhotoAction(
             const alarmAction = action as SetAlarmAction;
             result = createActionResult("Setting Alarm");
             context.actionIO.takeAction("set-alarm", alarmAction.parameters);
+            break;
+        }
+        case "setTimer": {
+            const timerAction = action as SetTimerAction;
+            const duration = Math.floor(
+                timerAction.parameters.durationInSeconds,
+            );
+            if (duration <= 0) {
+                result = createActionResult(
+                    "Timer duration must be a positive number of seconds.",
+                );
+                break;
+            }
+            result = createActionResult(
+                `Setting timer for ${duration} seconds`,
+            );
+            context.actionIO.takeAction("set-timer", {
+                ...timerAction.parameters,
+                durationInSeconds: duration,
+            });
             break;
         }
         case "searchNearby": {
