@@ -12,10 +12,7 @@
  * is byte-identical to the pre-adapter path.
  */
 
-import {
-    DEFAULT_WIRE_API,
-    type WireApi,
-} from "@typeagent/config";
+import { DEFAULT_WIRE_API, type WireApi } from "@typeagent/config";
 import type { ProviderAdapter } from "./types.js";
 import { chatCompletionsAdapter } from "./chatCompletions.js";
 import { anthropicMessagesAdapter } from "./anthropicMessages.js";

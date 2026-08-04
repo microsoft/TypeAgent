@@ -45,7 +45,4 @@ export {
     anthropicMessagesAdapter,
 } from "./anthropicMessages.js";
 
-export {
-    adapterFor,
-    DEFAULT_PROVIDER_ADAPTER,
-} from "./providerAdapter.js";
+export { adapterFor, DEFAULT_PROVIDER_ADAPTER } from "./providerAdapter.js";
