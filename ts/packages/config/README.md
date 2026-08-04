@@ -51,7 +51,7 @@ Anthropic Messages API behind the same endpoint pool.
 | `apiType` value      | Wire protocol                             | Default? |
 | -------------------- | ----------------------------------------- | -------- |
 | `chat_completions`   | OpenAI / Azure OpenAI `/chat/completions` | ✅ yes   |
-| `openai_responses`    | OpenAI `/responses` | no       |
+| `openai_responses`   | OpenAI `/responses`                       | no       |
 | `anthropic_messages` | Anthropic `/v1/messages`                  | no       |
 
 **Default & back-compat.** `apiType` is optional. Omitting it is exactly
