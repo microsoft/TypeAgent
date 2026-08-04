@@ -41,7 +41,7 @@ OpenTelemetry gives TypeAgent a structured, end-to-end view of every request, ma
 | Correlation           | `traceId`, `sessionId`, `activationId`, `hostName`         | OTel attributes and RPC metadata      |
 | LLM usage             | `TokenCounter` and completion callbacks                    | Token metrics and LLM span attributes |
 | Phase timing          | `RequestMetricsManager`, profiler, `StopWatch`             | Duration metrics and spans            |
-| Redaction             | `filterSecrets`, `filterSecretsFromObject`, `SecretFilter` | Redaction before record/export         |
+| Redaction             | `filterSecrets`, `filterSecretsFromObject`, `SecretFilter` | Redaction before record/export        |
 | Cross-process tracing | Debug namespace fan-out only                               | W3C context in RPC metadata           |
 
 The design extends these seams rather than creating a parallel telemetry system.
