@@ -8,7 +8,12 @@
   // desktop-lite feature historically supports amd64 only, so on Apple
   // Silicon this config may still require Rosetta/QEMU emulation just for
   // the VNC desktop. The standard (non-VNC) config runs natively on arm64.
-  "build": { "dockerfile": "../Dockerfile" },
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "args": {
+      "NPM_CONFIG_REGISTRY": "${localEnv:NPM_CONFIG_REGISTRY}"
+    }
+  },
 
   "features": {
     // VNC desktop for Electron shell support
@@ -74,7 +79,9 @@
 
   "containerEnv": {
     "LOCAL_GIT_USER_NAME": "${localEnv:LOCAL_GIT_USER_NAME}",
-    "LOCAL_GIT_USER_EMAIL": "${localEnv:LOCAL_GIT_USER_EMAIL}"
+    "LOCAL_GIT_USER_EMAIL": "${localEnv:LOCAL_GIT_USER_EMAIL}",
+    "TYPEAGENT_USE_COREPACK": "${localEnv:TYPEAGENT_USE_COREPACK}",
+    "NPM_CONFIG_REGISTRY": "${localEnv:NPM_CONFIG_REGISTRY}"
   },
 
   "postCreateCommand": "bash .devcontainer/scripts/post-create.sh && bash .devcontainer/scripts/install-electron-deps.sh",
