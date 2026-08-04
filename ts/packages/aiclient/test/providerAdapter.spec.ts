@@ -8,7 +8,7 @@ import {
     verifyFilterResults,
     type ModelRequest,
     type FilterResult,
-} from "../src/providerAdapter.js";
+} from "../src/providers/index.js";
 import type { AzureApiSettings } from "../src/azureSettings.js";
 import type { OpenAIApiSettings } from "../src/openaiSettings.js";
 
@@ -28,22 +28,22 @@ function makeRequest(overrides: Partial<ModelRequest> = {}): ModelRequest {
 
 describe("adapterFor: dispatch + back-compat", () => {
     test("undefined (legacy config) resolves to the chat_completions adapter", () => {
-        expect(adapterFor(undefined).apiType).toBe("chat_completions");
+        expect(adapterFor(undefined).wireApi).toBe("chat_completions");
     });
 
     test("undefined and explicit chat_completions resolve to the same singleton", () => {
         expect(adapterFor(undefined)).toBe(adapterFor("chat_completions"));
     });
 
-    test("each api-type maps to an adapter reporting that api-type", () => {
-        expect(adapterFor("chat_completions").apiType).toBe("chat_completions");
-        expect(adapterFor("openai_responses").apiType).toBe("openai_responses");
-        expect(adapterFor("anthropic_messages").apiType).toBe(
+    test("each wire-api maps to an adapter reporting that wire-api", () => {
+        expect(adapterFor("chat_completions").wireApi).toBe("chat_completions");
+        expect(adapterFor("openai_responses").wireApi).toBe("openai_responses");
+        expect(adapterFor("anthropic_messages").wireApi).toBe(
             "anthropic_messages",
         );
     });
 
-    test("adapters are stateless singletons (stable identity per api-type)", () => {
+    test("adapters are stateless singletons (stable identity per wire-api)", () => {
         expect(adapterFor("openai_responses")).toBe(
             adapterFor("openai_responses"),
         );

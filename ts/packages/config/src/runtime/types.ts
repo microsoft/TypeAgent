@@ -41,26 +41,26 @@ export type DeploymentMode = "PAYG" | "PTU";
 /**
  * Wire protocol / request-response shape a deployment endpoint speaks.
  * The pool routing layer is unaffected by this — it picks *which*
- * endpoint to call; `apiType` then selects the `ProviderAdapter` that
+ * endpoint to call; `wireApi` then selects the `ProviderAdapter` that
  * encodes the request body/headers and decodes the response.
  *
  * - `chat_completions` (default): the OpenAI / Azure OpenAI
  *   `/chat/completions` shape TypeAgent has always spoken. Omitting
- *   `apiType` is exactly equivalent to this value, so existing configs
+ *   `wireApi` is exactly equivalent to this value, so existing configs
  *   are byte-for-byte unchanged.
  * - `openai_responses`: the OpenAI `/responses` shape.
  * - `anthropic_messages`: the Anthropic `/v1/messages` shape.
  */
-export type ApiType =
+export type WireApi =
     | "chat_completions"
     | "openai_responses"
     | "anthropic_messages";
 
-/** The api-type assumed when a deployment/endpoint omits `apiType`. */
-export const DEFAULT_API_TYPE: ApiType = "chat_completions";
+/** The wire-api assumed when a deployment/endpoint omits `wireApi`. */
+export const DEFAULT_WIRE_API = "chat_completions" as const satisfies WireApi;
 
-/** Narrow an arbitrary string to a known `ApiType`, else `undefined`. */
-export function apiTypeFromString(s: string | undefined): ApiType | undefined {
+/** Narrow an arbitrary string to a known `WireApi`, else `undefined`. */
+export function wireApiFromString(s: string | undefined): WireApi | undefined {
     if (
         s === "chat_completions" ||
         s === "openai_responses" ||
@@ -92,11 +92,11 @@ export interface DeploymentEndpoint {
     readonly tpm?: number | undefined;
     /**
      * Wire protocol this endpoint speaks. Absent ⇒ `chat_completions`
-     * (see {@link DEFAULT_API_TYPE}); the builder never fabricates this
+     * (see {@link DEFAULT_WIRE_API}); the builder never fabricates this
      * field for a default endpoint, so the round-trip stays lossless and
      * pre-existing configs project back to identical env vars.
      */
-    readonly apiType?: ApiType | undefined;
+    readonly wireApi?: WireApi | undefined;
 }
 
 /**

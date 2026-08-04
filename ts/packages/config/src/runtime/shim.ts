@@ -22,7 +22,7 @@ import {
     Config,
     Deployment,
     DeploymentEndpoint,
-    DEFAULT_API_TYPE,
+    DEFAULT_WIRE_API,
 } from "./types.js";
 
 /** A flat env-var name → value map. Same shape as `FlatEnv`. */
@@ -57,14 +57,14 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
                 ? `${regionToEnvSuffix(endpoint.region)}_PTU`
                 : regionToEnvSuffix(endpoint.region);
         emitEndpoint(out, suffix, regionSuffix, endpoint);
-        // Capture capacity/priority/tpm/apiType into the legacy POOL
+        // Capture capacity/priority/tpm/wireApi into the legacy POOL
         // override JSON so unmigrated consumers can still see them.
         if (
             endpoint.capacity !== undefined ||
             endpoint.tpm !== undefined ||
             endpoint.priority !== (endpoint.mode === "PTU" ? 1 : 2) ||
-            (endpoint.apiType !== undefined &&
-                endpoint.apiType !== DEFAULT_API_TYPE)
+            (endpoint.wireApi !== undefined &&
+                endpoint.wireApi !== DEFAULT_WIRE_API)
         ) {
             const o: Record<string, unknown> = {
                 suffix: `${suffix}_${regionSuffix}`,
@@ -75,10 +75,10 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
             if (endpoint.tpm !== undefined) o.tpm = endpoint.tpm;
             o.priority = endpoint.priority;
             if (
-                endpoint.apiType !== undefined &&
-                endpoint.apiType !== DEFAULT_API_TYPE
+                endpoint.wireApi !== undefined &&
+                endpoint.wireApi !== DEFAULT_WIRE_API
             ) {
-                o.apiType = endpoint.apiType;
+                o.wireApi = endpoint.wireApi;
             }
             overrides.push(o);
         }

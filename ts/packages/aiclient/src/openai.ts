@@ -45,7 +45,7 @@ import {
     type ModelRequest,
     type FilterResult,
     type FilterError,
-} from "./providerAdapter.js";
+} from "./providers/index.js";
 import { priorityQueue } from "async";
 import registerDebug from "debug";
 import { TokenCounter } from "./tokenCounter.js";
@@ -64,7 +64,7 @@ import {
     copilotApiSettingsFromConfig,
 } from "./copilotSettings.js";
 import { getProviderChatModel } from "./providerChatModelRegistry.js";
-import type { ApiType } from "@typeagent/config";
+import type { WireApi } from "@typeagent/config";
 import { getActiveModelProvider, resolveTarget } from "./providerMode.js";
 
 export { azureApiSettingsFromEnv, openAIApiSettingsFromEnv };
@@ -98,7 +98,7 @@ export type CommonApiSettings = {
      * (OpenAI-compatible /chat/completions). Also supports
      * openai_responses and anthropic_messages.
      */
-    apiType?: ApiType | undefined;
+    wireApi?: WireApi | undefined;
 };
 /**
  * Settings used by OpenAI clients
@@ -487,8 +487,8 @@ function createAzureOpenAIChatModel(
               };
 
     // Select the wire adapter AFTER the pool has been built (routing is
-    // unchanged). Absent apiType ⇒ chat_completions (legacy default).
-    const adapter = adapterFor(settings.apiType);
+    // unchanged). Absent wireApi ⇒ chat_completions (legacy default).
+    const adapter = adapterFor(settings.wireApi);
     const modelName = (settings as OpenAIApiSettings).modelName;
 
     const model: ChatModelWithStreaming = {
@@ -620,7 +620,7 @@ function createAzureOpenAIChatModel(
         const decoder = adapter.createStreamDecoder?.(request);
         if (decoder === undefined) {
             return error(
-                `Streaming is not supported by api-type '${adapter.apiType}'`,
+                `Streaming is not supported by wire-api '${adapter.wireApi}'`,
             );
         }
         const body = adapter.buildRequestBody(request);

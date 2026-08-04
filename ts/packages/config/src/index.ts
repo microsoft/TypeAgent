@@ -49,10 +49,10 @@ export {
 } from "./runtime/regions.js";
 export {
     IDENTITY,
-    DEFAULT_API_TYPE,
+    DEFAULT_WIRE_API,
     authModeFromString,
-    apiTypeFromString,
-    type ApiType,
+    wireApiFromString,
+    type WireApi,
     type AuthMode,
     type AzureOpenAIConfig,
     type AzureStorageConfig,

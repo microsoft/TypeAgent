@@ -9,11 +9,11 @@ import { getData } from "typechat";
 import { testIf } from "./testCore.js";
 import { ApiSettings, createChatModel, ModelType } from "../src/openai.js";
 
-// One live integration test per api-type. Each is skipped unless the
+// One live integration test per wire-api. Each is skipped unless the
 // operator supplies a full endpoint URL + API key (and, for the
 // non-Azure protocols, a model name) via env. These exercise the
 // ProviderAdapter seam end-to-end against a real service: the endpoint
-// pool still routes, then adapterFor(apiType) encodes the request and
+// pool still routes, then adapterFor(wireApi) encodes the request and
 // decodes the response.
 //
 //   chat_completions  (default) : AZURE_OPENAI_ENDPOINT_* + key (existing)
@@ -47,9 +47,9 @@ async function expectHello(settings: ApiSettings) {
     expect(text.length).toBeGreaterThan(0);
 }
 
-describe("providerAdapter (live, one per api-type)", () => {
+describe("providerAdapter (live, one per wire-api)", () => {
     // Default chat_completions path against Azure OpenAI. Uses the standard
-    // env-driven settings; apiType omitted ⇒ chat_completions adapter.
+    // env-driven settings; wireApi omitted ⇒ chat_completions adapter.
     testIf(
         () =>
             has(
@@ -63,7 +63,7 @@ describe("providerAdapter (live, one per api-type)", () => {
                 modelType: ModelType.Chat,
                 endpoint: env("AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS")!,
                 apiKey: env("AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS")!,
-                // apiType omitted → default chat_completions.
+                // wireApi omitted → default chat_completions.
             };
             await expectHello(settings);
         },
@@ -86,7 +86,7 @@ describe("providerAdapter (live, one per api-type)", () => {
                 endpoint: env("TEST_CODEX_RESPONSES_ENDPOINT")!,
                 apiKey: env("TEST_CODEX_RESPONSES_API_KEY")!,
                 modelName: env("TEST_CODEX_RESPONSES_MODEL")!,
-                apiType: "openai_responses",
+                wireApi: "openai_responses",
             } as unknown as ApiSettings;
             await expectHello(settings);
         },
@@ -95,7 +95,7 @@ describe("providerAdapter (live, one per api-type)", () => {
 
     // Anthropic Messages protocol. The adapter supplies its own
     // x-api-key + anthropic-version headers, so the routing provider bucket
-    // is immaterial here; apiType drives the wire protocol.
+    // is immaterial here; wireApi drives the wire protocol.
     testIf(
         () =>
             has(
@@ -111,7 +111,7 @@ describe("providerAdapter (live, one per api-type)", () => {
                 endpoint: env("TEST_ANTHROPIC_ENDPOINT")!,
                 apiKey: env("TEST_ANTHROPIC_API_KEY")!,
                 modelName: env("TEST_ANTHROPIC_MODEL")!,
-                apiType: "anthropic_messages",
+                wireApi: "anthropic_messages",
             } as unknown as ApiSettings;
             await expectHello(settings);
         },

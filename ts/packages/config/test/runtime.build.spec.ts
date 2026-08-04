@@ -160,8 +160,8 @@ describe("buildConfig: Azure OpenAI defaults", () => {
     });
 });
 
-describe("buildConfig: apiType (multi-provider)", () => {
-    test("omitting apiType leaves endpoint.apiType undefined (defaults to chat_completions)", () => {
+describe("buildConfig: wireApi (multi-provider)", () => {
+    test("omitting wireApi leaves endpoint.wireApi undefined (defaults to chat_completions)", () => {
         const flat: FlatEnv = {
             AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://eastus",
         };
@@ -169,63 +169,63 @@ describe("buildConfig: apiType (multi-provider)", () => {
         const ep = config.azureOpenAI.deployments
             .get("gpt_4_o")!
             .endpoints.find((e) => e.region === "eastus")!;
-        expect(ep.apiType).toBeUndefined();
+        expect(ep.wireApi).toBeUndefined();
     });
 
-    test("POOL override sets openai_responses apiType on the endpoint", () => {
+    test("POOL override sets openai_responses wireApi on the endpoint", () => {
         const flat: FlatEnv = {
             AZURE_OPENAI_ENDPOINT_GPT_5_CODEX_EASTUS: "https://codex-eastus",
             AZURE_OPENAI_POOL_GPT_5_CODEX:
-                "[{suffix:GPT_5_CODEX_EASTUS,region:eastus,apiType:openai_responses}]",
+                "[{suffix:GPT_5_CODEX_EASTUS,region:eastus,wireApi:openai_responses}]",
         };
         const config = buildConfig(flat);
         const ep = config.azureOpenAI.deployments
             .get("gpt_5_codex")!
             .endpoints.find((e) => e.region === "eastus")!;
-        expect(ep.apiType).toBe("openai_responses");
+        expect(ep.wireApi).toBe("openai_responses");
         // The POOL override key is consumed, not left in extra.
         expect(
             config.extra.get("AZURE_OPENAI_POOL_GPT_5_CODEX"),
         ).toBeUndefined();
     });
 
-    test("POOL override sets anthropic_messages apiType on the endpoint", () => {
+    test("POOL override sets anthropic_messages wireApi on the endpoint", () => {
         const flat: FlatEnv = {
             AZURE_OPENAI_ENDPOINT_CLAUDE_SONNET_EASTUS: "https://claude-eastus",
             AZURE_OPENAI_POOL_CLAUDE_SONNET:
-                "[{suffix:CLAUDE_SONNET_EASTUS,region:eastus,apiType:anthropic_messages}]",
+                "[{suffix:CLAUDE_SONNET_EASTUS,region:eastus,wireApi:anthropic_messages}]",
         };
         const config = buildConfig(flat);
         const ep = config.azureOpenAI.deployments
             .get("claude_sonnet")!
             .endpoints.find((e) => e.region === "eastus")!;
-        expect(ep.apiType).toBe("anthropic_messages");
+        expect(ep.wireApi).toBe("anthropic_messages");
     });
 
-    test("explicit chat_completions apiType is preserved on the endpoint", () => {
+    test("explicit chat_completions wireApi is preserved on the endpoint", () => {
         const flat: FlatEnv = {
             AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://eastus",
             AZURE_OPENAI_POOL_GPT_4_O:
-                "[{suffix:GPT_4_O_EASTUS,region:eastus,apiType:chat_completions}]",
+                "[{suffix:GPT_4_O_EASTUS,region:eastus,wireApi:chat_completions}]",
         };
         const config = buildConfig(flat);
         const ep = config.azureOpenAI.deployments
             .get("gpt_4_o")!
             .endpoints.find((e) => e.region === "eastus")!;
-        expect(ep.apiType).toBe("chat_completions");
+        expect(ep.wireApi).toBe("chat_completions");
     });
 
-    test("unrecognized apiType value in POOL override is ignored", () => {
+    test("unrecognized wireApi value in POOL override is ignored", () => {
         const flat: FlatEnv = {
             AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://eastus",
             AZURE_OPENAI_POOL_GPT_4_O:
-                "[{suffix:GPT_4_O_EASTUS,region:eastus,apiType:bogus_protocol}]",
+                "[{suffix:GPT_4_O_EASTUS,region:eastus,wireApi:bogus_protocol}]",
         };
         const config = buildConfig(flat);
         const ep = config.azureOpenAI.deployments
             .get("gpt_4_o")!
             .endpoints.find((e) => e.region === "eastus")!;
-        expect(ep.apiType).toBeUndefined();
+        expect(ep.wireApi).toBeUndefined();
     });
 });
 

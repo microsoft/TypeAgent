@@ -23,7 +23,7 @@ export type AzureApiSettings = CommonApiSettings & {
     supportsResponseFormat?: boolean; // only apply to chat models
     tokenProvider?: AuthTokenProvider;
     maxPromptChars?: number | undefined; // Maximum # of allowed prompt chars to send
-    // apiType inherited from CommonApiSettings
+    // wireApi inherited from CommonApiSettings
 };
 
 const IdentityApiKey = "identity";

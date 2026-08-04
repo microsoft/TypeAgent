@@ -173,8 +173,8 @@ export function azureApiSettingsFromConfig(
         // pick the right ProviderAdapter. Omitted when the endpoint uses
         // the default (chat_completions) so the settings object stays
         // identical to today for back-compat configs.
-        ...(endpoint.apiType !== undefined
-            ? { apiType: endpoint.apiType }
+        ...(endpoint.wireApi !== undefined
+            ? { wireApi: endpoint.wireApi }
             : {}),
     };
     return settings;

@@ -119,21 +119,21 @@ describe("apiSettingsFromConfig: typed-config path equivalence", () => {
         }
     });
 
-    test("Azure: apiType absent by default (back-compat chat_completions)", () => {
+    test("Azure: wireApi absent by default (back-compat chat_completions)", () => {
         const config = configFromEnvRecord({
             AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://4o",
             AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS: "identity",
         });
         const s = azureApiSettingsFromConfig(config, ModelType.Chat, "gpt_4_o");
-        expect(s.apiType).toBeUndefined();
+        expect(s.wireApi).toBeUndefined();
     });
 
-    test("Azure: non-default apiType surfaces onto AzureApiSettings", () => {
+    test("Azure: non-default wireApi surfaces onto AzureApiSettings", () => {
         const config = configFromEnvRecord({
             AZURE_OPENAI_ENDPOINT_GPT_5_CODEX_EASTUS: "https://codex",
             AZURE_OPENAI_API_KEY_GPT_5_CODEX_EASTUS: "identity",
             AZURE_OPENAI_POOL_GPT_5_CODEX:
-                "[{suffix:GPT_5_CODEX_EASTUS,region:eastus,apiType:openai_responses}]",
+                "[{suffix:GPT_5_CODEX_EASTUS,region:eastus,wireApi:openai_responses}]",
         });
         const s = azureApiSettingsFromConfig(
             config,
@@ -141,7 +141,7 @@ describe("apiSettingsFromConfig: typed-config path equivalence", () => {
             "gpt_5_codex",
             "eastus",
         );
-        expect(s.apiType).toBe("openai_responses");
+        expect(s.wireApi).toBe("openai_responses");
     });
 
     test("OpenAI: openAIApiSettingsFromConfig requires endpoint", () => {

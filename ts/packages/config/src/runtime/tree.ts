@@ -29,9 +29,9 @@ import {
     DeploymentMode,
     IDENTITY,
     authModeFromString,
-    apiTypeFromString,
-    DEFAULT_API_TYPE,
-    type ApiType,
+    wireApiFromString,
+    DEFAULT_WIRE_API,
+    type WireApi,
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -79,10 +79,10 @@ function endpointToYaml(
     // (PTU=1, PAYG=2). Keeps the YAML quiet for the common case.
     const defaultPriority = ep.mode === "PTU" ? 1 : 2;
     if (ep.priority !== defaultPriority) out.priority = ep.priority;
-    // Only emit apiType when it differs from the default so back-compat
+    // Only emit wireApi when it differs from the default so back-compat
     // configs (chat_completions) stay byte-identical.
-    if (ep.apiType !== undefined && ep.apiType !== DEFAULT_API_TYPE) {
-        out.apiType = ep.apiType;
+    if (ep.wireApi !== undefined && ep.wireApi !== DEFAULT_WIRE_API) {
+        out.wireApi = ep.wireApi;
     }
     return out;
 }
@@ -588,7 +588,7 @@ function readEndpointEntry(
     capacity?: number | null;
     region?: string;
     tpm?: number;
-    apiType?: ApiType;
+    wireApi?: WireApi;
 } {
     const obj = asObject(node, where);
     const out: ReturnType<typeof readEndpointEntry> = {
@@ -616,16 +616,16 @@ function readEndpointEntry(
         out.capacity = asNumber(obj.capacity, `${where}.capacity`);
     }
     if (obj.tpm !== undefined) out.tpm = asNumber(obj.tpm, `${where}.tpm`);
-    if (obj.apiType !== undefined) {
-        const raw = asString(obj.apiType, `${where}.apiType`);
-        const at = apiTypeFromString(raw);
+    if (obj.wireApi !== undefined) {
+        const raw = asString(obj.wireApi, `${where}.wireApi`);
+        const at = wireApiFromString(raw);
         if (at === undefined) {
             throw new Error(
-                `Invalid apiType at '${where}.apiType': expected ` +
+                `Invalid wireApi at '${where}.wireApi': expected ` +
                     `chat_completions, openai_responses, or anthropic_messages.`,
             );
         }
-        out.apiType = at;
+        out.wireApi = at;
     }
     return out;
 }
@@ -775,8 +775,8 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
                     capacity !== undefined ||
                     ep.tpm !== undefined ||
                     priority !== defPriority ||
-                    (ep.apiType !== undefined &&
-                        ep.apiType !== DEFAULT_API_TYPE)
+                    (ep.wireApi !== undefined &&
+                        ep.wireApi !== DEFAULT_WIRE_API)
                 ) {
                     const o: Record<string, unknown> = {
                         suffix,
@@ -787,10 +787,10 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
                     if (ep.tpm !== undefined) o.tpm = ep.tpm;
                     o.priority = priority;
                     if (
-                        ep.apiType !== undefined &&
-                        ep.apiType !== DEFAULT_API_TYPE
+                        ep.wireApi !== undefined &&
+                        ep.wireApi !== DEFAULT_WIRE_API
                     ) {
-                        o.apiType = ep.apiType;
+                        o.wireApi = ep.wireApi;
                     }
                     overrides.push(o);
                 }
