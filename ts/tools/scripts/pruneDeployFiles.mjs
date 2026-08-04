@@ -21,7 +21,14 @@ const removableDirectoryNames = new Set([
 const removableDocumentNames =
     /^(authors|changelog|changes|contributing|history|readme|security)(\..*)?$/i;
 const sourceMapExtensions = [".js.map", ".mjs.map", ".cjs.map", ".css.map"];
-const declarationExtensions = [".d.ts", ".d.mts", ".d.cts"];
+const declarationExtensions = [
+    ".d.ts",
+    ".d.mts",
+    ".d.cts",
+    ".d.ts.map",
+    ".d.mts.map",
+    ".d.cts.map",
+];
 
 function parseArgs(argv) {
     const args = { dryRun: false };
@@ -52,6 +59,7 @@ function shouldRemoveFile(name) {
     return (
         sourceMapExtensions.some((extension) => lower.endsWith(extension)) ||
         declarationExtensions.some((extension) => lower.endsWith(extension)) ||
+        lower.endsWith(".tsbuildinfo") ||
         removableDocumentNames.test(name)
     );
 }

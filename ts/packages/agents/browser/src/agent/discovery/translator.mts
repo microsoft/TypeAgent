@@ -13,10 +13,10 @@ import path from "path";
 import fs from "fs";
 import { openai as ai } from "@typeagent/aiclient";
 import { hookModelTokenUsage } from "../tokenUsage.mjs";
-import { fileURLToPath } from "node:url";
 import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 import { PageDescription } from "./schema/pageSummary.mjs";
 import registerDebug from "debug";
+import { getBrowserPackageFilePath } from "../utils/packageFilePath.mjs";
 
 const debugPerf = registerDebug("typeagent:browser:discover:perf");
 
@@ -118,17 +118,9 @@ function getScreenshotPromptSection(
 }
 
 async function getSchemaFileContents(fileName: string): Promise<string> {
-    const packageRoot = path.join("..", "..", "..");
     return await fs.promises.readFile(
-        fileURLToPath(
-            new URL(
-                path.join(
-                    packageRoot,
-                    "./src/agent/discovery/schema",
-                    fileName,
-                ),
-                import.meta.url,
-            ),
+        getBrowserPackageFilePath(
+            path.join("src", "agent", "discovery", "schema", fileName),
         ),
         "utf8",
     );

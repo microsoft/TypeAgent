@@ -10,6 +10,7 @@ This is a list of step-by-step instructions to set up a Windows environment from
 
 - Install Git ([instructions](https://git-scm.com/downloads/win))
 - Install NodeJS ([instructions](https://nodejs.org/en/download))
+  - NOTE: During installation, at the "Tools for Native Modules" step, make sure you select "Automatically install the necessary tools"
 - Enable corepack
   - Open Command Prompt as Administrator
   - `corepack enable`
