@@ -11,7 +11,7 @@ DEFAULT_KEY_NAME="typeagent-devcontainer"
 DEFAULT_KEY_PATH="$HOME/.ssh/$DEFAULT_KEY_NAME"
 DEFAULT_CONFIG_PATH="$HOME/.ssh/config"
 DEFAULT_LOCAL_PORT="2222"
-REMOTE_USER="codespace"
+DEFAULT_REMOTE_USER=""  # auto-detected from container metadata; falls back to "vscode" then "codespace"
 
 usage() {
     cat <<EOF
@@ -25,7 +25,8 @@ Options:
   --key-path PATH           Private key path to use (default: $DEFAULT_KEY_PATH)
   --host-alias NAME         SSH host alias to write to ~/.ssh/config (default: typeagent-devcontainer)
   --local-port PORT         Local SSH port to expose in ssh config (default: $DEFAULT_LOCAL_PORT)
-    --insecure-local          Disable host key verification for local-only workflows
+  --remote-user USER        Remote user inside the container (auto-detected if omitted)
+  --insecure-local          Disable host key verification for local-only workflows
   --print-only              Do not modify files or container state; print detected values only
   -h, --help                Show this help text
 EOF
@@ -130,6 +131,7 @@ CONFIG_MATCH=""
 KEY_PATH="$DEFAULT_KEY_PATH"
 HOST_ALIAS="$DEFAULT_KEY_NAME"
 LOCAL_PORT="$DEFAULT_LOCAL_PORT"
+REMOTE_USER="$DEFAULT_REMOTE_USER"
 PRINT_ONLY=0
 INSECURE_LOCAL=0
 
@@ -158,6 +160,11 @@ while [[ $# -gt 0 ]]; do
         --local-port)
             [[ $# -ge 2 ]] || fail "Missing value for $1"
             LOCAL_PORT="$2"
+            shift 2
+            ;;
+        --remote-user)
+            [[ $# -ge 2 ]] || fail "Missing value for $1"
+            REMOTE_USER="$2"
             shift 2
             ;;
         --insecure-local)
@@ -224,6 +231,28 @@ log "Workspace match: $WORKSPACE_MATCH"
 if [[ -n "$CONFIG_MATCH" ]]; then
     log "Config match: $CONFIG_MATCH"
 fi
+
+# Auto-detect remoteUser from devcontainer metadata label if not specified.
+if [[ -z "$REMOTE_USER" ]]; then
+    REMOTE_USER=$(docker inspect "$CONTAINER_NAME" | \
+        jq -r '.[0].Config.Labels["devcontainer.metadata"] // "[]" | fromjson | map(select(.remoteUser != null)) | last | .remoteUser // ""' 2>/dev/null || true)
+    # The metadata label stores the raw devcontainer.json value, which may contain
+    # unresolved variable references like ${localEnv:USER}. Substitute them now
+    # using the local environment.
+    if [[ "$REMOTE_USER" =~ \$\{localEnv:([^}]+)\} ]]; then
+        VAR_NAME="${BASH_REMATCH[1]}"
+        REMOTE_USER="${!VAR_NAME}"
+    fi
+    if [[ -z "$REMOTE_USER" ]]; then
+        # Last resort: ask the container itself which non-root user exists.
+        REMOTE_USER=$(docker exec "$CONTAINER_NAME" awk -F: '$3==1000{print $1}' /etc/passwd 2>/dev/null | head -1 || true)
+    fi
+    if [[ -z "$REMOTE_USER" ]]; then
+        log "Could not detect remoteUser; falling back to vscode"
+        REMOTE_USER="vscode"
+    fi
+fi
+log "Remote user: $REMOTE_USER"
 
 if [[ ! -f "$KEY_PATH" ]]; then
     if [[ $PRINT_ONLY -eq 1 ]]; then
