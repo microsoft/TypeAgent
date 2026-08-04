@@ -2749,6 +2749,9 @@ importers:
         specifier: workspace:*
         version: link:../../agentSdk
     devDependencies:
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../../actionGrammar
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
         version: link:../../actionGrammarCompiler
