@@ -15,7 +15,7 @@ OpenTelemetry gives TypeAgent a structured, end-to-end view of every request, ma
 
 - **Local development:** Follow a request through translation, reasoning, LLM calls, action execution, agents, and RPC; identify latency and failures; correlate existing debug output; and save structured local traces and logs for parsing and comparison.
 - **Beyond local development:** Export the same signals to OTLP-compatible platforms; build dashboards and alerts for latency, failures, token usage, and reliability; correlate TypeAgent with surrounding services; and remain vendor-neutral.
-- **Partner value:** TypeAgent libraries automatically join a host's active OTel trace and no-op without a provider. Partners retain control over the SDK, exporters, sampling, resources, privacy, storage, and governance.
+- **Partner value:** TypeAgent trace and metric instrumentation joins a host's global OTel providers and no-ops without them. Structured `Logger` events join the host pipeline only when the host attaches `OtelLoggerSink`; debug mirroring is a separate explicit opt-in. Partners retain control over SDK initialization, exporters, sampling, resources, privacy, storage, and governance.
 
 **Bottom line:** one instrumentation model supports local debugging, production operations, and embedded TypeAgent libraries.
 
@@ -38,10 +38,10 @@ OpenTelemetry gives TypeAgent a structured, end-to-end view of every request, ma
 | --------------------- | ---------------------------------------------------------- | ------------------------------------- |
 | Developer tracing     | `debug` namespaces and runtime `@trace` control            | Correlated OTel log bridge            |
 | Structured logging    | `Logger`, `LoggerSink`, `MultiSinkLogger`, `ChildLogger`   | Additional OTel logger sink           |
-| Correlation           | `traceId`, `sessionId`, `activationId`, `hostName`         | OTel attributes and W3C baggage       |
+| Correlation           | `traceId`, `sessionId`, `activationId`, `hostName`         | OTel attributes and RPC metadata      |
 | LLM usage             | `TokenCounter` and completion callbacks                    | Token metrics and LLM span attributes |
 | Phase timing          | `RequestMetricsManager`, profiler, `StopWatch`             | Duration metrics and spans            |
-| Redaction             | `filterSecrets`, `filterSecretsFromObject`, `SecretFilter` | Processing before export              |
+| Redaction             | `filterSecrets`, `filterSecretsFromObject`, `SecretFilter` | Redaction before record/export         |
 | Cross-process tracing | Debug namespace fan-out only                               | W3C context in RPC metadata           |
 
 The design extends these seams rather than creating a parallel telemetry system.
@@ -51,26 +51,22 @@ The design extends these seams rather than creating a parallel telemetry system.
 Add a small OTel module to the existing `@typeagent/telemetry` package.
 
 ```text
-debug("typeagent:*") ───────► debug bridge ────────┐
-Logger / LoggerSink ────────► OtelLoggerSink ──────┴─► OTel logs
-TokenCounter / timings ─────► OTel meters ─────────► OTel metrics
-core operation boundaries ──► OTel tracer ─────────► OTel traces
-RPC metadata ◄──────────────► W3C context
+debug("typeagent:*") ──► optional debug bridge ─┐
+Logger / LoggerSink ──► attached OtelLoggerSink ┴─► OTel Logs API ─► log provider/processors ─┬─► OTLP logs
+                                                                                             └─► JSONL LogRecordExporter
+TokenCounter / timings ───────────────────────────► OTel Metrics API ─► meter provider/readers ──► OTLP metrics
+core operation boundaries ───────────────────────► OTel Trace API ───► tracer provider/processors ► OTLP traces
 
-OTel traces  ─┐
-OTel logs    ─┼─► TypeAgent-owned SDK processors ─┬─► OTLP exporter ─► collector / observability platform
-OTel metrics ─┘                                    │   traces, logs, metrics
-                                                   └─► JSONL log writer ─► local files
-                                                       logs only
+RPC metadata ◄──────────── traceparent plus explicit TypeAgent correlation fields ────────────►
 ```
 
 The OTLP and JSONL export branches are independently optional and may be enabled together.
 
-**Default policy:** OTel instrumentation is compiled in, but collection and export remain disabled until configured. TypeAgent-owned processes start no SDK unless OTLP or local JSONL is configured, and embeddable libraries no-op unless their host installs an OTel provider. When telemetry is configured, core spans and metrics may be collected independently of debug; the debug bridge emits only namespaces enabled through `DEBUG` or `@trace`, so existing debug output also remains disabled until enabled.
+**Default policy:** OTel instrumentation is compiled in, but collection and export remain disabled until configured. TypeAgent-owned processes create only the providers, processors, and readers required by the configured signals. A JSONL-only configuration creates a logs pipeline, not trace or metric pipelines. Embeddable trace and metric instrumentation no-ops unless the host installs the corresponding provider; OTel logs use the separate `@opentelemetry/api-logs` API and also require both a logger provider and TypeAgent sink/bridge wiring. The debug bridge emits only namespaces enabled through `DEBUG` or `@trace`.
 
 **Separate authoring interfaces, one observability pipeline.** The unification is downstream: `debug(...)` remains the lightweight, namespace-controlled developer interface for immediate terminal and CLI-panel output, while `logger.logEvent(...)` remains the structured event interface. The debug bridge and `OtelLoggerSink` feed both into the same correlated OTel log processing and export path.
 
-The package uses a **thin hybrid facade**. Instrumentation imports `@opentelemetry/api` directly. `@typeagent/telemetry` owns bootstrap, configuration, resources, redaction, debug bridging, and the logger sink. It may expose `getTracer()` and `getMeter()` as naming conveniences but does not wrap OTel spans or instruments.
+The package uses a **thin hybrid facade**. Trace and metric instrumentation imports `@opentelemetry/api` directly; log adapters use `@opentelemetry/api-logs`. `@typeagent/telemetry` owns TypeAgent-host bootstrap, configuration, resources, redaction, the optional debug bridge, and `OtelLoggerSink`. It does not wrap OTel spans or instruments and does not re-export `getTracer()` or `getMeter()`.
 
 The setup boundary is:
 
@@ -84,11 +80,17 @@ There is no `TypeAgentSpan` abstraction or custom telemetry API layered over OTe
 
 ## Ownership and Partner Integration
 
-**Embeddable TypeAgent libraries** use `@opentelemetry/api` but never initialize or replace the global SDK. They join the host's active context, no-op without a provider, and use the host's exporters, sampling, resources, privacy policy, and configuration.
+**Embeddable TypeAgent libraries** use the trace and metric APIs but never initialize or replace global providers. They join the host's active context, no-op without a provider, and use the host's exporters, sampling, resources, privacy policy, and configuration.
 
-**TypeAgent-owned Node hosts** call `initTelemetry()` once per process and `shutdownTelemetry()` on exit. Shell main, CLI, agent server, dispatcher hosts, and agent subprocess hosts each install one process-global SDK/provider set and export directly. There is no SDK per library, agent, request, or session.
+**TypeAgent-owned Node hosts** call `initTelemetry()` once per process and `shutdownTelemetry()` on exit. Shell main, CLI, agent server, dispatcher hosts, and agent subprocess hosts each install at most one process-global provider per enabled signal and export directly. There is no SDK or provider per library, agent, request, or session.
+
+Global provider registration is first-writer-wins. TypeAgent-owned bootstrap runs before application instrumentation and treats an unexpected existing provider as a configuration conflict rather than silently claiming ownership. Embeddable code never replaces a host provider. Shutdown is idempotent but not restartable in the same process; it does not unregister or swap host globals.
 
 Each subprocess receives W3C context over RPC, creates child spans with its own process-global provider, and exports them directly. Telemetry payloads are not routed through the dispatcher.
+
+The ownership rule does not make existing `Logger` events automatic. TypeAgent-owned composition roots attach one `OtelLoggerSink` to each relevant `MultiSinkLogger` while preserving debug and database sinks. An embedding host that wants structured TypeAgent events must likewise attach the sink through the library's logger/integration option; merely installing an OTel SDK is insufficient. The sink emits through the host's global Logs API and does not initialize a provider.
+
+Embeddable libraries never install a process-wide `debug` hook. A partner may explicitly install a TypeAgent-provided debug adapter at its composition root, accepting process-global hook behavior and identifying the `debug` module instances to cover.
 
 ## Signals
 
@@ -104,14 +106,22 @@ Spans record status and exceptions. Selected lifecycle and failure events may be
 
 Today the paths are mostly separate: `debug(...)` formats text for stderr, while `Logger.logEvent(...)` creates structured events for logger sinks. `DebugLoggerSink` provides a limited one-way connection by serializing a structured event as JSON text under `typeagent:logger:*`; that flattening is lossy for downstream structured processing and does not itself provide OTel correlation or export.
 
-The design preserves both producer APIs and unifies them downstream. `OtelLoggerSink` converts `LogEvent` values into OTel logs without flattening their structured fields; `ChildLogger` properties remain attributes, and existing debug/database sinks continue alongside it. Debug messages remain text bodies with namespace attributes. Both paths share active trace/span correlation, resource and TypeAgent attributes, redaction, batching, JSONL output, and OTLP export.
+JavaScript logs use the separate `@opentelemetry/api-logs` and `@opentelemetry/sdk-logs` packages, which remain experimental. Pin a mutually compatible reviewed package set rather than allowing independent range upgrades. `NodeSDK` may coordinate a logger provider only when configured with log processors/exporters; installing or starting it is not, by itself, the TypeAgent `Logger` integration.
+
+The design preserves both producer APIs and unifies them downstream. `OtelLoggerSink` emits the redacted JSON-compatible `LogEvent.event` as the log body, adds `eventName` plus allowlisted scalar correlation fields as attributes, and leaves nested or unbounded fields out of attributes. This matches the current `ChildLogger`, which merges common properties into the event rather than preserving their provenance. Existing debug/database sinks continue alongside it. Debug messages remain text bodies with namespace attributes. Both paths share active trace/span correlation, resource attributes, redaction, batching, JSONL output, and OTLP export.
 
 A process-wide `debug` hook mirrors enabled `typeagent:*` namespaces into OTel logs:
 
 - It preserves `DEBUG` and runtime `@trace` namespace control.
-- It excludes structured logger namespaces such as `typeagent:logger:*` because the original event already reaches OTel through `OtelLoggerSink`, and excludes `typeagent:telemetry:promptLogger` to prevent duplicate flattened records.
+- It excludes structured logger namespaces such as `typeagent:logger:*` because configured structured events reach OTel through `OtelLoggerSink`. It also excludes the bridge's own diagnostic namespace and `typeagent:telemetry:promptLogger` to prevent recursion or duplicate flattened records.
 - It emits one log record per debug call, correlated with the active trace and span.
 - `TYPEAGENT_OTEL_DEBUG_BRIDGE=off` disables the bridge independently.
+- It tees to the exact prior `debug.log` implementation so stderr, color, timestamps, and CLI interception continue unchanged.
+- It derives the namespace from the debug instance (`this.namespace`), not by parsing rendered text. The telemetry body is a separately rendered, ANSI-free string; formatted objects and multi-argument calls are tested explicitly.
+
+The hook affects only the resolved `debug` module instance on which it is installed. TypeAgent agent processes can load a second instance from the agent module, as `agentProcess.ts` already recognizes when forwarding `enable()`. TypeAgent-owned bootstrap must install the bridge on each known distinct instance or document that only host-package debug calls are covered; it must not claim process-wide coverage from one hook. A debugger with its own instance-level `.log` override can also bypass a module-level hook and is outside v1 unless explicitly adapted.
+
+Installation is reference-counted or otherwise idempotent, does not wrap the same instance twice, uses a reentrancy guard plus OTel suppression for exporter/diagnostic paths, and restores the exact prior hook on shutdown only if the bridge still owns it. These rules prevent duplicate records, recursive diagnostics, and damage to hooks installed by the host.
 
 Developers should not emit both `debug()` and `logEvent()` for the same fact.
 
@@ -121,7 +131,7 @@ Debug log export follows enabled debug namespaces and the bridge toggle, indepen
 
 Surface values TypeAgent already calculates:
 
-- `TokenCounter` feeds `gen_ai.client.token.usage`, with `gen_ai.token.type` set to `input` or `output`.
+- `TokenCounter` feeds token-usage instruments. GenAI semantic conventions are still evolving, so implementation pins a reviewed convention version and schema URL; if the desired names are not stable in that version, use documented `typeagent.*` names rather than presenting experimental names as permanent.
 - `RequestMetricsManager` and profiler timing feed request/phase duration instruments such as `typeagent.request.duration`.
 - Stable attributes may include model, agent, operation, status, and token type.
 
@@ -129,15 +139,17 @@ Do not use session IDs, trace IDs, activation IDs, user text, or other unbounded
 
 ## Context and Attributes
 
-Use W3C `traceparent` and `baggage` over WebSocket and RPC boundaries. Callers inject the active context into RPC metadata; receivers extract it before handling the operation.
+Use W3C `traceparent` over TypeAgent WebSocket and RPC boundaries. Callers inject active trace context into a dedicated metadata envelope; receivers validate and extract it before handling the operation.
 
 OTel generates the canonical trace ID. The existing caller-supplied `traceId` may be arbitrary, so preserve it as `typeagent.trace.id`.
 
-Carry `typeagent.trace.id`, `typeagent.session.id`, and `typeagent.activation.id` as span and log attributes and through baggage where downstream correlation is required.
+Carry `typeagent.trace.id`, `typeagent.session.id`, and `typeagent.activation.id` as span and log attributes. When a TypeAgent subprocess needs them, send them as explicit, allowlisted TypeAgent RPC metadata rather than global W3C baggage. V1 does not inject these identifiers into generic HTTP propagation, because baggage can escape through downstream requests and cross partner trust boundaries.
+
+Accept remote trace context only on designated TypeAgent RPC channels. Use the OTel propagator's parsing rules, bound the metadata/header size, ignore malformed context, and validate TypeAgent correlation fields for expected length and character set before attaching them. External or partner-supplied parent context is accepted only when the embedding boundary explicitly opts in; otherwise start a new root and optionally link to separately validated context.
 
 TypeAgent-owned processes set process-level resource attributes once: `service.name`, `service.version`, a per-process `service.instance.id`, `host.name`, `os.type`, `process.pid`, `process.runtime.name`, `process.runtime.version`, and `deployment.environment`.
 
-`activationId` is not `service.instance.id`; it is a request or session correlation value.
+`activationId` is not `service.instance.id` and is not currently per request. The dispatcher creates it when `CommandHandlerContext` is initialized, so it identifies that dispatcher activation until the context is recreated.
 
 Useful operation attributes include `typeagent.agent.name`, `typeagent.action.name`, `gen_ai.system`, and `gen_ai.request.model`.
 
@@ -155,13 +167,13 @@ telemetry:
   tracesSampler: always_on
 ```
 
-Standard `OTEL_*` environment variables override YAML. Relevant settings include `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG`, `TYPEAGENT_OTEL_LOG_FILE`, and `TYPEAGENT_OTEL_DEBUG_BRIDGE`.
+Standard `OTEL_*` environment variables override YAML. Relevant settings include `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG`, `TYPEAGENT_OTEL_LOG_FILE`, and `TYPEAGENT_OTEL_DEBUG_BRIDGE`. TypeAgent resolves this configuration first and passes explicit signal components to the SDKs; it does not rely on SDK defaults that may create exporters for unspecified signals.
 
 Partner libraries do not read TypeAgent telemetry configuration; they use the host's OTel configuration.
 
 ### Sampling
 
-- Local development captures 100% of traces when telemetry is enabled unless explicitly overridden.
+- Local development captures 100% of traces when trace export is enabled unless explicitly overridden.
 - Deployed TypeAgent-owned processes use standard configurable OTel sampling.
 - Partner hosts own sampling for embedded TypeAgent libraries.
 
@@ -170,26 +182,30 @@ Partner libraries do not read TypeAgent telemetry configuration; they use the ho
 `TYPEAGENT_OTEL_LOG_FILE` or YAML `logFile` enables direct local OTel log output:
 
 - One valid JSON object per line with timestamp, severity, body, namespace/event name, resources, `trace_id`, `span_id`, and TypeAgent correlation attributes.
-- Asynchronous, buffered writes serialized in emission order, with redaction, parent-directory creation, and shutdown flushing.
-- Open and write failures isolated from request handling.
+- Implemented as an OTel `LogRecordExporter` behind a bounded `BatchLogRecordProcessor`, not as a parallel TypeAgent event format or an ambiguously named SDK processor.
+- Asynchronous writes serialized in accepted-record order, with a bounded queue and explicit drop accounting when full.
+- Open, write, and disk-full failures are isolated from request handling, rate-limited in diagnostics, and disable or retry the writer according to a documented policy rather than growing memory without bound.
 
-The path supports `{service}` and `{pid}` expansion. If neither placeholder is present, insert `.<pid>` before the extension so each process has one writer. External tooling or the OS owns rotation, retention, archival, and deletion.
+The path supports `{service}` and `{pid}` expansion. `~` is expanded with `os.homedir()` before `path.resolve()` so YAML behaves consistently on Windows; placeholder values are filename-safe. If `{pid}` is absent, insert `.<pid>` before the extension so separate processes never share a writer. Create the parent directory recursively. External tooling or the OS owns rotation, retention, archival, and deletion.
 
 JSONL and OTLP are additive. JSONL covers logs only; OTLP through a local collector remains the path for all signals, cross-process aggregation, and production parity.
 
-If neither OTLP nor JSONL is configured, `initTelemetry()` does not start an SDK and OTel API calls remain no-ops.
+If neither OTLP nor JSONL is configured, `initTelemetry()` registers no providers and OTel API calls remain no-ops. Signal-specific `OTEL_*_EXPORTER=none` settings are honored; configuration must not accidentally create default trace or metric exporters while enabling only JSONL logs.
 
 ## Privacy and Reliability
 
 - Do not capture raw prompts, responses, user content, or known secrets by default.
 - Gate sensitive development capture behind an explicit developer setting and retain redaction.
-- TypeAgent-owned processors apply `filterSecrets`, `filterSecretsFromObject`, and registered `SecretFilter` values before OTLP export or JSONL serialization.
+- TypeAgent-controlled bridges and sinks apply `filterSecrets`, `filterSecretsFromObject`, and registered `SecretFilter` values before creating each log record. TypeAgent span attributes are similarly filtered before `setAttribute()` when their source is not already allowlisted.
+- Processors/exporters provide defense in depth for TypeAgent-created attributes, but cannot guarantee redaction of arbitrary log bodies or events emitted directly by partner code or other instrumentation.
 - Partner hosts own final export filtering and privacy policy.
 - Never put user content or secrets in metric attributes.
 
-Use batch processors so export remains off the request path. `initTelemetry()` is idempotent. `shutdownTelemetry()` flushes spans, logs, metrics, and ordered JSONL writes for short-lived CLI and subprocess hosts.
+Use batch processors so export remains off the request path. `initTelemetry()` is idempotent. It retains the exact providers/processors/exporters and debug-hook restorers that TypeAgent created. `shutdownTelemetry()` coordinates them with a bounded timeout and is also idempotent.
 
-Wire shutdown to normal process termination paths, including `SIGINT`, `SIGTERM`, and `beforeExit` where appropriate.
+`NodeSDK.shutdown()` flushes and shuts down the tracer, meter, and logger providers that the `NodeSDK` instance actually created. It does not cover a separately constructed `LoggerProvider`, an unattached `OtelLoggerSink`, or an independent file writer. The preferred JSONL design registers its exporter with the owned logger provider so provider shutdown reaches it; any separately owned component must be explicitly included in coordinated shutdown.
+
+Wire awaited shutdown into normal owned-host exit paths and graceful `SIGINT`/`SIGTERM` handlers. Do not rely on `beforeExit` alone, and do not call `process.exit()` before the bounded flush completes. Forced termination may still lose buffered telemetry.
 
 Exporter and file failures degrade to missing telemetry, never a failed TypeAgent request. Report failures through OTel diagnostics or a guarded telemetry debug namespace so error reporting cannot recurse into the failing exporter.
 
@@ -297,16 +313,16 @@ structured log event for the same fact.
 
 **Objective:** Establish the shared OTel runtime and test seams without changing application signals.
 
-- **Key work:** Add dependencies and module structure in `@typeagent/telemetry`; define instrumentation names and scope; implement TypeAgent-owned `initTelemetry()` and `shutdownTelemetry()` with YAML and `OTEL_*` precedence, resources, sampling, redaction, no-op behavior, and in-memory provider injection points. Wire initialization and shutdown only into TypeAgent-owned Node entry points.
-- **Exit criteria:** Each owned process can initialize one SDK, flush it cleanly, remain a no-op when unconfigured, and be exercised with in-memory providers.
+- **Key work:** Add dependencies and module structure in `@typeagent/telemetry`; define instrumentation names and scope; implement signal-specific configuration resolution and an idempotent lifecycle coordinator with resource, redaction, no-op, timeout, and in-memory injection seams. Wire lifecycle only into TypeAgent-owned Node entry points.
+- **Exit criteria:** Each owned process remains a no-op when unconfigured, starts only requested signal components, and cleanly shuts down every component it created.
 - **Not included yet:** Application logs, spans, metrics, or cross-process propagation.
 
 ### Phase 1 — Logs and Local Diagnostics
 
 **Objective:** Produce useful local and exported diagnostics while preserving current logging behavior.
 
-- **Key work:** Implement `OtelLoggerSink`, the filtered debug bridge, and direct process-safe JSONL logs with `{service}` and `{pid}` expansion. Preserve ordering, redaction, error isolation, and shutdown flushing; keep `DEBUG` and `@trace` behavior unchanged; prevent duplicate structured and bridged records.
-- **Exit criteria:** Local files are parseable and complete, OTLP logs are emitted when configured, active trace context is attached when present, and existing debug/database sinks behave as before.
+- **Key work:** Implement `OtelLoggerSink`; attach it at TypeAgent-owned logger composition roots; add the opt-in, multi-instance-safe debug bridge; and implement the bounded JSONL `LogRecordExporter`. Preserve local debug/database behavior, redact before record creation, and coordinate logger-provider/exporter shutdown.
+- **Exit criteria:** JSONL-only mode works without trace or metric providers; local files are parseable; OTLP logs are emitted when configured; active trace context is attached when present; and existing stderr/CLI/database sinks behave as before.
 - **Not included yet:** New application spans, distributed propagation, or metrics.
 
 ### Phase 2 — Core Traces
@@ -321,7 +337,7 @@ structured log event for the same fact.
 
 **Objective:** Extend core traces across dispatcher, agent server, and agent subprocess boundaries.
 
-- **Key work:** Add RPC client and server spans plus W3C inject/extract in RPC metadata. Keep one SDK per TypeAgent-owned process and export directly from each process.
+- **Key work:** Add RPC client and server spans plus W3C `traceparent` inject/extract and explicit allowlisted TypeAgent correlation metadata. Validate remote metadata, keep it off generic downstream HTTP, and export directly from each process.
 - **Exit criteria:** One end-to-end request forms a single trace across processes with correct parent-child relationships and independent export.
 - **Not included yet:** Browser/web propagation or HTTP/`undici` auto-instrumentation.
 
@@ -337,8 +353,8 @@ structured log event for the same fact.
 
 **Objective:** Validate safe embedding and production-ready failure behavior.
 
-- **Key work:** Verify libraries join a host provider and no-op without one; validate sampling and configuration behavior, exporter failure isolation, shutdown flushing, documentation, and disabled-path overhead.
-- **Exit criteria:** Partner-host tests, failure-path tests, and operational documentation demonstrate the settled ownership, privacy, reliability, and performance expectations.
+- **Key work:** Verify trace/metric libraries join host providers and no-op without them; verify structured logs require explicit sink attachment and debug bridging requires explicit host opt-in; validate failure isolation, coordinated shutdown, documentation, and disabled-path overhead.
+- **Exit criteria:** Partner-host tests cover provider-only, sink-attached, debug-opt-in, and no-provider cases, and operational tests demonstrate the stated privacy, reliability, and performance expectations.
 - **Not included yet:** Browser/web telemetry, HTTP auto-instrumentation, collector topology, or file rotation and retention.
 
 Phases proceed in order because distributed context depends on core spans. Metrics may begin after Phase 0 in parallel if resourcing allows.
@@ -347,8 +363,8 @@ Phases proceed in order because distributed context depends on core spans. Metri
 
 Validation is incremental at each phase and remains backend-independent where possible:
 
-- Use unit tests with in-memory providers, exporters, and readers for configuration, resources, sampling, signal mapping, redaction, error handling, and flush behavior.
-- Use integration tests for logger/debug coexistence, valid and ordered JSONL output, active-span correlation, and parent-child continuity across RPC processes that export independently.
+- Use unit tests with in-memory providers, exporters, and readers for configuration, resources, sampling, signal mapping, pre-record redaction, no-provider behavior, error handling, and coordinated flush behavior.
+- Use integration tests for logger/debug coexistence across distinct resolved `debug` instances, prior-hook restoration, valid and ordered JSONL output, queue overflow/disk failure, active-span correlation, and parent-child continuity across RPC processes that export independently.
 - Run compatibility checks with telemetry enabled, disabled, and unconfigured to preserve `DEBUG`, runtime `@trace`, library no-op behavior, and host-provider participation.
 - Exercise exporter and file failures to confirm requests continue normally and shutdown completes.
 - Measure disabled and representative enabled paths to detect unacceptable overhead or cardinality growth.
@@ -366,3 +382,8 @@ pnpm --filter @typeagent/telemetry test
 - Dispatcher logging, trace control, RPC, and metrics: `packages/dispatcher/dispatcher/src/context/`, `packages/dispatcher/dispatcher/src/utils/metrics.ts`
 - LLM usage: `packages/aiclient/src/tokenCounter.ts`, `packages/aiclient/src/openai.ts`, `packages/aiclient/src/copilotModels.ts`
 - Redaction: `packages/utils/commonUtils/src/secretFilter.ts`
+- Multiple `debug` instances and trace fan-out: `packages/dispatcher/nodeProviders/src/agentProvider/process/agentProcess.ts`
+- OpenTelemetry JS manual instrumentation: <https://opentelemetry.io/docs/languages/js/instrumentation/>
+- OpenTelemetry JS Logs SDK: <https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_sdk-logs.html>
+- OpenTelemetry baggage security guidance: <https://www.w3.org/TR/baggage/#security-considerations>
+- OpenTelemetry GenAI semantic conventions: <https://github.com/open-telemetry/semantic-conventions-genai>
