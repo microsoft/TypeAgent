@@ -105,6 +105,7 @@
     "@fluidframework/build-tools": "^0.57.0",
     "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
+    "@typeagent/browser-extension": "workspace:*",
     "@types/debug": "^4.1.12",
     "@types/express": "^4.17.21",
     "@types/html-to-text": "^9.0.4",
@@ -213,7 +214,6 @@
       ],
       "assets": [
         "dist/views/public",
-        "dist/extension",
         "src/agent/discovery/schema",
         "src/agent/indexing/schema",
         "src/agent/knowledge/actions/schema",
@@ -227,6 +227,11 @@
           "package": "@typeagent/azure-ai-foundry",
           "source": "dist/phrases.json",
           "destination": "dist/agent/phrases.json"
+        },
+        {
+          "package": "@typeagent/browser-extension",
+          "source": "dist/extension",
+          "destination": "dist/extension"
         },
         {
           "package": "@typeagent/browser",
