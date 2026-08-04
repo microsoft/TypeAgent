@@ -98,9 +98,11 @@ export type TranslateTestStep = {
     // History insertion after translation (if any)
     history?: ChatHistoryInputAssistant | ChatHistoryInputAssistant[];
 
-    // When true, disable grammar matching for this step so the request is
-    // translated by the LLM. Useful for measuring model behavior without
-    // authored-grammar interception (see schema-tuning.md note #5).
+    // TODO (stopgap): when true, disable grammar matching for this step so the
+    // request is translated by the LLM instead of the authored grammar. Works
+    // around the list-agent determiner-capture grammar bug (see listSchema.agr
+    // <AddItems>): "add ham to the list" otherwise grammar-matches to
+    // listName="the" instead of clarifying. Remove once the grammar is fixed.
     skipGrammar?: boolean;
 
     // Optional trailing actions the model may append run-to-run. `expected` is
@@ -339,7 +341,10 @@ export async function defineTranslateTest(
                 async (step) => {
                     await runOnDispatchers(async (dispatcher) => {
                         await setupOneStep(steps, step, dispatcher);
-                        // Optional per-step grammar off for LLM-only measurement.
+                        // TODO (stopgap): skipGrammar disables grammar matching
+                        // for this step (LLM-only translation) to work around
+                        // the list determiner-capture grammar bug. Remove with
+                        // the grammar fix (see listSchema.agr <AddItems>).
                         if (step.skipGrammar) {
                             await awaitCommand(
                                 dispatcher,
