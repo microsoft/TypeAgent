@@ -154,13 +154,23 @@ function copyMappedAssets(packageRoot, out, pkg, assets) {
                 `${pkg.name}: bundle asset destination escapes the package: ${mapping.destination}.`,
             );
         }
-        if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
+        if (!fs.existsSync(source)) {
             throw new Error(
                 `${pkg.name}: bundle mapped asset is missing ${mapping.package}/${mapping.source}.`,
             );
         }
-        copyFile(source, destination);
-        assets.add(mapping.destination);
+        if (fs.statSync(source).isDirectory()) {
+            for (const relative of copyRuntimeTree(source, destination)) {
+                assets.add(path.join(mapping.destination, relative));
+            }
+        } else if (fs.statSync(source).isFile()) {
+            copyFile(source, destination);
+            assets.add(mapping.destination);
+        } else {
+            throw new Error(
+                `${pkg.name}: bundle mapped asset is not a file or directory ${mapping.package}/${mapping.source}.`,
+            );
+        }
     }
 }
 

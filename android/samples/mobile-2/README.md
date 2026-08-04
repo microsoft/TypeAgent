@@ -9,9 +9,34 @@ An Android Jetpack Compose chat client that connects to a TypeAgent agent-server
 - TypeAgent agent-server RPC protocol:
   - `joinConversation` / `submitCommand`
   - Inbound `appendDisplay`, `setDisplay`, `setDisplayInfo`, and command completion events
-- Incremental assistant response streaming into a single bubble per `requestId`
+  - Inbound `takeAction` client actions
+- Incremental assistant response streaming into a single bubble per `requestId`, honouring
+  the SDK's `DisplayAppendMode` (`inline`, `block`, `temporary`, `step`) and
+  `DisplayMessageKind` styling the same way the Electron shell does
 - DevTunnel authentication via `X-Tunnel-Authorization` header
 - Build-time configuration via environment variables and `BuildConfig`
+
+## Device actions
+
+The app implements the `takeAction` client actions emitted by the `androidMobile`
+agent. Unknown actions are logged and ignored, so the app stays compatible with
+servers that emit actions this sample does not support.
+
+| Client action | Android intent | Notes |
+|---|---|---|
+| `set-alarm` | `AlarmClock.ACTION_SET_ALARM` | Opens the clock app so the user can confirm the alarm. |
+| `set-timer` | `AlarmClock.ACTION_SET_TIMER` | Starts the countdown in the background (`EXTRA_SKIP_UI = true`) and confirms with a toast, so a chat request never yanks the user out of the conversation. Durations outside the documented 1..86400 second range are rejected rather than clamped. |
+
+Both actions require the app to be in the foreground: Android 10+ silently refuses
+background activity starts (no exception is thrown), so the app checks its own
+lifecycle state first and reports a failure rather than a false confirmation.
+
+Both require the `com.android.alarm.permission.SET_ALARM` permission (declared in
+the manifest, install-time only) and matching `<queries>` entries so
+`resolveActivity` works under Android 11+ package visibility rules.
+
+> `set-timer` requires the server-side `androidMobile` `setTimer` action. Install
+> the agent with `@package install androidMobile` in the TypeAgent CLI/shell.
 
 ## Prerequisites
 
