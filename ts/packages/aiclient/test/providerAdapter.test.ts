@@ -70,7 +70,7 @@ describe("providerAdapter (live, one per api-type)", () => {
         testTimeout,
     );
 
-    // OpenAI Responses (Codex) protocol. Bearer auth (provider "openai").
+    // OpenAI Responses protocol. Bearer auth (provider "openai").
     testIf(
         () =>
             has(

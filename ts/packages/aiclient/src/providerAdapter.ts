@@ -576,7 +576,7 @@ class AnthropicMessagesAdapter implements ProviderAdapter {
 
 // ---------------------------------------------------------------------------
 // openai_responses adapter — reference implementation for the OpenAI
-// Responses API (the wire protocol Codex/GPT-5 tooling speaks). Same auth
+// OpenAI Responses API (/responses wire protocol). Same auth
 // as chat_completions but a different body (`input`) and response
 // (`output` blocks / `output_text`).
 // ---------------------------------------------------------------------------
@@ -703,7 +703,7 @@ class OpenAIResponsesAdapter implements ProviderAdapter {
 
 const chatCompletionsAdapter = new ChatCompletionsAdapter();
 const anthropicMessagesAdapter = new AnthropicMessagesAdapter();
-const codexResponsesAdapter = new OpenAIResponsesAdapter();
+const openaiResponsesAdapter = new OpenAIResponsesAdapter();
 
 /**
  * Select the wire adapter for an api-type. Called after the pool has
@@ -715,7 +715,7 @@ export function adapterFor(apiType: ApiType | undefined): ProviderAdapter {
         case "anthropic_messages":
             return anthropicMessagesAdapter;
         case "openai_responses":
-            return codexResponsesAdapter;
+            return openaiResponsesAdapter;
         case "chat_completions":
         case undefined:
             return chatCompletionsAdapter;

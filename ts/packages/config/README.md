@@ -45,13 +45,13 @@ See [src/flatten.ts](./src/flatten.ts) for the full mapping.
 
 An Azure OpenAI deployment endpoint may declare an `apiType` selecting the
 **wire protocol** it speaks. This lets a single TypeAgent config route to
-Azure/OpenAI Chat Completions, the OpenAI Responses (Codex) API, and the
+Azure/OpenAI Chat Completions, the OpenAI Responses API, and the
 Anthropic Messages API behind the same endpoint pool.
 
 | `apiType` value      | Wire protocol                             | Default? |
 | -------------------- | ----------------------------------------- | -------- |
 | `chat_completions`   | OpenAI / Azure OpenAI `/chat/completions` | ✅ yes   |
-| `openai_responses`    | OpenAI `/responses` (Codex / GPT-5 tools) | no       |
+| `openai_responses`    | OpenAI `/responses` | no       |
 | `anthropic_messages` | Anthropic `/v1/messages`                  | no       |
 
 **Default & back-compat.** `apiType` is optional. Omitting it is exactly
