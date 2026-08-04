@@ -65,12 +65,6 @@ jobs:
       IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
     steps:
-      - name: Remove stale default CodeQL analysis
-        if: github.event_name == 'pull_request' && github.event.pull_request.number == 2717 && matrix.language == 'actions'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh api --method DELETE "repos/${GITHUB_REPOSITORY}/code-scanning/analyses/1557314272?confirm_delete"
-
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:

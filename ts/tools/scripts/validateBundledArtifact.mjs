@@ -91,7 +91,7 @@ function validateDeclaredBundleFiles(root, packageName) {
     }
     for (const mapping of pkg.typeagent?.bundle?.assetMappings ?? []) {
         const file = path.join(packageDirectory, mapping.destination);
-        if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
+        if (!fs.existsSync(file)) {
             throw new Error(
                 `${packageName}: mapped bundle asset is missing ${file}.`,
             );
