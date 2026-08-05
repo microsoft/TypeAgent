@@ -3,3 +3,4 @@
 
 export * from "./ir/index.js";
 export * from "./language/index.js";
+export * from "./evaluator/index.js";

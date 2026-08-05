@@ -88,7 +88,7 @@ try {
             throw new Error("Packed server returned an unexpected status");
         }
         if (
-            result.structuredContent.schemaVersion !== 1 ||
+            result.structuredContent.schemaVersion !== 2 ||
             result.structuredContent.database !== "ready"
         ) {
             throw new Error("Packed server did not initialize SQLite");

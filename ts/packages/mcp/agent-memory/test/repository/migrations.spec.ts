@@ -36,7 +36,10 @@ describe("SQLite migrations", () => {
             database
                 .prepare("SELECT version, name FROM schema_migrations")
                 .all(),
-        ).toEqual([{ version: 1, name: "initial_schema" }]);
+        ).toEqual([
+            { version: 1, name: "initial_schema" },
+            { version: 2, name: "query_indexes" },
+        ]);
         expect(
             database
                 .prepare(
@@ -74,7 +77,7 @@ describe("SQLite migrations", () => {
         const migrations = [
             ...loadMigrations(),
             createMigration(
-                2,
+                3,
                 "failing_probe",
                 "CREATE TABLE rollback_probe(value TEXT); INVALID SQL;",
             ),
@@ -93,6 +96,6 @@ describe("SQLite migrations", () => {
                 .prepare("SELECT COUNT(*) FROM schema_migrations")
                 .pluck()
                 .get(),
-        ).toBe(1);
+        ).toBe(2);
     });
 });

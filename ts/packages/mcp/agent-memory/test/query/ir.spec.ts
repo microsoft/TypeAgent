@@ -174,6 +174,8 @@ describe("query IR normalization", () => {
         expect(serializeQuery(left)).toBe(serializeQuery(right));
         expect(hashQuery(left)).toBe(hashQuery(right));
         expect(normalizeQuery(left).orderBy).toEqual([
+            { field: "hitCount", direction: "desc" },
+            { field: "quality", direction: "desc" },
             { field: "entityId", direction: "asc" },
         ]);
 

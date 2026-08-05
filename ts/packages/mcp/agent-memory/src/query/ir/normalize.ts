@@ -385,7 +385,12 @@ function normalizeTemporal(selector: TemporalSelector): TemporalSelector {
 function normalizeOrdering(
     orderBy: QueryIrV1["orderBy"],
 ): NonNullable<QueryIrV1["orderBy"]> {
-    const normalized = [...(orderBy ?? [])];
+    const normalized = [
+        ...(orderBy ?? [
+            { field: "hitCount", direction: "desc" },
+            { field: "quality", direction: "desc" },
+        ]),
+    ];
     for (const order of normalized) {
         if (!orderFields.has(order.field)) {
             return invalidArgument("Invalid ordering field", {

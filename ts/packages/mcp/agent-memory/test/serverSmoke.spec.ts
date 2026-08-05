@@ -52,7 +52,7 @@ describe("agent-memory MCP server", () => {
             expect(status).toEqual({
                 service: serviceName,
                 version: serviceVersion,
-                schemaVersion: 1,
+                schemaVersion: 2,
                 database: "ready",
             });
         } finally {

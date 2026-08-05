@@ -37,6 +37,31 @@ export type SearchDocument = {
     occurredAt: string;
 };
 
+export type SearchPosting = SearchDocument & {
+    quality: number;
+    channel: "lexical" | "term";
+};
+
+export type SearchDocumentFields = Readonly<
+    Record<string, string | number | boolean | readonly string[] | undefined>
+>;
+
+export type StructuralPostingSource =
+    | { type: "term"; value: string }
+    | { type: "artifact"; value: string }
+    | { type: "turn"; value: string };
+
+export type ChangedEntityPosting = {
+    entityKind: string;
+    entityId: string;
+    eventReferences: readonly string[];
+};
+
+export type ProjectedSearchDocument = {
+    document: SearchDocument;
+    fields: SearchDocumentFields;
+};
+
 export type IdempotencyRecord = {
     scopeId: string;
     key: string;
@@ -48,6 +73,7 @@ export type IdempotencyRecord = {
 export interface MemoryRepository extends Disposable {
     runInTransaction<T>(operation: () => T): T;
     getSchemaVersion(): number;
+    getSearchIndexVersion(): number;
     getIdempotencyRecord(
         scopeId: string,
         key: string,
@@ -67,7 +93,43 @@ export interface MemoryRepository extends Disposable {
     savePropertyDefinition(definition: TopicPropertyDefinition): void;
     savePropertyValue(value: TopicPropertyValue): void;
     rebuildSearchDocuments(): number;
-    listSearchDocuments(): SearchDocument[];
+    listSearchDocuments(
+        scopeId?: string,
+        entityKinds?: readonly string[],
+    ): SearchDocument[];
+    searchDocuments(
+        scopeId: string,
+        text: string,
+        entityKinds: readonly string[],
+        maxResults: number,
+    ): SearchPosting[];
+    resolveTopicIds(
+        scopeId: string,
+        rootPath: string,
+        traversal: "exact" | "children" | "descendants",
+    ): string[];
+    listTopicEntityIds(
+        scopeId: string,
+        topicIds: readonly string[],
+        entityKind: string,
+        roles?: readonly ("primary" | "secondary")[],
+    ): string[];
+    listSourceEntityIds(
+        scopeId: string,
+        source: StructuralPostingSource,
+        entityKind: string,
+    ): string[];
+    getSearchDocumentFields(document: SearchDocument): SearchDocumentFields;
+    listChangedEntityPostings(
+        scopeId: string,
+        entityKinds: readonly string[],
+        start: string,
+        end: string,
+    ): ChangedEntityPosting[];
+    projectSearchDocumentAt(
+        document: SearchDocument,
+        instant: string,
+    ): ProjectedSearchDocument | undefined;
     close(): void;
     getScope(scopeId: string): AccessScope | undefined;
     findTopicByPath(scopeId: string, path: string): Topic | undefined;
@@ -127,6 +189,15 @@ export class SqliteMemoryRepository implements MemoryRepository {
     public getSchemaVersion(): number {
         return this.#database
             .prepare("SELECT COALESCE(MAX(version), 0) FROM schema_migrations")
+            .pluck()
+            .get() as number;
+    }
+
+    public getSearchIndexVersion(): number {
+        return this.#database
+            .prepare(
+                "SELECT index_version FROM search_index_state WHERE singleton = 1",
+            )
             .pluck()
             .get() as number;
     }
@@ -1023,21 +1094,46 @@ export class SqliteMemoryRepository implements MemoryRepository {
                 );
                 insertFts.run(documentId, candidate.title, candidate.content);
             }
+            this.#database
+                .prepare(
+                    `UPDATE search_index_state
+                     SET index_version = index_version + 1, updated_at = ?
+                     WHERE singleton = 1`,
+                )
+                .run(new Date().toISOString());
             return candidates.length;
         });
     }
 
-    public listSearchDocuments(): SearchDocument[] {
-        return (
-            this.#database
-                .prepare(
-                    `SELECT document_id, scope_id, entity_kind, entity_id,
-                            revision, title, content, occurred_at
-                     FROM search_documents
-                     ORDER BY document_id`,
-                )
-                .all() as SearchDocumentRow[]
-        ).map((row) => ({
+    public listSearchDocuments(
+        scopeId?: string,
+        entityKinds?: readonly string[],
+    ): SearchDocument[] {
+        if (entityKinds?.length === 0) {
+            return [];
+        }
+        const conditions: string[] = [];
+        const parameters: (string | number)[] = [];
+        if (scopeId !== undefined) {
+            conditions.push("scope_id = ?");
+            parameters.push(scopeId);
+        }
+        if (entityKinds !== undefined) {
+            conditions.push(
+                `entity_kind IN (${entityKinds.map(() => "?").join(", ")})`,
+            );
+            parameters.push(...entityKinds);
+        }
+        const rows = this.#database
+            .prepare(
+                `SELECT document_id, scope_id, entity_kind, entity_id,
+                        revision, title, content, occurred_at
+                 FROM search_documents
+                 ${conditions.length === 0 ? "" : `WHERE ${conditions.join(" AND ")}`}
+                 ORDER BY document_id`,
+            )
+            .all(...parameters) as SearchDocumentRow[];
+        return rows.map((row) => ({
             documentId: row.document_id,
             scopeId: row.scope_id,
             entityKind: row.entity_kind,
@@ -1047,6 +1143,299 @@ export class SqliteMemoryRepository implements MemoryRepository {
             content: row.content,
             occurredAt: row.occurred_at,
         }));
+    }
+
+    public searchDocuments(
+        scopeId: string,
+        text: string,
+        entityKinds: readonly string[],
+        maxResults: number,
+    ): SearchPosting[] {
+        if (entityKinds.length === 0 || maxResults <= 0) {
+            return [];
+        }
+        const kindPlaceholders = entityKinds.map(() => "?").join(", ");
+        const rows = this.#database
+            .prepare(
+                `SELECT documents.document_id, documents.scope_id,
+                        documents.entity_kind, documents.entity_id,
+                        documents.revision, documents.title, documents.content,
+                        documents.occurred_at, bm25(search_fts) AS rank
+                 FROM search_fts
+                 JOIN search_documents AS documents USING(document_id)
+                 WHERE search_fts MATCH ?
+                   AND documents.scope_id = ?
+                   AND documents.entity_kind IN (${kindPlaceholders})
+                 ORDER BY rank, documents.entity_id
+                 LIMIT ?`,
+            )
+            .all(
+                toFtsPhrase(text),
+                scopeId,
+                ...entityKinds,
+                maxResults,
+            ) as (SearchDocumentRow & { rank: number })[];
+        return rows.map((row) => ({
+            documentId: row.document_id,
+            scopeId: row.scope_id,
+            entityKind: row.entity_kind,
+            entityId: row.entity_id,
+            revision: row.revision,
+            title: row.title,
+            content: row.content,
+            occurredAt: row.occurred_at,
+            quality: 1 / (1 + Math.abs(row.rank)),
+            channel: "lexical",
+        }));
+    }
+
+    public resolveTopicIds(
+        scopeId: string,
+        rootPath: string,
+        traversal: "exact" | "children" | "descendants",
+    ): string[] {
+        const root = this.findTopicByPath(scopeId, rootPath);
+        if (root === undefined) {
+            return [];
+        }
+        if (traversal === "exact") {
+            return [root.topicId];
+        }
+        const recursive = traversal === "descendants" ? "RECURSIVE" : "";
+        const rows = this.#database
+            .prepare(
+                traversal === "children"
+                    ? `SELECT topic_id FROM topics
+                       WHERE scope_id = ? AND parent_topic_id = ?
+                       ORDER BY topic_id`
+                    : `WITH ${recursive} descendants(topic_id) AS (
+                              SELECT topic_id FROM topics
+                              WHERE scope_id = ? AND topic_id = ?
+                           UNION ALL
+                           SELECT topics.topic_id FROM topics
+                           JOIN descendants
+                             ON topics.parent_topic_id = descendants.topic_id
+                           WHERE topics.scope_id = ?
+                       )
+                       SELECT topic_id FROM descendants ORDER BY topic_id`,
+            )
+            .pluck()
+            .all(
+                ...(traversal === "children"
+                    ? [scopeId, root.topicId]
+                    : [scopeId, root.topicId, scopeId]),
+            ) as string[];
+        return rows;
+    }
+
+    public listTopicEntityIds(
+        scopeId: string,
+        topicIds: readonly string[],
+        entityKind: string,
+        roles?: readonly ("primary" | "secondary")[],
+    ): string[] {
+        if (topicIds.length === 0 || roles?.length === 0) {
+            return [];
+        }
+        const topicPlaceholders = topicIds.map(() => "?").join(", ");
+        const roleCondition =
+            roles === undefined
+                ? ""
+                : ` AND turn_topics.role IN (${roles.map(() => "?").join(", ")})`;
+        const parameters = [scopeId, ...topicIds, ...(roles ?? [])];
+        const query = topicEntitySql(
+            entityKind,
+            topicPlaceholders,
+            roleCondition,
+        );
+        return this.#database
+            .prepare(query)
+            .pluck()
+            .all(...parameters) as string[];
+    }
+
+    public listSourceEntityIds(
+        scopeId: string,
+        source: StructuralPostingSource,
+        entityKind: string,
+    ): string[] {
+        const query = sourceEntitySql(source.type, entityKind);
+        if (query === undefined) {
+            return [];
+        }
+        const value =
+            source.type === "term"
+                ? this.findTerm(scopeId, source.value)?.termId
+                : source.value;
+        if (value === undefined) {
+            return [];
+        }
+        return this.#database
+            .prepare(query)
+            .pluck()
+            .all(scopeId, value) as string[];
+    }
+
+    public getSearchDocumentFields(
+        document: SearchDocument,
+    ): SearchDocumentFields {
+        const fields: Record<
+            string,
+            string | number | boolean | readonly string[] | undefined
+        > = {
+            entityId: document.entityId,
+            entityKind: document.entityKind,
+            revision: document.revision,
+            occurredAt: document.occurredAt,
+        };
+        const details = this.#database
+            .prepare(documentFieldSql(document.entityKind))
+            .get(document.scopeId, document.entityId) as
+            | {
+                  state: string | null;
+                  recorded_at: string | null;
+                  property_name: string | null;
+              }
+            | undefined;
+        if (details?.state !== null && details?.state !== undefined) {
+            fields.state = details.state;
+        }
+        fields.recordedAt = details?.recorded_at ?? document.occurredAt;
+        if (
+            details?.property_name !== null &&
+            details?.property_name !== undefined
+        ) {
+            fields.propertyName = details.property_name;
+        }
+        if (
+            document.entityKind === "turn" ||
+            document.entityKind === "action"
+        ) {
+            const roles = this.#database
+                .prepare(
+                    document.entityKind === "turn"
+                        ? `SELECT DISTINCT role FROM turn_topics
+                           WHERE scope_id = ? AND turn_id = ? ORDER BY role`
+                        : `SELECT DISTINCT turn_topics.role FROM actions
+                           JOIN turns USING(turn_id)
+                           JOIN turn_topics USING(turn_id)
+                           WHERE turns.scope_id = ? AND actions.action_id = ?
+                           ORDER BY turn_topics.role`,
+                )
+                .pluck()
+                .all(document.scopeId, document.entityId) as string[];
+            fields.role = roles;
+        }
+        return fields;
+    }
+
+    public listChangedEntityPostings(
+        scopeId: string,
+        entityKinds: readonly string[],
+        start: string,
+        end: string,
+    ): ChangedEntityPosting[] {
+        if (entityKinds.length === 0) {
+            return [];
+        }
+        const rows = this.#database.prepare(changedEntitySql).all({
+            scopeId,
+            entityKinds: JSON.stringify(entityKinds),
+            start,
+            end,
+        }) as {
+            entity_kind: string;
+            entity_id: string;
+            event_reference: string;
+        }[];
+        const postings = new Map<string, ChangedEntityPosting>();
+        for (const row of rows) {
+            const key = `${row.entity_kind}:${row.entity_id}`;
+            const existing = postings.get(key);
+            postings.set(key, {
+                entityKind: row.entity_kind,
+                entityId: row.entity_id,
+                eventReferences: [
+                    ...(existing?.eventReferences ?? []),
+                    row.event_reference,
+                ],
+            });
+        }
+        return [...postings.values()];
+    }
+
+    public projectSearchDocumentAt(
+        document: SearchDocument,
+        instant: string,
+    ): ProjectedSearchDocument | undefined {
+        if (document.entityKind === "goal") {
+            const row = this.#database
+                .prepare(
+                    `SELECT events.revision, events.desired_state, events.state,
+                            events.updated_at
+                     FROM goal_events AS events JOIN goals USING(goal_id)
+                     WHERE goals.scope_id = ? AND events.goal_id = ?
+                       AND events.updated_at <= ?
+                     ORDER BY events.updated_at DESC, events.revision DESC
+                     LIMIT 1`,
+                )
+                .get(document.scopeId, document.entityId, instant) as
+                | {
+                      revision: number;
+                      desired_state: string;
+                      state: string;
+                      updated_at: string;
+                  }
+                | undefined;
+            return row === undefined
+                ? undefined
+                : createHistoricalProjection(
+                      document,
+                      row.revision,
+                      document.title,
+                      row.desired_state,
+                      row.state,
+                      row.updated_at,
+                  );
+        }
+        if (document.entityKind === "designNote") {
+            const row = this.#database
+                .prepare(
+                    `SELECT revisions.revision, revisions.title, revisions.body,
+                            revisions.state, revisions.updated_at
+                     FROM design_note_revisions AS revisions
+                     JOIN design_notes USING(design_note_id)
+                     WHERE design_notes.scope_id = ?
+                       AND revisions.design_note_id = ?
+                       AND revisions.updated_at <= ?
+                     ORDER BY revisions.updated_at DESC, revisions.revision DESC
+                     LIMIT 1`,
+                )
+                .get(document.scopeId, document.entityId, instant) as
+                | {
+                      revision: number;
+                      title: string;
+                      body: string;
+                      state: string;
+                      updated_at: string;
+                  }
+                | undefined;
+            return row === undefined
+                ? undefined
+                : createHistoricalProjection(
+                      document,
+                      row.revision,
+                      row.title,
+                      row.body,
+                      row.state,
+                      row.updated_at,
+                  );
+        }
+        const fields = this.getSearchDocumentFields(document);
+        const recordedAt = fields.recordedAt;
+        return typeof recordedAt === "string" && recordedAt <= instant
+            ? { document, fields }
+            : undefined;
     }
 
     public close(): void {
@@ -1228,10 +1617,219 @@ const searchCandidateSql = `
     SELECT scope_id, 'goal', goal_id, revision, 'Goal', desired_state, updated_at
     FROM goals
     UNION ALL
-    SELECT scope_id, 'design_note', design_note_id, revision, title, body, updated_at
+    SELECT scope_id, 'designNote', design_note_id, revision, title, body, updated_at
     FROM design_notes
+        UNION ALL
+        SELECT topic_outputs.scope_id, 'output', topic_outputs.output_id,
+            topic_outputs.revision, artifacts.name,
+            artifacts.kind || ' ' || artifacts.name, topic_outputs.updated_at
+        FROM topic_outputs JOIN artifacts USING(artifact_id, scope_id)
+        UNION ALL
+        SELECT definitions.scope_id, 'property', definitions.definition_id,
+            definitions.revision, definitions.name,
+                definitions.name || ' ' || property_values.value_json,
+                property_values.updated_at
+        FROM topic_property_definitions AS definitions
+            JOIN topic_property_values AS property_values USING(definition_id, topic_id)
     ORDER BY entity_kind, entity_id, revision
 `;
+
+const changedEntitySql = `
+        WITH changes(entity_kind, entity_id, event_reference, changed_at) AS (
+         SELECT 'topic', topic_id, topic_id || ':' || revision, created_at
+         FROM topics WHERE scope_id = @scopeId
+         UNION ALL
+         SELECT 'turn', turn_id, turn_id, recorded_at
+         FROM turns WHERE scope_id = @scopeId
+         UNION ALL
+         SELECT 'term', term_id, term_id, created_at
+         FROM terms WHERE scope_id = @scopeId
+         UNION ALL
+         SELECT 'action', actions.action_id, actions.action_id, turns.recorded_at
+         FROM actions JOIN turns USING(turn_id)
+         WHERE turns.scope_id = @scopeId
+         UNION ALL
+         SELECT 'artifact', artifact_changes.artifact_id,
+             artifact_changes.artifact_id || ':' || artifact_changes.turn_id,
+             turns.recorded_at
+         FROM artifact_changes JOIN turns USING(turn_id)
+         WHERE turns.scope_id = @scopeId
+         UNION ALL
+         SELECT 'goal', goal_events.goal_id,
+             goal_events.goal_id || ':' || goal_events.revision,
+             goal_events.updated_at
+         FROM goal_events JOIN goals USING(goal_id)
+         WHERE goals.scope_id = @scopeId
+         UNION ALL
+         SELECT 'designNote', revisions.design_note_id,
+             revisions.design_note_id || ':' || revisions.revision,
+             revisions.updated_at
+         FROM design_note_revisions AS revisions
+         JOIN design_notes USING(design_note_id)
+         WHERE design_notes.scope_id = @scopeId
+         UNION ALL
+         SELECT 'output', output_id, output_id || ':' || revision, updated_at
+         FROM topic_outputs WHERE scope_id = @scopeId
+         UNION ALL
+         SELECT 'property', definitions.definition_id,
+             definitions.definition_id || ':' || definitions.revision,
+             property_values.updated_at
+         FROM topic_property_definitions AS definitions
+         JOIN topic_property_values AS property_values USING(definition_id, topic_id)
+         WHERE definitions.scope_id = @scopeId
+        )
+        SELECT entity_kind, entity_id, event_reference
+        FROM changes
+        WHERE changed_at >= @start AND changed_at < @end
+          AND entity_kind IN (SELECT value FROM json_each(@entityKinds))
+        ORDER BY entity_kind, entity_id, event_reference
+    `;
+
+function toFtsPhrase(text: string): string {
+    return `"${text.replaceAll('"', '""')}"`;
+}
+
+function createHistoricalProjection(
+    document: SearchDocument,
+    revision: number,
+    title: string,
+    content: string,
+    state: string,
+    updatedAt: string,
+): ProjectedSearchDocument {
+    return {
+        document: {
+            ...document,
+            revision,
+            title,
+            content,
+            occurredAt: updatedAt,
+        },
+        fields: {
+            entityId: document.entityId,
+            entityKind: document.entityKind,
+            revision,
+            state,
+            occurredAt: updatedAt,
+            recordedAt: updatedAt,
+        },
+    };
+}
+
+function topicEntitySql(
+    entityKind: string,
+    topicPlaceholders: string,
+    roleCondition: string,
+): string {
+    const topicFilter = `topics.scope_id = ? AND topics.topic_id IN (${topicPlaceholders})`;
+    switch (entityKind) {
+        case "topic":
+            return `SELECT topics.topic_id FROM topics WHERE ${topicFilter} ORDER BY 1`;
+        case "turn":
+            return `SELECT DISTINCT turn_topics.turn_id FROM turn_topics
+                    JOIN topics USING(topic_id, scope_id)
+                    WHERE ${topicFilter}${roleCondition} ORDER BY 1`;
+        case "term":
+            return `SELECT DISTINCT turn_terms.term_id FROM turn_topics
+                    JOIN topics USING(topic_id, scope_id)
+                    JOIN turn_terms USING(turn_id)
+                    WHERE ${topicFilter}${roleCondition} ORDER BY 1`;
+        case "action":
+            return `SELECT DISTINCT actions.action_id FROM turn_topics
+                    JOIN topics USING(topic_id, scope_id)
+                    JOIN actions USING(turn_id)
+                    WHERE ${topicFilter}${roleCondition} ORDER BY 1`;
+        case "artifact":
+            return `SELECT DISTINCT artifact_changes.artifact_id FROM turn_topics
+                    JOIN topics USING(topic_id, scope_id)
+                    JOIN artifact_changes USING(turn_id)
+                    WHERE ${topicFilter}${roleCondition} ORDER BY 1`;
+        case "goal":
+            return `SELECT goals.goal_id FROM goals JOIN topics USING(topic_id, scope_id)
+                    WHERE ${topicFilter} ORDER BY 1`;
+        case "designNote":
+            return `SELECT design_notes.design_note_id FROM design_notes
+                    JOIN topics USING(topic_id, scope_id)
+                    WHERE ${topicFilter} ORDER BY 1`;
+        case "output":
+            return `SELECT topic_outputs.output_id FROM topic_outputs
+                    JOIN topics USING(topic_id, scope_id)
+                    WHERE ${topicFilter} ORDER BY 1`;
+        case "property":
+            return `SELECT definitions.definition_id
+                    FROM topic_property_definitions AS definitions
+                    JOIN topics USING(topic_id, scope_id)
+                    WHERE ${topicFilter} ORDER BY 1`;
+        default:
+            return `SELECT topic_id FROM topics WHERE 0 AND ${topicFilter}`;
+    }
+}
+
+function sourceEntitySql(
+    sourceType: StructuralPostingSource["type"],
+    entityKind: string,
+): string | undefined {
+    if (sourceType === "turn" && entityKind === "turn") {
+        return `SELECT turn_id FROM turns WHERE scope_id = ? AND turn_id = ?`;
+    }
+    if (sourceType === "term" && entityKind === "turn") {
+        return `SELECT turns.turn_id FROM turns
+                JOIN turn_terms USING(turn_id)
+                WHERE turns.scope_id = ? AND turn_terms.term_id = ? ORDER BY 1`;
+    }
+    if (sourceType === "term" && entityKind === "topic") {
+        return `SELECT DISTINCT turn_topics.topic_id FROM turns
+                JOIN turn_terms USING(turn_id)
+                JOIN turn_topics USING(turn_id)
+                WHERE turns.scope_id = ? AND turn_terms.term_id = ? ORDER BY 1`;
+    }
+    if (sourceType === "artifact" && entityKind === "turn") {
+        return `SELECT turns.turn_id FROM turns
+                JOIN artifact_changes USING(turn_id)
+                JOIN artifacts USING(artifact_id, scope_id)
+                WHERE turns.scope_id = ? AND artifacts.artifact_id = ? ORDER BY 1`;
+    }
+    return undefined;
+}
+
+function documentFieldSql(entityKind: string): string {
+    switch (entityKind) {
+        case "topic":
+            return `SELECT state, created_at AS recorded_at, NULL AS property_name
+                    FROM topics WHERE scope_id = ? AND topic_id = ?`;
+        case "turn":
+            return `SELECT NULL AS state, recorded_at, NULL AS property_name
+                    FROM turns WHERE scope_id = ? AND turn_id = ?`;
+        case "action":
+            return `SELECT actions.status AS state, turns.recorded_at,
+                           NULL AS property_name
+                    FROM actions JOIN turns USING(turn_id)
+                    WHERE turns.scope_id = ? AND actions.action_id = ?`;
+        case "artifact":
+            return `SELECT state, created_at AS recorded_at, NULL AS property_name
+                    FROM artifacts WHERE scope_id = ? AND artifact_id = ?`;
+        case "goal":
+            return `SELECT state, updated_at AS recorded_at, NULL AS property_name
+                    FROM goals WHERE scope_id = ? AND goal_id = ?`;
+        case "designNote":
+            return `SELECT state, updated_at AS recorded_at, NULL AS property_name
+                    FROM design_notes WHERE scope_id = ? AND design_note_id = ?`;
+        case "output":
+            return `SELECT state, updated_at AS recorded_at, NULL AS property_name
+                    FROM topic_outputs WHERE scope_id = ? AND output_id = ?`;
+        case "property":
+            return `SELECT NULL AS state,
+                      property_values.updated_at AS recorded_at,
+                           definitions.name AS property_name
+                    FROM topic_property_definitions AS definitions
+                  JOIN topic_property_values AS property_values
+                 USING(definition_id, topic_id)
+                    WHERE definitions.scope_id = ? AND definitions.definition_id = ?`;
+        default:
+            return `SELECT NULL AS state, NULL AS recorded_at,
+                           NULL AS property_name WHERE ? = ?`;
+    }
+}
 
 function mapTopic(row: TopicRow): Topic {
     return {

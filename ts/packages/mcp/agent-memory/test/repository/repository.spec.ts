@@ -57,7 +57,9 @@ describe("SQLite memory repository", () => {
     test("stores an aggregate and rebuilds deterministic search projections", () => {
         const fixture = createBaseFixture(repository, ids);
 
+        expect(repository.getSearchIndexVersion()).toBe(0);
         expect(repository.rebuildSearchDocuments()).toBe(5);
+        expect(repository.getSearchIndexVersion()).toBe(1);
         const first = repository.listSearchDocuments();
         expect(first.map((document) => document.entityKind)).toEqual([
             "action",
@@ -67,6 +69,7 @@ describe("SQLite memory repository", () => {
             "turn",
         ]);
         expect(repository.rebuildSearchDocuments()).toBe(5);
+        expect(repository.getSearchIndexVersion()).toBe(2);
         expect(repository.listSearchDocuments()).toEqual(first);
         expect(
             database
@@ -77,6 +80,28 @@ describe("SQLite memory repository", () => {
                 .pluck()
                 .all("memory"),
         ).toContain(`topic:${fixture.topic.topicId}:1`);
+    });
+
+    test("filters lexical postings by scope before returning candidates", () => {
+        const first = createBaseFixture(repository, ids);
+        const second = createBaseFixture(repository, ids, true, "second-user");
+        repository.rebuildSearchDocuments();
+
+        const postings = repository.searchDocuments(
+            first.scope.scopeId,
+            "stored memory",
+            ["turn"],
+            10,
+        );
+
+        expect(postings.map((posting) => posting.entityId)).toEqual([
+            first.turn.turnId,
+        ]);
+        expect(postings).not.toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ entityId: second.turn.turnId }),
+            ]),
+        );
     });
 
     test("rejects cross-scope topic links before writing a turn", () => {
@@ -267,7 +292,7 @@ describe("SQLite memory repository", () => {
                 .pluck()
                 .get(),
         ).toBe('"high"');
-        expect(repository.rebuildSearchDocuments()).toBe(8);
+        expect(repository.rebuildSearchDocuments()).toBe(10);
     });
 
     test("rejects skipped facet revisions without partial history", () => {
@@ -296,9 +321,10 @@ function createBaseFixture(
     repository: SqliteMemoryRepository,
     ids: SequenceIdGenerator,
     saveTurn = true,
+    userId = "test-user",
 ) {
     const scope = createAccessScope(ids.generate("Scope"), {
-        userId: "test-user",
+        userId,
         workspaceId: "test-workspace",
     });
     repository.saveScope(scope);
