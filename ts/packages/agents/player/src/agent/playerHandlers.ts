@@ -25,6 +25,8 @@ import {
     configKeyNames,
     configPathForEnvVar,
     configSetupHint,
+    getConfigProblems,
+    reloadConfigSync,
 } from "@typeagent/config";
 import { searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
@@ -47,6 +49,7 @@ import {
 } from "../userData.js";
 
 const debugSpotify = registerDebug("typeagent:spotify");
+const debugError = registerDebug("typeagent:spotify:error");
 
 export function instantiate(): AppAgent {
     return {
@@ -67,12 +70,24 @@ export function instantiate(): AppAgent {
 // config.local.yaml). Spotify integration is impossible without these,
 // so we surface the missing configuration up front instead of letting
 // the user discover it on the first action. No `setup` hook — this is a
-// manual-config case (edit config.local.yaml, restart the agent server);
-// the dispatcher's setup-required error points the user at
-// @config agent refresh once they've fixed it.
+// manual-config case (edit config.local.yaml, then run
+// `@config agent refresh player`).
+//
+// The probe re-reads the config files first. This agent usually runs in
+// a forked child process whose `process.env` was snapshotted when it was
+// spawned, so without the reload every refresh would re-report the state
+// the user just fixed and the only way out would be restarting the
+// server — which is exactly what the setup hint promises it isn't.
 //
 // Exported for unit tests.
 export async function checkPlayerReadiness(): Promise<ReadinessReport> {
+    try {
+        reloadConfigSync();
+    } catch (e) {
+        // Best-effort: a malformed config file shouldn't turn the probe
+        // into a hard failure — fall through and report what's missing.
+        debugError(`Failed to reload config during readiness check: ${e}`);
+    }
     const missing: string[] = [];
     if (!process.env.SPOTIFY_APP_CLI) missing.push("SPOTIFY_APP_CLI");
     if (!process.env.SPOTIFY_APP_CLISEC) missing.push("SPOTIFY_APP_CLISEC");
@@ -90,6 +105,21 @@ export async function checkPlayerReadiness(): Promise<ReadinessReport> {
         };
     }
     if (missing.length === 0) return { state: "ready" };
+    // The settings can also be "missing" because the whole `spotify:`
+    // section was rejected — a leftover `<value>` placeholder, a port
+    // that isn't a number. Say so, otherwise the user is told to add
+    // settings they can plainly see in the file.
+    const problem = getConfigProblems().find((p) => p.section === "spotify");
+    if (problem !== undefined) {
+        return {
+            state: "setup-required",
+            message: `Spotify configuration is invalid and was ignored: ${problem.message}`,
+            details: configSetupHint(
+                missing,
+                "Replace any placeholder with a real value — `clientId` and `clientSecret` come from the Spotify developer dashboard for your app, and `port` is the (unquoted, numeric) redirect port you registered there. Then run `@config agent refresh player`.",
+            ),
+        };
+    }
     return {
         state: "setup-required",
         message: `Spotify is not configured. Missing: ${configKeyNames(missing).join(", ")}.`,

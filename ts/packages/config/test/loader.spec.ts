@@ -4,7 +4,12 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { loadConfigSync, loadConfig } from "../src/loader.js";
+import {
+    loadConfigSync,
+    loadConfig,
+    reloadConfigSync,
+    getConfigProblems,
+} from "../src/loader.js";
 
 function makeTempWorkspace(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-config-test-"));
@@ -258,6 +263,66 @@ describe("loadConfig (async)", () => {
         } finally {
             fs.rmSync(root, { recursive: true, force: true });
             delete process.env.OPENAI_API_KEY;
+        }
+    });
+});
+
+describe("invalid sections", () => {
+    const trackedKeys = ["OPENAI_API_KEY", "SPOTIFY_APP_PORT"];
+    afterEach(() => cleanProcessEnv(trackedKeys));
+
+    test("skips only the bad section and reports it as a problem", () => {
+        const root = makeTempWorkspace();
+        try {
+            fs.writeFileSync(
+                path.join(root, "config.local.yaml"),
+                [
+                    "openai:",
+                    "  api_key: good",
+                    "spotify:",
+                    "  port: <value>",
+                ].join("\n"),
+            );
+            cleanProcessEnv(trackedKeys);
+            const warn = console.warn;
+            console.warn = () => {};
+            try {
+                const result = loadConfigSync({
+                    workspaceRoot: root,
+                    strict: true,
+                    populateProcessEnv: false,
+                });
+                expect(result.env.OPENAI_API_KEY).toBe("good");
+                expect(result.env.SPOTIFY_APP_PORT).toBeUndefined();
+            } finally {
+                console.warn = warn;
+            }
+            const problems = getConfigProblems();
+            expect(problems.map((p) => p.section)).toContain("spotify");
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+});
+
+describe("reloadConfigSync", () => {
+    afterEach(() => cleanProcessEnv(["OPENAI_API_KEY"]));
+
+    test("overwrites an existing process.env value and reports the change", () => {
+        const root = makeTempWorkspace();
+        try {
+            const file = path.join(root, "config.local.yaml");
+            fs.writeFileSync(file, "openai:\n  api_key: first\n");
+            cleanProcessEnv(["OPENAI_API_KEY"]);
+            loadConfigSync({ workspaceRoot: root });
+            expect(process.env.OPENAI_API_KEY).toBe("first");
+
+            fs.writeFileSync(file, "openai:\n  api_key: second\n");
+            const changed = reloadConfigSync({ workspaceRoot: root });
+            expect(process.env.OPENAI_API_KEY).toBe("second");
+            expect(changed).toContain("OPENAI_API_KEY");
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
         }
     });
 });

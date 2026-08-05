@@ -4,8 +4,11 @@
 export {
     loadConfig,
     loadConfigSync,
+    reloadConfigSync,
+    getConfigProblems,
     computeConfigDrift,
     resolveLocalConfigPath,
+    type ConfigProblem,
 } from "./loader.js";
 export { flatten, mergeFlat } from "./flatten.js";
 export {
