@@ -184,7 +184,7 @@ interface GrammarExpander {
 }
 
 class LLMGrammarExpander implements GrammarExpander {
-  constructor(private inferenceClient: LLMClient) {}
+  constructor(private llmClient: LLMClient) {}
 
   async expandAction(
     metadata: ActionMetadata,
@@ -192,7 +192,7 @@ class LLMGrammarExpander implements GrammarExpander {
     targetCount: number,
   ): Promise<string[]> {
     const prompt = this.buildExpansionPrompt(metadata, language, targetCount);
-    const response = await this.inferenceClient.complete(prompt);
+    const response = await this.llmClient.complete(prompt);
     return this.parsePatterns(response);
   }
 }

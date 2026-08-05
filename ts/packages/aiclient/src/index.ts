@@ -3,9 +3,7 @@
 
 export * from "./common.js";
 export * from "./models.js";
-export * as inferenceClient from "./inferenceClient.js";
-// Back-compat alias — prefer inferenceClient.
-export * as openai from "./inferenceClient.js";
+export * as openai from "./openai.js";
 export * as bing from "./bing.js";
 export * from "./restClient.js";
 export * from "./auth.js";

@@ -10,7 +10,7 @@ import {
     openAIApiSettingsFromConfig,
 } from "../src/index.js";
 import { azureApiSettingsFromEnv } from "../src/azureSettings.js";
-import { ModelType } from "../src/inferenceClient.js";
+import { ModelType } from "../src/openai.js";
 
 describe("apiSettingsFromConfig: typed-config path equivalence", () => {
     test("Azure chat single deployment matches env-based path", () => {

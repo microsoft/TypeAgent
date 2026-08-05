@@ -16,7 +16,7 @@ import {
     reverseGeocode,
     ReverseGeocodeAddressLookup,
 } from "./location.js";
-import { inferenceClient } from "@typeagent/aiclient";
+import { openai } from "@typeagent/aiclient";
 import { getMimeTypeFromFileExtension } from "./mimeTypes.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -223,7 +223,7 @@ export async function addImagePromptContent(
     // Resolve the image's GPS position once. If the image has no GPS EXIF
     // (e.g. a webcam capture from the photo agent) skip POI / reverse-geocode
     // lookups entirely — both helpers early-return for `position === undefined`,
-    // and `inferenceClient.apiSettingsFromEnv()` (which they accept but ignore) throws
+    // and `openai.apiSettingsFromEnv()` (which they accept but ignore) throws
     // `Missing ApiSetting: AZURE_OPENAI_ENDPOINT` when only suffixed Azure
     // deployments are configured.
     const gpsPosition = image.exifTags
@@ -239,7 +239,7 @@ export async function addImagePromptContent(
     if (gpsPosition !== undefined) {
         retValue.nearbyPOI = await findNearbyPointsOfInterest(
             gpsPosition,
-            inferenceClient.apiSettingsFromEnv(),
+            openai.apiSettingsFromEnv(),
         );
     }
     if (includePOI !== false) {
@@ -253,7 +253,7 @@ export async function addImagePromptContent(
     if (gpsPosition !== undefined) {
         retValue.reverseGeocode = await reverseGeocode(
             gpsPosition,
-            inferenceClient.apiSettingsFromEnv(),
+            openai.apiSettingsFromEnv(),
         );
     }
 

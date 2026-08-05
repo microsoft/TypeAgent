@@ -48,7 +48,7 @@ import {
     getNamespaceForCache,
 } from "../schemaInfoProvider.js";
 import { ParamSpec } from "@typeagent/action-schema";
-import { inferenceClient } from "@typeagent/aiclient";
+import { openai } from "@typeagent/aiclient";
 import {
     PropertyExplainer,
     createPropertyExplainer,
@@ -315,7 +315,7 @@ async function augmentExplanation(
             if (paramRange) {
                 const subPhrases = param.propertySubPhrases;
                 if (subPhrases.length === 1) {
-                    const model = inferenceClient.createChatModel(
+                    const model = openai.createChatModel(
                         undefined,
                         {
                             response_format: { type: "json_object" },

@@ -6,7 +6,7 @@ loadConfigSync();
 import {
     ChatModel,
     hasEnvSettings,
-    inferenceClient,
+    openai,
     TextEmbeddingModel,
 } from "@typeagent/aiclient";
 import { TextBlock, TextBlockType } from "../src/text.js";
@@ -40,10 +40,10 @@ export function shouldSkip() {
 
 export function hasTestKeys() {
     const hasKeys: boolean =
-        hasEnvSettings(process.env, inferenceClient.EnvVars.AZURE_OPENAI_API_KEY) &&
+        hasEnvSettings(process.env, openai.EnvVars.AZURE_OPENAI_API_KEY) &&
         hasEnvSettings(
             process.env,
-            inferenceClient.EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING,
+            openai.EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING,
         );
     return hasKeys;
 }
@@ -61,11 +61,11 @@ export function createTestModels(): TestModels {
 }
 
 export function createTestChatModel() {
-    return inferenceClient.createChatModelDefault("knowpro-test");
+    return openai.createChatModelDefault("knowpro-test");
 }
 
 export function createTestEmbeddingModel() {
-    return inferenceClient.createEmbeddingModel();
+    return openai.createEmbeddingModel();
 }
 
 export function getRootDataPath() {

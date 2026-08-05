@@ -30,7 +30,7 @@ import type {
     EndpointPoolMember,
 } from "./endpointPool.js";
 import { ModelProviders, ModelType } from "./apiTypes.js";
-import type { ApiSettings } from "./inferenceClient.js";
+import type { ApiSettings } from "./openai.js";
 import type { FetchThrottler } from "./restClient.js";
 
 const debugPool = registerDebug("typeagent:pool");

@@ -18,7 +18,7 @@ import {
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 import { createTypeChat } from "@typeagent/agent-runtime";
-import { inferenceClient } from "@typeagent/aiclient";
+import { openai } from "@typeagent/aiclient";
 import { SelfHelpAction } from "./selfHelpSchema.js";
 import {
     CommandHelpResponse,
@@ -96,7 +96,7 @@ async function answerCommandQuestion(
         completion_tokens: 0,
         total_tokens: 0,
     };
-    const chatModel = inferenceClient.createChatModel(
+    const chatModel = openai.createChatModel(
         undefined,
         { response_format: { type: "json_object" } },
         undefined,

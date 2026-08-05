@@ -3,7 +3,7 @@
 
 import fs from "node:fs";
 import { LookupOptions, extractEntities } from "@typeagent/agent-runtime";
-import { ChatModel, inferenceClient } from "@typeagent/aiclient";
+import { ChatModel, openai } from "@typeagent/aiclient";
 import { ActionContext, ActionResult, Entity } from "@typeagent/agent-sdk";
 import {
     createActionResultFromError,
@@ -159,11 +159,11 @@ export async function getLookupSettings(
     }
     fastModelName ??= "GPT_35_TURBO";
     const fastModel =
-        inferenceClient.createLocalChatModel(fastModelName, undefined, [
+        openai.createLocalChatModel(fastModelName, undefined, [
             "chatResponseHandler",
         ]) ??
-        inferenceClient.createJsonChatModel(fastModelName, ["chatResponseHandler"]);
-    const generalModel = inferenceClient.createJsonChatModel(undefined, [
+        openai.createJsonChatModel(fastModelName, ["chatResponseHandler"]);
+    const generalModel = openai.createJsonChatModel(undefined, [
         "chatResponseHandler",
     ]);
     rewriteFocus ??=

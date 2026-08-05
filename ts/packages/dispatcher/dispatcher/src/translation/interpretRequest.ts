@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { inferenceClient as ai } from "@typeagent/aiclient";
+import { openai as ai } from "@typeagent/aiclient";
 import { HistoryContext, RequestAction } from "@typeagent/agent-cache";
 import {
     getActivityActiveSchemas,

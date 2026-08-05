@@ -22,7 +22,7 @@ import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
 import { loadConfigSync } from "@typeagent/config";
 //import * as Filter from "./trackFilter.js";
-import { inferenceClient, ChatModelWithStreaming } from "@typeagent/aiclient";
+import { openai, ChatModelWithStreaming } from "@typeagent/aiclient";
 import {
     AlbumTrackCollection,
     ITrackCollection,
@@ -127,7 +127,7 @@ function createNotFoundActionResult(kind: string, queryString?: string) {
 let languageModel: ChatModelWithStreaming | undefined;
 // Returns the chat model used for LLM-backed track filtering.
 //
-// Uses an aiclient model (inferenceClient.createChatModel) instead of typechat's
+// Uses an aiclient model (openai.createChatModel) instead of typechat's
 // createLanguageModel: the bare TypeChatLanguageModel returned by
 // createLanguageModel does not surface token usage (its complete() only
 // yields the response text), whereas the aiclient model exposes
@@ -141,7 +141,7 @@ export function getTypeChatLanguageModel(tokenUsage?: ActionTokenUsage) {
         loadConfigSync();
         // No explicit settings => initialize from the standard TypeChat env
         // variables, matching the previous createLanguageModel(process.env).
-        languageModel = inferenceClient.createChatModel(
+        languageModel = openai.createChatModel(
             undefined,
             undefined,
             undefined,

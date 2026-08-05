@@ -3,7 +3,7 @@
 
 import { DefaultAzureCredential } from "@azure/identity";
 import { TypeAgentStorageProvider } from "../storageProvider.js";
-import { getEnvSetting, inferenceClient } from "@typeagent/aiclient";
+import { getEnvSetting, openai } from "@typeagent/aiclient";
 import { env } from "node:process";
 import {
     BlobServiceClient,
@@ -24,14 +24,14 @@ export class AzureStorageProvider implements TypeAgentStorageProvider {
     constructor() {
         this.storageAccount = getEnvSetting(
             env,
-            inferenceClient.EnvVars.AZURE_STORAGE_ACCOUNT,
+            openai.EnvVars.AZURE_STORAGE_ACCOUNT,
             undefined,
             undefined,
         );
 
         this.containerName = getEnvSetting(
             env,
-            inferenceClient.EnvVars.AZURE_STORAGE_CONTAINER,
+            openai.EnvVars.AZURE_STORAGE_CONTAINER,
             undefined,
             "",
         );

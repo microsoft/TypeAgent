@@ -21,7 +21,7 @@ import { getTabHTMLFragments, CompressionMode } from "./capture";
 import { screenshotCoordinator } from "./screenshotCoordinator";
 import { runBrowserAction } from "./browserActions";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
-//import { inferenceClient } from "@typeagent/aiclient";
+//import { openai } from "@typeagent/aiclient";
 
 async function ensureActiveTab() {
     const targetTab = await getActiveTab();
@@ -304,7 +304,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             // const score_threshold = 0.85;
             // const titleEmbedding: NormalizedEmbedding[] = [];
             // const urlEmbedding: NormalizedEmbedding[] = [];
-            //  const embeddingModel = inferenceClient.createEmbeddingModel();
+            //  const embeddingModel = openai.createEmbeddingModel();
             // const queryEmbedding = await generateEmbedding(embeddingModel, tabDescription);
 
             // const tabData: any[] = [];

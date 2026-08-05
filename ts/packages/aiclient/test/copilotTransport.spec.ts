@@ -8,7 +8,7 @@ import {
     CopilotEndpointUnavailableError,
 } from "../src/copilotModels.js";
 import { CopilotApiSettings } from "../src/copilotSettings.js";
-import { ModelType } from "../src/inferenceClient.js";
+import { ModelType } from "../src/openai.js";
 import { PromptSection } from "typechat";
 
 function makeSettings(): CopilotApiSettings {

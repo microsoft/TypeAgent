@@ -6,7 +6,7 @@ import {
     AzureTokenScopes,
     createAzureTokenProvider,
     getEnvSetting,
-    inferenceClient,
+    openai,
 } from "@typeagent/aiclient";
 import { StringArrayTag, TypedTag, XmpTag } from "exifreader";
 import { env } from "process";
@@ -105,7 +105,7 @@ export function exifGPSTagToLatLong(
  */
 export async function findNearbyPointsOfInterest(
     position: LatLong | undefined,
-    settings: inferenceClient.ApiSettings,
+    settings: openai.ApiSettings,
     maxSearchRadius: number = 10000,
     minResultCount: number = 1,
 ): Promise<PointOfInterest[]> {
@@ -127,12 +127,12 @@ export async function findNearbyPointsOfInterest(
         do {
             //let fuzzySearch = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/fuzzy/json?api-version=1.0&query={lat,long}`
             //let poi = `${getEnvSetting(env, EnvVars.AZURE_MAPS_ENDPOINT)}search/poi/{format}?api-version=1.0&lat={LAT}&lon={LON}`
-            const nearby = `${getEnvSetting(env, inferenceClient.EnvVars.AZURE_MAPS_ENDPOINT)}search/nearby/json?api-version=1.0&lat=${position.latitude}&lon=${position.longitude}&radius=${radii[index]}`;
+            const nearby = `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_ENDPOINT)}search/nearby/json?api-version=1.0&lat=${position.latitude}&lon=${position.longitude}&radius=${radii[index]}`;
             const options: RequestInit = {
                 method: "GET",
                 headers: new Headers({
                     Authorization: `Bearer ${tokenResult.data}`,
-                    "x-ms-client-id": `${getEnvSetting(env, inferenceClient.EnvVars.AZURE_MAPS_CLIENTID)}`,
+                    "x-ms-client-id": `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_CLIENTID)}`,
                 }),
             };
 
@@ -176,7 +176,7 @@ export async function findNearbyPointsOfInterest(
 
 export async function reverseGeocode(
     position: LatLong | undefined,
-    settings: inferenceClient.ApiSettings,
+    settings: openai.ApiSettings,
 ): Promise<ReverseGeocodeAddressLookup[]> {
     if (position === undefined) {
         return [];
@@ -189,13 +189,13 @@ export async function reverseGeocode(
             return [];
         }
 
-        const reverseGeocode = `${getEnvSetting(env, inferenceClient.EnvVars.AZURE_MAPS_ENDPOINT)}reverseGeocode?api-version=2023-06-01&coordinates=${position.longitude},${position.latitude}`;
+        const reverseGeocode = `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_ENDPOINT)}reverseGeocode?api-version=2023-06-01&coordinates=${position.longitude},${position.latitude}`;
 
         const options: RequestInit = {
             method: "GET",
             headers: new Headers({
                 Authorization: `Bearer ${tokenResult.data}`,
-                "x-ms-client-id": `${getEnvSetting(env, inferenceClient.EnvVars.AZURE_MAPS_CLIENTID)}`,
+                "x-ms-client-id": `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_CLIENTID)}`,
             }),
         };
 

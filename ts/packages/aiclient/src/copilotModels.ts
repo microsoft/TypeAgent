@@ -552,7 +552,7 @@ export function createCopilotEndpointProvider(
 }
 
 // The copilot provider registers its chat-model factory here so that
-// inferenceClient.ts can dispatch to it via the registry without importing this
+// openai.ts can dispatch to it via the registry without importing this
 // module directly (breaks a circular dependency).
 registerProviderChatModel(
     "copilot",
@@ -786,7 +786,7 @@ export function createCopilotTransportModel(
 
         // BUGBUG - image_url content with streaming token usage reporting is
         // broken on the Azure-backed endpoints (usage chunk never arrives). We
-        // mirror the Azure path (inferenceClient.ts) and disable include_usage when the
+        // mirror the Azure path (openai.ts) and disable include_usage when the
         // prompt carries images. Vision input itself streams fine.
         const includeUsage = !hasImageContent(messages);
 

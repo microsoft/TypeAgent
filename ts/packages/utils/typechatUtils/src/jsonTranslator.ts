@@ -14,7 +14,7 @@ import {
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import registerDebug from "debug";
 import {
-    inferenceClient as ai,
+    openai as ai,
     CompleteUsageStatsCallback,
     CompletionJsonSchema,
 } from "@typeagent/aiclient";

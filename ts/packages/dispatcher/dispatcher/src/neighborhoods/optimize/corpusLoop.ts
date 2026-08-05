@@ -34,7 +34,7 @@ import {
 import type { CaseResult, EvaluationResult, OptimizationRun } from "./types.js";
 import { DEFAULT_CONCURRENCY, ensureDir, pmap } from "./util.js";
 
-import { inferenceClient, type ChatModel } from "@typeagent/aiclient";
+import { openai, type ChatModel } from "@typeagent/aiclient";
 import { schemaGuidelines } from "../../translation/schemaGuidelines.js";
 
 // =============================================================================
@@ -222,7 +222,7 @@ export async function runCorpusLoop(
                 neighborhood: c.neighborhood,
                 translationResults,
                 provider: opts.sourceProvider,
-                createModel: (name) => inferenceClient.createChatModel(name),
+                createModel: (name) => openai.createChatModel(name),
                 schemaGuidelines,
                 ...(opts.dryRun && { skipLLM: true }),
                 severityTier: pickSeverity(c.neighborhood, gravity),
@@ -397,7 +397,7 @@ function createProposeModel(
     // same run skip the probe.
 
     const buildModel = (choice: TokenParamChoice) =>
-        inferenceClient.createChatModel(
+        openai.createChatModel(
             endpointName,
             choice.param === "max_completion_tokens"
                 ? { max_completion_tokens: choice.cap }

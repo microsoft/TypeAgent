@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { EnvVars, ModelType } from "./apiTypes.js";
-import type { CommonApiSettings } from "./inferenceClient.js";
+import type { CommonApiSettings } from "./openai.js";
 import { getEnvSetting, getIntFromEnv } from "./common.js";
 
 export type OpenAIApiSettings = CommonApiSettings & {

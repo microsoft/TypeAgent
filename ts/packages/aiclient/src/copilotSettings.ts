@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ModelType } from "./apiTypes.js";
-import type { CommonApiSettings } from "./inferenceClient.js";
+import type { CommonApiSettings } from "./openai.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
 
 export type CopilotReasoningEffort = "low" | "medium" | "high" | "xhigh";

@@ -32,7 +32,7 @@ import {
 } from "./auth.js";
 import type { AzureApiSettings } from "./azureSettings.js";
 import { ModelType } from "./apiTypes.js";
-import type { ApiSettings } from "./inferenceClient.js";
+import type { ApiSettings } from "./openai.js";
 import type { OpenAIApiSettings } from "./openaiSettings.js";
 
 const azureTokenProvider = createAzureTokenProvider(

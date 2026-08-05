@@ -436,7 +436,7 @@ ${this.generateExamples(action, scenario, language)}
 NOW GENERATE ${count} PATTERNS:
 `;
 
-    const response = await this.inferenceClient.complete(prompt);
+    const response = await this.llmClient.complete(prompt);
     return this.parsePatterns(response);
   }
 

@@ -19,7 +19,7 @@ import {
 import {
     ChatModelWithStreaming,
     CompletionSettings,
-    inferenceClient,
+    openai,
 } from "@typeagent/aiclient";
 import { PromptSection, Result } from "typechat";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
@@ -221,18 +221,18 @@ export class GreetingCommandHandler implements CommandHandler {
     }
 
     private createModel(fastModel: boolean = true): ChatModelWithStreaming {
-        let apiSettings: inferenceClient.ApiSettings | undefined;
+        let apiSettings: openai.ApiSettings | undefined;
         if (!apiSettings) {
             if (fastModel) {
-                apiSettings = inferenceClient.localOpenAIApiSettingsFromEnv(
-                    inferenceClient.ModelType.Chat,
+                apiSettings = openai.localOpenAIApiSettingsFromEnv(
+                    openai.ModelType.Chat,
                     undefined,
                     "GPT_35_TURBO",
                     ["greeting"],
                 );
             } else {
                 // Create default model
-                apiSettings = inferenceClient.apiSettingsFromEnv();
+                apiSettings = openai.apiSettingsFromEnv();
             }
         }
         const completionSettings: CompletionSettings = {
@@ -242,7 +242,7 @@ export class GreetingCommandHandler implements CommandHandler {
             // createChatModel will remove it if the model doesn't support it
             response_format: { type: "json_object" },
         };
-        const chatModel = inferenceClient.createChatModel(
+        const chatModel = openai.createChatModel(
             apiSettings,
             completionSettings,
             undefined,

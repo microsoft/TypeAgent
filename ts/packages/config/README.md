@@ -28,7 +28,7 @@ Live Azure Key Vault fetch, encrypted on-disk caching, and the
 ## Flattening rules
 
 YAML maps are flattened into the `EnvVars` flat-key shape used by
-[packages/aiclient/src/inferenceClient.ts](../aiclient/src/inferenceClient.ts):
+[packages/aiclient/src/openai.ts](../aiclient/src/openai.ts):
 
 | YAML path                                          | Flat key                               |
 | -------------------------------------------------- | -------------------------------------- |

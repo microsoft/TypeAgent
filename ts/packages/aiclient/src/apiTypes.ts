@@ -3,7 +3,7 @@
 
 // Foundational, dependency-free API types shared across the aiclient
 // provider modules. Kept in a leaf module (no intra-package imports) so that
-// inferenceClient.ts and the provider/settings modules can share these enums and types
+// openai.ts and the provider/settings modules can share these enums and types
 // without importing each other, which would form circular dependencies.
 
 export enum ModelType {

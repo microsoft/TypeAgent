@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { inferenceClient } from "@typeagent/aiclient";
+import { openai } from "@typeagent/aiclient";
 import {
     readJsonFile,
     removeFile,
@@ -12,7 +12,7 @@ export type ItemIndexingStats = {
     name?: string | undefined;
     timeMs: number;
     charCount: number;
-    tokenStats: inferenceClient.CompletionUsageStats;
+    tokenStats: openai.CompletionUsageStats;
 };
 
 export interface IndexingStats {
@@ -21,7 +21,7 @@ export interface IndexingStats {
     clear(): void;
     startItem(name?: string): void;
     updateCurrent(timeMs: number, charCount: number): void;
-    updateCurrentTokenStats(stats: inferenceClient.CompletionUsageStats): void;
+    updateCurrentTokenStats(stats: openai.CompletionUsageStats): void;
 }
 
 export function createIndexingStats(
@@ -54,7 +54,7 @@ export function createIndexingStats(
         }
     }
 
-    function updateCurrentTokenStats(stats: inferenceClient.CompletionUsageStats): void {
+    function updateCurrentTokenStats(stats: openai.CompletionUsageStats): void {
         const totalStats = indexingStats.totalStats;
         totalStats.tokenStats.completion_tokens += stats.completion_tokens;
         totalStats.tokenStats.prompt_tokens += stats.prompt_tokens;
@@ -79,7 +79,7 @@ export function createIndexingStats(
         };
     }
 
-    function emptyTokenStats(): inferenceClient.CompletionUsageStats {
+    function emptyTokenStats(): openai.CompletionUsageStats {
         return {
             completion_tokens: 0,
             prompt_tokens: 0,

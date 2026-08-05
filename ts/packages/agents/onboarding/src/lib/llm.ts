@@ -10,7 +10,7 @@
 // model. When omitted the model is determined by the OPENAI_MODEL /
 // AZURE_OPENAI_CHAT_MODEL_DEPLOYMENT_NAME environment variable.
 
-import { ChatModel, inferenceClient } from "@typeagent/aiclient";
+import { ChatModel, openai } from "@typeagent/aiclient";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 // ---------------------------------------------------------------------------
@@ -66,7 +66,7 @@ function instrumentModel<T extends ChatModel>(model: T): T {
 
 export function getDiscoveryModel(endpoint?: string): ChatModel {
     return instrumentModel(
-        inferenceClient.createChatModel(endpoint, undefined, undefined, [
+        openai.createChatModel(endpoint, undefined, undefined, [
             "onboarding:discovery",
         ]),
     );
@@ -74,7 +74,7 @@ export function getDiscoveryModel(endpoint?: string): ChatModel {
 
 export function getPhraseGenModel(endpoint?: string): ChatModel {
     return instrumentModel(
-        inferenceClient.createChatModel(endpoint, undefined, undefined, [
+        openai.createChatModel(endpoint, undefined, undefined, [
             "onboarding:phrasegen",
         ]),
     );
@@ -82,7 +82,7 @@ export function getPhraseGenModel(endpoint?: string): ChatModel {
 
 export function getSchemaGenModel(endpoint?: string): ChatModel {
     return instrumentModel(
-        inferenceClient.createChatModel(endpoint, undefined, undefined, [
+        openai.createChatModel(endpoint, undefined, undefined, [
             "onboarding:schemagen",
         ]),
     );
@@ -90,7 +90,7 @@ export function getSchemaGenModel(endpoint?: string): ChatModel {
 
 export function getGrammarGenModel(endpoint?: string): ChatModel {
     return instrumentModel(
-        inferenceClient.createChatModel(endpoint, undefined, undefined, [
+        openai.createChatModel(endpoint, undefined, undefined, [
             "onboarding:grammargen",
         ]),
     );
@@ -98,7 +98,7 @@ export function getGrammarGenModel(endpoint?: string): ChatModel {
 
 export function getTestingModel(endpoint?: string): ChatModel {
     return instrumentModel(
-        inferenceClient.createChatModel(endpoint, undefined, undefined, [
+        openai.createChatModel(endpoint, undefined, undefined, [
             "onboarding:testing",
         ]),
     );
@@ -106,7 +106,7 @@ export function getTestingModel(endpoint?: string): ChatModel {
 
 export function getPackagingModel(endpoint?: string): ChatModel {
     return instrumentModel(
-        inferenceClient.createChatModel(endpoint, undefined, undefined, [
+        openai.createChatModel(endpoint, undefined, undefined, [
             "onboarding:packaging",
         ]),
     );
@@ -118,7 +118,7 @@ export function getPackagingModel(endpoint?: string): ChatModel {
 // vectors for context-weighted collision resolution.
 export function getKeywordGenModel(endpoint?: string): ChatModel {
     return instrumentModel(
-        inferenceClient.createChatModel(endpoint, undefined, undefined, [
+        openai.createChatModel(endpoint, undefined, undefined, [
             "onboarding:keywordgen",
         ]),
     );
@@ -128,7 +128,7 @@ export function getExploreModel(endpoint?: string): ChatModel {
     // Default to GPT-5 — exploration benefits from reasoning when picking
     // the next frontier action and recognizing modal vs. neutral states.
     return instrumentModel(
-        inferenceClient.createChatModel(endpoint ?? "GPT_5", undefined, undefined, [
+        openai.createChatModel(endpoint ?? "GPT_5", undefined, undefined, [
             "onboarding:explore",
         ]),
     );
@@ -139,7 +139,7 @@ export function getSynthesisModel(endpoint?: string): ChatModel {
     // action emission, validation) is structural reasoning over a large
     // graph — a reasoning model produces dramatically better aggregation.
     return instrumentModel(
-        inferenceClient.createChatModel(endpoint ?? "GPT_5", undefined, undefined, [
+        openai.createChatModel(endpoint ?? "GPT_5", undefined, undefined, [
             "onboarding:synthesis",
         ]),
     );
@@ -152,7 +152,7 @@ export function getReconModel(endpoint?: string): ChatModel {
     // not supported" for image_url content; GPT-4o uses a /v1/ URL shape
     // that aiclient doesn't construct correctly.)
     return instrumentModel(
-        inferenceClient.createChatModel(endpoint ?? "GPT_v", undefined, undefined, [
+        openai.createChatModel(endpoint ?? "GPT_v", undefined, undefined, [
             "onboarding:recon",
         ]),
     );

@@ -3,7 +3,7 @@
 
 import { createSemanticList, cleanDir } from "@typeagent/agent-runtime";
 import { getRootDataPath, hasTestKeys, testIf } from "./testCore.js";
-import { inferenceClient, TextEmbeddingModel } from "@typeagent/aiclient";
+import { openai, TextEmbeddingModel } from "@typeagent/aiclient";
 import { createEntitySearchOptions } from "../src/conversation/entities.js";
 import { createAliasMatcher, TextTable } from "../src/textMatcher.js";
 import { createFileSystemStorageProvider } from "../src/storageProvider.js";
@@ -30,7 +30,7 @@ describe("TextMatchers", () => {
 
     beforeAll(() => {
         if (hasTestKeys()) {
-            embeddingModel = inferenceClient.createEmbeddingModel();
+            embeddingModel = openai.createEmbeddingModel();
         }
     });
     testIf(

@@ -7,7 +7,7 @@ loadConfigSync();
 
 import { getData } from "typechat";
 import { testIf } from "./testCore.js";
-import { ApiSettings, createChatModel, ModelType } from "../src/inferenceClient.js";
+import { ApiSettings, createChatModel, ModelType } from "../src/openai.js";
 
 // One live integration test per wire-api. Each is skipped unless the
 // operator supplies a full endpoint URL + API key (and, for the

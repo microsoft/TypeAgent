@@ -9,7 +9,7 @@ import {
 } from "@typeagent/agent-runtime";
 import {
     TextEmbeddingModel,
-    inferenceClient,
+    openai,
     isEmbeddingAvailable,
 } from "@typeagent/aiclient";
 import registerDebug from "debug";
@@ -80,8 +80,8 @@ export function createConversationNameIndex(
     const embeddingModel: TextEmbeddingModel | undefined =
         modelOverride ??
         (isEmbeddingAvailable()
-            ? inferenceClient.createEmbeddingModel(
-                  inferenceClient.apiSettingsFromEnv(inferenceClient.ModelType.Embedding),
+            ? openai.createEmbeddingModel(
+                  openai.apiSettingsFromEnv(openai.ModelType.Embedding),
               )
             : undefined);
 

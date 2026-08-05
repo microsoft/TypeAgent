@@ -16,7 +16,7 @@ import { emitActionResult } from "../../../execute/actionHandlers.js";
 
 import { simpleStarRegex } from "@typeagent/common-utils";
 import {
-    inferenceClient as ai,
+    openai as ai,
     getChatModelNames,
     getCopilotClient,
     getActiveModelProvider,

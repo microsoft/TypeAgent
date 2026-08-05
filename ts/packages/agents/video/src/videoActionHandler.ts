@@ -15,7 +15,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 import {
     ImageInPaintItem,
-    inferenceClient,
+    openai,
     VideoGenerationJob,
 } from "@typeagent/aiclient";
 import { CreateVideoAction, VideoAction } from "./videoActionSchema.js";
@@ -37,7 +37,7 @@ async function executeVideoAction(
     action: AppAction,
     context: ActionContext<VideoActionContext>,
 ) {
-    // The video-generation API (inferenceClient.createVideoModel) only submits an async
+    // The video-generation API (openai.createVideoModel) only submits an async
     // job and exposes no token/usage stats, and VideoModel has no
     // completionCallback. Report all-zero usage so the agent participates in
     // the token-usage contract: all-zero => ran but no LLM tokens reported
@@ -69,7 +69,7 @@ async function handleVideoAction(
             const createVideoAction: CreateVideoAction =
                 action as CreateVideoAction;
             // TODO: dynamic duration
-            const videoModel = inferenceClient.createVideoModel();
+            const videoModel = openai.createVideoModel();
             const response = await videoModel.generateVideo(
                 createVideoAction.parameters.caption,
                 1,

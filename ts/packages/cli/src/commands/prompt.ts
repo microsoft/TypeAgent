@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { inferenceClient, getChatModelNames } from "@typeagent/aiclient";
+import { openai, getChatModelNames } from "@typeagent/aiclient";
 import fs from "node:fs";
 import chalk from "chalk";
 import { createPromptLogger } from "@typeagent/telemetry";
@@ -33,7 +33,7 @@ export default class Prompt extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(Prompt);
-        const model = inferenceClient.createChatModel(
+        const model = openai.createChatModel(
             flags.model,
             flags.json
                 ? {

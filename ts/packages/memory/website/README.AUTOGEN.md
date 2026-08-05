@@ -43,7 +43,7 @@ To use the `website-memory` package, follow these steps to configure the environ
 3. **Configure AI Models**:
    - Use the `@typeagent/aiclient` package to configure AI models. For example:
      ```typescript
-     import { inferenceClient as ai } from "aiclient";
+     import { openai as ai } from "aiclient";
      const apiSettings = ai.azureApiSettingsFromEnv(ai.ModelType.Chat);
      const languageModel = ai.createChatModel(apiSettings);
      ```

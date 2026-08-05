@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { inferenceClient } from "@typeagent/aiclient";
+import { openai } from "@typeagent/aiclient";
 import { createEmbeddingCache } from "../src/modelCache.js";
 import { hasTestKeys, testIf } from "./testCore.js";
 import { getData } from "typechat";
@@ -21,7 +21,7 @@ describe("modelCache", () => {
         () => hasTestKeys(),
         async () => {
             const cacheSize = 3;
-            const embeddingModel = inferenceClient.createEmbeddingModel();
+            const embeddingModel = openai.createEmbeddingModel();
             const model = createEmbeddingCache(embeddingModel, cacheSize);
             for (let i = 0; i < cacheSize; ++i) {
                 await model.generateEmbedding(texts[i]);
@@ -57,7 +57,7 @@ describe("modelCache", () => {
         () => hasTestKeys(),
         async () => {
             const cacheSize = 3;
-            const embeddingModel = inferenceClient.createEmbeddingModel();
+            const embeddingModel = openai.createEmbeddingModel();
             const model = createEmbeddingCache(embeddingModel, cacheSize);
             let embeddings = getData(
                 await model.generateEmbeddingBatch!(

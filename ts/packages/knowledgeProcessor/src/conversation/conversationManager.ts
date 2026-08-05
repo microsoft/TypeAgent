@@ -4,7 +4,7 @@
 import path from "path";
 import {
     ChatModel,
-    inferenceClient,
+    openai,
     tryCreateEmbeddingModel,
 } from "@typeagent/aiclient";
 import {
@@ -196,7 +196,7 @@ export async function createConversationManager(
 ): Promise<ConversationManager<string, string>> {
     const conversationSettings = createConversationSettings();
     const chatModel =
-        settings.model ?? inferenceClient.createChatModelDefault("conversationManager");
+        settings.model ?? openai.createChatModelDefault("conversationManager");
     const knowledgeModel = chatModel;
     const answerModel = settings.answerModel ?? chatModel;
 
