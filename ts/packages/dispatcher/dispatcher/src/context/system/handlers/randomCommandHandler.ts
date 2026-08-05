@@ -11,7 +11,7 @@ import { processCommandNoLock } from "../../../command/command.js";
 import {
     ChatModelWithStreaming,
     CompletionSettings,
-    openai,
+    inferenceClient,
 } from "@typeagent/aiclient";
 import { createTypeChat, promptLib } from "@typeagent/agent-runtime";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
@@ -158,17 +158,17 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
     }
 
     private createModel(): ChatModelWithStreaming {
-        let apiSettings: openai.ApiSettings | undefined;
+        let apiSettings: inferenceClient.ApiSettings | undefined;
         if (!apiSettings) {
             // Create default model
-            apiSettings = openai.apiSettingsFromEnv();
+            apiSettings = inferenceClient.apiSettingsFromEnv();
         }
         const completionSettings: CompletionSettings = {
             temperature: 1.0,
             max_tokens: 1000, // Max response tokens
             response_format: { type: "json_object" }, // createChatModel will remove it if the model doesn't support it
         };
-        const chatModel = openai.createChatModel(
+        const chatModel = inferenceClient.createChatModel(
             apiSettings,
             completionSettings,
             undefined,

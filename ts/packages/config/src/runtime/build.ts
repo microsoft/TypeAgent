@@ -30,6 +30,7 @@ import {
 import {
     AuthMode,
     authModeFromString,
+    DEFAULT_WIRE_API,
     wireApiFromString,
     Config,
     Deployment,
@@ -112,7 +113,11 @@ function makeEndpoint(
         priority: priority ?? defaultPriority(mode),
         ...(capacity !== undefined ? { capacity } : {}),
         ...(tpm !== undefined ? { tpm } : {}),
-        ...(wireApi !== undefined ? { wireApi } : {}),
+        // Collapse explicit default so omit and wireApi:chat_completions
+        // project identically (back-compat flat env).
+        ...(wireApi !== undefined && wireApi !== DEFAULT_WIRE_API
+            ? { wireApi }
+            : {}),
     };
     return ep;
 }
@@ -386,7 +391,9 @@ function parsePoolOverride(
             if (typeof o.tpm === "number") ov.tpm = o.tpm;
             if (typeof o.wireApi === "string") {
                 const at = wireApiFromString(o.wireApi);
-                if (at !== undefined) ov.wireApi = at;
+                if (at !== undefined && at !== DEFAULT_WIRE_API) {
+                    ov.wireApi = at;
+                }
             }
             out.push(ov);
         }

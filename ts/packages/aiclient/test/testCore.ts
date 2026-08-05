@@ -2,15 +2,15 @@
 // Licensed under the MIT License.
 
 import { hasEnvSettings } from "../src/common.js";
-import { openai } from "../src/index.js";
+import { inferenceClient } from "../src/index.js";
 
 export function hasEmbeddingModel() {
-    return hasApiSettings(openai.EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING);
+    return hasApiSettings(inferenceClient.EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING);
 }
 
 export function hasEmbeddingEndpoint(endpoint?: string | undefined) {
     return hasApiSettings(
-        openai.EnvVars.AZURE_OPENAI_ENDPOINT_EMBEDDING,
+        inferenceClient.EnvVars.AZURE_OPENAI_ENDPOINT_EMBEDDING,
         endpoint,
     );
 }

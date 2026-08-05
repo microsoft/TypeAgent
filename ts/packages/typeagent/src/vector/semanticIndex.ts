@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
+import { TextEmbeddingModel, inferenceClient } from "@typeagent/aiclient";
 import { ScoredItem } from "../memory.js";
 import {
     VectorStore,
@@ -63,7 +63,7 @@ export function createSemanticIndex<ID = string>(
     store: VectorStore<ID>,
     model?: TextEmbeddingModel,
 ): SemanticIndex<ID> {
-    model ??= openai.createEmbeddingModel();
+    model ??= inferenceClient.createEmbeddingModel();
     return {
         store,
         getEmbedding,

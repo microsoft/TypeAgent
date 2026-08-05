@@ -8,7 +8,7 @@ import {
     verifyFilterResults,
     type ModelRequest,
     type FilterResult,
-} from "../src/providers/index.js";
+} from "../src/wireApiProvider/index.js";
 import type { AzureApiSettings } from "../src/azureSettings.js";
 import type { OpenAIApiSettings } from "../src/openaiSettings.js";
 

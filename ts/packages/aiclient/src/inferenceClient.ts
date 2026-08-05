@@ -45,7 +45,7 @@ import {
     type ModelRequest,
     type FilterResult,
     type FilterError,
-} from "./providers/index.js";
+} from "./wireApiProvider/index.js";
 import { priorityQueue } from "async";
 import registerDebug from "debug";
 import { TokenCounter } from "./tokenCounter.js";
@@ -551,12 +551,15 @@ function createAzureOpenAIChatModel(
         }
         const data = result.data;
 
-        // Decode via the adapter. A decode error (e.g. "No choices returned")
-        // returns before the completion callback fires — matching the legacy
-        // early-return on an empty response.
-        const parsed = adapter.parseResponse(data, request);
-        if (!parsed.success) {
-            return parsed;
+        // Legacy chat_completions gate: empty/missing choices returns before
+        // side effects. Tool-call parse failures happen AFTER side effects.
+        // Only on the default adapter — messages/responses have no `choices`.
+        // Bare `.choices` access: null/undefined body throws TypeError (main).
+        if (adapter.wireApi === "chat_completions") {
+            const choices = (data as { choices?: unknown[] }).choices;
+            if (!choices || choices.length === 0) {
+                return error("No choices returned");
+            }
         }
 
         if (model.completionCallback) {
@@ -566,22 +569,35 @@ function createAzureOpenAIChatModel(
         try {
             const usage = adapter.extractUsage(data);
             if (settings.enableModelRequestLogging && logFn) {
-                // Log request
+                // Log raw assistant content (not unwrapped tool-call JSON).
+                // Bare choices[0]: null entry TypeErrors inside try (main),
+                // skipping logFn/TokenCounter/usageCallback before parse.
+                const rawContent =
+                    (
+                        data as {
+                            choices: {
+                                message?: { content?: string | null };
+                            }[];
+                        }
+                    ).choices[0].message?.content ?? "";
                 logFn({
                     prompt: messages as PromptSection[],
-                    response: parsed.data,
+                    response: rawContent,
                     tokenUsage: usage,
                     tags: tags,
                 });
             }
-            // track token usage
-            if (usage) {
-                TokenCounter.getInstance().add(usage, tags);
-                usageCallback?.(usage);
-            }
+            // Unconditional — matches pre-adapter TokenCounter/usageCallback
+            // (undefined usage was passed through at runtime).
+            TokenCounter.getInstance().add(
+                usage as CompletionUsageStats,
+                tags,
+            );
+            usageCallback?.(usage as CompletionUsageStats);
         } catch {}
 
-        return parsed;
+        // Tool-call validation / JSON.parse throw after bookkeeping.
+        return adapter.parseResponse(data, request);
     }
 
     async function completeStream(
@@ -660,9 +676,21 @@ function createAzureOpenAIChatModel(
                         break;
                     }
                     const piece = decoder.push(evt.data);
-                    if (piece.text) {
+                    // Function-calling may emit multiple yields per SSE event
+                    // (including undefined argument tails — legacy coercion).
+                    // Yield texts, then throw piece.error before usage — matches
+                    // legacy mid-loop yield-then-throw (usage skipped on throw).
+                    if (piece.texts !== undefined) {
+                        for (const chunk of piece.texts) {
+                            fullResponseText += chunk as string;
+                            yield chunk as string;
+                        }
+                    } else if (piece.text) {
                         fullResponseText += piece.text;
                         yield piece.text;
+                    }
+                    if (piece.error) {
+                        throw piece.error;
                     }
                     if (piece.usage) {
                         tokenUsage = piece.usage;

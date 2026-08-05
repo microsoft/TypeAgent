@@ -12,7 +12,7 @@ import {
 } from "@typeagent/agent-runtime";
 import {
     TextEmbeddingModel,
-    openai,
+    inferenceClient,
     isEmbeddingAvailable,
 } from "@typeagent/aiclient";
 import registerDebug from "debug";
@@ -62,11 +62,11 @@ export function createProgramNameIndex(
         modelOverride ??
         (isEmbeddingAvailable()
             ? (() => {
-                  const aiSettings = openai.apiSettingsFromEnv(
-                      openai.ModelType.Embedding,
+                  const aiSettings = inferenceClient.apiSettingsFromEnv(
+                      inferenceClient.ModelType.Embedding,
                       vals,
                   );
-                  return openai.createEmbeddingModel(aiSettings);
+                  return inferenceClient.createEmbeddingModel(aiSettings);
               })()
             : undefined);
 

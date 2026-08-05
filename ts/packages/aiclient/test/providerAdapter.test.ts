@@ -7,7 +7,7 @@ loadConfigSync();
 
 import { getData } from "typechat";
 import { testIf } from "./testCore.js";
-import { ApiSettings, createChatModel, ModelType } from "../src/openai.js";
+import { ApiSettings, createChatModel, ModelType } from "../src/inferenceClient.js";
 
 // One live integration test per wire-api. Each is skipped unless the
 // operator supplies a full endpoint URL + API key (and, for the
@@ -93,8 +93,7 @@ describe("providerAdapter (live, one per wire-api)", () => {
         testTimeout,
     );
 
-    // messages wireApi. Provider supplies x-api-key + version headers;
-    // wireApi drives the wire protocol.
+    // messages wireApi. Auth via createApiHeaders (same as other providers).
     testIf(
         () =>
             has(

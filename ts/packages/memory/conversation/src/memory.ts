@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel, openai } from "@typeagent/aiclient";
+import { ChatModel, inferenceClient } from "@typeagent/aiclient";
 import * as kp from "@typeagent/knowpro";
 import {
     conversation as kpLib,
@@ -33,7 +33,7 @@ export function createMemorySettings(
     getPersistentCache?: () => TextEmbeddingCache | undefined,
     languageModel?: ChatModel,
 ): MemorySettings {
-    languageModel ??= openai.createChatModelDefault("conversation-memory");
+    languageModel ??= inferenceClient.createChatModelDefault("conversation-memory");
     /**
      * Our index already has embeddings for every term in the podcast
      * Create a caching embedding model that can just leverage those embeddings

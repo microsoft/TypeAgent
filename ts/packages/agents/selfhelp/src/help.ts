@@ -14,7 +14,7 @@ import {
     createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { createTypeChat } from "@typeagent/agent-runtime";
-import { openai } from "@typeagent/aiclient";
+import { inferenceClient } from "@typeagent/aiclient";
 import { HelpResponse, helpResponseSchemaText } from "./helpResponseSchema.js";
 import {
     formatAgentRoster,
@@ -67,7 +67,7 @@ function createHelpChat<T extends object>(
     instructions: string,
     usage: TokenUsage,
 ) {
-    const chatModel = openai.createChatModel(
+    const chatModel = inferenceClient.createChatModel(
         undefined,
         { response_format: { type: "json_object" } },
         undefined,

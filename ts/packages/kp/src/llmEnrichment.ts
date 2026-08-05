@@ -12,7 +12,7 @@
  * before building the index).
  */
 
-import { openai, ChatModel } from "@typeagent/aiclient";
+import { inferenceClient, ChatModel } from "@typeagent/aiclient";
 import { PromptSection } from "typechat";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { claudeExecutableOption } from "./cliPath.js";
@@ -77,9 +77,9 @@ function getChatModel(): ChatModel | undefined {
 
     try {
         // Get settings and increase timeout for large batch enrichment (default 60s is too short)
-        const settings = openai.getChatModelSettings("GPT_5_MINI");
+        const settings = inferenceClient.getChatModelSettings("GPT_5_MINI");
         settings.timeout = 120_000;
-        chatModel = openai.createChatModel(settings);
+        chatModel = inferenceClient.createChatModel(settings);
         chatModel.completionSettings.max_completion_tokens = 16384;
         // GPT-5 doesn't support temperature=0; remove the default set by aiclient
         delete (chatModel.completionSettings as any).temperature;

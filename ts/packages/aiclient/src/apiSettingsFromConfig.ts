@@ -32,7 +32,7 @@ import {
 } from "./auth.js";
 import type { AzureApiSettings } from "./azureSettings.js";
 import { ModelType } from "./apiTypes.js";
-import type { ApiSettings } from "./openai.js";
+import type { ApiSettings } from "./inferenceClient.js";
 import type { OpenAIApiSettings } from "./openaiSettings.js";
 
 const azureTokenProvider = createAzureTokenProvider(
@@ -169,11 +169,10 @@ export function azureApiSettingsFromConfig(
             ? { enableModelRequestLogging: true }
             : {}),
         ...(auth.tokenProvider ? { tokenProvider: auth.tokenProvider } : {}),
-        // Surface the endpoint's wire protocol so the model layer can
-        // pick the right ProviderAdapter. Omitted when the endpoint uses
-        // the default (chat_completions) so the settings object stays
-        // identical to today for back-compat configs.
-        ...(endpoint.wireApi !== undefined
+        // Surface non-default wire protocol only. Default chat_completions
+        // stays omitted so settings match pre-wireApi configs.
+        ...(endpoint.wireApi !== undefined &&
+        endpoint.wireApi !== "chat_completions"
             ? { wireApi: endpoint.wireApi }
             : {}),
     };

@@ -21,7 +21,7 @@ import {
 } from "./interfaces.js";
 import { IndexingEventHandlers } from "./interfaces.js";
 import { conversation as kpLib } from "@typeagent/knowledge-processor";
-import { openai } from "@typeagent/aiclient";
+import { inferenceClient } from "@typeagent/aiclient";
 import { extractKnowledgeFromTextBatch } from "./knowledge.js";
 import { facetValueToString } from "./knowledgeLib.js";
 import { createKnowledgeExtractor } from "./knowledge.js";
@@ -492,13 +492,13 @@ export class TermToSemanticRefIndex implements ITermToSemanticRefIndex {
 }
 
 export function createKnowledgeModel() {
-    const chatModelSettings = openai.apiSettingsFromEnv(
-        openai.ModelType.Chat,
+    const chatModelSettings = inferenceClient.apiSettingsFromEnv(
+        inferenceClient.ModelType.Chat,
         undefined,
         "GPT_4_O",
     );
     chatModelSettings.retryPauseMs = 10000;
-    const chatModel = openai.createJsonChatModel(chatModelSettings, [
+    const chatModel = inferenceClient.createJsonChatModel(chatModelSettings, [
         "chatExtractor",
     ]);
     return chatModel;

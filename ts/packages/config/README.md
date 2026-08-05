@@ -28,7 +28,7 @@ Live Azure Key Vault fetch, encrypted on-disk caching, and the
 ## Flattening rules
 
 YAML maps are flattened into the `EnvVars` flat-key shape used by
-[packages/aiclient/src/openai.ts](../aiclient/src/openai.ts):
+[packages/aiclient/src/inferenceClient.ts](../aiclient/src/inferenceClient.ts):
 
 | YAML path                                          | Flat key                               |
 | -------------------------------------------------- | -------------------------------------- |
@@ -41,57 +41,13 @@ YAML maps are flattened into the `EnvVars` flat-key shape used by
 
 See [src/flatten.ts](./src/flatten.ts) for the full mapping.
 
-## Multi-provider `wireApi`
+## `wireApi` (per endpoint)
 
-An Azure OpenAI deployment endpoint may declare a `wireApi` selecting the
-**wire protocol** it speaks. This lets a single TypeAgent config route
-multiple wire shapes behind the same endpoint pool.
-
-| `wireApi` value    | Wire protocol       | Provider                         | Default? |
-| ------------------ | ------------------- | -------------------------------- | -------- |
-| `chat_completions` | `/chat/completions` | `chatCompletionsWireApiProvider` | ✅ yes   |
-| `responses`        | `/responses`        | `responsesWireApiProvider`       | no       |
-| `messages`         | `/v1/messages`      | `messagesWireApiProvider`        | no       |
-
-**Default & back-compat.** `wireApi` is optional. Omitting it is exactly
-equivalent to `chat_completions`, so every existing config keeps working
-byte-for-byte — the projected flat env is unchanged, and the default value
-is never emitted into the legacy `AZURE_OPENAI_POOL_*` override. Set
-`wireApi` only when an endpoint speaks a non-default protocol.
-
-```yaml
-azureOpenAI:
-  deployments:
-    gpt_4_o: # no wireApi ⇒ chat_completions (unchanged)
-      endpoints:
-        - endpoint: https://my-resource.openai.azure.com/.../chat/completions?api-version=...
-    gpt_5_codex:
-      endpoints:
-        - endpoint: https://api.openai.com/v1/responses
-          region: eastus
-          wireApi: responses
-    claude_sonnet:
-      endpoints:
-        - endpoint: https://api.anthropic.com/v1/messages
-          region: eastus
-          wireApi: messages
-```
-
-**Precedence.** `wireApi` is a per-**endpoint** attribute, resolved on the
-same YAML → flat-env → typed-`Config` path as `capacity`/`priority`/`tpm`.
-In the flat-env representation it rides the `AZURE_OPENAI_POOL_<DEPLOYMENT>`
-override list (`[{suffix:...,wireApi:responses}]`), so a
-`process.env` override of that key wins over YAML, matching the rest of the
-merge precedence above. `wireApi` never participates in routing — the pool
-still picks _which_ endpoint to call by priority/capacity/cooldown; the
-resolved `wireApi` then selects the matching `*WireApiProvider`
-([packages/aiclient/src/providers/](../aiclient/src/providers/providerAdapter.ts))
-that encodes the request and decodes the response.
-
-This mirrors the shipping multi-provider pattern used elsewhere: opencode's
-`shouldUseCopilotResponsesApi`, Copilot-CLI's `copilot_model_api_mode`, and
-hermes-agent's `ProviderProfile.api_mode` — one dispatch switch selecting
-N wire adapters, rather than a novel design.
+Optional endpoint field (default `chat_completions`). Maps to aiclient providers:
+`chat_completions` → `chatCompletionsWireApiProvider`,
+`responses` → `responsesWireApiProvider`,
+`messages` → `messagesWireApiProvider`.
+Carried on `AZURE_OPENAI_POOL_*`; does not affect pool routing.
 
 ## Usage
 

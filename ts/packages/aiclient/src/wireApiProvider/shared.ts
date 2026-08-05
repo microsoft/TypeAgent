@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { PromptSection, Result, success } from "typechat";
-import type { ApiSettings, CompletionUsageStats } from "../openai.js";
+import type { ApiSettings, CompletionUsageStats } from "../inferenceClient.js";
 import type { Filter, FilterError, FilterResult } from "./types.js";
 
 export async function createApiHeaders(

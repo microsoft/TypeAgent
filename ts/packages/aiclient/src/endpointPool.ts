@@ -6,7 +6,7 @@ import { priorityQueue } from "async";
 import { azureApiSettingsFromEnv } from "./azureSettings.js";
 import { openAIApiSettingsFromEnv } from "./openaiSettings.js";
 import { EnvVars, ModelProviders, ModelType } from "./apiTypes.js";
-import type { ApiSettings } from "./openai.js";
+import type { ApiSettings } from "./inferenceClient.js";
 import { FetchThrottler } from "./restClient.js";
 
 const debugPool = registerDebug("typeagent:pool");

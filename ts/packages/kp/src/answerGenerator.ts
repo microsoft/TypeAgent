@@ -12,7 +12,7 @@
  * Falls back to Claude Agent SDK query() if aiclient is not available.
  */
 
-import { openai, ChatModel } from "@typeagent/aiclient";
+import { inferenceClient, ChatModel } from "@typeagent/aiclient";
 import { PromptSection } from "typechat";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { claudeExecutableOption } from "./cliPath.js";
@@ -34,9 +34,9 @@ function getAnswerModel(): ChatModel | undefined {
     if (answerModel) return answerModel;
 
     try {
-        const settings = openai.getChatModelSettings("GPT_5_MINI");
+        const settings = inferenceClient.getChatModelSettings("GPT_5_MINI");
         settings.timeout = 120_000;
-        answerModel = openai.createChatModel(settings);
+        answerModel = inferenceClient.createChatModel(settings);
         answerModel.completionSettings.max_completion_tokens = 4096;
         delete (answerModel.completionSettings as any).temperature;
         answerModelAvailable = true;

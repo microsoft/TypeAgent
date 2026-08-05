@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { openai as ai } from "@typeagent/aiclient";
+import { inferenceClient as ai } from "@typeagent/aiclient";
 import {
     ActionContext,
     CompletionDirection,

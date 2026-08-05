@@ -22,7 +22,7 @@ import {
     ReplyEmailAction,
 } from "./emailActionsSchema.js";
 import { generateNotes } from "@typeagent/agent-runtime";
-import { openai } from "@typeagent/aiclient";
+import { inferenceClient } from "@typeagent/aiclient";
 import {
     ActionContext,
     ActionResult,
@@ -612,7 +612,7 @@ async function handleEmailAction(
             if (action.parameters.genContent.generateBody) {
                 const query = action.parameters.genContent.bodySearchQuery;
                 if (query) {
-                    const chatModel = openai.createChatModel(
+                    const chatModel = inferenceClient.createChatModel(
                         "GPT_35_TURBO",
                         undefined,
                         undefined,

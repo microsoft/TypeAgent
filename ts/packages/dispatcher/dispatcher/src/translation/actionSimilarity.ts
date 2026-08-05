@@ -50,7 +50,7 @@ import {
     similarity,
     SimilarityType,
 } from "@typeagent/agent-runtime";
-import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
+import { TextEmbeddingModel, inferenceClient } from "@typeagent/aiclient";
 import registerDebug from "debug";
 import { ActionSchemaFile } from "./actionConfigProvider.js";
 import { ActionConfig } from "./actionConfig.js";
@@ -429,7 +429,7 @@ export async function computeActionSimilarity(
     options: ActionSimilarityScanOptions = {},
 ): Promise<ActionSimilarityScanResult> {
     const keepThreshold = options.keepThreshold ?? 0.5;
-    const model = options.model ?? openai.createEmbeddingModel();
+    const model = options.model ?? inferenceClient.createEmbeddingModel();
     const onProgress = options.onProgress ?? (() => {});
 
     const entries: ActionSimilarityEntry[] = [];

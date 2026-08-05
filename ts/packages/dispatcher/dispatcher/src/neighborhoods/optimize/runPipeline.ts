@@ -34,7 +34,7 @@ import { buildPatternsHTML } from "./patternsViz.js";
 import { distillGuidelineCandidates } from "./guidelineDistiller.js";
 import { buildCandidatesMarkdown } from "./guidelinesViz.js";
 import { schemaGuidelines as canonicalSchemaGuidelines } from "../../translation/schemaGuidelines.js";
-import { openai, type ChatModel } from "@typeagent/aiclient";
+import { inferenceClient, type ChatModel } from "@typeagent/aiclient";
 import {
     defaultPath as defaultPathHelper,
     ensureDir,
@@ -364,7 +364,7 @@ export interface RunDistillStepOpts {
     /** Canonical schemaGuidelines text. Defaults to the live
      *  `schemaGuidelines` constant. Tests pass a stub. */
     schemaGuidelines?: string;
-    /** ChatModel factory. Defaults to `openai.createChatModel`. Tests
+    /** ChatModel factory. Defaults to `inferenceClient.createChatModel`. Tests
      *  pass a mock. */
     createModel?: (name: string) => ChatModel;
 }
@@ -390,7 +390,7 @@ export async function runDistillStep(
 ): Promise<"completed" | "not-enough-data"> {
     const schemaGuidelines = opts.schemaGuidelines ?? canonicalSchemaGuidelines;
     const createModel =
-        opts.createModel ?? ((name: string) => openai.createChatModel(name));
+        opts.createModel ?? ((name: string) => inferenceClient.createChatModel(name));
 
     if (!fs.existsSync(opts.patternsFile)) {
         fs.writeFileSync(

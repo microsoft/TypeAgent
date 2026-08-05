@@ -3,7 +3,7 @@
 
 import { Result, success } from "typechat";
 import type { WireApi } from "@typeagent/config";
-import type { ApiSettings, CompletionUsageStats } from "../openai.js";
+import type { ApiSettings, CompletionUsageStats } from "../inferenceClient.js";
 import {
     createApiHeaders,
     splitSystemMessages,

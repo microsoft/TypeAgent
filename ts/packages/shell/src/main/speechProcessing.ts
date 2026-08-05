@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModelWithStreaming, openai } from "@typeagent/aiclient";
+import { ChatModelWithStreaming, inferenceClient } from "@typeagent/aiclient";
 import registerDebug from "debug";
 import { createTypeChat, loadSchema } from "@typeagent/agent-runtime";
 import {
@@ -46,12 +46,12 @@ Only classify statements as questions or requests if they are complete statement
 `;
 
     constructor() {
-        const apiSettings = openai.apiSettingsFromEnv(
-            openai.ModelType.Chat,
+        const apiSettings = inferenceClient.apiSettingsFromEnv(
+            inferenceClient.ModelType.Chat,
             undefined,
             "GPT_5_NANO",
         );
-        this.model = openai.createChatModel(
+        this.model = inferenceClient.createChatModel(
             apiSettings,
             {
                 temperature: 1.0,

@@ -8,17 +8,17 @@ import {
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
-import { TokenCounter, openai } from "@typeagent/aiclient";
+import { TokenCounter, inferenceClient } from "@typeagent/aiclient";
 
 class TokenSummaryCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Get overall LLM usage statistics.";
 
     public async run(context: ActionContext<CommandHandlerContext>) {
-        const total: openai.CompletionUsageStats =
+        const total: inferenceClient.CompletionUsageStats =
             TokenCounter.getInstance().total;
-        const avg: openai.CompletionUsageStats =
+        const avg: inferenceClient.CompletionUsageStats =
             TokenCounter.getInstance().average;
-        const max: openai.CompletionUsageStats =
+        const max: inferenceClient.CompletionUsageStats =
             TokenCounter.getInstance().maximum;
 
         displaySuccess(

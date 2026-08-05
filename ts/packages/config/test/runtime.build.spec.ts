@@ -202,7 +202,7 @@ describe("buildConfig: wireApi (multi-provider)", () => {
         expect(ep.wireApi).toBe("messages");
     });
 
-    test("explicit chat_completions wireApi is preserved on the endpoint", () => {
+    test("explicit chat_completions wireApi collapses to omitted", () => {
         const flat: FlatEnv = {
             AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://eastus",
             AZURE_OPENAI_POOL_GPT_4_O:
@@ -212,7 +212,7 @@ describe("buildConfig: wireApi (multi-provider)", () => {
         const ep = config.azureOpenAI.deployments
             .get("gpt_4_o")!
             .endpoints.find((e) => e.region === "eastus")!;
-        expect(ep.wireApi).toBe("chat_completions");
+        expect(ep.wireApi).toBeUndefined();
     });
 
     test("unrecognized wireApi value in POOL override is ignored", () => {

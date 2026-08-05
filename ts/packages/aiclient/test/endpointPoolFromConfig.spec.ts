@@ -5,7 +5,7 @@ import {
     configFromEnvRecord,
     discoverEndpointPoolFromConfig,
 } from "../src/index.js";
-import { ModelType } from "../src/openai.js";
+import { ModelType } from "../src/inferenceClient.js";
 
 describe("discoverEndpointPoolFromConfig: typed-Config endpoint pool", () => {
     test("named model, single region: pool of one", () => {

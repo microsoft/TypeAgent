@@ -39,7 +39,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 
-import { openai } from "@typeagent/aiclient";
+import { inferenceClient } from "@typeagent/aiclient";
 
 import {
     CommandHandlerContext,
@@ -664,7 +664,7 @@ async function generateCorpus(
 
     const models = opts.models.map((name) => ({
         name,
-        model: openai.createChatModel(name, undefined, undefined, [
+        model: inferenceClient.createChatModel(name, undefined, undefined, [
             "@collision corpus generate",
         ]),
     }));

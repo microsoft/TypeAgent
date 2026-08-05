@@ -7,17 +7,17 @@ loadConfigSync();
 import {
     ChatModel,
     hasEnvSettings,
-    openai,
+    inferenceClient,
     TextEmbeddingModel,
 } from "@typeagent/aiclient";
 import { Result } from "typechat";
 
 export function hasTestKeys() {
     const hasKeys: boolean =
-        hasEnvSettings(process.env, openai.EnvVars.AZURE_OPENAI_API_KEY) &&
+        hasEnvSettings(process.env, inferenceClient.EnvVars.AZURE_OPENAI_API_KEY) &&
         hasEnvSettings(
             process.env,
-            openai.EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING,
+            inferenceClient.EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING,
         );
     return hasKeys;
 }
@@ -28,11 +28,11 @@ export type TestModels = {
 };
 
 export function createTestEmbeddingModel(): [TextEmbeddingModel, number] {
-    return [openai.createEmbeddingModel(), 1536];
+    return [inferenceClient.createEmbeddingModel(), 1536];
 }
 
 export function createTestChatModel(testName: string = "string"): ChatModel {
-    const model = openai.createChatModelDefault("UnitTest_" + testName);
+    const model = inferenceClient.createChatModelDefault("UnitTest_" + testName);
     model.completionSettings.seed = 1234;
     model.completionSettings.temperature = 0;
     return model;
@@ -41,7 +41,7 @@ export function createTestChatModel(testName: string = "string"): ChatModel {
 export function createTestModels(testName: string): TestModels {
     return {
         chat: createTestChatModel(testName),
-        embeddings: openai.createEmbeddingModel(),
+        embeddings: inferenceClient.createEmbeddingModel(),
     };
 }
 

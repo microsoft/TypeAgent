@@ -24,7 +24,7 @@ import {
     displayResult,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { openai } from "@typeagent/aiclient";
+import { inferenceClient } from "@typeagent/aiclient";
 import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { KeywordVector } from "../../contextSelector/keywordVector.js";
 import {
@@ -513,7 +513,7 @@ class CollisionKeywordsBackfillCommandHandler implements CommandHandler {
 
         // Default chat model, tagged for token accounting; only built when --llm.
         const createModel = params.flags.llm
-            ? (name: string) => openai.createChatModelDefault(name)
+            ? (name: string) => inferenceClient.createChatModelDefault(name)
             : undefined;
 
         const plan = newBackfillPlan();

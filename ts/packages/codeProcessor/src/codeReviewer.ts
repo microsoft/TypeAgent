@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel, openai } from "@typeagent/aiclient";
+import { ChatModel, inferenceClient } from "@typeagent/aiclient";
 import { MessageSourceRole, loadSchema } from "@typeagent/agent-runtime";
 import {
     PromptSection,
@@ -53,7 +53,7 @@ export interface CodeReviewer {
 export function createCodeReviewer(
     model?: ChatModel | undefined,
 ): CodeReviewer {
-    model ??= openai.createChatModelDefault("codeReviewer");
+    model ??= inferenceClient.createChatModelDefault("codeReviewer");
     const codeReviewSchema = ["codeReviewSchema.ts"];
     const reviewTranslator = createReviewTranslator<CodeReview>(
         model,

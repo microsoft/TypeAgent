@@ -5,7 +5,7 @@ import { loadConfigSync } from "@typeagent/config";
 
 loadConfigSync();
 
-import { openai, TextEmbeddingModel } from "@typeagent/aiclient";
+import { inferenceClient, TextEmbeddingModel } from "@typeagent/aiclient";
 import {
     generateRandomEmbedding,
     hasEmbeddingModel,
@@ -31,7 +31,7 @@ describe("vector.vectorIndex", () => {
     let model: TextEmbeddingModel | undefined;
     beforeAll(() => {
         if (hasEmbeddingModel()) {
-            model = openai.createEmbeddingModel();
+            model = inferenceClient.createEmbeddingModel();
         }
     });
     test("dot", () => {

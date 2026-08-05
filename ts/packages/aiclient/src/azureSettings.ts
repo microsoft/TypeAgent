@@ -8,7 +8,7 @@ import {
 } from "./auth.js";
 import { getEnvSetting, getIntFromEnv } from "./common.js";
 import { EnvVars, ModelType } from "./apiTypes.js";
-import type { CommonApiSettings } from "./openai.js";
+import type { CommonApiSettings } from "./inferenceClient.js";
 import { azureApiSettingsFromConfig } from "./apiSettingsFromConfig.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
 import registerDebug from "debug";

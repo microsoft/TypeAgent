@@ -9,7 +9,7 @@ import registerDebug from "debug";
 import {
     ChatModelWithStreaming,
     CompletionSettings,
-    openai,
+    inferenceClient,
 } from "@typeagent/aiclient";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -369,18 +369,18 @@ export type WebPageLink = {
 }
 
 function createModel(fastModel: boolean = true): ChatModelWithStreaming {
-    let apiSettings: openai.ApiSettings | undefined;
+    let apiSettings: inferenceClient.ApiSettings | undefined;
     if (!apiSettings) {
         if (fastModel) {
-            apiSettings = openai.localOpenAIApiSettingsFromEnv(
-                openai.ModelType.Chat,
+            apiSettings = inferenceClient.localOpenAIApiSettingsFromEnv(
+                inferenceClient.ModelType.Chat,
                 undefined,
                 "GPT_4O_mini",
                 ["wikipedia"],
             );
         } else {
             // Create default model
-            apiSettings = openai.apiSettingsFromEnv();
+            apiSettings = inferenceClient.apiSettingsFromEnv();
         }
     }
 
@@ -392,7 +392,7 @@ function createModel(fastModel: boolean = true): ChatModelWithStreaming {
         response_format: { type: "json_object" },
     };
 
-    const chatModel = openai.createChatModel(
+    const chatModel = inferenceClient.createChatModel(
         apiSettings,
         completionSettings,
         undefined,

@@ -3,7 +3,7 @@
 
 import { createTranslator, MessageSourceRole } from "@typeagent/agent-runtime";
 import { CodeGenResponse } from "./codeGenSchema.js";
-import { openai } from "@typeagent/aiclient";
+import { inferenceClient } from "@typeagent/aiclient";
 import { getData, PromptSection, TypeChatLanguageModel } from "typechat";
 import { Api, createApiSection } from "./code.js";
 
@@ -38,7 +38,7 @@ export interface CodeGenerator {
 export function createCodeGenerator(
     model?: TypeChatLanguageModel | undefined,
 ): CodeGenerator {
-    model ??= openai.createChatModelDefault("codeGenerator");
+    model ??= inferenceClient.createChatModelDefault("codeGenerator");
     const codeGenSchema = ["codeGenSchema.ts"];
     const codeGenTranslator = createTranslator<CodeGenResponse>(
         model,

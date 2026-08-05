@@ -2,13 +2,13 @@
 // Licensed under the MIT License.
 import path from "path";
 import os from "os";
-import { hasEnvSettings, openai } from "@typeagent/aiclient";
+import { hasEnvSettings, inferenceClient } from "@typeagent/aiclient";
 import { Embedding } from "../src/vector/embeddings.js";
 
 export function hasEmbeddingModel(endpoint?: string | undefined) {
     return hasEnvSettings(
         process.env,
-        openai.EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING,
+        inferenceClient.EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING,
         endpoint,
     );
 }

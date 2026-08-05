@@ -8,7 +8,7 @@ import {
     markTransientFailure,
     pickEndpoint,
 } from "../src/endpointPool.js";
-import { ModelType } from "../src/openai.js";
+import { ModelType } from "../src/inferenceClient.js";
 
 // Deterministic RNG for reproducible random-within-tier selection.
 function seededRng(seed: number): () => number {

@@ -3,7 +3,7 @@
 
 import { Result, success, error } from "typechat";
 import type { WireApi } from "@typeagent/config";
-import type { ApiSettings, CompletionUsageStats } from "../openai.js";
+import type { ApiSettings, CompletionUsageStats } from "../inferenceClient.js";
 import {
     createApiHeaders,
     verifyFilterResults,
@@ -152,30 +152,47 @@ export class ChatCompletionsWireApiProvider implements ProviderAdapter {
                     if (isFunctionCalling) {
                         const delta = data.choices[0].delta.tool_calls;
                         if (delta) {
+                            // One yield per delta entry (legacy completeStream).
+                            // Defer throws via piece.error so prior deltas in
+                            // the same SSE event are yielded first — including
+                            // unguarded property-access TypeErrors mid-loop.
+                            const texts: (string | undefined)[] = [];
+                            let streamError: Error | undefined;
                             for (const d of delta) {
-                                if (d.index !== 0) {
-                                    throw new Error(
-                                        "Invalid number of tool_calls",
-                                    );
-                                }
-                                if (emittedPrefix === "") {
-                                    if (d.type !== "function") {
+                                try {
+                                    if (d.index !== 0) {
                                         throw new Error(
-                                            "Invalid tool call type",
+                                            "Invalid number of tool_calls",
                                         );
                                     }
-                                    if (!d.function.name) {
-                                        throw new Error(
-                                            "Invalid function name",
-                                        );
+                                    if (emittedPrefix === "") {
+                                        if (d.type !== "function") {
+                                            throw new Error(
+                                                "Invalid tool call type",
+                                            );
+                                        }
+                                        if (!d.function.name) {
+                                            throw new Error(
+                                                "Invalid function name",
+                                            );
+                                        }
+                                        emittedPrefix = `{"name":"${d.function.name}","arguments":${d.function.arguments ?? ""}`;
+                                        texts.push(emittedPrefix);
+                                    } else {
+                                        // No ?? "" — undefined coerces on += / yield.
+                                        texts.push(d.function.arguments);
                                     }
-                                    emittedPrefix = `{"name":"${d.function.name}","arguments":${d.function.arguments ?? ""}`;
-                                    piece.text = emittedPrefix;
-                                } else {
-                                    piece.text =
-                                        (piece.text ?? "") +
-                                        (d.function.arguments ?? "");
+                                } catch (e) {
+                                    streamError =
+                                        e instanceof Error
+                                            ? e
+                                            : new Error(String(e));
+                                    break;
                                 }
+                            }
+                            piece.texts = texts;
+                            if (streamError) {
+                                piece.error = streamError;
                             }
                         }
                     } else {

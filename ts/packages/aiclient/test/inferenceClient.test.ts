@@ -16,7 +16,7 @@ import {
     createChatModelDefault,
     createEmbeddingModel,
     EnvVars,
-} from "../src/openai.js";
+} from "../src/inferenceClient.js";
 import { TextEmbeddingModel } from "../src/models.js";
 
 const testTimeout = 30000;

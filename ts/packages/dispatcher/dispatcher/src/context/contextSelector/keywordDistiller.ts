@@ -18,7 +18,7 @@ import { tokenize } from "./tokenize.js";
 import { distillJson } from "../../utils/distillJson.js";
 
 // Injected `(name) => ChatModel`. Production passes
-// `(name) => openai.createChatModel(name)`; tests pass a stub.
+// `(name) => inferenceClient.createChatModel(name)`; tests pass a stub.
 export type CreateChatModel = (name: string) => ChatModel;
 
 export type DistillOptions = {

@@ -3,9 +3,13 @@
 
 import { Result, success, error } from "typechat";
 import type { WireApi } from "@typeagent/config";
-import type { ApiSettings, CompletionUsageStats } from "../openai.js";
+import type { ApiSettings, CompletionUsageStats } from "../inferenceClient.js";
 import type { FunctionCallingJsonSchema } from "../models.js";
-import { splitSystemMessages, usageFromInputOutput } from "./shared.js";
+import {
+    createApiHeaders,
+    splitSystemMessages,
+    usageFromInputOutput,
+} from "./shared.js";
 import type {
     ModelRequest,
     ProviderAdapter,
@@ -23,8 +27,6 @@ import type {
     Tool,
     ToolUseBlock,
 } from "./messages.types.js";
-
-const MESSAGES_API_VERSION = "2023-06-01";
 
 function toMessageParams(
     turns: { role: string; content: unknown }[],
@@ -56,23 +58,11 @@ function toTools(schemas: FunctionCallingJsonSchema[]): Tool[] {
     });
 }
 
-function apiKeyFromSettings(settings: ApiSettings): string {
-    if ("apiKey" in settings && typeof settings.apiKey === "string") {
-        return settings.apiKey;
-    }
-    return "";
-}
-
 export class MessagesWireApiProvider implements ProviderAdapter {
     readonly wireApi: WireApi = "messages";
 
-    async buildHeaders(
-        settings: ApiSettings,
-    ): Promise<Result<Record<string, string>>> {
-        return success({
-            "x-api-key": apiKeyFromSettings(settings),
-            "anthropic-version": MESSAGES_API_VERSION,
-        });
+    buildHeaders(settings: ApiSettings) {
+        return createApiHeaders(settings);
     }
 
     buildRequestBody(request: ModelRequest): MessageCreateParamsBase {

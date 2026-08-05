@@ -3,7 +3,7 @@
 
 import type { PromptSection, Result } from "typechat";
 import type { WireApi } from "@typeagent/config";
-import type { ApiSettings, CompletionUsageStats } from "../openai.js";
+import type { ApiSettings, CompletionUsageStats } from "../inferenceClient.js";
 import type { CompletionJsonSchema, CompletionSettings } from "../models.js";
 
 export type ModelRequest = {
@@ -18,8 +18,19 @@ export type ModelRequest = {
 };
 
 export type StreamPiece = {
+    /** Single text chunk (content deltas). */
     text?: string | undefined;
+    /**
+     * Multiple yields for one SSE event (function-calling tool_call
+     * deltas). Entries may be `undefined` to match legacy
+     * `yield d.function.arguments` coercion behavior.
+     * When `error` is also set, consumers must yield `texts` first then
+     * throw — matches legacy mid-loop yield-then-throw on bad deltas.
+     */
+    texts?: (string | undefined)[] | undefined;
     usage?: CompletionUsageStats | undefined;
+    /** Throw after yielding any `texts` (function-calling multi-delta). */
+    error?: Error | undefined;
 };
 
 export interface StreamDecoder {

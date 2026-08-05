@@ -15,7 +15,7 @@ import {
     createActionResultFromError,
     createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
-import { ChatModel, openai } from "@typeagent/aiclient";
+import { ChatModel, inferenceClient } from "@typeagent/aiclient";
 import { DiscordActions } from "./discordSchema.js";
 
 const DISCORD_API = "https://discord.com/api/v10";
@@ -303,7 +303,7 @@ async function craftMessageContent(
     channelName: string,
     agentContext: DiscordAgentContext,
 ): Promise<string> {
-    agentContext.craftMessageModel ??= openai.createChatModel(
+    agentContext.craftMessageModel ??= inferenceClient.createChatModel(
         undefined,
         undefined,
         undefined,

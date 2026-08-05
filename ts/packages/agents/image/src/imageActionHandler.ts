@@ -14,7 +14,7 @@ import {
     createActionResult,
     createActionResultFromHtmlDisplayWithScript,
 } from "@typeagent/agent-sdk/helpers/action";
-import { GeneratedImage, openai } from "@typeagent/aiclient";
+import { GeneratedImage, inferenceClient } from "@typeagent/aiclient";
 import { randomBytes, randomUUID } from "crypto";
 import {
     CreateImageAction,
@@ -76,7 +76,7 @@ async function handlePhotoAction(
                 </div>`,
             });
 
-            const imageModel = openai.createImageModel();
+            const imageModel = inferenceClient.createImageModel();
             const images: GeneratedImage[] = [];
             // limit image creation
             const imageCount: number =
@@ -242,7 +242,7 @@ async function handleEditImage(
     const ext = dotIdx >= 0 ? resolvedName.substring(dotIdx) : "";
     const mime = ext ? getMimeType(ext) : "image/png";
 
-    const imageModel = openai.createImageModel();
+    const imageModel = inferenceClient.createImageModel();
     if (!imageModel.editImage) {
         photoContext.actionIO.setDisplay({ type: "html", content: "" });
         return createActionResult(

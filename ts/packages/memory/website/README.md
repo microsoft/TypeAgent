@@ -45,7 +45,7 @@ const result = await extractor.extract(
 
 // AI-powered extraction (requires knowledge extractor)
 import { conversation as kpLib } from "knowledge-processor";
-import { openai as ai } from "aiclient";
+import { inferenceClient as ai } from "aiclient";
 
 const languageModel = ai.createChatModel(
   ai.azureApiSettingsFromEnv(ai.ModelType.Chat),
@@ -290,7 +290,7 @@ interface ExtractionConfig {
 ### AI Model Setup
 
 ```typescript
-import { openai as ai } from "aiclient";
+import { inferenceClient as ai } from "aiclient";
 import { conversation as kpLib } from "knowledge-processor";
 
 // Configure AI model
@@ -385,7 +385,7 @@ interface ExtractionConfig {
 ### AI Model Setup
 
 ```typescript
-import { openai as ai } from "aiclient";
+import { inferenceClient as ai } from "aiclient";
 import { conversation as kpLib } from "knowledge-processor";
 
 // Configure AI model

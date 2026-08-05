@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel, openai } from "@typeagent/aiclient";
+import { ChatModel, inferenceClient } from "@typeagent/aiclient";
 import {
     createJsonTranslator,
     error,
@@ -508,8 +508,8 @@ export function createAnswerGeneratorSettings(
 ): AnswerGeneratorSettings {
     return {
         answerGeneratorModel:
-            model ?? openai.createJsonChatModel(undefined, ["answerGenerator"]),
-        answerCombinerModel: openai.createChatModel(),
+            model ?? inferenceClient.createJsonChatModel(undefined, ["answerGenerator"]),
+        answerCombinerModel: inferenceClient.createChatModel(),
         maxCharsInBudget: 4096 * 4, // 4096 tokens * 4 chars per token,
         concurrency: 2,
         fastStop: true,

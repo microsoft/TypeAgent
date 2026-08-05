@@ -1,6 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-import { ChatModel, hasEnvSettings, openai } from "@typeagent/aiclient";
+import { ChatModel, hasEnvSettings, inferenceClient } from "@typeagent/aiclient";
 
 export interface LanguageModel {
     model: ChatModel;
@@ -13,14 +13,14 @@ export function hasApiSettings(key: string, endpoint?: string | undefined) {
 
 export function createKnowledgeModel(nameSuffix?: string) {
     const chatModelSettings = nameSuffix
-        ? openai.apiSettingsFromEnv(
-              openai.ModelType.Chat,
+        ? inferenceClient.apiSettingsFromEnv(
+              inferenceClient.ModelType.Chat,
               undefined,
               nameSuffix,
           )
-        : openai.apiSettingsFromEnv(openai.ModelType.Chat);
+        : inferenceClient.apiSettingsFromEnv(inferenceClient.ModelType.Chat);
     chatModelSettings.retryPauseMs = 10000;
-    const model = openai.createJsonChatModel(chatModelSettings, [
+    const model = inferenceClient.createJsonChatModel(chatModelSettings, [
         "knowproTest",
     ]);
     // Use 0 temperature and explicit seed to minimize variation
@@ -39,11 +39,11 @@ export function createGpt41Models(): {
     let gpt41Mini: LanguageModel | undefined;
 
     let modelName = "GPT_4_1";
-    if (hasApiSettings(openai.EnvVars.AZURE_OPENAI_API_KEY, modelName)) {
+    if (hasApiSettings(inferenceClient.EnvVars.AZURE_OPENAI_API_KEY, modelName)) {
         gpt41 = { model: createKnowledgeModel(modelName), modelName };
     }
     modelName = "GPT_4_1_MINI";
-    if (hasApiSettings(openai.EnvVars.AZURE_OPENAI_API_KEY, modelName)) {
+    if (hasApiSettings(inferenceClient.EnvVars.AZURE_OPENAI_API_KEY, modelName)) {
         gpt41Mini = { model: createKnowledgeModel(modelName), modelName };
     }
 
@@ -55,7 +55,7 @@ export function createGpt41Models(): {
 
 export function create35Model(): LanguageModel | undefined {
     const modelName = "GPT_35_TURBO";
-    if (hasApiSettings(openai.EnvVars.AZURE_OPENAI_API_KEY, modelName)) {
+    if (hasApiSettings(inferenceClient.EnvVars.AZURE_OPENAI_API_KEY, modelName)) {
         return { model: createKnowledgeModel(modelName), modelName };
     }
     return undefined;

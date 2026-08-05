@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel, TextEmbeddingModel, openai } from "@typeagent/aiclient";
+import { ChatModel, TextEmbeddingModel, inferenceClient } from "@typeagent/aiclient";
 import * as kp from "@typeagent/knowpro";
 import { createKnowledgeModel } from "./models.js";
 import * as cm from "@typeagent/conversation-memory";
@@ -29,7 +29,7 @@ export class KnowproContext {
     //
     public options: KnowproContextOptions;
 
-    public tokenStats: openai.CompletionUsageStats;
+    public tokenStats: inferenceClient.CompletionUsageStats;
     public promptHandler?:
         | ((request: PromptSection[], response: string) => void)
         | undefined;
@@ -41,7 +41,7 @@ export class KnowproContext {
         this.knowledgeModel.completionCallback = (request, response) =>
             this.completionHandler(request, response);
         this.similarityModel = createEmbeddingCache(
-            openai.createEmbeddingModel(),
+            inferenceClient.createEmbeddingModel(),
             1024,
         );
         this.queryTranslator = kp.createSearchQueryTranslator(
@@ -105,7 +105,7 @@ export class KnowproContext {
         };
     }
 
-    private updateTokenCounts(counter: openai.CompletionUsageStats): void {
+    private updateTokenCounts(counter: inferenceClient.CompletionUsageStats): void {
         this.tokenStats.completion_tokens += counter.completion_tokens;
         this.tokenStats.prompt_tokens += counter.prompt_tokens;
         this.tokenStats.total_tokens += counter.total_tokens;

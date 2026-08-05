@@ -625,7 +625,10 @@ function readEndpointEntry(
                     `chat_completions, responses, or messages.`,
             );
         }
-        out.wireApi = at;
+        // Explicit default collapses to omitted (same as never set).
+        if (at !== DEFAULT_WIRE_API) {
+            out.wireApi = at;
+        }
     }
     return out;
 }
