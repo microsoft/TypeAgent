@@ -301,7 +301,25 @@ export function getUserDataCompletions(
         const playlistNames = userData.playlists.map((p) => p.name);
         completions.push(...playlistNames);
     }
-    return completions;
+    // The same artist or album can appear both as a history-derived entry
+    // (keyed by name) and as an API-derived one (keyed by its Spotify id),
+    // so drop repeats while keeping the established ordering.
+    return dedupe(completions);
+}
+
+function dedupe(names: string[]): string[] {
+    const seen = new Set<string>();
+    return names.filter((name) => {
+        if (name === undefined || name === null) {
+            return false;
+        }
+        const key = name.toLocaleLowerCase();
+        if (seen.has(key)) {
+            return false;
+        }
+        seen.add(key);
+        return true;
+    });
 }
 
 export function addFullTracks(
