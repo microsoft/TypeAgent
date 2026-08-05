@@ -1585,7 +1585,9 @@ pre.chat-code-block {
   padding: 0;
   border-radius: 4px;
   cursor: pointer;
-  opacity: 0;
+  /* Dimmed rather than hidden: the button is the only hint that a snippet
+     can be copied, so it has to be discoverable without hovering. */
+  opacity: 0.5;
   transition: opacity 0.12s ease;
   background: var(--vscode-editorWidget-background, rgba(255, 255, 255, 0.85));
   color: var(--vscode-editorWidget-foreground, #333);

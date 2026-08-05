@@ -44,6 +44,7 @@ import {
 } from "./connectionStatus.js";
 import { type StatusNotice, type StatusNoticeLevel } from "./statusNotice.js";
 import { createBellIconSvg } from "./icons.js";
+import { copyTextToClipboard } from "./clipboard.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
 // passed in is built from values that, while in practice come from
@@ -1196,7 +1197,7 @@ export class ChatPanel {
         copyBtn.textContent = "Copy";
         copyBtn.title = "Copy to clipboard";
         copyBtn.addEventListener("click", () => {
-            void navigator.clipboard?.writeText(text);
+            void copyTextToClipboard(text);
         });
         header.appendChild(copyBtn);
 

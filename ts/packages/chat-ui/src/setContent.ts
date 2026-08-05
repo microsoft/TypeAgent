@@ -22,6 +22,7 @@ import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import { PlatformAdapter, ChatSettingsView } from "./platformAdapter.js";
 import { iconCheck, iconCopy } from "./icons.js";
+import { copyTextToClipboard } from "./clipboard.js";
 
 const ansiUpTextToHtml = new AnsiUp();
 ansiUpTextToHtml.use_classes = true;
@@ -669,10 +670,7 @@ async function copyStatusMessage(
     text: string,
     anchor: HTMLElement,
 ): Promise<void> {
-    try {
-        await navigator.clipboard.writeText(text);
-    } catch (e) {
-        console.warn("clipboard write failed", e);
+    if (!(await copyTextToClipboard(text))) {
         return;
     }
     showCopiedToast(anchor);
@@ -694,14 +692,21 @@ function showCopiedToast(anchor: HTMLElement): void {
 
 // Give every fenced code block a hover-reveal copy button, so snippets an
 // agent hands the user (config YAML, shell commands) can be grabbed in one
-// click instead of hand-selected. Idempotent: re-running over already
-// decorated blocks is a no-op, which matters because the `innerHTML +=`
-// append sink re-walks previously rendered content.
+// click instead of hand-selected.
+//
+// The click is delegated to `root` rather than bound on each button: the
+// `innerHTML +=` append sink re-serializes the container, which recreates
+// the buttons and drops any listener attached directly to them (the link
+// and status-badge handlers below re-bind for the same reason). `root`
+// itself survives, so one listener on it keeps working.
 function attachCodeBlockCopyButtons(root: HTMLElement): void {
     const codes = root.querySelectorAll<HTMLElement>("pre > code");
     codes.forEach((code) => {
         const pre = code.parentElement;
-        if (pre === null || pre.classList.contains("chat-code-block")) {
+        if (
+            pre === null ||
+            pre.querySelector(":scope > button.chat-code-copy") !== null
+        ) {
             return;
         }
         pre.classList.add("chat-code-block");
@@ -711,23 +716,36 @@ function attachCodeBlockCopyButtons(root: HTMLElement): void {
         button.title = "Copy to clipboard";
         button.setAttribute("aria-label", "Copy code to clipboard");
         button.appendChild(iconCopy());
-        button.addEventListener("click", async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            try {
-                await navigator.clipboard.writeText(code.textContent ?? "");
-            } catch (error) {
-                console.warn("clipboard write failed", error);
-                return;
-            }
-            showCopiedToast(button);
-            // Brief check-mark confirmation on the button itself, so the
-            // feedback survives the toast fading out.
-            button.replaceChildren(iconCheck());
-            setTimeout(() => button.replaceChildren(iconCopy()), 1200);
-        });
         pre.appendChild(button);
     });
+    if (codes.length === 0 || root.dataset.chatCodeCopyBound === "true") {
+        return;
+    }
+    root.dataset.chatCodeCopyBound = "true";
+    root.addEventListener("click", (e) => {
+        const button = (e.target as HTMLElement | null)?.closest<HTMLElement>(
+            "button.chat-code-copy",
+        );
+        if (button === null || button === undefined || !root.contains(button)) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        // The button lives inside the <pre>, so exclude it from the text.
+        const code = button.parentElement?.querySelector("code");
+        void copyCodeBlock(code?.textContent ?? "", button);
+    });
+}
+
+async function copyCodeBlock(text: string, button: HTMLElement): Promise<void> {
+    if (!(await copyTextToClipboard(text))) {
+        return;
+    }
+    showCopiedToast(button);
+    // Brief check-mark confirmation on the button itself, so the feedback
+    // survives the toast fading out.
+    button.replaceChildren(iconCheck());
+    setTimeout(() => button.replaceChildren(iconCopy()), 1200);
 }
 
 /**
