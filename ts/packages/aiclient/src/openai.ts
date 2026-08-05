@@ -589,10 +589,7 @@ function createAzureOpenAIChatModel(
             }
             // Unconditional — matches pre-adapter TokenCounter/usageCallback
             // (undefined usage was passed through at runtime).
-            TokenCounter.getInstance().add(
-                usage as CompletionUsageStats,
-                tags,
-            );
+            TokenCounter.getInstance().add(usage as CompletionUsageStats, tags);
             usageCallback?.(usage as CompletionUsageStats);
         } catch {}
 
