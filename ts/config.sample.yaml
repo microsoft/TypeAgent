@@ -370,3 +370,25 @@ typeagent:
   feed:
     registry: https://pkgs.dev.azure.com/<org>/<project>/_packaging/<feed>/npm/registry/
     scopes: "@typeagent" # comma-separated for multiple scopes
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Telemetry (OpenTelemetry)                                       ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Optional OTel configuration for TypeAgent-owned processes. Every field
+# is optional; env vars (OTEL_* / TYPEAGENT_OTEL_*) always win over YAML.
+#
+#   - otlpEndpoint       fallback endpoint for traces + metrics + logs
+#   - logFile            local JSONL log file; enables the logs signal
+#                        independently of any OTLP endpoint. Leading
+#                        `~`/`~/`/`~\` expands to your home dir.
+#   - tracesSampler      one of always_on, always_off, traceidratio,
+#                        parentbased_always_on, parentbased_always_off,
+#                        parentbased_traceidratio
+#   - tracesSamplerArg   required with the ratio samplers (0.0 - 1.0)
+
+# telemetry:
+#   otlpEndpoint: http://localhost:4318
+#   logFile: ~/.typeagent/logs/typeagent-{service}-{pid}.jsonl
+#   tracesSampler: parentbased_traceidratio
+#   tracesSamplerArg: 0.1
