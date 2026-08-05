@@ -2,7 +2,7 @@
   "name": "windowsclock-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "Windows Clock agent — set alarms, start timers, run the stopwatch, and add world clocks via the built-in Windows Alarms & Clock app.",
+  "description": "Windows Clock agent \u2014 set alarms, start timers, run the stopwatch, and add world clocks via the built-in Windows Alarms & Clock app.",
   "keywords": [
     "typeagent-agent"
   ],
@@ -42,7 +42,8 @@
     "tasks": {
       "asc:main": {
         "dependsOn": [
-          "@typeagent/action-schema-compiler#tsc"
+          "@typeagent/action-schema-compiler#tsc",
+          "@typeagent/action-schema#tsc"
         ],
         "files": {
           "inputGlobs": [

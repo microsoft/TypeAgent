@@ -46,7 +46,8 @@
     "tasks": {
       "asc": {
         "dependsOn": [
-          "@typeagent/action-schema-compiler#tsc"
+          "@typeagent/action-schema-compiler#tsc",
+          "@typeagent/action-schema#tsc"
         ],
         "files": {
           "inputGlobs": [

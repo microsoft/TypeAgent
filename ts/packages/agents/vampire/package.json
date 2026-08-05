@@ -43,7 +43,8 @@
     "tasks": {
       "agc": {
         "dependsOn": [
-          "@typeagent/action-grammar-compiler#tsc"
+          "@typeagent/action-grammar-compiler#tsc",
+          "@typeagent/action-grammar#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -57,7 +58,8 @@
       },
       "asc": {
         "dependsOn": [
-          "@typeagent/action-schema-compiler#tsc"
+          "@typeagent/action-schema-compiler#tsc",
+          "@typeagent/action-schema#tsc"
         ],
         "files": {
           "inputGlobs": [

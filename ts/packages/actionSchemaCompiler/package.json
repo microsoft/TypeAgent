@@ -46,5 +46,14 @@
   "devDependencies": {
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "tsc": {
+        "dependsOn": [
+          "@typeagent/action-schema#tsc"
+        ]
+      }
+    }
   }
 }
