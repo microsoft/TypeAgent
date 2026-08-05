@@ -239,7 +239,6 @@
     },
     {
       "request": "put cheese on the list",
-      "skipGrammar": true,
       "expected": {
         "schemaName": "list",
         "actionName": "addItems",

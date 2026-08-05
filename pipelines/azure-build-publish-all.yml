@@ -444,13 +444,13 @@ stages:
   - stage: Test
     displayName: "Test gate"
     dependsOn: Build
-    condition: succeeded()
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'Manual'))
     jobs:
       - job: unit_tests
         displayName: "Unit tests, lint, policy"
-        # Optional gate: a failure here must NOT block Publish. continueOnError
-        # makes a failing job report SucceededWithIssues instead of Failed, and
-        # the Publish stage condition accepts that result.
+        # Manual-only gate: a failure here must NOT block Publish.
+        # continueOnError makes a failing job report SucceededWithIssues
+        # instead of Failed, and the Publish stage accepts that result.
         continueOnError: true
         pool:
           vmImage: ubuntu-latest
@@ -507,8 +507,8 @@ stages:
       - Build
       - Test
     # Run if Build succeeded and Test did not hard-fail. The Test stage is an
-    # optional gate (unit_tests uses continueOnError), so a failing test reports
-    # SucceededWithIssues; Skipped covers the runTests=false case.
+    # optional manual-only gate (unit_tests uses continueOnError), so a failing
+    # test reports SucceededWithIssues; Skipped covers CI runs.
     condition: |
       and(
         in(stageDependencies.Build.result, 'Succeeded', 'SucceededWithIssues'),
