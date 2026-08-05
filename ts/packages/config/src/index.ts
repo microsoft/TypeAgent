@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export { loadConfig, loadConfigSync, computeConfigDrift } from "./loader.js";
+export {
+    loadConfig,
+    loadConfigSync,
+    computeConfigDrift,
+    resolveLocalConfigPath,
+} from "./loader.js";
 export { flatten, mergeFlat } from "./flatten.js";
 export {
     fetchKeyVaultConfig,
@@ -29,11 +34,13 @@ export {
     CONFIG_LOCAL_FILE,
     CONFIG_SAMPLE_FILE,
     configKeyNames,
+    configLocalFileLink,
     configPathForEnvVar,
     configSetupHint,
     configYamlSnippet,
     type ConfigHintVar,
 } from "./hints.js";
+export { fileLinkHref, FILE_LINK_SCHEME } from "./fileLink.js";
 export { validateConfigTree, configTreeSchema } from "./schema.js";
 export {
     ConfigSource,

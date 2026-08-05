@@ -93,6 +93,48 @@ describe("setContent markdown linkification", () => {
     });
 });
 
+describe("setContent local-file links", () => {
+    it("keeps typeagent-file links and routes clicks to the adapter", () => {
+        const handleLinkClick = jest.fn();
+        const href = "typeagent-file:///d:/repo/ts/config.local.yaml";
+        const elm = render(
+            {
+                type: "markdown",
+                content: `Edit [\`config.local.yaml\`](<${href}>)`,
+            },
+            { handleLinkClick },
+        );
+        const link = elm.querySelector<HTMLAnchorElement>("a[href]");
+        // The sanitizer allows the scheme through...
+        expect(link?.getAttribute("href")).toBe(href);
+        link!.dispatchEvent(
+            new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+        // ...and the host decides how to open it.
+        expect(handleLinkClick).toHaveBeenCalledWith(href, expect.anything());
+    });
+});
+
+describe("setContent code blocks", () => {
+    it("adds a copy button to fenced code blocks", () => {
+        const elm = render({
+            type: "markdown",
+            content: "```yaml\nspotify:\n  clientId: <value>\n```",
+        });
+        const pre = elm.querySelector("pre");
+        expect(pre?.classList.contains("chat-code-block")).toBe(true);
+        expect(pre?.querySelector("button.chat-code-copy")).not.toBeNull();
+    });
+
+    it("does not add a copy button to inline code", () => {
+        const elm = render({
+            type: "markdown",
+            content: "Run `pnpm build` first.",
+        });
+        expect(elm.querySelector("button.chat-code-copy")).toBeNull();
+    });
+});
+
 describe("setContent plain-text linkification", () => {
     it("turns a bare https URL in text content into a clickable link", () => {
         const elm = render({

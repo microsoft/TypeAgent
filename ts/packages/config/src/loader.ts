@@ -72,6 +72,18 @@ interface ResolvedConfigPaths {
 }
 
 /**
+ * Absolute path of the `config.local.yaml` this process would load, resolved
+ * with the same precedence as {@link loadConfigSync}. Used by setup hints so
+ * they can point at (and link to) the actual file on this machine rather than
+ * a generic repo-relative path. Returns the path whether or not it exists.
+ */
+export function resolveLocalConfigPath(
+    options: LoadConfigOptions = {},
+): string {
+    return resolveConfigPaths(options).localPath;
+}
+
+/**
  * Resolve the three config file paths. Precedence per file:
  *   explicit option  >  dedicated env var  >  `<configDir>/<filename>`
  * where `configDir` is, in order:

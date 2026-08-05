@@ -8,6 +8,7 @@ export {
 } from "./platformAdapter.js";
 
 export { setContent, swapContent } from "./setContent.js";
+export { FILE_LINK_SCHEME, fileLinkToPath, isFileLink } from "./fileLink.js";
 
 export {
     PartialCompletion,
