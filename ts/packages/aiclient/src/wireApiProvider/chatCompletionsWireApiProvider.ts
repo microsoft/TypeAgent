@@ -70,6 +70,82 @@ function verifyStreamContentSafety(data: ChatCompletionChunk): void {
     });
 }
 
+function asStreamError(e: unknown): Error {
+    return e instanceof Error ? e : new Error(String(e));
+}
+
+/** First tool_call delta chunk: emit `{"name":"...","arguments":...` prefix. */
+function firstToolCallText(d: ToolCallDelta): string {
+    if (d.index !== 0) {
+        throw new Error("Invalid number of tool_calls");
+    }
+    if (d.type !== "function") {
+        throw new Error("Invalid tool call type");
+    }
+    if (!d.function.name) {
+        throw new Error("Invalid function name");
+    }
+    return `{"name":"${d.function.name}","arguments":${d.function.arguments ?? ""}`;
+}
+
+/** Continuation tool_call delta: raw arguments (undefined coerces on yield). */
+function continuationToolCallText(d: ToolCallDelta): string | undefined {
+    if (d.index !== 0) {
+        throw new Error("Invalid number of tool_calls");
+    }
+    // No ?? "" — undefined coerces on += / yield (legacy completeStream).
+    return d.function.arguments;
+}
+
+/**
+ * One yield per delta entry (legacy completeStream). Defer throws via
+ * `error` so prior deltas in the same SSE event are yielded first —
+ * including unguarded property-access TypeErrors mid-loop.
+ */
+function decodeToolCallDeltas(
+    delta: ToolCallDelta[],
+    state: { emittedPrefix: string },
+): { texts: (string | undefined)[]; error?: Error } {
+    const texts: (string | undefined)[] = [];
+    for (const d of delta) {
+        try {
+            if (state.emittedPrefix === "") {
+                state.emittedPrefix = firstToolCallText(d);
+                texts.push(state.emittedPrefix);
+            } else {
+                texts.push(continuationToolCallText(d));
+            }
+        } catch (e) {
+            return { texts, error: asStreamError(e) };
+        }
+    }
+    return { texts };
+}
+
+function applyStreamChoice(
+    piece: StreamPiece,
+    choice: ChatCompletionDelta,
+    isFunctionCalling: boolean,
+    state: { emittedPrefix: string },
+): void {
+    if (isFunctionCalling) {
+        const delta = choice.delta.tool_calls;
+        if (!delta) {
+            return;
+        }
+        const decoded = decodeToolCallDeltas(delta, state);
+        piece.texts = decoded.texts;
+        if (decoded.error) {
+            piece.error = decoded.error;
+        }
+        return;
+    }
+    const content = choice.delta.content;
+    if (content) {
+        piece.text = content;
+    }
+}
+
 export class ChatCompletionsWireApiProvider implements ProviderAdapter {
     readonly wireApi: WireApi = "chat_completions";
 
@@ -142,65 +218,19 @@ export class ChatCompletionsWireApiProvider implements ProviderAdapter {
 
     createStreamDecoder(request: ModelRequest): StreamDecoder {
         const isFunctionCalling = Array.isArray(request.jsonSchema);
-        let emittedPrefix = "";
+        const state = { emittedPrefix: "" };
         return {
             push: (raw: string): StreamPiece => {
                 const data = JSON.parse(raw) as ChatCompletionChunk;
                 verifyStreamContentSafety(data);
                 const piece: StreamPiece = {};
                 if (data.choices && data.choices.length > 0) {
-                    if (isFunctionCalling) {
-                        const delta = data.choices[0].delta.tool_calls;
-                        if (delta) {
-                            // One yield per delta entry (legacy completeStream).
-                            // Defer throws via piece.error so prior deltas in
-                            // the same SSE event are yielded first — including
-                            // unguarded property-access TypeErrors mid-loop.
-                            const texts: (string | undefined)[] = [];
-                            let streamError: Error | undefined;
-                            for (const d of delta) {
-                                try {
-                                    if (d.index !== 0) {
-                                        throw new Error(
-                                            "Invalid number of tool_calls",
-                                        );
-                                    }
-                                    if (emittedPrefix === "") {
-                                        if (d.type !== "function") {
-                                            throw new Error(
-                                                "Invalid tool call type",
-                                            );
-                                        }
-                                        if (!d.function.name) {
-                                            throw new Error(
-                                                "Invalid function name",
-                                            );
-                                        }
-                                        emittedPrefix = `{"name":"${d.function.name}","arguments":${d.function.arguments ?? ""}`;
-                                        texts.push(emittedPrefix);
-                                    } else {
-                                        // No ?? "" — undefined coerces on += / yield.
-                                        texts.push(d.function.arguments);
-                                    }
-                                } catch (e) {
-                                    streamError =
-                                        e instanceof Error
-                                            ? e
-                                            : new Error(String(e));
-                                    break;
-                                }
-                            }
-                            piece.texts = texts;
-                            if (streamError) {
-                                piece.error = streamError;
-                            }
-                        }
-                    } else {
-                        const delta = data.choices[0].delta.content;
-                        if (delta) {
-                            piece.text = delta;
-                        }
-                    }
+                    applyStreamChoice(
+                        piece,
+                        data.choices[0],
+                        isFunctionCalling,
+                        state,
+                    );
                 }
                 if (data.usage) {
                     piece.usage = data.usage;
