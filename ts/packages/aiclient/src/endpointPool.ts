@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { randomInt } from "node:crypto";
 import registerDebug from "debug";
 import { priorityQueue } from "async";
 import { azureApiSettingsFromEnv } from "./azureSettings.js";
@@ -453,7 +454,7 @@ export type PickResult =
 export function pickEndpoint(
     pool: EndpointPool,
     now: number = Date.now(),
-    rng: () => number = Math.random,
+    rng: () => number = () => randomInt(2 ** 32) / 2 ** 32,
 ): PickResult {
     if (pool.members.length === 0) {
         throw new Error(`pool ${pool.modelKey} has no members`);
