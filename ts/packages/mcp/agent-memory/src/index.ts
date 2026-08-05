@@ -18,5 +18,9 @@ export {
     serviceVersion,
     startMemoryServer,
     type MemoryStatus,
+    type MemoryGetProvider,
+    type MemoryQueryProvider,
+    type MemoryServerServices,
     type MemoryStatusProvider,
+    type RecordTurnProvider,
 } from "./server.js";

@@ -130,6 +130,10 @@ export interface MemoryRepository extends Disposable {
         document: SearchDocument,
         instant: string,
     ): ProjectedSearchDocument | undefined;
+    projectSearchDocumentRevision(
+        document: SearchDocument,
+        revision: number,
+    ): ProjectedSearchDocument | undefined;
     close(): void;
     getScope(scopeId: string): AccessScope | undefined;
     findTopicByPath(scopeId: string, path: string): Topic | undefined;
@@ -1439,6 +1443,74 @@ export class SqliteMemoryRepository implements MemoryRepository {
         const recordedAt = fields.recordedAt;
         return typeof recordedAt === "string" && recordedAt <= instant
             ? { document, fields }
+            : undefined;
+    }
+
+    public projectSearchDocumentRevision(
+        document: SearchDocument,
+        revision: number,
+    ): ProjectedSearchDocument | undefined {
+        if (document.entityKind === "goal") {
+            const row = this.#database
+                .prepare(
+                    `SELECT events.revision, events.desired_state, events.state,
+                            events.updated_at
+                     FROM goal_events AS events JOIN goals USING(goal_id)
+                     WHERE goals.scope_id = ? AND events.goal_id = ?
+                       AND events.revision = ?`,
+                )
+                .get(document.scopeId, document.entityId, revision) as
+                | {
+                      revision: number;
+                      desired_state: string;
+                      state: string;
+                      updated_at: string;
+                  }
+                | undefined;
+            return row === undefined
+                ? undefined
+                : createHistoricalProjection(
+                      document,
+                      row.revision,
+                      document.title,
+                      row.desired_state,
+                      row.state,
+                      row.updated_at,
+                  );
+        }
+        if (document.entityKind === "designNote") {
+            const row = this.#database
+                .prepare(
+                    `SELECT revisions.revision, revisions.title, revisions.body,
+                            revisions.state, revisions.updated_at
+                     FROM design_note_revisions AS revisions
+                     JOIN design_notes USING(design_note_id)
+                     WHERE design_notes.scope_id = ?
+                       AND revisions.design_note_id = ?
+                       AND revisions.revision = ?`,
+                )
+                .get(document.scopeId, document.entityId, revision) as
+                | {
+                      revision: number;
+                      title: string;
+                      body: string;
+                      state: string;
+                      updated_at: string;
+                  }
+                | undefined;
+            return row === undefined
+                ? undefined
+                : createHistoricalProjection(
+                      document,
+                      row.revision,
+                      row.title,
+                      row.body,
+                      row.state,
+                      row.updated_at,
+                  );
+        }
+        return document.revision === revision
+            ? { document, fields: this.getSearchDocumentFields(document) }
             : undefined;
     }
 

@@ -19,12 +19,16 @@ describe("agent-memory configuration", () => {
                 "cli.db",
                 "--allowed-scope",
                 "workspace:demo",
+                "--cursor-secret",
+                "cli-cursor-secret-value-32-bytes",
                 "--log-level",
                 "debug",
             ],
             {
                 AGENT_MEMORY_DATABASE: "environment.db",
                 AGENT_MEMORY_ALLOWED_SCOPE: "workspace:other",
+                AGENT_MEMORY_CURSOR_SECRET:
+                    "environment-cursor-secret-value-32-bytes",
                 AGENT_MEMORY_LOG_LEVEL: "error",
             },
             "C:\\memory-test",
@@ -33,6 +37,7 @@ describe("agent-memory configuration", () => {
         expect(config).toEqual({
             databasePath: path.resolve("C:\\memory-test", "cli.db"),
             allowedScope: "workspace:demo",
+            cursorSecret: "cli-cursor-secret-value-32-bytes",
             logLevel: "debug",
         });
     });

@@ -3,16 +3,47 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { randomBytes } from "node:crypto";
 import { loadMemoryServerConfig } from "./config.js";
+import {
+    HmacPacketContinuationCodec,
+    WorkingMemoryPacketAssembler,
+} from "./packet/index.js";
 import { SqliteMemoryRepository } from "./repository/index.js";
 import { startMemoryServer } from "./server.js";
-import { RecordTurnService } from "./services/index.js";
+import {
+    MemoryGetService,
+    MemoryQueryService,
+    RecordTurnService,
+} from "./services/index.js";
 
 async function main(): Promise<void> {
     const config = loadMemoryServerConfig(process.argv.slice(2));
     const repository = SqliteMemoryRepository.open(config.databasePath);
     const recordTurn = new RecordTurnService(repository);
-    const server = await startMemoryServer({ status: repository, recordTurn });
+    const continuationCodec = new HmacPacketContinuationCodec(
+        config.cursorSecret ?? randomBytes(32),
+    );
+    const query = new MemoryQueryService(
+        repository,
+        new WorkingMemoryPacketAssembler({ continuationCodec }),
+        {
+            ...(config.allowedScope === undefined
+                ? {}
+                : { allowedScope: config.allowedScope }),
+        },
+    );
+    const get = new MemoryGetService(repository, {
+        ...(config.allowedScope === undefined
+            ? {}
+            : { allowedScope: config.allowedScope }),
+    });
+    const server = await startMemoryServer({
+        status: repository,
+        recordTurn,
+        query,
+        get,
+    });
 
     const close = async () => {
         await server.close();

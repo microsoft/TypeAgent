@@ -77,8 +77,16 @@ try {
     try {
         await client.connect(transport);
         const tools = await client.listTools();
-        if (!tools.tools.some((tool) => tool.name === "memory_record_turn")) {
-            throw new Error("Packed server did not expose memory_record_turn");
+        const toolNames = new Set(tools.tools.map((tool) => tool.name));
+        for (const toolName of [
+            "memory_status",
+            "memory_record_turn",
+            "memory_query",
+            "memory_get",
+        ]) {
+            if (!toolNames.has(toolName)) {
+                throw new Error(`Packed server did not expose ${toolName}`);
+            }
         }
         const result = await client.callTool({
             name: "memory_status",

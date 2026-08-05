@@ -8,6 +8,7 @@ export type LogLevel = "error" | "warn" | "info" | "debug";
 export type MemoryServerConfig = {
     databasePath: string;
     allowedScope?: string;
+    cursorSecret?: string;
     logLevel: LogLevel;
 };
 
@@ -15,6 +16,7 @@ export type ConfigEnvironment = {
     [key: string]: string | undefined;
     AGENT_MEMORY_DATABASE?: string;
     AGENT_MEMORY_ALLOWED_SCOPE?: string;
+    AGENT_MEMORY_CURSOR_SECRET?: string;
     AGENT_MEMORY_LOG_LEVEL?: string;
 };
 
@@ -30,6 +32,8 @@ export function loadMemoryServerConfig(
         path.join(workingDirectory, "agent-memory.db");
     const allowedScope =
         options.allowedScope ?? environment.AGENT_MEMORY_ALLOWED_SCOPE;
+    const cursorSecret =
+        options.cursorSecret ?? environment.AGENT_MEMORY_CURSOR_SECRET;
     const logLevel = parseLogLevel(
         options.logLevel ?? environment.AGENT_MEMORY_LOG_LEVEL ?? "info",
     );
@@ -37,6 +41,7 @@ export function loadMemoryServerConfig(
     return {
         databasePath: path.resolve(workingDirectory, databasePath),
         ...(allowedScope === undefined ? {} : { allowedScope }),
+        ...(cursorSecret === undefined ? {} : { cursorSecret }),
         logLevel,
     };
 }
@@ -44,6 +49,7 @@ export function loadMemoryServerConfig(
 type ParsedArguments = {
     databasePath?: string;
     allowedScope?: string;
+    cursorSecret?: string;
     logLevel?: string;
 };
 
@@ -64,6 +70,9 @@ function parseArguments(args: string[]): ParsedArguments {
                 break;
             case "--allowed-scope":
                 result.allowedScope = value;
+                break;
+            case "--cursor-secret":
+                result.cursorSecret = value;
                 break;
             case "--log-level":
                 result.logLevel = value;
