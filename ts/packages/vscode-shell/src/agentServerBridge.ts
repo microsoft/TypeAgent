@@ -1492,6 +1492,15 @@ export class AgentServerBridge {
                     void vscode.env.openExternal(vscode.Uri.parse(msg.href));
                 }
                 break;
+            case "openFile":
+                // `typeagent-file:` link — show it in an editor tab rather
+                // than handing it to the OS; the user is already in VS Code.
+                if (msg.path) {
+                    void vscode.window.showTextDocument(
+                        vscode.Uri.file(msg.path),
+                    );
+                }
+                break;
             case "openMessageWindow":
                 // Open the message content in a new editor panel (a movable
                 // window). The extension owns the panel.

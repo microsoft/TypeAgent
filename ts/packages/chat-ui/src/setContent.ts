@@ -21,6 +21,7 @@ import {
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import { PlatformAdapter, ChatSettingsView } from "./platformAdapter.js";
+import { iconCheck, iconCopy } from "./icons.js";
 
 const ansiUpTextToHtml = new AnsiUp();
 ansiUpTextToHtml.use_classes = true;
@@ -562,7 +563,7 @@ function processContent(
                 ADD_DATA_URI_TAGS: ["img"],
                 ADD_URI_SAFE_ATTR: ["src", "href"],
                 ALLOWED_URI_REGEXP:
-                    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+                    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser|typeagent-file):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
             });
         case "markdown": {
             const md = createMarkdownRenderer();
@@ -577,7 +578,7 @@ function processContent(
                 ADD_DATA_URI_TAGS: ["img"],
                 ADD_URI_SAFE_ATTR: ["src", "href", "style"],
                 ALLOWED_URI_REGEXP:
-                    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+                    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser|typeagent-file):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
             });
         }
         case "text":
@@ -689,6 +690,44 @@ function showCopiedToast(anchor: HTMLElement): void {
     toast.style.top = `${rect.top}px`;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 1200);
+}
+
+// Give every fenced code block a hover-reveal copy button, so snippets an
+// agent hands the user (config YAML, shell commands) can be grabbed in one
+// click instead of hand-selected. Idempotent: re-running over already
+// decorated blocks is a no-op, which matters because the `innerHTML +=`
+// append sink re-walks previously rendered content.
+function attachCodeBlockCopyButtons(root: HTMLElement): void {
+    const codes = root.querySelectorAll<HTMLElement>("pre > code");
+    codes.forEach((code) => {
+        const pre = code.parentElement;
+        if (pre === null || pre.classList.contains("chat-code-block")) {
+            return;
+        }
+        pre.classList.add("chat-code-block");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "chat-code-copy";
+        button.title = "Copy to clipboard";
+        button.setAttribute("aria-label", "Copy code to clipboard");
+        button.appendChild(iconCopy());
+        button.addEventListener("click", async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+                await navigator.clipboard.writeText(code.textContent ?? "");
+            } catch (error) {
+                console.warn("clipboard write failed", error);
+                return;
+            }
+            showCopiedToast(button);
+            // Brief check-mark confirmation on the button itself, so the
+            // feedback survives the toast fading out.
+            button.replaceChildren(iconCheck());
+            setTimeout(() => button.replaceChildren(iconCopy()), 1200);
+        });
+        pre.appendChild(button);
+    });
 }
 
 /**
@@ -850,7 +889,7 @@ export function setContent(
             ADD_DATA_URI_TAGS: ["img"],
             ADD_URI_SAFE_ATTR: ["src", "href", "style"],
             ALLOWED_URI_REGEXP:
-                /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+                /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser|typeagent-file):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
         });
 
         // Plain-text content authors no links of its own, so bare URLs would
@@ -868,6 +907,7 @@ export function setContent(
             if (
                 href &&
                 (href.startsWith("typeagent-browser://") ||
+                    href.startsWith("typeagent-file:") ||
                     href.startsWith("http://") ||
                     href.startsWith("https://"))
             ) {
@@ -881,6 +921,9 @@ export function setContent(
 
         // Phase 4a — wire sort + filter on any sc-table elements just added.
         attachTableInteractivity(contentElm);
+
+        // Fenced code blocks get a hover copy button.
+        attachCodeBlockCopyButtons(contentElm);
 
         // Status badges (agent-status readiness/load indicators and other
         // tooltip-bearing status glyphs) stash their full message in a

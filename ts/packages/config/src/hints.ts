@@ -16,9 +16,11 @@
  * away from the real converter in `runtime/tree.ts`.
  */
 
+import { fileLinkHref } from "./fileLink.js";
+import { resolveLocalConfigPath } from "./loader.js";
+
 /** Where users put their own settings. */
 export const CONFIG_LOCAL_FILE = "ts/config.local.yaml";
-
 /** Fully commented example of every supported section. */
 export const CONFIG_SAMPLE_FILE = "ts/config.sample.yaml";
 
@@ -132,13 +134,38 @@ export function configYamlSnippet(vars: ConfigHintVar[]): string {
 }
 
 /**
+ * `resolveLocalConfigPath` walks the filesystem, so treat any failure
+ * (permissions, exotic install layout) as "no link".
+ */
+function tryResolveLocalConfigPath(): string | undefined {
+    try {
+        return resolveLocalConfigPath();
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Markdown for the `config.local.yaml` reference. When the file's location
+ * on this machine can be resolved, it becomes a `typeagent-file:` link the
+ * chat hosts open in the user's editor; otherwise it degrades to plain
+ * code text.
+ */
+export function configLocalFileLink(): string {
+    const target = fileLinkHref(tryResolveLocalConfigPath());
+    return target === undefined
+        ? `\`${CONFIG_LOCAL_FILE}\``
+        : `[\`${CONFIG_LOCAL_FILE}\`](<${target}>)`;
+}
+
+/**
  * Full "how to configure this" blurb: the YAML to add, where to add it,
  * and an optional agent-specific note (where to obtain the values, which
  * command to run afterwards, ...).
  */
 export function configSetupHint(vars: ConfigHintVar[], note?: string): string {
     const lines = [
-        `Add to \`${CONFIG_LOCAL_FILE}\` (see \`${CONFIG_SAMPLE_FILE}\` for the full format):`,
+        `Add to ${configLocalFileLink()} (see \`${CONFIG_SAMPLE_FILE}\` for the full format):`,
         "",
         "```yaml",
         configYamlSnippet(vars),

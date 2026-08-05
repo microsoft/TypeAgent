@@ -143,6 +143,15 @@ describe("configSetupHint", () => {
         // The legacy env-var name shouldn't be the headline instruction.
         expect(hint).not.toContain("SPOTIFY_APP_CLI");
     });
+
+    test("links the local config file so hosts can open it", () => {
+        const hint = configSetupHint(["SPOTIFY_APP_CLI"]);
+        // Inside the monorepo the path always resolves, so the reference is
+        // a markdown link with the `typeagent-file:` scheme the chat hosts
+        // route to "open this file".
+        expect(hint).toContain(`[\`${CONFIG_LOCAL_FILE}\`](<typeagent-file:`);
+        expect(hint).toContain("config.local.yaml>)");
+    });
 });
 
 describe("configKeyNames", () => {

@@ -26,6 +26,7 @@ import {
     parseStatusNotice,
     type TemplateEditServices,
     type ConnectionStatus,
+    fileLinkToPath,
 } from "@typeagent/chat-ui";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import {
@@ -654,6 +655,14 @@ export function createChatPanelClient(
     const chatPanel = new ChatPanel(rootElement, {
         platformAdapter: {
             handleLinkClick: (href: string) => {
+                // Local-file links open in the OS default editor; the
+                // `openFolder` channel is just `shell.openPath`, which
+                // handles files as well as directories.
+                const filePath = fileLinkToPath(href);
+                if (filePath !== undefined) {
+                    getClientAPI().openFolder(filePath);
+                    return;
+                }
                 getClientAPI().openUrlExternal(href);
             },
         },

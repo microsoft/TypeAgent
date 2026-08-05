@@ -1567,6 +1567,40 @@ table.sc-kv-table.sc-card-fields {
 
 /* --- Code blocks --------------------------------------------------------- */
 
+/* Fenced code blocks in agent messages. `position: relative` anchors the
+   hover-reveal copy button added by attachCodeBlockCopyButtons. */
+pre.chat-code-block {
+  position: relative;
+}
+
+.chat-code-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  background: var(--vscode-editorWidget-background, rgba(255, 255, 255, 0.85));
+  color: var(--vscode-editorWidget-foreground, #333);
+  border: 1px solid var(--vscode-widget-border, rgba(0, 0, 0, 0.15));
+}
+
+pre.chat-code-block:hover .chat-code-copy,
+.chat-code-copy:focus-visible {
+  opacity: 1;
+}
+
+.chat-code-copy:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(0, 0, 0, 0.06));
+}
+
 .sc-code {
   background: var(--vscode-textCodeBlock-background, #f0f0f0);
   border-radius: 4px;
