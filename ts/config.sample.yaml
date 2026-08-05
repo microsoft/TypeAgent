@@ -95,13 +95,13 @@ azureOpenAI:
     # messages.
     gpt_5_codex:
       endpoints:
-        - endpoint: https://api.openai.com/v1/responses
+        - endpoint: https://my-resource.cognitiveservices.azure.com/openai/responses?api-version=2025-04-01-preview
           region: eastus
           wireApi: responses
 
     claude_sonnet:
       endpoints:
-        - endpoint: https://api.anthropic.com/v1/messages
+        - endpoint: https://my-resource.cognitiveservices.azure.com/anthropic/messages?api-version=2025-04-01-preview
           region: eastus
           wireApi: messages
 
