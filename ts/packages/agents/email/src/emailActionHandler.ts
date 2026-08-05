@@ -10,6 +10,7 @@ import {
     claimSilentRestoreAnnouncement,
     evaluateGraphReadiness,
     GoogleEmailClient,
+    graphProviderSetupHint,
     parseDayRange,
     probeGraphConfig,
 } from "@typeagent/graph-utils";
@@ -413,7 +414,7 @@ async function setupEmail(
     const config = probeGraphConfig(process.env);
     if (!config.msGraphConfigured && !config.googleConfigured) {
         return createActionResultFromError(
-            "No email provider configured. Set MSGRAPH_APP_CLIENTID + MSGRAPH_APP_TENANTID or GOOGLE_CALENDAR_CLIENT_ID + GOOGLE_CALENDAR_CLIENT_SECRET in `ts/.env`, then run `@config agent refresh email`.",
+            `No email provider configured.\n${graphProviderSetupHint("email")}`,
         );
     }
     if (!ctx.emailProvider) {
@@ -426,7 +427,7 @@ async function setupEmail(
     const provider = ctx.emailProvider;
     if (!provider) {
         return createActionResultFromError(
-            "Email env vars are set but the provider could not be created. Check `ts/.env` and restart the agent server.",
+            "Email settings are present but the provider could not be created. Check the `msGraph` / `googleCalendar` section of `ts/config.local.yaml` and restart the agent server.",
         );
     }
     if (provider.isAuthenticated()) {

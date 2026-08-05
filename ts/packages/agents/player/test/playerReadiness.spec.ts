@@ -49,8 +49,8 @@ describe("checkPlayerReadiness", () => {
         process.env.SPOTIFY_APP_PORT = "8080";
         const out = await checkPlayerReadiness();
         expect(out.state).toBe("setup-required");
-        expect(out.message).toContain("SPOTIFY_APP_CLI");
-        expect(out.message).not.toContain("SPOTIFY_APP_CLISEC,");
+        expect(out.message).toContain("spotify.clientId");
+        expect(out.message).not.toContain("spotify.clientSecret");
     });
 
     test("setup-required when SPOTIFY_APP_CLISEC is missing", async () => {
@@ -58,7 +58,7 @@ describe("checkPlayerReadiness", () => {
         process.env.SPOTIFY_APP_PORT = "8080";
         const out = await checkPlayerReadiness();
         expect(out.state).toBe("setup-required");
-        expect(out.message).toContain("SPOTIFY_APP_CLISEC");
+        expect(out.message).toContain("spotify.clientSecret");
     });
 
     test("setup-required when SPOTIFY_APP_PORT is missing", async () => {
@@ -66,15 +66,15 @@ describe("checkPlayerReadiness", () => {
         process.env.SPOTIFY_APP_CLISEC = "secret";
         const out = await checkPlayerReadiness();
         expect(out.state).toBe("setup-required");
-        expect(out.message).toContain("SPOTIFY_APP_PORT");
+        expect(out.message).toContain("spotify.port");
     });
 
-    test("lists every missing var when more than one is unset", async () => {
+    test("lists every missing key when more than one is unset", async () => {
         const out = await checkPlayerReadiness();
         expect(out.state).toBe("setup-required");
-        expect(out.message).toContain("SPOTIFY_APP_CLI");
-        expect(out.message).toContain("SPOTIFY_APP_CLISEC");
-        expect(out.message).toContain("SPOTIFY_APP_PORT");
+        expect(out.message).toContain("spotify.clientId");
+        expect(out.message).toContain("spotify.clientSecret");
+        expect(out.message).toContain("spotify.port");
     });
 
     test("setup-required with port-specific message when SPOTIFY_APP_PORT isn't a number", async () => {
@@ -100,6 +100,9 @@ describe("checkPlayerReadiness", () => {
         const out = await checkPlayerReadiness();
         expect(out.state).toBe("setup-required");
         expect(out.details).toBeTruthy();
-        expect(out.details).toMatch(/ts\/\.env/);
+        // Points at the YAML config, not the legacy env vars.
+        expect(out.details).toMatch(/config\.local\.yaml/);
+        expect(out.details).toMatch(/clientId:/);
+        expect(out.details).not.toMatch(/SPOTIFY_APP_/);
     });
 });

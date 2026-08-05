@@ -16,6 +16,7 @@ import {
     createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ChatModel, openai } from "@typeagent/aiclient";
+import { configSetupHint } from "@typeagent/config";
 import { DiscordActions } from "./discordSchema.js";
 
 const DISCORD_API = "https://discord.com/api/v10";
@@ -152,7 +153,10 @@ async function discordFetch(
     const token = process.env.DISCORD_BOT_TOKEN;
     if (!token) {
         throw new Error(
-            "DISCORD_BOT_TOKEN is not set. Please add it to ts/.env.",
+            `Discord is not configured.\n${configSetupHint(
+                ["DISCORD_BOT_TOKEN"],
+                "The bot token comes from your application's Bot page in the Discord developer portal.",
+            )}`,
         );
     }
     const headers: Record<string, string> = {

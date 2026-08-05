@@ -70,8 +70,9 @@ describe("evaluateGraphReadiness", () => {
         });
         expect(r.state).toBe("setup-required");
         expect(r.message).toMatch(/no provider configured/i);
-        expect(r.details).toMatch(/MSGRAPH_APP_CLIENTID/);
-        expect(r.details).toMatch(/GOOGLE_CALENDAR_CLIENT_ID/);
+        expect(r.details).toMatch(/config\.local\.yaml/);
+        expect(r.details).toMatch(/msGraph:/);
+        expect(r.details).toMatch(/googleCalendar:/);
         expect(r.details).toMatch(/@config agent refresh calendar/);
     });
 

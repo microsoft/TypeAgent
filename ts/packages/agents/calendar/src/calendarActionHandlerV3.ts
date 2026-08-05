@@ -42,6 +42,7 @@ import {
     evaluateGraphReadiness,
     getAvailableProviders,
     GoogleCalendarClient,
+    graphProviderSetupHint,
     probeGraphConfig,
 } from "@typeagent/graph-utils";
 import {
@@ -1290,7 +1291,7 @@ async function offerCalendarLogin(
     const config = probeGraphConfig(process.env);
     if (!config.msGraphConfigured && !config.googleConfigured) {
         return createActionResultFromError(
-            "No calendar provider configured. Set MSGRAPH_APP_CLIENTID + MSGRAPH_APP_TENANTID or GOOGLE_CALENDAR_CLIENT_ID + GOOGLE_CALENDAR_CLIENT_SECRET in `ts/.env`, then run `@config agent refresh calendar`.",
+            `No calendar provider configured.\n${graphProviderSetupHint("calendar")}`,
         );
     }
     if (!ctx.calendarProvider) {
@@ -1303,7 +1304,7 @@ async function offerCalendarLogin(
     const provider = ctx.calendarProvider;
     if (!provider) {
         return createActionResultFromError(
-            "Calendar env vars are set but the provider could not be created. Check `ts/.env` and restart the agent server.",
+            "Calendar settings are present but the provider could not be created. Check the `msGraph` / `googleCalendar` section of `ts/config.local.yaml` and restart the agent server.",
         );
     }
     if (provider.isAuthenticated()) {

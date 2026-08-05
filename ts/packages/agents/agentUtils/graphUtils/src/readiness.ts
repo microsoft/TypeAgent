@@ -3,12 +3,13 @@
 
 // Shared readiness/setup helpers for the calendar and email agents.
 // Both agents speak to Microsoft Graph (or Google) through the same provider
-// abstraction in this package, gated on the same env vars, and want the same
+// abstraction in this package, gated on the same settings, and want the same
 // "configured? signed-in?" state machine. This module factors that decision
 // out so both agents stay thin wrappers — see the desktop agent's readiness.ts
 // for the pattern this mirrors.
 
 import type { ReadinessReport } from "@typeagent/agent-sdk";
+import { configSetupHint } from "@typeagent/config";
 
 export type GraphAgentName = "calendar" | "email";
 
@@ -52,12 +53,32 @@ export function probeGraphConfig(env: NodeJS.ProcessEnv): {
     };
 }
 
+// The "no provider configured" instructions, shared by the readiness
+// report and by the agents' own login/setup paths so both point at the
+// same YAML keys.
+export function graphProviderSetupHint(agentName: GraphAgentName): string {
+    return [
+        "Microsoft Graph (Outlook / Microsoft 365):",
+        "",
+        configSetupHint(["MSGRAPH_APP_CLIENTID", "MSGRAPH_APP_TENANTID"]),
+        "",
+        "OR Google:",
+        "",
+        configSetupHint([
+            "GOOGLE_CALENDAR_CLIENT_ID",
+            "GOOGLE_CALENDAR_CLIENT_SECRET",
+        ]),
+        "",
+        `Then run \`@config agent refresh ${agentName}\`.`,
+    ].join("\n");
+}
+
 // Pure decision: probe → ReadinessReport.
 //
 // Three states, in order of severity:
-//   - No provider configured at all → "setup-required" with env-var hint.
-//     This is a manual-config case (edit ts/.env, then refresh); the
-//     `setup` hook can't help.
+//   - No provider configured at all → "setup-required" with a config hint.
+//     This is a manual-config case (edit config.local.yaml, then refresh);
+//     the `setup` hook can't help.
 //   - Configured but not signed in → "setup-required" with sign-in hint.
 //     The `setup` hook CAN drive this — it kicks off the device-code or
 //     OAuth flow via the existing provider.login() path.
@@ -72,17 +93,7 @@ export function evaluateGraphReadiness(
         return {
             state: "setup-required",
             message: `${Agent} agent has no provider configured.`,
-            details: [
-                `Set environment variables in \`ts/.env\` and run \`@config agent refresh ${agentName}\`:`,
-                "",
-                "Microsoft Graph (Outlook / Microsoft 365):",
-                "  - MSGRAPH_APP_CLIENTID",
-                "  - MSGRAPH_APP_TENANTID",
-                "",
-                "OR Google:",
-                "  - GOOGLE_CALENDAR_CLIENT_ID",
-                "  - GOOGLE_CALENDAR_CLIENT_SECRET",
-            ].join("\n"),
+            details: graphProviderSetupHint(agentName),
         };
     }
 
