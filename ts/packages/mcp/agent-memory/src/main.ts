@@ -4,14 +4,17 @@
 // Licensed under the MIT License.
 
 import { loadMemoryServerConfig } from "./config.js";
+import { SqliteMemoryRepository } from "./repository/index.js";
 import { startMemoryServer } from "./server.js";
 
 async function main(): Promise<void> {
-    loadMemoryServerConfig(process.argv.slice(2));
-    const server = await startMemoryServer();
+    const config = loadMemoryServerConfig(process.argv.slice(2));
+    const repository = SqliteMemoryRepository.open(config.databasePath);
+    const server = await startMemoryServer(repository);
 
     const close = async () => {
         await server.close();
+        repository.close();
         process.exitCode = 0;
     };
 

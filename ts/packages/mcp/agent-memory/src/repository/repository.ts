@@ -1,0 +1,869 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import type Database from "better-sqlite3";
+import {
+    DomainError,
+    type AccessScope,
+    type Artifact,
+    type ArtifactChange,
+    type DesignNote,
+    type Goal,
+    type Term,
+    type TermAlias,
+    type Topic,
+    type TopicAlias,
+    type TopicOutput,
+    type TopicPropertyDefinition,
+    type TopicPropertyValue,
+    type TurnAggregate,
+} from "../domain/index.js";
+import {
+    openDatabaseConnection,
+    type OpenDatabaseOptions,
+} from "./connection.js";
+
+export type SearchDocument = {
+    documentId: string;
+    scopeId: string;
+    entityKind: string;
+    entityId: string;
+    revision: number;
+    title: string;
+    content: string;
+    occurredAt: string;
+};
+
+export interface MemoryRepository extends Disposable {
+    getSchemaVersion(): number;
+    saveScope(scope: AccessScope): void;
+    saveTopic(topic: Topic): void;
+    saveTopicAlias(alias: TopicAlias): void;
+    saveTerm(term: Term): void;
+    saveTermAlias(scopeId: string, alias: TermAlias): void;
+    saveTurnAggregate(aggregate: TurnAggregate): void;
+    saveArtifact(artifact: Artifact): void;
+    saveArtifactChange(change: ArtifactChange): void;
+    saveGoal(goal: Goal): void;
+    saveDesignNote(note: DesignNote): void;
+    saveTopicOutput(output: TopicOutput): void;
+    savePropertyDefinition(definition: TopicPropertyDefinition): void;
+    savePropertyValue(value: TopicPropertyValue): void;
+    rebuildSearchDocuments(): number;
+    listSearchDocuments(): SearchDocument[];
+    close(): void;
+}
+
+type ScopeRow = { scope_id: string };
+type RevisionRow = { revision: number };
+
+export class SqliteMemoryRepository implements MemoryRepository {
+    readonly #database: Database.Database;
+
+    public constructor(database: Database.Database) {
+        this.#database = database;
+    }
+
+    public static open(
+        filename: string,
+        options?: OpenDatabaseOptions,
+    ): SqliteMemoryRepository {
+        return new SqliteMemoryRepository(
+            openDatabaseConnection(filename, options),
+        );
+    }
+
+    public getSchemaVersion(): number {
+        return this.#database
+            .prepare("SELECT COALESCE(MAX(version), 0) FROM schema_migrations")
+            .pluck()
+            .get() as number;
+    }
+
+    public saveScope(scope: AccessScope): void {
+        this.#transaction(() => {
+            this.#database
+                .prepare(
+                    `INSERT INTO scopes(scope_id, user_id, agent_id, workspace_id, session_id)
+                     VALUES (?, ?, ?, ?, ?)`,
+                )
+                .run(
+                    scope.scopeId,
+                    scope.userId,
+                    scope.agentId ?? null,
+                    scope.workspaceId ?? null,
+                    scope.sessionId ?? null,
+                );
+        });
+    }
+
+    public saveTopic(topic: Topic): void {
+        this.#transaction(() => {
+            this.#requireScope(topic.scopeId);
+            if (topic.parentTopicId !== undefined) {
+                this.#requireEntityScope(
+                    "topics",
+                    "topic_id",
+                    topic.parentTopicId,
+                    topic.scopeId,
+                );
+            }
+            if (topic.mergedIntoTopicId !== undefined) {
+                this.#requireEntityScope(
+                    "topics",
+                    "topic_id",
+                    topic.mergedIntoTopicId,
+                    topic.scopeId,
+                );
+            }
+            this.#database
+                .prepare(
+                    `INSERT INTO topics(
+                        topic_id, scope_id, parent_topic_id, slug, display_name,
+                        state, revision, created_at, merged_into_topic_id
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                )
+                .run(
+                    topic.topicId,
+                    topic.scopeId,
+                    topic.parentTopicId ?? null,
+                    topic.slug,
+                    topic.displayName,
+                    topic.state,
+                    topic.revision,
+                    topic.createdAt,
+                    topic.mergedIntoTopicId ?? null,
+                );
+        });
+    }
+
+    public saveTopicAlias(alias: TopicAlias): void {
+        this.#transaction(() => {
+            this.#requireEntityScope(
+                "topics",
+                "topic_id",
+                alias.topicId,
+                alias.scopeId,
+            );
+            this.#database
+                .prepare(
+                    `INSERT INTO topic_aliases(scope_id, path, topic_id, created_at)
+                     VALUES (?, ?, ?, ?)`,
+                )
+                .run(alias.scopeId, alias.path, alias.topicId, alias.createdAt);
+        });
+    }
+
+    public saveTerm(term: Term): void {
+        this.#transaction(() => {
+            this.#requireScope(term.scopeId);
+            this.#database
+                .prepare(
+                    `INSERT INTO terms(
+                        term_id, scope_id, canonical_text, display_text, created_at
+                     ) VALUES (?, ?, ?, ?, ?)`,
+                )
+                .run(
+                    term.termId,
+                    term.scopeId,
+                    term.canonicalText,
+                    term.displayText,
+                    term.createdAt,
+                );
+        });
+    }
+
+    public saveTermAlias(scopeId: string, alias: TermAlias): void {
+        this.#transaction(() => {
+            this.#requireEntityScope("terms", "term_id", alias.termId, scopeId);
+            this.#database
+                .prepare(
+                    `INSERT INTO term_aliases(
+                        scope_id, normalized_alias, term_id, display_alias, created_at
+                     ) VALUES (?, ?, ?, ?, ?)`,
+                )
+                .run(
+                    scopeId,
+                    alias.normalizedAlias,
+                    alias.termId,
+                    alias.displayAlias,
+                    alias.createdAt,
+                );
+        });
+    }
+
+    public saveTurnAggregate(aggregate: TurnAggregate): void {
+        this.#transaction(() => {
+            const { turn } = aggregate;
+            this.#requireScope(turn.scopeId);
+            const primaryCount = aggregate.topics.filter(
+                (topic) => topic.role === "primary",
+            ).length;
+            if (primaryCount !== 1) {
+                throw new DomainError(
+                    "INVARIANT_VIOLATION",
+                    "Turn must have one primary topic",
+                    { turnId: turn.turnId, primaryTopicCount: primaryCount },
+                );
+            }
+            for (const topic of aggregate.topics) {
+                this.#requireEntityScope(
+                    "topics",
+                    "topic_id",
+                    topic.topicId,
+                    turn.scopeId,
+                );
+            }
+            for (const term of aggregate.terms) {
+                this.#requireEntityScope(
+                    "terms",
+                    "term_id",
+                    term.termId,
+                    turn.scopeId,
+                );
+            }
+
+            this.#database
+                .prepare(
+                    `INSERT INTO turns(
+                        turn_id, scope_id, conversation_id, sequence,
+                        request_summary, outcome_summary, occurred_at,
+                        recorded_at, provenance_json
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                )
+                .run(
+                    turn.turnId,
+                    turn.scopeId,
+                    turn.conversationId,
+                    turn.sequence,
+                    turn.requestSummary,
+                    turn.outcomeSummary,
+                    turn.occurredAt,
+                    turn.recordedAt,
+                    JSON.stringify(turn.provenance),
+                );
+
+            const insertTopic = this.#database.prepare(
+                `INSERT INTO turn_topics(turn_id, topic_id, scope_id, role)
+                 VALUES (?, ?, ?, ?)`,
+            );
+            for (const topic of aggregate.topics) {
+                insertTopic.run(
+                    turn.turnId,
+                    topic.topicId,
+                    turn.scopeId,
+                    topic.role,
+                );
+            }
+
+            const insertTerm = this.#database.prepare(
+                "INSERT INTO turn_terms(turn_id, term_id, role) VALUES (?, ?, ?)",
+            );
+            for (const term of aggregate.terms) {
+                insertTerm.run(turn.turnId, term.termId, term.role ?? null);
+            }
+
+            const insertAction = this.#database.prepare(`
+                INSERT INTO actions(
+                    action_id, turn_id, sequence, name, summary, status,
+                    tool_name, affected_goal_ids_json,
+                    affected_artifact_ids_json, affected_output_ids_json,
+                    design_note_ids_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+            for (const action of aggregate.actions) {
+                insertAction.run(
+                    action.actionId,
+                    turn.turnId,
+                    action.sequence,
+                    action.name,
+                    action.summary,
+                    action.status,
+                    action.toolName ?? null,
+                    JSON.stringify(action.affectedGoalIds),
+                    JSON.stringify(action.affectedArtifactIds),
+                    JSON.stringify(action.affectedOutputIds),
+                    JSON.stringify(action.designNoteIds),
+                );
+            }
+        });
+    }
+
+    public saveArtifact(artifact: Artifact): void {
+        this.#transaction(() => {
+            this.#requireScope(artifact.scopeId);
+            this.#database
+                .prepare(
+                    `INSERT INTO artifacts(
+                        artifact_id, scope_id, kind, name, uri, state, revision, created_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                )
+                .run(
+                    artifact.artifactId,
+                    artifact.scopeId,
+                    artifact.kind,
+                    artifact.name,
+                    artifact.uri ?? null,
+                    artifact.state,
+                    artifact.revision,
+                    artifact.createdAt,
+                );
+        });
+    }
+
+    public saveArtifactChange(change: ArtifactChange): void {
+        this.#transaction(() => {
+            const artifact = this.#requireRevision(
+                "artifacts",
+                "artifact_id",
+                change.artifactId,
+                change.artifactRevision,
+            );
+            const turnScope = this.#requireEntity(
+                "turns",
+                "turn_id",
+                change.turnId,
+            );
+            if (artifact.scope_id !== turnScope.scope_id) {
+                this.#scopeMismatch(change.artifactId, change.turnId);
+            }
+            this.#database
+                .prepare(
+                    `INSERT INTO artifact_changes(
+                        artifact_id, turn_id, kind, summary, occurred_at,
+                        artifact_revision, provenance_json
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                )
+                .run(
+                    change.artifactId,
+                    change.turnId,
+                    change.kind,
+                    change.summary,
+                    change.occurredAt,
+                    change.artifactRevision,
+                    JSON.stringify(change.provenance),
+                );
+        });
+    }
+
+    public saveGoal(goal: Goal): void {
+        this.#transaction(() => {
+            this.#requireFacetReferences(
+                goal.scopeId,
+                goal.topicId,
+                goal.updatedByTurnId,
+            );
+            this.#writeRevisionedFacet(
+                "goals",
+                "goal_id",
+                goal.goalId,
+                goal.revision,
+                () => {
+                    this.#database
+                        .prepare(
+                            `INSERT INTO goals(
+                                goal_id, scope_id, topic_id, desired_state, state,
+                                revision, updated_by_turn_id, updated_at, provenance_json
+                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             ON CONFLICT(goal_id) DO UPDATE SET
+                                desired_state = excluded.desired_state,
+                                state = excluded.state,
+                                revision = excluded.revision,
+                                updated_by_turn_id = excluded.updated_by_turn_id,
+                                updated_at = excluded.updated_at,
+                                provenance_json = excluded.provenance_json`,
+                        )
+                        .run(
+                            goal.goalId,
+                            goal.scopeId,
+                            goal.topicId,
+                            goal.desiredState,
+                            goal.state,
+                            goal.revision,
+                            goal.updatedByTurnId,
+                            goal.updatedAt,
+                            JSON.stringify(goal.provenance),
+                        );
+                    this.#database
+                        .prepare(
+                            `INSERT INTO goal_events(
+                                goal_id, revision, desired_state, state,
+                                updated_by_turn_id, updated_at, provenance_json
+                             ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                        )
+                        .run(
+                            goal.goalId,
+                            goal.revision,
+                            goal.desiredState,
+                            goal.state,
+                            goal.updatedByTurnId,
+                            goal.updatedAt,
+                            JSON.stringify(goal.provenance),
+                        );
+                },
+            );
+        });
+    }
+
+    public saveDesignNote(note: DesignNote): void {
+        this.#transaction(() => {
+            this.#requireFacetReferences(
+                note.scopeId,
+                note.topicId,
+                note.updatedByTurnId,
+            );
+            for (const goalId of note.addressedGoalIds) {
+                this.#requireEntityScope(
+                    "goals",
+                    "goal_id",
+                    goalId,
+                    note.scopeId,
+                );
+            }
+            this.#writeRevisionedFacet(
+                "design_notes",
+                "design_note_id",
+                note.designNoteId,
+                note.revision,
+                () => {
+                    const values = [
+                        note.designNoteId,
+                        note.scopeId,
+                        note.topicId,
+                        note.title,
+                        note.body,
+                        JSON.stringify(note.addressedGoalIds),
+                        note.state,
+                        note.revision,
+                        note.updatedByTurnId,
+                        note.updatedAt,
+                        JSON.stringify(note.provenance),
+                    ] as const;
+                    this.#database
+                        .prepare(
+                            `INSERT INTO design_notes(
+                                design_note_id, scope_id, topic_id, title, body,
+                                addressed_goal_ids_json, state, revision,
+                                updated_by_turn_id, updated_at, provenance_json
+                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             ON CONFLICT(design_note_id) DO UPDATE SET
+                                title = excluded.title, body = excluded.body,
+                                addressed_goal_ids_json = excluded.addressed_goal_ids_json,
+                                state = excluded.state, revision = excluded.revision,
+                                updated_by_turn_id = excluded.updated_by_turn_id,
+                                updated_at = excluded.updated_at,
+                                provenance_json = excluded.provenance_json`,
+                        )
+                        .run(...values);
+                    this.#database
+                        .prepare(
+                            `INSERT INTO design_note_revisions(
+                                design_note_id, revision, title, body,
+                                addressed_goal_ids_json, state,
+                                updated_by_turn_id, updated_at, provenance_json
+                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        )
+                        .run(
+                            note.designNoteId,
+                            note.revision,
+                            note.title,
+                            note.body,
+                            JSON.stringify(note.addressedGoalIds),
+                            note.state,
+                            note.updatedByTurnId,
+                            note.updatedAt,
+                            JSON.stringify(note.provenance),
+                        );
+                },
+            );
+        });
+    }
+
+    public saveTopicOutput(output: TopicOutput): void {
+        this.#transaction(() => {
+            this.#requireFacetReferences(
+                output.scopeId,
+                output.topicId,
+                output.updatedByTurnId,
+            );
+            this.#requireEntityScope(
+                "artifacts",
+                "artifact_id",
+                output.artifactId,
+                output.scopeId,
+            );
+            for (const note of output.designNotes) {
+                const row = this.#requireEntity(
+                    "design_note_revisions",
+                    "design_note_id",
+                    note.designNoteId,
+                    "revision = ?",
+                    note.revision,
+                );
+                const current = this.#requireEntity(
+                    "design_notes",
+                    "design_note_id",
+                    note.designNoteId,
+                );
+                if (
+                    current.scope_id !== output.scopeId ||
+                    current.topic_id !== output.topicId
+                ) {
+                    this.#scopeMismatch(output.outputId, note.designNoteId);
+                }
+                void row;
+            }
+            this.#writeRevisionedFacet(
+                "topic_outputs",
+                "output_id",
+                output.outputId,
+                output.revision,
+                () => {
+                    this.#database
+                        .prepare(
+                            "DELETE FROM output_design_notes WHERE output_id = ?",
+                        )
+                        .run(output.outputId);
+                    this.#database
+                        .prepare(
+                            `INSERT INTO topic_outputs(
+                                output_id, scope_id, topic_id, artifact_id, state,
+                                revision, updated_by_turn_id, updated_at, provenance_json
+                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             ON CONFLICT(output_id) DO UPDATE SET
+                                artifact_id = excluded.artifact_id,
+                                state = excluded.state, revision = excluded.revision,
+                                updated_by_turn_id = excluded.updated_by_turn_id,
+                                updated_at = excluded.updated_at,
+                                provenance_json = excluded.provenance_json`,
+                        )
+                        .run(
+                            output.outputId,
+                            output.scopeId,
+                            output.topicId,
+                            output.artifactId,
+                            output.state,
+                            output.revision,
+                            output.updatedByTurnId,
+                            output.updatedAt,
+                            JSON.stringify(output.provenance),
+                        );
+                    const insertNote = this.#database.prepare(
+                        `INSERT INTO output_design_notes(
+                            output_id, output_revision,
+                            design_note_id, design_note_revision
+                         ) VALUES (?, ?, ?, ?)`,
+                    );
+                    for (const note of output.designNotes) {
+                        insertNote.run(
+                            output.outputId,
+                            output.revision,
+                            note.designNoteId,
+                            note.revision,
+                        );
+                    }
+                },
+            );
+        });
+    }
+
+    public savePropertyDefinition(definition: TopicPropertyDefinition): void {
+        this.#transaction(() => {
+            this.#requireEntityScope(
+                "topics",
+                "topic_id",
+                definition.topicId,
+                definition.scopeId,
+            );
+            this.#database
+                .prepare(
+                    `INSERT INTO topic_property_definitions(
+                        definition_id, scope_id, topic_id, name, value_type,
+                        required, allowed_values_json, revision
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                )
+                .run(
+                    definition.definitionId,
+                    definition.scopeId,
+                    definition.topicId,
+                    definition.name,
+                    definition.valueType,
+                    definition.required ? 1 : 0,
+                    definition.allowedValues === undefined
+                        ? null
+                        : JSON.stringify(definition.allowedValues),
+                    definition.revision,
+                );
+        });
+    }
+
+    public savePropertyValue(value: TopicPropertyValue): void {
+        this.#transaction(() => {
+            const definition = this.#requireRevision(
+                "topic_property_definitions",
+                "definition_id",
+                value.definitionId,
+                value.definitionRevision,
+            );
+            if (definition.topic_id !== value.topicId) {
+                this.#scopeMismatch(value.definitionId, value.topicId);
+            }
+            this.#requireEntityScope(
+                "turns",
+                "turn_id",
+                value.updatedByTurnId,
+                definition.scope_id as string,
+            );
+            this.#database
+                .prepare(
+                    `INSERT INTO topic_property_values(
+                        definition_id, topic_id, value_json, definition_revision,
+                        updated_by_turn_id, updated_at
+                     ) VALUES (?, ?, ?, ?, ?, ?)
+                     ON CONFLICT(definition_id, topic_id) DO UPDATE SET
+                        value_json = excluded.value_json,
+                        definition_revision = excluded.definition_revision,
+                        updated_by_turn_id = excluded.updated_by_turn_id,
+                        updated_at = excluded.updated_at`,
+                )
+                .run(
+                    value.definitionId,
+                    value.topicId,
+                    JSON.stringify(value.value),
+                    value.definitionRevision,
+                    value.updatedByTurnId,
+                    value.updatedAt,
+                );
+        });
+    }
+
+    public rebuildSearchDocuments(): number {
+        return this.#transaction(() => {
+            this.#database.exec(
+                "DELETE FROM search_fts; DELETE FROM search_documents;",
+            );
+            const candidates = this.#database
+                .prepare(searchCandidateSql)
+                .all() as SearchCandidate[];
+            const insertDocument = this.#database.prepare(`
+                INSERT INTO search_documents(
+                    document_id, scope_id, entity_kind, entity_id, revision,
+                    title, content, occurred_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+            const insertFts = this.#database.prepare(
+                "INSERT INTO search_fts(document_id, title, content) VALUES (?, ?, ?)",
+            );
+            for (const candidate of candidates) {
+                const documentId = `${candidate.entity_kind}:${candidate.entity_id}:${candidate.revision}`;
+                insertDocument.run(
+                    documentId,
+                    candidate.scope_id,
+                    candidate.entity_kind,
+                    candidate.entity_id,
+                    candidate.revision,
+                    candidate.title,
+                    candidate.content,
+                    candidate.occurred_at,
+                );
+                insertFts.run(documentId, candidate.title, candidate.content);
+            }
+            return candidates.length;
+        });
+    }
+
+    public listSearchDocuments(): SearchDocument[] {
+        return (
+            this.#database
+                .prepare(
+                    `SELECT document_id, scope_id, entity_kind, entity_id,
+                            revision, title, content, occurred_at
+                     FROM search_documents
+                     ORDER BY document_id`,
+                )
+                .all() as SearchDocumentRow[]
+        ).map((row) => ({
+            documentId: row.document_id,
+            scopeId: row.scope_id,
+            entityKind: row.entity_kind,
+            entityId: row.entity_id,
+            revision: row.revision,
+            title: row.title,
+            content: row.content,
+            occurredAt: row.occurred_at,
+        }));
+    }
+
+    public close(): void {
+        if (this.#database.open) {
+            this.#database.close();
+        }
+    }
+
+    public [Symbol.dispose](): void {
+        this.close();
+    }
+
+    #requireFacetReferences(
+        scopeId: string,
+        topicId: string,
+        turnId: string,
+    ): void {
+        this.#requireEntityScope("topics", "topic_id", topicId, scopeId);
+        this.#requireEntityScope("turns", "turn_id", turnId, scopeId);
+    }
+
+    #writeRevisionedFacet(
+        table: string,
+        idColumn: string,
+        id: string,
+        revision: number,
+        write: () => void,
+    ): void {
+        const existing = this.#database
+            .prepare(`SELECT revision FROM ${table} WHERE ${idColumn} = ?`)
+            .get(id) as RevisionRow | undefined;
+        const expected = existing === undefined ? 1 : existing.revision + 1;
+        if (revision !== expected) {
+            throw new DomainError(
+                "REVISION_CONFLICT",
+                "Facet revision changed",
+                {
+                    id,
+                    expectedRevision: expected,
+                    actualRevision: revision,
+                },
+            );
+        }
+        write();
+    }
+
+    #requireScope(scopeId: string): void {
+        const row = this.#database
+            .prepare("SELECT scope_id FROM scopes WHERE scope_id = ?")
+            .get(scopeId) as ScopeRow | undefined;
+        if (row === undefined) {
+            throw new DomainError("NOT_FOUND", "Scope was not found", {
+                scopeId,
+            });
+        }
+    }
+
+    #requireEntityScope(
+        table: string,
+        idColumn: string,
+        id: string,
+        scopeId: string,
+    ): void {
+        const row = this.#requireEntity(table, idColumn, id);
+        if (row.scope_id !== scopeId) {
+            this.#scopeMismatch(id, scopeId);
+        }
+    }
+
+    #requireRevision(
+        table: string,
+        idColumn: string,
+        id: string,
+        revision: number,
+    ): Record<string, string | number> {
+        const row = this.#requireEntity(table, idColumn, id);
+        if (row.revision !== revision) {
+            throw new DomainError(
+                "REVISION_CONFLICT",
+                "Entity revision changed",
+                {
+                    id,
+                    expectedRevision: revision,
+                    actualRevision: row.revision,
+                },
+            );
+        }
+        return row;
+    }
+
+    #requireEntity(
+        table: string,
+        idColumn: string,
+        id: string,
+        extraPredicate?: string,
+        extraValue?: string | number,
+    ): Record<string, string | number> {
+        const row = this.#database
+            .prepare(
+                `SELECT * FROM ${table} WHERE ${idColumn} = ?${
+                    extraPredicate === undefined ? "" : ` AND ${extraPredicate}`
+                }`,
+            )
+            .get(
+                ...(extraPredicate === undefined ? [id] : [id, extraValue]),
+            ) as Record<string, string | number> | undefined;
+        if (row === undefined) {
+            throw new DomainError(
+                "NOT_FOUND",
+                "Referenced entity was not found",
+                {
+                    entity: table,
+                    id,
+                },
+            );
+        }
+        return row;
+    }
+
+    #scopeMismatch(leftId: string, rightId: string): never {
+        throw new DomainError(
+            "SCOPE_MISMATCH",
+            "Referenced entities have different scopes",
+            {
+                leftId,
+                rightId,
+            },
+        );
+    }
+
+    #transaction<T>(operation: () => T): T {
+        return this.#database.transaction(operation)();
+    }
+}
+
+type SearchCandidate = {
+    scope_id: string;
+    entity_kind: string;
+    entity_id: string;
+    revision: number;
+    title: string;
+    content: string;
+    occurred_at: string;
+};
+
+type SearchDocumentRow = SearchCandidate & { document_id: string };
+
+const searchCandidateSql = `
+    SELECT scope_id, 'topic' AS entity_kind, topic_id AS entity_id, revision,
+           display_name AS title, slug || ' ' || display_name AS content,
+           created_at AS occurred_at
+    FROM topics
+    UNION ALL
+    SELECT scope_id, 'turn', turn_id, 1, request_summary,
+           request_summary || ' ' || outcome_summary, occurred_at
+    FROM turns
+    UNION ALL
+    SELECT scope_id, 'term', term_id, 1, display_text, canonical_text, created_at
+    FROM terms
+    UNION ALL
+    SELECT turns.scope_id, 'action', actions.action_id, 1, actions.name,
+           actions.summary || ' ' || COALESCE(actions.tool_name, ''), turns.occurred_at
+    FROM actions JOIN turns USING(turn_id)
+    UNION ALL
+    SELECT scope_id, 'artifact', artifact_id, revision, name,
+           kind || ' ' || name || ' ' || COALESCE(uri, ''), created_at
+    FROM artifacts
+    UNION ALL
+    SELECT scope_id, 'goal', goal_id, revision, 'Goal', desired_state, updated_at
+    FROM goals
+    UNION ALL
+    SELECT scope_id, 'design_note', design_note_id, revision, title, body, updated_at
+    FROM design_notes
+    ORDER BY entity_kind, entity_id, revision
+`;

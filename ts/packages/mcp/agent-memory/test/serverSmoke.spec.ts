@@ -52,8 +52,8 @@ describe("agent-memory MCP server", () => {
             expect(status).toEqual({
                 service: serviceName,
                 version: serviceVersion,
-                schemaVersion: 0,
-                database: "not-initialized",
+                schemaVersion: 1,
+                database: "ready",
             });
         } finally {
             await client.close();

@@ -11,10 +11,16 @@ export type MemoryStatus = {
     service: string;
     version: string;
     schemaVersion: number;
-    database: "not-initialized";
+    database: "not-initialized" | "ready";
 };
 
-export function createMemoryServer(): McpServer {
+export interface MemoryStatusProvider {
+    getSchemaVersion(): number;
+}
+
+export function createMemoryServer(
+    statusProvider?: MemoryStatusProvider,
+): McpServer {
     const server = new McpServer({
         name: serviceName,
         version: serviceVersion,
@@ -31,8 +37,9 @@ export function createMemoryServer(): McpServer {
             const status: MemoryStatus = {
                 service: serviceName,
                 version: serviceVersion,
-                schemaVersion: 0,
-                database: "not-initialized",
+                schemaVersion: statusProvider?.getSchemaVersion() ?? 0,
+                database:
+                    statusProvider === undefined ? "not-initialized" : "ready",
             };
 
             return {
@@ -50,8 +57,10 @@ export function createMemoryServer(): McpServer {
     return server;
 }
 
-export async function startMemoryServer(): Promise<McpServer> {
-    const server = createMemoryServer();
+export async function startMemoryServer(
+    statusProvider?: MemoryStatusProvider,
+): Promise<McpServer> {
+    const server = createMemoryServer(statusProvider);
     const transport = new StdioServerTransport();
     await server.connect(transport);
     return server;

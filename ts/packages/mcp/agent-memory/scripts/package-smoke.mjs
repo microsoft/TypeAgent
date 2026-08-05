@@ -4,7 +4,7 @@
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -30,7 +30,7 @@ try {
 
     for (const requiredPath of [
         "dist/src/main.js",
-        "migrations/README.md",
+        "migrations/001_initial_schema.sql",
         "package.json",
     ]) {
         if (!packedPaths.has(requiredPath)) {
@@ -42,7 +42,7 @@ try {
     }
 
     runNpm(["init", "--yes"], temporaryDirectory);
-    runNpm(["install", "--ignore-scripts", tarballPath], temporaryDirectory);
+    runNpm(["install", tarballPath], temporaryDirectory);
 
     const installedPackageDirectory = path.join(
         temporaryDirectory,
@@ -83,6 +83,13 @@ try {
         if (result.structuredContent?.service !== "agent-memory-mcp") {
             throw new Error("Packed server returned an unexpected status");
         }
+        if (
+            result.structuredContent.schemaVersion !== 1 ||
+            result.structuredContent.database !== "ready"
+        ) {
+            throw new Error("Packed server did not initialize SQLite");
+        }
+        await access(path.join(temporaryDirectory, "agent-memory.db"));
     } finally {
         await client.close();
     }
