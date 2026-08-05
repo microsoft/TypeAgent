@@ -1,0 +1,47 @@
+{
+  "name": "@typeagent/agent-memory-mcp",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Standalone MCP server for durable agent memory.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./dist/src/index.js"
+  },
+  "types": "./dist/src/index.d.ts",
+  "bin": {
+    "agent-memory-mcp": "./dist/src/main.js"
+  },
+  "files": [
+    "dist/src",
+    "migrations",
+    "ARCHITECTURE.md",
+    "IMPLEMENTATION_PLAN.md",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "start": "node dist/src/main.js",
+    "test": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.config.js --runInBand",
+    "test:package": "node scripts/package-smoke.mjs",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "4.2.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@types/jest": "29.5.14",
+    "@types/node": "22.18.6",
+    "jest": "29.7.0",
+    "prettier": "3.6.2",
+    "rimraf": "6.0.1",
+    "typescript": "5.9.2"
+  }
+}
