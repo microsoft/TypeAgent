@@ -2228,7 +2228,7 @@ Usage: `@player spotify load <file>`
 
 ### Arguments:
 
-- &lt;file&gt; - File to load (type: string)
+- &lt;file&gt; - File or directory to load (a directory loads all Spotify streaming history .json files in it) (type: string)
 
 ## @player spotify login - Login to Spotify
 

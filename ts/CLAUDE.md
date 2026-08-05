@@ -52,6 +52,23 @@ first** and run it only after they approve, or let the user run it.
 
 This is a **pnpm monorepo** rooted at `ts/`. All commands run from the `ts/` directory.
 
+### First step in a new session/worktree: provision the npm registry
+
+The public npm registry is blocked; packages come from an internal Azure Artifacts
+feed configured by `ts/.npmrc`, which is gitignored (so it is missing in every fresh
+clone/worktree). **Before running `pnpm install` — or any command that may install
+packages, such as `npx` — run:**
+
+```bash
+cd ts
+npm run getNPMRC      # or: node tools/scripts/getNPMRC.mjs
+```
+
+This pulls `ts/.npmrc` from Key Vault and installs feed auth (requires `az login`).
+Symptoms of skipping it: `ERR_SSL_SSL/TLS_ALERT_HANDSHAKE_FAILURE` or timeouts
+against `registry.npmjs.org`. Also prefer `pnpm exec <tool>` over `npx <tool>`,
+since `npx` will try to download from the public registry.
+
 ```bash
 # Install & build
 pnpm i
