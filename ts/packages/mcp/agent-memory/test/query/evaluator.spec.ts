@@ -105,6 +105,9 @@ describe("memory query evaluator", () => {
             sqliteOnly.turnId,
         ]);
         expect(result.records.map((record) => record.hitCount)).toEqual([2, 1]);
+        expect(result.records.map((record) => record.fields.sequence)).toEqual([
+            1, 2,
+        ]);
         expect(
             result.records.some((record) => record.entityId === foreign.turnId),
         ).toBe(false);

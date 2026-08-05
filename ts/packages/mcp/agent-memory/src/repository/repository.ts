@@ -1295,6 +1295,7 @@ export class SqliteMemoryRepository implements MemoryRepository {
                   state: string | null;
                   recorded_at: string | null;
                   property_name: string | null;
+                  sequence?: number | null;
               }
             | undefined;
         if (details?.state !== null && details?.state !== undefined) {
@@ -1306,6 +1307,9 @@ export class SqliteMemoryRepository implements MemoryRepository {
             details?.property_name !== undefined
         ) {
             fields.propertyName = details.property_name;
+        }
+        if (details?.sequence !== null && details?.sequence !== undefined) {
+            fields.sequence = details.sequence;
         }
         if (
             document.entityKind === "turn" ||
@@ -1798,11 +1802,12 @@ function documentFieldSql(entityKind: string): string {
             return `SELECT state, created_at AS recorded_at, NULL AS property_name
                     FROM topics WHERE scope_id = ? AND topic_id = ?`;
         case "turn":
-            return `SELECT NULL AS state, recorded_at, NULL AS property_name
+            return `SELECT NULL AS state, recorded_at, NULL AS property_name,
+                           sequence
                     FROM turns WHERE scope_id = ? AND turn_id = ?`;
         case "action":
             return `SELECT actions.status AS state, turns.recorded_at,
-                           NULL AS property_name
+                           NULL AS property_name, actions.sequence
                     FROM actions JOIN turns USING(turn_id)
                     WHERE turns.scope_id = ? AND actions.action_id = ?`;
         case "artifact":
