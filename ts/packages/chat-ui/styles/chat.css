@@ -1603,6 +1603,56 @@ pre.chat-code-block:hover .chat-code-copy,
   background: var(--vscode-toolbar-hoverBackground, rgba(0, 0, 0, 0.06));
 }
 
+/* Syntax tokens inside chat code blocks, set by highlightCodeBlock().
+   Same palette as the action-JSON popup so highlighted YAML and JSON read
+   identically wherever they appear. `!important` matches the popup rules:
+   the surrounding bubble sets a foreground color that would otherwise
+   inherit down into these spans. */
+pre.chat-code-block code .json-key {
+  color: #9c27b0 !important;
+  font-weight: 600;
+}
+
+pre.chat-code-block code .json-string {
+  color: #0a8043 !important;
+}
+
+pre.chat-code-block code .json-number {
+  color: #1976d2 !important;
+}
+
+pre.chat-code-block code .json-bool {
+  color: #b85c00 !important;
+  font-weight: 600;
+}
+
+pre.chat-code-block code .json-null {
+  color: #888 !important;
+  font-style: italic;
+}
+
+/* Inline commands (`@config agent refresh player`) are click-to-copy.
+   Keep the affordance quiet — a pointer cursor and a hover tint — so the
+   text still reads as prose rather than as a button. */
+code.chat-inline-copy {
+  cursor: pointer;
+  border-radius: 3px;
+  transition:
+    background-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+code.chat-inline-copy:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 0 0 2px
+    var(--vscode-toolbar-hoverBackground, rgba(0, 0, 0, 0.08));
+}
+
+code.chat-inline-copied {
+  background: rgba(10, 128, 67, 0.18);
+  box-shadow: 0 0 0 2px rgba(10, 128, 67, 0.18);
+}
+
 .sc-code {
   background: var(--vscode-textCodeBlock-background, #f0f0f0);
   border-radius: 4px;

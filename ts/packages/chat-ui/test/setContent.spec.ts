@@ -176,6 +176,61 @@ describe("setContent code blocks", () => {
         });
         expect(elm.querySelector("button.chat-code-copy")).toBeNull();
     });
+
+    it("syntax-highlights yaml and json blocks", () => {
+        const elm = render({ type: "markdown", content: yaml });
+        const code = elm.querySelector("pre > code")!;
+        expect(code.querySelector(".json-key")?.textContent).toBe("spotify:");
+        // Highlighting must not disturb the text the copy button grabs.
+        expect(code.textContent).toBe("spotify:\n  clientId: <value>\n");
+
+        const json = render({
+            type: "markdown",
+            content: '```json\n{"port": 8080}\n```',
+        });
+        expect(json.querySelector("pre > code .json-number")?.textContent).toBe(
+            "8080",
+        );
+    });
+
+    it("leaves blocks in unknown languages alone", () => {
+        const elm = render({
+            type: "markdown",
+            content: "```\nplain text\n```",
+        });
+        const code = elm.querySelector("pre > code")!;
+        expect(code.querySelector("span")).toBeNull();
+        expect(code.textContent).toBe("plain text\n");
+    });
+});
+
+describe("setContent inline commands", () => {
+    it("makes an inline command click-to-copy", async () => {
+        const writeText = jest.fn(async () => {});
+        Object.defineProperty(navigator, "clipboard", {
+            value: { writeText },
+            configurable: true,
+        });
+        const elm = render({
+            type: "markdown",
+            content: "Then run `@config agent refresh player`.",
+        });
+        document.body.appendChild(elm);
+        const code = elm.querySelector<HTMLElement>("code.chat-inline-copy")!;
+        expect(code.textContent).toBe("@config agent refresh player");
+        code.dispatchEvent(
+            new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+        expect(writeText).toHaveBeenCalledWith("@config agent refresh player");
+    });
+
+    it("leaves ordinary inline code as prose", () => {
+        const elm = render({
+            type: "markdown",
+            content: "The `clientId` comes from the dashboard.",
+        });
+        expect(elm.querySelector("code.chat-inline-copy")).toBeNull();
+    });
 });
 
 describe("setContent plain-text linkification", () => {

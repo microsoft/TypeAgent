@@ -133,14 +133,24 @@ export async function checkAgentReady(
     // Different hint depending on whether the agent can be configured
     // from chat. Without a hook (manual config case), `@config agent
     // setup` would just bounce the user; point at `refresh` instead.
-    const hint = systemContext.agents.hasSetup(appAgentName)
-        ? `Run \`@config agent setup ${appAgentName}\` to configure it.`
-        : `After fixing the underlying issue, run \`@config agent refresh ${appAgentName}\` to re-check.`;
+    const hasSetup = systemContext.agents.hasSetup(appAgentName);
+    const command = hasSetup
+        ? `@config agent setup ${appAgentName}`
+        : `@config agent refresh ${appAgentName}`;
+    const hint = hasSetup
+        ? `Run \`${command}\` to configure it.`
+        : `After fixing the underlying issue, run \`${command}\` to re-check.`;
     const headline = `Agent '${appAgentName}' needs configuration before it can be used: ${reason}`;
-    throw new AgentNotReadyError(
-        `${headline} ${hint}`,
-        details ? `${headline}\n\n${details}\n\n${hint}` : undefined,
-    );
+    // Agents commonly close their own `details` by telling the user to run
+    // the very same command; appending the hint on top of that just says it
+    // twice. Only add it when the details didn't already.
+    const detailsDisplay =
+        details === undefined
+            ? undefined
+            : details.includes(command)
+              ? `${headline}\n\n${details}`
+              : `${headline}\n\n${details}\n\n${hint}`;
+    throw new AgentNotReadyError(`${headline} ${hint}`, detailsDisplay);
 }
 
 function getStreamingActionContext(

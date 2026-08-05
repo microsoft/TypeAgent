@@ -23,6 +23,7 @@ import MarkdownIt from "markdown-it";
 import { PlatformAdapter, ChatSettingsView } from "./platformAdapter.js";
 import { iconCheck, iconCopy } from "./icons.js";
 import { copyTextToClipboard } from "./clipboard.js";
+import { highlightJson, highlightYaml } from "./highlight.js";
 
 const ansiUpTextToHtml = new AnsiUp();
 ansiUpTextToHtml.use_classes = true;
@@ -710,6 +711,7 @@ function attachCodeBlockCopyButtons(root: HTMLElement): void {
             return;
         }
         pre.classList.add("chat-code-block");
+        highlightCodeBlock(code);
         const button = document.createElement("button");
         button.type = "button";
         button.className = "chat-code-copy";
@@ -718,23 +720,85 @@ function attachCodeBlockCopyButtons(root: HTMLElement): void {
         button.appendChild(iconCopy());
         pre.appendChild(button);
     });
-    if (codes.length === 0 || root.dataset.chatCodeCopyBound === "true") {
+    decorateInlineCommands(root);
+    if (
+        (codes.length === 0 && !root.querySelector("code.chat-inline-copy")) ||
+        root.dataset.chatCodeCopyBound === "true"
+    ) {
         return;
     }
     root.dataset.chatCodeCopyBound = "true";
     root.addEventListener("click", (e) => {
-        const button = (e.target as HTMLElement | null)?.closest<HTMLElement>(
-            "button.chat-code-copy",
-        );
-        if (button === null || button === undefined || !root.contains(button)) {
+        const target = e.target as HTMLElement | null;
+        const button = target?.closest<HTMLElement>("button.chat-code-copy");
+        if (button !== null && button !== undefined && root.contains(button)) {
+            e.preventDefault();
+            e.stopPropagation();
+            // The button lives inside the <pre>, so exclude it from the text.
+            const code = button.parentElement?.querySelector("code");
+            void copyCodeBlock(code?.textContent ?? "", button);
             return;
         }
-        e.preventDefault();
-        e.stopPropagation();
-        // The button lives inside the <pre>, so exclude it from the text.
-        const code = button.parentElement?.querySelector("code");
-        void copyCodeBlock(code?.textContent ?? "", button);
+        const inline = target?.closest<HTMLElement>("code.chat-inline-copy");
+        if (inline !== null && inline !== undefined && root.contains(inline)) {
+            e.preventDefault();
+            e.stopPropagation();
+            void copyInlineCommand(inline);
+        }
     });
+}
+
+// Commands an agent tells the user to run (`@config agent refresh player`)
+// arrive as inline code, not a fenced block, so they miss out on the block
+// copy button — yet they're the thing the user most wants to paste. Make
+// those click-to-copy.
+//
+// Deliberately narrow: only inline code that reads as a command, so an
+// ordinary mention of a setting name like `clientId` doesn't become a
+// mystery click target.
+function decorateInlineCommands(root: HTMLElement): void {
+    root.querySelectorAll<HTMLElement>("code").forEach((code) => {
+        if (code.closest("pre") !== null) {
+            return;
+        }
+        const text = code.textContent?.trim() ?? "";
+        if (!text.startsWith("@") || text.length < 2) {
+            return;
+        }
+        code.classList.add("chat-inline-copy");
+        code.title = "Click to copy";
+    });
+}
+
+async function copyInlineCommand(code: HTMLElement): Promise<void> {
+    if (!(await copyTextToClipboard(code.textContent?.trim() ?? ""))) {
+        return;
+    }
+    showCopiedToast(code);
+    // The element is the affordance here (there's no button to swap an
+    // icon on), so flash it instead.
+    code.classList.add("chat-inline-copied");
+    setTimeout(() => code.classList.remove("chat-inline-copied"), 600);
+}
+
+// Colorize fenced blocks whose language we can highlight cheaply. The
+// markdown renderer emits `language-<lang>` on the <code>. Guarded by a
+// data flag because `innerHTML +=` re-serializes the container: the spans
+// survive that round-trip and must not be re-scanned as source text.
+function highlightCodeBlock(code: HTMLElement): void {
+    if (code.dataset.highlighted === "true") {
+        return;
+    }
+    const lang = /(?:^|\s)language-([\w-]+)/.exec(code.className)?.[1];
+    const source = code.textContent ?? "";
+    if (lang === "yaml" || lang === "yml") {
+        code.innerHTML = highlightYaml(source);
+    } else if (lang === "json") {
+        code.innerHTML = highlightJson(source);
+    } else {
+        return;
+    }
+    code.dataset.highlighted = "true";
 }
 
 async function copyCodeBlock(text: string, button: HTMLElement): Promise<void> {
