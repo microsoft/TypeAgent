@@ -55,19 +55,20 @@ npm start
 ## Incident-response demo
 
 The extended demo replays an identity-to-build-system compromise for incident
-`IR-7421` in two GitHub Copilot CLI sessions through Agency. The first session
-analyzes all evidence and stores durable observations. A fresh second session
-receives no evidence and must reconstruct the handoff from agent-memory. Both
-sessions have 135-second limits, keeping the live path under five minutes:
+`IR-7421` in two GitHub Copilot CLI sessions through Agency. A security analyst
+and the first agent exchange two investigation rounds in one resumed session.
+A fresh second session receives no evidence and must reconstruct the handoff
+from agent-memory. Each of the three model calls has a 90-second limit, keeping
+the live path under five minutes:
 
 ```powershell
 npm run demo:incident
 ```
 
-The live transcript prints every evidence turn and its native memory-index
-update, including the topic path, topic ID, turn ID, query path, and indexed
-terms. Agency tool calls are streamed as durable memories are stored, followed
-by the fresh-session handoff.
+The live transcript prints the analyst's messages, the agent's actual replies,
+and each durable memory update with its memory ID, state, revision, topic path,
+topic and turn IDs, query path, tags, and assertion. The fresh handoff also
+shows the successful durable-memory retrieval.
 
 Use `-- --model <model>` to select a Copilot model. Use `-- --output <folder>`
 to retain the generated database and MCP configuration for inspection. The

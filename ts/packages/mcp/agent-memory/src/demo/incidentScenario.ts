@@ -22,6 +22,13 @@ export type IncidentCheckpointTurn = {
 
 export type IncidentTurn = IncidentEvidenceTurn | IncidentCheckpointTurn;
 
+export type IncidentConversationRound = {
+    id: string;
+    at: string;
+    analystMessage: string;
+    evidenceIds: readonly string[];
+};
+
 export const incidentScenario: readonly IncidentTurn[] = [
     {
         id: "alert-password-spray",
@@ -157,6 +164,76 @@ export const incidentScenario: readonly IncidentTurn[] = [
         ],
     },
 ];
+
+export const incidentConversationRounds: readonly IncidentConversationRound[] =
+    [
+        {
+            id: "initial-triage",
+            at: "2026-08-05T09:25:00.000Z",
+            analystMessage:
+                "We have a likely account compromise on IR-7421. Entra reports a password spray from 203.0.113.77 against 46 accounts, with svc-build as the only successful login. The account used legacy authentication, is excluded from MFA, and normally runs only on build-runner-03. EDR now shows w3wp.exe on that host spawning encoded PowerShell to download update.ps1; its SHA-256 starts 84c1e9b7. What is your initial assessment and what should I prioritize?",
+            evidenceIds: [
+                "alert-password-spray",
+                "identity-correlation",
+                "endpoint-execution",
+            ],
+        },
+        {
+            id: "impact-and-containment",
+            at: "2026-08-05T10:29:00.000Z",
+            analystMessage:
+                "More evidence is in. build-runner-03 beaconed to 198.51.100.24:443 every 60 seconds after update.ps1 ran. The svc-build token listed secrets in prod-signing, but there was no secret-value read or signing operation. A payments-api 4.18.2 digest mismatch briefly raised signing-key abuse as a hypothesis. We isolated the host, revoked and rotated svc-build, and sinkholed the callback. Forensics then traced the mismatch to a stale verifier cache and confirmed no signing key was retrieved or used. Update the diagnosis and tell me what remains to do.",
+            evidenceIds: [
+                "command-and-control",
+                "vault-access",
+                "artifact-anomaly",
+                "containment",
+                "false-lead-resolution",
+            ],
+        },
+    ];
+
+export function getConversationRoundEvidence(
+    round: IncidentConversationRound,
+): readonly IncidentEvidenceTurn[] {
+    return round.evidenceIds.map((id) => {
+        const turn = incidentScenario.find(
+            (candidate): candidate is IncidentEvidenceTurn =>
+                candidate.type === "evidence" && candidate.id === id,
+        );
+        if (turn === undefined) {
+            throw new Error(`Unknown incident evidence turn: ${id}`);
+        }
+        return turn;
+    });
+}
+
+export function createInvestigationRoundPrompt(
+    round: IncidentConversationRound,
+    scope: Readonly<Record<string, string>>,
+    continuing: boolean,
+): string {
+    const evidence = getConversationRoundEvidence(round)
+        .map(
+            (turn, index) =>
+                `${index + 1}. [${turn.at}] ${turn.source} (${turn.topicPath}): ${turn.evidence}`,
+        )
+        .join("\n");
+    return [
+        continuing
+            ? "Continue the IR-7421 investigation using the context already in this session."
+            : "You are assisting a security analyst with incident IR-7421.",
+        `Use this exact access scope for every memory tool: ${JSON.stringify(scope)}.`,
+        "Store each new evidence item below as a separate durable memory using memory_store with kind observation, tags including IR-7421, provenance sourceType agent, actorId incident-demo, and its timestamp as observedAt.",
+        "Keep confirmed facts, hypotheses, corrections, and containment distinct. Do not store the analyst's question as evidence.",
+        "After the memory updates, answer the analyst directly with a concise assessment, confidence, and prioritized next actions.",
+        "",
+        `Analyst: ${round.analystMessage}`,
+        "",
+        "New evidence:",
+        evidence,
+    ].join("\n");
+}
 
 export function createIncidentTurnPrompt(
     turn: IncidentTurn,

@@ -12,29 +12,47 @@ import {
     SequenceIdGenerator,
     WorkingMemoryPacketAssembler,
     createAccessScope,
-    createBatchedInvestigationPrompt,
     createFreshHandoffPrompt,
+    createInvestigationRoundPrompt,
+    getConversationRoundEvidence,
+    incidentConversationRounds,
     incidentScenario,
 } from "../../src/index.js";
 import { SqliteMemoryRepository } from "../../src/repository/index.js";
 
 describe("security incident memory demo", () => {
-    test("live prompts batch evidence and isolate the fresh handoff", () => {
+    test("live prompts partition evidence and isolate the fresh handoff", () => {
         const scope = {
             userId: "incident-analyst",
             workspaceId: "IR-7421",
         };
-        const investigation = createBatchedInvestigationPrompt(scope);
+        const investigationPrompts = incidentConversationRounds.map(
+            (round, index) =>
+                createInvestigationRoundPrompt(round, scope, index > 0),
+        );
         const handoff = createFreshHandoffPrompt(scope);
+        const includedEvidence = incidentConversationRounds.flatMap((round) =>
+            getConversationRoundEvidence(round),
+        );
 
         for (const turn of incidentScenario) {
             if (turn.type === "evidence") {
-                expect(investigation).toContain(turn.evidence);
-                expect(investigation).toContain(turn.topicPath);
+                expect(
+                    investigationPrompts.filter((prompt) =>
+                        prompt.includes(turn.evidence),
+                    ),
+                ).toHaveLength(1);
                 expect(handoff).not.toContain(turn.evidence);
                 expect(handoff).not.toContain(turn.memoryContent);
             }
         }
+        expect(includedEvidence).toHaveLength(8);
+        expect(investigationPrompts[0]).toContain(
+            "You are assisting a security analyst",
+        );
+        expect(investigationPrompts[1]).toContain(
+            "Continue the IR-7421 investigation",
+        );
         expect(handoff).toContain('/memories where "IR-7421"');
         expect(handoff).toContain(JSON.stringify(scope));
     });

@@ -12,13 +12,21 @@ import { SequenceIdGenerator, createAccessScope } from "../domain/index.js";
 import { SqliteMemoryRepository } from "../repository/index.js";
 import { RecordTurnService } from "../services/index.js";
 import {
-    createBatchedInvestigationPrompt,
     createFreshHandoffPrompt,
+    createInvestigationRoundPrompt,
     finalHandoffRecall,
+    incidentConversationRounds,
     incidentScenario,
 } from "./incidentScenario.js";
 
 const packageDirectory = fileURLToPath(new URL("../../../", import.meta.url));
+const sessionTimeoutMs = 90_000;
+
+type IndexedEvidence = {
+    topicPath: string;
+    topicId: string;
+    turnId: string;
+};
 
 async function main(): Promise<void> {
     const options = parseArguments(process.argv.slice(2));
@@ -36,9 +44,9 @@ async function main(): Promise<void> {
     repository.saveScope(scope);
     console.log(`Incident demo workspace: ${workingDirectory}`);
     console.log(
-        "Session 1 investigates and stores evidence. Session 2 is fresh and must recover the incident from memory.\n",
+        "A security analyst investigates with an agent, then hands the incident to a fresh agent session.\n",
     );
-    recordAndPrintEvidenceTurns(repository, ids, scope);
+    const indexedEvidence = indexEvidenceTurns(repository, ids, scope);
     repository.close();
     const mcpConfigPath = path.join(workingDirectory, "mcp.json");
     await writeFile(
@@ -72,32 +80,40 @@ async function main(): Promise<void> {
     );
 
     const startedAt = Date.now();
+    const investigationSession = `IR-7421-investigation-${scope.scopeId}`;
     try {
-        console.log("=== Session 1/2: primary investigation ===");
-        console.log("\nStarting Agency; memory tool activity follows:\n");
-        const investigation = await runAgencyTurn(
-            createBatchedInvestigationPrompt(scope),
-            mcpConfigPath,
-            options.model,
-            "investigation",
-        );
-        console.log("\nPrimary investigation complete.\n");
+        console.log("SESSION 1 - INCIDENT INVESTIGATION\n");
+        for (const [index, round] of incidentConversationRounds.entries()) {
+            printAnalystMessage(round.at, round.analystMessage);
+            await runAgencyTurn({
+                prompt: createInvestigationRoundPrompt(round, scope, index > 0),
+                mcpConfigPath,
+                model: options.model,
+                sessionName: investigationSession,
+                resume: index > 0,
+                indexedEvidence,
+            });
+        }
 
-        console.log("=== Session 2/2: fresh analyst handoff ===");
-        console.log(
-            "Starting a fresh Agency process with no incident evidence:\n",
+        console.log("\nSESSION 2 - FRESH ANALYST HANDOFF");
+        console.log("(new Copilot process; no incident evidence in context)\n");
+        printAnalystMessage(
+            "2026-08-05T10:40:00.000Z",
+            "I'm taking over IR-7421. Reconstruct the incident from durable memory and give me the current diagnosis, containment status, false leads, and next actions.",
         );
-        const handoff = await runAgencyTurn(
-            createFreshHandoffPrompt(scope),
+        const handoff = await runAgencyTurn({
+            prompt: createFreshHandoffPrompt(scope),
             mcpConfigPath,
-            options.model,
-            "handoff",
-        );
-        console.log("\n");
+            model: options.model,
+            sessionName: `IR-7421-handoff-${scope.scopeId}`,
+            resume: false,
+            indexedEvidence,
+        });
         assertRecall(handoff);
         const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
-        console.log(`Cross-session recall: ${finalHandoffRecall.join(", ")}`);
-        console.log(`Incident memory demo passed in ${durationSeconds}s.`);
+        console.log("DEMO RESULT");
+        console.log(`  Cross-session recall: ${finalHandoffRecall.join(", ")}`);
+        console.log(`  Passed in ${durationSeconds}s.\n`);
     } finally {
         if (options.outputDirectory === undefined && !options.keep) {
             await rm(workingDirectory, { recursive: true, force: true });
@@ -105,34 +121,37 @@ async function main(): Promise<void> {
     }
 }
 
-async function runAgencyTurn(
-    prompt: string,
-    mcpConfigPath: string,
-    model: string,
-    sessionName: string,
-): Promise<string> {
+async function runAgencyTurn(options: {
+    prompt: string;
+    mcpConfigPath: string;
+    model: string;
+    sessionName: string;
+    resume: boolean;
+    indexedEvidence: ReadonlyMap<string, IndexedEvidence>;
+}): Promise<string> {
     const args = [
         "copilot",
         "--prompt",
-        prompt,
+        options.prompt,
         "--no-default-mcps",
         "--no-config-plugins",
         "--no-org-config",
         "--no-input-processing",
         "--additional-mcp-config",
-        `@${mcpConfigPath}`,
+        `@${options.mcpConfigPath}`,
         "--allow-all-tools",
         "--no-ask-user",
         "--no-custom-instructions",
         "--disable-builtin-mcps",
         "--output-format",
-        "text",
+        "json",
         "--stream",
         "off",
         "--model",
-        model,
-        "--name",
-        `IR-7421-${sessionName}`,
+        options.model,
+        ...(options.resume
+            ? ["--resume", options.sessionName]
+            : ["--name", options.sessionName]),
         "-C",
         packageDirectory,
     ];
@@ -142,33 +161,48 @@ async function runAgencyTurn(
             env: { ...process.env, NO_COLOR: "1" },
             stdio: ["ignore", "pipe", "pipe"],
         });
-        let stdout = "";
+        const transcript = new AgencyTranscriptRenderer(
+            options.indexedEvidence,
+        );
+        let stdoutBuffer = "";
         let stderr = "";
+        let timedOut = false;
         const timeout = setTimeout(() => {
+            timedOut = true;
             child.kill();
             reject(
                 new Error(
-                    `Agency ${sessionName} session exceeded the 135-second demo limit`,
+                    `Agency ${options.sessionName} session exceeded the 90-second demo limit`,
                 ),
             );
-        }, 135_000);
+        }, sessionTimeoutMs);
         child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
-            stdout += chunk;
-            process.stdout.write(chunk);
+            stdoutBuffer += chunk;
+            const lines = stdoutBuffer.split(/\r?\n/);
+            stdoutBuffer = lines.pop() ?? "";
+            for (const line of lines) {
+                transcript.accept(line);
+            }
         });
         child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
             stderr += chunk;
-            process.stderr.write(chunk);
         });
-        child.on("error", reject);
+        child.on("error", (error) => {
+            clearTimeout(timeout);
+            reject(error);
+        });
         child.on("close", (code) => {
             clearTimeout(timeout);
+            if (timedOut) {
+                return;
+            }
+            transcript.accept(stdoutBuffer);
             if (code === 0) {
-                const response = stdout.trim();
+                const response = transcript.response;
                 if (response.length === 0) {
                     reject(
                         new Error(
-                            `Agency ${sessionName} session returned no analyst response. ${stderr.trim()}`,
+                            `Agency ${options.sessionName} session returned no agent response. ${stderr.trim()}`,
                         ),
                     );
                 } else {
@@ -185,13 +219,175 @@ async function runAgencyTurn(
     });
 }
 
-function recordAndPrintEvidenceTurns(
+class AgencyTranscriptRenderer {
+    readonly #responses: string[] = [];
+    readonly #printedResponses = new Set<string>();
+    readonly #memoryRequests = new Map<string, Record<string, unknown>>();
+    readonly #queryRequests = new Map<string, Record<string, unknown>>();
+    readonly #indexedEvidence: ReadonlyMap<string, IndexedEvidence>;
+    #printedRetrieval = false;
+
+    public constructor(indexedEvidence: ReadonlyMap<string, IndexedEvidence>) {
+        this.#indexedEvidence = indexedEvidence;
+    }
+
+    public get response(): string {
+        return this.#responses.join("\n").trim();
+    }
+
+    public accept(line: string): void {
+        if (line.trim().length === 0) {
+            return;
+        }
+        let event: Record<string, unknown>;
+        try {
+            event = JSON.parse(line) as Record<string, unknown>;
+        } catch {
+            return;
+        }
+        const type = stringValue(event.type);
+        const data = recordValue(event.data);
+        if (type === "assistant.message") {
+            this.printAgentResponse(stringValue(data?.content));
+            return;
+        }
+        if (type === "session.task_complete") {
+            if (this.#responses.length === 0) {
+                this.printAgentResponse(stringValue(data?.summary));
+            }
+            return;
+        }
+        if (type === "tool.execution_start") {
+            this.startTool(data);
+            return;
+        }
+        if (type === "tool.execution_complete") {
+            this.completeTool(data);
+        }
+    }
+
+    private startTool(data: Record<string, unknown> | undefined): void {
+        const toolCallId = stringValue(data?.toolCallId);
+        const toolName = stringValue(data?.toolName);
+        const argumentsValue = recordValue(data?.arguments);
+        if (toolName === undefined) {
+            return;
+        }
+        if (toolName.endsWith("memory_store") && toolCallId !== undefined) {
+            this.#memoryRequests.set(toolCallId, argumentsValue ?? {});
+            return;
+        }
+        if (toolName.endsWith("memory_query")) {
+            if (toolCallId !== undefined) {
+                this.#queryRequests.set(toolCallId, argumentsValue ?? {});
+            }
+        }
+    }
+
+    private completeTool(data: Record<string, unknown> | undefined): void {
+        if (data?.success !== true) {
+            return;
+        }
+        const toolCallId = stringValue(data.toolCallId);
+        if (toolCallId === undefined) {
+            return;
+        }
+        const queryRequest = this.#queryRequests.get(toolCallId);
+        if (queryRequest !== undefined) {
+            this.#queryRequests.delete(toolCallId);
+            if (!this.#printedRetrieval) {
+                this.#printedRetrieval = true;
+                this.printRetrieval(queryRequest, data);
+            }
+            return;
+        }
+        const request = this.#memoryRequests.get(toolCallId);
+        if (request === undefined) {
+            return;
+        }
+        this.#memoryRequests.delete(toolCallId);
+        const result = recordValue(data.result);
+        const payload = parseJsonRecord(stringValue(result?.content));
+        const memory = recordValue(payload?.memory);
+        const revision = recordValue(memory?.revision);
+        const head = recordValue(memory?.head);
+        const observedAt = stringValue(
+            recordValue(revision?.provenance)?.observedAt,
+        );
+        const indexed =
+            observedAt === undefined
+                ? undefined
+                : this.#indexedEvidence.get(observedAt);
+        const tags = arrayOfStrings(revision?.tags);
+
+        console.log("MEMORY  stored durable observation");
+        console.log(
+            `  Memory: ${stringValue(revision?.memoryId) ?? "unknown"}  rev ${numberValue(revision?.revision) ?? "?"}  ${stringValue(head?.state) ?? "active"}`,
+        );
+        if (indexed !== undefined) {
+            console.log(`  Topic:  ${indexed.topicPath}`);
+            console.log(
+                `  Index:  topic ${indexed.topicId} | turn ${indexed.turnId}`,
+            );
+            console.log(`  Query:  /topics${indexed.topicPath}/turns`);
+        }
+        if (tags.length > 0) {
+            console.log(`  Tags:   ${tags.join(", ")}`);
+        }
+        console.log(
+            `  Fact:   ${stringValue(revision?.content) ?? stringValue(request.content) ?? "stored"}`,
+        );
+        console.log();
+    }
+
+    private printRetrieval(
+        request: Record<string, unknown>,
+        data: Record<string, unknown>,
+    ): void {
+        const result = recordValue(data.result);
+        const payload = parseJsonRecord(stringValue(result?.content));
+        const packet = recordValue(payload?.packet);
+        const references = Array.isArray(packet?.references)
+            ? packet.references.length
+            : undefined;
+        console.log("MEMORY  recalled durable evidence");
+        console.log(
+            `  Query:     ${stringValue(request.query) ?? "/memories"}`,
+        );
+        const retrievalId = stringValue(payload?.retrievalId);
+        if (retrievalId !== undefined) {
+            console.log(`  Retrieval: ${retrievalId}`);
+        }
+        if (references !== undefined) {
+            console.log(`  Records:   ${references}`);
+        }
+        console.log();
+    }
+
+    private printAgentResponse(content: string | undefined): void {
+        const response = content?.trim();
+        if (
+            response === undefined ||
+            response.length === 0 ||
+            this.#printedResponses.has(response)
+        ) {
+            return;
+        }
+        this.#printedResponses.add(response);
+        this.#responses.push(response);
+        console.log("AGENT");
+        console.log(indent(response));
+        console.log();
+    }
+}
+
+function indexEvidenceTurns(
     repository: SqliteMemoryRepository,
     ids: SequenceIdGenerator,
     scope: ReturnType<typeof createAccessScope>,
-): void {
-    console.log("=== Evidence turns and topic-index updates ===\n");
+): ReadonlyMap<string, IndexedEvidence> {
     const recorder = new RecordTurnService(repository, undefined, ids);
+    const indexed = new Map<string, IndexedEvidence>();
     const evidenceTurns = incidentScenario.filter(
         (turn) => turn.type === "evidence",
     );
@@ -213,16 +409,67 @@ function recordAndPrintEvidenceTurns(
             },
             terms: turn.tags.map((text) => ({ text, role: "subject" })),
         });
-        console.log(`TURN ${index + 1}/${evidenceTurns.length}`);
-        console.log(`  Time:   ${turn.at}`);
-        console.log(`  Source: ${turn.source}`);
-        console.log(`  Text:   ${turn.evidence}`);
-        console.log("  MEMORY UPDATE (native topic index)");
-        console.log(`    Topic path: ${turn.topicPath}`);
-        console.log(`    Topic ID:   ${result.primaryTopicId}`);
-        console.log(`    Turn ID:    ${result.turnId}`);
-        console.log(`    Query path: /topics${turn.topicPath}/turns`);
-        console.log(`    Terms:      ${turn.tags.join(", ")}\n`);
+        indexed.set(turn.at, {
+            topicPath: turn.topicPath,
+            topicId: result.primaryTopicId,
+            turnId: result.turnId,
+        });
+    }
+    return indexed;
+}
+
+function printAnalystMessage(at: string, message: string): void {
+    console.log(`ANALYST  ${formatTime(at)}`);
+    console.log(indent(message));
+    console.log();
+}
+
+function formatTime(timestamp: string): string {
+    return new Date(timestamp).toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: "UTC",
+    });
+}
+
+function indent(text: string): string {
+    return text
+        .split("\n")
+        .map((line) => `  ${line}`)
+        .join("\n");
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+    return typeof value === "string" ? value : undefined;
+}
+
+function numberValue(value: unknown): number | undefined {
+    return typeof value === "number" ? value : undefined;
+}
+
+function arrayOfStrings(value: unknown): readonly string[] {
+    return Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string")
+        : [];
+}
+
+function parseJsonRecord(
+    value: string | undefined,
+): Record<string, unknown> | undefined {
+    if (value === undefined) {
+        return undefined;
+    }
+    try {
+        return recordValue(JSON.parse(value));
+    } catch {
+        return undefined;
     }
 }
 
