@@ -61,6 +61,7 @@ import {
     saveUserData,
     addUserDataStrings,
     UserData,
+    type MusicItemInfo,
     addFullTracks,
     getPlaylistsFromUserData,
     updatePlaylists,
@@ -214,7 +215,9 @@ function getIdPart(uri: string) {
         const parts = uri.split(":");
         return parts[parts.length - 1];
     } else {
-        console.log(`Invalid uri: ${uri}`);
+        // Podcast/video/local-file rows land here on every history load, so
+        // this is debug output, not console noise.
+        debugSpotify(`Skipping row with non-track uri: ${uri}`);
         return "";
     }
 }
@@ -402,7 +405,11 @@ export async function loadHistoryFile(
         for (const record of data) {
             debugSpotify(`${record.master_metadata_track_name}`);
         }
-        const tracks = data.filter((r) => r.spotify_track_uri !== null);
+        const tracks = data.filter(
+            (r) =>
+                r.spotify_track_uri !== null &&
+                getIdPart(r.spotify_track_uri) !== "",
+        );
         mergeUserDataKind(
             context.userData.data.tracks,
             tracks.map((r) => ({
@@ -414,6 +421,20 @@ export async function loadHistoryFile(
                 id: getIdPart(r.spotify_track_uri),
             })),
         );
+        // Streaming history carries the artist and album names alongside the
+        // track, but no ids for them. Without merging these, completion for
+        // `target.artist` / `target.albumName` stays empty no matter how much
+        // history is loaded — only the Spotify API path ever filled those.
+        // Key on the name so a later API update (which has real ids) doesn't
+        // produce a second entry for the same artist.
+        mergeUserDataKind(
+            context.userData.data.artists,
+            namedItems(tracks, (r) => r.master_metadata_album_artist_name),
+        );
+        mergeUserDataKind(
+            context.userData.data.albums,
+            namedItems(tracks, (r) => r.master_metadata_album_album_name),
+        );
         result.loaded.push(source.name);
         result.records += tracks.length;
     }
@@ -424,8 +445,39 @@ export async function loadHistoryFile(
         );
     }
 
+    // The name index is built once and cached; wildcard validation consults
+    // it to decide whether a track/artist the user named is one of theirs.
+    // Leaving the pre-load index in place would make everything just loaded
+    // look unknown until the next restart.
+    delete context.userData.data.nameMap;
+
     await saveUserData(instanceStorage, context.userData.data);
     return result;
+}
+
+// Artist/album entries derived from history rows, deduped by name (history
+// has no ids for them) and skipping rows where the name is absent — podcast
+// and local-file plays leave these null.
+function namedItems(
+    records: SpotifyRecord[],
+    getName: (r: SpotifyRecord) => string | null,
+): MusicItemInfo[] {
+    const byName = new Map<string, MusicItemInfo>();
+    for (const record of records) {
+        const name = getName(record);
+        if (!name) {
+            continue;
+        }
+        const id = `name:${name.toLocaleLowerCase()}`;
+        const existing = byName.get(id);
+        if (existing === undefined) {
+            byName.set(id, { id, name, freq: 1, timestamps: [record.ts] });
+        } else {
+            existing.freq++;
+            existing.timestamps.push(record.ts);
+        }
+    }
+    return Array.from(byName.values());
 }
 
 async function htmlPlaylistNames(

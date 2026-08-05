@@ -56,10 +56,12 @@ const loadHandler: CommandHandler = {
 
         const skipped =
             result.skipped.length !== 0
-                ? ` (${result.skipped.length} file(s) skipped)`
+                ? `\n\nSkipped ${result.skipped.length} file(s) that aren't Spotify streaming history: ${result.skipped
+                      .map((f) => f.replace(/^.*[\\/]/, ""))
+                      .join(", ")}.`
                 : "";
         context.actionIO.setDisplay(
-            `Spotify user data loaded: ${result.records} track play(s) from ${result.loaded.length} file(s)${skipped}.`,
+            `Spotify user data loaded: ${result.records} track play(s) from ${result.loaded.length} file(s).${skipped}`,
         );
     },
 };
