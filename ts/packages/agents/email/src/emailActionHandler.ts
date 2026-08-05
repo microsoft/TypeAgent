@@ -12,7 +12,7 @@ import {
     GoogleEmailClient,
     graphProviderSetupHint,
     parseDayRange,
-    probeGraphConfig,
+    probeCurrentGraphConfig,
 } from "@typeagent/graph-utils";
 import chalk from "chalk";
 import {
@@ -392,7 +392,7 @@ function emailTs(): string {
 async function checkEmailReadiness(
     context: SessionContext<EmailActionContext>,
 ): Promise<ReadinessReport> {
-    const config = probeGraphConfig(process.env);
+    const config = probeCurrentGraphConfig();
     let provider = context.agentContext?.emailProvider;
     if (!provider && (config.msGraphConfigured || config.googleConfigured)) {
         provider = createEmailProviderFromConfig();
@@ -411,7 +411,7 @@ async function setupEmail(
     actionContext: ActionContext<EmailActionContext>,
 ): Promise<ActionResult> {
     const ctx = actionContext.sessionContext.agentContext;
-    const config = probeGraphConfig(process.env);
+    const config = probeCurrentGraphConfig();
     if (!config.msGraphConfigured && !config.googleConfigured) {
         return createActionResultFromError(
             `No email provider configured.\n${graphProviderSetupHint("email")}`,

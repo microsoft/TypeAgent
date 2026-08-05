@@ -16,7 +16,7 @@ import {
     createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ChatModel, openai } from "@typeagent/aiclient";
-import { configSetupError } from "@typeagent/config";
+import { configSetupError, tryReloadConfigSync } from "@typeagent/config";
 import { DiscordActions } from "./discordSchema.js";
 
 const DISCORD_API = "https://discord.com/api/v10";
@@ -152,6 +152,13 @@ async function discordFetch(
 ): Promise<Response> {
     const token = process.env.DISCORD_BOT_TOKEN;
     if (!token) {
+        // Re-read the config files before giving up: this agent runs in a
+        // forked process whose env is a startup snapshot, so a token added
+        // since then is only visible after a reload.
+        tryReloadConfigSync();
+    }
+    const botToken = token ?? process.env.DISCORD_BOT_TOKEN;
+    if (!botToken) {
         throw configSetupError(
             "Discord is not configured.",
             ["DISCORD_BOT_TOKEN"],
@@ -159,7 +166,7 @@ async function discordFetch(
         );
     }
     const headers: Record<string, string> = {
-        Authorization: `Bot ${token}`,
+        Authorization: `Bot ${botToken}`,
         "Content-Type": "application/json",
         ...(options.headers as Record<string, string>),
     };

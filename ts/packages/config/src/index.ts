@@ -5,6 +5,7 @@ export {
     loadConfig,
     loadConfigSync,
     reloadConfigSync,
+    tryReloadConfigSync,
     getConfigProblems,
     computeConfigDrift,
     resolveLocalConfigPath,

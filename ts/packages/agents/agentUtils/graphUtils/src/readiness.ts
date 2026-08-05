@@ -9,7 +9,7 @@
 // for the pattern this mirrors.
 
 import type { ReadinessReport } from "@typeagent/agent-sdk";
-import { configSetupHint } from "@typeagent/config";
+import { configSetupHint, tryReloadConfigSync } from "@typeagent/config";
 
 export type GraphAgentName = "calendar" | "email";
 
@@ -51,6 +51,22 @@ export function probeGraphConfig(env: NodeJS.ProcessEnv): {
             env.GOOGLE_CALENDAR_CLIENT_ID && env.GOOGLE_CALENDAR_CLIENT_SECRET
         ),
     };
+}
+
+// The probe an agent should use at runtime: re-reads the config files
+// first, then probes `process.env`.
+//
+// Agent processes are forked with a snapshot of `process.env`, so without
+// the reload a user who adds MSGRAPH_APP_CLIENTID to config.local.yaml and
+// runs `@config agent refresh email` would keep being told the agent has
+// no provider configured. `probeGraphConfig` stays pure so the decision
+// logic remains testable without touching the filesystem.
+export function probeCurrentGraphConfig(): {
+    msGraphConfigured: boolean;
+    googleConfigured: boolean;
+} {
+    tryReloadConfigSync();
+    return probeGraphConfig(process.env);
 }
 
 // The "no provider configured" instructions, shared by the readiness

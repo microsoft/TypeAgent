@@ -8,6 +8,7 @@ import {
     loadConfigSync,
     loadConfig,
     reloadConfigSync,
+    tryReloadConfigSync,
     getConfigProblems,
 } from "../src/loader.js";
 
@@ -307,6 +308,27 @@ describe("invalid sections", () => {
 
 describe("reloadConfigSync", () => {
     afterEach(() => cleanProcessEnv(["OPENAI_API_KEY"]));
+
+    test("tryReloadConfigSync keeps startup values when the reload fails", () => {
+        const root = makeTempWorkspace();
+        try {
+            const file = path.join(root, "config.local.yaml");
+            fs.writeFileSync(file, "openai:\n  api_key: first\n");
+            cleanProcessEnv(["OPENAI_API_KEY"]);
+            loadConfigSync({ workspaceRoot: root });
+            expect(process.env.OPENAI_API_KEY).toBe("first");
+
+            // Unparseable YAML: the reload can't produce anything, and the
+            // caller must not be turned into a hard failure by it.
+            fs.writeFileSync(file, "openai:\n  api_key: [unclosed\n");
+            expect(() =>
+                tryReloadConfigSync({ workspaceRoot: root }),
+            ).not.toThrow();
+            expect(process.env.OPENAI_API_KEY).toBe("first");
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
 
     test("overwrites an existing process.env value and reports the change", () => {
         const root = makeTempWorkspace();

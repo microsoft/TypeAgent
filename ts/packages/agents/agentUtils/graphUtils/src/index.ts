@@ -87,4 +87,5 @@ export {
     evaluateGraphReadiness,
     graphProviderSetupHint,
     probeGraphConfig,
+    probeCurrentGraphConfig,
 } from "./readiness.js";

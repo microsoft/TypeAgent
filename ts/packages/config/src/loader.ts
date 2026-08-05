@@ -495,6 +495,26 @@ export function reloadConfigSync(options: LoadConfigOptions = {}): string[] {
 }
 
 /**
+ * `reloadConfigSync` for callers that must not fail because of it: a
+ * broken or unreadable config file leaves whatever was loaded at startup
+ * in place rather than turning "your Spotify settings are missing" into
+ * an unrelated parse error. Returns the keys that changed, or none.
+ *
+ * This is what agents should call before reading their settings. An agent
+ * process is forked with a snapshot of `process.env`, so without a reload
+ * it can never observe an edit the user made after startup — which is
+ * exactly what `@config agent refresh <agent>` promises to pick up.
+ */
+export function tryReloadConfigSync(options: LoadConfigOptions = {}): string[] {
+    try {
+        return reloadConfigSync(options);
+    } catch (e: any) {
+        debug("config reload failed: %s", e?.message ?? e);
+        return [];
+    }
+}
+
+/**
  * Merge a flat env map into `process.env`. Existing values in
  * `process.env` are preserved — they sit at higher precedence than
  * any config file (matching how `dotenv.config()` behaved). This
