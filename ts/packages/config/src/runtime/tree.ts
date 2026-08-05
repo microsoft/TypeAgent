@@ -29,6 +29,9 @@ import {
     DeploymentMode,
     IDENTITY,
     authModeFromString,
+    wireApiFromString,
+    DEFAULT_WIRE_API,
+    type WireApi,
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -76,6 +79,11 @@ function endpointToYaml(
     // (PTU=1, PAYG=2). Keeps the YAML quiet for the common case.
     const defaultPriority = ep.mode === "PTU" ? 1 : 2;
     if (ep.priority !== defaultPriority) out.priority = ep.priority;
+    // Only emit wireApi when it differs from the default so back-compat
+    // configs (chat_completions) stay byte-identical.
+    if (ep.wireApi !== undefined && ep.wireApi !== DEFAULT_WIRE_API) {
+        out.wireApi = ep.wireApi;
+    }
     return out;
 }
 
@@ -580,6 +588,7 @@ function readEndpointEntry(
     capacity?: number | null;
     region?: string;
     tpm?: number;
+    wireApi?: WireApi;
 } {
     const obj = asObject(node, where);
     const out: ReturnType<typeof readEndpointEntry> = {
@@ -607,6 +616,20 @@ function readEndpointEntry(
         out.capacity = asNumber(obj.capacity, `${where}.capacity`);
     }
     if (obj.tpm !== undefined) out.tpm = asNumber(obj.tpm, `${where}.tpm`);
+    if (obj.wireApi !== undefined) {
+        const raw = asString(obj.wireApi, `${where}.wireApi`);
+        const at = wireApiFromString(raw);
+        if (at === undefined) {
+            throw new Error(
+                `Invalid wireApi at '${where}.wireApi': expected ` +
+                    `chat_completions, responses, or messages.`,
+            );
+        }
+        // Explicit default collapses to omitted (same as never set).
+        if (at !== DEFAULT_WIRE_API) {
+            out.wireApi = at;
+        }
+    }
     return out;
 }
 
@@ -754,7 +777,9 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
                 if (
                     capacity !== undefined ||
                     ep.tpm !== undefined ||
-                    priority !== defPriority
+                    priority !== defPriority ||
+                    (ep.wireApi !== undefined &&
+                        ep.wireApi !== DEFAULT_WIRE_API)
                 ) {
                     const o: Record<string, unknown> = {
                         suffix,
@@ -764,6 +789,12 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
                     if (capacity !== undefined) o.capacity = capacity;
                     if (ep.tpm !== undefined) o.tpm = ep.tpm;
                     o.priority = priority;
+                    if (
+                        ep.wireApi !== undefined &&
+                        ep.wireApi !== DEFAULT_WIRE_API
+                    ) {
+                        o.wireApi = ep.wireApi;
+                    }
                     overrides.push(o);
                 }
             }

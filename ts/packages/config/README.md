@@ -41,6 +41,14 @@ YAML maps are flattened into the `EnvVars` flat-key shape used by
 
 See [src/flatten.ts](./src/flatten.ts) for the full mapping.
 
+## `wireApi` (per endpoint)
+
+Optional endpoint field (default `chat_completions`). Maps to aiclient providers:
+`chat_completions` → `chatCompletionsWireApiProvider`,
+`responses` → `responsesWireApiProvider`,
+`messages` → `messagesWireApiProvider`.
+Carried on `AZURE_OPENAI_POOL_*`; does not affect pool routing.
+
 ## Usage
 
 ```ts
