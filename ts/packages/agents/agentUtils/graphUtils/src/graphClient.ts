@@ -28,7 +28,7 @@ import lockfile from "proper-lockfile";
 import registerDebug from "debug";
 import chalk from "chalk";
 import os from "os";
-import { configSetupHint } from "@typeagent/config";
+import { configSetupError } from "@typeagent/config";
 import { EventEmitter } from "node:events";
 
 try {
@@ -565,11 +565,10 @@ export class GraphClient extends EventEmitter {
 
         const settings = this._settings;
         if (settings === invalidSettings) {
-            throw new Error(
-                `Microsoft Graph is not configured.\n${configSetupHint(
-                    ["MSGRAPH_APP_CLIENTID", "MSGRAPH_APP_TENANTID"],
-                    "Values come from your app registration in the Azure portal.",
-                )}`,
+            throw configSetupError(
+                "Microsoft Graph is not configured.",
+                ["MSGRAPH_APP_CLIENTID", "MSGRAPH_APP_TENANTID"],
+                "Values come from your app registration in the Azure portal.",
             );
         }
         if (settings.username && settings.password) {

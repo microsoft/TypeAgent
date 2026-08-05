@@ -23,11 +23,15 @@ export class AgentNotReadyError extends Error {
 /**
  * The rich error display for a thrown value, or undefined when it carries
  * none (in which case callers should fall back to the plain message).
+ *
+ * Duck-typed on a `markdown` property rather than an `instanceof` check:
+ * errors thrown inside an agent process are rebuilt from the RPC envelope
+ * on this side, and agents raise their own markdown-carrying errors
+ * (`ConfigSetupError`) that this package doesn't own.
  */
 export function getErrorDisplayContent(e: unknown): DisplayContent | undefined {
-    const markdown =
-        e instanceof AgentNotReadyError ? e.markdown : (undefined as undefined);
-    return markdown === undefined
-        ? undefined
-        : { type: "markdown", content: markdown, kind: "error" };
+    const markdown = (e as { markdown?: unknown } | undefined)?.markdown;
+    return typeof markdown === "string" && markdown.length > 0
+        ? { type: "markdown", content: markdown, kind: "error" }
+        : undefined;
 }

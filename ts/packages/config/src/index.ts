@@ -44,6 +44,11 @@ export {
     type ConfigHintVar,
 } from "./hints.js";
 export { fileLinkHref, FILE_LINK_SCHEME } from "./fileLink.js";
+export {
+    ConfigSetupError,
+    configSetupError,
+    getErrorMarkdown,
+} from "./setupError.js";
 export { validateConfigTree, configTreeSchema } from "./schema.js";
 export {
     ConfigSource,
