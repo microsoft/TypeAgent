@@ -62,6 +62,15 @@ describe("createProcessResource", () => {
         );
     });
 
+    it("reuses the default service instance ID within the process", () => {
+        const first = createProcessResource({ serviceName: "first" });
+        const second = createProcessResource({ serviceName: "second" });
+
+        expect(first.attributes[ATTR_SERVICE_INSTANCE_ID]).toBe(
+            second.attributes[ATTR_SERVICE_INSTANCE_ID],
+        );
+    });
+
     it("merges caller-supplied attributes", () => {
         const resource = createProcessResource({
             serviceName: "my-service",

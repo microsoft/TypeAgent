@@ -164,4 +164,31 @@ describe("TelemetryLifecycle", () => {
             createTelemetryLifecycle({ componentTimeoutMs: 0 }),
         ).toThrow(/positive finite number/);
     });
+
+    it("bounds the total shutdown time across components", async () => {
+        const lifecycle = createTelemetryLifecycle({
+            totalTimeoutMs: 20,
+            componentTimeoutMs: 100,
+        });
+        let remainingComponentRan = false;
+        lifecycle.register("remaining", () => {
+            remainingComponentRan = true;
+        });
+        lifecycle.register("hung", () => new Promise<void>(() => undefined));
+
+        try {
+            await lifecycle.shutdown();
+            throw new Error("expected shutdown() to reject");
+        } catch (error) {
+            expect(error).toBeInstanceOf(AggregateError);
+            expect((error as AggregateError).errors).toHaveLength(2);
+        }
+        expect(remainingComponentRan).toBe(false);
+    });
+
+    it("rejects an invalid total timeout", () => {
+        expect(() => createTelemetryLifecycle({ totalTimeoutMs: 0 })).toThrow(
+            /positive finite number/,
+        );
+    });
 });

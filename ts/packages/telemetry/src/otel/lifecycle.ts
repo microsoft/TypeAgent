@@ -18,6 +18,11 @@ export type ShutdownCallback = () => void | Promise<void>;
 /** Options for {@link createTelemetryLifecycle}. */
 export interface TelemetryLifecycleOptions {
     /**
+     * Maximum total time allowed for telemetry shutdown.
+     * Defaults to 10 seconds.
+     */
+    readonly totalTimeoutMs?: number;
+    /**
      * Maximum time allowed for each component's shutdown callback.
      * Defaults to 5 seconds.
      */
@@ -95,7 +100,13 @@ interface RegisteredComponent {
 export function createTelemetryLifecycle(
     options: TelemetryLifecycleOptions = {},
 ): TelemetryLifecycle {
+    const totalTimeoutMs = options.totalTimeoutMs ?? 10_000;
     const componentTimeoutMs = options.componentTimeoutMs ?? 5_000;
+    if (!Number.isFinite(totalTimeoutMs) || totalTimeoutMs <= 0) {
+        throw new Error(
+            "Telemetry lifecycle totalTimeoutMs must be a positive finite number.",
+        );
+    }
     if (!Number.isFinite(componentTimeoutMs) || componentTimeoutMs <= 0) {
         throw new Error(
             "Telemetry lifecycle componentTimeoutMs must be a positive finite number.",
@@ -108,11 +119,20 @@ export function createTelemetryLifecycle(
 
     async function runShutdown(): Promise<void> {
         const failures: unknown[] = [];
+        const deadline = Date.now() + totalTimeoutMs;
         // Reverse registration order: the most recently registered
         // component (typically the one most dependent on earlier ones)
         // shuts down first.
         for (let i = components.length - 1; i >= 0; i--) {
             const component = components[i];
+            const remainingMs = deadline - Date.now();
+            if (remainingMs <= 0) {
+                failures.push(
+                    new TelemetryShutdownTimeoutError(component.name, 0),
+                );
+                continue;
+            }
+            const timeoutMs = Math.min(componentTimeoutMs, remainingMs);
             try {
                 let timeout: NodeJS.Timeout | undefined;
                 try {
@@ -123,10 +143,10 @@ export function createTelemetryLifecycle(
                                 reject(
                                     new TelemetryShutdownTimeoutError(
                                         component.name,
-                                        componentTimeoutMs,
+                                        timeoutMs,
                                     ),
                                 );
-                            }, componentTimeoutMs);
+                            }, timeoutMs);
                             timeout.unref();
                         }),
                     ]);

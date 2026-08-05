@@ -21,6 +21,8 @@ import {
     ATTR_PROCESS_RUNTIME_VERSION,
 } from "@opentelemetry/semantic-conventions/incubating";
 
+const PROCESS_INSTANCE_ID = randomUUID();
+
 /**
  * Constructs the process-level OTel {@link Resource} TypeAgent-owned hosts
  * attach to their providers. This module only builds resource attributes; it
@@ -67,7 +69,7 @@ export function createProcessResource(
     const identity: Record<string, AttributeValue> = {
         [ATTR_SERVICE_NAME]: serviceName,
         [ATTR_SERVICE_INSTANCE_ID]:
-            options.serviceInstanceId?.trim() || randomUUID(),
+            options.serviceInstanceId?.trim() || PROCESS_INSTANCE_ID,
         [ATTR_HOST_NAME]: os.hostname(),
         [ATTR_OS_TYPE]: normalizeOsType(process.platform),
         [ATTR_PROCESS_PID]: process.pid,
