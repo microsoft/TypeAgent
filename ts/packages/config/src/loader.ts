@@ -9,7 +9,7 @@ import yaml from "js-yaml";
 import dotenv from "dotenv";
 import registerDebug from "debug";
 
-import { flatten, mergeFlat } from "./flatten.js";
+import { flatten, mergeFlat, type FlattenOptions } from "./flatten.js";
 import { fetchKeyVaultConfig } from "./keyVault.js";
 import { validateConfigTree } from "./schema.js";
 import {
@@ -147,6 +147,53 @@ function readDotEnvFile(filePath: string): FlatEnv {
 }
 
 /**
+ * A top-level section of a config file that failed to convert and was
+ * therefore skipped — most often a leftover `<value>` placeholder or a
+ * value of the wrong type. Reported instead of silently dropping the
+ * whole file, which used to leave everything looking "not configured".
+ */
+export interface ConfigProblem {
+    /** Absolute path of the file the section came from. */
+    readonly file: string;
+    /** Top-level key, e.g. `spotify`. */
+    readonly section: string;
+    /** Converter message, e.g. `Expected a number at 'spotify.port'`. */
+    readonly message: string;
+}
+
+let configProblems: ConfigProblem[] = [];
+const warnedProblems = new Set<string>();
+
+/**
+ * Sections skipped by the most recent load. Setup/readiness checks use
+ * this to explain "you configured it, but the value is invalid" rather
+ * than reporting the setting as missing.
+ */
+export function getConfigProblems(): ConfigProblem[] {
+    return configProblems;
+}
+
+function flattenOptions(file: string): FlattenOptions {
+    // Section errors are always non-fatal: one mistyped value shouldn't
+    // take down the whole file (which reads to the user as "nothing is
+    // configured", the exact confusion this reporting exists to avoid).
+    // File-level errors — unreadable file, invalid YAML — still honor
+    // `strict`.
+    return {
+        onSectionError: (section, error) => {
+            configProblems.push({ file, section, message: error.message });
+            const key = `${file}:${section}:${error.message}`;
+            if (!warnedProblems.has(key)) {
+                warnedProblems.add(key);
+                console.warn(
+                    `Warning: skipping '${section}:' in ${file} — ${error.message}`,
+                );
+            }
+        },
+    };
+}
+
+/**
  * Synchronous loader used by tests and any entry point that cannot
  * await. Reads YAML files and the `.env` fallback only — never reaches
  * out to Key Vault.
@@ -161,6 +208,7 @@ export function loadConfigSync(
     const trackSources = options.trackSources ?? false;
     const populateProcessEnv = options.populateProcessEnv ?? true;
     const strict = options.strict ?? true;
+    configProblems = [];
 
     debug(
         "loading config (defaults=%s, local=%s, dotenv=%s)",
@@ -188,7 +236,7 @@ export function loadConfigSync(
         if (tree) {
             layers.push({
                 source: ConfigSource.Defaults,
-                flat: flatten(tree),
+                flat: flatten(tree, flattenOptions(defaultsPath)),
             });
         }
     } catch (err) {
@@ -202,7 +250,7 @@ export function loadConfigSync(
         if (tree) {
             layers.push({
                 source: ConfigSource.Local,
-                flat: flatten(tree),
+                flat: flatten(tree, flattenOptions(localPath)),
             });
         }
     } catch (err) {
@@ -294,6 +342,9 @@ export async function loadConfig(
 
     debug("loading config with key vault (vault=%s)", vaultName);
 
+    // Discard anything the vault-name pre-pass reported; the layers
+    // below are re-read and re-report on their own.
+    configProblems = [];
     const layers: { source: ConfigSource; flat: FlatEnv }[] = [];
 
     // .env
@@ -318,7 +369,7 @@ export async function loadConfig(
         if (tree) {
             layers.push({
                 source: ConfigSource.KeyVault,
-                flat: flatten(tree),
+                flat: flatten(tree, flattenOptions("key vault")),
             });
         }
     } catch (err) {
@@ -367,7 +418,10 @@ function pushYamlLayer(
     try {
         const tree = readYamlFile(filePath);
         if (tree) {
-            layers.push({ source, flat: flatten(tree) });
+            layers.push({
+                source,
+                flat: flatten(tree, flattenOptions(filePath)),
+            });
         }
     } catch (err) {
         if (strict) throw err;
@@ -407,6 +461,37 @@ function finalize(
     );
 
     return sources !== undefined ? { env: merged, sources } : { env: merged };
+}
+
+/**
+ * Re-read the config files and push any changes into `process.env`.
+ *
+ * Normal loading never clobbers `process.env` (a shell export outranks
+ * the files). A reload is different: it happens because the user just
+ * edited `config.local.yaml` and asked for the new values to take
+ * effect — `@config agent refresh`, say — so the files win for the keys
+ * they define. That also matters for agents running in a forked child,
+ * whose entire `process.env` is a snapshot of the parent taken at fork
+ * time and cannot be told apart from a real shell export.
+ *
+ * Returns the keys whose values actually changed.
+ */
+export function reloadConfigSync(options: LoadConfigOptions = {}): string[] {
+    const { env } = loadConfigSync({
+        strict: false,
+        ...options,
+        populateProcessEnv: false,
+    });
+    const changed: string[] = [];
+    for (const [key, value] of Object.entries(env)) {
+        if (process.env[key] === value) {
+            continue;
+        }
+        process.env[key] = value;
+        changed.push(key);
+    }
+    debug("reloaded config, %d key(s) changed", changed.length);
+    return changed;
 }
 
 /**
