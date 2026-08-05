@@ -54,6 +54,10 @@ import {
 } from "./pendingActions.js";
 import { getActionContext } from "./actionContext.js";
 import {
+    AgentNotReadyError,
+    getErrorDisplayContent,
+} from "./agentNotReadyError.js";
+import {
     addActionResultToMemory,
     addResultToMemory,
 } from "../context/memory.js";
@@ -102,9 +106,16 @@ export async function checkAgentReady(
         return undefined;
     }
     const reason = report.message ?? "Agent is not ready.";
+    // `details` carries the actionable part (which file to edit, the YAML to
+    // paste). It's markdown, so it travels as rich display content rather
+    // than being folded into the plain-text Error message, which clients
+    // render without formatting (collapsing the snippet's indentation).
+    const details = report.details;
     if (report.state === "unsupported") {
-        throw new Error(
-            `Agent '${appAgentName}' is not supported in this environment: ${reason}`,
+        const message = `Agent '${appAgentName}' is not supported in this environment: ${reason}`;
+        throw new AgentNotReadyError(
+            message,
+            details ? `${message}\n\n${details}` : undefined,
         );
     }
     // setup-required
@@ -125,8 +136,10 @@ export async function checkAgentReady(
     const hint = systemContext.agents.hasSetup(appAgentName)
         ? `Run \`@config agent setup ${appAgentName}\` to configure it.`
         : `After fixing the underlying issue, run \`@config agent refresh ${appAgentName}\` to re-check.`;
-    throw new Error(
-        `Agent '${appAgentName}' needs configuration before it can be used: ${reason} ${hint}`,
+    const headline = `Agent '${appAgentName}' needs configuration before it can be used: ${reason}`;
+    throw new AgentNotReadyError(
+        `${headline} ${hint}`,
+        details ? `${headline}\n\n${details}\n\n${hint}` : undefined,
     );
 }
 
@@ -286,6 +299,12 @@ export async function executeAction(
         }
         const details = serializeError(e);
         result = createActionResultFromError(details.message, details);
+        // Readiness failures carry markdown setup instructions; show those
+        // instead of the flattened one-line message.
+        const errorDisplay = getErrorDisplayContent(e);
+        if (errorDisplay !== undefined) {
+            result = { ...result, errorDisplayContent: errorDisplay };
+        }
     }
     // If the agent ran to completion but a cancel arrived while it was executing,
     // discard the result and treat this as a cancellation.
@@ -381,7 +400,14 @@ export function emitActionResult(
     }
     if (result.error !== undefined) {
         if (!("fallbackToReasoning" in result) || !result.fallbackToReasoning) {
-            displayError(result.error, actionContext);
+            if (result.errorDisplayContent !== undefined) {
+                actionContext.actionIO.appendDisplay(
+                    result.errorDisplayContent,
+                    "block",
+                );
+            } else {
+                displayError(result.error, actionContext);
+            }
         }
         return;
     }

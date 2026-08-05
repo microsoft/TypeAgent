@@ -18,6 +18,7 @@ import {
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
 import { executeCommand } from "../execute/actionHandlers.js";
+import { getErrorDisplayContent } from "../execute/agentNotReadyError.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";
 import { parseParams } from "./parameters.js";
 import { getHandlerTableUsage, getUsage } from "./commandHelp.js";
@@ -358,7 +359,7 @@ export async function processCommandNoLock(
         context.clientIO.appendDisplay(
             makeClientIOMessage(
                 context,
-                {
+                getErrorDisplayContent(e) ?? {
                     type: "text",
                     content: `ERROR: ${e.message}`,
                     kind: "error",
