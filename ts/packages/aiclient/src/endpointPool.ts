@@ -12,17 +12,6 @@ import { FetchThrottler } from "./restClient.js";
 
 const debugPool = registerDebug("typeagent:pool");
 
-/**
- * Cryptographically secure uniform value in [0, 1).
- * Default for pickEndpoint so CodeQL does not flag Math.random; tests may
- * inject a deterministic rng instead.
- */
-function secureUnitInterval(): number {
-    // 32 bits is plenty for load-balancing endpoint selection.
-    // randomInt range must be < 2^48 (Node limit).
-    return randomInt(2 ** 32) / 2 ** 32;
-}
-
 export type EndpointMode = "PTU" | "PAYG" | "unknown";
 
 /**
@@ -465,7 +454,7 @@ export type PickResult =
 export function pickEndpoint(
     pool: EndpointPool,
     now: number = Date.now(),
-    rng: () => number = secureUnitInterval,
+    rng: () => number = () => randomInt(2 ** 32) / 2 ** 32,
 ): PickResult {
     if (pool.members.length === 0) {
         throw new Error(`pool ${pool.modelKey} has no members`);
