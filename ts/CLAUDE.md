@@ -12,6 +12,15 @@ pnpm run setup            # provision .npmrc + config.local.yaml, then install
 pnpm run setup --build    # same, plus a full build at the end
 ```
 
+On a brand-new machine where pnpm isn't cached yet, `pnpm run setup` can't
+bootstrap itself (corepack would try to fetch pnpm from the blocked public
+registry). Start with the pnpm-free entrypoint instead — it provisions `.npmrc`
+(which also seeds corepack's pnpm) before it uses pnpm:
+
+```bash
+node tools/scripts/setupWorktree.mjs
+```
+
 `setup` does **not** build by default — a full build of every package is
 redundant for most sessions. `fluid-build` is incremental and dependency-aware,
 so build just the package you touch, on demand (`pnpm run build <package>`). Use
@@ -22,8 +31,9 @@ Order matters, and `setup` handles it:
 1. **`ts/.npmrc`** points pnpm at the internal Azure Artifacts feed. It must
    exist **before `pnpm install`**, or pnpm/corepack reach the (blocked) public
    npm registry and install fails. `setup` copies it from the main checkout
-   when available; if it can't, setup runs `pnpm run getNPMRC` automatically
-   (that only fetches an npm token, no secrets).
+   when available; if it can't, setup runs `node tools/scripts/getNPMRC.mjs`
+   automatically (fetches only an npm token, no secrets, and seeds corepack's
+   pnpm — invoked via node so it works before pnpm is available).
 2. **`pnpm install`**.
 3. **`ts/config.local.yaml`** holds API keys. `setup` copies it from the main
    checkout when available; if it can't, setup warns and continues (only

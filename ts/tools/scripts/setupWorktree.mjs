@@ -43,6 +43,13 @@
  * Usage:
  *   pnpm run setup             # copy-provision and install (no build)
  *   pnpm run setup --build     # also run a full `pnpm run build` at the end
+ *
+ * On a brand-new machine where pnpm isn't cached yet, corepack would try to
+ * fetch pnpm from the blocked public registry, so `pnpm run setup` can't
+ * bootstrap itself. Start with the pnpm-free entrypoint instead:
+ *   node tools/scripts/setupWorktree.mjs
+ * It provisions `.npmrc` via `node tools/scripts/getNPMRC.mjs` (which also seeds
+ * corepack's pnpm from the feed) before it uses pnpm for the install.
  */
 
 import fs from "node:fs";
@@ -59,11 +66,13 @@ const doBuild = args.has("--build");
 if (args.has("--help") || args.has("-h")) {
     console.log(
         "Usage: pnpm run setup [--build]\n" +
+            "  (on a fresh machine without pnpm: node tools/scripts/setupWorktree.mjs)\n" +
             "  Provisions ts/.npmrc and ts/config.local.yaml and installs.\n" +
             "  Files are copied from the main checkout when available. If .npmrc\n" +
-            "  can't be copied, setup runs `pnpm run getNPMRC` (npm token only).\n" +
-            "  If config.local.yaml can't be copied, setup does NOT run getKeys\n" +
-            "  (it fetches secrets) - it prints the command to run yourself.\n" +
+            "  can't be copied, setup runs `node tools/scripts/getNPMRC.mjs` (npm\n" +
+            "  token only; also seeds corepack's pnpm). If config.local.yaml can't\n" +
+            "  be copied, setup does NOT run getKeys (it fetches secrets) - it\n" +
+            "  prints the command to run yourself.\n" +
             "  --build      also run a full `pnpm run build` at the end\n" +
             "               (otherwise build the package you touch on demand).",
     );
@@ -85,15 +94,18 @@ function run(cmd) {
     });
 }
 
-// Compare two filesystem paths for equality, case-insensitively on Windows and
-// macOS (whose default filesystems are case-insensitive, but path.resolve does
-// not normalize case). Linux filesystems are case-sensitive.
+// Compare two paths for the same real directory. `realpathSync.native` resolves
+// symlinks and normalizes to the on-disk canonical casing, so this is correct on
+// every filesystem - case-insensitive (Windows, default macOS) and case-sensitive
+// (Linux, case-sensitive APFS) alike - without guessing per platform. It throws
+// if a path does not exist, which for our purpose means "not the same existing
+// dir", so we treat that as false.
 function samePath(a, b) {
-    const ra = path.resolve(a);
-    const rb = path.resolve(b);
-    const caseInsensitive =
-        process.platform === "win32" || process.platform === "darwin";
-    return caseInsensitive ? ra.toLowerCase() === rb.toLowerCase() : ra === rb;
+    try {
+        return fs.realpathSync.native(a) === fs.realpathSync.native(b);
+    } catch {
+        return false;
+    }
 }
 
 // Locate the main checkout's `ts/` dir from any worktree via the shared git
@@ -120,15 +132,17 @@ function findMainCheckoutTs() {
 }
 
 // Ensure `fileName` exists in this worktree's `ts/`. If missing, copy it from
-// the main checkout when available. If it still can't be provided, the get*
-// fallback runs only when `autoRun` is true (getNPMRC: npm token only, safe to
-// run). When `autoRun` is false (getKeys: signs in to Azure and fetches
-// secrets), setup never runs it - it just prints the command for the user to
+// the main checkout when available. If it still can't be provided, run
+// `fallbackCmd`. For .npmrc that is `node tools/scripts/getNPMRC.mjs` invoked via
+// node (not pnpm) on purpose: getNPMRC also seeds corepack's pnpm from the feed,
+// so it has to work on a machine where pnpm isn't cached yet. `autoRun` gates
+// whether setup runs the fallback: it's false for getKeys, which signs in to
+// Azure and fetches secrets, so setup only prints that command for the user to
 // run. `required` files (needed before install) stop setup when unresolved;
 // others warn and continue. Returns true when the file is now present.
 function ensureProvisioned(
     fileName,
-    fallbackScript,
+    fallbackCmd,
     mainTs,
     { required, autoRun },
 ) {
@@ -145,7 +159,7 @@ function ensureProvisioned(
             return true;
         }
     }
-    const cmd = `pnpm run ${fallbackScript}`;
+    const cmd = fallbackCmd;
     if (autoRun) {
         log("provision", `${fileName} missing; running \`${cmd}\``);
         run(cmd);
@@ -187,8 +201,10 @@ if (mainTs !== undefined) {
 }
 
 // 1. .npmrc must exist before install so pnpm uses the internal feed. getNPMRC
-//    only fetches an npm token (no secrets), so it's safe to run automatically.
-ensureProvisioned(".npmrc", "getNPMRC", mainTs, {
+//    fetches only an npm token (no secrets) and seeds corepack's pnpm from the
+//    feed, so it's safe to run automatically - and is invoked via node so it
+//    works even before pnpm is available.
+ensureProvisioned(".npmrc", "node tools/scripts/getNPMRC.mjs", mainTs, {
     required: true,
     autoRun: true,
 });
@@ -197,8 +213,9 @@ ensureProvisioned(".npmrc", "getNPMRC", mainTs, {
 run("pnpm install");
 
 // 3. config.local.yaml holds API secrets; getKeys can open an interactive Azure
-//    sign-in, so setup never runs it automatically (autoRun: false).
-ensureProvisioned("config.local.yaml", "getKeys", mainTs, {
+//    sign-in, so setup never runs it automatically (autoRun: false). It needs
+//    node_modules, so it runs via pnpm after install.
+ensureProvisioned("config.local.yaml", "pnpm run getKeys", mainTs, {
     required: false,
     autoRun: false,
 });
