@@ -164,19 +164,22 @@ describe("fetchKeyVaultConfig", () => {
     });
 
     test("test-isolation guard can be bypassed via env opt-in", async () => {
-        // The opt-in is honored even though no fetcher is supplied; we
-        // can't make a real call here, so we expect the SDK call to
-        // fail and (since failOnError is false) yield null. The point
-        // is that the guard's distinct "refusing live call" debug
-        // message is NOT what's blocking us.
+        // The opt-in is honored even though no fetcher is supplied.
+        // Pass a credential that fails immediately so we never hang on
+        // DefaultAzureCredential's multi-second chain (flakes on macOS
+        // CI). failOnError defaults to false, so the failed SDK call
+        // yields null — proving the guard did not short-circuit us.
         const prev = process.env.TYPEAGENT_ALLOW_KEYVAULT_IN_TESTS;
         process.env.TYPEAGENT_ALLOW_KEYVAULT_IN_TESTS = "1";
         try {
             const tree = await fetchKeyVaultConfig({
                 vaultName: "definitely-not-a-real-vault-12345",
+                credential: {
+                    getToken: async () => {
+                        throw new Error("credential boom");
+                    },
+                },
             });
-            // Live call attempted but failed; failOnError defaults to
-            // false, so we get null.
             expect(tree).toBeNull();
         } finally {
             if (prev === undefined) {
@@ -185,5 +188,5 @@ describe("fetchKeyVaultConfig", () => {
                 process.env.TYPEAGENT_ALLOW_KEYVAULT_IN_TESTS = prev;
             }
         }
-    }, 30000);
+    });
 });
