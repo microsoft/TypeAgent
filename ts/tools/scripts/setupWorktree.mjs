@@ -93,9 +93,7 @@ function samePath(a, b) {
     const rb = path.resolve(b);
     const caseInsensitive =
         process.platform === "win32" || process.platform === "darwin";
-    return caseInsensitive
-        ? ra.toLowerCase() === rb.toLowerCase()
-        : ra === rb;
+    return caseInsensitive ? ra.toLowerCase() === rb.toLowerCase() : ra === rb;
 }
 
 // Locate the main checkout's `ts/` dir from any worktree via the shared git
@@ -128,7 +126,12 @@ function findMainCheckoutTs() {
 // secrets), setup never runs it - it just prints the command for the user to
 // run. `required` files (needed before install) stop setup when unresolved;
 // others warn and continue. Returns true when the file is now present.
-function ensureProvisioned(fileName, fallbackScript, mainTs, { required, autoRun }) {
+function ensureProvisioned(
+    fileName,
+    fallbackScript,
+    mainTs,
+    { required, autoRun },
+) {
     const dest = path.join(repoTs, fileName);
     if (fs.existsSync(dest)) {
         log("ok", `${fileName} already present`);
@@ -177,19 +180,28 @@ const mainTs = findMainCheckoutTs();
 if (mainTs !== undefined) {
     log("info", `main checkout detected at ${mainTs}`);
 } else {
-    log("info", "no separate main checkout; .npmrc will be provisioned via getNPMRC, config.local.yaml must be provisioned by running getKeys yourself");
+    log(
+        "info",
+        "no separate main checkout; .npmrc will be provisioned via getNPMRC, config.local.yaml must be provisioned by running getKeys yourself",
+    );
 }
 
 // 1. .npmrc must exist before install so pnpm uses the internal feed. getNPMRC
 //    only fetches an npm token (no secrets), so it's safe to run automatically.
-ensureProvisioned(".npmrc", "getNPMRC", mainTs, { required: true, autoRun: true });
+ensureProvisioned(".npmrc", "getNPMRC", mainTs, {
+    required: true,
+    autoRun: true,
+});
 
 // 2. Install dependencies.
 run("pnpm install");
 
 // 3. config.local.yaml holds API secrets; getKeys can open an interactive Azure
 //    sign-in, so setup never runs it automatically (autoRun: false).
-ensureProvisioned("config.local.yaml", "getKeys", mainTs, { required: false, autoRun: false });
+ensureProvisioned("config.local.yaml", "getKeys", mainTs, {
+    required: false,
+    autoRun: false,
+});
 
 // 4. Build only when explicitly asked; otherwise leave building on demand.
 if (doBuild) {
