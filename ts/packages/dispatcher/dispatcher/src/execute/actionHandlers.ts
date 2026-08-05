@@ -938,7 +938,12 @@ export async function executeCommand(
                     "AbortError",
                 );
             }
-            displayError(`ERROR: ${e.message}`, actionContext);
+            const errorDisplay = getErrorDisplayContent(e);
+            if (errorDisplay !== undefined) {
+                actionContext.actionIO.appendDisplay(errorDisplay, "block");
+            } else {
+                displayError(`ERROR: ${e.message}`, actionContext);
+            }
             debugCommandExecError(e.stack);
         }
     } finally {
