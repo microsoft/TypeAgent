@@ -1,20 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * Wire-protocol providers package surface.
- *
- * Layout:
- *   providers/
- *     types.ts              — ProviderAdapter interface + shared request types
- *     shared.ts             — auth headers, content filters, usage helpers
- *     chatCompletions.ts    — default `/chat/completions` adapter
- *     openaiResponses.ts    — OpenAI `/responses` adapter
- *     anthropicMessages.ts  — Anthropic `/v1/messages` adapter
- *     providerAdapter.ts    — adapterFor() dispatch (default: chat_completions)
- *     index.ts              — this barrel
- */
-
 export type {
     ModelRequest,
     StreamPiece,
@@ -33,16 +19,19 @@ export {
 } from "./shared.js";
 
 export {
-    ChatCompletionsAdapter,
-    chatCompletionsAdapter,
-} from "./chatCompletions.js";
+    ChatCompletionsWireApiProvider,
+    chatCompletionsWireApiProvider,
+} from "./chatCompletionsWireApiProvider.js";
 export {
-    OpenAIResponsesAdapter,
-    openaiResponsesAdapter,
-} from "./openaiResponses.js";
+    ResponsesWireApiProvider,
+    responsesWireApiProvider,
+} from "./responsesWireApiProvider.js";
 export {
-    AnthropicMessagesAdapter,
-    anthropicMessagesAdapter,
-} from "./anthropicMessages.js";
+    MessagesWireApiProvider,
+    messagesWireApiProvider,
+} from "./messagesWireApiProvider.js";
 
-export { adapterFor, DEFAULT_PROVIDER_ADAPTER } from "./providerAdapter.js";
+export {
+    adapterFor,
+    DEFAULT_WIRE_API_PROVIDER,
+} from "./providerAdapter.js";

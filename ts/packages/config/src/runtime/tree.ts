@@ -622,7 +622,7 @@ function readEndpointEntry(
         if (at === undefined) {
             throw new Error(
                 `Invalid wireApi at '${where}.wireApi': expected ` +
-                    `chat_completions, openai_responses, or anthropic_messages.`,
+                    `chat_completions, responses, or messages.`,
             );
         }
         out.wireApi = at;

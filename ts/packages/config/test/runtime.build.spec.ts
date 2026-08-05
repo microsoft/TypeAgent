@@ -172,34 +172,34 @@ describe("buildConfig: wireApi (multi-provider)", () => {
         expect(ep.wireApi).toBeUndefined();
     });
 
-    test("POOL override sets openai_responses wireApi on the endpoint", () => {
+    test("POOL override sets responses wireApi on the endpoint", () => {
         const flat: FlatEnv = {
             AZURE_OPENAI_ENDPOINT_GPT_5_CODEX_EASTUS: "https://codex-eastus",
             AZURE_OPENAI_POOL_GPT_5_CODEX:
-                "[{suffix:GPT_5_CODEX_EASTUS,region:eastus,wireApi:openai_responses}]",
+                "[{suffix:GPT_5_CODEX_EASTUS,region:eastus,wireApi:responses}]",
         };
         const config = buildConfig(flat);
         const ep = config.azureOpenAI.deployments
             .get("gpt_5_codex")!
             .endpoints.find((e) => e.region === "eastus")!;
-        expect(ep.wireApi).toBe("openai_responses");
+        expect(ep.wireApi).toBe("responses");
         // The POOL override key is consumed, not left in extra.
         expect(
             config.extra.get("AZURE_OPENAI_POOL_GPT_5_CODEX"),
         ).toBeUndefined();
     });
 
-    test("POOL override sets anthropic_messages wireApi on the endpoint", () => {
+    test("POOL override sets messages wireApi on the endpoint", () => {
         const flat: FlatEnv = {
             AZURE_OPENAI_ENDPOINT_CLAUDE_SONNET_EASTUS: "https://claude-eastus",
             AZURE_OPENAI_POOL_CLAUDE_SONNET:
-                "[{suffix:CLAUDE_SONNET_EASTUS,region:eastus,wireApi:anthropic_messages}]",
+                "[{suffix:CLAUDE_SONNET_EASTUS,region:eastus,wireApi:messages}]",
         };
         const config = buildConfig(flat);
         const ep = config.azureOpenAI.deployments
             .get("claude_sonnet")!
             .endpoints.find((e) => e.region === "eastus")!;
-        expect(ep.wireApi).toBe("anthropic_messages");
+        expect(ep.wireApi).toBe("messages");
     });
 
     test("explicit chat_completions wireApi is preserved on the endpoint", () => {

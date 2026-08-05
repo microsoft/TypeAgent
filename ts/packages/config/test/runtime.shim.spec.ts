@@ -32,7 +32,7 @@ describe("configToEnv: shim projection", () => {
             AZURE_OPENAI_ENDPOINT_GPT_5_CODEX_EASTUS: "https://codex-eastus",
             AZURE_OPENAI_API_KEY_GPT_5_CODEX_EASTUS: "identity",
             AZURE_OPENAI_POOL_GPT_5_CODEX:
-                "[{suffix:GPT_5_CODEX_EASTUS,region:eastus,mode:PAYG,priority:2,wireApi:openai_responses}]",
+                "[{suffix:GPT_5_CODEX_EASTUS,region:eastus,mode:PAYG,priority:2,wireApi:responses}]",
         };
         const projected = configToEnv(buildConfig(flat));
         expect(projected.AZURE_OPENAI_ENDPOINT_GPT_5_CODEX_EASTUS).toBe(
@@ -40,14 +40,14 @@ describe("configToEnv: shim projection", () => {
         );
         // The emitted POOL override carries the wireApi back out.
         expect(projected.AZURE_OPENAI_POOL_GPT_5_CODEX).toContain(
-            "wireApi:openai_responses",
+            "wireApi:responses",
         );
         // And feeding the projection back in yields the same wireApi.
         const reparsed = buildConfig(projected);
         const ep = reparsed.azureOpenAI.deployments
             .get("gpt_5_codex")!
             .endpoints.find((e) => e.region === "eastus")!;
-        expect(ep.wireApi).toBe("openai_responses");
+        expect(ep.wireApi).toBe("responses");
     });
 
     test("default (omitted) wireApi is not emitted into the POOL override", () => {

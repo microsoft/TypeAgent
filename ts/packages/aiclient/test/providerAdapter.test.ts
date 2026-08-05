@@ -16,15 +16,15 @@ import { ApiSettings, createChatModel, ModelType } from "../src/openai.js";
 // pool still routes, then adapterFor(wireApi) encodes the request and
 // decodes the response.
 //
-//   chat_completions  (default) : AZURE_OPENAI_ENDPOINT_* + key (existing)
-//   openai_responses             : TEST_CODEX_RESPONSES_ENDPOINT / _API_KEY / _MODEL
-//   anthropic_messages          : TEST_ANTHROPIC_ENDPOINT / _API_KEY / _MODEL
+//   chat_completions (default) : AZURE_OPENAI_ENDPOINT_* + key (existing)
+//   responses                  : TEST_RESPONSES_ENDPOINT / _API_KEY / _MODEL
+//   messages                   : TEST_MESSAGES_ENDPOINT / _API_KEY / _MODEL
 //
-// The endpoint value is the *full* URL the adapter POSTs to (the pool
+// The endpoint value is the *full* URL the provider POSTs to (the pool
 // uses settings.endpoint verbatim), e.g.
-//   https://<res>.openai.azure.com/openai/deployments/<dep>/chat/completions?api-version=...
-//   https://api.openai.com/v1/responses
-//   https://api.anthropic.com/v1/messages
+//   .../chat/completions?api-version=...
+//   .../v1/responses
+//   .../v1/messages
 
 const testTimeout = 60 * 1000;
 
@@ -70,48 +70,47 @@ describe("providerAdapter (live, one per wire-api)", () => {
         testTimeout,
     );
 
-    // OpenAI Responses protocol. Bearer auth (provider "openai").
+    // responses wireApi. Bearer auth (provider "openai").
     testIf(
         () =>
             has(
-                "TEST_CODEX_RESPONSES_ENDPOINT",
-                "TEST_CODEX_RESPONSES_API_KEY",
-                "TEST_CODEX_RESPONSES_MODEL",
+                "TEST_RESPONSES_ENDPOINT",
+                "TEST_RESPONSES_API_KEY",
+                "TEST_RESPONSES_MODEL",
             ),
-        "openai_responses completes",
+        "responses completes",
         async () => {
             const settings = {
                 provider: "openai",
                 modelType: ModelType.Chat,
-                endpoint: env("TEST_CODEX_RESPONSES_ENDPOINT")!,
-                apiKey: env("TEST_CODEX_RESPONSES_API_KEY")!,
-                modelName: env("TEST_CODEX_RESPONSES_MODEL")!,
-                wireApi: "openai_responses",
+                endpoint: env("TEST_RESPONSES_ENDPOINT")!,
+                apiKey: env("TEST_RESPONSES_API_KEY")!,
+                modelName: env("TEST_RESPONSES_MODEL")!,
+                wireApi: "responses",
             } as unknown as ApiSettings;
             await expectHello(settings);
         },
         testTimeout,
     );
 
-    // Anthropic Messages protocol. The adapter supplies its own
-    // x-api-key + anthropic-version headers, so the routing provider bucket
-    // is immaterial here; wireApi drives the wire protocol.
+    // messages wireApi. Provider supplies x-api-key + version headers;
+    // wireApi drives the wire protocol.
     testIf(
         () =>
             has(
-                "TEST_ANTHROPIC_ENDPOINT",
-                "TEST_ANTHROPIC_API_KEY",
-                "TEST_ANTHROPIC_MODEL",
+                "TEST_MESSAGES_ENDPOINT",
+                "TEST_MESSAGES_API_KEY",
+                "TEST_MESSAGES_MODEL",
             ),
-        "anthropic_messages completes",
+        "messages completes",
         async () => {
             const settings = {
                 provider: "azure",
                 modelType: ModelType.Chat,
-                endpoint: env("TEST_ANTHROPIC_ENDPOINT")!,
-                apiKey: env("TEST_ANTHROPIC_API_KEY")!,
-                modelName: env("TEST_ANTHROPIC_MODEL")!,
-                wireApi: "anthropic_messages",
+                endpoint: env("TEST_MESSAGES_ENDPOINT")!,
+                apiKey: env("TEST_MESSAGES_API_KEY")!,
+                modelName: env("TEST_MESSAGES_MODEL")!,
+                wireApi: "messages",
             } as unknown as ApiSettings;
             await expectHello(settings);
         },

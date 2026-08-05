@@ -41,31 +41,23 @@ export type DeploymentMode = "PAYG" | "PTU";
 /**
  * Wire protocol / request-response shape a deployment endpoint speaks.
  * The pool routing layer is unaffected by this — it picks *which*
- * endpoint to call; `wireApi` then selects the `ProviderAdapter` that
+ * endpoint to call; `wireApi` then selects the wire-api provider that
  * encodes the request body/headers and decodes the response.
  *
- * - `chat_completions` (default): the OpenAI / Azure OpenAI
- *   `/chat/completions` shape TypeAgent has always spoken. Omitting
- *   `wireApi` is exactly equivalent to this value, so existing configs
- *   are byte-for-byte unchanged.
- * - `openai_responses`: the OpenAI `/responses` shape.
- * - `anthropic_messages`: the Anthropic `/v1/messages` shape.
+ * - `chat_completions` (default): `/chat/completions` shape TypeAgent
+ *   has always spoken. Omitting `wireApi` is exactly equivalent to this
+ *   value, so existing configs are byte-for-byte unchanged.
+ * - `responses`: `/responses` request/response shape.
+ * - `messages`: `/v1/messages` request/response shape.
  */
-export type WireApi =
-    | "chat_completions"
-    | "openai_responses"
-    | "anthropic_messages";
+export type WireApi = "chat_completions" | "responses" | "messages";
 
 /** The wire-api assumed when a deployment/endpoint omits `wireApi`. */
 export const DEFAULT_WIRE_API = "chat_completions" as const satisfies WireApi;
 
 /** Narrow an arbitrary string to a known `WireApi`, else `undefined`. */
 export function wireApiFromString(s: string | undefined): WireApi | undefined {
-    if (
-        s === "chat_completions" ||
-        s === "openai_responses" ||
-        s === "anthropic_messages"
-    ) {
+    if (s === "chat_completions" || s === "responses" || s === "messages") {
         return s;
     }
     return undefined;

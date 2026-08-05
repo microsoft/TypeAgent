@@ -37,23 +37,23 @@ describe("adapterFor: dispatch + back-compat", () => {
 
     test("each wire-api maps to an adapter reporting that wire-api", () => {
         expect(adapterFor("chat_completions").wireApi).toBe("chat_completions");
-        expect(adapterFor("openai_responses").wireApi).toBe("openai_responses");
-        expect(adapterFor("anthropic_messages").wireApi).toBe(
-            "anthropic_messages",
+        expect(adapterFor("responses").wireApi).toBe("responses");
+        expect(adapterFor("messages").wireApi).toBe(
+            "messages",
         );
     });
 
     test("adapters are stateless singletons (stable identity per wire-api)", () => {
-        expect(adapterFor("openai_responses")).toBe(
-            adapterFor("openai_responses"),
+        expect(adapterFor("responses")).toBe(
+            adapterFor("responses"),
         );
-        expect(adapterFor("anthropic_messages")).toBe(
-            adapterFor("anthropic_messages"),
+        expect(adapterFor("messages")).toBe(
+            adapterFor("messages"),
         );
     });
 });
 
-describe("ChatCompletionsAdapter (default path is byte-identical)", () => {
+describe("ChatCompletionsWireApiProvider (default path is byte-identical)", () => {
     const adapter = adapterFor("chat_completions");
 
     test("buildRequestBody merges defaultParams, messages, completionSettings", () => {
@@ -231,8 +231,8 @@ describe("ChatCompletionsAdapter (default path is byte-identical)", () => {
     });
 });
 
-describe("AnthropicMessagesAdapter", () => {
-    const adapter = adapterFor("anthropic_messages");
+describe("MessagesWireApiProvider", () => {
+    const adapter = adapterFor("messages");
 
     test("buildRequestBody splits system prompt, requires max_tokens", () => {
         const req = makeRequest({
@@ -251,10 +251,11 @@ describe("AnthropicMessagesAdapter", () => {
         expect(body.messages).toEqual([{ role: "user", content: "Hello" }]);
     });
 
-    test("buildRequestBody falls back to a default max_tokens", () => {
+    test("buildRequestBody throws when max_completion_tokens is missing", () => {
         const req = makeRequest({ completionSettings: {} });
-        const body = adapter.buildRequestBody(req) as Record<string, any>;
-        expect(body.max_tokens).toBe(4096);
+        expect(() => adapter.buildRequestBody(req)).toThrow(
+            /max_completion_tokens/,
+        );
     });
 
     test("array jsonSchema maps to Anthropic tool use", () => {
@@ -331,8 +332,8 @@ describe("AnthropicMessagesAdapter", () => {
     });
 });
 
-describe("OpenAIResponsesAdapter", () => {
-    const adapter = adapterFor("openai_responses");
+describe("ResponsesWireApiProvider", () => {
+    const adapter = adapterFor("responses");
 
     test("buildRequestBody uses input array + instructions + max_output_tokens", () => {
         const req = makeRequest({

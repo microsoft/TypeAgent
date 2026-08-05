@@ -1,22 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * Shared helpers used by multiple wire adapters and by non-chat paths
- * in openai.ts (image/embedding/video). Dependency is one-directional:
- * openai.ts → providers/.
- */
-
 import { PromptSection, Result, success } from "typechat";
 import type { ApiSettings, CompletionUsageStats } from "../openai.js";
 import type { Filter, FilterError, FilterResult } from "./types.js";
 
-/**
- * Build auth headers for OpenAI-style endpoints (chat_completions and
- * openai_responses both use this). Azure uses either an AAD bearer token
- * (identity) or the `api-key` header; direct OpenAI uses a bearer key +
- * organization header.
- */
 export async function createApiHeaders(
     settings: ApiSettings,
 ): Promise<Result<Record<string, string>>> {
@@ -42,10 +30,6 @@ export async function createApiHeaders(
     return success(apiHeaders ?? {});
 }
 
-/**
- * Throw if any Azure content filter tripped. Shared by the chat streaming
- * decoder and the image path in openai.ts.
- */
 export function verifyFilterResults(filterResult: FilterResult) {
     const filters: string[] = [];
     if (filterResult) {
@@ -75,13 +59,8 @@ export function verifyFilterResults(filterResult: FilterResult) {
     }
 }
 
-/** Re-export filter error shape for stream safety helpers. */
 export type { Filter, FilterError, FilterResult };
 
-/**
- * Non-OpenAI protocols report input/output token counts under different
- * keys; normalize to CompletionUsageStats.
- */
 export function usageFromInputOutput(
     inputTokens: number | undefined,
     outputTokens: number | undefined,
@@ -98,7 +77,6 @@ export function usageFromInputOutput(
     };
 }
 
-/** Concatenate system prompt sections; return the rest as user/assistant turns. */
 export function splitSystemMessages(messages: PromptSection[]): {
     system: string;
     turns: { role: string; content: unknown }[];

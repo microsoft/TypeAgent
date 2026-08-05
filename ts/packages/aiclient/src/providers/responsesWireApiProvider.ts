@@ -1,14 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * openai_responses wire adapter.
- *
- * OpenAI Responses API (`/responses`): same auth as chat_completions but a
- * different body (`input` / `instructions`) and response (`output` blocks /
- * `output_text`).
- */
-
 import { Result, success } from "typechat";
 import type { WireApi } from "@typeagent/config";
 import type { ApiSettings, CompletionUsageStats } from "../openai.js";
@@ -37,11 +29,10 @@ type ResponsesResult = {
     usage?: { input_tokens?: number; output_tokens?: number };
 };
 
-export class OpenAIResponsesAdapter implements ProviderAdapter {
-    readonly wireApi: WireApi = "openai_responses";
+export class ResponsesWireApiProvider implements ProviderAdapter {
+    readonly wireApi: WireApi = "responses";
 
     buildHeaders(settings: ApiSettings) {
-        // Responses API uses the same OpenAI/Azure auth as chat_completions.
         return createApiHeaders(settings);
     }
 
@@ -67,14 +58,11 @@ export class OpenAIResponsesAdapter implements ProviderAdapter {
         if (system) {
             body.instructions = system;
         }
-        if (typeof cs.temperature === "number") {
+        if (cs.temperature !== undefined) {
             body.temperature = cs.temperature;
         }
-        const maxOut =
-            (cs.max_completion_tokens as number | undefined) ??
-            (cs.max_tokens as number | undefined);
-        if (maxOut !== undefined) {
-            body.max_output_tokens = maxOut;
+        if (cs.max_completion_tokens !== undefined) {
+            body.max_output_tokens = cs.max_completion_tokens;
         }
         if (request.stream) {
             body.stream = true;
@@ -104,8 +92,6 @@ export class OpenAIResponsesAdapter implements ProviderAdapter {
     }
 
     createStreamDecoder(): StreamDecoder {
-        // Responses SSE: response.output_text.delta { delta } for text,
-        // response.completed { response: { usage } } for final counts.
         return {
             push: (raw: string): StreamPiece => {
                 const evt = JSON.parse(raw) as {
@@ -139,5 +125,4 @@ export class OpenAIResponsesAdapter implements ProviderAdapter {
     }
 }
 
-/** Singleton used by the dispatcher (adapters are stateless). */
-export const openaiResponsesAdapter = new OpenAIResponsesAdapter();
+export const responsesWireApiProvider = new ResponsesWireApiProvider();

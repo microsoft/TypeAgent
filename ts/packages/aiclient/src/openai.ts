@@ -95,8 +95,7 @@ export type CommonApiSettings = {
     retryPauseMs?: number | undefined;
     /**
      * Wire protocol for chat calls. Absent ⇒ chat_completions
-     * (OpenAI-compatible /chat/completions). Also supports
-     * openai_responses and anthropic_messages.
+     * (/chat/completions). Also supports responses and messages.
      */
     wireApi?: WireApi | undefined;
 };
@@ -510,8 +509,7 @@ function createAzureOpenAIChatModel(
         return {
             messages,
             jsonSchema,
-            completionSettings: completionSettings as CompletionSettings &
-                Record<string, unknown>,
+            completionSettings: completionSettings!,
             defaultParams,
             disableResponseFormat,
             modelName,

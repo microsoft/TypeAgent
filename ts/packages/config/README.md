@@ -44,15 +44,14 @@ See [src/flatten.ts](./src/flatten.ts) for the full mapping.
 ## Multi-provider `wireApi`
 
 An Azure OpenAI deployment endpoint may declare a `wireApi` selecting the
-**wire protocol** it speaks. This lets a single TypeAgent config route to
-Azure/OpenAI Chat Completions, the OpenAI Responses API, and the
-Anthropic Messages API behind the same endpoint pool.
+**wire protocol** it speaks. This lets a single TypeAgent config route
+multiple wire shapes behind the same endpoint pool.
 
-| `wireApi` value      | Wire protocol                             | Default? |
-| -------------------- | ----------------------------------------- | -------- |
-| `chat_completions`   | OpenAI / Azure OpenAI `/chat/completions` | ✅ yes   |
-| `openai_responses`   | OpenAI `/responses`                       | no       |
-| `anthropic_messages` | Anthropic `/v1/messages`                  | no       |
+| `wireApi` value    | Wire protocol        | Provider                            | Default? |
+| ------------------ | -------------------- | ----------------------------------- | -------- |
+| `chat_completions` | `/chat/completions`  | `chatCompletionsWireApiProvider`    | ✅ yes   |
+| `responses`        | `/responses`         | `responsesWireApiProvider`          | no       |
+| `messages`         | `/v1/messages`       | `messagesWireApiProvider`           | no       |
 
 **Default & back-compat.** `wireApi` is optional. Omitting it is exactly
 equivalent to `chat_completions`, so every existing config keeps working
@@ -70,23 +69,23 @@ azureOpenAI:
       endpoints:
         - endpoint: https://api.openai.com/v1/responses
           region: eastus
-          wireApi: openai_responses
+          wireApi: responses
     claude_sonnet:
       endpoints:
         - endpoint: https://api.anthropic.com/v1/messages
           region: eastus
-          wireApi: anthropic_messages
+          wireApi: messages
 ```
 
 **Precedence.** `wireApi` is a per-**endpoint** attribute, resolved on the
 same YAML → flat-env → typed-`Config` path as `capacity`/`priority`/`tpm`.
 In the flat-env representation it rides the `AZURE_OPENAI_POOL_<DEPLOYMENT>`
-override list (`[{suffix:...,wireApi:openai_responses}]`), so a
+override list (`[{suffix:...,wireApi:responses}]`), so a
 `process.env` override of that key wins over YAML, matching the rest of the
 merge precedence above. `wireApi` never participates in routing — the pool
 still picks _which_ endpoint to call by priority/capacity/cooldown; the
-resolved `wireApi` then selects the `ProviderAdapter`
-([packages/aiclient/src/providers/](../aiclient/src/providerAdapter.ts))
+resolved `wireApi` then selects the matching `*WireApiProvider`
+([packages/aiclient/src/providers/](../aiclient/src/providers/providerAdapter.ts))
 that encodes the request and decodes the response.
 
 This mirrors the shipping multi-provider pattern used elsewhere: opencode's

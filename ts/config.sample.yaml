@@ -91,19 +91,19 @@ azureOpenAI:
     # not affect priority/capacity/cooldown routing at all. Omit it (as
     # every deployment above does) to get the default `chat_completions`
     # shape TypeAgent has always spoken — existing configs are unchanged.
-    # Supported values: chat_completions (default) | openai_responses |
-    # anthropic_messages.
+    # Supported values: chat_completions (default) | responses |
+    # messages.
     gpt_5_codex:
       endpoints:
         - endpoint: https://api.openai.com/v1/responses
           region: eastus
-          wireApi: openai_responses
+          wireApi: responses
 
     claude_sonnet:
       endpoints:
         - endpoint: https://api.anthropic.com/v1/messages
           region: eastus
-          wireApi: anthropic_messages
+          wireApi: messages
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  OpenAI (non-Azure)                                              ║

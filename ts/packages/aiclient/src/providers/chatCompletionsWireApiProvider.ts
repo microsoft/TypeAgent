@@ -1,15 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * chat_completions wire adapter — the default.
- *
- * OpenAI / Azure OpenAI Chat Completions API (`/chat/completions`).
- * Faithful extraction of the request/response logic that lived inline in
- * createAzureOpenAIChatModel, so the default path is byte-identical to
- * before adapters existed.
- */
-
 import { Result, success, error } from "typechat";
 import type { WireApi } from "@typeagent/config";
 import type { ApiSettings, CompletionUsageStats } from "../openai.js";
@@ -67,7 +58,6 @@ type ChatCompletionChunk = {
     usage?: CompletionUsageStats;
 };
 
-/** Throw on any content-filter violation in a chat completion chunk. */
 function verifyStreamContentSafety(data: ChatCompletionChunk): void {
     data.choices.map((c: ChatCompletionDelta) => {
         if (c.finish_reason === "content_filter_error") {
@@ -80,7 +70,7 @@ function verifyStreamContentSafety(data: ChatCompletionChunk): void {
     });
 }
 
-export class ChatCompletionsAdapter implements ProviderAdapter {
+export class ChatCompletionsWireApiProvider implements ProviderAdapter {
     readonly wireApi: WireApi = "chat_completions";
 
     buildHeaders(settings: ApiSettings) {
@@ -104,7 +94,6 @@ export class ChatCompletionsAdapter implements ProviderAdapter {
                 );
             }
             if (Array.isArray(jsonSchema)) {
-                // function calling
                 params.tools = jsonSchema;
                 params.tool_choice = "required";
                 params.parallel_tool_calls = false;
@@ -208,5 +197,5 @@ export class ChatCompletionsAdapter implements ProviderAdapter {
     }
 }
 
-/** Singleton used by the dispatcher (adapters are stateless). */
-export const chatCompletionsAdapter = new ChatCompletionsAdapter();
+export const chatCompletionsWireApiProvider =
+    new ChatCompletionsWireApiProvider();
