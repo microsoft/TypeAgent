@@ -12,6 +12,8 @@ import type {
     AgentServerConnection,
     ConversationDispatcher,
     ConversationInfo,
+    ConversationMatch,
+    ConversationContentMatch,
 } from "../src/index.js";
 
 export function makeInfo(
@@ -19,8 +21,9 @@ export function makeInfo(
     name: string,
     createdAt: string = "2026-01-01T00:00:00Z",
     clientCount: number = 0,
+    messageCount: number = 0,
 ): ConversationInfo {
-    return { conversationId: id, name, createdAt, clientCount };
+    return { conversationId: id, name, createdAt, clientCount, messageCount };
 }
 
 export type StubCallLog = {
@@ -45,6 +48,19 @@ export type StubConnectionOptions = {
             name: string | undefined,
             callIndex: number,
         ) => ConversationInfo[] | Promise<ConversationInfo[]> | undefined;
+        findConversations?: (
+            query: string,
+            maxMatches: number | undefined,
+            callIndex: number,
+        ) => ConversationMatch[] | Promise<ConversationMatch[]> | undefined;
+        searchConversationContent?: (
+            query: string,
+            maxMatches: number | undefined,
+            callIndex: number,
+        ) =>
+            | ConversationContentMatch[]
+            | Promise<ConversationContentMatch[]>
+            | undefined;
         createConversation?: (
             name: string,
             callIndex: number,
@@ -117,6 +133,52 @@ export function makeStubConnection(
             // server's substring semantics.
             const norm = name.trim().toLowerCase();
             return state.filter((c) => c.name.toLowerCase().includes(norm));
+        },
+
+        async findConversations(query: string, maxMatches?: number) {
+            const idx = nextCount("findConversations");
+            calls.push({
+                method: "findConversations",
+                args: [query, maxMatches],
+            });
+            const override = await opts.intercept?.findConversations?.(
+                query,
+                maxMatches,
+                idx,
+            );
+            if (override !== undefined) return override;
+            const norm = query.trim().toLowerCase();
+            const matched = state
+                .filter((c) => c.name.toLowerCase().includes(norm))
+                .map((conversation) => ({ conversation, score: 1 }));
+            return maxMatches !== undefined
+                ? matched.slice(0, maxMatches)
+                : matched;
+        },
+
+        async searchConversationContent(query: string, maxMatches?: number) {
+            const idx = nextCount("searchConversationContent");
+            calls.push({
+                method: "searchConversationContent",
+                args: [query, maxMatches],
+            });
+            const override = await opts.intercept?.searchConversationContent?.(
+                query,
+                maxMatches,
+                idx,
+            );
+            if (override !== undefined) return override;
+            const norm = query.trim().toLowerCase();
+            const matched = state
+                .filter((c) => c.name.toLowerCase().includes(norm))
+                .map((conversation) => ({
+                    conversation,
+                    score: 1,
+                    snippets: [] as string[],
+                }));
+            return maxMatches !== undefined
+                ? matched.slice(0, maxMatches)
+                : matched;
         },
 
         async createConversation(name: string) {

@@ -665,6 +665,46 @@ export interface AgentLocation {
     external: boolean;
 }
 
+/**
+ * Options for proving that a generated agent answers an utterance via
+ * "Try it". All optional: with none given, a deterministic PhraseGen example
+ * phrase is chosen and any resolved typed action counts as answered.
+ */
+export interface ProveUtteranceOptions {
+    /** Explicit utterance to try instead of a generated example phrase. */
+    utterance?: string;
+    /**
+     * Restrict example-phrase selection to this action's phrases, and treat it
+     * as the expected target action for the match check.
+     */
+    expectedAction?: string;
+    /**
+     * Schema names that belong to the generated agent; when given, the answered
+     * verdict additionally requires the resolved schema to be one of these.
+     */
+    agentSchemaNames?: string[];
+}
+
+/** Verdict of proving one utterance against a generated agent. */
+export interface UtteranceProofResult {
+    /** The integration/agent under test. */
+    integrationName: string;
+    /** The utterance that was tried. */
+    utterance: string;
+    /** The action the phrase was generated for (the expected target), if known. */
+    expectedAction?: string;
+    /** Whether the generated agent answered (resolved to one of its actions). */
+    answered: boolean;
+    /** The schema the translator resolved to, when it answered. */
+    resolvedSchema?: string;
+    /** The action the translator resolved to, when it answered. */
+    resolvedAction?: string;
+    /** True when the resolved action equals {@link expectedAction}. */
+    matchedExpectedAction: boolean;
+    /** The translator's error, when it failed to resolve the utterance. */
+    error?: string;
+}
+
 export interface StudioRuntime {
     /**
      * Repo root used for agent discovery and whether a `packages/agents`
@@ -696,6 +736,17 @@ export interface StudioRuntime {
     enforcePackagingHealthGateForActiveSession(): Promise<PackagingHealthGateResult>;
     clearActiveOnboardingSession(): Promise<void>;
     getActiveOnboardingSession(): Promise<OnboardingState>;
+    /**
+     * Prove that the active session's generated agent answers an utterance
+     * ("Try it"): translate a PhraseGen example phrase (or an explicit
+     * utterance) against a dispatcher loaded with just that agent and report
+     * the resolved action, WITHOUT executing it. Requires a `proveUtterance`
+     * resolver to be configured on the runtime (the standalone service injects
+     * one); throws otherwise.
+     */
+    proveActiveSessionUtterance(
+        options?: ProveUtteranceOptions,
+    ): Promise<UtteranceProofResult>;
     runPhaseOnActiveSession(
         phase: OnboardingPhaseName,
         inputs?: unknown,
@@ -939,6 +990,17 @@ export interface CreateStudioRuntimeOptions {
     evaluatePackagingHealthGate?: (
         artifactPath: string,
     ) => Promise<PackagingHealthGateResult>;
+    /**
+     * Resolver that proves a generated agent answers an utterance via
+     * "Try it". Injected so the standalone service can back it with a
+     * translate-only dispatcher loaded with just the generated agent; absent in
+     * the dependency-light default, where `proveActiveSessionUtterance` throws.
+     */
+    proveUtterance?: (params: {
+        agentName: string;
+        agentDir: string;
+        options?: ProveUtteranceOptions;
+    }) => Promise<UtteranceProofResult>;
 }
 
 /** Deterministic default resolver: surfaces each entry's captured
@@ -1139,6 +1201,7 @@ export function createStudioRuntimeCore(
     const evaluatePackagingHealthGate =
         options.evaluatePackagingHealthGate ??
         defaultEvaluatePackagingHealthGate;
+    const proveUtterance = options.proveUtterance;
 
     const profileDir = path.join(
         context.globalStorageFsPath,
@@ -1392,6 +1455,28 @@ export function createStudioRuntimeCore(
         async getActiveOnboardingSession() {
             const sessionId = getRequiredSessionId(context);
             return onboarding.snapshot(sessionId);
+        },
+        async proveActiveSessionUtterance(proveOptions) {
+            if (proveUtterance === undefined) {
+                throw new Error(
+                    "Try it is unavailable: no utterance prover is " +
+                        "configured for this runtime.",
+                );
+            }
+            const sessionId = getRequiredSessionId(context);
+            const session = await onboarding.snapshot(sessionId);
+            const agentDir = await resolveArtifactPathForSession(
+                onboarding,
+                sessionId,
+                context,
+            );
+            return proveUtterance({
+                agentName: session.agentName,
+                agentDir,
+                ...(proveOptions !== undefined
+                    ? { options: proveOptions }
+                    : {}),
+            });
         },
         async runPhaseOnActiveSession(phase, inputs = {}) {
             const sessionId = getRequiredSessionId(context);

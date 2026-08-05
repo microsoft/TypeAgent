@@ -5,6 +5,7 @@ export type AndroidMobileAction =
     | SendSMSAction
     | CallPhoneNumberAction
     | SetAlarmAction
+    | SetTimerAction
     | SearchNearbyAction
     | AutomatePhoneUIAction;
 
@@ -40,6 +41,17 @@ export type SetAlarmAction = {
         originalRequest: string;
         // the time for the alarm in the format YYYY-mm-ddThh:mm:ss (i.e. 2024-02-15T08:30:15 )
         time: string;
+    };
+};
+
+// sets a countdown timer on the local mobile device
+export type SetTimerAction = {
+    actionName: "setTimer";
+    parameters: {
+        // the original request of the user
+        originalRequest: string;
+        // the timer duration in seconds; must be a positive integer (e.g. 300 for 5 minutes)
+        durationInSeconds: number;
     };
 };
 

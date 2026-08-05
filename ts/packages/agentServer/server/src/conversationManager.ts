@@ -9,10 +9,20 @@ import {
     ConversationNameCollisionOptions,
     CreateConversationOptions,
     ConversationInfo,
+    ConversationMatch,
+    ConversationContentMatch,
     ConversationSource,
     RenameConversationOptions,
 } from "@typeagent/agent-server-protocol";
-import { ClientIO, Dispatcher, DispatcherOptions } from "agent-dispatcher";
+import {
+    ClientIO,
+    Dispatcher,
+    DispatcherOptions,
+    ConversationIndexTarget,
+    ConversationIndexResult,
+    ConversationIndexProgress,
+    ConversationSummaryResult,
+} from "agent-dispatcher";
 import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import type {
     DisplayLogEntry,
@@ -23,12 +33,28 @@ import {
     createSharedDispatcher,
     SharedDispatcher,
 } from "./sharedDispatcher.js";
+import {
+    ConversationNameIndex,
+    createConversationNameIndex,
+} from "./conversationNameIndex.js";
+import {
+    ContentSearchQuery,
+    createConversationSearchIndex,
+    selectUnindexedTurns,
+} from "./conversationSearchIndex.js";
 import { importCopilotSessions } from "./copilot/mirrorImporter.js";
+import {
+    buildTranscriptTurns,
+    createConversationSummaryTranslator,
+    summarizeTranscript,
+    type ConversationSummaryTranslator,
+} from "./conversationSummary.js";
 import { lockInstanceDir } from "agent-dispatcher/internal";
 
 import registerDebug from "debug";
 const debugConversation = registerDebug("agent-server:conversation");
 const debugConversationErr = registerDebug("agent-server:conversation:error");
+const debugIndex = registerDebug("agent-server:conversation:index");
 
 const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const CONVERSATIONS_DIR = "conversations";
@@ -151,7 +177,49 @@ export type ConversationManager = {
         conversationId: string,
         connectionId: string,
     ): Promise<void>;
-    listConversations(name?: string): ConversationInfo[];
+    listConversations(name?: string): Promise<ConversationInfo[]>;
+    /**
+     * Fuzzy-find conversations by name, blending lexical and embedding
+     * similarity. Sorted by descending relevance score.
+     */
+    findConversations(
+        query: string,
+        maxMatches?: number,
+    ): Promise<ConversationMatch[]>;
+    /**
+     * Index a conversation message into the unified content-search index
+     * (tagged by conversation id). Populated by callers as turns arrive.
+     * `turnKey` (the source turn's id) is recorded on user messages so the
+     * turn is counted once and skipped by a later history backfill.
+     */
+    indexConversationMessage(
+        conversationId: string,
+        text: string,
+        sender?: string,
+        turnKey?: string,
+    ): void;
+    /**
+     * Cross-conversation content search: rank conversations by how well their
+     * indexed messages match the query. Accepts a natural-language `question`,
+     * keyword `terms`, or both (blended). Returns [] when the unified index has
+     * no model provider configured.
+     */
+    searchConversationContent(
+        query: ContentSearchQuery,
+        maxMatches?: number,
+    ): Promise<ConversationContentMatch[]>;
+    /**
+     * Backfill conversation history into the unified content index. For each
+     * targeted conversation, indexes the user turns not already present (live
+     * or from an earlier backfill) and reports how many were newly indexed.
+     * `currentConversationId` resolves the `current` target. `onProgress`, if
+     * given, is called as turns are indexed (for a live progress display).
+     */
+    indexConversations(
+        target: ConversationIndexTarget,
+        currentConversationId: string,
+        onProgress?: (progress: ConversationIndexProgress) => void,
+    ): Promise<ConversationIndexResult>;
     renameConversation(
         conversationId: string,
         newName: string,
@@ -191,6 +259,9 @@ export async function createConversationManager(
     baseOptions: DispatcherOptions,
     baseDir: string,
     idleTimeoutMs: number = DEFAULT_IDLE_TIMEOUT_MS,
+    // When true (embedded test hosts), skip work that would make real model
+    // calls - currently the on-demand conversation summary model.
+    testMode: boolean = false,
 ): Promise<ConversationManager> {
     const conversationsDir = path.join(baseDir, CONVERSATIONS_DIR);
 
@@ -264,6 +335,12 @@ export async function createConversationManager(
     const unlockInstanceDir = await lockInstanceDir(baseDir);
 
     const conversations = new Map<string, ConversationRecord>();
+
+    // Fuzzy index over conversation names (lexical + embedding), backing
+    // `findConversations`. Kept in sync as conversations are created, renamed,
+    // and deleted.
+    const conversationNameIndex: ConversationNameIndex =
+        createConversationNameIndex();
 
     // Single-flight lock for "auto-create the default conversation". Two
     // concurrent first-connects could both observe "no conversations exist"
@@ -362,8 +439,150 @@ export async function createConversationManager(
         await fs.promises.rename(tmpPath, metadataPath);
     }
 
+    // Read a conversation's persisted display-log entries, or [] when the log
+    // is missing or unreadable. Shared by the user-message count and the
+    // content-index backfill so both see the same on-disk history.
+    async function readDisplayLogEntries(
+        conversationId: string,
+    ): Promise<DisplayLogEntry[]> {
+        const filePath = path.join(
+            getConversationPersistDir(conversationId),
+            DISPLAY_LOG_FILE_NAME,
+        );
+        try {
+            const data = await fs.promises.readFile(filePath, "utf-8");
+            const parsed = JSON.parse(data);
+            return Array.isArray(parsed) ? (parsed as DisplayLogEntry[]) : [];
+        } catch {
+            return [];
+        }
+    }
+
+    // Count the user requests recorded in a conversation's persisted display
+    // log. Reads from disk so idle conversations (no live dispatcher) report a
+    // count too; the log is flushed after each turn, so this trails by at most
+    // the in-flight request. Returns 0 when the log is missing or unreadable.
+    async function countUserMessages(conversationId: string): Promise<number> {
+        const entries = await readDisplayLogEntries(conversationId);
+        let count = 0;
+        for (const entry of entries) {
+            if (entry?.type === "user-request") {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // Lazily created TypeChat translator for conversation summaries. `null`
+    // records a failed init (e.g. no model provider) so we don't retry it on
+    // every call. Skipped in test mode so unit tests never issue a model call.
+    let summaryTranslator: ConversationSummaryTranslator | null | undefined;
+    function getSummaryTranslator(): ConversationSummaryTranslator | undefined {
+        if (testMode) {
+            return undefined;
+        }
+        if (summaryTranslator === undefined) {
+            summaryTranslator = createConversationSummaryTranslator() ?? null;
+        }
+        return summaryTranslator ?? undefined;
+    }
+
+    // Resolve a conversation (exact name, then fuzzy name match, or the current
+    // one when no name is given), read its stored transcript, and summarize it.
+    async function summarizeConversationImpl(
+        nameOrTopic: string | undefined,
+        currentConversationId: string,
+    ): Promise<ConversationSummaryResult> {
+        const query = nameOrTopic?.trim();
+        let record: ConversationRecord | undefined;
+        if (query === undefined || query.length === 0) {
+            record = conversations.get(currentConversationId);
+        } else {
+            record = findConversationByName(query);
+            if (record === undefined) {
+                // Fall back to a fuzzy name match (lexical + embedding).
+                const matches = await conversationNameIndex.search(query, 1);
+                const top = matches[0];
+                if (top !== undefined) {
+                    record = conversations.get(top.conversationId);
+                }
+            }
+        }
+        if (record === undefined) {
+            return { kind: "not-found", query: query ?? "" };
+        }
+        const translator = getSummaryTranslator();
+        if (translator === undefined) {
+            return {
+                kind: "unavailable",
+                reason: "No language model is configured for summarization.",
+            };
+        }
+        // Prefer the live dispatcher's in-memory log when the conversation is
+        // active. Re-reading the on-disk log races the debounced write: the
+        // summarize request itself just appended a turn, so a large log may be
+        // mid-rewrite and the read sees truncated JSON or a locked file (yielding
+        // zero turns). Idle conversations have no live log and fall back to disk.
+        const entries =
+            record.sharedDispatcher?.getDisplayLogEntries() ??
+            (await readDisplayLogEntries(record.conversationId));
+        const turns = buildTranscriptTurns(entries);
+        if (turns.length === 0) {
+            return {
+                kind: "empty",
+                conversationId: record.conversationId,
+                name: record.name,
+            };
+        }
+        const summary = await summarizeTranscript(
+            translator,
+            record.name,
+            turns,
+        );
+        return {
+            kind: "ok",
+            conversationId: record.conversationId,
+            name: record.name,
+            summary,
+        };
+    }
+
+    // Resolve a conversation by exact (case-insensitive) name, or undefined.
+    function findConversationByName(
+        name: string,
+    ): ConversationRecord | undefined {
+        const lower = name.toLowerCase();
+        for (const record of conversations.values()) {
+            if ((record.name ?? "").toLowerCase() === lower) {
+                return record;
+            }
+        }
+        return undefined;
+    }
+
     function getConversationPersistDir(conversationId: string): string {
         return path.join(conversationsDir, conversationId);
+    }
+
+    // Build the wire-facing ConversationInfo for a record. Shared by
+    // listConversations and findConversations so the shape stays consistent.
+    async function toConversationInfo(
+        record: ConversationRecord,
+    ): Promise<ConversationInfo> {
+        return {
+            conversationId: record.conversationId,
+            name: record.name ?? "",
+            clientCount: record.sharedDispatcher?.clientCount ?? 0,
+            createdAt: record.createdAt,
+            messageCount: await countUserMessages(record.conversationId),
+            indexedMessageCount: conversationSearchIndex.getIndexedTurns(
+                record.conversationId,
+            ).size,
+            ...(record.source !== undefined ? { source: record.source } : {}),
+            ...(record.readOnly !== undefined
+                ? { readOnly: record.readOnly }
+                : {}),
+        };
     }
 
     function ensureDispatcher(
@@ -402,6 +621,51 @@ export async function createConversationManager(
                                     renamed: r.renamed,
                                     failed: r.failed,
                                 }),
+                            ),
+                        // Tee this conversation's live turns into the unified
+                        // content index, tagged by its id, so cross-
+                        // conversation search can find it. Independent of the
+                        // per-conversation memory (which connected mode leaves
+                        // unextracted).
+                        conversationContentSink: (text, sender, turnKey) =>
+                            manager.indexConversationMessage(
+                                record.conversationId,
+                                text,
+                                sender,
+                                turnKey,
+                            ),
+                        // Let the reasoning agent search across ALL
+                        // conversations' content (the knowPro unified index)
+                        // and read the best matches back, enriched with each
+                        // conversation's name.
+                        searchConversations: async (query, maxMatches) => {
+                            const matches =
+                                await manager.searchConversationContent(
+                                    query,
+                                    maxMatches,
+                                );
+                            return matches.map((m) => ({
+                                conversationId: m.conversation.conversationId,
+                                name: m.conversation.name,
+                                score: m.score,
+                                snippets: m.snippets,
+                            }));
+                        },
+                        // Let `@conversation index` backfill a conversation's
+                        // (or every conversation's) history into the unified
+                        // content index. `current` resolves to this record.
+                        indexConversations: (target, onProgress) =>
+                            manager.indexConversations(
+                                target,
+                                record.conversationId,
+                                onProgress,
+                            ),
+                        // Summarize a conversation (by name/topic, or the
+                        // current one when omitted) from its stored transcript.
+                        summarizeConversation: (nameOrTopic) =>
+                            summarizeConversationImpl(
+                                nameOrTopic,
+                                record.conversationId,
                             ),
                     }),
                 )
@@ -603,6 +867,34 @@ export async function createConversationManager(
         }
     }
 
+    // Seed the fuzzy name index from the loaded registry (after the ephemeral
+    // sweep above). Names make lexical matching work immediately; embeddings
+    // are generated in the background so startup (and bulk imports) never block
+    // on embedding calls.
+    for (const record of conversations.values()) {
+        conversationNameIndex.update(record.conversationId, record.name);
+    }
+    void conversationNameIndex.prime();
+
+    // Unified content-search index across all conversations, tagged by
+    // conversation id. Inert when no model provider is configured.
+    const conversationSearchIndex = await createConversationSearchIndex(
+        path.join(conversationsDir, "_unified"),
+    );
+
+    // Re-apply deletes from previous runs. The unified index persists messages
+    // (append-only) but its tombstone set is in-memory, so any indexed
+    // conversation that no longer exists in the live registry must be
+    // tombstoned again now, or its content would resurface in search.
+    const staleTombstoned = conversationSearchIndex.reconcileTombstones(
+        new Set(conversations.keys()),
+    );
+    if (staleTombstoned > 0) {
+        debugConversation(
+            `Unified index: tombstoned ${staleTombstoned} deleted conversation(s) on startup`,
+        );
+    }
+
     const manager: ConversationManager = {
         async createConversation(
             name: string,
@@ -622,6 +914,7 @@ export async function createConversationManager(
                 idleTimer: undefined,
             };
             conversations.set(conversationId, record);
+            conversationNameIndex.update(conversationId, resolvedName);
             await saveMetadata();
             debugConversation(
                 `Conversation created: "${resolvedName}" (${conversationId})`,
@@ -631,6 +924,7 @@ export async function createConversationManager(
                 name: resolvedName,
                 clientCount: 0,
                 createdAt,
+                messageCount: 0,
             };
         },
 
@@ -655,6 +949,10 @@ export async function createConversationManager(
                         `Reconciling Copilot mirror name "${existing.name}" -> "${desiredName}" (${existing.conversationId})`,
                     );
                     existing.name = desiredName;
+                    conversationNameIndex.update(
+                        existing.conversationId,
+                        desiredName,
+                    );
                     await saveMetadata();
                     renamed = true;
                 }
@@ -691,6 +989,7 @@ export async function createConversationManager(
                 },
             };
             conversations.set(conversationId, record);
+            conversationNameIndex.update(conversationId, resolvedName);
 
             // Persist the synthesized display log so joining the conversation
             // replays the imported history through the normal replay path.
@@ -893,7 +1192,7 @@ export async function createConversationManager(
             );
         },
 
-        listConversations(name?: string): ConversationInfo[] {
+        async listConversations(name?: string): Promise<ConversationInfo[]> {
             const result: ConversationInfo[] = [];
             for (const record of conversations.values()) {
                 const recordName = record.name ?? "";
@@ -903,20 +1202,168 @@ export async function createConversationManager(
                 ) {
                     continue;
                 }
+                result.push(await toConversationInfo(record));
+            }
+            return result;
+        },
+
+        async findConversations(
+            query: string,
+            maxMatches?: number,
+        ): Promise<ConversationMatch[]> {
+            // Coalesce with `??` rather than a `= 10` default: the RPC boundary
+            // serializes an omitted `maxMatches` to `null`, which slips past a
+            // default parameter and would reach the ranker as 0.
+            const matches = await conversationNameIndex.search(
+                query,
+                maxMatches ?? 10,
+            );
+            const result: ConversationMatch[] = [];
+            for (const match of matches) {
+                const record = conversations.get(match.conversationId);
+                // The index can briefly lag a concurrent delete; skip ids that
+                // no longer resolve to a live conversation.
+                if (record === undefined) {
+                    continue;
+                }
                 result.push({
-                    conversationId: record.conversationId,
-                    name: recordName,
-                    clientCount: record.sharedDispatcher?.clientCount ?? 0,
-                    createdAt: record.createdAt,
-                    ...(record.source !== undefined
-                        ? { source: record.source }
-                        : {}),
-                    ...(record.readOnly !== undefined
-                        ? { readOnly: record.readOnly }
-                        : {}),
+                    conversation: await toConversationInfo(record),
+                    score: match.score,
                 });
             }
             return result;
+        },
+
+        indexConversationMessage(
+            conversationId: string,
+            text: string,
+            sender?: string,
+            turnKey?: string,
+        ): void {
+            conversationSearchIndex.addMessage(
+                conversationId,
+                text,
+                sender,
+                turnKey,
+            );
+        },
+
+        async searchConversationContent(
+            query: ContentSearchQuery,
+            maxMatches?: number,
+        ): Promise<ConversationContentMatch[]> {
+            // See findConversations: RPC serializes an omitted arg to `null`.
+            const matches = await conversationSearchIndex.search(
+                query,
+                maxMatches ?? 10,
+            );
+            const result: ConversationContentMatch[] = [];
+            for (const match of matches) {
+                const record = conversations.get(match.conversationId);
+                // The index can briefly lag a concurrent delete; skip ids
+                // that no longer resolve to a live conversation.
+                if (record === undefined) {
+                    continue;
+                }
+                result.push({
+                    conversation: await toConversationInfo(record),
+                    score: match.score,
+                    snippets: match.snippets,
+                });
+            }
+            return result;
+        },
+
+        async indexConversations(
+            target: ConversationIndexTarget,
+            currentConversationId: string,
+            onProgress?: (progress: ConversationIndexProgress) => void,
+        ): Promise<ConversationIndexResult> {
+            let ids: string[];
+            if (target.scope === "all") {
+                ids = [...conversations.keys()];
+            } else if (target.scope === "named") {
+                const match = findConversationByName(target.name);
+                if (match === undefined) {
+                    return { indexed: [], notFound: target.name };
+                }
+                ids = [match.conversationId];
+            } else {
+                ids = [currentConversationId];
+            }
+            debugIndex(
+                "indexConversations scope=%s targeting %d conversation(s)",
+                target.scope,
+                ids.length,
+            );
+            // Plan first: select each conversation's un-indexed turns up front,
+            // so the total is known for progress reporting before any indexing
+            // begins.
+            const plan: {
+                id: string;
+                name: string;
+                turns: { text: string; turnKey: string }[];
+            }[] = [];
+            for (const id of ids) {
+                const record = conversations.get(id);
+                if (record === undefined) {
+                    continue;
+                }
+                const alreadyIndexed =
+                    conversationSearchIndex.getIndexedTurns(id);
+                const entries = await readDisplayLogEntries(id);
+                const turns = selectUnindexedTurns(entries, (turnKey) =>
+                    alreadyIndexed.has(turnKey),
+                );
+                debugIndex(
+                    "plan %s (%s): %d log entries, %d already indexed, %d to index",
+                    id,
+                    record.name ?? "",
+                    entries.length,
+                    alreadyIndexed.size,
+                    turns.length,
+                );
+                plan.push({ id, name: record.name ?? "", turns });
+            }
+            const total = plan.reduce((n, p) => n + p.turns.length, 0);
+            debugIndex(
+                "total %d turns to index across %d conversation(s)",
+                total,
+                plan.length,
+            );
+            let done = 0;
+            onProgress?.({ done, total, name: plan[0]?.name ?? "" });
+            const indexed: ConversationIndexResult["indexed"] = [];
+            for (const { id, name, turns } of plan) {
+                for (const { text, turnKey } of turns) {
+                    conversationSearchIndex.addMessage(
+                        id,
+                        text,
+                        "user",
+                        turnKey,
+                        () => {
+                            done++;
+                            debugIndex("indexed %d/%d (%s)", done, total, name);
+                            onProgress?.({ done, total, name });
+                        },
+                    );
+                }
+                indexed.push({
+                    name,
+                    newlyIndexed: turns.length,
+                    totalMessages: await countUserMessages(id),
+                });
+            }
+            // addMessage only queues; drain so the command reports completion
+            // once the turns are actually indexed and written to disk, not
+            // merely enqueued.
+            debugIndex(
+                "queued %d turns; waiting for pending index tasks",
+                total,
+            );
+            await conversationSearchIndex.waitForPendingTasks();
+            debugIndex("indexConversations done: %o", indexed);
+            return { indexed };
         },
 
         async renameConversation(
@@ -935,6 +1382,7 @@ export async function createConversationManager(
                 conversationId,
             );
             record.name = resolvedName;
+            conversationNameIndex.update(conversationId, resolvedName);
             await saveMetadata();
             debugConversation(
                 `Conversation renamed: "${resolvedName}" (${conversationId})`,
@@ -956,6 +1404,8 @@ export async function createConversationManager(
             }
 
             conversations.delete(conversationId);
+            conversationNameIndex.remove(conversationId);
+            conversationSearchIndex.tombstone(conversationId);
 
             // Remove persist directory
             const persistDir = getConversationPersistDir(conversationId);
@@ -984,6 +1434,7 @@ export async function createConversationManager(
             }
             await Promise.all(promises);
             await saveMetadata();
+            await conversationSearchIndex.close();
             await unlockInstanceDir();
             debugConversation("ConversationManager closed");
         },

@@ -39,6 +39,7 @@
     "@typeagent/agent-sdk": "workspace:*"
   },
   "devDependencies": {
+    "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/jest": "^29.5.7",
@@ -59,7 +60,8 @@
             "src/listSchema.agr"
           ],
           "outputGlobs": [
-            "dist/listSchema.ag.json"
+            "dist/listSchema.ag.json",
+            "dist/listSchema.ag.map.json"
           ]
         }
       },

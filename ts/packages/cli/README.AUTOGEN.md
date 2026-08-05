@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=45c18858ee6c0f0a433dff0af65a553c61530c2c6e884ad0dac7a438fabb6704 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=402c75d518f3752fec5f5e57bf92686274d704d2e707c96bc5869a8c7de4ad80 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-cli — AI-generated documentation
@@ -129,18 +129,18 @@ Workspace:
 
 - [@typeagent/action-grammar](../../packages/actionGrammar/README.md)
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
+- [@typeagent/agent-cache](../../packages/cache/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/config](../../packages/config/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
-- [agent-cache](../../packages/cache/README.md)
+- [@typeagent/telemetry](../../packages/telemetry/README.md)
+- [@typeagent/typechat-utils](../../packages/utils/typechatUtils/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 - [interactive-app](../../packages/interactiveApp/README.md)
-- [telemetry](../../packages/telemetry/README.md)
-- [typechat-utils](../../packages/utils/typechatUtils/README.md)
 
 External: `@oclif/core`, `@oclif/plugin-help`, `chalk`, `debug`, `dotenv`, `html-to-text`, `marked`, `marked-terminal`, `open`, `ts-node`
 
@@ -150,6 +150,6 @@ External: `@oclif/core`, `@oclif/plugin-help`, `chalk`, `debug`, `dotenv`, `html
 
 ---
 
-_Auto-generated against commit `ff9101e00228c5d0ff34c8dd3f108f46af46b0a6` on `2026-07-23T00:41:03.476Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
+_Auto-generated against commit `513baf52ceffeed05addca6ca873c3e52edae019` on `2026-07-30T18:10:08.236Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

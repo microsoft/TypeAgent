@@ -12,6 +12,8 @@ import type {
     AgentServerConnection,
     ConversationDispatcher,
     ConversationInfo,
+    ConversationMatch,
+    ConversationContentMatch,
 } from "../index.js";
 import {
     findConversationByName,
@@ -38,9 +40,16 @@ export type ManageConversationPayload = {
         | "prev"
         | "next"
         | "rename"
-        | "delete";
+        | "delete"
+        | "find"
+        | "search"
+        | "help";
     name?: string;
     newName?: string;
+    /** Search term for the `find` (by name) and `search` (by content) subcommands. */
+    query?: string;
+    /** Optional cap on `find` / `search` results. */
+    maxMatches?: number;
 };
 
 export type ManageConversationContext = {
@@ -132,8 +141,21 @@ export type ConversationActionResult =
           conversations: ConversationInfo[];
           currentConversationId: string | undefined;
       }
+    | {
+          kind: "matches";
+          query: string;
+          matches: ConversationMatch[];
+          currentConversationId: string | undefined;
+      }
     | { kind: "info"; conversationId: string; name: string }
-    | { kind: "cancelled"; target: ConversationInfo };
+    | { kind: "cancelled"; target: ConversationInfo }
+    | {
+          kind: "contentMatches";
+          query: string;
+          matches: ConversationContentMatch[];
+          currentConversationId: string | undefined;
+      }
+    | { kind: "help" };
 
 function ok(
     message: string,
@@ -152,6 +174,10 @@ function warning(message: string): ConversationActionResult {
 function error(message: string, cause?: unknown): ConversationActionResult {
     return { kind: "error", message, cause };
 }
+
+// Minimum fuzzy score for `switch <name>` to accept a non-exact match and
+// switch to it (find-then-switch). Below this, switch reports "not found".
+const SWITCH_FUZZY_MIN_SCORE = 0.6;
 
 async function performSwitch(
     connection: AgentServerConnection,
@@ -301,6 +327,71 @@ export async function manageList(
     };
 }
 
+/**
+ * `find` — fuzzy-find conversations by name (lexical + embedding). Returns a
+ * ranked `matches` result for the caller to render.
+ */
+export async function manageFind(
+    connection: AgentServerConnection,
+    ctx: ManageConversationContext,
+    query: string | undefined,
+    maxMatches?: number,
+): Promise<ConversationActionResult> {
+    const trimmed = query?.trim();
+    if (!trimmed) {
+        return warning("A search term is required to find conversations.");
+    }
+    // Matches cross the RPC boundary from the server; drop any malformed entry
+    // defensively so a version-skewed server can't crash the renderers on
+    // `.conversation`/`.score`.
+    const matches = (
+        await connection.findConversations(trimmed, maxMatches)
+    ).filter((m) => m?.conversation !== undefined);
+    if (matches.length === 0) {
+        return warning(`No conversations matching "${trimmed}" found.`);
+    }
+    return {
+        kind: "matches",
+        query: trimmed,
+        matches,
+        currentConversationId: ctx.currentConversationId,
+    };
+}
+
+/**
+ * `search` - cross-conversation *content* search (the knowPro unified message
+ * index). Ranks conversations by how well their messages match the query, with
+ * representative snippets. Distinct from {@link manageFind}, which matches on
+ * conversation names.
+ */
+export async function manageSearch(
+    connection: AgentServerConnection,
+    ctx: ManageConversationContext,
+    query: string | undefined,
+    maxMatches?: number,
+): Promise<ConversationActionResult> {
+    const trimmed = query?.trim();
+    if (!trimmed) {
+        return warning("A search term is required to search conversations.");
+    }
+    // Matches cross the RPC boundary from the server; drop any malformed entry
+    // defensively (see manageFind).
+    const matches = (
+        await connection.searchConversationContent(trimmed, maxMatches)
+    ).filter((m) => m?.conversation !== undefined);
+    if (matches.length === 0) {
+        return warning(
+            `No conversations with content matching "${trimmed}" found.`,
+        );
+    }
+    return {
+        kind: "contentMatches",
+        query: trimmed,
+        matches,
+        currentConversationId: ctx.currentConversationId,
+    };
+}
+
 /** `info` — show the current conversation id + name. */
 export function manageInfo(
     ctx: ManageConversationContext,
@@ -330,9 +421,34 @@ export async function manageSwitch(
         return warning("A conversation name is required to switch.");
     }
     const all = await connection.listConversations();
-    const match = findConversationByName(all, trimmed);
+    let match = findConversationByName(all, trimmed);
+    // Suffix noting an approximate (non-exact-name) match, surfaced to the user.
+    let matchNote = "";
     if (match === undefined) {
-        return warning(`No conversation named "${trimmed}" found.`);
+        // No exact name: fall back to a fuzzy name match if it clears a
+        // confidence floor.
+        const found = await connection.findConversations(trimmed, 1);
+        if (found.length > 0 && found[0].score >= SWITCH_FUZZY_MIN_SCORE) {
+            match = found[0].conversation;
+            matchNote = ` (closest match for "${trimmed}")`;
+        }
+    }
+    if (match === undefined) {
+        // Still no name match: the user may be describing the conversation by
+        // what was discussed in it ("switch to the conversation where we
+        // talked about spikes") rather than by its name. Fall back to a
+        // content search over message text and switch to the best match.
+        const byContent = await connection.searchConversationContent(
+            trimmed,
+            1,
+        );
+        if (byContent.length > 0) {
+            match = byContent[0].conversation;
+            matchNote = ` (matched by content for "${trimmed}")`;
+        }
+    }
+    if (match === undefined) {
+        return warning(`No conversation named or matching "${trimmed}" found.`);
     }
     if (match.conversationId === ctx.currentConversationId) {
         return warning(`Already on conversation "${match.name}".`);
@@ -342,7 +458,7 @@ export async function manageSwitch(
         clientIO,
         ctx,
         match,
-        `Switched to conversation "${match.name}".`,
+        `Switched to conversation "${match.name}"${matchNote}.`,
     );
 }
 
@@ -454,14 +570,15 @@ export async function manageRename(
         );
     }
 
-    // Preserve original createdAt/clientCount so callers re-sorting by
-    // created time don't see zero placeholders.
+    // Preserve original createdAt/clientCount/messageCount so callers
+    // re-sorting by created time don't see zero placeholders.
     const original = all.find((c) => c.conversationId === targetId);
     const updated: ConversationInfo = {
         conversationId: targetId,
         name: trimmedNew,
         clientCount: original?.clientCount ?? 0,
         createdAt: original?.createdAt ?? "",
+        messageCount: original?.messageCount ?? 0,
     };
 
     if (isCurrent && ctx.onCurrentConversationUpdated !== undefined) {
@@ -581,6 +698,13 @@ export async function manageConversation(
                 return await manageNew(connection, clientIO, ctx, payload.name);
             case "list":
                 return await manageList(connection, ctx, payload.name);
+            case "find":
+                return await manageFind(
+                    connection,
+                    ctx,
+                    payload.query,
+                    payload.maxMatches,
+                );
             case "info":
                 return manageInfo(ctx);
             case "switch":
@@ -607,6 +731,15 @@ export async function manageConversation(
                 );
             case "delete":
                 return await manageDelete(connection, ctx, payload.name);
+            case "search":
+                return await manageSearch(
+                    connection,
+                    ctx,
+                    payload.query,
+                    payload.maxMatches,
+                );
+            case "help":
+                return { kind: "help" };
             default: {
                 const unknown = (payload as { subcommand: string }).subcommand;
                 return error(

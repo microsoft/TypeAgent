@@ -64,6 +64,24 @@ class DisplayContentParserTest {
     }
 
     @Test
+    fun `suppresses reasoning tool traces in html content`() {
+        val display = extractAgentMessageContent(
+            JSONObject()
+                .put(
+                    "message",
+                    JSONObject()
+                        .put("type", "html")
+                        .put(
+                            "content",
+                            "<summary>Thinking</summary>reasoning-tools-call tool=discover-actions then execute_actions androidMobile.setAlarm"
+                        )
+                )
+        )
+
+        assertEquals("", display.text)
+    }
+
+    @Test
     fun `returns friendly fallback for structured content without alternates`() {
         val display = extractAgentMessageContent(
             JSONObject()
@@ -99,5 +117,47 @@ class DisplayContentParserTest {
             "| Name | Value |\n| --- | --- |\n| Color | Blue |",
             display.text
         )
+    }
+
+    @Test
+    fun `carries the display message kind`() {
+        val display = extractAgentMessageContent(
+            JSONObject()
+                .put(
+                    "message",
+                    JSONObject()
+                        .put("type", "text")
+                        .put("content", "\u21aa routed to list \u2014 recent topic")
+                        .put("kind", "info")
+                )
+        )
+
+        assertEquals(MessageKind.INFO, display.kind)
+        assertEquals("\u21aa routed to list \u2014 recent topic", display.text)
+    }
+
+    @Test
+    fun `defaults to no kind when absent`() {
+        val display = extractAgentMessageContent(
+            JSONObject()
+                .put(
+                    "message",
+                    JSONObject()
+                        .put("type", "text")
+                        .put("content", "Created list: to-do")
+                )
+        )
+
+        assertEquals(MessageKind.NONE, display.kind)
+    }
+
+    @Test
+    fun `reads the agent message kind for ephemeral routing`() {
+        val agentMessage = JSONObject()
+            .put("kind", "toast")
+            .put("message", "hi")
+
+        assertEquals("toast", extractAgentMessageKind(agentMessage))
+        assertEquals(null, extractAgentMessageKind(JSONObject().put("message", "hi")))
     }
 }

@@ -51,7 +51,8 @@ import { getActionSchemaTypeName } from "../translation/agentTranslators.js";
 import {
     formatParams as sharedFormatParams,
     formatThinkingDisplay as sharedFormatThinkingDisplay,
-    formatToolResultDisplay as sharedFormatToolResultDisplay,
+    formatToolResult,
+    formatToolRun,
     buildReasoningActionResult,
     estimateReasoningTokens,
     reasoningTokenUsage,
@@ -318,7 +319,15 @@ function formatToolCallDisplay(toolName: string, input: any): string {
     return `**Tool:** ${toolName}${params}`;
 }
 
-const formatToolResultDisplay = sharedFormatToolResultDisplay;
+// Render a Claude tool call as a click-to-expand block (matching the copilot
+// engine). A call and its result render together in one bubble, so this is
+// combined with formatToolResult when the tool finishes.
+function renderToolCallBlock(toolName: string, input: unknown): string {
+    return formatToolRun(formatToolCallDisplay(toolName, input), [
+        { tool: toolName, args: input },
+    ]);
+}
+
 const formatThinkingDisplay = sharedFormatThinkingDisplay;
 
 const mcpExecuteActionTool = `mcp__${mcpServerName}__execute_action`;
@@ -516,6 +525,12 @@ function getClaudeOptions(
 
             const result: IAgentMessage[] = [];
             const savedClientIO = systemContext.clientIO;
+            // When enabled, client-forwarding actions (e.g. @conversation
+            // switch's manage-conversation) reach the real client instead of
+            // nullClientIO's "not supported"; off keeps capture-only.
+            const forwardActions =
+                systemContext.session.getConfig().execution
+                    .reasoningForwardActions;
             const capturingClientIO: ClientIO = {
                 ...nullClientIO,
                 setDisplay: (message) => {
@@ -534,6 +549,13 @@ function getClaudeOptions(
                 appendDiagnosticData: (requestId, data) => {
                     savedClientIO.appendDiagnosticData(requestId, data);
                 },
+                ...(forwardActions
+                    ? {
+                          takeAction: (
+                              ...args: Parameters<ClientIO["takeAction"]>
+                          ) => savedClientIO.takeAction(...args),
+                      }
+                    : {}),
             };
             systemContext.isInsideReasoningLoop = true;
             let actionResult: ActionResult | undefined;
@@ -648,11 +670,12 @@ function getClaudeOptions(
         },
     };
 
-    // TODO (deferred): cross-conversation browsing. get_conversation_info /
-    // read_conversation are scoped to the CURRENT conversation only. To help a
-    // user who is unsure which conversation they were in, add
-    // list_conversations / read_conversation(conversationId) backed by the
-    // agent-server ConversationManager (getConversationList). Not implemented yet.
+    // get_conversation_info / read_conversation are scoped to the CURRENT
+    // conversation. Cross-conversation browsing is provided by
+    // list_conversations (id + name) and search_conversations (content search
+    // with snippets), both backed by the agent-server ConversationManager.
+    // TODO (deferred): read_conversation(conversationId) to page another
+    // conversation's full transcript, not just its search snippets.
     const conversationInfoSchema = {};
     const getConversationInfoTool: SdkMcpToolDefinition<
         typeof conversationInfoSchema
@@ -729,6 +752,96 @@ function getClaudeOptions(
             return {
                 content: [
                     { type: "text", text: `${header}\n${lines.join("\n")}` },
+                ],
+            };
+        },
+    };
+
+    const listConversationsSchema = {};
+    const listConversationsTool: SdkMcpToolDefinition<
+        typeof listConversationsSchema
+    > = {
+        name: "list_conversations",
+        description: [
+            "List ALL of the user's conversations (id + name), across the whole session store — not just the current one.",
+            "Use this to resolve a conversation the user names (e.g. 'the CLI conversation') to its id before reading or searching it.",
+        ].join("\n"),
+        inputSchema: listConversationsSchema,
+        handler: async () => {
+            const list = systemContext.getConversationList?.() ?? [];
+            if (list.length === 0) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "No other conversations are available in this host.",
+                        },
+                    ],
+                };
+            }
+            return {
+                content: [
+                    { type: "text", text: JSON.stringify(list, null, 2) },
+                ],
+            };
+        },
+    };
+
+    const searchConversationsSchema = {
+        question: z.string().optional(),
+        terms: z.array(z.string()).optional(),
+        maxMatches: z.number().optional(),
+    };
+    const searchConversationsTool: SdkMcpToolDefinition<
+        typeof searchConversationsSchema
+    > = {
+        name: "search_conversations",
+        description: [
+            "Search the CONTENT of ALL the user's conversations (not just the current one) and return the best-matching conversations with representative snippets.",
+            "Use this to answer questions like 'what did we discuss in the CLI conversation' or to find where a topic was talked about across conversations.",
+            "Provide a natural-language `question` and/or a list of keyword `terms` - they are blended (NL/semantic + literal message-text match), so put distinctive keywords (e.g. proper nouns) in `terms` to catch literal mentions.",
+            "This reads matching content back to you - unlike the conversation find/search *actions*, which only render in the UI.",
+        ].join("\n"),
+        inputSchema: searchConversationsSchema,
+        handler: async (args) => {
+            const search = systemContext.searchConversations;
+            if (search === undefined) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "Cross-conversation content search is not available in this host.",
+                        },
+                    ],
+                };
+            }
+            const question = args.question;
+            const terms = args.terms;
+            if (!question && (terms === undefined || terms.length === 0)) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "Provide a `question` and/or `terms` to search for.",
+                        },
+                    ],
+                };
+            }
+            const matches = await search({ question, terms }, args.maxMatches);
+            if (matches.length === 0) {
+                const what = question ?? (terms ?? []).join(", ");
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `No conversations with content matching "${what}" found.`,
+                        },
+                    ],
+                };
+            }
+            return {
+                content: [
+                    { type: "text", text: JSON.stringify(matches, null, 2) },
                 ],
             };
         },
@@ -1003,6 +1116,8 @@ function getClaudeOptions(
                 "- `remember`: Durably save a new memory so it can be recalled later",
                 "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
                 "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
+                "- `list_conversations`: List ALL conversations (id + name) across the session store — use to resolve a conversation the user names",
+                "- `search_conversations`: Search the CONTENT of ALL conversations and read back matching snippets (use for 'what did we discuss in X')",
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file, language, cursor/selection ranges, workspace, open editors, the active file's diagnostic messages) and the user's selected text (bounded) when present; use the code agent's read actions for full file contents",
                 "- `find_installable_agent`: List agents that are not installed yet but can be installed on demand. Call it when no active agent can fulfill the request; if a candidate matches, tell the user the exact `@package install` command (never install it yourself)",
                 "- `ask_user`: Ask the user ONE multiple-choice question and block for their answer - only when genuinely blocked on a decision only they can make (see Autonomous Execution Policy)",
@@ -1416,6 +1531,8 @@ function getClaudeOptions(
                     rememberTool,
                     getConversationInfoTool,
                     readConversationTool,
+                    listConversationsTool,
+                    searchConversationsTool,
                     getUserContextTool,
                     ...subagentTools,
                     findInstallableAgentTool,
@@ -1494,6 +1611,10 @@ async function executeReasoningWithoutPlanning(
     let toolUseCount = 0;
     let reasoningStepCount = 0;
     const toolUseIdToName = new Map<string, string>();
+    // Buffer each tool call until its result arrives so the call and its result
+    // render together in one bubble. Keyed by tool-use id so parallel calls pair
+    // with the correct result.
+    const pendingToolCalls = new Map<string, { tool: string; args: unknown }>();
     const pendingExecuteActions = new Map<string, TypeAgentAction>();
     const executedActions: TypeAgentAction[] = [];
     // LLM token usage reported by the final result message (captured below).
@@ -1568,17 +1689,12 @@ async function executeReasoningWithoutPlanning(
                         parameters: content.input,
                         timestamp: new Date().toISOString(),
                     });
-                    context.actionIO.appendDisplay(
-                        {
-                            type: "markdown",
-                            content: formatToolCallDisplay(
-                                content.name,
-                                content.input,
-                            ),
-                            kind: "info",
-                        },
-                        displayMode,
-                    );
+                    // Buffer the call; it renders together with its result when
+                    // the tool finishes (see the tool_result handler below).
+                    pendingToolCalls.set(content.id, {
+                        tool: content.name,
+                        args: content.input,
+                    });
                 } else if ((content as any).type === "thinking") {
                     const thinkingContent = (content as any).thinking;
                     if (thinkingContent) {
@@ -1637,13 +1753,20 @@ async function executeReasoningWithoutPlanning(
                             result: content,
                             timestamp: new Date().toISOString(),
                         });
+                        // Emit the buffered call and its result together in one
+                        // bubble so the output sits with the call that produced
+                        // it.
+                        const call = pendingToolCalls.get(block.tool_use_id);
+                        pendingToolCalls.delete(block.tool_use_id);
+                        const callBlock = call
+                            ? renderToolCallBlock(call.tool, call.args)
+                            : "";
                         context.actionIO.appendDisplay(
                             {
                                 type: "markdown",
-                                content: formatToolResultDisplay(
-                                    content,
-                                    isError,
-                                ),
+                                content:
+                                    callBlock +
+                                    formatToolResult(content, isError),
                                 kind: isError ? "warning" : "info",
                             },
                             displayMode,
@@ -1769,6 +1892,13 @@ async function executeReasoningWithTracing(
         let toolUseCount = 0;
         let reasoningStepCount = 0;
         const toolUseIdToName = new Map<string, string>();
+        // Buffer each tool call until its result arrives so the call and its
+        // result render together in one bubble. Keyed by tool-use id so parallel
+        // calls pair with the correct result.
+        const pendingToolCalls = new Map<
+            string,
+            { tool: string; args: unknown }
+        >();
         const pendingExecuteActions = new Map<string, TypeAgentAction>();
         const executedActions: TypeAgentAction[] = [];
         // LLM token usage reported by the final result message (captured below).
@@ -1854,17 +1984,12 @@ async function executeReasoningWithTracing(
                             timestamp: new Date().toISOString(),
                         });
 
-                        context.actionIO.appendDisplay(
-                            {
-                                type: "markdown",
-                                content: formatToolCallDisplay(
-                                    content.name,
-                                    content.input,
-                                ),
-                                kind: "info",
-                            },
-                            displayMode,
-                        );
+                        // Buffer the call; it renders together with its result
+                        // when the tool finishes (see the tool_result handler).
+                        pendingToolCalls.set(content.id, {
+                            tool: content.name,
+                            args: content.input,
+                        });
                     } else if ((content as any).type === "thinking") {
                         const thinkingContent = (content as any).thinking;
                         if (thinkingContent) {
@@ -1937,13 +2062,22 @@ async function executeReasoningWithTracing(
                                 timestamp: new Date().toISOString(),
                             });
 
+                            // Emit the buffered call and its result together in
+                            // one bubble so the output sits with the call that
+                            // produced it.
+                            const call = pendingToolCalls.get(
+                                block.tool_use_id,
+                            );
+                            pendingToolCalls.delete(block.tool_use_id);
+                            const callBlock = call
+                                ? renderToolCallBlock(call.tool, call.args)
+                                : "";
                             context.actionIO.appendDisplay(
                                 {
                                     type: "markdown",
-                                    content: formatToolResultDisplay(
-                                        content,
-                                        isError,
-                                    ),
+                                    content:
+                                        callBlock +
+                                        formatToolResult(content, isError),
                                     kind: isError ? "warning" : "info",
                                 },
                                 displayMode,

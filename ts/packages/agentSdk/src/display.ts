@@ -201,6 +201,7 @@ export type ClientAction =
     | "show-camera"
     | "show-notification"
     | "set-alarm"
+    | "set-timer"
     | "call-phonenumber"
     | "send-sms"
     | "search-nearby"

@@ -21,6 +21,10 @@ function formatTable(conversations: ConversationInfo[]): string {
         "NAME".length,
         ...conversations.map((s) => (s.name ?? "").length),
     );
+    const messagesWidth = Math.max(
+        "MESSAGES".length,
+        ...conversations.map((s) => String(s.messageCount).length),
+    );
     const clientsWidth = Math.max(
         "CLIENTS".length,
         ...conversations.map((s) => String(s.clientCount).length),
@@ -33,6 +37,7 @@ function formatTable(conversations: ConversationInfo[]): string {
     const header = [
         "CONVERSATION ID".padEnd(idWidth),
         "NAME".padEnd(nameWidth),
+        "MESSAGES".padEnd(messagesWidth),
         "CLIENTS".padEnd(clientsWidth),
         "CREATED AT",
     ].join("  ");
@@ -40,6 +45,7 @@ function formatTable(conversations: ConversationInfo[]): string {
     const separator = [
         "-".repeat(idWidth),
         "-".repeat(nameWidth),
+        "-".repeat(messagesWidth),
         "-".repeat(clientsWidth),
         "-".repeat(createdWidth),
     ].join("  ");
@@ -48,6 +54,7 @@ function formatTable(conversations: ConversationInfo[]): string {
         [
             s.conversationId.padEnd(idWidth),
             (s.name ?? "").padEnd(nameWidth),
+            String(s.messageCount).padEnd(messagesWidth),
             String(s.clientCount).padEnd(clientsWidth),
             s.createdAt,
         ].join("  "),

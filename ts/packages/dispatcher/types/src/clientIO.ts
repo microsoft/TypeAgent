@@ -49,11 +49,46 @@ export interface IAgentMessage {
     kind?: AgentMessageKind | undefined;
 }
 
+// One row of the "how the phrase mapped to the action" table shown in the
+// explained popover: a parameter (dotted path) and the value extracted for it.
+export type ExplainedMapping = {
+    name: string;
+    value: string;
+};
+
+// One sub-phrase of the original request as the explainer broke it down: the
+// original words and the category the explainer assigned (e.g. "politeness",
+// "action", "entity"). Drives per-category coloring so a phrase word and its
+// matching generalized-form marker share a color.
+export type ExplainedSegment = {
+    text: string;
+    category: string;
+};
+
+// Rich detail backing the popover shown when the user clicks the roadrunner.
+// `source` distinguishes a cache hit (an existing construction/grammar rule
+// was triggered) from a fresh model translation the explainer generalized.
+// `rule` is the construction/grammar rule text (the generalized form for the
+// model case); `mapping` lists the extracted parameter values; `segments` is
+// the per-category sub-phrase breakdown; `generalizations` are example
+// same-meaning rephrasings, each broken into the same per-category segments so
+// they can be colored consistently.
+export type ExplainedDetail = {
+    source: "construction" | "grammar" | "model";
+    phrase: string;
+    action: string;
+    rule?: string | undefined;
+    mapping?: ExplainedMapping[] | undefined;
+    segments?: ExplainedSegment[] | undefined;
+    generalizations?: ExplainedSegment[][] | undefined;
+};
+
 export type NotifyExplainedData = {
     error?: string | undefined;
     fromCache: "construction" | "grammar" | false;
     fromUser: boolean;
     time: string;
+    detail?: ExplainedDetail | undefined;
 };
 
 // Options for ClientIO.notify. All notifications are ephemeral by default and

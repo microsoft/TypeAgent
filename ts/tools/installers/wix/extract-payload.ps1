@@ -15,11 +15,15 @@
   TYPEAGENTROOT, e.g. %LOCALAPPDATA%\TypeAgent\. Contains payload\*.zip and is
   the parent of the agent-server\ and copilot-plugin\ extraction targets.
 
+.PARAMETER Payload
+  Extract only the named payload. Omit to extract both payloads.
+
 .PARAMETER Uninstall
   Remove the extracted directories instead of creating them.
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Root,
+    [ValidateSet("agent-server", "copilot-plugin")][string]$Payload,
     [string]$LogPath,
     [switch]$Uninstall
 )
@@ -47,6 +51,9 @@ $payloads = @(
     @{ Name = "agent-server";   Zip = "agent-server.zip" },
     @{ Name = "copilot-plugin"; Zip = "copilot-plugin.zip" }
 )
+if ($Payload) {
+    $payloads = @($payloads | Where-Object { $_.Name -eq $Payload })
+}
 
 $payloadDir = Join-Path $Root "payload"
 
@@ -63,7 +70,10 @@ try {
         exit 0
     }
 
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $tarExe = Join-Path $env:SystemRoot "System32\tar.exe"
+    if (-not (Test-Path $tarExe)) {
+        throw "Windows tar.exe was not found at $tarExe."
+    }
 
     foreach ($p in $payloads) {
         $zip = Join-Path $payloadDir $p.Zip
@@ -80,11 +90,16 @@ try {
         }
         New-Item -ItemType Directory -Force -Path $target | Out-Null
 
-        Write-Log "Extracting $zip -> $target"
-        [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $target)
+        Write-Log "Extracting $zip -> $target with tar.exe"
+        $output = & $tarExe -xf $zip -C $target 2>&1
+        $exitCode = $LASTEXITCODE
+        $output | ForEach-Object { Write-Log "tar> $_" }
+        if ($exitCode -ne 0) {
+            throw "tar.exe exited with code $exitCode while extracting $zip."
+        }
     }
 
-    Write-Log "Payload extraction complete."
+    Write-Log "Payload extraction complete: $($payloads.Name -join ', ')."
     exit 0
 } catch {
     Write-Log "ERROR: $($_.Exception.Message)"

@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 import * as path from "node:path";
 import { readFile } from "node:fs/promises";
 import { registerStudioCommands } from "./commands.js";
-import { createStudioRuntime } from "./studioRuntime.js";
+import { resolveRepoRoot } from "@typeagent/core/runtime";
 import { ensureStudioService } from "./studioServiceLauncher.js";
 import {
     StudioServiceRuntimeFacade,
@@ -57,16 +57,19 @@ import type {
 } from "./webviewKit/replayViewModel.js";
 
 export function activate(context: vscode.ExtensionContext): void {
-    // In-process runtime — retained ONLY for the onboarding command surface
-    // (see studioRuntime.ts). The shared live surfaces below read from the
-    // standalone Studio service over the channel, not from this runtime.
-    const runtime = createStudioRuntime(context);
+    // Resolve the workspace repo root locally (no in-process runtime). Onboarding
+    // now runs in the standalone Studio service over the channel, like every
+    // other live surface — the extension is a thin client with no runtime of its
+    // own. This mirrors what the service runtime resolves internally.
+    const repoRootInfo = resolveRepoRoot(
+        vscode.workspace.workspaceFolders?.map((f) => f.uri.fsPath) ?? [],
+        context.globalStorageUri.fsPath,
+    );
 
     // Warn early if we couldn't locate `packages/agents` under any open
     // folder. Without it, health/corpus/collision views are silently empty
     // because there are no agents to discover. Most often this means the user
     // opened the git root rather than the monorepo's `ts/` directory.
-    const repoRootInfo = runtime.getRepoRootInfo();
     if (!repoRootInfo.agentsDirFound) {
         const hasFolder = (vscode.workspace.workspaceFolders?.length ?? 0) > 0;
         const message = hasFolder
@@ -75,20 +78,23 @@ export function activate(context: vscode.ExtensionContext): void {
         void vscode.window.showWarningMessage(message);
     }
 
-    registerStudioCommands(context, runtime);
-
     // One shared connection to the standalone Studio service for all
     // channel-backed views. Created early because the Sandbox view reads only
     // through it (the service is the single source of truth for sandboxes). The
     // launcher (below) points it at the launched/attached service.
     const connection = new StudioServiceConnection(repoRootInfo.repoRoot);
     const sandboxSource = new StudioServiceSandboxSource(connection);
-    // Service-backed corpus / health / feedback / replay surfaces (repo info is
-    // resolved locally; everything else routes to the service).
+    // Service-backed corpus / health / feedback / replay / onboarding surfaces
+    // (repo info is resolved locally; everything else routes to the service).
     const serviceRuntime = new StudioServiceRuntimeFacade(
         connection,
         repoRootInfo,
     );
+
+    // Onboarding (the New Agent wizard + command palette) drives the service
+    // through the facade — installs land in the real service sandboxes, no
+    // split-brain.
+    registerStudioCommands(context, serviceRuntime);
 
     const sandboxTree = new SandboxTreeProvider(sandboxSource);
 

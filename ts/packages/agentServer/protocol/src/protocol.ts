@@ -25,6 +25,19 @@ export type ConversationInfo = {
     clientCount: number;
     createdAt: string; // ISO 8601
     /**
+     * Number of user requests recorded in the conversation's display log - a
+     * rough measure of how much activity it holds. Computed server-side; 0 for
+     * a brand-new conversation.
+     */
+    messageCount: number;
+    /**
+     * How many of this conversation's user turns are in the cross-conversation
+     * content index. Compared with {@link messageCount} it shows how completely
+     * the conversation is indexed (0 = not indexed; == messageCount = fully).
+     * Omitted by hosts without a unified content index.
+     */
+    indexedMessageCount?: number;
+    /**
      * Where this conversation came from. Omitted for native TypeAgent
      * conversations; set to `"copilot"` for imported mirrors. Clients use it to
      * badge the conversation and (together with {@link readOnly}) decide whether
@@ -37,6 +50,26 @@ export type ConversationInfo = {
      * conversations.
      */
     readOnly?: boolean;
+};
+
+/**
+ * A conversation matched by fuzzy name search, with a relevance score in
+ * [0, 1] (higher is a closer match).
+ */
+export type ConversationMatch = {
+    conversation: ConversationInfo;
+    score: number;
+};
+
+/**
+ * A conversation whose message *content* matched a search, with a relevance
+ * score in [0, 1] and representative snippets (best match first). Distinct
+ * from {@link ConversationMatch}, which matches on the conversation name.
+ */
+export type ConversationContentMatch = {
+    conversation: ConversationInfo;
+    score: number;
+    snippets: string[];
 };
 
 export type ConversationNameCollisionBehavior = "error" | "appendNumber";
@@ -104,6 +137,26 @@ export type AgentServerInvokeFunctions = {
         options?: CreateConversationOptions,
     ) => Promise<ConversationInfo>;
     listConversations: (name?: string) => Promise<ConversationInfo[]>;
+    /**
+     * Fuzzy-find conversations by name. Blends lexical (exact / substring /
+     * edit-distance) with embedding similarity, so imprecise or semantically
+     * close queries still match. Results are sorted by descending score. Falls
+     * back to lexical-only matching when no embedding provider is configured.
+     */
+    findConversations: (
+        query: string,
+        maxMatches?: number,
+    ) => Promise<ConversationMatch[]>;
+    /**
+     * Search conversation *content* (the knowPro unified message index) and
+     * rank conversations by how well their messages match the query. Distinct
+     * from {@link findConversations}, which matches on conversation names.
+     * Returns [] when the content index has no model provider configured.
+     */
+    searchConversationContent: (
+        query: string,
+        maxMatches?: number,
+    ) => Promise<ConversationContentMatch[]>;
     renameConversation: (
         conversationId: string,
         newName: string,

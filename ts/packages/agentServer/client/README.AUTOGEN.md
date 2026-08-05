@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ac666c56240da8bdd30324f4c777c7eb743862cea02da6438bc1b4dd491c6deb -->
+<!-- AUTOGEN:DOCS:HASH:sha256=00e71435a343a317b408381bced5f9404512989c4cac02ab5280e43b62f8c830 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-server-client — AI-generated documentation
@@ -12,17 +12,18 @@
 
 ## Overview
 
-The `@typeagent/agent-server-client` package is a TypeScript library that provides tools for interacting with a running `agentServer`. It is a core component of the TypeAgent ecosystem, enabling clients such as the Shell, CLI, and browser extensions to manage server connections, handle conversations, and ensure the server is running when needed.
+The `@typeagent/agent-server-client` package is a TypeScript library designed to facilitate interaction with a running `agentServer`. It provides tools for managing server connections, handling conversations, and ensuring the server is operational. This package is a critical component of the TypeAgent ecosystem, used by clients such as the Shell, CLI, and browser extensions.
 
 ## What it does
 
-This package offers a range of features to facilitate interaction with the `agentServer`:
+This package provides a comprehensive set of features for interacting with the `agentServer`:
 
 ### Server Connection Management
 
-- **`connectAgentServer`**: Establishes a WebSocket connection to an `agentServer` and returns an `AgentServerConnection` object. This object provides methods for managing conversations and interacting with the server.
+- **`connectAgentServer`**: Establishes a WebSocket connection to an `agentServer` and returns an `AgentServerConnection` object. This object enables full conversation management.
 - **`isServerRunning`**: Checks if an `agentServer` is already running at a specified WebSocket URL.
-- **`ensureAgentServer`**: Ensures that the `agentServer` is running, spawning it if necessary. Options include running the server in hidden mode and setting an idle timeout.
+- **`ensureAgentServer`**: Ensures the `agentServer` is running, spawning it if necessary. Options include running the server in hidden mode and setting an idle timeout.
+- **`stopAgentServer`**: Sends a shutdown RPC to a running server.
 
 ### Conversation Management
 
@@ -127,22 +128,22 @@ Workspace:
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-protocol](../../../packages/agentServer/protocol/README.md)
 - [@typeagent/dispatcher-rpc](../../../packages/dispatcher/rpc/README.md)
-- [websocket-channel-server](../../../packages/utils/webSocketChannelServer/README.md)
+- [@typeagent/websocket-channel-server](../../../packages/utils/webSocketChannelServer/README.md)
 
 External: `debug`, `isomorphic-ws`
 
 ### Used by
 
+- [@typeagent/browser](../../../packages/agents/browser/README.md)
 - [@typeagent/browser-extension](../../../packages/agents/browserExtension/README.md)
 - [@typeagent/copilot-plugin](../../../packages/copilot-plugin/README.md)
+- [@typeagent/studio-service](../../../packages/studio-service/README.md)
 - [agent-cli](../../../packages/cli/README.md)
 - [agent-coda](../../../packages/coda/README.md)
 - [agent-server](../../../packages/agentServer/server/README.md)
 - [agent-shell](../../../packages/shell/README.md)
-- [browser-typeagent](../../../packages/agents/browser/README.md)
 - [coder-wrapper](../../../packages/coderWrapper/README.md)
 - [command-executor-mcp](../../../packages/commandExecutor/README.md)
-- [remote-client-example](../../../examples/remoteClient/README.md)
 - _…and 6 more workspace consumers._
 
 ### Files of interest
@@ -153,6 +154,7 @@ External: `debug`, `isomorphic-ws`
 - [./src/conversation/lifecycle.ts](./src/conversation/lifecycle.ts)
 - [./src/conversation/manage.ts](./src/conversation/manage.ts)
 - [./src/conversation/naming.ts](./src/conversation/naming.ts)
+- [./src/conversation/render.ts](./src/conversation/render.ts)
 - [./src/discovery.ts](./src/discovery.ts)
 - [./src/tsconfig.json](./src/tsconfig.json)
 
@@ -166,6 +168,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
+_Auto-generated against commit `5018562335eded84b16dedcbb8e86d59b538a978` on `2026-07-30T06:29:20.146Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

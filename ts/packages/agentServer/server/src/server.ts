@@ -269,9 +269,14 @@ async function main() {
                     configName,
                 ),
                 constructionProvider: getDefaultConstructionProvider(),
+                // Extract knowledge from user turns and action results into the
+                // per-conversation memory so lookupAndAnswerConversation can
+                // answer from the current conversation. Both paths queue the
+                // work (queueAddMessage), so the extraction LLM call runs in the
+                // background and does not block the turn.
                 conversationMemorySettings: {
-                    requestKnowledgeExtraction: false,
-                    actionResultKnowledgeExtraction: false,
+                    requestKnowledgeExtraction: true,
+                    actionResultKnowledgeExtraction: true,
                 },
                 collectCommandResult: true,
                 portRegistrar,

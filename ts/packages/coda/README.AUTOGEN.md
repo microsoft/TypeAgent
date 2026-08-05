@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=befe1c8082ea53aa9d982f95658c259667706633c2847803df894ca69206a534 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=f6f2a80afb1441f85f2a757c3138508f3bc895307d0f49cf62e96dd21c6be64c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-coda — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `agent-coda` package is a TypeScript library that implements the Coda Operated Assistance (CODA) system, a voice-controlled coding assistant for Visual Studio Code (VSCode). It integrates with the TypeAgent shell or CLI to enable developers to perform coding tasks and manage their workspace using natural language commands. This package is designed to enhance accessibility and streamline workflows by enabling hands-free interaction with the VSCode environment.
+The `agent-coda` package is a TypeScript library that powers the Coda Operated Assistance (CODA) system, a voice-controlled coding assistant for Visual Studio Code (VSCode). It integrates with the TypeAgent shell or CLI to enable developers to perform coding tasks and manage their workspace using natural language commands. This package is designed to enhance accessibility and streamline workflows by enabling hands-free interaction with the VSCode environment.
 
 ## What it does
 
@@ -137,6 +137,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-coda docs:verify-links` to spot-check._
+_Auto-generated against commit `5a7bdd3625eef42d75702c9fd9f0dadb7cb10410` on `2026-07-29T05:15:39.538Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-coda docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

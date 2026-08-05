@@ -11,6 +11,7 @@ import {
 import {
     findOrCreateNamedConversation,
     manageConversation,
+    renderConversationActionResult,
     switchConversationSafe,
     type ConversationActionResult,
     type ManageConversationContext,
@@ -2130,8 +2131,6 @@ export class AgentServerBridge {
                     }
                 }
             },
-            handleShellAction: (requestId, data) =>
-                this.handleShellAction(requestId, data),
             handleManageConversation: (requestId, data) =>
                 this.handleManageConversation(requestId, data),
         });
@@ -2150,8 +2149,9 @@ export class AgentServerBridge {
                   type: "html" | "markdown" | "text";
                   content: string;
                   kind?: "info" | "warning" | "error" | "success";
-              },
-        source: string = "code.code-vscode-shell",
+              }
+            | ReturnType<typeof renderConversationActionResult>,
+        source: string = "conversation",
     ): void {
         this.broadcastToWebviews({
             type: "setDisplay",
@@ -2179,222 +2179,6 @@ export class AgentServerBridge {
             content,
             kind,
         });
-    }
-
-    /**
-     * Handle a "vscode-shell-action" routed from the code agent. Targeted
-     * to the originating client by the agent server's takeAction routing,
-     * so only this bridge (the originator's bridge) receives it.
-     */
-    private async handleShellAction(requestId: any, data: any): Promise<void> {
-        if (!data || typeof data !== "object") return;
-        const actionName = data.actionName as string | undefined;
-        const params = (data.parameters ?? {}) as {
-            name?: string;
-            newName?: string;
-        };
-
-        switch (actionName) {
-            case "newConversation":
-                await this.newConversationFromAgent(requestId, params.name);
-                break;
-            case "renameConversation":
-                if (params.newName) {
-                    await this.renameCurrentConversationFromAgent(
-                        params.newName,
-                    );
-                }
-                break;
-            case "switchConversation":
-                await this.switchConversationFromAgent(params.name);
-                break;
-            case "deleteConversation":
-                await this.deleteConversationFromAgent(requestId, params.name);
-                break;
-        }
-    }
-
-    /**
-     * Create a new conversation programmatically (from a chat-issued
-     * action). If `name` is omitted, falls back to the interactive prompt.
-     */
-    private async newConversationFromAgent(
-        requestId: any,
-        name?: string,
-    ): Promise<void> {
-        if (!this.connection) {
-            vscode.window.showWarningMessage("Not connected to agent server.");
-            return;
-        }
-        if (!name || !name.trim()) {
-            await this.newSession();
-            return;
-        }
-
-        const trimmed = name.trim();
-        const sessions = await this.connection.listSessions();
-        const existing = sessions.find(
-            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
-        );
-        if (existing) {
-            vscode.window.showWarningMessage(
-                `A conversation named "${trimmed}" already exists; switching to it.`,
-            );
-            this.overwriteActionBubble(
-                requestId,
-                `A conversation named "${trimmed}" already exists. Switching to it instead of creating a new one.`,
-            );
-            await this.joinSpecificSession(existing.sessionId, existing.name);
-            return;
-        }
-
-        const info = await this.connection.createSession(trimmed);
-        await this.joinSpecificSession(info.sessionId, trimmed);
-        vscode.window.showInformationMessage(
-            `Created and switched to conversation "${trimmed}"`,
-        );
-    }
-
-    /**
-     * Rename the current conversation programmatically (from chat).
-     */
-    private async renameCurrentConversationFromAgent(
-        newName: string,
-    ): Promise<void> {
-        if (!this.connection || !this.session) {
-            vscode.window.showWarningMessage("No active conversation.");
-            return;
-        }
-        const trimmed = newName.trim();
-        if (!trimmed) return;
-
-        const sessions = await this.connection.listSessions();
-        const collision = sessions.find(
-            (s) =>
-                s.sessionId !== this.session!.sessionId &&
-                s.name.toLowerCase() === trimmed.toLowerCase(),
-        );
-        if (collision) {
-            vscode.window.showErrorMessage(
-                `A conversation named "${trimmed}" already exists.`,
-            );
-            return;
-        }
-
-        await this.connection.renameSession(this.session.sessionId, trimmed);
-        this.nameOverride = trimmed;
-        this.broadcastToWebviews({
-            type: "status",
-            connected: true,
-            sessionId: this.session.sessionId,
-            sessionName: this.getDisplayName(),
-        });
-        this.onStatusChanged?.();
-        vscode.window.showInformationMessage(
-            `Renamed conversation to "${trimmed}"`,
-        );
-    }
-
-    /**
-     * Switch to a conversation by display name (from chat). Falls back to
-     * the interactive picker if no name was provided. If a name is given
-     * but no conversation matches, creates a new conversation with that
-     * name and switches to it.
-     */
-    private async switchConversationFromAgent(name?: string): Promise<void> {
-        if (!this.connection) {
-            vscode.window.showWarningMessage("Not connected to agent server.");
-            return;
-        }
-        if (!name || !name.trim()) {
-            await this.switchSession();
-            return;
-        }
-
-        const trimmed = name.trim();
-        const sessions = await this.connection.listSessions();
-        const match = sessions.find(
-            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
-        );
-        if (!match) {
-            // Create-on-switch: user asked to switch to a conversation
-            // that doesn't exist yet, so create it and switch to it.
-            const info = await this.connection.createSession(trimmed);
-            await this.joinSpecificSession(info.sessionId, trimmed);
-            vscode.window.showInformationMessage(
-                `Created and switched to new conversation "${trimmed}".`,
-            );
-            return;
-        }
-        if (match.sessionId === this.session?.sessionId) {
-            return;
-        }
-        await this.joinSpecificSession(match.sessionId, match.name);
-    }
-
-    /**
-     * Delete a conversation by display name (from chat). Prompts the user
-     * for confirmation before deleting. Falls back to the interactive
-     * picker if no name was provided. Refuses to delete the currently
-     * active conversation.
-     */
-    private async deleteConversationFromAgent(
-        requestId: any,
-        name?: string,
-    ): Promise<void> {
-        if (!this.connection) {
-            vscode.window.showWarningMessage("Not connected to agent server.");
-            return;
-        }
-        if (!name || !name.trim()) {
-            await this.deleteSession();
-            return;
-        }
-
-        const trimmed = name.trim();
-        const sessions = await this.connection.listSessions();
-        const match = sessions.find(
-            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
-        );
-        if (!match) {
-            vscode.window.showWarningMessage(
-                `No conversation named "${trimmed}" found.`,
-            );
-            this.overwriteActionBubble(
-                requestId,
-                `No conversation named "${trimmed}" found to delete.`,
-            );
-            return;
-        }
-        if (match.sessionId === this.session?.sessionId) {
-            vscode.window.showWarningMessage(
-                `Cannot delete the currently active conversation "${trimmed}".`,
-            );
-            this.overwriteActionBubble(
-                requestId,
-                `Cannot delete the currently active conversation "${match.name}". Switch to a different conversation first.`,
-            );
-            return;
-        }
-
-        const confirm = await vscode.window.showWarningMessage(
-            `Delete conversation "${match.name}"? This cannot be undone.`,
-            { modal: true },
-            "Delete",
-        );
-        if (confirm !== "Delete") {
-            this.overwriteActionBubble(
-                requestId,
-                `Delete of conversation "${match.name}" was cancelled.`,
-            );
-            return;
-        }
-
-        await this.connection.deleteSession(match.sessionId);
-        vscode.window.showInformationMessage(
-            `Deleted conversation "${match.name}".`,
-        );
-        this.onStatusChanged?.();
     }
 
     // manage-conversation handler — routed from NL and `@conversation` slash
@@ -2879,101 +2663,27 @@ export class AgentServerBridge {
         await this.postSessionList();
     }
 
-    // Map a structured ConversationActionResult to the bridge's two
-    // display surfaces — inline action-bubble overwrite for non-switching
-    // results, conversation-notification banner for switching results
-    // (the request bubble belongs to the old conversation and gets
-    // cleared on sessionChanged).
+    // Render a ConversationActionResult into the message bubble as structured
+    // content (shared with the Electron shell). Switching results surface a
+    // notification banner instead - the request bubble belongs to the old
+    // conversation and gets cleared on sessionChanged.
     private renderManageResult(
         requestId: any,
         result: ConversationActionResult,
         _switchTargetName?: string,
     ): void {
-        switch (result.kind) {
-            case "ok":
-                if (result.switched) {
-                    this.displayConversationNotification(
-                        htmlizeManageMessage(result.message),
-                        "info",
-                    );
-                } else {
-                    this.overwriteActionBubble(
-                        requestId,
-                        {
-                            type: "html",
-                            content: htmlizeManageMessage(result.message),
-                            kind: "info",
-                        },
-                        "conversation",
-                    );
-                }
-                return;
-            case "warning":
-                this.overwriteActionBubble(
-                    requestId,
-                    {
-                        type: "html",
-                        content: htmlizeManageMessage(result.message),
-                        kind: "warning",
-                    },
-                    "conversation",
-                );
-                return;
-            case "error":
-                this.overwriteActionBubble(
-                    requestId,
-                    {
-                        type: "html",
-                        content: `❌ ${htmlizeManageMessage(result.message)}`,
-                        kind: "error",
-                    },
-                    "conversation",
-                );
-                return;
-            case "cancelled":
-                this.overwriteActionBubble(
-                    requestId,
-                    {
-                        type: "html",
-                        content: "Cancelled.",
-                        kind: "info",
-                    },
-                    "conversation",
-                );
-                return;
-            case "info":
-                this.overwriteActionBubble(
-                    requestId,
-                    {
-                        type: "html",
-                        content: `Current conversation: <b>${escapeHtml(result.name)}</b> (${escapeHtml(result.conversationId)})`,
-                        kind: "info",
-                    },
-                    "conversation",
-                );
-                return;
-            case "list": {
-                let html: string;
-                if (result.conversations.length === 0) {
-                    html = "No conversations found.";
-                } else {
-                    const rows = result.conversations.map((s) => {
-                        const isCurrent =
-                            s.conversationId === result.currentConversationId;
-                        const marker = isCurrent ? " ← <b>current</b>" : "";
-                        const date = new Date(s.createdAt).toLocaleDateString();
-                        return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.conversationId)}) — ${s.clientCount} client(s), created ${escapeHtml(date)}${marker}`;
-                    });
-                    html = `<b>Conversations (${result.conversations.length})</b><br>${rows.join("<br>")}`;
-                }
-                this.overwriteActionBubble(
-                    requestId,
-                    { type: "html", content: html, kind: "info" },
-                    "conversation",
-                );
-                return;
-            }
+        if (result.kind === "ok" && result.switched) {
+            this.displayConversationNotification(
+                htmlizeManageMessage(result.message),
+                "info",
+            );
+            return;
         }
+        this.overwriteActionBubble(
+            requestId,
+            renderConversationActionResult(result),
+            "conversation",
+        );
     }
 
     public notifyDemoState(

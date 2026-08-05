@@ -23,6 +23,9 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { getDefaultSubCommandDescriptor } from "./command.js";
+import { getPackageFilePath } from "../utils/getPackageFilePath.js";
+import { getAppAgentName } from "../translation/agentTranslators.js";
+import type { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:command:reference");
@@ -38,8 +41,18 @@ function escapeAngles(text: string): string {
 // Render a single command descriptor to a markdown section. Mirrors the
 // mechanical parts of getUsage() (commandHelp.ts) so the reference stays in
 // lockstep with interactive `@help`.
+// Resolve a command's declared actionName (already scoped to its agent) to a
+// fully-qualified name and an optional markdown link to its schema source.
+type ActionResolver = (
+    actionName: string,
+) => { qualifiedName: string; link?: string } | undefined;
+
 // code-complexity-allow: command usage markdown needs explicit branches for args/flags formatting
-function renderCommand(command: string, descriptor: CommandDescriptor): string {
+function renderCommand(
+    command: string,
+    descriptor: CommandDescriptor,
+    resolveAction?: ActionResolver,
+): string {
     // Usage tokens (flags first, unshifted in reverse like getUsage; then args).
     const usageParams: string[] = [];
     const argLines: string[] = [];
@@ -87,6 +100,23 @@ function renderCommand(command: string, descriptor: CommandDescriptor): string {
     out.push(`## @${command} - ${descriptor.description}`);
     out.push("");
     out.push(`Usage: \`${usage}\``);
+    // A command may declare the agent action it is equivalent to, so readers
+    // know the same thing is reachable via natural language. The declaration is
+    // just the actionName; the fully-qualified name and schema-source link are
+    // resolved from the dispatcher's action metadata.
+    const actionName =
+        typeof descriptor.action === "string"
+            ? descriptor.action
+            : descriptor.action?.actionName;
+    if (actionName !== undefined) {
+        const resolved = resolveAction?.(actionName);
+        const label = resolved?.qualifiedName ?? actionName;
+        const rendered = resolved?.link
+            ? `[\`${label}\`](${resolved.link})`
+            : `\`${label}\``;
+        out.push("");
+        out.push(`Equivalent action: ${rendered}`);
+    }
     if (argLines.length !== 0) {
         out.push("");
         out.push("### Arguments:");
@@ -110,20 +140,23 @@ function walkTable(
     table: CommandDescriptorTable,
     commandPrefix: string,
     sections: string[],
+    resolveAction?: ActionResolver,
 ): void {
     if (typeof table.defaultSubCommand !== "string" && commandPrefix !== "") {
         const defaultDescriptor = getDefaultSubCommandDescriptor(table);
         if (defaultDescriptor !== undefined) {
-            sections.push(renderCommand(commandPrefix, defaultDescriptor));
+            sections.push(
+                renderCommand(commandPrefix, defaultDescriptor, resolveAction),
+            );
         }
     }
 
     for (const [name, handler] of Object.entries(table.commands)) {
         const command = commandPrefix ? `${commandPrefix} ${name}` : name;
         if (isCommandDescriptorTable(handler)) {
-            walkTable(handler, command, sections);
+            walkTable(handler, command, sections, resolveAction);
         } else {
-            sections.push(renderCommand(command, handler));
+            sections.push(renderCommand(command, handler, resolveAction));
         }
     }
 }
@@ -144,8 +177,19 @@ function orderAgentNames(names: string[]): string[] {
 // agent's commands. The caller supplies the file's intro/header. Agents that
 // are not command-enabled (e.g. failed to initialize headlessly) are skipped
 // with a debug note, so the output reflects whatever agents booted.
+export interface CommandReferenceOptions {
+    // Resolve a command's declared action (given its agent and actionName) to a
+    // fully-qualified name and an optional markdown link. Returns undefined to
+    // fall back to the bare actionName.
+    resolveAction?: (
+        agentName: string,
+        actionName: string,
+    ) => { qualifiedName: string; link?: string } | undefined;
+}
+
 export async function collectCommandReferenceMarkdown(
     context: CommandHandlerContext,
+    options?: CommandReferenceOptions,
 ): Promise<string> {
     const sections: string[] = [];
     const agents = context.agents;
@@ -172,13 +216,57 @@ export async function collectCommandReferenceMarkdown(
         // agent prefix (`@action`). Every other agent prefixes its commands
         // with the agent name (`@dispatcher request`).
         const commandPrefix = agentName === "system" ? "" : agentName;
+        const resolveAction = options?.resolveAction
+            ? (actionName: string) =>
+                  options.resolveAction!(agentName, actionName)
+            : undefined;
         if (isCommandDescriptorTable(commands)) {
-            walkTable(commands, commandPrefix, sections);
+            walkTable(commands, commandPrefix, sections, resolveAction);
         } else if (commandPrefix !== "") {
             // Agent exposes a single `@<agentName>` command.
-            sections.push(renderCommand(commandPrefix, commands));
+            sections.push(
+                renderCommand(commandPrefix, commands, resolveAction),
+            );
         }
     }
 
     return sections.join("\n\n");
+}
+
+// (agent, actionName) -> the schema that declares it and its source file, so a
+// command reference can render a command's equivalent action as a fully-
+// qualified, linkable name. Keyed "<agent>\n<actionName>". Takes an
+// ActionConfigProvider (e.g. from getAllActionConfigProvider) rather than a
+// running context, so the lookup is independent of which schemas are enabled.
+export interface ActionReferenceEntry {
+    schemaName: string;
+    // Absolute path to the schema's TypeScript source, when resolvable.
+    sourceFile: string | undefined;
+}
+
+export function collectActionReference(
+    provider: ActionConfigProvider,
+): Map<string, ActionReferenceEntry> {
+    const map = new Map<string, ActionReferenceEntry>();
+    for (const config of provider.getActionConfigs()) {
+        const agentName = getAppAgentName(config.schemaName);
+        const relPath = config.originalSchemaFilePath ?? config.schemaFilePath;
+        const sourceFile =
+            relPath !== undefined ? getPackageFilePath(relPath) : undefined;
+        let actionSchemas: ReadonlyMap<string, unknown>;
+        try {
+            actionSchemas =
+                provider.getActionSchemaFileForConfig(config).parsedActionSchema
+                    .actionSchemas;
+        } catch {
+            continue;
+        }
+        for (const actionName of actionSchemas.keys()) {
+            map.set(`${agentName}\n${actionName}`, {
+                schemaName: config.schemaName,
+                sourceFile,
+            });
+        }
+    }
+    return map;
 }

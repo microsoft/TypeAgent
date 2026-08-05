@@ -24,6 +24,7 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
+    createActionResultNoDisplay,
     actionResultToString,
     createActionResultFromError,
     serializeError,
@@ -251,11 +252,29 @@ export async function executeAction(
             if (setupResult !== undefined) {
                 result = setupResult;
             } else {
-                result =
-                    (await appAgent.executeAction(action, actionContext)) ??
-                    createActionResult(
-                        `Action ${getFullActionName(executableAction)} completed.`,
-                    );
+                const displayCountBefore = systemContext.displayCount;
+                const handlerResult = await appAgent.executeAction(
+                    action,
+                    actionContext,
+                );
+                if (handlerResult !== undefined) {
+                    result = handlerResult;
+                } else {
+                    // The agent returned no ActionResult. Synthesize a
+                    // completion using the same history/memory text as before.
+                    // If the action already emitted visible output - either
+                    // directly via actionIO or through a command it delegated
+                    // to with processCommandNoLock - suppress the redundant
+                    // "completed" bubble by returning a no-display result;
+                    // otherwise show it so silent actions still acknowledge.
+                    const completedText = `Action ${getFullActionName(
+                        executableAction,
+                    )} completed.`;
+                    result =
+                        systemContext.displayCount !== displayCountBefore
+                            ? createActionResultNoDisplay(completedText)
+                            : createActionResult(completedText);
+                }
             }
         }
     } catch (e: any) {
