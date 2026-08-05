@@ -77,6 +77,11 @@
             "dist/listSchema.pas.json"
           ]
         }
+      },
+      "tsc": {
+        "dependsOn": [
+          "@typeagent/action-grammar#tsc"
+        ]
       }
     }
   },
