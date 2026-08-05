@@ -73,6 +73,20 @@ export type TopicSelector = {
     roles?: readonly ("primary" | "secondary")[];
 };
 
+export type StructuralSource =
+    | {
+          type: "term";
+          term: string;
+      }
+    | {
+          type: "artifact";
+          artifactId: string;
+      }
+    | {
+          type: "turn";
+          turnId: string;
+      };
+
 export type TemporalSelector =
     | {
           type: "during";
@@ -132,6 +146,7 @@ export type QueryIrV1 = {
     scopeId: string;
     targetKinds: readonly QueryEntityKind[];
     expression: QueryExpression;
+    source?: StructuralSource;
     topic?: TopicSelector;
     temporal?: TemporalSelector;
     include?: readonly QueryInclude[];

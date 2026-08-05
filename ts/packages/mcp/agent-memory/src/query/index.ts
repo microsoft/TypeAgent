@@ -2,3 +2,4 @@
 // Licensed under the MIT License.
 
 export * from "./ir/index.js";
+export * from "./language/index.js";

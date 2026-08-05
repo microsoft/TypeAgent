@@ -18,6 +18,7 @@ import {
     type QueryExpression,
     type QueryIrV1,
     type QueryScalar,
+    type StructuralSource,
     type TemporalSelector,
 } from "./types.js";
 
@@ -85,6 +86,7 @@ export function normalizeQuery(query: QueryIrV1): NormalizedQueryIrV1 {
     const expression = normalizeExpression(query.expression, 1, counter);
     if (
         !hasPositiveMatch(expression) &&
+        query.source === undefined &&
         query.topic === undefined &&
         query.temporal === undefined
     ) {
@@ -115,6 +117,9 @@ export function normalizeQuery(query: QueryIrV1): NormalizedQueryIrV1 {
         scopeId,
         targetKinds,
         expression,
+        ...(query.source === undefined
+            ? {}
+            : { source: normalizeStructuralSource(query.source) }),
         ...(query.topic === undefined
             ? {}
             : {
@@ -318,6 +323,30 @@ function normalizeFilter(expression: FilterExpression): FilterExpression {
         });
     }
     return { ...expression, field };
+}
+
+function normalizeStructuralSource(source: StructuralSource): StructuralSource {
+    switch (source.type) {
+        case "term":
+            return {
+                type: "term",
+                term: requireText(source.term, "source.term")
+                    .replace(/\s+/g, " ")
+                    .toLowerCase(),
+            };
+        case "artifact":
+            return {
+                type: "artifact",
+                artifactId: asId(source.artifactId, "Artifact"),
+            };
+        case "turn":
+            return {
+                type: "turn",
+                turnId: asId(source.turnId, "Turn"),
+            };
+        default:
+            return invalidArgument("Invalid structural source type");
+    }
 }
 
 function normalizeTemporal(selector: TemporalSelector): TemporalSelector {

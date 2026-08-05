@@ -4,7 +4,7 @@ Agent Memory MCP is a standalone MCP server for durable, evidence-bearing AI
 agent memory. It is developed in the TypeAgent monorepo but has no TypeAgent
 runtime dependency.
 
-Milestones 0-4 are runnable. The server uses the official MCP TypeScript SDK v2
+Milestones 0-5 are runnable. The server uses the official MCP TypeScript SDK v2
 over stdio, initializes its package-owned SQLite database, applies ordered
 migrations, and exposes `memory_status` and `memory_record_turn`. Turn recording
 atomically resolves topics and terms, writes actions and memory facets, rebuilds
@@ -14,6 +14,19 @@ implemented in the following milestones.
 The version 1 query IR defines bounded Boolean, soft-AND, filter, topic, and
 temporal queries before textual query parsing is introduced. It includes
 canonical normalization and hashing for stable retrieval events and cursors.
+
+The path language compiles topic, term, artifact, and direct-turn routes into
+the query IR. Optional controls add Boolean expressions, filters, temporal
+selection, detail, ordering, result limits, and token budgets:
+
+```text
+/topics/project/memory/**/turns where "quark field" + (eigenvalue | spectrum) filter state=active during yesterday detail snippets order hitCount:desc limit 25 tokens 2048
+```
+
+Expression precedence, from strongest to weakest, is negation (`!`), hard AND
+(`&`), OR (`|`), then soft AND (`+`). Relative day and week expressions are
+resolved once in the caller's IANA timezone. Rendered queries and continuation
+state retain the resulting absolute interval across midnight and DST changes.
 
 ```powershell
 npm ci
