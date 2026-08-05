@@ -39,8 +39,8 @@ describe("agent-memory MCP server", () => {
             await client.connect(transport);
 
             const tools = await client.listTools();
-            expect(tools.tools.map((tool) => tool.name)).toContain(
-                "memory_status",
+            expect(tools.tools.map((tool) => tool.name)).toEqual(
+                expect.arrayContaining(["memory_status", "memory_record_turn"]),
             );
 
             const result = await client.callTool({

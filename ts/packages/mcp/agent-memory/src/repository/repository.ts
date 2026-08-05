@@ -4,6 +4,9 @@
 import type Database from "better-sqlite3";
 import {
     DomainError,
+    asId,
+    normalizeTerm,
+    normalizeTopicPath,
     type AccessScope,
     type Artifact,
     type ArtifactChange,
@@ -34,8 +37,22 @@ export type SearchDocument = {
     occurredAt: string;
 };
 
+export type IdempotencyRecord = {
+    scopeId: string;
+    key: string;
+    requestHash: string;
+    resultJson: string;
+    createdAt: string;
+};
+
 export interface MemoryRepository extends Disposable {
+    runInTransaction<T>(operation: () => T): T;
     getSchemaVersion(): number;
+    getIdempotencyRecord(
+        scopeId: string,
+        key: string,
+    ): IdempotencyRecord | undefined;
+    saveIdempotencyRecord(record: IdempotencyRecord): void;
     saveScope(scope: AccessScope): void;
     saveTopic(topic: Topic): void;
     saveTopicAlias(alias: TopicAlias): void;
@@ -52,10 +69,40 @@ export interface MemoryRepository extends Disposable {
     rebuildSearchDocuments(): number;
     listSearchDocuments(): SearchDocument[];
     close(): void;
+    getScope(scopeId: string): AccessScope | undefined;
+    findTopicByPath(scopeId: string, path: string): Topic | undefined;
+    findTerm(scopeId: string, text: string): Term | undefined;
+    getArtifact(artifactId: string): Artifact | undefined;
+    getGoal(goalId: string): Goal | undefined;
+    getDesignNote(designNoteId: string): DesignNote | undefined;
+    getTopicOutput(outputId: string): TopicOutput | undefined;
+    getPropertyDefinition(
+        definitionId: string,
+    ): TopicPropertyDefinition | undefined;
 }
 
 type ScopeRow = { scope_id: string };
 type RevisionRow = { revision: number };
+
+type TopicRow = {
+    topic_id: string;
+    scope_id: string;
+    parent_topic_id: string | null;
+    slug: string;
+    display_name: string;
+    state: Topic["state"];
+    revision: number;
+    created_at: string;
+    merged_into_topic_id: string | null;
+};
+
+type TermRow = {
+    term_id: string;
+    scope_id: string;
+    canonical_text: string;
+    display_text: string;
+    created_at: string;
+};
 
 export class SqliteMemoryRepository implements MemoryRepository {
     readonly #database: Database.Database;
@@ -73,11 +120,299 @@ export class SqliteMemoryRepository implements MemoryRepository {
         );
     }
 
+    public runInTransaction<T>(operation: () => T): T {
+        return this.#database.transaction(operation).immediate();
+    }
+
     public getSchemaVersion(): number {
         return this.#database
             .prepare("SELECT COALESCE(MAX(version), 0) FROM schema_migrations")
             .pluck()
             .get() as number;
+    }
+
+    public getScope(scopeId: string): AccessScope | undefined {
+        const row = this.#database
+            .prepare(
+                `SELECT scope_id, user_id, agent_id, workspace_id, session_id
+                 FROM scopes WHERE scope_id = ?`,
+            )
+            .get(scopeId) as
+            | {
+                  scope_id: string;
+                  user_id: string;
+                  agent_id: string | null;
+                  workspace_id: string | null;
+                  session_id: string | null;
+              }
+            | undefined;
+        if (row === undefined) {
+            return undefined;
+        }
+        return {
+            scopeId: asId(row.scope_id, "Scope"),
+            userId: row.user_id,
+            ...(row.agent_id === null ? {} : { agentId: row.agent_id }),
+            ...(row.workspace_id === null
+                ? {}
+                : { workspaceId: row.workspace_id }),
+            ...(row.session_id === null ? {} : { sessionId: row.session_id }),
+        };
+    }
+
+    public findTopicByPath(scopeId: string, path: string): Topic | undefined {
+        const normalizedPath = normalizeTopicPath(path);
+        const alias = this.#database
+            .prepare(
+                `SELECT topics.* FROM topic_aliases
+                 JOIN topics USING(topic_id, scope_id)
+                 WHERE topic_aliases.scope_id = ? AND topic_aliases.path = ?`,
+            )
+            .get(scopeId, normalizedPath) as TopicRow | undefined;
+        if (alias !== undefined) {
+            return mapTopic(alias);
+        }
+
+        let parentTopicId: string | null = null;
+        let topic: TopicRow | undefined;
+        for (const slug of normalizedPath.slice(1).split("/")) {
+            topic = (
+                parentTopicId === null
+                    ? this.#database
+                          .prepare(
+                              `SELECT * FROM topics
+                               WHERE scope_id = ? AND slug = ?
+                                 AND parent_topic_id IS NULL`,
+                          )
+                          .get(scopeId, slug)
+                    : this.#database
+                          .prepare(
+                              `SELECT * FROM topics
+                               WHERE scope_id = ? AND slug = ?
+                                 AND parent_topic_id = ?`,
+                          )
+                          .get(scopeId, slug, parentTopicId)
+            ) as TopicRow | undefined;
+            if (topic === undefined) {
+                return undefined;
+            }
+            parentTopicId = topic.topic_id;
+        }
+        return topic === undefined ? undefined : mapTopic(topic);
+    }
+
+    public findTerm(scopeId: string, text: string): Term | undefined {
+        const normalized = normalizeTerm(text);
+        const row = this.#database
+            .prepare(
+                `SELECT terms.* FROM terms
+                 WHERE terms.scope_id = ? AND terms.canonical_text = ?
+                 UNION ALL
+                 SELECT terms.* FROM term_aliases
+                 JOIN terms USING(term_id, scope_id)
+                 WHERE term_aliases.scope_id = ?
+                   AND term_aliases.normalized_alias = ?
+                 LIMIT 1`,
+            )
+            .get(scopeId, normalized, scopeId, normalized) as
+            | TermRow
+            | undefined;
+        return row === undefined ? undefined : mapTerm(row);
+    }
+
+    public getArtifact(artifactId: string): Artifact | undefined {
+        const row = this.#database
+            .prepare("SELECT * FROM artifacts WHERE artifact_id = ?")
+            .get(artifactId) as
+            | {
+                  artifact_id: string;
+                  scope_id: string;
+                  kind: string;
+                  name: string;
+                  uri: string | null;
+                  state: Artifact["state"];
+                  revision: number;
+                  created_at: string;
+              }
+            | undefined;
+        return row === undefined
+            ? undefined
+            : {
+                  artifactId: asId(row.artifact_id, "Artifact"),
+                  scopeId: asId(row.scope_id, "Scope"),
+                  kind: row.kind,
+                  name: row.name,
+                  ...(row.uri === null ? {} : { uri: row.uri }),
+                  state: row.state,
+                  revision: row.revision,
+                  createdAt: row.created_at,
+              };
+    }
+
+    public getGoal(goalId: string): Goal | undefined {
+        const row = this.#getRecord("goals", "goal_id", goalId);
+        return row === undefined
+            ? undefined
+            : {
+                  goalId: asId(row.goal_id as string, "Goal"),
+                  scopeId: asId(row.scope_id as string, "Scope"),
+                  topicId: asId(row.topic_id as string, "Topic"),
+                  desiredState: row.desired_state as string,
+                  state: row.state as Goal["state"],
+                  revision: row.revision as number,
+                  updatedByTurnId: asId(
+                      row.updated_by_turn_id as string,
+                      "Turn",
+                  ),
+                  updatedAt: row.updated_at as string,
+                  provenance: JSON.parse(row.provenance_json as string),
+              };
+    }
+
+    public getDesignNote(designNoteId: string): DesignNote | undefined {
+        const row = this.#getRecord(
+            "design_notes",
+            "design_note_id",
+            designNoteId,
+        );
+        return row === undefined
+            ? undefined
+            : {
+                  designNoteId: asId(
+                      row.design_note_id as string,
+                      "DesignNote",
+                  ),
+                  scopeId: asId(row.scope_id as string, "Scope"),
+                  topicId: asId(row.topic_id as string, "Topic"),
+                  title: row.title as string,
+                  body: row.body as string,
+                  addressedGoalIds: (
+                      JSON.parse(
+                          row.addressed_goal_ids_json as string,
+                      ) as string[]
+                  ).map((id) => asId(id, "Goal")),
+                  state: row.state as DesignNote["state"],
+                  revision: row.revision as number,
+                  updatedByTurnId: asId(
+                      row.updated_by_turn_id as string,
+                      "Turn",
+                  ),
+                  updatedAt: row.updated_at as string,
+                  provenance: JSON.parse(row.provenance_json as string),
+              };
+    }
+
+    public getTopicOutput(outputId: string): TopicOutput | undefined {
+        const row = this.#getRecord("topic_outputs", "output_id", outputId);
+        if (row === undefined) {
+            return undefined;
+        }
+        const designNotes = this.#database
+            .prepare(
+                `SELECT design_note_id, design_note_revision
+                 FROM output_design_notes WHERE output_id = ?
+                 ORDER BY design_note_id, design_note_revision`,
+            )
+            .all(outputId) as Array<{
+            design_note_id: string;
+            design_note_revision: number;
+        }>;
+        return {
+            outputId: asId(row.output_id as string, "Output"),
+            scopeId: asId(row.scope_id as string, "Scope"),
+            topicId: asId(row.topic_id as string, "Topic"),
+            artifactId: asId(row.artifact_id as string, "Artifact"),
+            state: row.state as TopicOutput["state"],
+            revision: row.revision as number,
+            designNotes: designNotes.map((note) => ({
+                designNoteId: asId(note.design_note_id, "DesignNote"),
+                revision: note.design_note_revision,
+            })),
+            updatedByTurnId: asId(row.updated_by_turn_id as string, "Turn"),
+            updatedAt: row.updated_at as string,
+            provenance: JSON.parse(row.provenance_json as string),
+        };
+    }
+
+    public getPropertyDefinition(
+        definitionId: string,
+    ): TopicPropertyDefinition | undefined {
+        const row = this.#getRecord(
+            "topic_property_definitions",
+            "definition_id",
+            definitionId,
+        );
+        return row === undefined
+            ? undefined
+            : {
+                  definitionId: asId(
+                      row.definition_id as string,
+                      "PropertyDefinition",
+                  ),
+                  scopeId: asId(row.scope_id as string, "Scope"),
+                  topicId: asId(row.topic_id as string, "Topic"),
+                  name: row.name as string,
+                  valueType:
+                      row.value_type as TopicPropertyDefinition["valueType"],
+                  required: row.required === 1,
+                  ...(row.allowed_values_json === null
+                      ? {}
+                      : {
+                            allowedValues: JSON.parse(
+                                row.allowed_values_json as string,
+                            ),
+                        }),
+                  revision: row.revision as number,
+              };
+    }
+
+    public getIdempotencyRecord(
+        scopeId: string,
+        key: string,
+    ): IdempotencyRecord | undefined {
+        const row = this.#database
+            .prepare(
+                `SELECT scope_id, idempotency_key, request_hash, result_json, created_at
+                 FROM idempotency_records
+                 WHERE scope_id = ? AND idempotency_key = ?`,
+            )
+            .get(scopeId, key) as
+            | {
+                  scope_id: string;
+                  idempotency_key: string;
+                  request_hash: string;
+                  result_json: string;
+                  created_at: string;
+              }
+            | undefined;
+        return row === undefined
+            ? undefined
+            : {
+                  scopeId: row.scope_id,
+                  key: row.idempotency_key,
+                  requestHash: row.request_hash,
+                  resultJson: row.result_json,
+                  createdAt: row.created_at,
+              };
+    }
+
+    public saveIdempotencyRecord(record: IdempotencyRecord): void {
+        this.#transaction(() => {
+            this.#requireScope(record.scopeId);
+            this.#database
+                .prepare(
+                    `INSERT INTO idempotency_records(
+                        scope_id, idempotency_key, request_hash, result_json, created_at
+                     ) VALUES (?, ?, ?, ?, ?)`,
+                )
+                .run(
+                    record.scopeId,
+                    record.key,
+                    record.requestHash,
+                    record.resultJson,
+                    record.createdAt,
+                );
+        });
     }
 
     public saveScope(scope: AccessScope): void {
@@ -292,22 +627,42 @@ export class SqliteMemoryRepository implements MemoryRepository {
     public saveArtifact(artifact: Artifact): void {
         this.#transaction(() => {
             this.#requireScope(artifact.scopeId);
-            this.#database
-                .prepare(
-                    `INSERT INTO artifacts(
-                        artifact_id, scope_id, kind, name, uri, state, revision, created_at
-                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                )
-                .run(
-                    artifact.artifactId,
-                    artifact.scopeId,
-                    artifact.kind,
-                    artifact.name,
-                    artifact.uri ?? null,
-                    artifact.state,
-                    artifact.revision,
-                    artifact.createdAt,
-                );
+            const existing = this.getArtifact(artifact.artifactId);
+            if (
+                existing !== undefined &&
+                existing.scopeId !== artifact.scopeId
+            ) {
+                this.#scopeMismatch(artifact.artifactId, artifact.scopeId);
+            }
+            this.#writeRevisionedFacet(
+                "artifacts",
+                "artifact_id",
+                artifact.artifactId,
+                artifact.revision,
+                () => {
+                    this.#database
+                        .prepare(
+                            `INSERT INTO artifacts(
+                                artifact_id, scope_id, kind, name, uri,
+                                state, revision, created_at
+                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                             ON CONFLICT(artifact_id) DO UPDATE SET
+                                kind = excluded.kind, name = excluded.name,
+                                uri = excluded.uri, state = excluded.state,
+                                revision = excluded.revision`,
+                        )
+                        .run(
+                            artifact.artifactId,
+                            artifact.scopeId,
+                            artifact.kind,
+                            artifact.name,
+                            artifact.uri ?? null,
+                            artifact.state,
+                            artifact.revision,
+                            artifact.createdAt,
+                        );
+                },
+            );
         });
     }
 
@@ -811,6 +1166,16 @@ export class SqliteMemoryRepository implements MemoryRepository {
         return row;
     }
 
+    #getRecord(
+        table: string,
+        idColumn: string,
+        id: string,
+    ): Record<string, string | number | null> | undefined {
+        return this.#database
+            .prepare(`SELECT * FROM ${table} WHERE ${idColumn} = ?`)
+            .get(id) as Record<string, string | number | null> | undefined;
+    }
+
     #scopeMismatch(leftId: string, rightId: string): never {
         throw new DomainError(
             "SCOPE_MISMATCH",
@@ -867,3 +1232,33 @@ const searchCandidateSql = `
     FROM design_notes
     ORDER BY entity_kind, entity_id, revision
 `;
+
+function mapTopic(row: TopicRow): Topic {
+    return {
+        topicId: asId(row.topic_id, "Topic"),
+        scopeId: asId(row.scope_id, "Scope"),
+        slug: row.slug,
+        displayName: row.display_name,
+        state: row.state,
+        revision: row.revision,
+        createdAt: row.created_at,
+        ...(row.parent_topic_id === null
+            ? {}
+            : { parentTopicId: asId(row.parent_topic_id, "Topic") }),
+        ...(row.merged_into_topic_id === null
+            ? {}
+            : {
+                  mergedIntoTopicId: asId(row.merged_into_topic_id, "Topic"),
+              }),
+    };
+}
+
+function mapTerm(row: TermRow): Term {
+    return {
+        termId: asId(row.term_id, "Term"),
+        scopeId: asId(row.scope_id, "Scope"),
+        canonicalText: row.canonical_text,
+        displayText: row.display_text,
+        createdAt: row.created_at,
+    };
+}

@@ -9,6 +9,7 @@ export {
 } from "./config.js";
 export * from "./domain/index.js";
 export * from "./repository/index.js";
+export * from "./services/index.js";
 export {
     createMemoryServer,
     serviceName,

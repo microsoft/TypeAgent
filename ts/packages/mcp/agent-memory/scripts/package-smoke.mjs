@@ -76,6 +76,10 @@ try {
 
     try {
         await client.connect(transport);
+        const tools = await client.listTools();
+        if (!tools.tools.some((tool) => tool.name === "memory_record_turn")) {
+            throw new Error("Packed server did not expose memory_record_turn");
+        }
         const result = await client.callTool({
             name: "memory_status",
             arguments: {},

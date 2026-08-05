@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 export type DomainErrorCode =
+    | "IDEMPOTENCY_CONFLICT"
     | "INVALID_ARGUMENT"
     | "INVALID_STATE_TRANSITION"
     | "INVARIANT_VIOLATION"

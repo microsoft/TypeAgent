@@ -6,11 +6,13 @@
 import { loadMemoryServerConfig } from "./config.js";
 import { SqliteMemoryRepository } from "./repository/index.js";
 import { startMemoryServer } from "./server.js";
+import { RecordTurnService } from "./services/index.js";
 
 async function main(): Promise<void> {
     const config = loadMemoryServerConfig(process.argv.slice(2));
     const repository = SqliteMemoryRepository.open(config.databasePath);
-    const server = await startMemoryServer(repository);
+    const recordTurn = new RecordTurnService(repository);
+    const server = await startMemoryServer({ status: repository, recordTurn });
 
     const close = async () => {
         await server.close();

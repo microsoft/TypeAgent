@@ -4,10 +4,12 @@ Agent Memory MCP is a standalone MCP server for durable, evidence-bearing AI
 agent memory. It is developed in the TypeAgent monorepo but has no TypeAgent
 runtime dependency.
 
-Milestones 0-2 are runnable. The server uses the official MCP TypeScript SDK v2
+Milestones 0-3 are runnable. The server uses the official MCP TypeScript SDK v2
 over stdio, initializes its package-owned SQLite database, applies ordered
-migrations, and exposes `memory_status`. Atomic turn recording and deterministic
-retrieval are implemented in the following milestones.
+migrations, and exposes `memory_status` and `memory_record_turn`. Turn recording
+atomically resolves topics and terms, writes actions and memory facets, rebuilds
+search projections, and persists an idempotent result. Deterministic retrieval is
+implemented in the following milestones.
 
 ```powershell
 npm ci
