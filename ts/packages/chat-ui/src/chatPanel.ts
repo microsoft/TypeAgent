@@ -80,6 +80,7 @@ import type {
 } from "./providers.js";
 import { createWebSpeechProvider } from "./webSpeechProvider.js";
 import { openSettingsPopup, openHelpPopup } from "./popups.js";
+import { highlightJson } from "./highlight.js";
 import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
 import {
@@ -287,92 +288,6 @@ function escapeHtml(s: string): string {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
-}
-
-// Lightweight JSON syntax highlighter — returns HTML with span wrappers
-// around tokens. Implemented as a hand-rolled scanner rather than a
-// single tokenizing regex so we have no chance of polynomial backtracking
-// on adversarial input (the JSON comes from action data which can carry
-// arbitrary user content). Also escapes <, >, & in any character that
-// passes through.
-// Avoids pulling in highlight.js / Prism just to colorize the action
-// JSON popup.
-// code-complexity-allow: hand-rolled JSON scanner kept branchy to avoid regex backtracking
-function highlightJson(json: string): string {
-    const escapeChar = (c: string): string =>
-        c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c;
-    const wrap = (cls: string, text: string): string =>
-        `<span class="${cls}">${text}</span>`;
-
-    let out = "";
-    let i = 0;
-    const n = json.length;
-    while (i < n) {
-        const ch = json[i];
-        if (ch === '"') {
-            // Linear scan to the matching closing quote, honoring `\\`
-            // and `\"` escapes. Each character is consumed at most once,
-            // so this is O(n) worst case.
-            let j = i + 1;
-            let raw = '"';
-            while (j < n) {
-                const cj = json[j];
-                if (cj === "\\" && j + 1 < n) {
-                    raw += "\\" + escapeChar(json[j + 1]);
-                    j += 2;
-                    continue;
-                }
-                raw += escapeChar(cj);
-                j++;
-                if (cj === '"') break;
-            }
-            i = j;
-            // If a colon follows (optionally with whitespace), this is a
-            // JSON object key; otherwise a string value.
-            let k = i;
-            while (k < n && (json[k] === " " || json[k] === "\t")) k++;
-            if (json[k] === ":") {
-                out += wrap("json-key", raw + json.slice(i, k + 1));
-                i = k + 1;
-            } else {
-                out += wrap("json-string", raw);
-            }
-        } else if (
-            (ch >= "0" && ch <= "9") ||
-            (ch === "-" &&
-                i + 1 < n &&
-                json[i + 1] >= "0" &&
-                json[i + 1] <= "9")
-        ) {
-            let j = i + 1;
-            while (
-                j < n &&
-                ((json[j] >= "0" && json[j] <= "9") ||
-                    json[j] === "." ||
-                    json[j] === "e" ||
-                    json[j] === "E" ||
-                    json[j] === "+" ||
-                    json[j] === "-")
-            ) {
-                j++;
-            }
-            out += wrap("json-number", json.slice(i, j));
-            i = j;
-        } else if (json.startsWith("true", i)) {
-            out += wrap("json-bool", "true");
-            i += 4;
-        } else if (json.startsWith("false", i)) {
-            out += wrap("json-bool", "false");
-            i += 5;
-        } else if (json.startsWith("null", i)) {
-            out += wrap("json-null", "null");
-            i += 4;
-        } else {
-            out += escapeChar(ch);
-            i++;
-        }
-    }
-    return out;
 }
 
 // Generates a UUID for tagging user-message bubbles. Falls back to a

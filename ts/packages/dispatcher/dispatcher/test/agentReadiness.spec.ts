@@ -488,6 +488,32 @@ describe("checkAgentReady (pre-flight gate)", () => {
         expect(display.content).toContain("@config agent refresh agentH");
     });
 
+    test("does not repeat the refresh command the details already gave", async () => {
+        const sys = fakeSystemContext({
+            readiness: new Map([
+                [
+                    "agentJ",
+                    {
+                        state: "setup-required",
+                        message: "Spotify is not configured.",
+                        details:
+                            "Add the values, then run `@config agent refresh agentJ`.",
+                    },
+                ],
+            ]),
+            hasSetup: () => false,
+        });
+        const error = await checkAgentReady(
+            "agentJ",
+            sys,
+            fakeActionContext(),
+        ).catch((e) => e);
+        const display = getErrorDisplayContent(error) as any;
+        const occurrences =
+            display.content.split("@config agent refresh agentJ").length - 1;
+        expect(occurrences).toBe(1);
+    });
+
     test("has no rich display when the report has no details", async () => {
         const sys = fakeSystemContext({
             readiness: new Map([
