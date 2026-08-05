@@ -28,7 +28,7 @@ import lockfile from "proper-lockfile";
 import registerDebug from "debug";
 import chalk from "chalk";
 import os from "os";
-import { configSetupError } from "@typeagent/config";
+import { configSetupError, tryReloadConfigSync } from "@typeagent/config";
 import { EventEmitter } from "node:events";
 
 try {
@@ -170,6 +170,10 @@ const invalidSettings: AppSettings = {
 };
 
 function loadMSGraphSettings(envPrefix: string = "MSGRAPH_APP"): AppSettings {
+    // Forked agent processes hold a snapshot of process.env, so re-read the
+    // config files: otherwise settings the user added after startup (and
+    // confirmed with `@config agent refresh`) stay invisible to login.
+    tryReloadConfigSync();
     const authModeRaw = (
         process.env[`${envPrefix}_AUTH_MODE`] ?? "browser"
     ).toLowerCase();

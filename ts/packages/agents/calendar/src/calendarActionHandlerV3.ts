@@ -43,7 +43,7 @@ import {
     getAvailableProviders,
     GoogleCalendarClient,
     graphProviderSetupHint,
-    probeGraphConfig,
+    probeCurrentGraphConfig,
 } from "@typeagent/graph-utils";
 import {
     getNWeeksDateRangeISO,
@@ -453,7 +453,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
     public async checkReadiness(
         context: SessionContext<CalendarActionContext>,
     ): Promise<ReadinessReport> {
-        const config = probeGraphConfig(process.env);
+        const config = probeCurrentGraphConfig();
         // Prefer the agentContext's provider when available (already set
         // up by updateAgentContext on enable). Fall back to a fresh
         // provider when the agent was disabled or env vars were set after
@@ -1288,7 +1288,7 @@ async function offerCalendarLogin(
     choiceManager: ChoiceManager,
 ): Promise<ActionResult> {
     const ctx = actionContext.sessionContext.agentContext;
-    const config = probeGraphConfig(process.env);
+    const config = probeCurrentGraphConfig();
     if (!config.msGraphConfigured && !config.googleConfigured) {
         return createActionResultFromError(
             `No calendar provider configured.\n${graphProviderSetupHint("calendar")}`,

@@ -3,7 +3,7 @@
 
 import {
     loadConfigSync,
-    reloadConfigSync,
+    tryReloadConfigSync,
     configSetupError,
 } from "@typeagent/config";
 import { TokenProvider } from "./tokenProvider.js";
@@ -36,11 +36,7 @@ export async function createTokenProvider(storage?: Storage) {
     // Agent processes are forked with a snapshot of process.env, so re-read
     // the config files here: otherwise settings the user added since startup
     // (and confirmed with `@config agent refresh player`) stay invisible.
-    try {
-        reloadConfigSync();
-    } catch {
-        // Keep whatever was loaded at startup.
-    }
+    tryReloadConfigSync();
 
     const baseClientId = process.env.SPOTIFY_APP_CLI;
     const baseClientSecret = process.env.SPOTIFY_APP_CLISEC;
