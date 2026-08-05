@@ -454,7 +454,7 @@ export type PickResult =
 export function pickEndpoint(
     pool: EndpointPool,
     now: number = Date.now(),
-    rng: () => number = () => randomInt(2 ** 32) / 2 ** 32,
+    rng: (n: number) => number = randomInt,
 ): PickResult {
     if (pool.members.length === 0) {
         throw new Error(`pool ${pool.modelKey} has no members`);
@@ -473,7 +473,7 @@ export function pickEndpoint(
             .get(tier)!
             .filter((m) => m.cooldownUntil <= now);
         if (ready.length > 0) {
-            const pick = ready[Math.floor(rng() * ready.length)];
+            const pick = ready[rng(ready.length)];
             return { kind: "ready", member: pick };
         }
     }
