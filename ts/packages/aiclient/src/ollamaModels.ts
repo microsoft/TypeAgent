@@ -9,7 +9,11 @@ import {
     success,
 } from "typechat";
 import { getEnvSetting } from "./common.js";
-import { ChatModelWithStreaming, CompletionSettings } from "./models.js";
+import {
+    ChatModelWithStreaming,
+    CompletionSettings,
+    CompleteUsageStatsCallback,
+} from "./models.js";
 import { CompletionUsageStats, EnvVars, ModelType } from "./apiTypes.js";
 import type { CommonApiSettings } from "./openai.js";
 import {
@@ -168,7 +172,10 @@ export function createOllamaChatModel(
     };
     return model;
 
-    function reportUsage(data: OllamaChatCompletionUsage) {
+    function reportUsage(
+        data: OllamaChatCompletionUsage,
+        usageCallback?: CompleteUsageStatsCallback,
+    ) {
         try {
             // track token usage
             const usage: CompletionUsageStats = {
@@ -178,11 +185,13 @@ export function createOllamaChatModel(
             };
 
             TokenCounter.getInstance().add(usage, tags);
+            usageCallback?.(usage);
         } catch {}
     }
 
     async function complete(
         prompt: string | PromptSection[],
+        usageCallback?: CompleteUsageStatsCallback,
         // TODO: thread AbortSignal through to fetch() for cancellation support (see interrupt-design.md)
     ): Promise<Result<string>> {
         const messages =
@@ -223,13 +232,14 @@ export function createOllamaChatModel(
             model.completionCallback(params, data);
         }
 
-        reportUsage(data);
+        reportUsage(data, usageCallback);
 
         return success(data.message.content as string);
     }
 
     async function completeStream(
         prompt: string | PromptSection[],
+        usageCallback?: CompleteUsageStatsCallback,
         // TODO: thread AbortSignal through to fetch() for cancellation support (see interrupt-design.md)
     ): Promise<Result<AsyncIterableIterator<string>>> {
         const messages: PromptSection[] =
@@ -270,7 +280,7 @@ export function createOllamaChatModel(
                 for await (const message of messageStream) {
                     const data: OllamaChatCompletionChunk = JSON.parse(message);
                     if (data.done) {
-                        reportUsage(data);
+                        reportUsage(data, usageCallback);
                         break;
                     }
                     yield data.message.content;

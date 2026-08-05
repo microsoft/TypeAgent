@@ -29,7 +29,28 @@ export type CompletionUsageStats = {
     prompt_tokens: number;
     // Total tokens (prompt + completion)
     total_tokens: number;
+    // Cached tokens are a subset of prompt_tokens (prompt cache hits).
+    cached_tokens?: number;
 };
+
+/** OpenAI-compatible usage payloads may nest cache stats under details. */
+export type OpenAICompatibleCompletionUsageStats = CompletionUsageStats & {
+    prompt_tokens_details?: { cached_tokens?: number };
+};
+
+/** Flatten provider usage into CompletionUsageStats (cached_tokens only). */
+export function normalizeOpenAICompatibleUsage(
+    usage: OpenAICompatibleCompletionUsageStats,
+): CompletionUsageStats {
+    const cachedTokens =
+        usage.prompt_tokens_details?.cached_tokens ?? usage.cached_tokens;
+    return {
+        completion_tokens: usage.completion_tokens,
+        prompt_tokens: usage.prompt_tokens,
+        total_tokens: usage.total_tokens,
+        ...(cachedTokens !== undefined && { cached_tokens: cachedTokens }),
+    };
+}
 
 /**
  * Environment variables used to configure OpenAI clients

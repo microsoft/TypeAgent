@@ -562,12 +562,15 @@ function createAzureOpenAIChatModel(
             }
         }
 
+        // Normalize before completionCallback so observers see flattened usage
+        // (e.g. prompt_tokens_details.cached_tokens → cached_tokens).
+        const usage = adapter.extractUsage(data);
+
         if (model.completionCallback) {
             model.completionCallback(body, data);
         }
 
         try {
-            const usage = adapter.extractUsage(data);
             if (settings.enableModelRequestLogging && logFn) {
                 // Log raw assistant content (not unwrapped tool-call JSON).
                 // Bare choices[0]: null entry TypeErrors inside try (main),
@@ -587,10 +590,11 @@ function createAzureOpenAIChatModel(
                     tags: tags,
                 });
             }
-            // Unconditional — matches pre-adapter TokenCounter/usageCallback
-            // (undefined usage was passed through at runtime).
-            TokenCounter.getInstance().add(usage as CompletionUsageStats, tags);
-            usageCallback?.(usage as CompletionUsageStats);
+            // Skip missing/null usage — do not invent zeros or call back empty.
+            if (usage != null) {
+                TokenCounter.getInstance().add(usage, tags);
+                usageCallback?.(usage);
+            }
         } catch {}
 
         // Tool-call validation / JSON.parse throw after bookkeeping.

@@ -37,7 +37,11 @@ import {
 } from "./restClient.js";
 import { readServerEventStream } from "./serverEvents.js";
 import { TokenCounter } from "./tokenCounter.js";
-import { CompletionUsageStats } from "./apiTypes.js";
+import {
+    CompletionUsageStats,
+    normalizeOpenAICompatibleUsage,
+    OpenAICompatibleCompletionUsageStats,
+} from "./apiTypes.js";
 import { registerProviderChatModel } from "./providerChatModelRegistry.js";
 
 const debug = registerDebug("typeagent:aiclient:copilot");
@@ -586,13 +590,13 @@ export function createCopilotChatModel(
 // Minimal shape of the CAPI chat-completions response we consume.
 type CapiChatCompletion = {
     choices?: Array<{ message?: { content?: string | null } | undefined }>;
-    usage?: CompletionUsageStats | undefined;
+    usage?: OpenAICompatibleCompletionUsageStats | null | undefined;
 };
 
 // Minimal shape of a streamed CAPI chat-completions chunk.
 type CapiChatCompletionChunk = {
     choices?: Array<{ delta?: { content?: string | null } | undefined }>;
-    usage?: CompletionUsageStats | undefined;
+    usage?: OpenAICompatibleCompletionUsageStats | null | undefined;
 };
 
 function isAbort(err: unknown, signal?: AbortSignal): boolean {
@@ -681,14 +685,16 @@ export function createCopilotTransportModel(
     }
 
     function reportUsage(
-        usage: CompletionUsageStats | undefined,
+        usage: OpenAICompatibleCompletionUsageStats | null | undefined,
         usageCallback?: CompleteUsageStatsCallback,
-    ) {
-        if (usage === undefined) return;
+    ): CompletionUsageStats | undefined {
+        if (usage == null) return;
+        const normalized = normalizeOpenAICompatibleUsage(usage);
         try {
-            TokenCounter.getInstance().add(usage, tags);
-            usageCallback?.(usage);
+            TokenCounter.getInstance().add(normalized, tags);
+            usageCallback?.(normalized);
         } catch {}
+        return normalized;
     }
 
     async function complete(
@@ -748,6 +754,9 @@ export function createCopilotTransportModel(
             return error("Copilot chat call returned no choices");
         }
         const content = data.choices[0].message?.content ?? "";
+        if (data.usage != null) {
+            data.usage = normalizeOpenAICompatibleUsage(data.usage);
+        }
 
         if (model.completionCallback) {
             model.completionCallback(params, data);
@@ -852,8 +861,7 @@ export function createCopilotTransportModel(
                         yield delta;
                     }
                     if (chunk.usage) {
-                        tokenUsage = chunk.usage;
-                        reportUsage(chunk.usage, usageCallback);
+                        tokenUsage = reportUsage(chunk.usage, usageCallback);
                     }
                 }
             })(),

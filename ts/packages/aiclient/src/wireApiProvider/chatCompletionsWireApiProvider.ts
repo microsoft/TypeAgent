@@ -3,6 +3,10 @@
 
 import { Result, success, error } from "typechat";
 import type { WireApi } from "@typeagent/config";
+import {
+    normalizeOpenAICompatibleUsage,
+    type OpenAICompatibleCompletionUsageStats,
+} from "../apiTypes.js";
 import type { ApiSettings, CompletionUsageStats } from "../openai.js";
 import {
     createApiHeaders,
@@ -41,7 +45,7 @@ type ChatCompletionChoice = {
 type ChatCompletion = {
     id: string;
     choices: ChatCompletionChoice[];
-    usage: CompletionUsageStats;
+    usage?: OpenAICompatibleCompletionUsageStats | null;
 };
 
 type ToolCallDelta = { index: number } & ToolCall;
@@ -55,7 +59,7 @@ type ChatCompletionDelta = {
 type ChatCompletionChunk = {
     id: string;
     choices: ChatCompletionDelta[];
-    usage?: CompletionUsageStats;
+    usage?: OpenAICompatibleCompletionUsageStats | null;
 };
 
 function verifyStreamContentSafety(data: ChatCompletionChunk): void {
@@ -213,7 +217,14 @@ export class ChatCompletionsWireApiProvider implements ProviderAdapter {
     }
 
     extractUsage(data: unknown): CompletionUsageStats | undefined {
-        return (data as ChatCompletion).usage;
+        const usage = (data as ChatCompletion).usage;
+        if (usage == null) {
+            return undefined;
+        }
+        // Normalize in place so completionCallback sees flattened usage.
+        const normalized = normalizeOpenAICompatibleUsage(usage);
+        (data as ChatCompletion).usage = normalized;
+        return normalized;
     }
 
     createStreamDecoder(request: ModelRequest): StreamDecoder {
@@ -233,7 +244,7 @@ export class ChatCompletionsWireApiProvider implements ProviderAdapter {
                     );
                 }
                 if (data.usage) {
-                    piece.usage = data.usage;
+                    piece.usage = normalizeOpenAICompatibleUsage(data.usage);
                 }
                 return piece;
             },

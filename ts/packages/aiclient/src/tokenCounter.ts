@@ -24,7 +24,24 @@ function updateStats(data: TokenStats, tokens: CompletionUsageStats) {
     data.total.completion_tokens += tokens.completion_tokens;
     data.total.prompt_tokens += tokens.prompt_tokens;
     data.total.total_tokens += tokens.total_tokens;
-    data.count++;
+
+    // Optional cached_tokens: only aggregate when every sample reports it.
+    // A single missing value clears the rollup so totals are never invented.
+    const cached = tokens.cached_tokens;
+    if (cached === undefined) {
+        delete data.total.cached_tokens;
+        delete data.max.cached_tokens;
+    } else if (data.count === 0) {
+        data.total.cached_tokens = cached;
+        data.max.cached_tokens = cached;
+    } else {
+        if (data.total.cached_tokens !== undefined) {
+            data.total.cached_tokens += cached;
+        }
+        if (data.max.cached_tokens !== undefined) {
+            data.max.cached_tokens = Math.max(data.max.cached_tokens, cached);
+        }
+    }
 
     data.max.completion_tokens = Math.max(
         data.max.completion_tokens,
@@ -38,6 +55,18 @@ function updateStats(data: TokenStats, tokens: CompletionUsageStats) {
         data.max.total_tokens,
         tokens.total_tokens,
     );
+    data.count++;
+}
+
+function copyOptionalStats(
+    destination: CompletionUsageStats,
+    source: CompletionUsageStats,
+    divisor: number = 1,
+) {
+    if (source.cached_tokens !== undefined) {
+        destination.cached_tokens = source.cached_tokens / divisor;
+    }
+    return destination;
 }
 
 export type TokenCounterData = {
@@ -133,28 +162,38 @@ export class TokenCounter {
     }
 
     public get total(): CompletionUsageStats {
-        return {
-            completion_tokens: this.all.total.completion_tokens,
-            prompt_tokens: this.all.total.prompt_tokens,
-            total_tokens: this.all.total.total_tokens,
-        };
+        return copyOptionalStats(
+            {
+                completion_tokens: this.all.total.completion_tokens,
+                prompt_tokens: this.all.total.prompt_tokens,
+                total_tokens: this.all.total.total_tokens,
+            },
+            this.all.total,
+        );
     }
 
     public get average(): CompletionUsageStats {
-        return {
-            completion_tokens:
-                this.all.total.completion_tokens / this.all.count,
-            prompt_tokens: this.all.total.prompt_tokens / this.all.count,
-            total_tokens: this.all.total.total_tokens / this.all.count,
-        };
+        return copyOptionalStats(
+            {
+                completion_tokens:
+                    this.all.total.completion_tokens / this.all.count,
+                prompt_tokens: this.all.total.prompt_tokens / this.all.count,
+                total_tokens: this.all.total.total_tokens / this.all.count,
+            },
+            this.all.total,
+            this.all.count,
+        );
     }
 
     public get maximum(): CompletionUsageStats {
-        return {
-            completion_tokens: this.all.max.completion_tokens,
-            prompt_tokens: this.all.max.prompt_tokens,
-            total_tokens: this.all.max.total_tokens,
-        };
+        return copyOptionalStats(
+            {
+                completion_tokens: this.all.max.completion_tokens,
+                prompt_tokens: this.all.max.prompt_tokens,
+                total_tokens: this.all.max.total_tokens,
+            },
+            this.all.max,
+        );
     }
 
     public get counters(): Map<string, TokenStats> {
