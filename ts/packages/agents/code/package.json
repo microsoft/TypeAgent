@@ -75,8 +75,7 @@
     "tasks": {
       "agc": {
         "dependsOn": [
-          "@typeagent/action-grammar-compiler#tsc",
-          "@typeagent/action-grammar#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -90,8 +89,7 @@
       },
       "agc:debug": {
         "dependsOn": [
-          "@typeagent/action-grammar-compiler#tsc",
-          "@typeagent/action-grammar#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -105,8 +103,7 @@
       },
       "agc:display": {
         "dependsOn": [
-          "@typeagent/action-grammar-compiler#tsc",
-          "@typeagent/action-grammar#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -120,8 +117,7 @@
       },
       "agc:extension": {
         "dependsOn": [
-          "@typeagent/action-grammar-compiler#tsc",
-          "@typeagent/action-grammar#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -135,8 +131,7 @@
       },
       "agc:general": {
         "dependsOn": [
-          "@typeagent/action-grammar-compiler#tsc",
-          "@typeagent/action-grammar#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -150,8 +145,7 @@
       },
       "agc:workbench": {
         "dependsOn": [
-          "@typeagent/action-grammar-compiler#tsc",
-          "@typeagent/action-grammar#tsc"
+          "@typeagent/action-grammar-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -165,8 +159,7 @@
       },
       "asc": {
         "dependsOn": [
-          "@typeagent/action-schema-compiler#tsc",
-          "@typeagent/action-schema#tsc"
+          "@typeagent/action-schema-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -179,8 +172,7 @@
       },
       "asc:debug": {
         "dependsOn": [
-          "@typeagent/action-schema-compiler#tsc",
-          "@typeagent/action-schema#tsc"
+          "@typeagent/action-schema-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -193,8 +185,7 @@
       },
       "asc:display": {
         "dependsOn": [
-          "@typeagent/action-schema-compiler#tsc",
-          "@typeagent/action-schema#tsc"
+          "@typeagent/action-schema-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -207,8 +198,7 @@
       },
       "asc:editor": {
         "dependsOn": [
-          "@typeagent/action-schema-compiler#tsc",
-          "@typeagent/action-schema#tsc"
+          "@typeagent/action-schema-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -221,8 +211,7 @@
       },
       "asc:extension": {
         "dependsOn": [
-          "@typeagent/action-schema-compiler#tsc",
-          "@typeagent/action-schema#tsc"
+          "@typeagent/action-schema-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -235,8 +224,7 @@
       },
       "asc:general": {
         "dependsOn": [
-          "@typeagent/action-schema-compiler#tsc",
-          "@typeagent/action-schema#tsc"
+          "@typeagent/action-schema-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
@@ -249,8 +237,7 @@
       },
       "asc:workbench": {
         "dependsOn": [
-          "@typeagent/action-schema-compiler#tsc",
-          "@typeagent/action-schema#tsc"
+          "@typeagent/action-schema-compiler#tsc"
         ],
         "files": {
           "inputGlobs": [
