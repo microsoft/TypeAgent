@@ -116,14 +116,57 @@ describe("setContent local-file links", () => {
 });
 
 describe("setContent code blocks", () => {
+    const yaml = "```yaml\nspotify:\n  clientId: <value>\n```";
+
+    function clickCopy(elm: HTMLElement): void {
+        elm.querySelector<HTMLButtonElement>("button.chat-code-copy")!.click();
+    }
+
     it("adds a copy button to fenced code blocks", () => {
-        const elm = render({
-            type: "markdown",
-            content: "```yaml\nspotify:\n  clientId: <value>\n```",
-        });
+        const elm = render({ type: "markdown", content: yaml });
         const pre = elm.querySelector("pre");
         expect(pre?.classList.contains("chat-code-block")).toBe(true);
         expect(pre?.querySelector("button.chat-code-copy")).not.toBeNull();
+    });
+
+    it("copies the block's text without the button's own markup", async () => {
+        const writeText = jest.fn(async () => {});
+        Object.defineProperty(navigator, "clipboard", {
+            value: { writeText },
+            configurable: true,
+        });
+        const elm = render({ type: "markdown", content: yaml });
+        document.body.appendChild(elm);
+        clickCopy(elm);
+        expect(writeText).toHaveBeenCalledWith(
+            "spotify:\n  clientId: <value>\n",
+        );
+    });
+
+    it("still copies after more content is appended", () => {
+        // setContent appends with `innerHTML +=`, which re-serializes the
+        // container and drops listeners bound to individual elements — the
+        // handler is delegated to the container so it survives.
+        const writeText = jest.fn(async () => {});
+        Object.defineProperty(navigator, "clipboard", {
+            value: { writeText },
+            configurable: true,
+        });
+        const elm = render({ type: "markdown", content: yaml });
+        document.body.appendChild(elm);
+        setContent(
+            elm,
+            { type: "markdown", content: "and then some prose." },
+            defaultChatSettings,
+            "agent",
+            { handleLinkClick() {} },
+            "inline",
+        );
+        expect(elm.querySelectorAll("button.chat-code-copy")).toHaveLength(1);
+        clickCopy(elm);
+        expect(writeText).toHaveBeenCalledWith(
+            "spotify:\n  clientId: <value>\n",
+        );
     });
 
     it("does not add a copy button to inline code", () => {
