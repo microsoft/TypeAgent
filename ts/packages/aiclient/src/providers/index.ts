@@ -31,7 +31,4 @@ export {
     messagesWireApiProvider,
 } from "./messagesWireApiProvider.js";
 
-export {
-    adapterFor,
-    DEFAULT_WIRE_API_PROVIDER,
-} from "./providerAdapter.js";
+export { adapterFor, DEFAULT_WIRE_API_PROVIDER } from "./providerAdapter.js";

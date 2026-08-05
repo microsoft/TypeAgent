@@ -38,18 +38,12 @@ describe("adapterFor: dispatch + back-compat", () => {
     test("each wire-api maps to an adapter reporting that wire-api", () => {
         expect(adapterFor("chat_completions").wireApi).toBe("chat_completions");
         expect(adapterFor("responses").wireApi).toBe("responses");
-        expect(adapterFor("messages").wireApi).toBe(
-            "messages",
-        );
+        expect(adapterFor("messages").wireApi).toBe("messages");
     });
 
     test("adapters are stateless singletons (stable identity per wire-api)", () => {
-        expect(adapterFor("responses")).toBe(
-            adapterFor("responses"),
-        );
-        expect(adapterFor("messages")).toBe(
-            adapterFor("messages"),
-        );
+        expect(adapterFor("responses")).toBe(adapterFor("responses"));
+        expect(adapterFor("messages")).toBe(adapterFor("messages"));
     });
 });
 

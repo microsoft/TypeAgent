@@ -47,11 +47,11 @@ An Azure OpenAI deployment endpoint may declare a `wireApi` selecting the
 **wire protocol** it speaks. This lets a single TypeAgent config route
 multiple wire shapes behind the same endpoint pool.
 
-| `wireApi` value    | Wire protocol        | Provider                            | Default? |
-| ------------------ | -------------------- | ----------------------------------- | -------- |
-| `chat_completions` | `/chat/completions`  | `chatCompletionsWireApiProvider`    | ✅ yes   |
-| `responses`        | `/responses`         | `responsesWireApiProvider`          | no       |
-| `messages`         | `/v1/messages`       | `messagesWireApiProvider`           | no       |
+| `wireApi` value    | Wire protocol       | Provider                         | Default? |
+| ------------------ | ------------------- | -------------------------------- | -------- |
+| `chat_completions` | `/chat/completions` | `chatCompletionsWireApiProvider` | ✅ yes   |
+| `responses`        | `/responses`        | `responsesWireApiProvider`       | no       |
+| `messages`         | `/v1/messages`      | `messagesWireApiProvider`        | no       |
 
 **Default & back-compat.** `wireApi` is optional. Omitting it is exactly
 equivalent to `chat_completions`, so every existing config keeps working
