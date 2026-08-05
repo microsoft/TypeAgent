@@ -101,7 +101,7 @@ azureOpenAI:
 
     claude_sonnet:
       endpoints:
-        - endpoint: https://my-resource.cognitiveservices.azure.com/anthropic/messages?api-version=2025-04-01-preview
+        - endpoint: https://my-resource.cognitiveservices.azure.com/anthropic/v1/messages?api-version=2025-04-01-preview
           region: eastus
           wireApi: messages
 
