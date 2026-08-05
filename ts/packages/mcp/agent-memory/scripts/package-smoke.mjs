@@ -31,6 +31,7 @@ try {
     for (const requiredPath of [
         "dist/src/main.js",
         "migrations/001_initial_schema.sql",
+        "migrations/003_memory_lifecycle.sql",
         "package.json",
     ]) {
         if (!packedPaths.has(requiredPath)) {
@@ -83,6 +84,10 @@ try {
             "memory_record_turn",
             "memory_query",
             "memory_get",
+            "memory_store",
+            "memory_revise",
+            "memory_forget",
+            "memory_feedback",
         ]) {
             if (!toolNames.has(toolName)) {
                 throw new Error(`Packed server did not expose ${toolName}`);
@@ -96,7 +101,7 @@ try {
             throw new Error("Packed server returned an unexpected status");
         }
         if (
-            result.structuredContent.schemaVersion !== 2 ||
+            result.structuredContent.schemaVersion !== 3 ||
             result.structuredContent.database !== "ready"
         ) {
             throw new Error("Packed server did not initialize SQLite");

@@ -89,7 +89,8 @@ describe("MemoryQueryService", () => {
         });
         const fromIr = service.query({ scopeId: scope.scopeId, ir });
 
-        expect(fromPath).toEqual(fromIr);
+        expect(fromPath.packet).toEqual(fromIr.packet);
+        expect(fromPath.resolvedTemporal).toEqual(fromIr.resolvedTemporal);
         expect(fromPath.packet.references).toHaveLength(1);
         expect(fromPath.packet.text).toContain("Query service assembled");
     });

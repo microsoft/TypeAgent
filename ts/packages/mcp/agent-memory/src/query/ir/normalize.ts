@@ -38,6 +38,7 @@ const entityKinds = new Set([
     "designNote",
     "output",
     "property",
+    "memory",
 ]);
 const includeFields = new Set([
     "topics",

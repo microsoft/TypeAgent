@@ -12,6 +12,13 @@ import {
     type ArtifactChange,
     type DesignNote,
     type Goal,
+    type MemoryHead,
+    type MemoryRelation,
+    type MemoryRevision,
+    type MemoryState,
+    type MemoryStateEvent,
+    type MemoryUsage,
+    type MemoryView,
     type Term,
     type TermAlias,
     type Topic,
@@ -20,6 +27,8 @@ import {
     type TopicPropertyDefinition,
     type TopicPropertyValue,
     type TurnAggregate,
+    canTransitionMemoryState,
+    createMemoryRevision,
 } from "../domain/index.js";
 import {
     openDatabaseConnection,
@@ -70,6 +79,27 @@ export type IdempotencyRecord = {
     createdAt: string;
 };
 
+export type MemoryStateChange = {
+    memoryId: string;
+    expectedRevision?: number;
+    supersededBy?: string;
+    event: MemoryStateEvent;
+};
+
+export type RetrievalRecordResult = {
+    entityId: string;
+    entityKind: string;
+    revision: number;
+    score: number;
+    channels: readonly string[];
+};
+
+export type MemoryFeedbackOutcome = {
+    memoryId: string;
+    outcome: "useful" | "unhelpful" | "unused";
+    reason?: string;
+};
+
 export interface MemoryRepository extends Disposable {
     runInTransaction<T>(operation: () => T): T;
     getSchemaVersion(): number;
@@ -92,6 +122,36 @@ export interface MemoryRepository extends Disposable {
     saveTopicOutput(output: TopicOutput): void;
     savePropertyDefinition(definition: TopicPropertyDefinition): void;
     savePropertyValue(value: TopicPropertyValue): void;
+    createMemory(
+        revision: MemoryRevision,
+        relations: readonly MemoryRelation[],
+    ): MemoryView;
+    reviseMemory(
+        revision: MemoryRevision,
+        expectedRevision: number,
+    ): MemoryView;
+    getMemory(
+        scopeId: string,
+        memoryId: string,
+        revision?: number,
+    ): MemoryView | undefined;
+    listMemoryHistory(scopeId: string, memoryId: string): MemoryRevision[];
+    changeMemoryStates(
+        scopeId: string,
+        changes: readonly MemoryStateChange[],
+    ): MemoryView[];
+    recordRetrieval(
+        retrievalId: string,
+        scopeId: string,
+        queryJson: string,
+        results: readonly RetrievalRecordResult[],
+        createdAt: string,
+    ): void;
+    recordMemoryFeedback(
+        retrievalId: string,
+        outcomes: readonly MemoryFeedbackOutcome[],
+        createdAt: string,
+    ): MemoryUsage[];
     rebuildSearchDocuments(): number;
     listSearchDocuments(
         scopeId?: string,
@@ -149,6 +209,33 @@ export interface MemoryRepository extends Disposable {
 
 type ScopeRow = { scope_id: string };
 type RevisionRow = { revision: number };
+
+type MemoryHeadRow = {
+    memory_id: string;
+    scope_id: string;
+    current_revision: number;
+    state: MemoryState;
+    superseded_by: string | null;
+    state_changed_at: string;
+    state_reason: string | null;
+};
+
+type MemoryRevisionRow = {
+    memory_id: string;
+    revision: number;
+    scope_id: string;
+    kind: MemoryRevision["kind"];
+    content: string;
+    structured_content_json: string | null;
+    tags_json: string;
+    provenance_json: string;
+    confidence: number | null;
+    importance: number;
+    valid_from: string | null;
+    valid_until: string | null;
+    reason: string | null;
+    created_at: string;
+};
 
 type TopicRow = {
     topic_id: string;
@@ -1067,10 +1154,324 @@ export class SqliteMemoryRepository implements MemoryRepository {
         });
     }
 
+    public createMemory(
+        revision: MemoryRevision,
+        relations: readonly MemoryRelation[],
+    ): MemoryView {
+        return this.#transaction(() => {
+            this.#requireScope(revision.scopeId);
+            if (revision.revision !== 1) {
+                throw new DomainError(
+                    "REVISION_CONFLICT",
+                    "New memory revision must be 1",
+                );
+            }
+            if (this.#getMemoryHeadRow(revision.memoryId) !== undefined) {
+                throw new DomainError(
+                    "REVISION_CONFLICT",
+                    "Memory already exists",
+                );
+            }
+            this.#insertMemoryRevision(revision);
+            this.#database
+                .prepare(
+                    `INSERT INTO memory_heads(
+                        memory_id, scope_id, current_revision, state,
+                        state_changed_at
+                     ) VALUES (?, ?, 1, 'active', ?)`,
+                )
+                .run(revision.memoryId, revision.scopeId, revision.createdAt);
+            this.#database
+                .prepare("INSERT INTO memory_usage(memory_id) VALUES (?)")
+                .run(revision.memoryId);
+            this.#insertMemoryRelations(revision, relations);
+            return this.#requireMemoryView(revision.scopeId, revision.memoryId);
+        });
+    }
+
+    public reviseMemory(
+        revision: MemoryRevision,
+        expectedRevision: number,
+    ): MemoryView {
+        return this.#transaction(() => {
+            const head = this.#requireMemoryHeadRow(
+                revision.scopeId,
+                revision.memoryId,
+            );
+            if (head.current_revision !== expectedRevision) {
+                throw new DomainError(
+                    "REVISION_CONFLICT",
+                    "Memory revision changed",
+                    {
+                        memoryId: revision.memoryId,
+                        expectedRevision,
+                        actualRevision: head.current_revision,
+                    },
+                );
+            }
+            if (revision.revision !== expectedRevision + 1) {
+                throw new DomainError(
+                    "REVISION_CONFLICT",
+                    "New memory revision is not the next revision",
+                );
+            }
+            this.#insertMemoryRevision(revision);
+            this.#database
+                .prepare(
+                    `UPDATE memory_heads SET current_revision = ?
+                     WHERE memory_id = ? AND scope_id = ?`,
+                )
+                .run(revision.revision, revision.memoryId, revision.scopeId);
+            return this.#requireMemoryView(revision.scopeId, revision.memoryId);
+        });
+    }
+
+    public getMemory(
+        scopeId: string,
+        memoryId: string,
+        revision?: number,
+    ): MemoryView | undefined {
+        const head = this.#getMemoryHeadRow(memoryId);
+        if (head === undefined || head.scope_id !== scopeId) {
+            return undefined;
+        }
+        const selectedRevision = revision ?? head.current_revision;
+        const revisionRow = this.#database
+            .prepare(
+                `SELECT * FROM memory_revisions
+                 WHERE memory_id = ? AND revision = ? AND scope_id = ?`,
+            )
+            .get(memoryId, selectedRevision, scopeId) as
+            | MemoryRevisionRow
+            | undefined;
+        return revisionRow === undefined
+            ? undefined
+            : this.#toMemoryView(head, revisionRow);
+    }
+
+    public listMemoryHistory(
+        scopeId: string,
+        memoryId: string,
+    ): MemoryRevision[] {
+        if (this.#requireMemoryHeadRow(scopeId, memoryId) === undefined) {
+            return [];
+        }
+        return (
+            this.#database
+                .prepare(
+                    `SELECT * FROM memory_revisions
+                     WHERE memory_id = ? AND scope_id = ? ORDER BY revision`,
+                )
+                .all(memoryId, scopeId) as MemoryRevisionRow[]
+        ).map(toMemoryRevision);
+    }
+
+    public changeMemoryStates(
+        scopeId: string,
+        changes: readonly MemoryStateChange[],
+    ): MemoryView[] {
+        return this.#transaction(() => {
+            const heads = changes.map((change) => {
+                const head = this.#requireMemoryHeadRow(
+                    scopeId,
+                    change.memoryId,
+                );
+                if (
+                    change.expectedRevision !== undefined &&
+                    head.current_revision !== change.expectedRevision
+                ) {
+                    throw new DomainError(
+                        "REVISION_CONFLICT",
+                        "Memory revision changed",
+                        {
+                            memoryId: change.memoryId,
+                            expectedRevision: change.expectedRevision,
+                            actualRevision: head.current_revision,
+                        },
+                    );
+                }
+                if (
+                    change.event.fromState !== head.state ||
+                    !canTransitionMemoryState(head.state, change.event.toState)
+                ) {
+                    throw new DomainError(
+                        "INVALID_STATE_TRANSITION",
+                        "Memory state transition is not allowed",
+                    );
+                }
+                return head;
+            });
+            for (let index = 0; index < changes.length; index++) {
+                const change = changes[index]!;
+                const head = heads[index]!;
+                this.#database
+                    .prepare(
+                        `UPDATE memory_heads SET state = ?, superseded_by = ?,
+                            state_changed_at = ?, state_reason = ?
+                         WHERE memory_id = ?`,
+                    )
+                    .run(
+                        change.event.toState,
+                        change.supersededBy ?? null,
+                        change.event.createdAt,
+                        change.event.reason,
+                        change.memoryId,
+                    );
+                this.#database
+                    .prepare(
+                        `INSERT INTO memory_state_events(
+                            event_id, memory_id, from_state, to_state, actor_id,
+                            reason, created_at
+                         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    )
+                    .run(
+                        change.event.eventId,
+                        change.memoryId,
+                        head.state,
+                        change.event.toState,
+                        change.event.actorId,
+                        change.event.reason,
+                        change.event.createdAt,
+                    );
+            }
+            return changes.map((change) =>
+                this.#requireMemoryView(scopeId, change.memoryId),
+            );
+        });
+    }
+
+    public recordRetrieval(
+        retrievalId: string,
+        scopeId: string,
+        queryJson: string,
+        results: readonly RetrievalRecordResult[],
+        createdAt: string,
+    ): void {
+        this.#transaction(() => {
+            this.#requireScope(scopeId);
+            this.#database
+                .prepare(
+                    `INSERT INTO retrieval_events(
+                        retrieval_id, scope_id, query_json, requested_at
+                     ) VALUES (?, ?, ?, ?)`,
+                )
+                .run(retrievalId, scopeId, queryJson, createdAt);
+            const findDocument = this.#database.prepare(
+                `SELECT document_id FROM search_documents
+                 WHERE scope_id = ? AND entity_kind = ? AND entity_id = ?
+                   AND revision = ?`,
+            );
+            const insertResult = this.#database.prepare(
+                `INSERT INTO retrieval_results(
+                    retrieval_id, document_id, rank, score, channels_json
+                 ) VALUES (?, ?, ?, ?, ?)`,
+            );
+            const updateUsage = this.#database.prepare(
+                `UPDATE memory_usage SET
+                    retrieval_count = retrieval_count + 1,
+                    last_retrieved_at = ?
+                 WHERE memory_id = ?`,
+            );
+            for (let rank = 0; rank < results.length; rank++) {
+                const result = results[rank]!;
+                const documentId = findDocument
+                    .pluck()
+                    .get(
+                        scopeId,
+                        result.entityKind,
+                        result.entityId,
+                        result.revision,
+                    ) as string | undefined;
+                if (documentId === undefined) {
+                    throw new DomainError(
+                        "REVISION_CONFLICT",
+                        "Retrieved search document changed",
+                    );
+                }
+                insertResult.run(
+                    retrievalId,
+                    documentId,
+                    rank,
+                    result.score,
+                    JSON.stringify(result.channels),
+                );
+                if (result.entityKind === "memory") {
+                    updateUsage.run(createdAt, result.entityId);
+                }
+            }
+        });
+    }
+
+    public recordMemoryFeedback(
+        retrievalId: string,
+        outcomes: readonly MemoryFeedbackOutcome[],
+        createdAt: string,
+    ): MemoryUsage[] {
+        return this.#transaction(() => {
+            const retrieval = this.#database
+                .prepare(
+                    "SELECT scope_id FROM retrieval_events WHERE retrieval_id = ?",
+                )
+                .get(retrievalId) as { scope_id: string } | undefined;
+            if (retrieval === undefined) {
+                throw new DomainError("NOT_FOUND", "Retrieval was not found");
+            }
+            const matched = this.#database.prepare(
+                `SELECT 1 FROM retrieval_results AS results
+                 JOIN search_documents AS documents USING(document_id)
+                 WHERE results.retrieval_id = ? AND documents.entity_kind = 'memory'
+                   AND documents.entity_id = ?`,
+            );
+            const insert = this.#database.prepare(
+                `INSERT INTO memory_feedback(
+                    retrieval_id, memory_id, outcome, reason, created_at
+                 ) VALUES (?, ?, ?, ?, ?)`,
+            );
+            const update = this.#database.prepare(
+                `UPDATE memory_usage SET
+                    useful_count = useful_count + ?,
+                    unhelpful_count = unhelpful_count + ?,
+                    last_useful_at = CASE WHEN ? = 1 THEN ? ELSE last_useful_at END
+                 WHERE memory_id = ?`,
+            );
+            for (const outcome of outcomes) {
+                if (matched.get(retrievalId, outcome.memoryId) === undefined) {
+                    throw new DomainError(
+                        "NOT_FOUND",
+                        "Retrieved memory was not found",
+                    );
+                }
+                insert.run(
+                    retrievalId,
+                    outcome.memoryId,
+                    outcome.outcome,
+                    outcome.reason ?? null,
+                    createdAt,
+                );
+                const useful = outcome.outcome === "useful" ? 1 : 0;
+                const unhelpful = outcome.outcome === "unhelpful" ? 1 : 0;
+                update.run(
+                    useful,
+                    unhelpful,
+                    useful,
+                    createdAt,
+                    outcome.memoryId,
+                );
+            }
+            return outcomes.map(
+                (outcome) =>
+                    this.#requireMemoryView(
+                        retrieval.scope_id,
+                        outcome.memoryId,
+                    ).usage,
+            );
+        });
+    }
+
     public rebuildSearchDocuments(): number {
         return this.#transaction(() => {
             this.#database.exec(
-                "DELETE FROM search_fts; DELETE FROM search_documents;",
+                "DELETE FROM search_fts; UPDATE search_documents SET is_current = 0;",
             );
             const candidates = this.#database
                 .prepare(searchCandidateSql)
@@ -1078,8 +1479,13 @@ export class SqliteMemoryRepository implements MemoryRepository {
             const insertDocument = this.#database.prepare(`
                 INSERT INTO search_documents(
                     document_id, scope_id, entity_kind, entity_id, revision,
-                    title, content, occurred_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    title, content, occurred_at, is_current
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+                ON CONFLICT(document_id) DO UPDATE SET
+                    title = excluded.title,
+                    content = excluded.content,
+                    occurred_at = excluded.occurred_at,
+                    is_current = 1
             `);
             const insertFts = this.#database.prepare(
                 "INSERT INTO search_fts(document_id, title, content) VALUES (?, ?, ?)",
@@ -1116,7 +1522,7 @@ export class SqliteMemoryRepository implements MemoryRepository {
         if (entityKinds?.length === 0) {
             return [];
         }
-        const conditions: string[] = [];
+        const conditions: string[] = ["is_current = 1"];
         const parameters: (string | number)[] = [];
         if (scopeId !== undefined) {
             conditions.push("scope_id = ?");
@@ -1133,7 +1539,7 @@ export class SqliteMemoryRepository implements MemoryRepository {
                 `SELECT document_id, scope_id, entity_kind, entity_id,
                         revision, title, content, occurred_at
                  FROM search_documents
-                 ${conditions.length === 0 ? "" : `WHERE ${conditions.join(" AND ")}`}
+                 WHERE ${conditions.join(" AND ")}
                  ORDER BY document_id`,
             )
             .all(...parameters) as SearchDocumentRow[];
@@ -1168,6 +1574,7 @@ export class SqliteMemoryRepository implements MemoryRepository {
                  FROM search_fts
                  JOIN search_documents AS documents USING(document_id)
                  WHERE search_fts MATCH ?
+                                     AND documents.is_current = 1
                    AND documents.scope_id = ?
                    AND documents.entity_kind IN (${kindPlaceholders})
                  ORDER BY rank, documents.entity_id
@@ -1314,6 +1721,17 @@ export class SqliteMemoryRepository implements MemoryRepository {
         }
         if (details?.sequence !== null && details?.sequence !== undefined) {
             fields.sequence = details.sequence;
+        }
+        if (document.entityKind === "memory") {
+            const memory = this.getMemory(document.scopeId, document.entityId);
+            if (memory !== undefined) {
+                fields.kind = memory.revision.kind;
+                fields.tags = memory.revision.tags;
+                fields.importance = memory.revision.importance;
+                fields.confidence = memory.revision.confidence;
+                fields.validFrom = memory.revision.validFrom;
+                fields.validUntil = memory.revision.validUntil;
+            }
         }
         if (
             document.entityKind === "turn" ||
@@ -1524,6 +1942,153 @@ export class SqliteMemoryRepository implements MemoryRepository {
         this.close();
     }
 
+    #insertMemoryRevision(revision: MemoryRevision): void {
+        this.#database
+            .prepare(
+                `INSERT INTO memory_revisions(
+                    memory_id, revision, scope_id, kind, content,
+                    structured_content_json, tags_json, provenance_json,
+                          confidence, importance, valid_from, valid_until, reason,
+                          created_at
+                      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            )
+            .run(
+                revision.memoryId,
+                revision.revision,
+                revision.scopeId,
+                revision.kind,
+                revision.content,
+                revision.structuredContent === undefined
+                    ? null
+                    : JSON.stringify(revision.structuredContent),
+                JSON.stringify(revision.tags),
+                JSON.stringify(revision.provenance),
+                revision.confidence ?? null,
+                revision.importance,
+                revision.validFrom ?? null,
+                revision.validUntil ?? null,
+                revision.reason ?? null,
+                revision.createdAt,
+            );
+    }
+
+    #insertMemoryRelations(
+        revision: MemoryRevision,
+        relations: readonly MemoryRelation[],
+    ): void {
+        const insert = this.#database.prepare(
+            `INSERT INTO memory_relations(
+                source_id, relation_type, target_id, created_at
+             ) VALUES (?, ?, ?, ?)`,
+        );
+        for (const relation of relations) {
+            if (relation.sourceMemoryId !== revision.memoryId) {
+                throw new DomainError(
+                    "INVARIANT_VIOLATION",
+                    "Memory relation source does not match new memory",
+                );
+            }
+            this.#requireMemoryHeadRow(
+                revision.scopeId,
+                relation.targetMemoryId,
+            );
+            insert.run(
+                relation.sourceMemoryId,
+                relation.relationType,
+                relation.targetMemoryId,
+                relation.createdAt,
+            );
+        }
+    }
+
+    #getMemoryHeadRow(memoryId: string): MemoryHeadRow | undefined {
+        return this.#database
+            .prepare("SELECT * FROM memory_heads WHERE memory_id = ?")
+            .get(memoryId) as MemoryHeadRow | undefined;
+    }
+
+    #requireMemoryHeadRow(scopeId: string, memoryId: string): MemoryHeadRow {
+        const head = this.#getMemoryHeadRow(memoryId);
+        if (head === undefined || head.scope_id !== scopeId) {
+            throw new DomainError("NOT_FOUND", "Memory was not found");
+        }
+        return head;
+    }
+
+    #requireMemoryView(scopeId: string, memoryId: string): MemoryView {
+        const view = this.getMemory(scopeId, memoryId);
+        if (view === undefined) {
+            throw new DomainError(
+                "INVARIANT_VIOLATION",
+                "Stored memory could not be read",
+            );
+        }
+        return view;
+    }
+
+    #toMemoryView(
+        head: MemoryHeadRow,
+        revisionRow: MemoryRevisionRow,
+    ): MemoryView {
+        const relationRows = this.#database
+            .prepare(
+                `SELECT source_id, relation_type, target_id, created_at
+                 FROM memory_relations WHERE source_id = ?
+                 ORDER BY relation_type, target_id`,
+            )
+            .all(head.memory_id) as {
+            source_id: string;
+            relation_type: MemoryRelation["relationType"];
+            target_id: string;
+            created_at: string;
+        }[];
+        const usageRow = this.#database
+            .prepare("SELECT * FROM memory_usage WHERE memory_id = ?")
+            .get(head.memory_id) as {
+            retrieval_count: number;
+            useful_count: number;
+            unhelpful_count: number;
+            last_retrieved_at: string | null;
+            last_useful_at: string | null;
+        };
+        return {
+            revision: toMemoryRevision(revisionRow),
+            head: {
+                memoryId: asId(head.memory_id, "Memory"),
+                scopeId: asId(head.scope_id, "Scope"),
+                currentRevision: head.current_revision,
+                state: head.state,
+                ...(head.superseded_by === null
+                    ? {}
+                    : {
+                          supersededBy: asId(head.superseded_by, "Memory"),
+                      }),
+                stateChangedAt: head.state_changed_at,
+                ...(head.state_reason === null
+                    ? {}
+                    : { stateReason: head.state_reason }),
+            },
+            relations: relationRows.map((row) => ({
+                sourceMemoryId: asId(row.source_id, "Memory"),
+                relationType: row.relation_type,
+                targetMemoryId: asId(row.target_id, "Memory"),
+                createdAt: row.created_at,
+            })),
+            usage: {
+                memoryId: asId(head.memory_id, "Memory"),
+                retrievalCount: usageRow.retrieval_count,
+                usefulCount: usageRow.useful_count,
+                unhelpfulCount: usageRow.unhelpful_count,
+                ...(usageRow.last_retrieved_at === null
+                    ? {}
+                    : { lastRetrievedAt: usageRow.last_retrieved_at }),
+                ...(usageRow.last_useful_at === null
+                    ? {}
+                    : { lastUsefulAt: usageRow.last_useful_at }),
+            },
+        };
+    }
+
     #requireFacetReferences(
         scopeId: string,
         topicId: string,
@@ -1669,6 +2234,29 @@ type SearchCandidate = {
 
 type SearchDocumentRow = SearchCandidate & { document_id: string };
 
+function toMemoryRevision(row: MemoryRevisionRow): MemoryRevision {
+    return createMemoryRevision({
+        memoryId: asId(row.memory_id, "Memory"),
+        scopeId: asId(row.scope_id, "Scope"),
+        revision: row.revision,
+        kind: row.kind,
+        content: row.content,
+        ...(row.structured_content_json === null
+            ? {}
+            : { structuredContent: JSON.parse(row.structured_content_json) }),
+        tags: JSON.parse(row.tags_json) as string[],
+        provenance: JSON.parse(
+            row.provenance_json,
+        ) as MemoryRevision["provenance"],
+        ...(row.confidence === null ? {} : { confidence: row.confidence }),
+        importance: row.importance,
+        ...(row.valid_from === null ? {} : { validFrom: row.valid_from }),
+        ...(row.valid_until === null ? {} : { validUntil: row.valid_until }),
+        ...(row.reason === null ? {} : { reason: row.reason }),
+        createdAt: row.created_at,
+    });
+}
+
 const searchCandidateSql = `
     SELECT scope_id, 'topic' AS entity_kind, topic_id AS entity_id, revision,
            display_name AS title, slug || ' ' || display_name AS content,
@@ -1707,6 +2295,16 @@ const searchCandidateSql = `
                 property_values.updated_at
         FROM topic_property_definitions AS definitions
             JOIN topic_property_values AS property_values USING(definition_id, topic_id)
+        UNION ALL
+        SELECT heads.scope_id, 'memory', revisions.memory_id,
+            revisions.revision, revisions.kind,
+            revisions.content || ' ' || revisions.tags_json,
+            revisions.created_at
+        FROM memory_heads AS heads
+        JOIN memory_revisions AS revisions
+          ON revisions.memory_id = heads.memory_id
+         AND revisions.revision = heads.current_revision
+        WHERE heads.state = 'active'
     ORDER BY entity_kind, entity_id, revision
 `;
 
@@ -1753,6 +2351,18 @@ const changedEntitySql = `
          FROM topic_property_definitions AS definitions
          JOIN topic_property_values AS property_values USING(definition_id, topic_id)
          WHERE definitions.scope_id = @scopeId
+         UNION ALL
+         SELECT 'memory', revisions.memory_id,
+             revisions.memory_id || ':' || revisions.revision,
+             revisions.created_at
+         FROM memory_revisions AS revisions
+         WHERE revisions.scope_id = @scopeId
+         UNION ALL
+         SELECT 'memory', heads.memory_id,
+             events.event_id, events.created_at
+         FROM memory_state_events AS events
+         JOIN memory_heads AS heads USING(memory_id)
+         WHERE heads.scope_id = @scopeId
         )
         SELECT entity_kind, entity_id, event_reference
         FROM changes
@@ -1902,6 +2512,14 @@ function documentFieldSql(entityKind: string): string {
                   JOIN topic_property_values AS property_values
                  USING(definition_id, topic_id)
                     WHERE definitions.scope_id = ? AND definitions.definition_id = ?`;
+        case "memory":
+            return `SELECT heads.state, revisions.created_at AS recorded_at,
+                                                     NULL AS property_name
+                                        FROM memory_heads AS heads
+                                        JOIN memory_revisions AS revisions
+                                            ON revisions.memory_id = heads.memory_id
+                                         AND revisions.revision = heads.current_revision
+                                        WHERE heads.scope_id = ? AND heads.memory_id = ?`;
         default:
             return `SELECT NULL AS state, NULL AS recorded_at,
                            NULL AS property_name WHERE ? = ?`;

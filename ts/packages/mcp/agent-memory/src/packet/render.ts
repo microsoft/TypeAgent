@@ -60,6 +60,7 @@ function label(kind: string): string {
         designNote: "Design note",
         output: "Output",
         property: "Property",
+        memory: "Memory",
     };
     return labels[kind] ?? kind;
 }

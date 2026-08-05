@@ -71,8 +71,16 @@ describe("agent-memory MCP server", () => {
                     "memory_record_turn",
                     "memory_query",
                     "memory_get",
+                    "memory_store",
+                    "memory_revise",
+                    "memory_forget",
+                    "memory_feedback",
                 ]),
             );
+            expect(
+                tools.tools.find((tool) => tool.name === "memory_forget")
+                    ?.annotations?.destructiveHint,
+            ).toBe(true);
 
             const result = await client.callTool({
                 name: "memory_status",
@@ -83,7 +91,7 @@ describe("agent-memory MCP server", () => {
             expect(status).toEqual({
                 service: serviceName,
                 version: serviceVersion,
-                schemaVersion: 2,
+                schemaVersion: 3,
                 database: "ready",
             });
 
@@ -186,6 +194,109 @@ describe("agent-memory MCP server", () => {
             expect(
                 (inaccessible.structuredContent as { items: unknown[] }).items,
             ).toEqual([{ memoryId: turnId, status: "notFound" }]);
+
+            const stored = await client.callTool({
+                name: "memory_store",
+                arguments: {
+                    content: "M9 supports reversible durable memory lifecycle",
+                    kind: "fact",
+                    scope,
+                    provenance: {
+                        sourceType: "agent",
+                        actorId: "m9-stdio-test",
+                        observedAt: "2026-08-10T12:00:00.000Z",
+                    },
+                    tags: ["M9", "lifecycle"],
+                    confidence: 0.9,
+                    idempotencyKey: "m9-stdio-store",
+                },
+            });
+            expect(stored.isError).not.toBe(true);
+            const memoryId = (
+                stored.structuredContent as {
+                    memory: { revision: { memoryId: string } };
+                }
+            ).memory.revision.memoryId;
+
+            const memoryQuery = await client.callTool({
+                name: "memory_query",
+                arguments: {
+                    scopeId: scope.scopeId,
+                    query: '/memories where "reversible durable" tokens 2048',
+                    timeZone: "UTC",
+                    now: "2026-08-10T12:00:00.000Z",
+                },
+            });
+            expect(memoryQuery.isError).not.toBe(true);
+            const retrievalId = (
+                memoryQuery.structuredContent as { retrievalId: string }
+            ).retrievalId;
+
+            const feedback = await client.callTool({
+                name: "memory_feedback",
+                arguments: {
+                    retrievalId,
+                    outcomes: [{ memoryId, outcome: "useful" }],
+                },
+            });
+            expect(feedback.isError).not.toBe(true);
+
+            const revised = await client.callTool({
+                name: "memory_revise",
+                arguments: {
+                    memoryId,
+                    scope,
+                    expectedRevision: 1,
+                    content:
+                        "M9 supports reversible, revisioned durable memory lifecycle",
+                    provenance: {
+                        sourceType: "agent",
+                        actorId: "m9-stdio-test",
+                        observedAt: "2026-08-10T12:00:00.000Z",
+                    },
+                    reason: "Add revision behavior",
+                },
+            });
+            expect(revised.isError).not.toBe(true);
+
+            const forgotten = await client.callTool({
+                name: "memory_forget",
+                arguments: {
+                    memoryIds: [memoryId],
+                    scope,
+                    action: "forget",
+                    reason: "Test reversible tombstone",
+                    actorId: "m9-stdio-test",
+                    expectedRevisions: { [memoryId]: 2 },
+                },
+            });
+            expect(forgotten.isError).not.toBe(true);
+            const forgottenExact = await client.callTool({
+                name: "memory_get",
+                arguments: {
+                    scopeId: scope.scopeId,
+                    memoryIds: [memoryId],
+                    tokenBudget: 4096,
+                },
+            });
+            expect(forgottenExact.isError).not.toBe(true);
+            expect(forgottenExact.content).toEqual([
+                expect.objectContaining({
+                    text: expect.stringContaining("revisioned durable"),
+                }),
+            ]);
+
+            const restored = await client.callTool({
+                name: "memory_forget",
+                arguments: {
+                    memoryIds: [memoryId],
+                    scope,
+                    action: "restore",
+                    reason: "Restore tombstone",
+                    actorId: "m9-stdio-test",
+                },
+            });
+            expect(restored.isError).not.toBe(true);
         } finally {
             await client.close();
             await rm(directory, { recursive: true, force: true });

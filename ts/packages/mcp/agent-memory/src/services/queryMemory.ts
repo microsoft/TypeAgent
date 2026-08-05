@@ -1,7 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DomainError, SystemClock, type Clock } from "../domain/index.js";
+import {
+    DomainError,
+    SystemClock,
+    UuidV7IdGenerator,
+    type Clock,
+    type IdGenerator,
+} from "../domain/index.js";
 import {
     type WorkingMemoryPacket,
     type WorkingMemoryPacketAssembler,
@@ -26,6 +32,7 @@ export type MemoryQueryRequest = {
 };
 
 export type MemoryQueryResult = {
+    retrievalId: string;
     packet: WorkingMemoryPacket;
     resolvedTemporal?: TemporalSelector;
 };
@@ -33,11 +40,13 @@ export type MemoryQueryResult = {
 export type MemoryQueryServiceOptions = {
     allowedScope?: string;
     clock?: Clock;
+    idGenerator?: IdGenerator;
 };
 
 export class MemoryQueryService {
     readonly #allowedScope: string | undefined;
     readonly #clock: Clock;
+    readonly #ids: IdGenerator;
 
     public constructor(
         private readonly repository: MemoryRepository,
@@ -46,6 +55,7 @@ export class MemoryQueryService {
     ) {
         this.#allowedScope = options.allowedScope;
         this.#clock = options.clock ?? new SystemClock();
+        this.#ids = options.idGenerator ?? new UuidV7IdGenerator(this.#clock);
     }
 
     public query(request: MemoryQueryRequest): MemoryQueryResult {
@@ -81,7 +91,42 @@ export class MemoryQueryService {
                 ? {}
                 : { repeatTopicBrief: request.repeatTopicBrief }),
         });
+        const retrievalId = this.#ids.generate("Retrieval");
+        const cited = new Set(
+            packet.references
+                .filter((reference) => reference.entityKind !== "summary")
+                .map(
+                    (reference) =>
+                        `${reference.entityKind}:${reference.entityId}:${reference.revision}`,
+                ),
+        );
+        this.repository.recordRetrieval(
+            retrievalId,
+            query.scopeId,
+            JSON.stringify(query),
+            evaluation.records
+                .filter((record) =>
+                    cited.has(
+                        `${record.entityKind}:${record.entityId}:${record.revision}`,
+                    ),
+                )
+                .map((record) => ({
+                    entityId: record.entityId,
+                    entityKind: record.entityKind,
+                    revision: record.revision,
+                    score: record.quality,
+                    channels: [
+                        ...new Set(
+                            record.evidence.flatMap(
+                                (evidence) => evidence.channels,
+                            ),
+                        ),
+                    ].sort(),
+                })),
+            this.#clock.now().toISOString(),
+        );
         return {
+            retrievalId,
             packet,
             ...(query.temporal === undefined
                 ? {}

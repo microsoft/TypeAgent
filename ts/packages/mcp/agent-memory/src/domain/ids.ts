@@ -20,6 +20,9 @@ export type GoalId = Id<"Goal">;
 export type DesignNoteId = Id<"DesignNote">;
 export type OutputId = Id<"Output">;
 export type PropertyDefinitionId = Id<"PropertyDefinition">;
+export type MemoryId = Id<"Memory">;
+export type RetrievalId = Id<"Retrieval">;
+export type StateEventId = Id<"StateEvent">;
 
 export interface Clock {
     now(): Date;

@@ -19,6 +19,7 @@ export {
     startMemoryServer,
     type MemoryStatus,
     type MemoryGetProvider,
+    type MemoryLifecycleProvider,
     type MemoryQueryProvider,
     type MemoryServerServices,
     type MemoryStatusProvider,

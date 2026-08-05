@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DomainError } from "../domain/index.js";
+import { DomainError, type MemoryView } from "../domain/index.js";
 import {
     ConservativeTokenEstimator,
     renderPacketRecord,
@@ -82,21 +82,31 @@ export class MemoryGetService {
         let estimatedTokens = 0;
         let truncated = false;
         for (const memoryId of request.memoryIds) {
+            const durableMemory = this.repository.getMemory(
+                request.scopeId,
+                memoryId,
+                request.revision,
+            );
             const document = documents.get(memoryId);
             const projection =
-                document === undefined
+                durableMemory !== undefined || document === undefined
                     ? undefined
                     : projectDocument(
                           this.repository,
                           document,
                           request.revision,
                       );
-            if (projection === undefined) {
+            const record =
+                durableMemory === undefined
+                    ? projection === undefined
+                        ? undefined
+                        : toEvaluatedRecord(projection)
+                    : toDurableMemoryRecord(durableMemory);
+            if (record === undefined) {
                 items.push({ memoryId, status: "notFound" });
                 continue;
             }
             const citation = `[m${references.length + 1}]`;
-            const record = toEvaluatedRecord(projection);
             const block = renderPacketRecord(
                 record,
                 request.detail ?? "full",
@@ -129,6 +139,32 @@ export class MemoryGetService {
             truncated,
         };
     }
+}
+
+function toDurableMemoryRecord(memory: MemoryView): EvaluatedQueryRecord {
+    const revision = memory.revision;
+    return {
+        entityId: revision.memoryId,
+        entityKind: "memory",
+        revision: revision.revision,
+        title: revision.kind,
+        content: revision.content,
+        occurredAt: revision.provenance.observedAt ?? revision.createdAt,
+        recordedAt: revision.createdAt,
+        hitCount: 0,
+        quality: 0,
+        fields: {
+            state: memory.head.state,
+            kind: revision.kind,
+            tags: revision.tags,
+            importance: revision.importance,
+            confidence: revision.confidence,
+            validFrom: revision.validFrom,
+            validUntil: revision.validUntil,
+        },
+        evidence: [],
+        eventReferences: [],
+    };
 }
 
 function validateRequest(request: MemoryGetRequest): void {

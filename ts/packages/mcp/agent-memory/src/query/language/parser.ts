@@ -189,9 +189,18 @@ function parsePath(path: string): ParsedPath {
             return parseArtifactPath(segments.slice(1));
         case "turns":
             return parseTurnPath(segments.slice(1));
+        case "memories":
+            return parseMemoryPath(segments.slice(1));
         default:
             return invalidArgument("Unsupported query path root", { root });
     }
+}
+
+function parseMemoryPath(segments: PathSegment[]): ParsedPath {
+    if (segments.length !== 0) {
+        return invalidArgument("Memory query path does not accept segments");
+    }
+    return { targetKinds: ["memory"], filters: [] };
 }
 
 function parseTopicPath(segments: PathSegment[]): ParsedPath {

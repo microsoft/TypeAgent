@@ -6,6 +6,7 @@ export * from "./errors.js";
 export * from "./facets.js";
 export * from "./ids.js";
 export * from "./metadata.js";
+export * from "./memories.js";
 export * from "./properties.js";
 export * from "./results.js";
 export * from "./scope.js";

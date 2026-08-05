@@ -331,6 +331,20 @@ function matchesTemporal(
     query: NormalizedQueryIrV1,
     candidate: QueryCandidate,
 ): boolean {
+    if (candidate.fields.entityKind === "memory") {
+        const validAt =
+            query.temporal?.type === "asOf"
+                ? query.temporal.instant
+                : query.timezone.resolvedAt;
+        const validFrom = candidate.fields.validFrom;
+        const validUntil = candidate.fields.validUntil;
+        if (
+            (typeof validFrom === "string" && validFrom > validAt) ||
+            (typeof validUntil === "string" && validUntil <= validAt)
+        ) {
+            return false;
+        }
+    }
     if (query.temporal === undefined) {
         return true;
     }

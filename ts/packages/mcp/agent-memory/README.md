@@ -4,18 +4,21 @@ Agent Memory MCP is a standalone MCP server for durable, evidence-bearing AI
 agent memory. It is developed in the TypeAgent monorepo but has no TypeAgent
 runtime dependency.
 
-Milestones 0-8 are runnable. The server uses the official MCP TypeScript SDK v2
+Milestones 0-9 are runnable. The server uses the official MCP TypeScript SDK v2
 over stdio, initializes its package-owned SQLite database, applies ordered
 migrations, and exposes `memory_status`, `memory_record_turn`, `memory_query`,
-and `memory_get`. Turn recording atomically resolves topics and terms, writes
+`memory_get`, `memory_store`, `memory_revise`, `memory_forget`, and
+`memory_feedback`. Turn recording atomically resolves topics and terms, writes
 actions and memory facets, rebuilds search projections, and persists an
-idempotent result.
+idempotent result. Explicit durable memories retain append-only revisions,
+provenance, relations, reversible visibility events, and separate usage
+telemetry.
 
 The version 1 query IR defines bounded Boolean, soft-AND, filter, topic, and
 temporal queries before textual query parsing is introduced. It includes
 canonical normalization and hashing for stable retrieval events and cursors.
 
-The path language compiles topic, term, artifact, and direct-turn routes into
+The path language compiles topic, term, artifact, direct-turn, and durable-memory routes into
 the query IR. Optional controls add Boolean expressions, filters, temporal
 selection, detail, ordering, result limits, and token budgets:
 

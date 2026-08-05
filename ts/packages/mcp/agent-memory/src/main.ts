@@ -13,6 +13,7 @@ import { SqliteMemoryRepository } from "./repository/index.js";
 import { startMemoryServer } from "./server.js";
 import {
     MemoryGetService,
+    MemoryLifecycleService,
     MemoryQueryService,
     RecordTurnService,
 } from "./services/index.js";
@@ -38,11 +39,17 @@ async function main(): Promise<void> {
             ? {}
             : { allowedScope: config.allowedScope }),
     });
+    const lifecycle = new MemoryLifecycleService(repository, {
+        ...(config.allowedScope === undefined
+            ? {}
+            : { allowedScope: config.allowedScope }),
+    });
     const server = await startMemoryServer({
         status: repository,
         recordTurn,
         query,
         get,
+        lifecycle,
     });
 
     const close = async () => {

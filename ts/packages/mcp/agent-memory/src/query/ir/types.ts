@@ -13,7 +13,8 @@ export type QueryEntityKind =
     | "goal"
     | "designNote"
     | "output"
-    | "property";
+    | "property"
+    | "memory";
 
 export type RetrievalChannel =
     | "lexical"

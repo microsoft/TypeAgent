@@ -11,8 +11,16 @@ import type {
     MemoryGetResult,
     MemoryQueryRequest,
     MemoryQueryResult,
+    ChangeMemoryVisibilityRequest,
+    ChangeMemoryVisibilityResult,
+    MemoryFeedbackRequest,
+    MemoryFeedbackResult,
     RecordTurnRequest,
     RecordTurnResult,
+    ReviseMemoryRequest,
+    ReviseMemoryResult,
+    StoreMemoryRequest,
+    StoreMemoryResult,
 } from "./services/index.js";
 
 export const serviceName = "agent-memory-mcp";
@@ -41,11 +49,21 @@ export interface MemoryGetProvider {
     get(request: MemoryGetRequest): MemoryGetResult;
 }
 
+export interface MemoryLifecycleProvider {
+    store(request: StoreMemoryRequest): StoreMemoryResult;
+    revise(request: ReviseMemoryRequest): ReviseMemoryResult;
+    changeVisibility(
+        request: ChangeMemoryVisibilityRequest,
+    ): ChangeMemoryVisibilityResult;
+    feedback(request: MemoryFeedbackRequest): MemoryFeedbackResult;
+}
+
 export type MemoryServerServices = {
     status?: MemoryStatusProvider;
     recordTurn?: RecordTurnProvider;
     query?: MemoryQueryProvider;
     get?: MemoryGetProvider;
+    lifecycle?: MemoryLifecycleProvider;
 };
 
 export function createMemoryServer(
@@ -114,7 +132,7 @@ export function createMemoryServer(
             description:
                 "Retrieve a deterministic working-memory packet using path language or version 1 query IR.",
             inputSchema: memoryQuerySchema,
-            annotations: readOnlyAnnotations,
+            annotations: telemetryAnnotations,
         },
         async (input) => {
             if (services.query === undefined) {
@@ -128,6 +146,7 @@ export function createMemoryServer(
                 return {
                     content: [{ type: "text" as const, text }],
                     structuredContent: {
+                        retrievalId: result.retrievalId,
                         packet: packetMetadata,
                         ...(result.resolvedTemporal === undefined
                             ? {}
@@ -165,6 +184,109 @@ export function createMemoryServer(
                     content: [{ type: "text" as const, text }],
                     structuredContent: metadata,
                 };
+            } catch (error) {
+                return toolError(error);
+            }
+        },
+    );
+
+    server.registerTool(
+        "memory_store",
+        {
+            description: "Store a new explicit durable memory assertion.",
+            inputSchema: memoryStoreSchema,
+            annotations: mutationAnnotations,
+        },
+        async (input) => {
+            if (services.lifecycle === undefined) {
+                return serviceUnavailable(
+                    "Memory lifecycle is not initialized",
+                );
+            }
+            try {
+                return jsonResult(
+                    services.lifecycle.store(
+                        input as unknown as StoreMemoryRequest,
+                    ) as unknown as Record<string, unknown>,
+                );
+            } catch (error) {
+                return toolError(error);
+            }
+        },
+    );
+
+    server.registerTool(
+        "memory_revise",
+        {
+            description:
+                "Append a durable memory revision using optimistic concurrency.",
+            inputSchema: memoryReviseSchema,
+            annotations: mutationAnnotations,
+        },
+        async (input) => {
+            if (services.lifecycle === undefined) {
+                return serviceUnavailable(
+                    "Memory lifecycle is not initialized",
+                );
+            }
+            try {
+                return jsonResult(
+                    services.lifecycle.revise(
+                        input as unknown as ReviseMemoryRequest,
+                    ) as unknown as Record<string, unknown>,
+                );
+            } catch (error) {
+                return toolError(error);
+            }
+        },
+    );
+
+    server.registerTool(
+        "memory_forget",
+        {
+            description:
+                "Forget or restore durable memories using reversible state events.",
+            inputSchema: memoryVisibilitySchema,
+            annotations: destructiveAnnotations,
+        },
+        async (input) => {
+            if (services.lifecycle === undefined) {
+                return serviceUnavailable(
+                    "Memory lifecycle is not initialized",
+                );
+            }
+            try {
+                return jsonResult(
+                    services.lifecycle.changeVisibility(
+                        input as unknown as ChangeMemoryVisibilityRequest,
+                    ) as unknown as Record<string, unknown>,
+                );
+            } catch (error) {
+                return toolError(error);
+            }
+        },
+    );
+
+    server.registerTool(
+        "memory_feedback",
+        {
+            description:
+                "Record whether durable memories in a retrieval helped the caller.",
+            inputSchema: memoryFeedbackSchema,
+            annotations: mutationAnnotations,
+        },
+        async (input) => {
+            if (services.lifecycle === undefined) {
+                return serviceUnavailable(
+                    "Memory lifecycle is not initialized",
+                );
+            }
+            try {
+                return jsonResult(
+                    services.lifecycle.feedback(
+                        input as unknown as MemoryFeedbackRequest,
+                    ) as unknown as Record<string, unknown>,
+                );
             } catch (error) {
                 return toolError(error);
             }
@@ -354,6 +476,7 @@ const queryEntityKindSchema = z.enum([
     "designNote",
     "output",
     "property",
+    "memory",
 ]);
 const queryScalarSchema = z.union([z.string(), z.number(), z.boolean()]);
 const queryExpressionSchema: z.ZodType = z.lazy(() =>
@@ -555,6 +678,103 @@ const memoryGetSchema = z
         { message: "revision requires exactly one memory ID" },
     );
 
+const memoryKindSchema = z.enum([
+    "fact",
+    "preference",
+    "instruction",
+    "procedure",
+    "episode",
+    "observation",
+    "summary",
+]);
+const memoryRelationTypeSchema = z.enum([
+    "supports",
+    "contradicts",
+    "supersedes",
+    "derived_from",
+    "related_to",
+]);
+const lifecycleScopeSchema = z.object(scopeShape).strict();
+const lifecycleProvenanceSchema = z.object(provenanceShape).strict();
+
+const memoryStoreSchema = z
+    .object({
+        content: z.string().min(1).max(1_000_000),
+        kind: memoryKindSchema,
+        scope: lifecycleScopeSchema,
+        provenance: lifecycleProvenanceSchema,
+        structuredContent: z.unknown().optional(),
+        tags: z.array(z.string().min(1).max(256)).max(100).optional(),
+        confidence: z.number().min(0).max(1).optional(),
+        importance: z.number().min(0).max(1).optional(),
+        validFrom: z.string().optional(),
+        validUntil: z.string().optional(),
+        relations: z
+            .array(
+                z
+                    .object({
+                        type: memoryRelationTypeSchema,
+                        targetMemoryId: z.string(),
+                    })
+                    .strict(),
+            )
+            .max(100)
+            .optional(),
+        idempotencyKey: z.string().min(1).max(512).optional(),
+    })
+    .strict();
+
+const memoryReviseSchema = z
+    .object({
+        memoryId: z.string(),
+        scope: lifecycleScopeSchema,
+        expectedRevision: z.number().int().positive(),
+        content: z.string().min(1).max(1_000_000).optional(),
+        structuredContent: z.unknown().optional(),
+        kind: memoryKindSchema.optional(),
+        tags: z.array(z.string().min(1).max(256)).max(100).optional(),
+        confidence: z.number().min(0).max(1).optional(),
+        importance: z.number().min(0).max(1).optional(),
+        validFrom: z.string().nullable().optional(),
+        validUntil: z.string().nullable().optional(),
+        provenance: lifecycleProvenanceSchema,
+        reason: z.string().min(1).max(4096),
+        idempotencyKey: z.string().min(1).max(512).optional(),
+    })
+    .strict();
+
+const memoryVisibilitySchema = z
+    .object({
+        memoryIds: z.array(z.string()).min(1).max(100),
+        scope: lifecycleScopeSchema,
+        action: z.enum(["forget", "restore"]).optional(),
+        reason: z.string().min(1).max(4096),
+        actorId: z.string().min(1).max(512),
+        expectedRevisions: z
+            .record(z.string(), z.number().int().positive())
+            .optional(),
+        idempotencyKey: z.string().min(1).max(512).optional(),
+    })
+    .strict();
+
+const memoryFeedbackSchema = z
+    .object({
+        retrievalId: z.string(),
+        outcomes: z
+            .array(
+                z
+                    .object({
+                        memoryId: z.string(),
+                        outcome: z.enum(["useful", "unhelpful", "unused"]),
+                        reason: z.string().min(1).max(4096).optional(),
+                    })
+                    .strict(),
+            )
+            .min(1)
+            .max(100),
+    })
+    .strict();
+
 const readOnlyAnnotations = {
     readOnlyHint: true,
     destructiveHint: false,
@@ -563,6 +783,16 @@ const readOnlyAnnotations = {
 const mutationAnnotations = {
     readOnlyHint: false,
     destructiveHint: false,
+    idempotentHint: true,
+};
+const telemetryAnnotations = {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+};
+const destructiveAnnotations = {
+    readOnlyHint: false,
+    destructiveHint: true,
     idempotentHint: true,
 };
 
