@@ -15,6 +15,7 @@
 import { AppAgentManager } from "../src/context/appAgentManager.js";
 import { PortRegistrar } from "../src/context/portRegistrar.js";
 import { checkAgentReady } from "../src/execute/actionHandlers.js";
+import { getErrorDisplayContent } from "../src/execute/agentNotReadyError.js";
 import type {
     ActionContext,
     ActionResult,
@@ -454,5 +455,51 @@ describe("checkAgentReady (pre-flight gate)", () => {
         await expect(
             checkAgentReady("agentG", sys, fakeActionContext()),
         ).rejects.toThrow(/needs configuration/);
+    });
+
+    test("carries the report's markdown details for rich display", async () => {
+        const sys = fakeSystemContext({
+            readiness: new Map([
+                [
+                    "agentH",
+                    {
+                        state: "setup-required",
+                        message: "Spotify is not configured.",
+                        details:
+                            "Add to `ts/config.local.yaml`:\n\n```yaml\nspotify:\n  clientId: <value>\n```",
+                    },
+                ],
+            ]),
+            hasSetup: () => false,
+        });
+        const error = await checkAgentReady(
+            "agentH",
+            sys,
+            fakeActionContext(),
+        ).catch((e) => e);
+        // The plain message stays a single line for logs / non-display clients.
+        expect(error.message).not.toContain("```");
+        expect(error.message).toContain("Spotify is not configured.");
+        const display = getErrorDisplayContent(error) as any;
+        expect(display.type).toBe("markdown");
+        expect(display.kind).toBe("error");
+        expect(display.content).toContain("ts/config.local.yaml");
+        expect(display.content).toContain("clientId: <value>");
+        expect(display.content).toContain("@config agent refresh agentH");
+    });
+
+    test("has no rich display when the report has no details", async () => {
+        const sys = fakeSystemContext({
+            readiness: new Map([
+                ["agentI", { state: "setup-required", message: "nope" }],
+            ]),
+            hasSetup: () => false,
+        });
+        const error = await checkAgentReady(
+            "agentI",
+            sys,
+            fakeActionContext(),
+        ).catch((e) => e);
+        expect(getErrorDisplayContent(error)).toBeUndefined();
     });
 });
