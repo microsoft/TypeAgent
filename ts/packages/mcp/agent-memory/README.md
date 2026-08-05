@@ -52,6 +52,33 @@ npm test
 npm start
 ```
 
+## Incident-response demo
+
+The extended demo replays an identity-to-build-system compromise for incident
+`IR-7421` in two GitHub Copilot CLI sessions through Agency. The first session
+analyzes all evidence and stores durable observations. A fresh second session
+receives no evidence and must reconstruct the handoff from agent-memory. Both
+sessions have 135-second limits, keeping the live path under five minutes:
+
+```powershell
+npm run demo:incident
+```
+
+The live transcript prints every evidence turn and its native memory-index
+update, including the topic path, topic ID, turn ID, query path, and indexed
+terms. Agency tool calls are streamed as durable memories are stored, followed
+by the fresh-session handoff.
+
+Use `-- --model <model>` to select a Copilot model. Use `-- --output <folder>`
+to retain the generated database and MCP configuration for inspection. The
+normal unit suite runs the same evidence sequence without an LLM and asserts
+three intermediate checkpoints through the real storage, query, and packet
+path.
+
+The live demo requires `agency` on `PATH` and a GitHub Copilot CLI session that
+Agency can launch. It creates no permanent configuration and uses no default
+MCP servers or repository instructions.
+
 Run these commands from `packages/mcp/agent-memory`. The publishable tarball
 contains the compiled executable and migrations and can be installed without
 the TypeAgent repository.
