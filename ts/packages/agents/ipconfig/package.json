@@ -45,9 +45,6 @@
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
   },
-  "typeagent": {
-    "defaultAgentName": "ipconfig"
-  },
   "fluidBuild": {
     "tasks": {
       "agc": {
@@ -80,5 +77,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "ipconfig"
   }
 }

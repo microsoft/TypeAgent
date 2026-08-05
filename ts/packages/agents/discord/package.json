@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/discord-agent",
   "version": "0.0.1",
-  "description": "Discord chat agent \u2014 send messages, draft messages from intent, list channels, browse channel history, manage server/channel invites.",
+  "description": "Discord chat agent — send messages, draft messages from intent, list channels, browse channel history, manage server/channel invites.",
   "keywords": [
     "typeagent-agent"
   ],
@@ -41,9 +41,6 @@
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
   },
-  "typeagent": {
-    "defaultAgentName": "discord"
-  },
   "fluidBuild": {
     "tasks": {
       "agc": {
@@ -76,5 +73,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "discord"
   }
 }
