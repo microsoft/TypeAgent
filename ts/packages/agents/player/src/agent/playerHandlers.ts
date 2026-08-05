@@ -21,6 +21,11 @@ import {
     ResolveEntityResult,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
+import {
+    configKeyNames,
+    configPathForEnvVar,
+    configSetupHint,
+} from "@typeagent/config";
 import { searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
 import { getPlayerCommandInterface } from "./playerCommands.js";
@@ -57,12 +62,14 @@ export function instantiate(): AppAgent {
     };
 }
 
-// Cheap probe for the env vars the token provider requires. Spotify
-// integration is impossible without these, so we surface the missing
-// configuration up front instead of letting the user discover it on the
-// first action. No `setup` hook — this is a manual-config case (edit
-// .env, restart the agent server); the dispatcher's setup-required
-// error points the user at @config agent refresh once they've fixed it.
+// Cheap probe for the Spotify settings the token provider requires
+// (read from process.env, which the config loader populates from
+// config.local.yaml). Spotify integration is impossible without these,
+// so we surface the missing configuration up front instead of letting
+// the user discover it on the first action. No `setup` hook — this is a
+// manual-config case (edit config.local.yaml, restart the agent server);
+// the dispatcher's setup-required error points the user at
+// @config agent refresh once they've fixed it.
 //
 // Exported for unit tests.
 export async function checkPlayerReadiness(): Promise<ReadinessReport> {
@@ -75,17 +82,21 @@ export async function checkPlayerReadiness(): Promise<ReadinessReport> {
     } else if (parseInt(port).toString() !== port) {
         return {
             state: "setup-required",
-            message: `SPOTIFY_APP_PORT has invalid port number "${port}".`,
-            details:
-                "Set SPOTIFY_APP_PORT to an integer in ts/.env (the redirect port your Spotify app is registered with).",
+            message: `Spotify ${configPathForEnvVar("SPOTIFY_APP_PORT")} has invalid port number "${port}".`,
+            details: configSetupHint(
+                [{ envVar: "SPOTIFY_APP_PORT", placeholder: "9999" }],
+                "It must be an integer — the redirect port your Spotify app is registered with.",
+            ),
         };
     }
     if (missing.length === 0) return { state: "ready" };
     return {
         state: "setup-required",
-        message: `Spotify env vars not set: ${missing.join(", ")}.`,
-        details:
-            "Set them in ts/.env. SPOTIFY_APP_CLI and SPOTIFY_APP_CLISEC come from the Spotify developer dashboard for your app; SPOTIFY_APP_PORT is the redirect port you registered there.",
+        message: `Spotify is not configured. Missing: ${configKeyNames(missing).join(", ")}.`,
+        details: configSetupHint(
+            missing,
+            "`clientId` and `clientSecret` come from the Spotify developer dashboard for your app; `port` is the redirect port you registered there. Then run `@config agent refresh player`.",
+        ),
     };
 }
 

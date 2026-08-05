@@ -25,6 +25,15 @@ export {
     REDACTED,
 } from "./redact.js";
 export { runCli, type CliIO, type CliArgs } from "./cli.js";
+export {
+    CONFIG_LOCAL_FILE,
+    CONFIG_SAMPLE_FILE,
+    configKeyNames,
+    configPathForEnvVar,
+    configSetupHint,
+    configYamlSnippet,
+    type ConfigHintVar,
+} from "./hints.js";
 export { validateConfigTree, configTreeSchema } from "./schema.js";
 export {
     ConfigSource,
