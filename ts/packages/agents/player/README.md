@@ -28,7 +28,7 @@ The `player` agent (package name `music`) implements Spotify support. Enable it 
 
 1. Enable the agent: `@config agent player on`
 2. Authenticate: `@player spotify login` — this opens the browser for a one-time authorization. Afterward, the refresh token is stored (DPAPI-encrypted on Windows, Keychain on macOS, libsecret on Linux via `@azure/msal-node-extensions`) at `$(HOME)/.typeagent/profiles/<profile>/player/token`, so subsequent runs mint access tokens without prompting.
-3. (Optional) Load Spotify listening history: `@player spotify load <path-to-history-file>`
+3. (Optional) Load Spotify listening history: `@player spotify load <path>` — `<path>` can be an absolute path to a single extended streaming history `.json` file, or a directory (every `.json` file in it is loaded, and files that aren't streaming history are skipped). Relative paths resolve against the agent's instance storage first, then the current working directory.
 4. To clear the cached token: `@player spotify logout`
 5. To disable the agent entirely: `@config agent player off`
 

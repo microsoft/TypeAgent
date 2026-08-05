@@ -20,6 +20,9 @@ import {
 } from "./agent/playerSchema.js";
 import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import { loadConfigSync } from "@typeagent/config";
 //import * as Filter from "./trackFilter.js";
 import { openai, ChatModelWithStreaming } from "@typeagent/aiclient";
@@ -105,7 +108,6 @@ import {
     setMaxVolumeAction,
     setVolumeAction,
 } from "./volume.js";
-import e from "express";
 
 function createWarningActionResult(message: string) {
     debugSpotifyError(message);
@@ -217,27 +219,193 @@ function getIdPart(uri: string) {
     }
 }
 
+// A single streaming history JSON file to load, along with how to read it.
+type HistorySource = {
+    name: string;
+    read: () => Promise<string>;
+};
+
+type HistorySources = {
+    sources: HistorySource[];
+    // True when the user pointed at a directory, in which case files that
+    // aren't Spotify streaming history are silently skipped.
+    isDirectory: boolean;
+};
+
+export type LoadHistoryResult = {
+    loaded: string[];
+    skipped: string[];
+    records: number;
+};
+
+function expandHomeDir(p: string) {
+    return p === "~" || p.startsWith("~/") || p.startsWith("~\\")
+        ? path.join(os.homedir(), p.slice(1))
+        : p;
+}
+
+function isJsonFileName(name: string) {
+    return name.toLowerCase().endsWith(".json");
+}
+
+function createFsSource(filePath: string): HistorySource {
+    return {
+        name: filePath,
+        read: () => fs.promises.readFile(filePath, "utf8"),
+    };
+}
+
+async function getFsHistorySources(
+    fullPath: string,
+): Promise<HistorySources | undefined> {
+    let stats;
+    try {
+        stats = await fs.promises.stat(fullPath);
+    } catch {
+        return undefined;
+    }
+    if (!stats.isDirectory()) {
+        return { sources: [createFsSource(fullPath)], isDirectory: false };
+    }
+    const entries = await fs.promises.readdir(fullPath, {
+        withFileTypes: true,
+    });
+    const sources = entries
+        .filter((entry) => entry.isFile() && isJsonFileName(entry.name))
+        .map((entry) => entry.name)
+        .sort()
+        .map((name) => createFsSource(path.join(fullPath, name)));
+    return { sources, isDirectory: true };
+}
+
+async function getStorageHistorySources(
+    instanceStorage: Storage,
+    historyPath: string,
+): Promise<HistorySources | undefined> {
+    if (!(await instanceStorage.exists(historyPath))) {
+        return undefined;
+    }
+    let names: string[] | undefined;
+    try {
+        // Listing a file (instead of a directory) throws.
+        names = await instanceStorage.list(historyPath);
+    } catch {
+        names = undefined;
+    }
+    if (names === undefined) {
+        return {
+            sources: [
+                {
+                    name: historyPath,
+                    read: () => instanceStorage.read(historyPath, "utf8"),
+                },
+            ],
+            isDirectory: false,
+        };
+    }
+    const sources = names
+        .filter(isJsonFileName)
+        .sort()
+        .map((name) => {
+            const filePath = `${historyPath}/${name}`;
+            return {
+                name: filePath,
+                read: () => instanceStorage.read(filePath, "utf8"),
+            };
+        });
+    return { sources, isDirectory: true };
+}
+
+// Resolve the user supplied path to the set of files to load.  Absolute paths
+// (and paths that exist relative to the current working directory) are read
+// directly from the file system; everything else is resolved against the
+// agent's instance storage.
+async function getHistorySources(
+    instanceStorage: Storage,
+    historyPath: string,
+): Promise<HistorySources> {
+    const expandedPath = expandHomeDir(historyPath);
+    if (path.isAbsolute(expandedPath)) {
+        const sources = await getFsHistorySources(expandedPath);
+        if (sources === undefined) {
+            throw new Error(`History path not found: ${historyPath}`);
+        }
+        return sources;
+    }
+
+    const sources =
+        (await getStorageHistorySources(instanceStorage, expandedPath)) ??
+        (await getFsHistorySources(path.resolve(process.cwd(), expandedPath)));
+    if (sources === undefined) {
+        throw new Error(`History path not found: ${historyPath}`);
+    }
+    return sources;
+}
+
+function isSpotifyHistoryData(data: any): data is SpotifyRecord[] {
+    if (!Array.isArray(data)) {
+        return false;
+    }
+    // Only the shape of the first record is checked; Spotify's extended
+    // streaming history files are homogeneous.
+    const record = data[0];
+    return (
+        record === undefined ||
+        (typeof record === "object" &&
+            record !== null &&
+            typeof record.ts === "string" &&
+            "spotify_track_uri" in record)
+    );
+}
+
 export async function loadHistoryFile(
     instanceStorage: Storage,
     historyPath: string,
     context: IClientContext,
-) {
-    if (!(await instanceStorage.exists(historyPath))) {
-        throw new Error(`History file not found: ${historyPath}`);
-    }
+): Promise<LoadHistoryResult> {
     if (!context.userData) {
         throw new Error("User data not enabled");
     }
-    try {
-        const rawData = await instanceStorage.read(historyPath, "utf8");
-        let data: SpotifyRecord[] = JSON.parse(rawData);
-        for (const record of data) {
-            console.log(`${record.master_metadata_track_name}`);
+    const { sources, isDirectory } = await getHistorySources(
+        instanceStorage,
+        historyPath,
+    );
+    if (isDirectory && sources.length === 0) {
+        throw new Error(`No JSON files found in directory: ${historyPath}`);
+    }
+
+    const result: LoadHistoryResult = {
+        loaded: [],
+        skipped: [],
+        records: 0,
+    };
+    for (const source of sources) {
+        let data: SpotifyRecord[];
+        try {
+            const parsed = JSON.parse(await source.read());
+            if (!isSpotifyHistoryData(parsed)) {
+                throw new Error("Not a Spotify streaming history file");
+            }
+            data = parsed;
+        } catch (e: any) {
+            if (isDirectory) {
+                // Silently skip files that aren't streaming history.
+                debugSpotify(`Skipping ${source.name}: ${e.message}`);
+                result.skipped.push(source.name);
+                continue;
+            }
+            throw new Error(
+                `Error reading history file ${source.name}: ${e.message}`,
+            );
         }
-        data = data.filter((r) => r.spotify_track_uri !== null);
+
+        for (const record of data) {
+            debugSpotify(`${record.master_metadata_track_name}`);
+        }
+        const tracks = data.filter((r) => r.spotify_track_uri !== null);
         mergeUserDataKind(
             context.userData.data.tracks,
-            data.map((r) => ({
+            tracks.map((r) => ({
                 timestamps: [r.ts],
                 freq: 1,
                 name: r.master_metadata_track_name,
@@ -246,10 +414,18 @@ export async function loadHistoryFile(
                 id: getIdPart(r.spotify_track_uri),
             })),
         );
-        await saveUserData(instanceStorage, context.userData.data);
-    } catch (e: any) {
-        throw new Error(`Error reading history file: ${e.message}`);
+        result.loaded.push(source.name);
+        result.records += tracks.length;
     }
+
+    if (result.loaded.length === 0) {
+        throw new Error(
+            `No Spotify streaming history files found in: ${historyPath}`,
+        );
+    }
+
+    await saveUserData(instanceStorage, context.userData.data);
+    return result;
 }
 
 async function htmlPlaylistNames(
