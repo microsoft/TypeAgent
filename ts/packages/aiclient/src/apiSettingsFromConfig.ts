@@ -169,6 +169,12 @@ export function azureApiSettingsFromConfig(
             ? { enableModelRequestLogging: true }
             : {}),
         ...(auth.tokenProvider ? { tokenProvider: auth.tokenProvider } : {}),
+        // Surface non-default wire protocol only. Default chat_completions
+        // stays omitted so settings match pre-wireApi configs.
+        ...(endpoint.wireApi !== undefined &&
+        endpoint.wireApi !== "chat_completions"
+            ? { wireApi: endpoint.wireApi }
+            : {}),
     };
     return settings;
 }
