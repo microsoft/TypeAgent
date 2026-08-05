@@ -8,6 +8,7 @@ export {
     type MemoryServerConfig,
 } from "./config.js";
 export * from "./domain/index.js";
+export * from "./query/index.js";
 export * from "./repository/index.js";
 export * from "./services/index.js";
 export {
