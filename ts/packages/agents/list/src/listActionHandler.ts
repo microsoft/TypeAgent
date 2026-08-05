@@ -11,8 +11,10 @@ import {
     Entity,
 } from "@typeagent/agent-sdk";
 import {
+    ChoiceManager,
     createActionResultFromTextDisplay,
     createStructuredResult,
+    createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ListAction, ListActivity } from "./listSchema.js";
 
@@ -22,11 +24,20 @@ export function instantiate(): AppAgent {
         updateAgentContext: updateListContext,
         executeAction: executeListAction,
         validateWildcardMatch: listValidateWildcardMatch,
+        handleChoice: (choiceId, response, context) =>
+            (
+                context as ActionContext<ListActionContext>
+            ).sessionContext.agentContext.choiceManager.handleChoice(
+                choiceId,
+                response,
+                context,
+            ),
     };
 }
 
 type ListActionContext = {
     store: MemoryListCollection | undefined;
+    choiceManager: ChoiceManager;
 };
 
 async function executeListAction(
@@ -118,7 +129,7 @@ async function listValidateWildcardMatch(
 }
 
 async function initializeListContext() {
-    return { store: undefined };
+    return { store: undefined, choiceManager: new ChoiceManager() };
 }
 
 interface List {
@@ -458,17 +469,30 @@ async function handleListAction(
             break;
         }
         case "deleteList": {
-            const store = getStore(listContext);
             const listName = action.parameters.listName;
-            // Validate the list exists before deleting (throws a clear,
-            // consistent "not found" error like the other list-name actions).
             getList(listContext, listName);
-            store.deleteList(listName);
-            await store.save();
-            displayText = `Deleted list: ${listName}`;
-            result = createActionResultFromTextDisplay(
-                displayText,
-                displayText,
+            result = createYesNoChoiceResult(
+                listContext.choiceManager,
+                `Delete list '${listName}'? This cannot be undone.`,
+                async (confirmed, liveActionContext) => {
+                    if (!confirmed) {
+                        return createActionResultFromTextDisplay(
+                            `Kept list: ${listName}`,
+                            `Kept list: ${listName}`,
+                        );
+                    }
+                    const liveListContext = (
+                        liveActionContext as ActionContext<ListActionContext>
+                    ).sessionContext.agentContext;
+                    const liveStore = getStore(liveListContext);
+                    getList(liveListContext, listName);
+                    liveStore.deleteList(listName);
+                    await liveStore.save();
+                    return createActionResultFromTextDisplay(
+                        `Deleted list: ${listName}`,
+                        `Deleted list: ${listName}`,
+                    );
+                },
             );
             break;
         }

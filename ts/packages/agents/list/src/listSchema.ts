@@ -15,11 +15,6 @@ export type ListActivity = StartEditList;
 // Name of a list such as "grocery", "to do", "shopping", "packing", "gift",
 // "book", "idea", "movie", "garden task", "place to visit". Names should be
 // lower case and stemmed to the singular form (e.g., "movies" -> "movie").
-// IMPORTANT: Do not invent a list name. If the user uses a reference phrase
-// ("the list", "that list", etc.), clarify with the user which list they
-// meant unless it is obvious from the conversation history. If the request
-// does not name an actual list (or is unrelated to lists altogether), use
-// the "unknown" action instead of guessing a listName.
 export type ListName = string;
 
 // add one or more items to a list; if the list does not exist, create it
