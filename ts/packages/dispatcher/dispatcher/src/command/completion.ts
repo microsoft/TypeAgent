@@ -33,6 +33,27 @@ import { CommandCompletionResult } from "@typeagent/dispatcher-types";
 const debug = registerDebug("typeagent:command:completion");
 const debugError = registerDebug("typeagent:command:completion:error");
 
+// Completion must never break typing, so getCommandCompletion swallows
+// everything and returns an empty result.  That made a plain TypeError in the
+// grammar store indistinguishable from "no suggestions available", and it went
+// unnoticed until someone thought to turn on the debug channel.  Bugs in our
+// own code get one console.error per distinct message so they're at least
+// visible without silently spamming a typing user.
+const reportedProgrammingErrors = new Set<string>();
+function reportProgrammingError(e: any) {
+    if (!(e instanceof TypeError) && !(e instanceof ReferenceError)) {
+        return;
+    }
+    const key = `${e.name}: ${e.message}`;
+    if (reportedProgrammingErrors.has(key)) {
+        return;
+    }
+    reportedProgrammingErrors.add(key);
+    console.error(
+        `Command completion failed with an internal error (suggestions will be missing): ${e.stack ?? key}`,
+    );
+}
+
 // Detect whether the last parsed token is a recognized flag name
 // awaiting a value.  Pure: returns metadata only, no side effects.
 //
@@ -806,6 +827,7 @@ export async function getCommandCompletion(
         return completionResult;
     } catch (e: any) {
         debugError(`Command completion error: ${e}\n${e.stack}`);
+        reportProgrammingError(e);
         // On error, return a safe default — don't claim closedSet
         // since we don't know what went wrong.
         return {

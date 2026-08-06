@@ -349,6 +349,14 @@ export class GrammarStoreImpl implements GrammarStore {
                         splitSchemaNamespaceKey(name).schemaName;
                     for (const p of nfaResult.properties) {
                         const action: any = p.match;
+                        // Same guard as the DFA branch below: a property can
+                        // come from a plain-object (non-action) grammar and
+                        // carry no match, which createExecutableAction can't
+                        // represent. Throwing here would abort completion for
+                        // the whole request, not just this grammar.
+                        if (action?.actionName === undefined) {
+                            continue;
+                        }
                         properties.push({
                             actions: [
                                 createExecutableAction(
@@ -504,6 +512,12 @@ export class GrammarStoreImpl implements GrammarStore {
                 ) {
                     for (const p of partial.properties) {
                         const action: any = p.match;
+                        // See the NFA branch above: skip properties with no
+                        // resolved action rather than throwing, which would
+                        // wipe out completions for the entire request.
+                        if (action?.actionName === undefined) {
+                            continue;
+                        }
                         properties.push({
                             actions: [
                                 createExecutableAction(
