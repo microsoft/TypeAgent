@@ -44,9 +44,8 @@ export function normalizeTranslationBenchActionShapePolicy(
         translationBenchActionShapePolicySchema,
         {
             mode: policy?.mode ?? "simple",
-            maxActionsPerProbe:
-                policy?.maxActionsPerProbe ??
-                (policy?.mode === "multi" ? 2 : 1),
+            // Multi is reserved (rejected by schema). Simple is always arity 1.
+            maxActionsPerProbe: policy?.maxActionsPerProbe ?? 1,
         },
         "actionShape",
     );
@@ -58,7 +57,8 @@ export function assertTranslationBenchExpectedActionArity(
     policy: TranslationBenchActionShapePolicy = TRANSLATION_BENCH_DEFAULT_ACTION_SHAPE,
     path = "probe",
 ): void {
-    const normalized = normalizeTranslationBenchActionShapePolicy(policy);
+    // Fail-closed: multi mode and illegal simple knobs rejected here.
+    normalizeTranslationBenchActionShapePolicy(policy);
     const actions = parseWithZod(
         z.array(z.unknown()),
         expectedActions,
@@ -70,17 +70,9 @@ export function assertTranslationBenchExpectedActionArity(
         }
         return;
     }
-    if (normalized.mode === "simple") {
-        if (actions.length !== 1) {
-            throw new Error(
-                `${path} simple-action ${role} must contain exactly one expected action`,
-            );
-        }
-        return;
-    }
-    if (actions.length < 1 || actions.length > normalized.maxActionsPerProbe) {
+    if (actions.length !== 1) {
         throw new Error(
-            `${path} multi-action ${role} must contain 1..${normalized.maxActionsPerProbe} expected actions`,
+            `${path} simple-action ${role} must contain exactly one expected action`,
         );
     }
 }

@@ -24,6 +24,15 @@ describe("action shape policy", () => {
         ).toThrow(/not implemented yet/);
     });
 
+    it("rejects simple with maxActionsPerProbe !== 1", () => {
+        expect(() =>
+            normalizeTranslationBenchActionShapePolicy({
+                mode: "simple",
+                maxActionsPerProbe: 2,
+            }),
+        ).toThrow(/maxActionsPerProbe/);
+    });
+
     it("enforces simple positive arity", () => {
         expect(() =>
             assertTranslationBenchExpectedActionArity(

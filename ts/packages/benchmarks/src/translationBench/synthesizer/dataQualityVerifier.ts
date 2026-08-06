@@ -13,7 +13,10 @@ import {
     parseTranslationBenchGeneratedCandidate,
     parseTranslationBenchReviewerDecision,
 } from "./datasetGenerator.js";
-import { parseTranslationBenchDatasetBuilderJson } from "./benchmark.js";
+import {
+    computeTranslationBenchCanonicalJsonHash,
+    parseTranslationBenchDatasetBuilderJson,
+} from "./benchmark.js";
 import {
     loadTranslationBenchQualityVerifierPromptPack,
     renderTranslationBenchPromptTemplate,
@@ -41,14 +44,14 @@ export interface TranslationBenchQualityVerifyResult {
     accepted: boolean;
     format: TranslationBenchFormatCheckResult;
     semantic?: TranslationBenchSemanticCheckResult;
-        feedback: TranslationBenchReviewIssue[];
+    feedback: TranslationBenchReviewIssue[];
 }
 
 export interface TranslationBenchQualityVerifierOptions {
-        synthesizerOutput: unknown;
+    synthesizerOutput: unknown;
     loop: TranslationBenchGenerationQualityLoopOptions;
     candidateHash: string;
-        candidate?: TranslationBenchGeneratedCandidate;
+    candidate?: TranslationBenchGeneratedCandidate;
     semanticLlm: TranslationBenchGenerationLlm;
     promptsDir?: string;
     promptPack?: TranslationBenchQualityVerifierPromptPack;
@@ -90,14 +93,6 @@ export function runTranslationBenchFormatChecker(
     loop: TranslationBenchGenerationQualityLoopOptions,
     preParsed?: TranslationBenchGeneratedCandidate,
 ): TranslationBenchFormatCheckResult {
-    if (preParsed !== undefined) {
-        return {
-            stage: "format_checker",
-            passed: true,
-            issues: [],
-            candidate: preParsed,
-        };
-    }
     try {
         const candidate = parseTranslationBenchGeneratedCandidate(
             synthesizerOutput,
@@ -110,6 +105,27 @@ export function runTranslationBenchFormatChecker(
                     : {}),
             },
         );
+        // Prefer re-parsed candidate; reject preParsed that drifts from raw JSON.
+        if (preParsed !== undefined) {
+            const fromRaw = computeTranslationBenchCanonicalJsonHash(candidate);
+            const fromPre = computeTranslationBenchCanonicalJsonHash(preParsed);
+            if (fromRaw !== fromPre) {
+                return {
+                    stage: "format_checker",
+                    passed: false,
+                    issues: [
+                        {
+                            code: "INVALID_PARAMETERS",
+                            path: "$",
+                            message:
+                                "preParsed candidate does not match synthesizerOutput",
+                            suggestedFix:
+                                "Pass the candidate produced by parsing synthesizerOutput only",
+                        },
+                    ],
+                };
+            }
+        }
         return {
             stage: "format_checker",
             passed: true,
@@ -166,7 +182,7 @@ export function semanticCheckerJsonSchema(
 ): CompletionJsonSchema {
     const score = { type: "number", minimum: 0, maximum: 1 };
     return {
-        name: "action_eval_quality_verifier_semantic",
+        name: "translation_bench_quality_verifier_semantic",
         description:
             "Independent data-quality decision for one synthesizer candidate",
         schema: {
@@ -332,14 +348,7 @@ export async function runTranslationBenchDataQualityVerifier(
         };
     }
 
-    if (!pack.acceptance.requireSemanticApprove) {
-        return {
-            accepted: format.passed,
-            format,
-            feedback: [],
-        };
-    }
-
+    // Pack load already requires require_semantic_approve=true.
     const semantic = await runTranslationBenchSemanticChecker({
         pack,
         loop: options.loop,

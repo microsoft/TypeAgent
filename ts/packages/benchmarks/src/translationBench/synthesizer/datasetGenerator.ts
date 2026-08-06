@@ -18,6 +18,7 @@ import {
     computeTranslationBenchSourceManifestHash,
     createTranslationBenchTypeAgentSchemaCatalog,
     parseTranslationBenchDatasetBuilderJson,
+    translationBenchCaseRecordSchemas,
     validateTranslationBenchBenchmark,
     type TranslationBenchBenchmark,
     type TranslationBenchBenchmarkAction,
@@ -30,9 +31,11 @@ import {
     type TranslationBenchDatasetBuilderCompletion,
     type TranslationBenchGeneratedAttempt,
     type TranslationBenchGeneratedCaseProvenance,
+    type TranslationBenchGenerationContractVersion,
     type TranslationBenchPublicProbe,
     type TranslationBenchTargetAction,
 } from "./benchmark.js";
+import { parseVersionedWithZod } from "./zodJson.js";
 import type { ActionConfigProvider } from "agent-dispatcher/internal";
 import {
     assertTranslationBenchSourceManifest,
@@ -59,6 +62,7 @@ import {
     runTranslationBenchFormatChecker,
 } from "./dataQualityVerifier.js";
 import {
+    loadTranslationBenchQualityVerifierPromptPack,
     loadTranslationBenchSynthesizerPromptPack,
     renderTranslationBenchPromptTemplate,
     toTranslationBenchPromptYaml,
@@ -119,7 +123,8 @@ const REVIEW_ISSUE_CODES = [
     "UNNATURAL_TEXT",
     "OTHER",
 ] as const;
-const TRANSLATION_BENCH_GENERATION_CONTRACT_VERSION = 2;
+const TRANSLATION_BENCH_GENERATION_CONTRACT_VERSION =
+    2 satisfies TranslationBenchGenerationContractVersion;
 
 export type TranslationBenchReviewIssueCode = (typeof REVIEW_ISSUE_CODES)[number];
 
@@ -161,10 +166,28 @@ export interface TranslationBenchGenerationQualityLoopOptions {
     activeSchemas: string[];
     genCaseCount: number;
     maxAttempts: number;
-        generator: TranslationBenchGenerationLlm;
-        reviewer: TranslationBenchGenerationLlm;
+    generator: TranslationBenchGenerationLlm;
+    reviewer: TranslationBenchGenerationLlm;
     forbiddenUtterances?: ReadonlySet<string>;
-        promptsDir?: string;
+    promptsDir?: string;
+}
+
+// Checkpoint settings fingerprint for a generation run.
+export interface TranslationBenchGenerationCheckpointSettings {
+    kind: "translation-bench-generation";
+    contractVersion: TranslationBenchGenerationContractVersion;
+    sourceManifestHash: string;
+    catalogDigest: string;
+    catalogSchemaHashes: Record<string, string>;
+    caseCount: number;
+    genCaseCount: number;
+    maxAttempts: number;
+    requireCompleteCoverage: boolean;
+    generatorModel: string;
+    reviewerModel: string;
+    schedule: TranslationBenchGenerationScheduleEntry[];
+    synthesizerPromptHash: string;
+    qualityVerifierPromptHash: string;
 }
 
 export type TranslationBenchSynthesizerLlm = TranslationBenchGenerationLlm;
@@ -184,6 +207,7 @@ export interface TranslationBenchGeneratedBenchmarkOptions {
     reviewer: TranslationBenchGenerationLlm;
     checkpointPath?: string;
     resume?: boolean;
+    promptsDir?: string;
     pricing?: Record<string, TranslationBenchBenchmarkPricing>;
     onProgress?: (completed: number, total: number) => void;
 }
@@ -400,7 +424,7 @@ export function parseTranslationBenchGeneratedCandidate(
         schema: TranslationBenchBenchmarkSchema;
         genCaseCount: number;
         forbiddenUtterances?: ReadonlySet<string>;
-                actionShape?: TranslationBenchActionShapePolicy;
+        actionShape?: TranslationBenchActionShapePolicy;
     },
 ): TranslationBenchGeneratedCandidate {
     requirePositiveInteger(context.genCaseCount, "Translation bench gen-case count");
@@ -507,6 +531,8 @@ export function parseTranslationBenchGeneratedCandidate(
 export function parseTranslationBenchReviewerDecision(
     value: unknown,
     candidateHash: string,
+    // Optional floor; pack threshold is applied later by the quality verifier.
+    approveScoreThreshold?: number,
 ): TranslationBenchReviewerDecision {
     const decision = reviewerDecisionSchema.parse(
         value,
@@ -520,13 +546,15 @@ export function parseTranslationBenchReviewerDecision(
         if (decision.issues.length !== 0) {
             throw new Error("Reviewer approval must not contain issues");
         }
-        const belowThreshold = Object.entries(decision.scores).find(
-            ([, score]) => score < 0.8,
-        );
-        if (belowThreshold !== undefined) {
-            throw new Error(
-                `Reviewer approval score '${belowThreshold[0]}' is below 0.8`,
+        if (approveScoreThreshold !== undefined) {
+            const belowThreshold = Object.entries(decision.scores).find(
+                ([, score]) => score < approveScoreThreshold,
             );
+            if (belowThreshold !== undefined) {
+                throw new Error(
+                    `Reviewer approval score '${belowThreshold[0]}' is below ${approveScoreThreshold}`,
+                );
+            }
         }
     } else if (decision.issues.length === 0) {
         throw new Error("Reviewer rejection must contain actionable issues");
@@ -636,7 +664,7 @@ function generationJsonSchema(
         history: generationHistoryJsonSchema(),
     };
     return {
-        name: "action_eval_generated_row",
+        name: "translation_bench_generated_row",
         description:
             "One seed and its positive and negative generalization cases",
         schema: {
@@ -750,6 +778,10 @@ export async function runTranslationBenchGenerationQualityLoop(
     options: TranslationBenchGenerationQualityLoopOptions,
 ): Promise<TranslationBenchAcceptedGeneration> {
     requirePositiveInteger(options.maxAttempts, "Translation bench maximum attempts");
+    requirePositiveInteger(options.genCaseCount, "Translation bench gen-case count");
+    if (options.genCaseCount % 2 !== 0) {
+        throw new Error("Translation bench gen-case count must be even");
+    }
     if (options.maxAttempts > 5) {
         throw new Error("Translation bench maximum attempts must not exceed 5");
     }
@@ -824,11 +856,30 @@ export async function runTranslationBenchGenerationQualityLoop(
         });
 
         if (
-            verify.semantic === undefined ||
             !verify.format.passed ||
             verify.format.candidate === undefined
         ) {
             feedback = verify.feedback;
+            record.validationIssues = feedback;
+            previousRejectedCandidate = candidate;
+            continue;
+        }
+
+        // Semantic is required; missing semantic is a hard reject (not accept).
+        if (verify.semantic === undefined) {
+            feedback =
+                verify.feedback.length > 0
+                    ? verify.feedback
+                    : [
+                          {
+                              code: "OTHER",
+                              path: "$",
+                              message:
+                                  "quality verifier did not produce a semantic decision",
+                              suggestedFix:
+                                  "Ensure the reviewer returns valid approve/reject JSON",
+                          },
+                      ];
             record.validationIssues = feedback;
             previousRejectedCandidate = candidate;
             continue;
@@ -853,7 +904,7 @@ export async function runTranslationBenchGenerationQualityLoop(
 
         if (verify.accepted && semantic.decision.decision === "approve") {
             return {
-                candidate,
+                candidate: verify.format.candidate,
                 candidateHash,
                 acceptedAttempt: attempt,
                 attempts,
@@ -884,7 +935,7 @@ function generatedLineage(
             activeSchemas,
             true,
         ),
-        transformVersion: 2,
+        transformVersion: 2 as const,
     };
 }
 
@@ -894,6 +945,8 @@ export function finalizeTranslationBenchGeneratedCaseLineage(
 ): TranslationBenchBenchmarkCaseRecord {
     const finalized = structuredClone(evalCase);
     for (const probe of [finalized.seed, ...finalized.generalizations]) {
+        // Generated probes always use transform v2 + canonical payload hash.
+        probe.lineage.transformVersion = 2 as const;
         probe.lineage.canonicalPayloadHash =
             computeTranslationBenchCanonicalPayloadHash(
                 probe,
@@ -1058,7 +1111,13 @@ function checkpointHeader(
     catalog: TranslationBenchBenchmarkSchema[],
     schedule: TranslationBenchGenerationSchedule,
 ): TranslationBenchCheckpointHeader {
-    const settings = {
+    const synthesizerPack = loadTranslationBenchSynthesizerPromptPack(
+        options.promptsDir,
+    );
+    const qualityPack = loadTranslationBenchQualityVerifierPromptPack(
+        options.promptsDir,
+    );
+    const settings: TranslationBenchGenerationCheckpointSettings = {
         kind: "translation-bench-generation",
         contractVersion: TRANSLATION_BENCH_GENERATION_CONTRACT_VERSION,
         sourceManifestHash: computeTranslationBenchSourceManifestHash(
@@ -1078,6 +1137,22 @@ function checkpointHeader(
         generatorModel: options.generator.model,
         reviewerModel: options.reviewer.model,
         schedule: schedule.entries,
+        // Pin packs so resume cannot mix labeler/verifier policies.
+        synthesizerPromptHash: hashJson({
+            name: synthesizerPack.name,
+            version: synthesizerPack.version,
+            role: synthesizerPack.role,
+            template: synthesizerPack.template,
+            modelConfiguration: synthesizerPack.modelConfiguration,
+        }),
+        qualityVerifierPromptHash: hashJson({
+            name: qualityPack.name,
+            version: qualityPack.version,
+            role: qualityPack.role,
+            formatChecker: qualityPack.formatChecker,
+            semanticChecker: qualityPack.semanticChecker,
+            acceptance: qualityPack.acceptance,
+        }),
     };
     return {
         kind: "translation-bench-checkpoint",
@@ -1087,6 +1162,22 @@ function checkpointHeader(
         shardIndex: 0,
         shardCount: 1,
     };
+}
+
+function generationCheckpointSettings(
+    settings: unknown,
+): TranslationBenchGenerationCheckpointSettings {
+    const value = settings as TranslationBenchGenerationCheckpointSettings;
+    if (
+        value?.kind !== "translation-bench-generation" ||
+        typeof value.generatorModel !== "string" ||
+        typeof value.reviewerModel !== "string"
+    ) {
+        throw new Error(
+            "Translation bench generation checkpoint settings are invalid",
+        );
+    }
+    return value;
 }
 
 function checkpointIdentity(
@@ -1116,6 +1207,7 @@ function loadCheckpointCases(
     ) {
         throw new Error("Translation bench generation checkpoint is incompatible");
     }
+    const settings = generationCheckpointSettings(header.settings);
     const bySlot = new Map<number, TranslationBenchBenchmarkCaseRecord>();
     for (const row of checkpoint.rows) {
         const entry = schedule.find(
@@ -1123,10 +1215,8 @@ function loadCheckpointCases(
                 translationBenchResumeKey(
                     checkpointIdentity(
                         candidate,
-                        (header.settings as { generatorModel: string })
-                            .generatorModel,
-                        (header.settings as { reviewerModel: string })
-                            .reviewerModel,
+                        settings.generatorModel,
+                        settings.reviewerModel,
                     ),
                 ) === translationBenchResumeKey(row),
         );
@@ -1135,17 +1225,22 @@ function loadCheckpointCases(
                 "Translation bench generation checkpoint has unexpected work",
             );
         }
+        const evalCase = parseVersionedWithZod(
+            row.value,
+            translationBenchCaseRecordSchemas,
+            `checkpoint case slot-${entry.slot}`,
+        ) as TranslationBenchBenchmarkCaseRecord;
         if (
-            row.value.targetAction.schemaName !== entry.schemaName ||
-            row.value.targetAction.actionName !== entry.actionName ||
-            row.value.id !==
+            evalCase.targetAction.schemaName !== entry.schemaName ||
+            evalCase.targetAction.actionName !== entry.actionName ||
+            evalCase.id !==
                 `generated-${String(entry.slot).padStart(6, "0")}-${entry.schemaName}-${entry.actionName}`
         ) {
             throw new Error(
                 "Translation bench generation checkpoint target does not match its schedule",
             );
         }
-        bySlot.set(entry.slot, row.value);
+        bySlot.set(entry.slot, evalCase);
     }
     return bySlot;
 }
@@ -1159,6 +1254,9 @@ export async function generateTranslationBenchBenchmark(
     requirePositiveInteger(options.maxAttempts, "Translation bench maximum attempts");
     if (options.genCaseCount % 2 !== 0) {
         throw new Error("Translation bench gen-case count must be even");
+    }
+    if (options.maxAttempts > 5) {
+        throw new Error("Translation bench maximum attempts must not exceed 5");
     }
     const catalog = createTranslationBenchTypeAgentSchemaCatalog(options.provider);
     const schedule = createTranslationBenchGenerationSchedule(catalog, {
@@ -1176,7 +1274,7 @@ export async function generateTranslationBenchBenchmark(
     });
     if (anchors.length < options.caseCount) {
         throw new Error(
-            `Pinned source source has ${anchors.length} eligible anchors; ${options.caseCount} unique anchors are required`,
+            `Pinned source has ${anchors.length} eligible anchors; ${options.caseCount} unique anchors are required`,
         );
     }
     const schemas = new Map(

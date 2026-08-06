@@ -33,6 +33,10 @@ import type { ActionConfigProvider } from "agent-dispatcher/internal";
 import type { TranslationBenchScenario } from "./scenario.js";
 import { assertTranslationBenchMinimumVisibleActions } from "./generationSupport.js";
 import {
+    TRANSLATION_BENCH_DEFAULT_ACTION_SHAPE,
+    assertTranslationBenchExpectedActionArity,
+} from "./actionShape.js";
+import {
     getTranslationBenchSourceAdapter,
     type TranslationBenchSourceAdapter,
     type TranslationBenchSourceCandidate,
@@ -518,16 +522,23 @@ export function materializeTranslationBenchBenchmarkFromSource(
                 );
             }
         } else if (
-            candidate.sourceCalls.length === 0 ||
-            decision.actionMappings.length !== candidate.sourceCalls.length ||
-            sourceCallIndexes.some((index, expected) => index !== expected)
+            // Simple-action only: one source call mapped once. Multi reserved.
+            candidate.sourceCalls.length !== 1 ||
+            decision.actionMappings.length !== 1 ||
+            sourceCallIndexes[0] !== 0
         ) {
             throw new Error(
-                `Candidate '${candidate.candidateId}' must map every source call exactly once in source order`,
+                `Candidate '${candidate.candidateId}' simple-action score requires exactly one source call mapped at index 0`,
             );
         }
         const expectedActions = decision.actionMappings.map((mapping) =>
             mappedAction(candidate, mapping, catalog),
+        );
+        assertTranslationBenchExpectedActionArity(
+            expectedActions,
+            decision.role,
+            TRANSLATION_BENCH_DEFAULT_ACTION_SHAPE,
+            `Candidate '${candidate.candidateId}'`,
         );
         if (
             decision.role !== "negative" &&
@@ -773,7 +784,7 @@ export function assertTranslationBenchSourceBenchmarkTrust(
             const candidate = bySource.get(key);
             if (candidate === undefined) {
                 throw new Error(
-                    `Translation-bench probe '${key}' is absent from the pinned source source`,
+                    `Translation-bench probe '${key}' is absent from the pinned source`,
                 );
             }
             const lineage = probe.lineage;
@@ -835,7 +846,7 @@ export function assertTranslationBenchSourceBenchmarkTrust(
             }
             if (probe.expectedActions.length !== candidate.sourceCalls.length) {
                 throw new Error(
-                    `Translation-bench probe '${key}' does not preserve the source source-call count`,
+                    `Translation-bench probe '${key}' does not preserve the source-call count`,
                 );
             }
             for (let index = 0; index < candidate.sourceCalls.length; index++) {
@@ -845,7 +856,7 @@ export function assertTranslationBenchSourceBenchmarkTrust(
                     ) !== sha256Json(candidate.sourceCalls[index]!.parameters)
                 ) {
                     throw new Error(
-                        `Translation-bench probe '${key}' rewrites source source-call arguments at index ${index}`,
+                        `Translation-bench probe '${key}' rewrites source-call arguments at index ${index}`,
                     );
                 }
             }

@@ -198,7 +198,7 @@ function sourceAnchor() {
             sourcePart: "conversations[0]",
             rawRowHash: "1".repeat(64),
             sourceSliceHash: "2".repeat(64),
-            transformVersion: 1,
+            transformVersion: 1 as const,
         },
         rawRow: { id: "source-row-1" },
         sourceSlice: { utterance: "Find the public item" },
@@ -418,7 +418,7 @@ describe("generated translation bench lineage finalization", () => {
             ...payload,
             lineage: {
                 ...sourceAnchor().lineage,
-                transformVersion: 2,
+                transformVersion: 2 as const,
                 canonicalPayloadHash: staleHash,
             },
             selection: {
@@ -473,6 +473,27 @@ describe("translation bench reviewer decision validation", () => {
                 HASH,
             ),
         ).toThrow(/hash/i);
+    });
+
+    it("keeps structural parse free of score floor; optional threshold is explicit", () => {
+        const lowApprove = {
+            ...reviewerDecision(HASH, "approve"),
+            scores: {
+                anchorFidelity: 0.5,
+                groundTruthCorrectness: 1,
+                naturalness: 1,
+                generalizationDiversity: 1,
+                negativeQuality: 1,
+                historyCoherence: 1,
+            },
+        };
+        // Structural parse alone does not own the pack threshold.
+        expect(
+            parseTranslationBenchReviewerDecision(lowApprove, HASH).decision,
+        ).toBe("approve");
+        expect(() =>
+            parseTranslationBenchReviewerDecision(lowApprove, HASH, 0.8),
+        ).toThrow(/below 0\.8/);
     });
 });
 
@@ -722,5 +743,50 @@ describe("translation bench generation quality loop", () => {
             runTranslationBenchGenerationQualityLoop(options),
         ).rejects.toThrow(/five|5|maximum/i);
         expect(generations).toBe(0);
+    });
+
+    it("rejects odd genCaseCount before calling a model", async () => {
+        let generations = 0;
+        const options = qualityLoopOptions(
+            async () => {
+                generations += 1;
+                return JSON.stringify(generatedCandidate());
+            },
+            async (prompt) =>
+                JSON.stringify(
+                    reviewerDecision(
+                        candidateHashFromPrompt(prompt),
+                        "approve",
+                    ),
+                ),
+        );
+        options.genCaseCount = 3;
+
+        await expect(
+            runTranslationBenchGenerationQualityLoop(options),
+        ).rejects.toThrow(/even/i);
+        expect(generations).toBe(0);
+    });
+
+    it("fails closed when generator always returns non-JSON", async () => {
+        let generations = 0;
+        let reviews = 0;
+        const options = qualityLoopOptions(
+            async () => {
+                generations += 1;
+                return "not-json";
+            },
+            async () => {
+                reviews += 1;
+                return "{}";
+            },
+        );
+        options.maxAttempts = 2;
+
+        await expect(
+            runTranslationBenchGenerationQualityLoop(options),
+        ).rejects.toThrow(/2 attempts/i);
+        expect(generations).toBe(2);
+        expect(reviews).toBe(0);
     });
 });

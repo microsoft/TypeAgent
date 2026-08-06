@@ -205,8 +205,15 @@ function parseJsonl(text: string): unknown[] {
     if (lines.length === 0) {
         const trimmed = text.trim();
         if (trimmed.startsWith("[")) {
-            const parsed = parseWithZod(z.array(z.unknown()), parseJsonText(trimmed, "seed-qa array"), "seed-qa array");
-            return parsed;
+            const parsed = parseWithZod(
+                z.array(z.unknown()),
+                parseJsonText(trimmed, "seed-qa array"),
+                "seed-qa array",
+            );
+            // Same versioned row gate as JSONL lines.
+            return parsed.map((row, index) =>
+                parseSeedQaRow(row, `seed-qa array[${index}]`),
+            );
         }
         throw new Error("seed-qa source is empty");
     }
@@ -256,9 +263,12 @@ function importCandidates(
                 typeof row.id === "string" && row.id.trim()
                     ? row.id.trim()
                     : `row-${rowIndex}`;
-            const utterance = requireString(row.query ?? row.utterance, `${rowLabel} query`);
+            const utterance = requireString(
+                row.query ?? row.question ?? row.utterance,
+                `${rowLabel} query`,
+            );
             const sourceCalls = parseCalls(
-                row.function_calls ?? row.expected_calls ?? [],
+                row.function_calls ?? row.calls ?? row.expected_calls ?? [],
                 rowLabel,
             );
             const sourceTools = parseTools(row.tools, rowLabel, sourceCalls);
@@ -275,15 +285,24 @@ function importCandidates(
                     : sourceCalls.length > 1
                       ? "strict"
                       : "any";
-            const dimensions =
+            const rawDimensions =
                 typeof row.dimensions === "object" &&
                 row.dimensions !== null &&
                 !Array.isArray(row.dimensions)
-                    ? (structuredClone(row.dimensions) as Record<
-                          string,
-                          string | number | boolean
-                      >)
+                    ? (structuredClone(row.dimensions) as Record<string, unknown>)
                     : {};
+            // Only plain scalar dimensions; drop reserved provenance keys from source.
+            const dimensions: Record<string, string | number | boolean> = {};
+            for (const [key, value] of Object.entries(rawDimensions)) {
+                if (key === "adapter" || key === "sourceCallCount") continue;
+                if (
+                    typeof value === "string" ||
+                    typeof value === "number" ||
+                    typeof value === "boolean"
+                ) {
+                    dimensions[key] = value;
+                }
+            }
             const sourceResponses = sourceCalls.map((call) =>
                 JSON.stringify({
                     name: call.name,
@@ -318,9 +337,9 @@ function importCandidates(
                 sourceCalls,
                 sourceResponses,
                 dimensions: {
+                    ...dimensions,
                     adapter: "seed-qa-jsonl",
                     sourceCallCount: sourceCalls.length,
-                    ...dimensions,
                 },
                 lineage: {
                     dataset: options.manifest.dataset,
@@ -334,7 +353,7 @@ function importCandidates(
                     rawRowHash: computeTranslationBenchRawRowHash(rawRow),
                     sourceSliceHash:
                         computeTranslationBenchSourceSliceHash(sourceSlice),
-                    transformVersion: 1,
+                    transformVersion: 1 as const,
                 },
             });
             if (candidates.length >= maxCandidates) {

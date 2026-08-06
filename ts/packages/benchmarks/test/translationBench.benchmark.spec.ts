@@ -25,6 +25,7 @@ import {
     materializeTranslationBenchBenchmark,
     parseTranslationBenchBenchmarkForEvaluation,
     parseTranslationBenchBenchmarkJsonl,
+    validateTranslationBenchBenchmark,
 } from "../src/translationBench/synthesizer/benchmark.js";
 
 const HASH = "1".repeat(64);
@@ -113,7 +114,7 @@ function candidate(
                 schemas,
                 [schemas[0]!.schemaName],
             ),
-            transformVersion: 1,
+            transformVersion: 1 as const,
         },
     };
 }
@@ -226,6 +227,43 @@ describe("translation-bench benchmark JSONL", () => {
         ).toThrow(/bad\.jsonl:2/);
         expect(() => parseTranslationBenchBenchmarkJsonl(`\n${jsonl}`)).toThrow(
             /first line must be the metadata record/,
+        );
+    });
+
+    it("rejects unsupported case and metadata versions", () => {
+        const jsonl = formatTranslationBenchBenchmarkJsonl(materialize());
+        const lines = jsonl.trimEnd().split("\n");
+        const metadata = JSON.parse(lines[0]!);
+        metadata.version = 99;
+        expect(() =>
+            parseTranslationBenchBenchmarkJsonl(
+                [JSON.stringify(metadata), ...lines.slice(1)].join("\n"),
+                "bad-version.jsonl",
+            ),
+        ).toThrow(/unsupported metadata version 99/);
+
+        const caseRow = JSON.parse(lines[1]!);
+        caseRow.version = 99;
+        expect(() =>
+            parseTranslationBenchBenchmarkJsonl(
+                [lines[0], JSON.stringify(caseRow)].join("\n"),
+                "bad-case-version.jsonl",
+            ),
+        ).toThrow(/unsupported case version 99/);
+    });
+
+    it("rejects multi-action seed probes under simple shape", () => {
+        const benchmark = materialize();
+        benchmark.cases[0]!.seed.expectedActions = [
+            ...benchmark.cases[0]!.seed.expectedActions,
+            {
+                schemaName: benchmark.cases[0]!.targetAction.schemaName,
+                actionName: benchmark.cases[0]!.targetAction.actionName,
+                parameters: { extra: true },
+            },
+        ];
+        expect(() => validateTranslationBenchBenchmark(benchmark)).toThrow(
+            /exactly one/,
         );
     });
 
@@ -550,7 +588,9 @@ describe("LLM-assisted translation-bench materialization", () => {
                     selection("c3", "seed"),
                 ],
             }),
-        ).toThrow(/negative role must have no expected calls|seed.*requires/);
+        ).toThrow(
+            /no expected actions|negative role must have no expected calls|seed.*requires/,
+        );
 
         expect(() =>
             materialize({

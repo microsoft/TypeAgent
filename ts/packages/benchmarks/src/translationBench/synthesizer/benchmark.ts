@@ -24,8 +24,18 @@ type ActionSchemaFile = ReturnType<
     ActionConfigProvider["getActionSchemaFileForConfig"]
 >;
 import type { TranslationBenchScenario } from "./scenario.js";
+import {
+    TRANSLATION_BENCH_DEFAULT_ACTION_SHAPE,
+    assertTranslationBenchExpectedActionArity,
+} from "./actionShape.js";
 
 export type TranslationBenchOrder = "strict" | "any";
+// Closed transform set: source import (1) vs generated/canonical (2).
+export type TranslationBenchTransformVersion = 1 | 2;
+// Generation contract currently supported end-to-end.
+export type TranslationBenchGenerationContractVersion = 2;
+// Default semantic approve floor (prompt pack + stored-approval validation).
+export const TRANSLATION_BENCH_DEFAULT_APPROVE_SCORE_THRESHOLD = 0.8;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 
 export interface TranslationBenchBenchmarkAction {
@@ -53,7 +63,7 @@ export interface TranslationBenchPublicTurnLineage {
     rawRowHash: string;
     sourceSliceHash: string;
     canonicalPayloadHash: string;
-    transformVersion: number;
+    transformVersion: TranslationBenchTransformVersion;
 }
 
 export interface TranslationBenchSelectionAnnotation {
@@ -238,7 +248,7 @@ export interface TranslationBenchBenchmarkConstruction {
     sourceManifestHash?: string;
     decisionLedger?: TranslationBenchBuilderDecisionLedgerEntry[];
     generation?: {
-        contractVersion: number;
+        contractVersion: TranslationBenchGenerationContractVersion;
         generatorModel: string;
         reviewerModel: string;
         caseCount: number;
@@ -431,7 +441,7 @@ const lineageSchema = z
         rawRowHash: sha256Schema,
         sourceSliceHash: sha256Schema,
         canonicalPayloadHash: sha256Schema,
-        transformVersion: z.number().int().positive(),
+        transformVersion: z.union([z.literal(1), z.literal(2)]),
     })
     .strict();
 const selectionAnnotationSchema = z
@@ -724,12 +734,18 @@ const metadataSchemaV1 = z
                 decisionLedger: decisionLedgerSchema.optional(),
                 generation: z
                     .object({
-                        contractVersion: z.number().int().positive(),
+                        contractVersion: z.literal(2),
                         generatorModel: z.string().trim().min(1),
                         reviewerModel: z.string().trim().min(1),
                         caseCount: z.number().int().positive(),
-                        genCaseCount: z.number().int().positive(),
-                        maxAttempts: z.number().int().positive(),
+                        genCaseCount: z
+                            .number()
+                            .int()
+                            .positive()
+                            .refine((n) => n % 2 === 0, {
+                                message: "genCaseCount must be even",
+                            }),
+                        maxAttempts: z.number().int().positive().max(5),
                         coverage: generationCoverageSchema,
                         runFingerprint: sha256Schema,
                     })
@@ -1090,7 +1106,7 @@ export function getTranslationBenchPublicTurnKey(
         lineage.rowIndex,
         lineage.rowId,
         lineage.sourcePart,
-        ...(lineage.transformVersion >= 2
+        ...(lineage.transformVersion === 2
             ? [lineage.canonicalPayloadHash]
             : []),
     ]);
@@ -1244,13 +1260,14 @@ function validateProbeRole(
     target: TranslationBenchTargetAction,
     label: string,
 ) {
+    // Simple-action pipeline: exact arity (multi reserved, not implemented).
+    assertTranslationBenchExpectedActionArity(
+        probe.expectedActions,
+        role,
+        TRANSLATION_BENCH_DEFAULT_ACTION_SHAPE,
+        label,
+    );
     const isPositive = role === "seed" || role === "positive";
-    if (isPositive && probe.expectedActions.length === 0) {
-        throw new Error(`${label} role '${role}' requires at least one call`);
-    }
-    if (!isPositive && probe.expectedActions.length !== 0) {
-        throw new Error(`${label} negative role must have no expected calls`);
-    }
     if (isPositive && !actionHasTarget(probe.expectedActions, target)) {
         throw new Error(
             `${label} does not contain target action '${target.schemaName}.${target.actionName}'`,
@@ -2000,7 +2017,10 @@ function validateGeneratedCaseProvenance(
         approval?.decision !== "approve" ||
         approval.candidateHash !== generation.candidateHash ||
         approval.issues.length !== 0 ||
-        Object.values(approval.scores).some((score) => score < 0.8)
+        Object.values(approval.scores).some(
+            (score) =>
+                score < TRANSLATION_BENCH_DEFAULT_APPROVE_SCORE_THRESHOLD,
+        )
     ) {
         throw new Error(
             `Case '${evalCase.id}' does not have a valid independent reviewer approval`,
@@ -2073,7 +2093,6 @@ export function validateTranslationBenchBenchmark(
         );
         if (
             benchmark.cases.length !== generation.caseCount ||
-            generation.genCaseCount % 2 !== 0 ||
             generation.coverage.schemaCount !==
                 benchmark.metadata.schemas.length ||
             generation.coverage.actionCount !== catalogActionCount
@@ -2217,16 +2236,47 @@ export function validateTranslationBenchBenchmark(
                 }
                 validateAction(definition, action);
             }
+            const transformVersion = probe.lineage.transformVersion;
+            if (transformVersion !== 1 && transformVersion !== 2) {
+                throw new Error(
+                    `Case '${evalCase.id}' has unsupported transformVersion ${String(transformVersion)}`,
+                );
+            }
             const actualHash = computeTranslationBenchCanonicalPayloadHash(
                 probe,
                 benchmark.metadata.schemas,
                 evalCase.activeSchemas,
-                probe.lineage.transformVersion >= 2,
+                transformVersion === 2,
             );
             if (actualHash !== probe.lineage.canonicalPayloadHash) {
                 throw new Error(
                     `Case '${evalCase.id}' ${probe.selection.role} canonical payload hash drift: stored ${probe.lineage.canonicalPayloadHash}, computed ${actualHash}`,
                 );
+            }
+        }
+        // shapeOnly is unscored but still must be schema-valid simple probes.
+        for (const probe of evalCase.shapeOnly ?? []) {
+            assertTranslationBenchExpectedActionArity(
+                probe.expectedActions,
+                probe.expectedActions.length === 0 ? "negative" : "positive",
+                TRANSLATION_BENCH_DEFAULT_ACTION_SHAPE,
+                `Case '${evalCase.id}' shapeOnly '${probe.id}'`,
+            );
+            for (const action of probe.expectedActions) {
+                if (!evalCase.activeSchemas.includes(action.schemaName)) {
+                    throw new Error(
+                        `Case '${evalCase.id}' shapeOnly expects inactive schema '${action.schemaName}'`,
+                    );
+                }
+                const definition = parsedSchemas
+                    .get(action.schemaName)
+                    ?.actionSchemas.get(action.actionName);
+                if (definition === undefined) {
+                    throw new Error(
+                        `Case '${evalCase.id}' shapeOnly expects unknown action '${action.schemaName}.${action.actionName}'`,
+                    );
+                }
+                validateAction(definition, action);
             }
         }
         if (evalCase.seed.selection.role !== "seed") {
