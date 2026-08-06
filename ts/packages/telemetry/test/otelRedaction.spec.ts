@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createSecretFilter } from "@typeagent/common-utils";
+import { createSecretFilter, type SecretFilter } from "@typeagent/common-utils";
 
 import { redactObject, redactText } from "../src/otel/redaction.js";
 
@@ -55,7 +55,7 @@ describe("redactObject", () => {
         const input = {
             count: 3,
             enabled: true,
-            when: new Date("2024-01-01T00:00:00Z"),
+            nested: { value: "safe" },
             secret: "sk-proj-abcdefghijklmnopqrstuvwxyz",
         };
 
@@ -63,19 +63,51 @@ describe("redactObject", () => {
 
         expect(result.count).toBe(3);
         expect(result.enabled).toBe(true);
-        expect(result.when).toBe(input.when);
+        expect(result.nested).not.toBe(input.nested);
+        expect(result.nested.value).toBe("safe");
         expect(input.secret).toBe("sk-proj-abcdefghijklmnopqrstuvwxyz");
     });
 
     it("redacts structured values using a provided SecretFilter", () => {
-        const secretFilter = createSecretFilter();
-        secretFilter.addValue("super-secret-value");
+        const baseFilter = createSecretFilter({
+            initialValues: ["super-secret-value"],
+        });
+        let filterCalls = 0;
+        const secretFilter: SecretFilter = {
+            addValue: (value) => baseFilter.addValue(value),
+            addValues: (values) => baseFilter.addValues(values),
+            filter: (text) => {
+                filterCalls++;
+                return baseFilter.filter(text);
+            },
+            get size() {
+                return baseFilter.size;
+            },
+        };
 
         const result = redactObject(
-            { nested: { value: "super-secret-value" } },
+            {
+                nested: { value: "super-secret-value" },
+                list: ["safe", "super-secret-value"],
+            },
             { secretFilter },
         );
 
         expect(result.nested.value).not.toContain("super-secret-value");
+        expect(result.list[1]).not.toContain("super-secret-value");
+        expect(filterCalls).toBe(1);
+    });
+
+    it("returns top-level values that JSON does not serialize", () => {
+        expect(redactObject(undefined)).toBeUndefined();
+    });
+
+    it("preserves start-of-string matching for nested password flags", () => {
+        const result = redactObject({
+            first: "safe",
+            second: "--password hunter2secret",
+        });
+
+        expect(result.second).not.toContain("hunter2secret");
     });
 });

@@ -295,6 +295,40 @@ describe("telemetry bootstrap", () => {
         expect(writerShutdown).toBe(true);
     });
 
+    it("attempts all cleanup before a total-deadline rejection settles", async () => {
+        const coordinator = createCoordinator();
+        const logProvider = new TestLogProvider();
+        let writerShutdown = false;
+        const writer: TelemetryOwnedComponent = {
+            name: "hung JSONL writer",
+            forceFlush: () => new Promise<void>(() => undefined),
+            shutdown() {
+                writerShutdown = true;
+            },
+        };
+
+        await coordinator.init({
+            config: { logs: { logFile: "telemetry.jsonl" } },
+            resource: resourceFromAttributes({}),
+            lifecycle: {
+                totalTimeoutMs: 20,
+                componentTimeoutMs: 100,
+            },
+            factories: {
+                createLogProvider() {
+                    return {
+                        provider: logProvider,
+                        components: [writer],
+                    };
+                },
+            },
+        });
+
+        await expect(coordinator.shutdown()).rejects.toThrow(AggregateError);
+        expect(writerShutdown).toBe(true);
+        expect(logProvider.calls).toContain("shutdown logs");
+    });
+
     it("rolls back globals when a later signal conflicts", async () => {
         const externalMetricProvider = new MeterProvider();
         expect(metrics.setGlobalMeterProvider(externalMetricProvider)).toBe(
