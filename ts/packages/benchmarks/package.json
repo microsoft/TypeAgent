@@ -14,8 +14,8 @@
   "scripts": {
     "build": "tsc -b && node ./scripts/copyAssets.mjs",
     "clean": "node ./scripts/clean.mjs",
-    "gen-catalog": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genCatalog.js && node --max-old-space-size=4096 dist/translationBench/scripts/genActionParametersGrader.js",
     "gen-action-parameters-grader": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genActionParametersGrader.js",
+    "gen-catalog": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genCatalog.js && node --max-old-space-size=4096 dist/translationBench/scripts/genActionParametersGrader.js",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "prettier": "prettier --check package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",

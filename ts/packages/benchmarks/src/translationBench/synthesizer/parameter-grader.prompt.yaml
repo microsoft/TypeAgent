@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 # Translation-bench parameter policy grader
 # Parallel shape to quality-verifier.prompt.yaml:
 #   1) regex_checker      — deterministic name/type rules (no LLM)
