@@ -134,6 +134,15 @@ export async function bundleAgentServer(args) {
         "--prod",
         out,
     ]);
+    run("node", [
+        path.join(scriptsDir, "pruneDeploy.mjs"),
+        "--dir",
+        out,
+        "--platform",
+        args.platform,
+        "--arch",
+        args.arch,
+    ]);
     if (args.externalCli) {
         run("node", [
             path.join(scriptsDir, "pruneSdkBinaries.mjs"),

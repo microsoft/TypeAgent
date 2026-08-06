@@ -11856,8 +11856,8 @@ packages:
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
-  baseline-browser-mapping@2.11.5:
-    resolution: {integrity: sha512-xJo6a6YZnwZfnyGmQKWMbVOcii7XRibjOskRh+WJ9UHQoX16xrQrcIgAMQOzfvs8XiLMx6ih/fsLPF73iY2D1A==}
+  baseline-browser-mapping@2.11.6:
+    resolution: {integrity: sha512-69D/imtToCsIcAl8WBS2YaRwA4jO/j0HhU+hELqMEu9f54MoUtI6+XH5mrKU8rEFNEk/Ui1I2MK4/JkWacclGw==}
     engines: {node: '>=6.0.0'}
     hasBin: true
 
@@ -11928,8 +11928,8 @@ packages:
   bowser@2.11.0:
     resolution: {integrity: sha512-AlcaJBi/pqqJBIQ8U9Mcpc9i8Aqxn88Skv5d+xBX006BY5u8N3mGLHa5Lgppa7L/HfwgwLgZ6NYs+Ag6uUmJRA==}
 
-  brace-expansion@1.1.16:
-    resolution: {integrity: sha512-IDw48K2/2kRkg9LdJxurvq3lV3aBgq0REY89duEqFRthjlPdXHKMj7EnQOXVckxzgisinf3nHfrcE2FufFLXMw==}
+  brace-expansion@1.1.17:
+    resolution: {integrity: sha512-w+aeW/mkgM4PyRMOJCgi3fOrTm5Q8QY1OSfn2TO2iuDj3ezIHqejmuxbjfPrqUkgqRew1iqkyAn0tr0ZwHD9+w==}
 
   brace-expansion@2.1.3:
     resolution: {integrity: sha512-DRdx5neNsG/QXbniLFWi2YmC/68oeOOmKz6zOjVk6ZS1ZLXgLIKqVEc6hWsmkjBbgii0SwaBTcJ5XKj5gzY/4A==}
@@ -13140,8 +13140,8 @@ packages:
   electron-publish@26.8.1:
     resolution: {integrity: sha512-q+jrSTIh/Cv4eGZa7oVR+grEJo/FoLMYBAnSL5GCtqwUpr1T+VgKB/dn1pnzxIxqD8S/jP1yilT9VrwCqINR4w==}
 
-  electron-to-chromium@1.5.397:
-    resolution: {integrity: sha512-khGTy9U9x02KEtsKM8vx5A62BsRmcOsIgDpWr1ImE32Ax8GxHGPHZf+Eu9H8zOOyHJnB0jTbseyTHbq2XCT8yw==}
+  electron-to-chromium@1.5.398:
+    resolution: {integrity: sha512-AsvhAxopJGh6museTDMIjn6JpDYOfgu4RLlygomt87MUwBUqTfd/1EiPtx10/LZE8xpTvkP2E9Gafq7lkLtodQ==}
 
   electron-updater@6.6.2:
     resolution: {integrity: sha512-Cr4GDOkbAUqRHP5/oeOmH/L2Bn6+FQPxVLZtPbcmKZC63a1F3uu5EefYOssgZXG3u/zBlubbJ5PJdITdMVggbw==}
@@ -13213,6 +13213,10 @@ packages:
 
   enhanced-resolve@5.24.3:
     resolution: {integrity: sha512-PwKooW9JUzh5chmYfHM3IQl5OkK2u2Nm011MgeZrss3JmFraUx/fqrf78kk8GUMYoibx/14MdwTl/1WKkG7TpQ==}
+    engines: {node: '>=10.13.0'}
+
+  enhanced-resolve@5.24.4:
+    resolution: {integrity: sha512-GVoi+ICHocoOIU7qVVM48wOJziRsqrsyqlI0Ce0LdowRn6v3bcH2zUa9kp85ncx0nwIb9/HOCOLS3fdThDG/XQ==}
     engines: {node: '>=10.13.0'}
 
   entities@2.2.0:
@@ -25849,7 +25853,7 @@ snapshots:
 
   base64-js@1.5.1: {}
 
-  baseline-browser-mapping@2.11.5: {}
+  baseline-browser-mapping@2.11.6: {}
 
   basic-ftp@5.3.0: {}
 
@@ -25939,7 +25943,7 @@ snapshots:
 
   bowser@2.11.0: {}
 
-  brace-expansion@1.1.16:
+  brace-expansion@1.1.17:
     dependencies:
       balanced-match: 1.0.2
       concat-map: 0.0.1
@@ -25960,9 +25964,9 @@ snapshots:
 
   browserslist@4.28.7:
     dependencies:
-      baseline-browser-mapping: 2.11.5
+      baseline-browser-mapping: 2.11.6
       caniuse-lite: 1.0.30001806
-      electron-to-chromium: 1.5.397
+      electron-to-chromium: 1.5.398
       node-releases: 2.0.51
       update-browserslist-db: 1.2.3(browserslist@4.28.7)
 
@@ -27368,7 +27372,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-to-chromium@1.5.397: {}
+  electron-to-chromium@1.5.398: {}
 
   electron-updater@6.6.2(supports-color@8.1.1):
     dependencies:
@@ -27456,6 +27460,11 @@ snapshots:
       tapable: 2.3.3
 
   enhanced-resolve@5.24.3:
+    dependencies:
+      graceful-fs: 4.2.11
+      tapable: 2.3.3
+
+  enhanced-resolve@5.24.4:
     dependencies:
       graceful-fs: 4.2.11
       tapable: 2.3.3
@@ -31171,7 +31180,7 @@ snapshots:
 
   minimatch@3.1.5:
     dependencies:
-      brace-expansion: 1.1.16
+      brace-expansion: 1.1.17
 
   minimatch@5.1.9:
     dependencies:
@@ -34724,7 +34733,7 @@ snapshots:
       acorn-import-phases: 1.0.4(acorn@8.18.0)
       browserslist: 4.28.7
       chrome-trace-event: 1.0.4
-      enhanced-resolve: 5.24.3
+      enhanced-resolve: 5.24.4
       es-module-lexer: 2.3.1
       eslint-scope: 5.1.1
       events: 3.3.0
@@ -34765,7 +34774,7 @@ snapshots:
       acorn-import-phases: 1.0.4(acorn@8.18.0)
       browserslist: 4.28.7
       chrome-trace-event: 1.0.4
-      enhanced-resolve: 5.24.3
+      enhanced-resolve: 5.24.4
       es-module-lexer: 2.3.1
       eslint-scope: 5.1.1
       events: 3.3.0
