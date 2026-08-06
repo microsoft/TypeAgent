@@ -177,7 +177,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -489,7 +489,7 @@ importers:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
-        version: 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+        version: 1.26.0(zod@4.1.13)
       '@typeagent/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/typeagent
@@ -572,7 +572,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -813,7 +813,7 @@ importers:
         version: 12.0.2(webpack@5.105.0)
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -957,7 +957,7 @@ importers:
         version: 12.0.2(webpack@5.105.0)
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1006,7 +1006,7 @@ importers:
         version: 9.1.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1040,7 +1040,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1096,7 +1096,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1133,7 +1133,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1222,7 +1222,7 @@ importers:
         version: 7.0.15
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1363,7 +1363,7 @@ importers:
         version: 5.6.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1413,7 +1413,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -1451,7 +1451,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -1476,7 +1476,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1507,7 +1507,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1625,13 +1625,13 @@ importers:
         version: 24.37.5(typescript@5.9.3)
       puppeteer-extra:
         specifier: ^3.3.6
-        version: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))
+        version: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
       puppeteer-extra-plugin-adblocker:
         specifier: ^2.13.6
-        version: 2.13.6(encoding@0.1.13)(puppeteer-core@24.37.5)(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3)))(puppeteer@24.37.5(typescript@5.9.3))
+        version: 2.13.6(encoding@0.1.13)(puppeteer-core@24.37.5)(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
       puppeteer-extra-plugin-stealth:
         specifier: ^2.11.2
-        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3)))
+        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
       sharp:
         specifier: ^0.33.5
         version: 0.33.5
@@ -1674,7 +1674,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1796,7 +1796,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1884,7 +1884,7 @@ importers:
         version: 2.4.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2041,13 +2041,13 @@ importers:
         version: 24.37.5(typescript@5.4.5)
       puppeteer-extra:
         specifier: ^3.3.6
-        version: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1)
+        version: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
       puppeteer-extra-plugin-adblocker:
         specifier: ^2.13.6
-        version: 2.13.6(encoding@0.1.13)(puppeteer-core@24.37.5)(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1))(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1)
+        version: 2.13.6(encoding@0.1.13)(puppeteer-core@24.37.5)(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))(puppeteer@24.37.5(typescript@5.4.5))
       puppeteer-extra-plugin-stealth:
         specifier: ^2.11.2
-        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1))(supports-color@8.1.1)
+        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
       readline:
         specifier: ^1.3.0
         version: 1.3.0
@@ -2266,7 +2266,7 @@ importers:
         version: 7.0.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       jest-chrome:
         specifier: ^0.8.0
         version: 0.8.0(jest@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5)))
@@ -2330,7 +2330,7 @@ importers:
         version: 9.1.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2373,7 +2373,7 @@ importers:
         version: 2.4.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2434,7 +2434,7 @@ importers:
         version: 9.1.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2525,7 +2525,7 @@ importers:
         version: 2.4.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2627,7 +2627,7 @@ importers:
         version: 9.1.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -2735,7 +2735,7 @@ importers:
         version: 9.1.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -2766,7 +2766,7 @@ importers:
         version: 9.1.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2999,7 +2999,7 @@ importers:
         version: 12.0.2(webpack@5.105.0)
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.2.5
         version: 3.5.3
@@ -3118,7 +3118,7 @@ importers:
         version: 9.1.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -3207,7 +3207,7 @@ importers:
         version: 9.1.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -3330,7 +3330,7 @@ importers:
         version: 9.1.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -3370,7 +3370,7 @@ importers:
         version: 9.1.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -3580,7 +3580,7 @@ importers:
         version: 12.0.2(webpack@5.105.0)
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -3625,7 +3625,7 @@ importers:
         version: 24.37.5(typescript@5.4.5)
       puppeteer-extra:
         specifier: ^3.3.6
-        version: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1)
+        version: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
       puppeteer-extra-plugin-stealth:
         specifier: ^2.11.2
         version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
@@ -3647,7 +3647,7 @@ importers:
         version: 9.1.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -3802,7 +3802,7 @@ importers:
         version: 9.1.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -3873,7 +3873,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -3965,7 +3965,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -4029,7 +4029,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -4051,6 +4051,9 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
+      commander:
+        specifier: ^12.1.0
+        version: 12.1.0
       default-agent-provider:
         specifier: workspace:*
         version: link:../defaultAgentProvider
@@ -4075,7 +4078,7 @@ importers:
         version: 22.20.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -4136,7 +4139,7 @@ importers:
         version: 2.0.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -4176,7 +4179,7 @@ importers:
         version: 5.6.3(webpack@5.105.0)
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -4228,7 +4231,7 @@ importers:
         version: 14.1.2
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       jest-environment-jsdom:
         specifier: ^29.7.0
         version: 29.7.0(supports-color@8.1.1)
@@ -4328,7 +4331,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -4472,7 +4475,7 @@ importers:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
-        version: 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+        version: 1.26.0(zod@4.1.13)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -4512,7 +4515,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.2.5
         version: 3.5.3
@@ -4573,7 +4576,7 @@ importers:
         version: 4.0.9
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -4625,7 +4628,7 @@ importers:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
-        version: 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+        version: 1.26.0(zod@4.1.13)
       '@modelcontextprotocol/server-filesystem':
         specifier: 2026.1.14
         version: 2026.1.14(zod@4.1.13)
@@ -4824,7 +4827,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -4839,7 +4842,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.26.0(supports-color@8.1.1)(zod@4.1.13))(zod@4.1.13)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.26.0(zod@4.1.13))(zod@4.1.13)
       '@azure/core-client':
         specifier: ^1.10.0
         version: 1.10.1
@@ -4857,7 +4860,7 @@ importers:
         version: 1.0.5
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
-        version: 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+        version: 1.26.0(zod@4.1.13)
       '@typeagent/action-grammar':
         specifier: workspace:*
         version: link:../../actionGrammar
@@ -4981,7 +4984,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -5024,7 +5027,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -5118,7 +5121,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       rimraf:
         specifier: ^5.0.5
         version: 5.0.10
@@ -5220,7 +5223,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -5318,7 +5321,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -5358,7 +5361,7 @@ importers:
         version: 12.0.2(webpack@5.105.0)
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -5508,7 +5511,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -5578,7 +5581,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -5630,7 +5633,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.2.5
         version: 3.5.3
@@ -5724,7 +5727,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -5962,7 +5965,7 @@ importers:
         version: 4.0.1(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(less@4.3.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.9.0))
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       less:
         specifier: ^4.2.0
         version: 4.3.0
@@ -6060,7 +6063,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -6094,7 +6097,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -6165,7 +6168,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -6229,7 +6232,7 @@ importers:
         version: link:../grammarTools/core
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -6312,7 +6315,7 @@ importers:
         version: 0.28.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -6340,7 +6343,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -6389,7 +6392,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -6432,7 +6435,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -6806,7 +6809,7 @@ packages:
     os: [win32]
 
   '@anthropic-ai/claude-agent-sdk@0.3.162':
-    resolution: {integrity: sha1-WvNe28L+TUqeqshn/ZXeFTLBgX0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.3.162.tgz}
+    resolution: {integrity: sha1-WvNe28L+TUqeqshn/ZXeFTLBgX0=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.3.162.tgz}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@anthropic-ai/sdk': '>=0.93.0'
@@ -7028,7 +7031,7 @@ packages:
     engines: {node: '>=22.0.0'}
 
   '@azure/ai-projects@2.2.0':
-    resolution: {integrity: sha1-DCm9bKe4FM22Liw0N6+mX61Q3vA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/ai-projects/-/ai-projects-2.2.0.tgz}
+    resolution: {integrity: sha1-DCm9bKe4FM22Liw0N6+mX61Q3vA=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/ai-projects/-/ai-projects-2.2.0.tgz}
     engines: {node: '>=20.0.0'}
 
   '@azure/arm-authorization@9.0.0':
@@ -7048,7 +7051,7 @@ packages:
     engines: {node: '>=18.0.0'}
 
   '@azure/core-client@1.10.1':
-    resolution: {integrity: sha1-g9ePl9ZHqyLmgRp6aLtCI+eh0Bk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/core-client/-/core-client-1.10.1.tgz}
+    resolution: {integrity: sha1-g9ePl9ZHqyLmgRp6aLtCI+eh0Bk=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/core-client/-/core-client-1.10.1.tgz}
     engines: {node: '>=20.0.0'}
 
   '@azure/core-client@1.11.0':
@@ -7091,7 +7094,7 @@ packages:
     engines: {node: '>=18.0.0'}
 
   '@azure/core-rest-pipeline@1.22.2':
-    resolution: {integrity: sha1-fhTyHSWrYnzQdnattdmqzY4ulcw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/core-rest-pipeline/-/core-rest-pipeline-1.22.2.tgz}
+    resolution: {integrity: sha1-fhTyHSWrYnzQdnattdmqzY4ulcw=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/core-rest-pipeline/-/core-rest-pipeline-1.22.2.tgz}
     engines: {node: '>=20.0.0'}
 
   '@azure/core-rest-pipeline@1.25.0':
@@ -7131,7 +7134,7 @@ packages:
     engines: {node: '>=20.0.0'}
 
   '@azure/cosmos@4.9.1':
-    resolution: {integrity: sha1-AwuYVOkbacjBNmS8uF/dRvraIUk=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/cosmos/-/cosmos-4.9.1.tgz}
+    resolution: {integrity: sha1-AwuYVOkbacjBNmS8uF/dRvraIUk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/cosmos/-/cosmos-4.9.1.tgz}
     engines: {node: '>=20.0.0'}
 
   '@azure/identity-broker@1.4.0':
@@ -7143,7 +7146,7 @@ packages:
     engines: {node: '>=18.0.0'}
 
   '@azure/identity@4.10.0':
-    resolution: {integrity: sha1-EM/kkge00RHr46qzreR1YcKFLG0=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/identity/-/identity-4.10.0.tgz}
+    resolution: {integrity: sha1-EM/kkge00RHr46qzreR1YcKFLG0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/identity/-/identity-4.10.0.tgz}
     engines: {node: '>=18.0.0'}
 
   '@azure/identity@4.13.1':
@@ -7163,7 +7166,7 @@ packages:
     engines: {node: '>=18.0.0'}
 
   '@azure/keyvault-secrets@4.11.2':
-    resolution: {integrity: sha1-Ngm9ZSp6Nn8UU17FWfgXhkMkr8k=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/keyvault-secrets/-/keyvault-secrets-4.11.2.tgz}
+    resolution: {integrity: sha1-Ngm9ZSp6Nn8UU17FWfgXhkMkr8k=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/keyvault-secrets/-/keyvault-secrets-4.11.2.tgz}
     engines: {node: '>=20.0.0'}
 
   '@azure/logger@1.2.0':
@@ -7240,7 +7243,7 @@ packages:
     engines: {node: '>=20'}
 
   '@azure/search-documents@12.1.0':
-    resolution: {integrity: sha1-eTO+ozIX17lWlv6XoZzA9DMbw2o=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/search-documents/-/search-documents-12.1.0.tgz}
+    resolution: {integrity: sha1-eTO+ozIX17lWlv6XoZzA9DMbw2o=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@azure/search-documents/-/search-documents-12.1.0.tgz}
     engines: {node: '>=18.0.0'}
 
   '@azure/storage-blob@12.27.0':
@@ -8237,7 +8240,7 @@ packages:
     hasBin: true
 
   '@fluidframework/build-tools@0.57.0':
-    resolution: {integrity: sha1-vtsSABTFzdB/oGQET7jlDV2PN9E=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@fluidframework/build-tools/-/build-tools-0.57.0.tgz}
+    resolution: {integrity: sha1-vtsSABTFzdB/oGQET7jlDV2PN9E=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@fluidframework/build-tools/-/build-tools-0.57.0.tgz}
     engines: {node: '>=20.15.1'}
     hasBin: true
 
@@ -8796,7 +8799,7 @@ packages:
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
 
   '@jest/globals@29.7.0':
-    resolution: {integrity: sha1-jZKQ+exH/3cmB/qGTKHVou+uHU0=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@jest/globals/-/globals-29.7.0.tgz}
+    resolution: {integrity: sha1-jZKQ+exH/3cmB/qGTKHVou+uHU0=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@jest/globals/-/globals-29.7.0.tgz}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
 
   '@jest/reporters@29.7.0':
@@ -9125,7 +9128,7 @@ packages:
     resolution: {integrity: sha1-UXs5FiNfWhialuhrpmmSNJdYFG4=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@milkdown/crepe/-/crepe-7.13.1.tgz}
 
   '@milkdown/ctx@7.13.1':
-    resolution: {integrity: sha1-6qThOmfhSkO2IyVd03x75VvAc50=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@milkdown/ctx/-/ctx-7.13.1.tgz}
+    resolution: {integrity: sha1-6qThOmfhSkO2IyVd03x75VvAc50=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@milkdown/ctx/-/ctx-7.13.1.tgz}
 
   '@milkdown/exception@7.13.1':
     resolution: {integrity: sha1-EiKnbI+ZD2HPTMvruru+0aQvdPM=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@milkdown/exception/-/exception-7.13.1.tgz}
@@ -9206,7 +9209,7 @@ packages:
     resolution: {integrity: sha1-CVBvKcwqmdnXuVHKp//8h+UiptM=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@mongodb-js/saslprep/-/saslprep-1.2.2.tgz}
 
   '@mozilla/readability@0.6.0':
-    resolution: {integrity: sha1-E0484/8WdnFuVQ3guN6Ve8xZIIs=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@mozilla/readability/-/readability-0.6.0.tgz}
+    resolution: {integrity: sha1-E0484/8WdnFuVQ3guN6Ve8xZIIs=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@mozilla/readability/-/readability-0.6.0.tgz}
     engines: {node: '>=14.0.0'}
 
   '@napi-rs/canvas-android-arm64@0.1.72':
@@ -9312,7 +9315,7 @@ packages:
     engines: {node: '>=18.0.0'}
 
   '@oclif/core@4.5.2':
-    resolution: {integrity: sha1-TbijZfp+njOvJyKU9xCn8/JVOOI=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@oclif/core/-/core-4.5.2.tgz}
+    resolution: {integrity: sha1-TbijZfp+njOvJyKU9xCn8/JVOOI=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@oclif/core/-/core-4.5.2.tgz}
     engines: {node: '>=18.0.0'}
 
   '@oclif/core@4.8.0':
@@ -9328,7 +9331,7 @@ packages:
     engines: {node: '>=18.0.0'}
 
   '@oclif/plugin-help@6.2.26':
-    resolution: {integrity: sha1-FtTF1Tjh7Shko8qP1ZMxaUtfhtI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@oclif/plugin-help/-/plugin-help-6.2.26.tgz}
+    resolution: {integrity: sha1-FtTF1Tjh7Shko8qP1ZMxaUtfhtI=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@oclif/plugin-help/-/plugin-help-6.2.26.tgz}
     engines: {node: '>=18.0.0'}
 
   '@oclif/plugin-help@6.2.55':
@@ -9668,7 +9671,7 @@ packages:
     hasBin: true
 
   '@popperjs/core@2.11.8':
-    resolution: {integrity: sha1-a3kDLnYKCJnNQgRxC+7elyo6GF8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@popperjs/core/-/core-2.11.8.tgz}
+    resolution: {integrity: sha1-a3kDLnYKCJnNQgRxC+7elyo6GF8=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@popperjs/core/-/core-2.11.8.tgz}
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha1-m4sMxmPWaafY9vXQiToU00jzD78=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@protobufjs/aspromise/-/aspromise-1.1.2.tgz}
@@ -10429,7 +10432,7 @@ packages:
     resolution: {integrity: sha1-jOsz+iYfS54wf6c0S6gYLY1BDU4=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/chrome/-/chrome-0.0.114.tgz}
 
   '@types/chrome@0.0.256':
-    resolution: {integrity: sha1-NmtS+PWi2BGa3p7vJRlpLm+Yf/g=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/chrome/-/chrome-0.0.256.tgz}
+    resolution: {integrity: sha1-NmtS+PWi2BGa3p7vJRlpLm+Yf/g=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/chrome/-/chrome-0.0.256.tgz}
 
   '@types/chrome@0.0.278':
     resolution: {integrity: sha1-9/78DdS2alS96ilQxf1zl8cpk40=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/chrome/-/chrome-0.0.278.tgz}
@@ -10459,13 +10462,13 @@ packages:
     resolution: {integrity: sha1-zN+G14Ly3qNFMd0yczolvkgXfNQ=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/cookies/-/cookies-0.9.2.tgz}
 
   '@types/cors@2.8.18':
-    resolution: {integrity: sha1-EB4DOzygZpXz1zxYfNf56zSBNdE=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/cors/-/cors-2.8.18.tgz}
+    resolution: {integrity: sha1-EB4DOzygZpXz1zxYfNf56zSBNdE=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/cors/-/cors-2.8.18.tgz}
 
   '@types/cytoscape-dagre@2.3.3':
-    resolution: {integrity: sha1-J/fFfm4FWgXY+XHLCeduEcg3c0w=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/cytoscape-dagre/-/cytoscape-dagre-2.3.3.tgz}
+    resolution: {integrity: sha1-J/fFfm4FWgXY+XHLCeduEcg3c0w=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/cytoscape-dagre/-/cytoscape-dagre-2.3.3.tgz}
 
   '@types/cytoscape@3.21.9':
-    resolution: {integrity: sha1-lQBBZaCld1e8ox2DrhyH5hlLICY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/cytoscape/-/cytoscape-3.21.9.tgz}
+    resolution: {integrity: sha1-lQBBZaCld1e8ox2DrhyH5hlLICY=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/cytoscape/-/cytoscape-3.21.9.tgz}
 
   '@types/d3-array@3.2.2':
     resolution: {integrity: sha1-4CFRRk0C1KG0RkbQ/NuT+viP3ow=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/d3-array/-/d3-array-3.2.2.tgz}
@@ -10567,10 +10570,10 @@ packages:
     resolution: {integrity: sha1-y36F2a1aur+sLycYPorItXayq7M=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/debounce/-/debounce-1.2.4.tgz}
 
   '@types/debug@4.1.12':
-    resolution: {integrity: sha1-oVXyFpCHGVNBDfS2tvUxh/BQCRc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/debug/-/debug-4.1.12.tgz}
+    resolution: {integrity: sha1-oVXyFpCHGVNBDfS2tvUxh/BQCRc=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/debug/-/debug-4.1.12.tgz}
 
   '@types/debug@4.1.13':
-    resolution: {integrity: sha1-ItHMnVQtNZPK6nZPl0MGqzYobuc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/debug/-/debug-4.1.13.tgz}
+    resolution: {integrity: sha1-ItHMnVQtNZPK6nZPl0MGqzYobuc=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/debug/-/debug-4.1.13.tgz}
 
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha1-M0MRlx06BxIefrkbaEpgXn7qnL0=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/deep-eql/-/deep-eql-4.0.2.tgz}
@@ -10627,7 +10630,7 @@ packages:
     resolution: {integrity: sha1-J+6teBBRsuaBo0TdKYNzX6rdQ0M=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/firefox-webext-browser/-/firefox-webext-browser-120.0.4.tgz}
 
   '@types/fs-extra@11.0.4':
-    resolution: {integrity: sha1-4WqGO7iEP7qMUAQ2K1pz4XvsykU=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/fs-extra/-/fs-extra-11.0.4.tgz}
+    resolution: {integrity: sha1-4WqGO7iEP7qMUAQ2K1pz4XvsykU=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/fs-extra/-/fs-extra-11.0.4.tgz}
 
   '@types/fs-extra@9.0.13':
     resolution: {integrity: sha1-dZT7rgT+fxkYzos9IT90/0SsH0U=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/fs-extra/-/fs-extra-9.0.13.tgz}
@@ -10654,7 +10657,7 @@ packages:
     resolution: {integrity: sha1-T8M6AMHQwWmHsaIM+S0gYUxVrDU=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/html-minifier-terser/-/html-minifier-terser-6.1.0.tgz}
 
   '@types/html-to-text@9.0.4':
-    resolution: {integrity: sha1-SoPdiui/qRRX0LH/wm9NBTfv9Yw=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/html-to-text/-/html-to-text-9.0.4.tgz}
+    resolution: {integrity: sha1-SoPdiui/qRRX0LH/wm9NBTfv9Yw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/html-to-text/-/html-to-text-9.0.4.tgz}
 
   '@types/http-assert@1.5.6':
     resolution: {integrity: sha1-trZXw4ojUNIc4hMTnzOwOytfpDE=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/http-assert/-/http-assert-1.5.6.tgz}
@@ -10690,7 +10693,7 @@ packages:
     resolution: {integrity: sha1-K5EJEvodaFbK3NDB+Vr33x1gSeU=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/jest/-/jest-29.5.14.tgz}
 
   '@types/jquery@3.5.32':
-    resolution: {integrity: sha1-PrDaIGEbksfEnr7WFjtSpP3Ffe8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/jquery/-/jquery-3.5.32.tgz}
+    resolution: {integrity: sha1-PrDaIGEbksfEnr7WFjtSpP3Ffe8=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/jquery/-/jquery-3.5.32.tgz}
 
   '@types/js-yaml@4.0.9':
     resolution: {integrity: sha1-zYI4LE+QL+2WkaLteexoxYmK9MI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/js-yaml/-/js-yaml-4.0.9.tgz}
@@ -10699,10 +10702,10 @@ packages:
     resolution: {integrity: sha1-B8FLwZvS+RjBkpVBzarK6JR0SAg=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/jsdom/-/jsdom-20.0.1.tgz}
 
   '@types/jsdom@28.0.0':
-    resolution: {integrity: sha1-OHvLX+YMdTrgxYWEtlmlmDGZOPI=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/jsdom/-/jsdom-28.0.0.tgz}
+    resolution: {integrity: sha1-OHvLX+YMdTrgxYWEtlmlmDGZOPI=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/jsdom/-/jsdom-28.0.0.tgz}
 
   '@types/json-schema@7.0.15':
-    resolution: {integrity: sha1-WWoXRyM2lNUPatinhp/Lb1bPWEE=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/json-schema/-/json-schema-7.0.15.tgz}
+    resolution: {integrity: sha1-WWoXRyM2lNUPatinhp/Lb1bPWEE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/json-schema/-/json-schema-7.0.15.tgz}
 
   '@types/jsonfile@6.1.4':
     resolution: {integrity: sha1-YUr+waEWTn1nC0p61k3z5763twI=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/jsonfile/-/jsonfile-6.1.4.tgz}
@@ -10711,7 +10714,7 @@ packages:
     resolution: {integrity: sha1-BlvlmYHBQggyg1r2Vjd2IicRVL4=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/jsonpath/-/jsonpath-0.2.4.tgz}
 
   '@types/katex@0.16.7':
-    resolution: {integrity: sha1-A6toCrT6T7xstG7PmH7K1dgBmGg=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/katex/-/katex-0.16.7.tgz}
+    resolution: {integrity: sha1-A6toCrT6T7xstG7PmH7K1dgBmGg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/katex/-/katex-0.16.7.tgz}
 
   '@types/keygrip@1.0.6':
     resolution: {integrity: sha1-F0lTUYGiqbAqwEp5dVCoeHNFt0A=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/keygrip/-/keygrip-1.0.6.tgz}
@@ -10814,7 +10817,7 @@ packages:
     resolution: {integrity: sha1-mgxJwPmIbIyGlqeQTdcD9ihANuA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/plist/-/plist-3.0.5.tgz}
 
   '@types/prismjs@1.26.5':
-    resolution: {integrity: sha1-ckmau7TE7JmCRGUJ0vFPuEg4adY=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/prismjs/-/prismjs-1.26.5.tgz}
+    resolution: {integrity: sha1-ckmau7TE7JmCRGUJ0vFPuEg4adY=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/prismjs/-/prismjs-1.26.5.tgz}
 
   '@types/prop-types@15.7.14':
     resolution: {integrity: sha1-FDNBnXOyp+v8aRjc79LsDVzWmPI=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/prop-types/-/prop-types-15.7.14.tgz}
@@ -10835,7 +10838,7 @@ packages:
     resolution: {integrity: sha1-mzgsTNMuE+Rj+X3wfC7ju80mkEs=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/react/-/react-18.3.18.tgz}
 
   '@types/regexp.escape@2.0.0':
-    resolution: {integrity: sha1-ojtCHip/dOJQ4yHByZF3ua/1aNY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/regexp.escape/-/regexp.escape-2.0.0.tgz}
+    resolution: {integrity: sha1-ojtCHip/dOJQ4yHByZF3ua/1aNY=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/regexp.escape/-/regexp.escape-2.0.0.tgz}
 
   '@types/resolve@1.20.2':
     resolution: {integrity: sha1-l9JuAM1KBCO0r2IKvs8+b0QreXU=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/resolve/-/resolve-1.20.2.tgz}
@@ -10886,7 +10889,7 @@ packages:
     resolution: {integrity: sha1-zjIs8HvMEZ1Mv3+IlU86O9D2dTU=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/sockjs/-/sockjs-0.3.36.tgz}
 
   '@types/spotify-api@0.0.25':
-    resolution: {integrity: sha1-nauzsKHwUn7WGTbr+KgMHROMJ8M=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/spotify-api/-/spotify-api-0.0.25.tgz}
+    resolution: {integrity: sha1-nauzsKHwUn7WGTbr+KgMHROMJ8M=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/spotify-api/-/spotify-api-0.0.25.tgz}
 
   '@types/stack-utils@2.0.2':
     resolution: {integrity: sha1-AShN3p705tjO9kInmNmjrRimb4s=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/stack-utils/-/stack-utils-2.0.2.tgz}
@@ -10928,10 +10931,10 @@ packages:
     resolution: {integrity: sha1-98OQo296Bnmqad4tUBMZ9PjZtwI=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/ws/-/ws-7.4.7.tgz}
 
   '@types/ws@8.18.1':
-    resolution: {integrity: sha1-SEZOS/Ld/RfbE9hFRn9gcP/qSqk=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/ws/-/ws-8.18.1.tgz}
+    resolution: {integrity: sha1-SEZOS/Ld/RfbE9hFRn9gcP/qSqk=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/ws/-/ws-8.18.1.tgz}
 
   '@types/xml2js@0.4.14':
-    resolution: {integrity: sha1-XUYqKnMwNF4jCca1SaGDo3bej5o=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/xml2js/-/xml2js-0.4.14.tgz}
+    resolution: {integrity: sha1-XUYqKnMwNF4jCca1SaGDo3bej5o=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/xml2js/-/xml2js-0.4.14.tgz}
 
   '@types/yargs-parser@21.0.3':
     resolution: {integrity: sha1-gV4wt4bS6PDc2F/VvPXhoE0AjxU=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@types/yargs-parser/-/yargs-parser-21.0.3.tgz}
@@ -11201,7 +11204,7 @@ packages:
     engines: {node: '>=18.0.0'}
 
   '@web/test-runner@0.19.0':
-    resolution: {integrity: sha1-6+gad/lC72kKNQRUZzJqk3/JfFo=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@web/test-runner/-/test-runner-0.19.0.tgz}
+    resolution: {integrity: sha1-6+gad/lC72kKNQRUZzJqk3/JfFo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@web/test-runner/-/test-runner-0.19.0.tgz}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -11444,7 +11447,7 @@ packages:
     engines: {node: '>=12'}
 
   ansi_up@6.0.5:
-    resolution: {integrity: sha1-k6s9bjHVjDUURZGCyh81q7t6PNk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ansi_up/-/ansi_up-6.0.5.tgz}
+    resolution: {integrity: sha1-k6s9bjHVjDUURZGCyh81q7t6PNk=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ansi_up/-/ansi_up-6.0.5.tgz}
 
   ansi_up@6.0.6:
     resolution: {integrity: sha1-gE+vMfA4XlYtL3EnXqjP8Nnc9tw=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ansi_up/-/ansi_up-6.0.6.tgz}
@@ -11683,7 +11686,7 @@ packages:
         optional: true
 
   bare-path@3.1.1:
-    resolution: {integrity: sha1-1KIHwIhgm0Zjp1VqRqlzQjmL9+I=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/bare-path/-/bare-path-3.1.1.tgz}
+    resolution: {integrity: sha1-1KIHwIhgm0Zjp1VqRqlzQjmL9+I=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/bare-path/-/bare-path-3.1.1.tgz}
 
   bare-stream@2.13.3:
     resolution: {integrity: sha1-9hhsfLtLv1OkVg815IsWNzulHOY=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/bare-stream/-/bare-stream-2.13.3.tgz}
@@ -11767,7 +11770,7 @@ packages:
     deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
   bootstrap@5.3.6:
-    resolution: {integrity: sha1-+9keuv8JP1sZGhwBqMhm0k+fpuE=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/bootstrap/-/bootstrap-5.3.6.tgz}
+    resolution: {integrity: sha1-+9keuv8JP1sZGhwBqMhm0k+fpuE=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/bootstrap/-/bootstrap-5.3.6.tgz}
     peerDependencies:
       '@popperjs/core': ^2.11.8
 
@@ -11940,7 +11943,7 @@ packages:
     engines: {node: '>=10'}
 
   chalk@5.6.2:
-    resolution: {integrity: sha1-sSOLbiPqM3r3HH+KKV21rwwViuo=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/chalk/-/chalk-5.6.2.tgz}
+    resolution: {integrity: sha1-sSOLbiPqM3r3HH+KKV21rwwViuo=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/chalk/-/chalk-5.6.2.tgz}
     engines: {node: ^12.17.0 || ^14.13 || >=16.0.0}
 
   change-case@5.4.4:
@@ -12228,7 +12231,7 @@ packages:
     resolution: {integrity: sha1-2Klr13/Wjfd5OnMDajug1UBdR3s=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/concat-map/-/concat-map-0.0.1.tgz}
 
   concurrently@9.1.2:
-    resolution: {integrity: sha1-ItkQkpaWHq7nc+Er+xzppmvJg2w=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/concurrently/-/concurrently-9.1.2.tgz}
+    resolution: {integrity: sha1-ItkQkpaWHq7nc+Er+xzppmvJg2w=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/concurrently/-/concurrently-9.1.2.tgz}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -12281,13 +12284,13 @@ packages:
     resolution: {integrity: sha1-CSRU6pWEp7etVXMGKyqH9ZAPxIA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/copy-anything/-/copy-anything-2.0.6.tgz}
 
   copy-webpack-plugin@12.0.2:
-    resolution: {integrity: sha1-k15XuOYYPIL5W9k332WKWfai2ig=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/copy-webpack-plugin/-/copy-webpack-plugin-12.0.2.tgz}
+    resolution: {integrity: sha1-k15XuOYYPIL5W9k332WKWfai2ig=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/copy-webpack-plugin/-/copy-webpack-plugin-12.0.2.tgz}
     engines: {node: '>= 18.12.0'}
     peerDependencies:
       webpack: ^5.1.0
 
   copyfiles@2.4.1:
-    resolution: {integrity: sha1-0tz/YKqtEBXwnQtm5/Dxxc08XaU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/copyfiles/-/copyfiles-2.4.1.tgz}
+    resolution: {integrity: sha1-0tz/YKqtEBXwnQtm5/Dxxc08XaU=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/copyfiles/-/copyfiles-2.4.1.tgz}
     hasBin: true
 
   core-util-is@1.0.2:
@@ -12375,7 +12378,7 @@ packages:
     engines: {node: '>= 8'}
 
   crx@5.0.1:
-    resolution: {integrity: sha1-M/eoE3Ws+rGqOoKRQkIjQ03Al4s=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/crx/-/crx-5.0.1.tgz}
+    resolution: {integrity: sha1-M/eoE3Ws+rGqOoKRQkIjQ03Al4s=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/crx/-/crx-5.0.1.tgz}
     engines: {node: '>=10'}
     deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
     hasBin: true
@@ -12427,7 +12430,7 @@ packages:
       cytoscape: ^3.2.0
 
   cytoscape-dagre@2.5.0:
-    resolution: {integrity: sha1-R9mDWrZN0LWW2clHMfBwKC+C/Fo=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cytoscape-dagre/-/cytoscape-dagre-2.5.0.tgz}
+    resolution: {integrity: sha1-R9mDWrZN0LWW2clHMfBwKC+C/Fo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cytoscape-dagre/-/cytoscape-dagre-2.5.0.tgz}
     peerDependencies:
       cytoscape: ^3.2.22
 
@@ -12437,7 +12440,7 @@ packages:
       cytoscape: ^3.2.0
 
   cytoscape@3.33.3:
-    resolution: {integrity: sha1-bIhYI8sIjrjDEIfDXZeGYdzeXq4=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cytoscape/-/cytoscape-3.33.3.tgz}
+    resolution: {integrity: sha1-bIhYI8sIjrjDEIfDXZeGYdzeXq4=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/cytoscape/-/cytoscape-3.33.3.tgz}
     engines: {node: '>=0.10'}
 
   cytoscape@3.34.0:
@@ -12624,7 +12627,7 @@ packages:
     engines: {node: '>=0.11'}
 
   date-fns@4.1.0:
-    resolution: {integrity: sha1-ZLPYP/9aqAQ49bGmM8LoO4ocLRQ=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/date-fns/-/date-fns-4.1.0.tgz}
+    resolution: {integrity: sha1-ZLPYP/9aqAQ49bGmM8LoO4ocLRQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/date-fns/-/date-fns-4.1.0.tgz}
 
   dayjs@1.11.20:
     resolution: {integrity: sha1-iNkZ/WOdyZFBXaX0y28bZlCBGTg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/dayjs/-/dayjs-1.11.20.tgz}
@@ -12652,7 +12655,7 @@ packages:
         optional: true
 
   debug@4.4.1:
-    resolution: {integrity: sha1-5ai8bLxMbNPmQwiwaTo9T6VQGJs=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/debug/-/debug-4.4.1.tgz}
+    resolution: {integrity: sha1-5ai8bLxMbNPmQwiwaTo9T6VQGJs=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/debug/-/debug-4.4.1.tgz}
     engines: {node: '>=6.0'}
     peerDependencies:
       supports-color: '*'
@@ -12661,7 +12664,7 @@ packages:
         optional: true
 
   debug@4.4.3:
-    resolution: {integrity: sha1-xq5DLZvZZiWC/OCHCbA4xY6ePWo=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/debug/-/debug-4.4.3.tgz}
+    resolution: {integrity: sha1-xq5DLZvZZiWC/OCHCbA4xY6ePWo=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/debug/-/debug-4.4.3.tgz}
     engines: {node: '>=6.0'}
     peerDependencies:
       supports-color: '*'
@@ -12927,7 +12930,7 @@ packages:
     engines: {node: '>= 4'}
 
   dompurify@3.4.12:
-    resolution: {integrity: sha1-b6ImXpu9zogsSs5BB2JgUbRI/6g=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/dompurify/-/dompurify-3.4.12.tgz}
+    resolution: {integrity: sha1-b6ImXpu9zogsSs5BB2JgUbRI/6g=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/dompurify/-/dompurify-3.4.12.tgz}
 
   domutils@2.8.0:
     resolution: {integrity: sha1-RDfe9dtuLR9dbuhZvZXKfQIEgTU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/domutils/-/domutils-2.8.0.tgz}
@@ -12996,7 +12999,7 @@ packages:
     resolution: {integrity: sha1-PmXgRPGpmwDWHiAOJN6OcJxpzpk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/electron-updater/-/electron-updater-6.6.2.tgz}
 
   electron-vite@4.0.1:
-    resolution: {integrity: sha1-bN95j4QsJVd5mDzK3Qaz1HXAL1c=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/electron-vite/-/electron-vite-4.0.1.tgz}
+    resolution: {integrity: sha1-bN95j4QsJVd5mDzK3Qaz1HXAL1c=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/electron-vite/-/electron-vite-4.0.1.tgz}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
@@ -13192,7 +13195,7 @@ packages:
     hasBin: true
 
   eslint-plugin-sonarjs@4.1.0:
-    resolution: {integrity: sha1-YYeeWoU2peU7UkAYfMETpoP3EF4=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/eslint-plugin-sonarjs/-/eslint-plugin-sonarjs-4.1.0.tgz}
+    resolution: {integrity: sha1-YYeeWoU2peU7UkAYfMETpoP3EF4=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/eslint-plugin-sonarjs/-/eslint-plugin-sonarjs-4.1.0.tgz}
     peerDependencies:
       eslint: ^8.0.0 || ^9.0.0 || ^10.0.0
 
@@ -13213,7 +13216,7 @@ packages:
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
   eslint@10.6.0:
-    resolution: {integrity: sha1-4bQFnFgr6VDHCIybVfmEc4skPCc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/eslint/-/eslint-10.6.0.tgz}
+    resolution: {integrity: sha1-4bQFnFgr6VDHCIybVfmEc4skPCc=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/eslint/-/eslint-10.6.0.tgz}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
     hasBin: true
     peerDependencies:
@@ -13304,7 +13307,7 @@ packages:
     engines: {node: '>=10'}
 
   exifreader@4.40.3:
-    resolution: {integrity: sha1-P1uewWrL5upiH3Uth0Tzo+ta5Ow=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/exifreader/-/exifreader-4.40.3.tgz}
+    resolution: {integrity: sha1-P1uewWrL5upiH3Uth0Tzo+ta5Ow=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/exifreader/-/exifreader-4.40.3.tgz}
 
   exit@0.1.2:
     resolution: {integrity: sha1-BjJjj42HfMghB9MKD/8aF8uhzQw=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/exit/-/exit-0.1.2.tgz}
@@ -13322,7 +13325,7 @@ packages:
     resolution: {integrity: sha1-Uc+SwcBJPHZgU/nTq+5ENMJE0vY=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/exponential-backoff/-/exponential-backoff-3.1.3.tgz}
 
   express-rate-limit@7.5.1:
-    resolution: {integrity: sha1-jDpC9pIJo6HJaYkAcOzp4gqHnew=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/express-rate-limit/-/express-rate-limit-7.5.1.tgz}
+    resolution: {integrity: sha1-jDpC9pIJo6HJaYkAcOzp4gqHnew=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/express-rate-limit/-/express-rate-limit-7.5.1.tgz}
     engines: {node: '>= 16'}
     peerDependencies:
       express: '>= 4.11'
@@ -13368,7 +13371,7 @@ packages:
     engines: {node: '>=8.6.0'}
 
   fast-glob@3.3.3:
-    resolution: {integrity: sha1-0G1YXOjbqQoWsFBcVDw8z7OuuBg=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fast-glob/-/fast-glob-3.3.3.tgz}
+    resolution: {integrity: sha1-0G1YXOjbqQoWsFBcVDw8z7OuuBg=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fast-glob/-/fast-glob-3.3.3.tgz}
     engines: {node: '>=8.6.0'}
 
   fast-json-stable-stringify@2.1.0:
@@ -13378,7 +13381,7 @@ packages:
     resolution: {integrity: sha1-PYpcZog6FqMMqGQ+hR8Zuqd5eRc=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fast-levenshtein/-/fast-levenshtein-2.0.6.tgz}
 
   fast-levenshtein@3.0.0:
-    resolution: {integrity: sha1-N7iZrkfhCQ5A4/0jGOTV8BQsqRI=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fast-levenshtein/-/fast-levenshtein-3.0.0.tgz}
+    resolution: {integrity: sha1-N7iZrkfhCQ5A4/0jGOTV8BQsqRI=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fast-levenshtein/-/fast-levenshtein-3.0.0.tgz}
 
   fast-uri@3.1.4:
     resolution: {integrity: sha1-Oz2vnOaPQflW3wtQUTLAz86ex68=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fast-uri/-/fast-uri-3.1.4.tgz}
@@ -13387,11 +13390,11 @@ packages:
     resolution: {integrity: sha1-q9I2MUWnYl2Xia2W2jdfq+PP8ow=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fast-xml-builder/-/fast-xml-builder-1.2.0.tgz}
 
   fast-xml-parser@5.10.1:
-    resolution: {integrity: sha1-GTE/fJOGxH+kod5SdUe3PtLPzt4=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fast-xml-parser/-/fast-xml-parser-5.10.1.tgz}
+    resolution: {integrity: sha1-GTE/fJOGxH+kod5SdUe3PtLPzt4=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fast-xml-parser/-/fast-xml-parser-5.10.1.tgz}
     hasBin: true
 
   fastest-levenshtein@1.0.16:
-    resolution: {integrity: sha1-IQ5htv8YHekeqbPRuE/e3UfgNOU=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fastest-levenshtein/-/fastest-levenshtein-1.0.16.tgz}
+    resolution: {integrity: sha1-IQ5htv8YHekeqbPRuE/e3UfgNOU=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fastest-levenshtein/-/fastest-levenshtein-1.0.16.tgz}
     engines: {node: '>= 4.9.1'}
 
   fastq@1.15.0:
@@ -13424,7 +13427,7 @@ packages:
     engines: {node: '>=16.0.0'}
 
   file-size@1.0.0:
-    resolution: {integrity: sha1-MzgmfV0ga79g9N9gwZ1+04E6Rlc=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/file-size/-/file-size-1.0.0.tgz}
+    resolution: {integrity: sha1-MzgmfV0ga79g9N9gwZ1+04E6Rlc=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/file-size/-/file-size-1.0.0.tgz}
 
   file-uri-to-path@1.0.0:
     resolution: {integrity: sha1-VTp7hEb/b2hDWcRF8eN6BdrMM90=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/file-uri-to-path/-/file-uri-to-path-1.0.0.tgz}
@@ -13469,7 +13472,7 @@ packages:
     engines: {node: '>=10'}
 
   find-up@7.0.0:
-    resolution: {integrity: sha1-6N7BRV90942IitZb98oT3StOZvs=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/find-up/-/find-up-7.0.0.tgz}
+    resolution: {integrity: sha1-6N7BRV90942IitZb98oT3StOZvs=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/find-up/-/find-up-7.0.0.tgz}
     engines: {node: '>=18'}
 
   flat-cache@4.0.1:
@@ -13522,7 +13525,7 @@ packages:
     resolution: {integrity: sha1-Hxrj3M9Y7UaQuG2H5PV8ZU+6sEA=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/form-data-encoder/-/form-data-encoder-1.7.2.tgz}
 
   form-data@4.0.6:
-    resolution: {integrity: sha1-KOhk4beG2+u2jbH0UvljUnhmWCc=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/form-data/-/form-data-4.0.6.tgz}
+    resolution: {integrity: sha1-KOhk4beG2+u2jbH0UvljUnhmWCc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/form-data/-/form-data-4.0.6.tgz}
     engines: {node: '>= 6'}
 
   formatly@0.3.0:
@@ -13557,7 +13560,7 @@ packages:
     engines: {node: '>=12'}
 
   fs-extra@11.3.0:
-    resolution: {integrity: sha1-DaztE2u69lpVWjJnGa+TGtx6MU0=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fs-extra/-/fs-extra-11.3.0.tgz}
+    resolution: {integrity: sha1-DaztE2u69lpVWjJnGa+TGtx6MU0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/fs-extra/-/fs-extra-11.3.0.tgz}
     engines: {node: '>=14.14'}
 
   fs-extra@11.3.4:
@@ -13643,7 +13646,7 @@ packages:
     engines: {node: '>=18'}
 
   get-folder-size@5.0.0:
-    resolution: {integrity: sha1-VUokjsgxWHH4nUZyRPUrTJ+UzeE=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/get-folder-size/-/get-folder-size-5.0.0.tgz}
+    resolution: {integrity: sha1-VUokjsgxWHH4nUZyRPUrTJ+UzeE=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/get-folder-size/-/get-folder-size-5.0.0.tgz}
     engines: {node: '>=18.11.0'}
     hasBin: true
 
@@ -13786,7 +13789,7 @@ packages:
     engines: {node: '>=14.0.0'}
 
   googleapis@144.0.0:
-    resolution: {integrity: sha1-lpr/Kb524wjqde5S8QmRr0yN3GM=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/googleapis/-/googleapis-144.0.0.tgz}
+    resolution: {integrity: sha1-lpr/Kb524wjqde5S8QmRr0yN3GM=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/googleapis/-/googleapis-144.0.0.tgz}
     engines: {node: '>=14.0.0'}
 
   gopd@1.2.0:
@@ -13804,7 +13807,7 @@ packages:
     resolution: {integrity: sha1-V2HUFHN4cAhMkux7XbywWSydNdo=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/graphlib/-/graphlib-2.1.8.tgz}
 
   graphology-communities-louvain@2.0.2:
-    resolution: {integrity: sha1-r+eqjc091co1Bibi9Ig2Jbuvo8c=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/graphology-communities-louvain/-/graphology-communities-louvain-2.0.2.tgz}
+    resolution: {integrity: sha1-r+eqjc091co1Bibi9Ig2Jbuvo8c=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/graphology-communities-louvain/-/graphology-communities-louvain-2.0.2.tgz}
     peerDependencies:
       graphology-types: '>=0.19.0'
 
@@ -13814,7 +13817,7 @@ packages:
       graphology-types: '>=0.20.0'
 
   graphology-layout-forceatlas2@0.10.1:
-    resolution: {integrity: sha1-dBhCE1YJ2C0S21pf33RnIGLCggU=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/graphology-layout-forceatlas2/-/graphology-layout-forceatlas2-0.10.1.tgz}
+    resolution: {integrity: sha1-dBhCE1YJ2C0S21pf33RnIGLCggU=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/graphology-layout-forceatlas2/-/graphology-layout-forceatlas2-0.10.1.tgz}
     peerDependencies:
       graphology-types: '>=0.19.0'
 
@@ -13824,7 +13827,7 @@ packages:
       graphology-types: '>=0.19.0'
 
   graphology-layout@0.6.1:
-    resolution: {integrity: sha1-58HWXAIuM3sRyXfi0wq+QHagMn0=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/graphology-layout/-/graphology-layout-0.6.1.tgz}
+    resolution: {integrity: sha1-58HWXAIuM3sRyXfi0wq+QHagMn0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/graphology-layout/-/graphology-layout-0.6.1.tgz}
     peerDependencies:
       graphology-types: '>=0.19.0'
 
@@ -13839,7 +13842,7 @@ packages:
       graphology-types: '>=0.20.0'
 
   graphology-types@0.24.8:
-    resolution: {integrity: sha1-KeQtH71h1lBHYMsxNekde+tOYEs=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/graphology-types/-/graphology-types-0.24.8.tgz}
+    resolution: {integrity: sha1-KeQtH71h1lBHYMsxNekde+tOYEs=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/graphology-types/-/graphology-types-0.24.8.tgz}
 
   graphology-utils@2.5.2:
     resolution: {integrity: sha1-TTDW5WfSfAHxBeFJSvgWdC6NJEA=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/graphology-utils/-/graphology-utils-2.5.2.tgz}
@@ -13847,7 +13850,7 @@ packages:
       graphology-types: '>=0.23.0'
 
   graphology@0.25.4:
-    resolution: {integrity: sha1-5SimRVWsHzkqnZZTIa2lsrhD7+E=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/graphology/-/graphology-0.25.4.tgz}
+    resolution: {integrity: sha1-5SimRVWsHzkqnZZTIa2lsrhD7+E=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/graphology/-/graphology-0.25.4.tgz}
     peerDependencies:
       graphology-types: '>=0.24.0'
 
@@ -13950,11 +13953,11 @@ packages:
     hasBin: true
 
   html-to-text@9.0.5:
-    resolution: {integrity: sha1-YUmg9hiueg24CF3Km7+W0yu4No0=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/html-to-text/-/html-to-text-9.0.5.tgz}
+    resolution: {integrity: sha1-YUmg9hiueg24CF3Km7+W0yu4No0=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/html-to-text/-/html-to-text-9.0.5.tgz}
     engines: {node: '>=14'}
 
   html-webpack-plugin@5.6.3:
-    resolution: {integrity: sha1-oxFF8P7kGE1Tp5T5UTFH3x5lNoU=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/html-webpack-plugin/-/html-webpack-plugin-5.6.3.tgz}
+    resolution: {integrity: sha1-oxFF8P7kGE1Tp5T5UTFH3x5lNoU=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/html-webpack-plugin/-/html-webpack-plugin-5.6.3.tgz}
     engines: {node: '>=10.13.0'}
     peerDependencies:
       '@rspack/core': 0.x || 1.x
@@ -14104,7 +14107,7 @@ packages:
     hasBin: true
 
   import-local@3.2.0:
-    resolution: {integrity: sha1-w9XHRXmMAqb4uJdyarpRABhu4mA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/import-local/-/import-local-3.2.0.tgz}
+    resolution: {integrity: sha1-w9XHRXmMAqb4uJdyarpRABhu4mA=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/import-local/-/import-local-3.2.0.tgz}
     engines: {node: '>=8'}
     hasBin: true
 
@@ -14446,15 +14449,15 @@ packages:
     resolution: {integrity: sha1-4SIvRt3ahd6tD9HJ3xMXYOd3VcE=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/is-what/-/is-what-3.14.1.tgz}
 
   is-wsl@2.2.0:
-    resolution: {integrity: sha1-dKTHbnfKn9P5MvKQwX6jJs0VcnE=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/is-wsl/-/is-wsl-2.2.0.tgz}
+    resolution: {integrity: sha1-dKTHbnfKn9P5MvKQwX6jJs0VcnE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/is-wsl/-/is-wsl-2.2.0.tgz}
     engines: {node: '>=8'}
 
   is-wsl@3.1.0:
-    resolution: {integrity: sha1-4cZX45wQCQr8vt7GFyD2uSTDy9I=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/is-wsl/-/is-wsl-3.1.0.tgz}
+    resolution: {integrity: sha1-4cZX45wQCQr8vt7GFyD2uSTDy9I=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/is-wsl/-/is-wsl-3.1.0.tgz}
     engines: {node: '>=16'}
 
   is-wsl@3.1.1:
-    resolution: {integrity: sha1-MniXsmgyo+sRfabCdJLQTKEyWU8=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/is-wsl/-/is-wsl-3.1.1.tgz}
+    resolution: {integrity: sha1-MniXsmgyo+sRfabCdJLQTKEyWU8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/is-wsl/-/is-wsl-3.1.1.tgz}
     engines: {node: '>=16'}
 
   isarray@0.0.1:
@@ -14490,7 +14493,7 @@ packages:
     engines: {node: '>=0.10.0'}
 
   isomorphic-ws@5.0.0:
-    resolution: {integrity: sha1-5VKRSJEuy5tFG0btRNU9rhzgS78=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/isomorphic-ws/-/isomorphic-ws-5.0.0.tgz}
+    resolution: {integrity: sha1-5VKRSJEuy5tFG0btRNU9rhzgS78=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/isomorphic-ws/-/isomorphic-ws-5.0.0.tgz}
     peerDependencies:
       ws: '*'
 
@@ -14559,7 +14562,7 @@ packages:
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
 
   jest-cli@29.7.0:
-    resolution: {integrity: sha1-VZLJQHmODK5nfuwWkmTy2DmjeZU=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/jest-cli/-/jest-cli-29.7.0.tgz}
+    resolution: {integrity: sha1-VZLJQHmODK5nfuwWkmTy2DmjeZU=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/jest-cli/-/jest-cli-29.7.0.tgz}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
     hasBin: true
     peerDependencies:
@@ -14593,7 +14596,7 @@ packages:
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
 
   jest-environment-jsdom@29.7.0:
-    resolution: {integrity: sha1-0gb6NVGTPD/VGeXf21ig9ROag38=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/jest-environment-jsdom/-/jest-environment-jsdom-29.7.0.tgz}
+    resolution: {integrity: sha1-0gb6NVGTPD/VGeXf21ig9ROag38=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/jest-environment-jsdom/-/jest-environment-jsdom-29.7.0.tgz}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
     peerDependencies:
       canvas: ^2.5.0
@@ -14716,7 +14719,7 @@ packages:
     hasBin: true
 
   js-yaml@4.3.0:
-    resolution: {integrity: sha1-0ZAFcqf3zwtfVAyDZz5gutNDZZI=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/js-yaml/-/js-yaml-4.3.0.tgz}
+    resolution: {integrity: sha1-0ZAFcqf3zwtfVAyDZz5gutNDZZI=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/js-yaml/-/js-yaml-4.3.0.tgz}
     hasBin: true
 
   jsbi@2.0.5:
@@ -14739,7 +14742,7 @@ packages:
         optional: true
 
   jsdom@28.1.0:
-    resolution: {integrity: sha1-rEID5Y/STXsPNDWasA1tnK69S2I=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/jsdom/-/jsdom-28.1.0.tgz}
+    resolution: {integrity: sha1-rEID5Y/STXsPNDWasA1tnK69S2I=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/jsdom/-/jsdom-28.1.0.tgz}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
     peerDependencies:
       canvas: ^3.0.0
@@ -14809,7 +14812,7 @@ packages:
     resolution: {integrity: sha1-tuMXF/Isw3MwsIHOAFHtXeU68vY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/jsonfile/-/jsonfile-6.2.1.tgz}
 
   jsonpath@1.3.0:
-    resolution: {integrity: sha1-YjGXlw+0M4RcaAJL+eK4ZPU3arI=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/jsonpath/-/jsonpath-1.3.0.tgz}
+    resolution: {integrity: sha1-YjGXlw+0M4RcaAJL+eK4ZPU3arI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/jsonpath/-/jsonpath-1.3.0.tgz}
 
   jsonwebtoken@9.0.2:
     resolution: {integrity: sha1-Zf+R9KvvF4RpfUCVK7GZjFBMqvM=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/jsonwebtoken/-/jsonwebtoken-9.0.2.tgz}
@@ -14838,7 +14841,7 @@ packages:
     resolution: {integrity: sha1-B+3Bvo+sIOZ3soPs4mFJi9OPBpA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/jws/-/jws-4.0.1.tgz}
 
   katex@0.16.22:
-    resolution: {integrity: sha1-0rPWZGSx5taeZGOyiobO1aAsXM0=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/katex/-/katex-0.16.22.tgz}
+    resolution: {integrity: sha1-0rPWZGSx5taeZGOyiobO1aAsXM0=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/katex/-/katex-0.16.22.tgz}
     hasBin: true
 
   katex@0.16.47:
@@ -14875,7 +14878,7 @@ packages:
     engines: {node: '>=6'}
 
   knip@6.24.0:
-    resolution: {integrity: sha1-h66MjDIs6sxjBWgyXcDsmMKuCUY=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/knip/-/knip-6.24.0.tgz}
+    resolution: {integrity: sha1-h66MjDIs6sxjBWgyXcDsmMKuCUY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/knip/-/knip-6.24.0.tgz}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
 
@@ -14932,7 +14935,7 @@ packages:
     resolution: {integrity: sha1-3PE244LmZr0kdfRKEJYGG3DcCRI=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/leac/-/leac-0.6.0.tgz}
 
   less@4.3.0:
-    resolution: {integrity: sha1-7wz8JgqcqAee2NDjUSvaihLILyo=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/less/-/less-4.3.0.tgz}
+    resolution: {integrity: sha1-7wz8JgqcqAee2NDjUSvaihLILyo=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/less/-/less-4.3.0.tgz}
     engines: {node: '>=14'}
     hasBin: true
 
@@ -14979,10 +14982,10 @@ packages:
     resolution: {integrity: sha1-8XIJZYSn7UOok2qNWGmkOod75qA=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/link-check/-/link-check-5.5.1.tgz}
 
   linkify-it@5.0.0:
-    resolution: {integrity: sha1-nvI4v6bccL2Of5VytS02mvVptCE=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/linkify-it/-/linkify-it-5.0.0.tgz}
+    resolution: {integrity: sha1-nvI4v6bccL2Of5VytS02mvVptCE=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/linkify-it/-/linkify-it-5.0.0.tgz}
 
   linkify-it@5.0.2:
-    resolution: {integrity: sha1-074KaTrz2p3ziD8eNGoOl0YajBk=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/linkify-it/-/linkify-it-5.0.2.tgz}
+    resolution: {integrity: sha1-074KaTrz2p3ziD8eNGoOl0YajBk=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/linkify-it/-/linkify-it-5.0.2.tgz}
 
   lit-element@4.2.2:
     resolution: {integrity: sha1-90/L++qUXq5WFOziKmdPpSyjNls=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/lit-element/-/lit-element-4.2.2.tgz}
@@ -14994,7 +14997,7 @@ packages:
     resolution: {integrity: sha1-pj/QL7jBx7cFfugFq2xhL96+8LE=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/lit-html/-/lit-html-3.3.3.tgz}
 
   lit@3.3.2:
-    resolution: {integrity: sha1-2SMOu/I3v9PSCRvAtWxXakcKxNc=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/lit/-/lit-3.3.2.tgz}
+    resolution: {integrity: sha1-2SMOu/I3v9PSCRvAtWxXakcKxNc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/lit/-/lit-3.3.2.tgz}
 
   loader-runner@4.3.2:
     resolution: {integrity: sha1-mRPToVlx+PY1kV5gH7XJ1JXZGOk=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/loader-runner/-/loader-runner-4.3.2.tgz}
@@ -15131,7 +15134,7 @@ packages:
     engines: {node: '>=16.14'}
 
   madge@8.0.0:
-    resolution: {integrity: sha1-zKSrZvs4jntr9DwfeNyqs8rTD1A=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/madge/-/madge-8.0.0.tgz}
+    resolution: {integrity: sha1-zKSrZvs4jntr9DwfeNyqs8rTD1A=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/madge/-/madge-8.0.0.tgz}
     engines: {node: '>=18'}
     hasBin: true
     peerDependencies:
@@ -15167,10 +15170,10 @@ packages:
     resolution: {integrity: sha1-5WqpTEyAVaFkBKBnS3jyFffI4ZQ=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/map-stream/-/map-stream-0.1.0.tgz}
 
   markdown-it-texmath@1.0.0:
-    resolution: {integrity: sha1-ZXA7I10HqPlrxYy/nUeK9XFU5fA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/markdown-it-texmath/-/markdown-it-texmath-1.0.0.tgz}
+    resolution: {integrity: sha1-ZXA7I10HqPlrxYy/nUeK9XFU5fA=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/markdown-it-texmath/-/markdown-it-texmath-1.0.0.tgz}
 
   markdown-it@14.2.0:
-    resolution: {integrity: sha1-BtSNkDXnfVscha2zFUgvyCQCie8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/markdown-it/-/markdown-it-14.2.0.tgz}
+    resolution: {integrity: sha1-BtSNkDXnfVscha2zFUgvyCQCie8=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/markdown-it/-/markdown-it-14.2.0.tgz}
     hasBin: true
 
   markdown-it@14.3.0:
@@ -15178,7 +15181,7 @@ packages:
     hasBin: true
 
   markdown-link-check@3.14.2:
-    resolution: {integrity: sha1-VoPfsDnYxlgRejlQ9PqsnGd04Pg=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/markdown-link-check/-/markdown-link-check-3.14.2.tgz}
+    resolution: {integrity: sha1-VoPfsDnYxlgRejlQ9PqsnGd04Pg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/markdown-link-check/-/markdown-link-check-3.14.2.tgz}
     hasBin: true
 
   markdown-link-extractor@4.0.3:
@@ -15320,7 +15323,7 @@ packages:
     engines: {node: '>= 0.6'}
 
   mic@2.1.2:
-    resolution: {integrity: sha1-8DQoOBeY/4iakEBaAxgVHbBUpO0=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mic/-/mic-2.1.2.tgz}
+    resolution: {integrity: sha1-8DQoOBeY/4iakEBaAxgVHbBUpO0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mic/-/mic-2.1.2.tgz}
 
   micromark-core-commonmark@2.0.3:
     resolution: {integrity: sha1-xpFjDkhQIaaM8o28Kyyifr9njNQ=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/micromark-core-commonmark/-/micromark-core-commonmark-2.0.3.tgz}
@@ -15531,7 +15534,7 @@ packages:
     resolution: {integrity: sha1-kHjNg4YIGv2YbMo0tStdhOp6TTg=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mnemonist/-/mnemonist-0.39.8.tgz}
 
   mocha@10.8.2:
-    resolution: {integrity: sha1-jYNC0BbtQRsSpCnrcxuCX5Ya+5Y=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mocha/-/mocha-10.8.2.tgz}
+    resolution: {integrity: sha1-jYNC0BbtQRsSpCnrcxuCX5Ya+5Y=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mocha/-/mocha-10.8.2.tgz}
     engines: {node: '>= 14.0.0'}
     hasBin: true
 
@@ -15554,7 +15557,7 @@ packages:
     resolution: {integrity: sha1-tPh/kv2Fk/O5Nl9ZJRWgbTBKHpw=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mongodb-connection-string-url/-/mongodb-connection-string-url-3.0.0.tgz}
 
   mongodb@6.16.0:
-    resolution: {integrity: sha1-KnoZhuwVHZxzj8jOTPQyTD9yii8=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mongodb/-/mongodb-6.16.0.tgz}
+    resolution: {integrity: sha1-KnoZhuwVHZxzj8jOTPQyTD9yii8=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/mongodb/-/mongodb-6.16.0.tgz}
     engines: {node: '>=16.20.1'}
     peerDependencies:
       '@aws-sdk/credential-providers': ^3.188.0
@@ -15713,7 +15716,7 @@ packages:
     resolution: {integrity: sha1-h6kGXNs1XTGC2PlM4RGIuCXGijs=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/node-int64/-/node-int64-0.4.0.tgz}
 
   node-pty@1.1.0:
-    resolution: {integrity: sha1-Fhk21FpHdRwuO2lMNl5zAXQXqIc=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/node-pty/-/node-pty-1.1.0.tgz}
+    resolution: {integrity: sha1-Fhk21FpHdRwuO2lMNl5zAXQXqIc=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/node-pty/-/node-pty-1.1.0.tgz}
 
   node-releases@2.0.51:
     resolution: {integrity: sha1-zcCEM1d/WzKtAWlEgXJuIu61Su8=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/node-releases/-/node-releases-2.0.51.tgz}
@@ -15854,7 +15857,7 @@ packages:
     engines: {node: '>=12'}
 
   openai@4.103.0:
-    resolution: {integrity: sha1-hO5S/sIvNIbcwQcziy6vVo70kks=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/openai/-/openai-4.103.0.tgz}
+    resolution: {integrity: sha1-hO5S/sIvNIbcwQcziy6vVo70kks=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/openai/-/openai-4.103.0.tgz}
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
@@ -15866,7 +15869,7 @@ packages:
         optional: true
 
   openai@6.41.0:
-    resolution: {integrity: sha1-snQ1RQFn9BWqOKj4maMaXKD7NH8=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/openai/-/openai-6.41.0.tgz}
+    resolution: {integrity: sha1-snQ1RQFn9BWqOKj4maMaXKD7NH8=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/openai/-/openai-6.41.0.tgz}
     peerDependencies:
       ws: ^8.18.0
       zod: ^3.25 || ^4.0
@@ -15976,7 +15979,7 @@ packages:
     resolution: {integrity: sha1-bJWZ00DVTf05RjgCUqNXBaa5kr8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/pako/-/pako-1.0.11.tgz}
 
   pandemonium@2.4.1:
-    resolution: {integrity: sha1-vVHKchhMauE1+QSaM8hgW/25V00=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/pandemonium/-/pandemonium-2.4.1.tgz}
+    resolution: {integrity: sha1-vVHKchhMauE1+QSaM8hgW/25V00=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/pandemonium/-/pandemonium-2.4.1.tgz}
 
   param-case@3.0.4:
     resolution: {integrity: sha1-fRf+SqEr3jTUp32RrPtiGcqtAcU=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/param-case/-/param-case-3.0.4.tgz}
@@ -16109,7 +16112,7 @@ packages:
     hasBin: true
 
   pdfjs-dist@5.3.31:
-    resolution: {integrity: sha1-DEKfO8Q8V+walfoodPL5MYnS1A4=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/pdfjs-dist/-/pdfjs-dist-5.3.31.tgz}
+    resolution: {integrity: sha1-DEKfO8Q8V+walfoodPL5MYnS1A4=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/pdfjs-dist/-/pdfjs-dist-5.3.31.tgz}
     engines: {node: '>=20.16.0 || >=22.3.0'}
 
   pe-library@0.4.1:
@@ -16165,7 +16168,7 @@ packages:
     resolution: {integrity: sha1-SLTOmDFksgnC1FoQetsx9HOm56c=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/platform/-/platform-1.3.6.tgz}
 
   play-sound@1.1.6:
-    resolution: {integrity: sha1-5i7Z2vhQarqVno/SZ8Sdm5edifo=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/play-sound/-/play-sound-1.1.6.tgz}
+    resolution: {integrity: sha1-5i7Z2vhQarqVno/SZ8Sdm5edifo=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/play-sound/-/play-sound-1.1.6.tgz}
 
   playwright-core@1.57.0:
     resolution: {integrity: sha1-PcyahlryVvqfCvDWf8jdVO7K6/U=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/playwright-core/-/playwright-core-1.57.0.tgz}
@@ -16237,7 +16240,7 @@ packages:
     engines: {node: '>= 0.8.0'}
 
   prettier@3.5.3:
-    resolution: {integrity: sha1-T8LODWV+egLmAlSfBTsjnLff4bU=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prettier/-/prettier-3.5.3.tgz}
+    resolution: {integrity: sha1-T8LODWV+egLmAlSfBTsjnLff4bU=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prettier/-/prettier-3.5.3.tgz}
     engines: {node: '>=14'}
     hasBin: true
 
@@ -16245,7 +16248,7 @@ packages:
     resolution: {integrity: sha1-kKcD9G3XI0rbRtD4SCPp0cuPENY=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/pretty-error/-/pretty-error-4.0.0.tgz}
 
   pretty-format@29.7.0:
-    resolution: {integrity: sha1-ykLHWDEPNlv6caC9oKgHFgt3aBI=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/pretty-format/-/pretty-format-29.7.0.tgz}
+    resolution: {integrity: sha1-ykLHWDEPNlv6caC9oKgHFgt3aBI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/pretty-format/-/pretty-format-29.7.0.tgz}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
 
   pretty-ms@7.0.1:
@@ -16256,7 +16259,7 @@ packages:
     resolution: {integrity: sha1-lgZAQO3YR+6d0wE9jhYpc5mmvU8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/priorityqueuejs/-/priorityqueuejs-2.0.0.tgz}
 
   prismjs@1.30.0:
-    resolution: {integrity: sha1-2XCZadnU4WQD9vNIxjVTsZ8Jdak=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prismjs/-/prismjs-1.30.0.tgz}
+    resolution: {integrity: sha1-2XCZadnU4WQD9vNIxjVTsZ8Jdak=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prismjs/-/prismjs-1.30.0.tgz}
     engines: {node: '>=6'}
 
   proc-log@6.1.0:
@@ -16286,7 +16289,7 @@ packages:
     engines: {node: '>= 6'}
 
   proper-lockfile@4.1.2:
-    resolution: {integrity: sha1-yLneKvay8WAQZ/mOAaxmuqIjFB8=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/proper-lockfile/-/proper-lockfile-4.1.2.tgz}
+    resolution: {integrity: sha1-yLneKvay8WAQZ/mOAaxmuqIjFB8=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/proper-lockfile/-/proper-lockfile-4.1.2.tgz}
 
   prosemirror-changeset@2.3.1:
     resolution: {integrity: sha1-7uMpnPq8egJ2lOmr3E6FUF6d1ec=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prosemirror-changeset/-/prosemirror-changeset-2.3.1.tgz}
@@ -16304,7 +16307,7 @@ packages:
     resolution: {integrity: sha1-zDcKRvtinoOjOUag4SYS6TSri5g=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prosemirror-history/-/prosemirror-history-1.4.1.tgz}
 
   prosemirror-inputrules@1.5.0:
-    resolution: {integrity: sha1-4iv68dbqT+JArUR8GErz1SDUPDc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prosemirror-inputrules/-/prosemirror-inputrules-1.5.0.tgz}
+    resolution: {integrity: sha1-4iv68dbqT+JArUR8GErz1SDUPDc=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prosemirror-inputrules/-/prosemirror-inputrules-1.5.0.tgz}
 
   prosemirror-keymap@1.2.3:
     resolution: {integrity: sha1-wParlfdcC4LJfkTraq8py/wVBHI=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prosemirror-keymap/-/prosemirror-keymap-1.2.3.tgz}
@@ -16319,7 +16322,7 @@ packages:
     resolution: {integrity: sha1-WGnI90nodFw5RUi7EYILD+seMvU=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prosemirror-schema-list/-/prosemirror-schema-list-1.5.1.tgz}
 
   prosemirror-state@1.4.3:
-    resolution: {integrity: sha1-lK7PP/1U7DfoeqcXnRNQjaGBoIA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prosemirror-state/-/prosemirror-state-1.4.3.tgz}
+    resolution: {integrity: sha1-lK7PP/1U7DfoeqcXnRNQjaGBoIA=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prosemirror-state/-/prosemirror-state-1.4.3.tgz}
 
   prosemirror-tables@1.7.1:
     resolution: {integrity: sha1-3yUH8oXGx1Ywl7SQTLfEueDNcks=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prosemirror-tables/-/prosemirror-tables-1.7.1.tgz}
@@ -16331,7 +16334,7 @@ packages:
     resolution: {integrity: sha1-AjkojQ6Y2R5q890mmoloRmvkBtc=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prosemirror-transform/-/prosemirror-transform-1.12.0.tgz}
 
   prosemirror-view@1.40.0:
-    resolution: {integrity: sha1-IS5iegxPAZismCOhIy4AmcmpKGU=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prosemirror-view/-/prosemirror-view-1.40.0.tgz}
+    resolution: {integrity: sha1-IS5iegxPAZismCOhIy4AmcmpKGU=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prosemirror-view/-/prosemirror-view-1.40.0.tgz}
 
   prosemirror-virtual-cursor@0.4.2:
     resolution: {integrity: sha1-t5gloF2cmseLLdaQwtnrZ0UPtC0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/prosemirror-virtual-cursor/-/prosemirror-virtual-cursor-0.4.2.tgz}
@@ -16445,7 +16448,7 @@ packages:
         optional: true
 
   puppeteer-extra-plugin-stealth@2.11.2:
-    resolution: {integrity: sha1-vT9aF4HKyKmMmD0UgIZYWoT8yPE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/puppeteer-extra-plugin-stealth/-/puppeteer-extra-plugin-stealth-2.11.2.tgz}
+    resolution: {integrity: sha1-vT9aF4HKyKmMmD0UgIZYWoT8yPE=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/puppeteer-extra-plugin-stealth/-/puppeteer-extra-plugin-stealth-2.11.2.tgz}
     engines: {node: '>=8'}
     peerDependencies:
       playwright-extra: '*'
@@ -16493,7 +16496,7 @@ packages:
         optional: true
 
   puppeteer-extra@3.3.6:
-    resolution: {integrity: sha1-/Bb/OWquUmZIQtqaVX6o+lHqqLc=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/puppeteer-extra/-/puppeteer-extra-3.3.6.tgz}
+    resolution: {integrity: sha1-/Bb/OWquUmZIQtqaVX6o+lHqqLc=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/puppeteer-extra/-/puppeteer-extra-3.3.6.tgz}
     engines: {node: '>=8'}
     peerDependencies:
       '@types/puppeteer': '*'
@@ -16508,7 +16511,7 @@ packages:
         optional: true
 
   puppeteer@24.37.5:
-    resolution: {integrity: sha1-xhkyzbK8U9GJcGcb4Y1UchbSlfA=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/puppeteer/-/puppeteer-24.37.5.tgz}
+    resolution: {integrity: sha1-xhkyzbK8U9GJcGcb4Y1UchbSlfA=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/puppeteer/-/puppeteer-24.37.5.tgz}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -16544,11 +16547,11 @@ packages:
     resolution: {integrity: sha1-Z6mncUjv/q+BpNQoQEpxC6qsigs=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/quote-unquote/-/quote-unquote-1.0.0.tgz}
 
   range-parser@1.2.1:
-    resolution: {integrity: sha1-PPNwI9GZ4cJNGlW4SADC8+ZGgDE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/range-parser/-/range-parser-1.2.1.tgz}
+    resolution: {integrity: sha1-PPNwI9GZ4cJNGlW4SADC8+ZGgDE=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/range-parser/-/range-parser-1.2.1.tgz}
     engines: {node: '>= 0.6'}
 
   range-parser@1.3.0:
-    resolution: {integrity: sha1-1/Gb6BK7YnIUcrRdO+IZ7wlXK0c=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/range-parser/-/range-parser-1.3.0.tgz}
+    resolution: {integrity: sha1-1/Gb6BK7YnIUcrRdO+IZ7wlXK0c=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/range-parser/-/range-parser-1.3.0.tgz}
     engines: {node: '>= 0.6'}
 
   raw-body@2.5.3:
@@ -16617,7 +16620,7 @@ packages:
     engines: {node: '>= 14.18.0'}
 
   readline@1.3.0:
-    resolution: {integrity: sha1-xYDXfvLPyHUrEySYBg3JeTp6wBw=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/readline/-/readline-1.3.0.tgz}
+    resolution: {integrity: sha1-xYDXfvLPyHUrEySYBg3JeTp6wBw=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/readline/-/readline-1.3.0.tgz}
 
   rechoir@0.6.2:
     resolution: {integrity: sha1-hSBLVNuoLVdC4oyWdW70OvUOM4Q=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/rechoir/-/rechoir-0.6.2.tgz}
@@ -16670,7 +16673,7 @@ packages:
     resolution: {integrity: sha1-qmB0P8s36/awaSBOtNowTkDbRaE=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/remark-parse/-/remark-parse-11.0.0.tgz}
 
   remark-stringify@11.0.0:
-    resolution: {integrity: sha1-TFsB3XEcJp3xqq4RdD634udjb9M=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/remark-stringify/-/remark-stringify-11.0.0.tgz}
+    resolution: {integrity: sha1-TFsB3XEcJp3xqq4RdD634udjb9M=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/remark-stringify/-/remark-stringify-11.0.0.tgz}
 
   remark@15.0.1:
     resolution: {integrity: sha1-rH51YyYFE7ZkJrxH+FDnqlhiw3w=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/remark/-/remark-15.0.1.tgz}
@@ -16786,16 +16789,16 @@ packages:
     hasBin: true
 
   rimraf@4.4.1:
-    resolution: {integrity: sha1-vTM2T2cCHFt56T1/T6BWjHwht1U=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/rimraf/-/rimraf-4.4.1.tgz}
+    resolution: {integrity: sha1-vTM2T2cCHFt56T1/T6BWjHwht1U=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/rimraf/-/rimraf-4.4.1.tgz}
     engines: {node: '>=14'}
     hasBin: true
 
   rimraf@5.0.10:
-    resolution: {integrity: sha1-I7mEPT3JLbcfluGizpLjn9KoIhw=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/rimraf/-/rimraf-5.0.10.tgz}
+    resolution: {integrity: sha1-I7mEPT3JLbcfluGizpLjn9KoIhw=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/rimraf/-/rimraf-5.0.10.tgz}
     hasBin: true
 
   rimraf@6.0.1:
-    resolution: {integrity: sha1-/7itiETdYDMqsV9SvBBLw+1x6k4=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/rimraf/-/rimraf-6.0.1.tgz}
+    resolution: {integrity: sha1-/7itiETdYDMqsV9SvBBLw+1x6k4=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/rimraf/-/rimraf-6.0.1.tgz}
     engines: {node: 20 || >=22}
     hasBin: true
 
@@ -16865,7 +16868,7 @@ packages:
     resolution: {integrity: sha1-RPoWGwGHuVSd2Eu5GAL5vYOFzWo=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/safer-buffer/-/safer-buffer-2.1.2.tgz}
 
   sanitize-filename@1.6.3:
-    resolution: {integrity: sha1-dV69dSBFkxl34wsgJdNA18kJA3g=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/sanitize-filename/-/sanitize-filename-1.6.3.tgz}
+    resolution: {integrity: sha1-dV69dSBFkxl34wsgJdNA18kJA3g=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/sanitize-filename/-/sanitize-filename-1.6.3.tgz}
 
   sanitize-filename@1.6.4:
     resolution: {integrity: sha1-trOevtm9GhiYuFxcAwidp0WQ1vg=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/sanitize-filename/-/sanitize-filename-1.6.4.tgz}
@@ -17268,14 +17271,14 @@ packages:
     resolution: {integrity: sha1-A1q1YFe37SIRtR1TLmlz8PmfvxE=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/streamx/-/streamx-2.28.0.tgz}
 
   string-compare@1.1.2:
-    resolution: {integrity: sha1-ByuOAKcTCLTkE3caGcpVtQ0L41g=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/string-compare/-/string-compare-1.1.2.tgz}
+    resolution: {integrity: sha1-ByuOAKcTCLTkE3caGcpVtQ0L41g=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/string-compare/-/string-compare-1.1.2.tgz}
 
   string-length@4.0.2:
     resolution: {integrity: sha1-qKjce9XBqCubPIuH4SX2aHG25Xo=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/string-length/-/string-length-4.0.2.tgz}
     engines: {node: '>=10'}
 
   string-width@4.2.3:
-    resolution: {integrity: sha1-JpxxF9J7Ba0uU2gwqOyJXvnG0BA=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/string-width/-/string-width-4.2.3.tgz}
+    resolution: {integrity: sha1-JpxxF9J7Ba0uU2gwqOyJXvnG0BA=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/string-width/-/string-width-4.2.3.tgz}
     engines: {node: '>=8'}
 
   string-width@5.1.2:
@@ -17283,7 +17286,7 @@ packages:
     engines: {node: '>=12'}
 
   string-width@7.2.0:
-    resolution: {integrity: sha1-tbuOIWXOJ11NQ0dt0nAK2Qkdttw=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/string-width/-/string-width-7.2.0.tgz}
+    resolution: {integrity: sha1-tbuOIWXOJ11NQ0dt0nAK2Qkdttw=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/string-width/-/string-width-7.2.0.tgz}
     engines: {node: '>=18'}
 
   string.prototype.trim@1.2.10:
@@ -17361,7 +17364,7 @@ packages:
     resolution: {integrity: sha1-yiOKGtR4ZSD3UVqFOdWmNpHXv2c=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/style-mod/-/style-mod-4.1.2.tgz}
 
   stylis@4.4.0:
-    resolution: {integrity: sha1-xYRsk0X0v8Ub0MvXyjWgdE9IWl0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/stylis/-/stylis-4.4.0.tgz}
+    resolution: {integrity: sha1-xYRsk0X0v8Ub0MvXyjWgdE9IWl0=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/stylis/-/stylis-4.4.0.tgz}
 
   stylus-lookup@6.1.2:
     resolution: {integrity: sha1-W/3hcwW8dj31511FXpGe95Vf4Ms=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/stylus-lookup/-/stylus-lookup-6.1.2.tgz}
@@ -17684,7 +17687,7 @@ packages:
     engines: {node: '>=18'}
 
   ts-jest@29.3.3:
-    resolution: {integrity: sha1-wkwxqdEiaPiImePusFkSyrQsV0w=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ts-jest/-/ts-jest-29.3.3.tgz}
+    resolution: {integrity: sha1-wkwxqdEiaPiImePusFkSyrQsV0w=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ts-jest/-/ts-jest-29.3.3.tgz}
     engines: {node: ^14.15.0 || ^16.10.0 || ^18.0.0 || >=20.0.0}
     hasBin: true
     peerDependencies:
@@ -17708,7 +17711,7 @@ packages:
         optional: true
 
   ts-jest@29.4.9:
-    resolution: {integrity: sha1-R9wz0PXDa93O3Rav764oXgsEnS0=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ts-jest/-/ts-jest-29.4.9.tgz}
+    resolution: {integrity: sha1-R9wz0PXDa93O3Rav764oXgsEnS0=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ts-jest/-/ts-jest-29.4.9.tgz}
     engines: {node: ^14.15.0 || ^16.10.0 || ^18.0.0 || >=20.0.0}
     hasBin: true
     peerDependencies:
@@ -17742,7 +17745,7 @@ packages:
       webpack: ^5.0.0
 
   ts-node@10.9.2:
-    resolution: {integrity: sha1-cPAhyeGFvM3Kgg4m3EE4BcEBxx8=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ts-node/-/ts-node-10.9.2.tgz}
+    resolution: {integrity: sha1-cPAhyeGFvM3Kgg4m3EE4BcEBxx8=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ts-node/-/ts-node-10.9.2.tgz}
     hasBin: true
     peerDependencies:
       '@swc/core': '>=1.2.50'
@@ -17805,7 +17808,7 @@ packages:
     engines: {node: '>=10'}
 
   type-fest@2.19.0:
-    resolution: {integrity: sha1-iAaAFbszA2pZi5UuVekxGmD9Ops=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/type-fest/-/type-fest-2.19.0.tgz}
+    resolution: {integrity: sha1-iAaAFbszA2pZi5UuVekxGmD9Ops=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/type-fest/-/type-fest-2.19.0.tgz}
     engines: {node: '>=12.20'}
 
   type-fest@3.13.1:
@@ -17813,7 +17816,7 @@ packages:
     engines: {node: '>=14.16'}
 
   type-fest@4.41.0:
-    resolution: {integrity: sha1-auHI5XMSc8K/H1itOcuuLJGkbFg=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/type-fest/-/type-fest-4.41.0.tgz}
+    resolution: {integrity: sha1-auHI5XMSc8K/H1itOcuuLJGkbFg=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/type-fest/-/type-fest-4.41.0.tgz}
     engines: {node: '>=16'}
 
   type-is@1.6.18:
@@ -17869,7 +17872,7 @@ packages:
       typescript: '>=4.8.4 <6.1.0'
 
   typescript@5.4.5:
-    resolution: {integrity: sha1-QszvLFcf29D2cYsdH15uXvAG9hE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/typescript/-/typescript-5.4.5.tgz}
+    resolution: {integrity: sha1-QszvLFcf29D2cYsdH15uXvAG9hE=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/typescript/-/typescript-5.4.5.tgz}
     engines: {node: '>=14.17'}
     hasBin: true
 
@@ -17974,10 +17977,10 @@ packages:
     resolution: {integrity: sha1-d333+5hlLOFrS3zZmdChpA76OgI=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/unist-util-visit-parents/-/unist-util-visit-parents-6.0.2.tgz}
 
   unist-util-visit@4.1.2:
-    resolution: {integrity: sha1-ElpC0euHYoNxWjy1zOqlMYKMcuI=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/unist-util-visit/-/unist-util-visit-4.1.2.tgz}
+    resolution: {integrity: sha1-ElpC0euHYoNxWjy1zOqlMYKMcuI=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/unist-util-visit/-/unist-util-visit-4.1.2.tgz}
 
   unist-util-visit@5.1.0:
-    resolution: {integrity: sha1-mioosKp2oV4NpwoIpYY6LwYOJGg=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/unist-util-visit/-/unist-util-visit-5.1.0.tgz}
+    resolution: {integrity: sha1-mioosKp2oV4NpwoIpYY6LwYOJGg=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/unist-util-visit/-/unist-util-visit-5.1.0.tgz}
 
   universalify@0.1.2:
     resolution: {integrity: sha1-tkb2m+OULavOzJ1mOcgNwQXvqmY=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/universalify/-/universalify-0.1.2.tgz}
@@ -18085,7 +18088,7 @@ packages:
     resolution: {integrity: sha1-NlKrHEllMYUr9VprrFevmB68OKs=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/vfile/-/vfile-6.0.3.tgz}
 
   vite@6.4.3:
-    resolution: {integrity: sha1-haFk23znBvKndoEu+is0DxchhY4=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/vite/-/vite-6.4.3.tgz}
+    resolution: {integrity: sha1-haFk23znBvKndoEu+is0DxchhY4=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/vite/-/vite-6.4.3.tgz}
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
     hasBin: true
     peerDependencies:
@@ -18137,7 +18140,7 @@ packages:
     engines: {node: '>=14.0.0'}
 
   vscode-languageclient@9.0.1:
-    resolution: {integrity: sha1-zf4gJncmyNTbg53B6dGBbhKW6FQ=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/vscode-languageclient/-/vscode-languageclient-9.0.1.tgz}
+    resolution: {integrity: sha1-zf4gJncmyNTbg53B6dGBbhKW6FQ=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/vscode-languageclient/-/vscode-languageclient-9.0.1.tgz}
     engines: {vscode: ^1.82.0}
 
   vscode-languageserver-protocol@3.17.5:
@@ -18212,7 +18215,7 @@ packages:
     engines: {node: '>=20'}
 
   webpack-cli@5.1.4:
-    resolution: {integrity: sha1-yOBGun6q5JEdfnHislt3b8w1dZs=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/webpack-cli/-/webpack-cli-5.1.4.tgz}
+    resolution: {integrity: sha1-yOBGun6q5JEdfnHislt3b8w1dZs=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/webpack-cli/-/webpack-cli-5.1.4.tgz}
     engines: {node: '>=14.15.0'}
     hasBin: true
     peerDependencies:
@@ -18259,7 +18262,7 @@ packages:
     engines: {node: '>=10.13.0'}
 
   webpack@5.105.0:
-    resolution: {integrity: sha1-OLXmxduMvoHeu9FuCJM1raBeojo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/webpack/-/webpack-5.105.0.tgz}
+    resolution: {integrity: sha1-OLXmxduMvoHeu9FuCJM1raBeojo=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/webpack/-/webpack-5.105.0.tgz}
     engines: {node: '>=10.13.0'}
     hasBin: true
     peerDependencies:
@@ -18367,7 +18370,7 @@ packages:
     resolution: {integrity: sha1-WrENAkhxmJVINrY0n3T/+WHhD2c=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/wildcard/-/wildcard-2.0.1.tgz}
 
   winreg@1.2.5:
-    resolution: {integrity: sha1-tlA4PokniVJJS10RO6BJpaT6ltg=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/winreg/-/winreg-1.2.5.tgz}
+    resolution: {integrity: sha1-tlA4PokniVJJS10RO6BJpaT6ltg=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/winreg/-/winreg-1.2.5.tgz}
 
   with@7.0.2:
     resolution: {integrity: sha1-zO461ULSVTinp6gKrSErmChJW6w=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/with/-/with-7.0.2.tgz}
@@ -18426,7 +18429,7 @@ packages:
         optional: true
 
   ws@8.21.1:
-    resolution: {integrity: sha1-BFZQzUsSB4CedUcUYiPDgUqa9YY=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ws/-/ws-8.21.1.tgz}
+    resolution: {integrity: sha1-BFZQzUsSB4CedUcUYiPDgUqa9YY=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/ws/-/ws-8.21.1.tgz}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -18485,7 +18488,7 @@ packages:
     resolution: {integrity: sha1-Bg/hvLf5x2/ioX24apvDq4lCEMs=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/xmlchars/-/xmlchars-2.2.0.tgz}
 
   xss@1.0.15:
-    resolution: {integrity: sha1-lqDhOIbwZhBjAotBDtGxhnD05Zo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/xss/-/xss-1.0.15.tgz}
+    resolution: {integrity: sha1-lqDhOIbwZhBjAotBDtGxhnD05Zo=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/xss/-/xss-1.0.15.tgz}
     engines: {node: '>= 0.10.0'}
     hasBin: true
 
@@ -18494,7 +18497,7 @@ packages:
     engines: {node: '>=0.4'}
 
   y-prosemirror@1.3.5:
-    resolution: {integrity: sha1-tz3+4G+ck2hDQGNbKahPnjoAHJ0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/y-prosemirror/-/y-prosemirror-1.3.5.tgz}
+    resolution: {integrity: sha1-tz3+4G+ck2hDQGNbKahPnjoAHJ0=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/y-prosemirror/-/y-prosemirror-1.3.5.tgz}
     engines: {node: '>=16.0.0', npm: '>=8.0.0'}
     peerDependencies:
       prosemirror-model: ^1.7.1
@@ -18504,13 +18507,13 @@ packages:
       yjs: ^13.5.38
 
   y-protocols@1.0.6:
-    resolution: {integrity: sha1-ZtrYqVdSYjRD6OKMDpI2gtLA1JU=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/y-protocols/-/y-protocols-1.0.6.tgz}
+    resolution: {integrity: sha1-ZtrYqVdSYjRD6OKMDpI2gtLA1JU=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/y-protocols/-/y-protocols-1.0.6.tgz}
     engines: {node: '>=16.0.0', npm: '>=8.0.0'}
     peerDependencies:
       yjs: ^13.0.0
 
   y-websocket@3.0.0:
-    resolution: {integrity: sha1-6GvbKcwKU8uNbjPsjSRhSnI4Mq8=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/y-websocket/-/y-websocket-3.0.0.tgz}
+    resolution: {integrity: sha1-6GvbKcwKU8uNbjPsjSRhSnI4Mq8=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/y-websocket/-/y-websocket-3.0.0.tgz}
     engines: {node: '>=16.0.0', npm: '>=8.0.0'}
     peerDependencies:
       yjs: ^13.5.6
@@ -18530,12 +18533,12 @@ packages:
     engines: {node: '>=18'}
 
   yaml@2.8.3:
-    resolution: {integrity: sha1-oNa9Lvs90DxZNwIjcBg05gQJvX0=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/yaml/-/yaml-2.8.3.tgz}
+    resolution: {integrity: sha1-oNa9Lvs90DxZNwIjcBg05gQJvX0=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/yaml/-/yaml-2.8.3.tgz}
     engines: {node: '>= 14.6'}
     hasBin: true
 
   yaml@2.9.0:
-    resolution: {integrity: sha1-eCdK/ZNZih391hMN9qVm3vy/mqQ=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/yaml/-/yaml-2.9.0.tgz}
+    resolution: {integrity: sha1-eCdK/ZNZih391hMN9qVm3vy/mqQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/yaml/-/yaml-2.9.0.tgz}
     engines: {node: '>= 14.6'}
     hasBin: true
 
@@ -18574,7 +18577,7 @@ packages:
     resolution: {integrity: sha1-o9ZdPdZZpbCTeFDoYJ8i//orXDU=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/yazl/-/yazl-2.5.1.tgz}
 
   yjs@13.6.27:
-    resolution: {integrity: sha1-iJm+kp1X2gWgqhEtBEpcIEOTq3s=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/yjs/-/yjs-13.6.27.tgz}
+    resolution: {integrity: sha1-iJm+kp1X2gWgqhEtBEpcIEOTq3s=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/yjs/-/yjs-13.6.27.tgz}
     engines: {node: '>=16.0.0', npm: '>=8.0.0'}
 
   ylru@1.4.0:
@@ -18617,16 +18620,16 @@ packages:
     resolution: {integrity: sha1-43uVe11SB5dp+4CXCZtZLw70Bn0=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zod/-/zod-3.23.8.tgz}
 
   zod@3.25.76:
-    resolution: {integrity: sha1-JoQcP2/SKmonYOfMtxkXl2hHHjQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zod/-/zod-3.25.76.tgz}
+    resolution: {integrity: sha1-JoQcP2/SKmonYOfMtxkXl2hHHjQ=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zod/-/zod-3.25.76.tgz}
 
   zod@4.1.13:
-    resolution: {integrity: sha1-k2maiv6Te6lrrbsM6L5gM8CktrE=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zod/-/zod-4.1.13.tgz}
+    resolution: {integrity: sha1-k2maiv6Te6lrrbsM6L5gM8CktrE=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zod/-/zod-4.1.13.tgz}
 
   zod@4.3.6:
-    resolution: {integrity: sha1-icVuCqfSsFEH2JRBIicIeIWrESo=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zod/-/zod-4.3.6.tgz}
+    resolution: {integrity: sha1-icVuCqfSsFEH2JRBIicIeIWrESo=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zod/-/zod-4.3.6.tgz}
 
   zod@4.4.3:
-    resolution: {integrity: sha1-toDxcohdGLvr8hqDTqJeVaG781Y=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zod/-/zod-4.4.3.tgz}
+    resolution: {integrity: sha1-toDxcohdGLvr8hqDTqJeVaG781Y=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zod/-/zod-4.4.3.tgz}
 
   zwitch@2.0.4:
     resolution: {integrity: sha1-yCfUsKy3b8PmhaTG7CkC1RBw6dc=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/zwitch/-/zwitch-2.0.4.tgz}
@@ -18686,10 +18689,10 @@ snapshots:
       '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.162
       '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.162
 
-  '@anthropic-ai/claude-agent-sdk@0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.26.0(supports-color@8.1.1)(zod@4.1.13))(zod@4.1.13)':
+  '@anthropic-ai/claude-agent-sdk@0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.26.0(zod@4.1.13))(zod@4.1.13)':
     dependencies:
       '@anthropic-ai/sdk': 0.93.0(zod@4.1.13)
-      '@modelcontextprotocol/sdk': 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.1.13)
       zod: 4.1.13
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.162
@@ -21417,10 +21420,45 @@ snapshots:
       jest-util: 29.7.0
       slash: 3.0.0
 
+  '@jest/core@29.7.0(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))':
+    dependencies:
+      '@jest/console': 29.7.0
+      '@jest/reporters': 29.7.0(supports-color@8.1.1)
+      '@jest/test-result': 29.7.0
+      '@jest/transform': 29.7.0
+      '@jest/types': 29.6.3
+      '@types/node': 22.20.1
+      ansi-escapes: 4.3.2
+      chalk: 4.1.2
+      ci-info: 3.9.0
+      exit: 0.1.2
+      graceful-fs: 4.2.11
+      jest-changed-files: 29.7.0
+      jest-config: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+      jest-haste-map: 29.7.0
+      jest-message-util: 29.7.0
+      jest-regex-util: 29.6.3
+      jest-resolve: 29.7.0
+      jest-resolve-dependencies: 29.7.0
+      jest-runner: 29.7.0
+      jest-runtime: 29.7.0
+      jest-snapshot: 29.7.0
+      jest-util: 29.7.0
+      jest-validate: 29.7.0
+      jest-watcher: 29.7.0
+      micromatch: 4.0.8
+      pretty-format: 29.7.0
+      slash: 3.0.0
+      strip-ansi: 6.0.1
+    transitivePeerDependencies:
+      - babel-plugin-macros
+      - supports-color
+      - ts-node
+
   '@jest/core@29.7.0(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))':
     dependencies:
       '@jest/console': 29.7.0
-      '@jest/reporters': 29.7.0
+      '@jest/reporters': 29.7.0(supports-color@8.1.1)
       '@jest/test-result': 29.7.0
       '@jest/transform': 29.7.0
       '@jest/types': 29.6.3
@@ -21455,7 +21493,7 @@ snapshots:
   '@jest/core@29.7.0(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))':
     dependencies:
       '@jest/console': 29.7.0
-      '@jest/reporters': 29.7.0
+      '@jest/reporters': 29.7.0(supports-color@8.1.1)
       '@jest/test-result': 29.7.0
       '@jest/transform': 29.7.0
       '@jest/types': 29.6.3
@@ -21487,45 +21525,10 @@ snapshots:
       - supports-color
       - ts-node
 
-  '@jest/core@29.7.0(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))':
-    dependencies:
-      '@jest/console': 29.7.0
-      '@jest/reporters': 29.7.0
-      '@jest/test-result': 29.7.0
-      '@jest/transform': 29.7.0
-      '@jest/types': 29.6.3
-      '@types/node': 22.20.1
-      ansi-escapes: 4.3.2
-      chalk: 4.1.2
-      ci-info: 3.9.0
-      exit: 0.1.2
-      graceful-fs: 4.2.11
-      jest-changed-files: 29.7.0
-      jest-config: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
-      jest-haste-map: 29.7.0
-      jest-message-util: 29.7.0
-      jest-regex-util: 29.6.3
-      jest-resolve: 29.7.0
-      jest-resolve-dependencies: 29.7.0
-      jest-runner: 29.7.0
-      jest-runtime: 29.7.0
-      jest-snapshot: 29.7.0
-      jest-util: 29.7.0
-      jest-validate: 29.7.0
-      jest-watcher: 29.7.0
-      micromatch: 4.0.8
-      pretty-format: 29.7.0
-      slash: 3.0.0
-      strip-ansi: 6.0.1
-    transitivePeerDependencies:
-      - babel-plugin-macros
-      - supports-color
-      - ts-node
-
   '@jest/core@29.7.0(ts-node@10.9.2(@types/node@26.1.2)(typescript@5.4.5))':
     dependencies:
       '@jest/console': 29.7.0
-      '@jest/reporters': 29.7.0
+      '@jest/reporters': 29.7.0(supports-color@8.1.1)
       '@jest/test-result': 29.7.0
       '@jest/transform': 29.7.0
       '@jest/types': 29.6.3
@@ -21593,7 +21596,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@jest/reporters@29.7.0':
+  '@jest/reporters@29.7.0(supports-color@8.1.1)':
     dependencies:
       '@bcoe/v8-coverage': 0.2.3
       '@jest/console': 29.7.0
@@ -21610,7 +21613,7 @@ snapshots:
       istanbul-lib-coverage: 3.2.2
       istanbul-lib-instrument: 6.0.3
       istanbul-lib-report: 3.0.1
-      istanbul-lib-source-maps: 4.0.1
+      istanbul-lib-source-maps: 4.0.1(supports-color@8.1.1)
       istanbul-reports: 3.2.0
       jest-message-util: 29.7.0
       jest-util: 29.7.0
@@ -22343,28 +22346,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/sdk@1.26.0(supports-color@8.1.1)(zod@4.1.13)':
-    dependencies:
-      '@hono/node-server': 1.19.17(hono@4.12.29)
-      ajv: 8.20.0
-      ajv-formats: 3.0.1(ajv@8.20.0)
-      content-type: 1.0.5
-      cors: 2.8.6
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.1.0
-      express: 5.2.1(supports-color@8.1.1)
-      express-rate-limit: 8.5.2(express@5.2.1)
-      hono: 4.12.29
-      jose: 6.2.3
-      json-schema-typed: 8.0.2
-      pkce-challenge: 5.0.1
-      raw-body: 3.0.2
-      zod: 4.1.13
-      zod-to-json-schema: 3.25.2(zod@4.1.13)
-    transitivePeerDependencies:
-      - supports-color
-
   '@modelcontextprotocol/sdk@1.26.0(zod@3.25.76)':
     dependencies:
       '@hono/node-server': 1.19.17(hono@4.12.29)
@@ -22375,7 +22356,7 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
       hono: 4.12.29
       jose: 6.2.3
@@ -22384,6 +22365,28 @@ snapshots:
       raw-body: 3.0.2
       zod: 3.25.76
       zod-to-json-schema: 3.25.2(zod@3.25.76)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.26.0(zod@4.1.13)':
+    dependencies:
+      '@hono/node-server': 1.19.17(hono@4.12.29)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.0
+      express: 5.2.1
+      express-rate-limit: 8.5.2(express@5.2.1)
+      hono: 4.12.29
+      jose: 6.2.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.1
+      raw-body: 3.0.2
+      zod: 4.1.13
+      zod-to-json-schema: 3.25.2(zod@4.1.13)
     transitivePeerDependencies:
       - supports-color
 
@@ -22397,7 +22400,7 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
       hono: 4.12.29
       jose: 6.2.3
@@ -22419,7 +22422,7 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
       hono: 4.12.29
       jose: 6.2.3
@@ -22433,7 +22436,7 @@ snapshots:
 
   '@modelcontextprotocol/server-filesystem@2026.1.14(zod@4.1.13)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.1.13)
       diff: 5.2.2
       glob: 10.5.0
       minimatch: 10.2.5
@@ -25113,7 +25116,7 @@ snapshots:
 
   agent-base@5.1.1: {}
 
-  agent-base@6.0.2:
+  agent-base@6.0.2(supports-color@8.1.1):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
@@ -25575,7 +25578,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  body-parser@2.3.0(supports-color@8.1.1):
+  body-parser@2.3.0:
     dependencies:
       bytes: 3.1.2
       content-type: 2.0.0
@@ -27580,7 +27583,7 @@ snapshots:
 
   express-rate-limit@8.5.2(express@5.2.1):
     dependencies:
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       ip-address: 10.3.1
 
   express@4.22.1:
@@ -27655,10 +27658,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  express@5.2.1(supports-color@8.1.1):
+  express@5.2.1:
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.3.0(supports-color@8.1.1)
+      body-parser: 2.3.0
       content-disposition: 1.1.0
       content-type: 1.0.5
       cookie: 0.7.2
@@ -27668,7 +27671,7 @@ snapshots:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
-      finalhandler: 2.1.1(supports-color@8.1.1)
+      finalhandler: 2.1.1
       fresh: 2.0.0
       http-errors: 2.0.1
       merge-descriptors: 2.0.0
@@ -27679,8 +27682,8 @@ snapshots:
       proxy-addr: 2.0.7
       qs: 6.15.3
       range-parser: 1.3.0
-      router: 2.2.0(supports-color@8.1.1)
-      send: 1.2.1(supports-color@8.1.1)
+      router: 2.2.0
+      send: 1.2.1
       serve-static: 2.2.1
       statuses: 2.0.2
       type-is: 2.1.0
@@ -27819,7 +27822,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  finalhandler@2.1.1(supports-color@8.1.1):
+  finalhandler@2.1.1:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       encodeurl: 2.0.0
@@ -28550,7 +28553,7 @@ snapshots:
 
   https-proxy-agent@5.0.1(supports-color@8.1.1):
     dependencies:
-      agent-base: 6.0.2
+      agent-base: 6.0.2(supports-color@8.1.1)
       debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
@@ -28974,7 +28977,7 @@ snapshots:
       make-dir: 4.0.0
       supports-color: 7.2.0
 
-  istanbul-lib-source-maps@4.0.1:
+  istanbul-lib-source-maps@4.0.1(supports-color@8.1.1):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       istanbul-lib-coverage: 3.2.2
@@ -29023,7 +29026,7 @@ snapshots:
   jest-chrome@0.8.0(jest@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))):
     dependencies:
       '@types/chrome': 0.0.114
-      jest: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+      jest: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
 
   jest-circus@29.7.0:
     dependencies:
@@ -29091,7 +29094,7 @@ snapshots:
 
   jest-cli@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5)):
     dependencies:
-      '@jest/core': 29.7.0(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+      '@jest/core': 29.7.0(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       '@jest/test-result': 29.7.0
       '@jest/types': 29.6.3
       chalk: 4.1.2
@@ -29604,9 +29607,9 @@ snapshots:
       - supports-color
       - ts-node
 
-  jest@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5)):
+  jest@29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5)):
     dependencies:
-      '@jest/core': 29.7.0(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+      '@jest/core': 29.7.0(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       '@jest/types': 29.6.3
       import-local: 3.2.0
       jest-cli: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
@@ -30711,7 +30714,7 @@ snapshots:
   microsoft-cognitiveservices-speech-sdk@1.43.1(supports-color@8.1.1):
     dependencies:
       '@types/webrtc': 0.0.37
-      agent-base: 6.0.2
+      agent-base: 6.0.2(supports-color@8.1.1)
       bent: 7.3.12
       https-proxy-agent: 4.0.0(supports-color@8.1.1)
       uuid: 9.0.1
@@ -31895,44 +31898,34 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  puppeteer-extra-plugin-adblocker@2.13.6(encoding@0.1.13)(puppeteer-core@24.37.5)(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1))(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1):
+  puppeteer-extra-plugin-adblocker@2.13.6(encoding@0.1.13)(puppeteer-core@24.37.5)(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))(puppeteer@24.37.5(typescript@5.4.5)):
     dependencies:
       '@cliqz/adblocker-puppeteer': 1.23.8(puppeteer@24.37.5(typescript@5.4.5))
       debug: 4.4.3(supports-color@8.1.1)
       node-fetch: 2.7.0(encoding@0.1.13)
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1))(supports-color@8.1.1)
+      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
     optionalDependencies:
       puppeteer: 24.37.5(typescript@5.4.5)
       puppeteer-core: 24.37.5
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1)
+      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
     transitivePeerDependencies:
       - encoding
       - playwright-extra
       - supports-color
 
-  puppeteer-extra-plugin-adblocker@2.13.6(encoding@0.1.13)(puppeteer-core@24.37.5)(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3)))(puppeteer@24.37.5(typescript@5.9.3)):
+  puppeteer-extra-plugin-adblocker@2.13.6(encoding@0.1.13)(puppeteer-core@24.37.5)(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1):
     dependencies:
       '@cliqz/adblocker-puppeteer': 1.23.8(puppeteer@24.37.5(typescript@5.9.3))
       debug: 4.4.3(supports-color@8.1.1)
       node-fetch: 2.7.0(encoding@0.1.13)
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3)))
+      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
     optionalDependencies:
       puppeteer: 24.37.5(typescript@5.9.3)
       puppeteer-core: 24.37.5
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))
+      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
     transitivePeerDependencies:
       - encoding
       - playwright-extra
-      - supports-color
-
-  puppeteer-extra-plugin-stealth@2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1))(supports-color@8.1.1):
-    dependencies:
-      debug: 4.4.3(supports-color@8.1.1)
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1))(supports-color@8.1.1)
-      puppeteer-extra-plugin-user-preferences: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1))(supports-color@8.1.1)
-    optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1)
-    transitivePeerDependencies:
       - supports-color
 
   puppeteer-extra-plugin-stealth@2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))):
@@ -31941,28 +31934,17 @@ snapshots:
       puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
       puppeteer-extra-plugin-user-preferences: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1)
+      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra-plugin-stealth@2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))):
+  puppeteer-extra-plugin-stealth@2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3)))
-      puppeteer-extra-plugin-user-preferences: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3)))
+      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
+      puppeteer-extra-plugin-user-preferences: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))
-    transitivePeerDependencies:
-      - supports-color
-
-  puppeteer-extra-plugin-user-data-dir@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1))(supports-color@8.1.1):
-    dependencies:
-      debug: 4.4.3(supports-color@8.1.1)
-      fs-extra: 10.1.0
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1))(supports-color@8.1.1)
-      rimraf: 3.0.2
-    optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1)
+      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -31973,29 +31955,18 @@ snapshots:
       puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
       rimraf: 3.0.2
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1)
+      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra-plugin-user-data-dir@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))):
+  puppeteer-extra-plugin-user-data-dir@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       fs-extra: 10.1.0
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3)))
+      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
       rimraf: 3.0.2
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))
-    transitivePeerDependencies:
-      - supports-color
-
-  puppeteer-extra-plugin-user-preferences@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1))(supports-color@8.1.1):
-    dependencies:
-      debug: 4.4.3(supports-color@8.1.1)
-      deepmerge: 4.3.1
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1))(supports-color@8.1.1)
-      puppeteer-extra-plugin-user-data-dir: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1))(supports-color@8.1.1)
-    optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1)
+      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -32006,28 +31977,18 @@ snapshots:
       puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
       puppeteer-extra-plugin-user-data-dir: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1)
+      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra-plugin-user-preferences@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))):
+  puppeteer-extra-plugin-user-preferences@2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       deepmerge: 4.3.1
-      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3)))
-      puppeteer-extra-plugin-user-data-dir: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3)))
+      puppeteer-extra-plugin: 3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
+      puppeteer-extra-plugin-user-data-dir: 2.4.1(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1)
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))
-    transitivePeerDependencies:
-      - supports-color
-
-  puppeteer-extra-plugin@3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1))(supports-color@8.1.1):
-    dependencies:
-      '@types/debug': 4.1.13
-      debug: 4.4.3(supports-color@8.1.1)
-      merge-deep: 3.0.3
-    optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1)
+      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -32037,21 +31998,21 @@ snapshots:
       debug: 4.4.3(supports-color@8.1.1)
       merge-deep: 3.0.3
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1)
+      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra-plugin@3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))):
+  puppeteer-extra-plugin@3.2.3(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
       '@types/debug': 4.1.13
       debug: 4.4.3(supports-color@8.1.1)
       merge-deep: 3.0.3
     optionalDependencies:
-      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))
+      puppeteer-extra: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))(supports-color@8.1.1):
+  puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)):
     dependencies:
       '@types/debug': 4.1.13
       debug: 4.4.3(supports-color@8.1.1)
@@ -32062,7 +32023,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3)):
+  puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.9.3))(supports-color@8.1.1):
     dependencies:
       '@types/debug': 4.1.13
       debug: 4.4.3(supports-color@8.1.1)
@@ -32533,7 +32494,7 @@ snapshots:
       points-on-curve: 0.2.0
       points-on-path: 0.2.1
 
-  router@2.2.0(supports-color@8.1.1):
+  router@2.2.0:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       depd: 2.0.0
@@ -32720,7 +32681,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  send@1.2.1(supports-color@8.1.1):
+  send@1.2.1:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       encodeurl: 2.0.0
@@ -32779,7 +32740,7 @@ snapshots:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       parseurl: 1.3.3
-      send: 1.2.1(supports-color@8.1.1)
+      send: 1.2.1
     transitivePeerDependencies:
       - supports-color
 
@@ -33633,7 +33594,7 @@ snapshots:
       bs-logger: 0.2.6
       ejs: 3.1.10
       fast-json-stable-stringify: 2.1.0
-      jest: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+      jest: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       jest-util: 29.7.0
       json5: 2.2.3
       lodash.memoize: 4.1.2
@@ -33654,7 +33615,7 @@ snapshots:
       bs-logger: 0.2.6
       fast-json-stable-stringify: 2.1.0
       handlebars: 4.7.9
-      jest: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
+      jest: 29.7.0(@types/node@22.20.1)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.4.5))
       json5: 2.2.3
       lodash.memoize: 4.1.2
       make-error: 1.3.6

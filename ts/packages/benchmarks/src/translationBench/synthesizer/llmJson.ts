@@ -1,106 +1,39 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * Robust LLM JSON extraction + Zod validation.
- *
- * Accepts:
- * - raw JSON object/array text
- * - optional markdown fences: ```json ... ``` or ``` ... ```
- * - leading/trailing prose around a single fenced or balanced JSON value
- */
-
 import { z } from "zod";
 
-/**
- * Pull JSON text out of an LLM response. Fences are optional.
- * Prefers a fenced block when present; otherwise the first balanced
- * `{...}` or `[...]` span; otherwise the trimmed whole string.
- */
+/** First `{`/`[` … last matching `}`/`]`; caller retries if JSON.parse fails. */
 export function extractLlmJsonText(response: string): string {
-    const trimmed = response.trim();
-    if (!trimmed) {
+    let text = response.trim();
+    if (!text) {
         throw new Error("LLM response is empty");
     }
 
-    const fencedBlocks = [
-        ...trimmed.matchAll(/```(?:json|JSON)?[ \t]*\r?\n?([\s\S]*?)```/g),
-    ];
-    for (const match of fencedBlocks) {
-        const body = match[1]?.trim();
-        if (body && looksLikeJsonStart(body)) {
-            return body;
-        }
-    }
-    // Whole response is a single fence (no trailing junk after close).
-    const wholeFence =
-        /^```(?:json|JSON)?[ \t]*\r?\n?([\s\S]*?)\r?\n?```$/i.exec(trimmed);
-    if (wholeFence?.[1] !== undefined) {
-        const body = wholeFence[1].trim();
-        if (body) return body;
+    const fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
+    if (fence?.[1] !== undefined) {
+        text = fence[1].trim();
     }
 
-    const balanced = extractBalancedJsonSpan(trimmed);
-    if (balanced !== undefined) {
-        return balanced;
-    }
-
-    return trimmed;
-}
-
-function looksLikeJsonStart(text: string): boolean {
-    const c = text[0];
-    return c === "{" || c === "[";
-}
-
-/** First top-level `{...}` or `[...]` with string-aware brace matching. */
-function extractBalancedJsonSpan(text: string): string | undefined {
     const startObj = text.indexOf("{");
     const startArr = text.indexOf("[");
     let start = -1;
-    let open: "{" | "[" | undefined;
-    let close: "}" | "]" | undefined;
+    let endChar = "";
     if (startObj >= 0 && (startArr < 0 || startObj < startArr)) {
         start = startObj;
-        open = "{";
-        close = "}";
+        endChar = "}";
     } else if (startArr >= 0) {
         start = startArr;
-        open = "[";
-        close = "]";
+        endChar = "]";
     } else {
-        return undefined;
+        throw new Error("LLM response has no JSON object or array");
     }
 
-    let depth = 0;
-    let inString = false;
-    let escape = false;
-    for (let i = start; i < text.length; i += 1) {
-        const ch = text[i]!;
-        if (inString) {
-            if (escape) {
-                escape = false;
-            } else if (ch === "\\") {
-                escape = true;
-            } else if (ch === '"') {
-                inString = false;
-            }
-            continue;
-        }
-        if (ch === '"') {
-            inString = true;
-            continue;
-        }
-        if (ch === open) {
-            depth += 1;
-        } else if (ch === close) {
-            depth -= 1;
-            if (depth === 0) {
-                return text.slice(start, i + 1);
-            }
-        }
+    const end = text.lastIndexOf(endChar);
+    if (end <= start) {
+        throw new Error("LLM response JSON is unclosed");
     }
-    return undefined;
+    return text.slice(start, end + 1);
 }
 
 export function parseLlmJsonValue(response: string, label: string): unknown {
@@ -109,16 +42,13 @@ export function parseLlmJsonValue(response: string, label: string): unknown {
         return JSON.parse(jsonText) as unknown;
     } catch (error) {
         throw new Error(
-            `${label} returned invalid JSON: ${
+            `${label} returned invalid JSON (retry): ${
                 error instanceof Error ? error.message : String(error)
             }`,
         );
     }
 }
 
-/**
- * Extract JSON from an LLM response (fences optional) and validate with Zod.
- */
 export function parseLlmJsonWithZod<T>(
     response: string,
     schema: z.ZodType<T>,

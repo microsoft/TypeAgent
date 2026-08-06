@@ -1,14 +1,42 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/** Copy non-TS assets next to compiled output (tsc does not emit .json/.yaml). */
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import {
+    constants,
+    copyFileSync,
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    statSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const dirsMade = new Set();
 
-const assets = [
+function ensureDir(dir) {
+    if (dirsMade.has(dir)) return;
+    mkdirSync(dir, { recursive: true });
+    dirsMade.add(dir);
+}
+
+/** Skip when dest exists with same size and mtime >= source (idempotent builds). */
+function copyFileFast(from, to) {
+    if (!existsSync(from)) return false;
+    ensureDir(path.dirname(to));
+    if (existsSync(to)) {
+        const src = statSync(from);
+        const dst = statSync(to);
+        if (src.size === dst.size && dst.mtimeMs >= src.mtimeMs) {
+            return false;
+        }
+    }
+    copyFileSync(from, to, constants.COPYFILE_FICLONE);
+    return true;
+}
+
+const files = [
     [
         "src/translationBench/catalog.generated.json",
         "dist/translationBench/catalog.generated.json",
@@ -23,42 +51,21 @@ const assets = [
     ],
 ];
 
-/** Copy every file under srcDir into dstDir (flat; no recursion). */
-function copyDirFlat(srcRel, dstRel, extensions) {
-    const srcDir = path.join(root, srcRel);
-    if (!existsSync(srcDir)) {
-        return;
-    }
-    const dstDir = path.join(root, dstRel);
-    mkdirSync(dstDir, { recursive: true });
-    for (const name of readdirSync(srcDir)) {
-        const from = path.join(srcDir, name);
-        if (!statSync(from).isFile()) {
-            continue;
-        }
-        if (
-            extensions !== undefined &&
-            !extensions.some((ext) => name.endsWith(ext))
-        ) {
-            continue;
-        }
-        copyFileSync(from, path.join(dstDir, name));
-    }
+for (const [fromRel, toRel] of files) {
+    copyFileFast(path.join(root, fromRel), path.join(root, toRel));
 }
 
-// Parameter-grader prompt YAML (and any sibling prompt packs)
-copyDirFlat(
-    "src/translationBench/synthesizer",
-    "dist/translationBench/synthesizer",
-    [".yaml", ".yml"],
-);
-
-for (const [fromRel, toRel] of assets) {
-    const from = path.join(root, fromRel);
-    if (!existsSync(from)) {
-        continue;
+const yamlSrc = path.join(root, "src/translationBench/synthesizer");
+const yamlDst = path.join(root, "dist/translationBench/synthesizer");
+if (existsSync(yamlSrc)) {
+    for (const name of readdirSync(yamlSrc, { withFileTypes: true })) {
+        if (!name.isFile()) continue;
+        if (!name.name.endsWith(".yaml") && !name.name.endsWith(".yml")) {
+            continue;
+        }
+        copyFileFast(
+            path.join(yamlSrc, name.name),
+            path.join(yamlDst, name.name),
+        );
     }
-    const to = path.join(root, toRel);
-    mkdirSync(path.dirname(to), { recursive: true });
-    copyFileSync(from, to);
 }

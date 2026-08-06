@@ -28,6 +28,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "agent-dispatcher": "workspace:*",
+    "commander": "^12.1.0",
     "default-agent-provider": "workspace:*",
     "js-yaml": "^4.3.0",
     "zod": "^4.1.13"

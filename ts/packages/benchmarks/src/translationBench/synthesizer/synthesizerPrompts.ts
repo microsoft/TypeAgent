@@ -1,20 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * Loads translation-bench synthesizer / quality-verifier prompts from YAML
- * beside this module:
- *   synthesizer.prompt.yaml
- *   quality-verifier.prompt.yaml
- *
- * Inspired by Azure-Samples function-calling-data-synthesizer
- * (prompts/*.yaml + multi-stage verify).
- *
- * Concepts:
- * - synthesizer  = data labeler (mints labeled rows)
- * - quality verifier = data quality eval (format + semantic), last stage
- */
-
 import * as fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,10 +16,6 @@ const SYNTHESIZER_PROMPT_FILE = "synthesizer.prompt.yaml";
 const QUALITY_VERIFIER_PROMPT_FILE = "quality-verifier.prompt.yaml";
 const PARAMETER_GRADER_PROMPT_FILE = "parameter-grader.prompt.yaml";
 
-/**
- * Ground-truth completion settings from *.prompt.yaml `model_configuration`.
- * Loaded packs apply these as-is; callers must not override them.
- */
 export interface TranslationBenchModelConfiguration {
     temperature: number;
     top_p?: number;
@@ -150,10 +132,6 @@ function asRequiredNumber(value: unknown, label: string): number {
 const REASONING_EFFORTS = new Set(["minimal", "low", "medium", "high"]);
 const VERBOSITIES = new Set(["low", "medium", "high"]);
 
-/**
- * Parse YAML `model_configuration` as ground truth.
- * `temperature` is required; unknown keys are rejected so the pack stays explicit.
- */
 export function parseTranslationBenchModelConfiguration(
     value: unknown,
     label: string,
@@ -228,11 +206,6 @@ export function parseTranslationBenchModelConfiguration(
     return config;
 }
 
-/**
- * Completion settings taken only from the prompt pack model_configuration.
- * Pipeline-required fields (e.g. response_format) are layered by the caller
- * around this object; pack fields always win on conflict.
- */
 export function completionSettingsFromModelConfiguration(
     config: TranslationBenchModelConfiguration,
 ): {
@@ -275,10 +248,6 @@ function asStringArray(value: unknown, label: string): string[] {
     });
 }
 
-/**
- * Serialize a JSON-compatible value as YAML for prompt injection.
- * Kept dependency-free; covers objects/arrays/scalars used in synthesizer context.
- */
 export function toTranslationBenchPromptYaml(value: unknown): string {
     const lines: string[] = [];
 

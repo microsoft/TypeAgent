@@ -1,22 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * Convert action-schema type AST nodes into translation-bench ParamSpec trees
- * and short parameter summary strings.
- *
- * Critical: `type-union` must not collapse to opaque `any` when arms are
- * string-like (e.g. moniker literals | WebPageMoniker string) or when arms are
- * structured objects (e.g. MusicTarget / StartLookup discriminated unions).
- *
- * Depth accounting:
- * - object / array add structural depth
- * - type-reference is depth-transparent (aliases do not charge)
- * - type-union is depth-transparent; `undefined` arms are stripped before
- *   recursing so `T | undefined` on an already-optional field does not erase
- *   nested number leaves (DateVal/TimeVal under conversationLookupFilters)
- */
-
 import type { ParamSpec } from "./paramTypes.js";
 
 /** Loose shape of action-schema type nodes (runtime schema objects). */
@@ -35,10 +19,6 @@ export interface SchemaFieldNode {
     type?: SchemaTypeNode;
 }
 
-/**
- * Structural nesting budget. Must clear conversationLookupFilters → TermFilter
- * → timeRange → DateTimeRange → DateTime → DateVal → day/month/year (depth 6).
- */
 const MAX_SPEC_DEPTH = 8;
 const MAX_RENDER_DEPTH = 8;
 
@@ -47,10 +27,6 @@ function nonUndefinedArms(types: SchemaTypeNode[] | undefined): SchemaTypeNode[]
     return (types ?? []).filter((arm) => arm?.type !== "undefined");
 }
 
-/**
- * Map a schema type node to ParamSpec.
- * Unknown / unsupported shapes become `{ kind: "any" }` only as a last resort.
- */
 export function schemaTypeToParamSpec(
     t: SchemaTypeNode | undefined,
     depth = 0,
@@ -113,21 +89,6 @@ export function schemaTypeToParamSpec(
     }
 }
 
-/**
- * Collapse union arms into one ParamSpec.
- *
- * Rules (in order):
- * - empty → any
- * - drop pure-any arms when other arms exist
- * - all string (enum and/or open): open string wins over closed enum;
- *   closed enums merge unique values
- * - all same scalar kind → that kind
- * - all arrays → merge item specs
- * - all objects → field-wise merge (optional if not on every arm)
- * - otherwise keep as kind:"union" when ≥2 structural arms remain;
- *   true scalar/structure conflicts that cannot score still become any only
- *   when mixing incompatible leaves with no shared object shape
- */
 export function mergeUnionParamSpecs(arms: ParamSpec[]): ParamSpec {
     const cleaned = arms.filter((a) => a !== undefined);
     if (cleaned.length === 0) return { kind: "any" };
@@ -237,10 +198,6 @@ function mergeObjectParamSpecs(
     return { kind: "object", fields };
 }
 
-/**
- * Pretty-print a schema type for the catalog `parameters` summary line.
- * Optional fields omit a redundant trailing `|undefined` arm.
- */
 export function renderSchemaType(
     t: SchemaTypeNode | undefined,
     depth = 0,

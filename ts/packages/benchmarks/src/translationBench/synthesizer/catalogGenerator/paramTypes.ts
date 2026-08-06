@@ -1,16 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * Shared structural parameter types for translation-bench catalog generation.
- *
- * `ParamSpec` is the type-tree representation emitted by genCatalog and consumed
- * by the action-parameters grader. It is intentionally separate from
- * action-schema's completion `ParamSpec` strings (wildcard/time/…).
- *
- * Discriminant field is `kind` (full name — not a one-letter tag).
- */
-
 export type ParamSpec =
     | { kind: "string"; enum?: string[] }
     | { kind: "number" }
@@ -95,10 +85,6 @@ export function paramSpecKind(spec: ParamSpec): string {
     }
 }
 
-/**
- * Canonical JSON for fingerprints: sorted object keys, sorted enum values,
- * stable union arm order by kind then JSON.
- */
 export function canonicalizeParamSpec(spec: ParamSpec): unknown {
     switch (spec.kind) {
         case "string": {

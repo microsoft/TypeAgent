@@ -1,27 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * Action-parameters grader catalog.
- *
- * Dual-use model per top-level parameter field:
- * - **create** — synthesizer (parameter creator) minting policy
- * - **verify** — runner (parameter verifier) soft-score mode
- *
- * Classification:
- * 1. Confident **regex** rules (structural type + well-known names)
- * 2. **Reuse** prior **LLM** decisions only when shape still matches
- *    (regex priors are never reused — rules bumps must re-resolve)
- * 3. **LLM** fallback when regex does not match — never a random/default guess
- *    except open strings, which get a structural free_text/nonempty soft default
- *
- * Nested object model (runner scores top-level keys only today):
- * - Objects whose every classified leaf is soft (nonempty/ignore/exists) get
- *   container verify=nonempty so nested free-text sites are not deep-equal exact.
- * - Mixed objects (any exact leaf) stay verify=exact. Dotted nested parameterScore
- *   paths are out of scope until the runner supports them.
- */
-
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 
@@ -40,16 +19,8 @@ import {
     type ParamSpec,
 } from "./paramTypes.js";
 
-/**
- * Bump when regex/LLM policy code changes so incremental fingerprints invalidate
- * and stale field policies are not pinned forever.
- */
 export const GRADER_RULES_VERSION = 3;
 
-/**
- * Stable allowlist of live regex rule ids. Tests / CI can hash this list to
- * detect heuristic edits that forgot to bump GRADER_RULES_VERSION.
- */
 export const REGEX_RULE_IDS = [
     "empty-name",
     "type-any",
@@ -74,11 +45,6 @@ export const REGEX_RULE_IDS = [
 /** Runner soft-score modes (must stay aligned with runner.ts). */
 export type ActionParamVerifyMode = "exact" | "exists" | "nonempty" | "ignore";
 
-/**
- * Create policies. `exists` verify is retained for hand-authored runner seeds;
- * generation currently emits exact|nonempty|ignore. Nested array create mirrors
- * the element policy (no separate `collection` create mode).
- */
 export type ActionParamCreatePolicy =
     | "enum_literal"
     | "typed_literal"
@@ -108,10 +74,7 @@ export interface ActionParametersGraderEntry {
     schemaName: string;
     actionName: string;
     paramSpec: ParamSpec;
-    /**
-     * Hash of canonical paramSpec + rules version. Used for incremental updates:
-     * unchanged fingerprint → keep prior policies, skip reclassify.
-     */
+    
     sourceFingerprint: string;
     fields: Record<string, ActionParameterFieldGrader>;
     parameterScore: {
@@ -138,9 +101,7 @@ export interface ActionParametersGraderCatalog {
     /** Fields that required LLM because regex did not match. */
     llmFallbackCount: number;
     regexMatchCount: number;
-    /**
-     * Last incremental apply summary — runtime/log only; omit from on-disk artifact.
-     */
+    
     lastDiff?: ActionParametersGraderDiff;
 }
 
@@ -188,11 +149,7 @@ export interface FieldGraderDecision {
     verify: ActionParamVerifyMode;
     rule: string;
     source: ActionParamClassifySource;
-    /**
-     * When the field is an array: policy for each element. Container verify is
-     * loosened only for soft element kinds; exact-typed collections keep exact
-     * container mode (runner has no item loop today).
-     */
+    
     item?: FieldGraderDecision;
 }
 
@@ -262,11 +219,6 @@ const parameterGraderLlmVerifierSchema = z
     })
     .passthrough();
 
-/**
- * Stable fingerprint of what drives classification for an action.
- * Canonical paramSpec only (sorted keys/enums) + rules version.
- * Cosmetic `parameters` summary is not part of the hash.
- */
 export function actionParameterSourceFingerprint(
     paramSpec: ParamSpec,
     _parametersSummary?: string,
@@ -305,11 +257,6 @@ function isSoftVerify(mode: ActionParamVerifyMode): boolean {
     return mode === "nonempty" || mode === "ignore" || mode === "exists";
 }
 
-/**
- * Confident regex classification only.
- * Returns `undefined` when no rule matches — caller must use LLM (never invent a default),
- * except open strings which always resolve via structural soft default.
- */
 export function tryClassifyActionParameterFieldRegex(
     fieldName: string,
     spec: ParamSpec,
@@ -538,14 +485,6 @@ function nestedParamSpecEqual(a: ParamSpec, b: ParamSpec): boolean {
     );
 }
 
-/**
- * Reuse a prior field grader only when:
- * - source is **llm** (regex priors are never reused — policy code may have changed)
- * - rule is a live (non-legacy) id
- * - typeKind + optional match
- * - enums / nested array|object shape still match
- * Never reuses opaque when the field is no longer `any`.
- */
 export function tryReusePriorFieldGraderDecision(
     prior: ActionParameterFieldGrader | undefined,
     spec: ParamSpec,
@@ -974,10 +913,6 @@ export function emptyActionParametersGraderDiff(): ActionParametersGraderDiff {
     return { added: [], updated: [], removed: [], unchanged: [] };
 }
 
-/**
- * Diff current action catalog against a previous grader file.
- * Only actions whose sourceFingerprint changed (or are new) need rebuild.
- */
 export function diffActionParametersGrader(
     catalog: GeneratedActionCatalog,
     previous: ActionParametersGraderCatalog | undefined,
@@ -1230,10 +1165,6 @@ export function loadActionParametersGraderCatalogFile(
     return raw as unknown as ActionParametersGraderCatalog;
 }
 
-/**
- * Incremental grader build: reuse unchanged action policies from `previous`,
- * only classify added/updated actions. Deletes drop removed catalog actions.
- */
 export async function buildActionParametersGraderCatalog(
     catalog: GeneratedActionCatalog,
     options?: {
@@ -1427,12 +1358,6 @@ export function toRecommendedByActionVerifyMap(
     return out;
 }
 
-/**
- * Container verify for arrays given the element decision.
- * Runner only supports top-level field modes — keep exact for exact-typed
- * elements so wrong contents do not get free credit. Soft element policies
- * (free_text/nonempty, ignore, exists) loosen the container accordingly.
- */
 export function loosenArrayVerifyMode(
     element: ActionParamVerifyMode | FieldGraderDecision,
 ): ActionParamVerifyMode {
@@ -1462,10 +1387,6 @@ function isUnitOrModeName(name: string): boolean {
     );
 }
 
-/**
- * High-confidence free-text names only (generic NL / URL / content roles).
- * Agent-specific field dumps belong in LLM fallback or string-open-soft-nonempty.
- */
 function isFreeTextName(name: string): boolean {
     return (
         /^(message|description|text|query|note|comment|title|titles|utterance|content|prompt|summary|reason|rationale|location|participant|body|details|instruction|instructions|request|originalRequest|generatedText|site|sites|url|uri|href|webpage|webPage|page|searchTerm|script|goal|domain|domains|question|trackName|albumName|artist|genre|subject|caption|phrase|notes|task|label|value|to|cc|bcc|input|condition)$/i.test(
@@ -1477,10 +1398,6 @@ function isFreeTextName(name: string): boolean {
     );
 }
 
-/**
- * Loose free-text collection element names — NOT identity token lists
- * (action/agent/cmdlet names stay identifier/exact).
- */
 function isLooseCollectionElementName(name: string): boolean {
     return /^(items|values|entries|keywords|tags|labels|options|files|relatedFiles|attachFiles|screenshots|internetLookups|sites|domains|artists|extensions|titles|attachments|search_filters)$/i.test(
         name,

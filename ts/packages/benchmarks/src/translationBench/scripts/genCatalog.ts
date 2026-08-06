@@ -1,24 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * Generate catalog.generated.json from agent action schemas.
- *
- * Memory / sandbox notes:
- * - Do NOT import `default-agent-provider` or `dispatcher-node-providers`.
- *   Those pull `@azure/msal-node-extensions` (native .node) which is SIGKILL'd
- *   in restricted environments (exit 137) and also OOM on full agent runtime init.
- * - Do NOT import the fat `agent-dispatcher/internal` barrel or
- *   `ActionSchemaFileCache` (pulls agentTranslators / pendingActions / cache graph).
- * - Lightweight path: read defaultAgentProvider config.json, resolve each
- *   package's agent/manifest via createRequire, convertToActionConfig only,
- *   parse with `@typeagent/action-schema` (parseActionSchemaSource / PAS JSON).
- * - Stream actions into a .tmp file and rename atomically so a crash never
- *   leaves a truncated catalog.generated.json.
- * - Fail closed on unloadable schemas unless --allow-unloadable
- *   (requires --i-understand-grader-deletions as well).
- */
-
 import type { ActionManifest, AppAgentManifest } from "@typeagent/agent-sdk";
 import {
     fromJSONParsedActionSchema,
@@ -37,6 +19,8 @@ import {
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { finished } from "node:stream/promises";
+
+import { Command } from "commander";
 
 import type { ParamSpec } from "../synthesizer/catalogGenerator/paramTypes.js";
 import {
@@ -85,10 +69,6 @@ function packageRoot(name: "defaultAgentProvider" | "dispatcher"): string {
     return path.join(packagesDir, "dispatcher", "dispatcher");
 }
 
-/**
- * Load only convertToActionConfig from agent-dispatcher dist — avoids the fat
- * `agent-dispatcher/internal` barrel and ActionSchemaFileCache translator graph.
- */
 async function loadConvertToActionConfig(): Promise<
     (
         name: string,
@@ -132,10 +112,6 @@ function resolveSchemaContent(config: ActionConfigLike): {
     return schemaFile;
 }
 
-/**
- * Parse one action config with @typeagent/action-schema only (no dispatcher
- * schema cache / translator / execute graph).
- */
 function parseActionConfig(config: ActionConfigLike): ParsedActionSchema {
     const { format, content, config: schemaConfigJson } = resolveSchemaContent(
         config,
@@ -242,10 +218,6 @@ function loadJsonManifest(manifestPath: string): AppAgentManifest {
     return raw;
 }
 
-/**
- * Resolve `${pkg}/agent/manifest` the same way npm agent providers do, using
- * createRequire rooted at defaultAgentProvider (where agent packages link).
- */
 function loadAgentManifest(
     requireFromProvider: NodeJS.Require,
     packageName: string,
@@ -431,19 +403,12 @@ function builtinManifests(dispatcherRoot: string): Record<string, AppAgentManife
 
 type CatalogWriteStream = {
     writeAction: (action: GeneratedAction, isLast: boolean) => Promise<void>;
-    /**
-     * Finish the actions array + close. Call with known action count after
-     * streaming, or use beginActions after header if count is known up front.
-     */
+    
     end: () => Promise<void>;
     tmpPath: string;
     outPath: string;
 };
 
-/**
- * Atomic catalog writer: stream to `.tmp`, rename on success. Mirrors grader
- * publish so OOM/SIGKILL mid-write cannot leave a truncated final catalog.
- */
 async function openCatalogWriter(
     outPath: string,
     header: {
@@ -527,16 +492,6 @@ async function openCatalogWriter(
     };
 }
 
-/**
- * Two-pass style without holding every paramSpec: first collect lightweight
- * action shells, then we still need paramSpecs. Prefer single pass that writes
- * after all schemas if count is small; for memory, extract per-schema and
- * buffer only that schema's actions, flush chunk to stream.
- *
- * Implementation: first pass extract all actions into per-schema arrays then
- * stream-write (still holds full actions[] — acceptable when AST is unloaded).
- * Atomic publish is the critical crash safety.
- */
 async function writeCatalogAtomic(
     outPath: string,
     payload: {
@@ -611,32 +566,38 @@ function collectActionConfigs(
     return actionConfigs;
 }
 
-function parseArgs(argv: string[]): {
-    outPath: string;
-    allowUnloadable: boolean;
-    understandGraderDeletions: boolean;
-} {
-    let outPath = "src/translationBench/catalog.generated.json";
-    let allowUnloadable = false;
-    let understandGraderDeletions = false;
-    const positionals: string[] = [];
-    for (let i = 0; i < argv.length; i += 1) {
-        const arg = argv[i]!;
-        if (arg === "--allow-unloadable") {
-            allowUnloadable = true;
-            continue;
-        }
-        if (arg === "--i-understand-grader-deletions") {
-            understandGraderDeletions = true;
-            continue;
-        }
-        if (arg.startsWith("-")) {
-            throw new Error(`Unknown flag '${arg}'`);
-        }
-        positionals.push(arg);
-    }
-    if (positionals[0] !== undefined) outPath = positionals[0];
-    return { outPath, allowUnloadable, understandGraderDeletions };
+function parseCli(argv: string[]) {
+    const program = new Command()
+        .name("genCatalog")
+        .description("Generate catalog.generated.json from agent action schemas")
+        .option(
+            "--allow-unloadable",
+            "write partial catalog when some schemas fail",
+            false,
+        )
+        .option(
+            "--i-understand-grader-deletions",
+            "required with --allow-unloadable (grader may drop missing actions)",
+            false,
+        )
+        .argument(
+            "[out]",
+            "output path",
+            "src/translationBench/catalog.generated.json",
+        )
+        .allowExcessArguments(false)
+        .parse(argv, { from: "user" });
+
+    const opts = program.opts<{
+        allowUnloadable: boolean;
+        iUnderstandGraderDeletions: boolean;
+    }>();
+    const [outPath] = program.args;
+    return {
+        outPath: outPath ?? "src/translationBench/catalog.generated.json",
+        allowUnloadable: opts.allowUnloadable === true,
+        understandGraderDeletions: opts.iUnderstandGraderDeletions === true,
+    };
 }
 
 function extractActionsForSchema(
@@ -661,7 +622,7 @@ function extractActionsForSchema(
 }
 
 async function main(): Promise<void> {
-    const args = parseArgs(process.argv.slice(2));
+    const args = parseCli(process.argv.slice(2));
     const convertToActionConfig = await loadConvertToActionConfig();
     const actionConfigs = collectActionConfigs(convertToActionConfig);
     const schemaNames = Object.keys(actionConfigs).sort();
