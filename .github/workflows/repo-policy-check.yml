@@ -4,7 +4,6 @@
 name: repo-policy-check
 
 on:
-  workflow_dispatch:
   pull_request:
     branches: ["main"]
   merge_group:
