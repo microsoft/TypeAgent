@@ -69,3 +69,15 @@ if (existsSync(yamlSrc)) {
         );
     }
 }
+
+const seedSrc = path.join(root, "src/translationBench/synthesizer/seed");
+const seedDst = path.join(root, "dist/translationBench/synthesizer/seed");
+if (existsSync(seedSrc)) {
+    for (const name of readdirSync(seedSrc, { withFileTypes: true })) {
+        if (!name.isFile()) continue;
+        copyFileFast(
+            path.join(seedSrc, name.name),
+            path.join(seedDst, name.name),
+        );
+    }
+}
