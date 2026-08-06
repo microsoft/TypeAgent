@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /** Load *.prompt.yaml packs; Zod validates snake_case → camelCase. */
 
 import * as fs from "node:fs";

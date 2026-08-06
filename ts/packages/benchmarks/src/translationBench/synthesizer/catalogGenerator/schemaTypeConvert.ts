@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import type { ParamSpec } from "./paramTypes.js";
 
 /** Loose shape of action-schema type nodes (runtime schema objects). */
