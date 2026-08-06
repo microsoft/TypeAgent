@@ -472,7 +472,6 @@ async function openCatalogWriter(
     );
     await write(`  "actions": [\n`);
 
-    let actionIndex = 0;
     return {
         tmpPath,
         outPath,
@@ -483,7 +482,6 @@ async function openCatalogWriter(
             );
             const comma = isLast ? "" : ",";
             await write(`    ${actionJson}${comma}\n`);
-            actionIndex += 1;
         },
         async end() {
             await write(`  ]\n}\n`);
