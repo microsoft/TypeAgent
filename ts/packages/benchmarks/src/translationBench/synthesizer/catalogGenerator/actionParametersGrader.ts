@@ -1,6 +1,3 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 
@@ -300,7 +297,7 @@ export function tryClassifyActionParameterFieldRegex(
         }
 
         case "object": {
-            // Soften pure soft-leaf records so nested free-text (site/url) is not deep-equal exact under a parent key. Mixed exact leaves stay exact.
+            // Soft-leaf-only objects use nonempty; mixed leaves stay exact.
             const fieldEntries = Object.entries(spec.fields);
             if (fieldEntries.length === 0) {
                 return {
@@ -339,7 +336,7 @@ export function tryClassifyActionParameterFieldRegex(
         }
 
         case "union":
-            // Structural union retained when arms could not merge — score as opaque only if every arm is any; otherwise treat as record-like.
+            // Union: all-any → opaque/ignore; else record/exact.
             if (spec.arms.every((a) => a.kind === "any")) {
                 return {
                     create: "opaque",
@@ -383,7 +380,7 @@ export function tryClassifyActionParameterFieldRegex(
                     source: "regex",
                 };
             }
-            // Identity token lists before free-text so action/agent name arrays stay exact (not loose nonempty). Explicit list — not *Name suffix.
+            // Identity token lists (not *Name) stay identifier/exact before free-text.
             if (isIdentityListName(name)) {
                 return {
                     create: "identifier",
@@ -427,7 +424,7 @@ export function tryClassifyActionParameterFieldRegex(
                     source: "regex",
                 };
             }
-            // Structural default for unmatched open strings — soft free_text so gen does not require an LLM for every novel field name. Not a legacy "default" rule id (those are rejected on load).
+            // Unmatched open strings: soft free_text/nonempty (not a legacy default rule id).
             return {
                 create: "free_text",
                 verify: "nonempty",
@@ -1062,7 +1059,7 @@ function validateGraderEntry(
     ) {
         throw new Error(`Invalid grader entry for ${id}: sourceFingerprint`);
     }
-    // Note: fingerprint is not recomputed against current GRADER_RULES_VERSION here — a rules bump must still load so diff/build can mark entries updated and rebuild. Unchanged-path integrity in buildActionParametersGraderCatalog recomputes and force-rebuilds on mismatch / stale rules hash.
+    // Load skips fingerprint recompute; build path force-rebuilds on rules/hash drift.
     if (!isPlainObject(entry.fields)) {
         throw new Error(`Invalid grader entry for ${id}: fields`);
     }

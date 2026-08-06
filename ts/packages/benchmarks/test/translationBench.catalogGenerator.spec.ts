@@ -1,6 +1,3 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 import { describe, expect, it } from "@jest/globals";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -1314,12 +1311,12 @@ describe("GRADER_RULES_VERSION contract", () => {
         expect(REGEX_RULE_IDS.length).toBeGreaterThan(5);
         expect(REGEX_RULE_IDS).toContain("string-open-soft-nonempty");
         expect(REGEX_RULE_IDS).toContain("type-object-soft-nonempty");
-        // Pin a hash of the allowlist so silent id edits without a version bump are visible in review (update both together intentionally).
+        // Pin allowlist hash; bump GRADER_RULES_VERSION with id edits.
         const hash = createHash("sha256")
             .update(JSON.stringify([...REGEX_RULE_IDS].sort()))
             .digest("hex")
             .slice(0, 16);
-        // Pin: bump GRADER_RULES_VERSION and update this hash together when REGEX_RULE_IDS / heuristics change.
+        // Bump GRADER_RULES_VERSION with this hash when rules change.
         expect(hash).toBe("d059bd043da09e1a");
     });
 });

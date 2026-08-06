@@ -1,6 +1,3 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 import { z } from "zod";
 
 /** First `{`/`[` … last matching `}`/`]`; caller retries if JSON.parse fails. */

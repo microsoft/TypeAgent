@@ -1,6 +1,3 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 export type ParamSpec =
     | { kind: "string"; enum?: string[] }
     | { kind: "number" }

@@ -1,6 +1,3 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
 /** @type {import("jest").Config} */
 const base = require("../../jest.config.js");
 
