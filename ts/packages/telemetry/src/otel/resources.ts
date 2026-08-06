@@ -9,6 +9,7 @@ import {
     type Resource,
 } from "@opentelemetry/resources";
 import {
+    ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
     ATTR_SERVICE_NAME,
     ATTR_SERVICE_INSTANCE_ID,
     ATTR_SERVICE_VERSION,
@@ -22,7 +23,6 @@ import {
 } from "@opentelemetry/semantic-conventions/incubating";
 
 const PROCESS_INSTANCE_ID = randomUUID();
-
 /**
  * Constructs the process-level OTel {@link Resource} TypeAgent-owned hosts
  * attach to their providers. This module only builds resource attributes; it
@@ -37,54 +37,61 @@ export interface ProcessResourceOptions {
     readonly serviceVersion?: string;
     /** Unique identity for this running process. Defaults to a UUID. */
     readonly serviceInstanceId?: string;
+    /** `deployment.environment.name`, when known. */
+    readonly deploymentEnvironment?: string;
     /**
-     * Additional caller-supplied resource attributes, e.g.
-     * `deployment.environment`. These cannot override the required
-     * service/process identity attributes below.
+     * Additional caller-supplied resource attributes. These cannot override
+     * the service or process attributes defined by this helper.
      */
     readonly attributes?: Readonly<Record<string, AttributeValue>>;
 }
 
 /**
  * Build the process-level OTel {@link Resource} for a TypeAgent-owned host:
- * `service.name` (required), `service.version` (optional), and the current
- * process's PID, runtime name, and runtime version.
+ * `service.name` (required), optional service and deployment metadata, and the
+ * current process's host, PID, runtime name, and runtime version.
  *
  * `options.attributes` is merged in first, so it can supply anything not
- * covered above (e.g. `deployment.environment`) but cannot override the
- * identity attributes this function sets.
+ * covered above but cannot override the process attributes this function sets.
  *
- * @throws {Error} if `serviceName` is empty or all whitespace.
+ * @throws {Error} if a supplied string attribute is empty or all whitespace.
  */
 export function createProcessResource(
     options: ProcessResourceOptions,
 ): Resource {
-    const serviceName = options.serviceName.trim();
-    if (serviceName.length === 0) {
-        throw new Error(
-            "createProcessResource requires a non-empty 'serviceName'.",
-        );
-    }
+    const serviceName = requireNonEmpty(options.serviceName, "serviceName");
+    const serviceVersion = normalizeOptional(
+        options.serviceVersion,
+        "serviceVersion",
+    );
+    const serviceInstanceId =
+        normalizeOptional(options.serviceInstanceId, "serviceInstanceId") ??
+        PROCESS_INSTANCE_ID;
+    const deploymentEnvironment = normalizeOptional(
+        options.deploymentEnvironment,
+        "deploymentEnvironment",
+    );
 
     const identity: Record<string, AttributeValue> = {
         [ATTR_SERVICE_NAME]: serviceName,
-        [ATTR_SERVICE_INSTANCE_ID]:
-            options.serviceInstanceId?.trim() || PROCESS_INSTANCE_ID,
+        [ATTR_SERVICE_INSTANCE_ID]: serviceInstanceId,
         [ATTR_HOST_NAME]: os.hostname(),
         [ATTR_OS_TYPE]: normalizeOsType(process.platform),
         [ATTR_PROCESS_PID]: process.pid,
         [ATTR_PROCESS_RUNTIME_NAME]: "nodejs",
         [ATTR_PROCESS_RUNTIME_VERSION]: process.versions.node,
     };
-    if (options.serviceVersion !== undefined) {
-        identity[ATTR_SERVICE_VERSION] = options.serviceVersion;
+    if (serviceVersion !== undefined) {
+        identity[ATTR_SERVICE_VERSION] = serviceVersion;
+    }
+    if (deploymentEnvironment !== undefined) {
+        identity[ATTR_DEPLOYMENT_ENVIRONMENT_NAME] = deploymentEnvironment;
     }
 
     const attributes = { ...options.attributes };
     for (const key of [
         ATTR_SERVICE_NAME,
         ATTR_SERVICE_INSTANCE_ID,
-        ATTR_SERVICE_VERSION,
         ATTR_HOST_NAME,
         ATTR_OS_TYPE,
         ATTR_PROCESS_PID,
@@ -98,6 +105,23 @@ export function createProcessResource(
         ...attributes,
         ...identity,
     });
+}
+
+function requireNonEmpty(value: string, optionName: string): string {
+    const normalized = value.trim();
+    if (normalized.length === 0) {
+        throw new Error(
+            `createProcessResource requires a non-empty '${optionName}'.`,
+        );
+    }
+    return normalized;
+}
+
+function normalizeOptional(
+    value: string | undefined,
+    optionName: string,
+): string | undefined {
+    return value === undefined ? undefined : requireNonEmpty(value, optionName);
 }
 
 function normalizeOsType(platform: NodeJS.Platform): string {

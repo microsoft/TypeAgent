@@ -222,7 +222,7 @@ TypeAgent-owned processes set:
 - `service.name`, `service.version`, `service.instance.id`
 - `host.name`, `os.type`, `process.pid`
 - `process.runtime.name`, `process.runtime.version`
-- `deployment.environment`
+- `deployment.environment.name`
 
 `activationId` is not `service.instance.id`. It identifies the dispatcher
 activation created with `CommandHandlerContext`, not an individual request.

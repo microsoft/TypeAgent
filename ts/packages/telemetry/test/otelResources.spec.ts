@@ -4,6 +4,7 @@
 import * as os from "node:os";
 
 import {
+    ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
     ATTR_SERVICE_INSTANCE_ID,
     ATTR_SERVICE_NAME,
     ATTR_SERVICE_VERSION,
@@ -45,7 +46,7 @@ describe("createProcessResource", () => {
     it("sets the optional service version when provided", () => {
         const resource = createProcessResource({
             serviceName: "my-service",
-            serviceVersion: "1.2.3",
+            serviceVersion: " 1.2.3 ",
         });
 
         expect(resource.attributes[ATTR_SERVICE_VERSION]).toBe("1.2.3");
@@ -54,7 +55,7 @@ describe("createProcessResource", () => {
     it("uses a caller-provided service instance ID", () => {
         const resource = createProcessResource({
             serviceName: "my-service",
-            serviceInstanceId: "instance-1",
+            serviceInstanceId: " instance-1 ",
         });
 
         expect(resource.attributes[ATTR_SERVICE_INSTANCE_ID]).toBe(
@@ -71,14 +72,36 @@ describe("createProcessResource", () => {
         );
     });
 
+    it("sets the deployment environment when provided", () => {
+        const resource = createProcessResource({
+            serviceName: "my-service",
+            deploymentEnvironment: " test ",
+        });
+
+        expect(resource.attributes[ATTR_DEPLOYMENT_ENVIRONMENT_NAME]).toBe(
+            "test",
+        );
+    });
+
     it("merges caller-supplied attributes", () => {
         const resource = createProcessResource({
             serviceName: "my-service",
-            attributes: { "deployment.environment": "test" },
+            attributes: {
+                "deployment.environment": "legacy",
+                [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: "custom",
+                [ATTR_SERVICE_VERSION]: "custom-version",
+                "typeagent.host.kind": "dispatcher",
+            },
         });
 
-        expect(resource.attributes["deployment.environment"]).toBe("test");
-        expect(resource.attributes[ATTR_SERVICE_NAME]).toBe("my-service");
+        expect(resource.attributes["deployment.environment"]).toBe("legacy");
+        expect(resource.attributes[ATTR_DEPLOYMENT_ENVIRONMENT_NAME]).toBe(
+            "custom",
+        );
+        expect(resource.attributes[ATTR_SERVICE_VERSION]).toBe(
+            "custom-version",
+        );
+        expect(resource.attributes["typeagent.host.kind"]).toBe("dispatcher");
     });
 
     it("does not allow caller-supplied attributes to override identity attributes", () => {
@@ -90,20 +113,44 @@ describe("createProcessResource", () => {
                 [ATTR_PROCESS_PID]: -1,
                 [ATTR_PROCESS_RUNTIME_NAME]: "spoofed-runtime",
                 [ATTR_PROCESS_RUNTIME_VERSION]: "0.0.0",
+                [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: "spoofed-environment",
             },
+            deploymentEnvironment: "production",
+            serviceVersion: "1.2.3",
         });
 
         expect(resource.attributes[ATTR_SERVICE_NAME]).toBe("my-service");
-        expect(resource.attributes[ATTR_SERVICE_VERSION]).toBeUndefined();
+        expect(resource.attributes[ATTR_SERVICE_VERSION]).toBe("1.2.3");
         expect(resource.attributes[ATTR_PROCESS_PID]).toBe(process.pid);
         expect(resource.attributes[ATTR_PROCESS_RUNTIME_NAME]).toBe("nodejs");
         expect(resource.attributes[ATTR_PROCESS_RUNTIME_VERSION]).toBe(
             process.versions.node,
         );
+        expect(resource.attributes[ATTR_DEPLOYMENT_ENVIRONMENT_NAME]).toBe(
+            "production",
+        );
     });
 
-    it("throws for an empty or all-whitespace service name", () => {
+    it("throws for empty string attributes", () => {
         expect(() => createProcessResource({ serviceName: "" })).toThrow();
         expect(() => createProcessResource({ serviceName: "   " })).toThrow();
+        expect(() =>
+            createProcessResource({
+                serviceName: "service",
+                serviceVersion: " ",
+            }),
+        ).toThrow("serviceVersion");
+        expect(() =>
+            createProcessResource({
+                serviceName: "service",
+                serviceInstanceId: " ",
+            }),
+        ).toThrow("serviceInstanceId");
+        expect(() =>
+            createProcessResource({
+                serviceName: "service",
+                deploymentEnvironment: " ",
+            }),
+        ).toThrow("deploymentEnvironment");
     });
 });
