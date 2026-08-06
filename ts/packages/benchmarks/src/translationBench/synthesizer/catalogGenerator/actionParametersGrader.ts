@@ -253,6 +253,123 @@ function isSoftVerify(mode: ActionParamVerifyMode): boolean {
     return mode === "nonempty" || mode === "ignore" || mode === "exists";
 }
 
+function classifyObjectFieldRegex(
+    spec: Extract<ParamSpec, { kind: "object" }>,
+): FieldGraderDecision {
+    // Soft-leaf-only objects use nonempty; mixed leaves stay exact.
+    const fieldEntries = Object.entries(spec.fields);
+    if (fieldEntries.length === 0) {
+        return {
+            create: "record",
+            verify: "exact",
+            rule: "type-object-exact",
+            source: "regex",
+        };
+    }
+    for (const [n, f] of fieldEntries) {
+        const leaf = tryClassifyActionParameterFieldRegex(n, f.spec, f.optional);
+        if (leaf === undefined || !isSoftVerify(leaf.verify)) {
+            return {
+                create: "record",
+                verify: "exact",
+                rule: "type-object-exact",
+                source: "regex",
+            };
+        }
+    }
+    return {
+        create: "record",
+        verify: "nonempty",
+        rule: "type-object-soft-nonempty",
+        source: "regex",
+    };
+}
+
+function classifyStringFieldRegex(
+    name: string,
+    spec: Extract<ParamSpec, { kind: "string" }>,
+    optional: boolean,
+): FieldGraderDecision {
+    if (spec.enum !== undefined && spec.enum.length > 0) {
+        if (isUnitOrModeName(name)) {
+            return {
+                create: "unit_or_mode",
+                verify: optional ? "ignore" : "exact",
+                rule: optional
+                    ? "string-enum-unit-optional-ignore"
+                    : "string-enum-unit-required-exact",
+                source: "regex",
+            };
+        }
+        return {
+            create: "enum_literal",
+            verify: "exact",
+            rule: "string-enum-exact",
+            source: "regex",
+        };
+    }
+
+    if (isUnitOrModeName(name)) {
+        return {
+            create: "unit_or_mode",
+            verify: "ignore",
+            rule: "string-unit-ignore",
+            source: "regex",
+        };
+    }
+    // Identity token lists (not *Name) stay identifier/exact before free-text.
+    if (isIdentityListName(name)) {
+        return {
+            create: "identifier",
+            verify: "exact",
+            rule: "string-identifier-exact",
+            source: "regex",
+        };
+    }
+    // Free-text before generic *Name identifier so trackName/location stay soft.
+    if (isFreeTextName(name) || isLooseCollectionElementName(name)) {
+        return {
+            create: "free_text",
+            verify: "nonempty",
+            rule: isLooseCollectionElementName(name)
+                ? "string-collection-element-nonempty"
+                : "string-free-text-nonempty",
+            source: "regex",
+        };
+    }
+    if (isDateName(name)) {
+        return {
+            create: "temporal",
+            verify: "exact",
+            rule: "string-date-exact",
+            source: "regex",
+        };
+    }
+    if (isTimeName(name)) {
+        return {
+            create: "temporal",
+            verify: "nonempty",
+            rule: "string-time-nonempty",
+            source: "regex",
+        };
+    }
+    if (isIdentifierName(name)) {
+        return {
+            create: "identifier",
+            verify: "exact",
+            rule: "string-identifier-exact",
+            source: "regex",
+        };
+    }
+    // Unmatched open strings: soft free_text/nonempty (not a legacy default rule id).
+    return {
+        create: "free_text",
+        verify: "nonempty",
+        rule: "string-open-soft-nonempty",
+        source: "regex",
+    };
+}
+
 export function tryClassifyActionParameterFieldRegex(
     fieldName: string,
     spec: ParamSpec,
@@ -299,44 +416,8 @@ export function tryClassifyActionParameterFieldRegex(
             return wrapArrayDecision(item);
         }
 
-        case "object": {
-            // Soft-leaf-only objects use nonempty; mixed leaves stay exact.
-            const fieldEntries = Object.entries(spec.fields);
-            if (fieldEntries.length === 0) {
-                return {
-                    create: "record",
-                    verify: "exact",
-                    rule: "type-object-exact",
-                    source: "regex",
-                };
-            }
-            let allSoft = true;
-            for (const [n, f] of fieldEntries) {
-                const leaf = tryClassifyActionParameterFieldRegex(
-                    n,
-                    f.spec,
-                    f.optional,
-                );
-                if (leaf === undefined || !isSoftVerify(leaf.verify)) {
-                    allSoft = false;
-                    break;
-                }
-            }
-            if (allSoft) {
-                return {
-                    create: "record",
-                    verify: "nonempty",
-                    rule: "type-object-soft-nonempty",
-                    source: "regex",
-                };
-            }
-            return {
-                create: "record",
-                verify: "exact",
-                rule: "type-object-exact",
-                source: "regex",
-            };
-        }
+        case "object":
+            return classifyObjectFieldRegex(spec);
 
         case "union":
             // Union: all-any → opaque/ignore; else record/exact.
@@ -355,86 +436,8 @@ export function tryClassifyActionParameterFieldRegex(
                 source: "regex",
             };
 
-        case "string": {
-            if (spec.enum !== undefined && spec.enum.length > 0) {
-                if (isUnitOrModeName(name)) {
-                    return {
-                        create: "unit_or_mode",
-                        verify: optional ? "ignore" : "exact",
-                        rule: optional
-                            ? "string-enum-unit-optional-ignore"
-                            : "string-enum-unit-required-exact",
-                        source: "regex",
-                    };
-                }
-                return {
-                    create: "enum_literal",
-                    verify: "exact",
-                    rule: "string-enum-exact",
-                    source: "regex",
-                };
-            }
-
-            if (isUnitOrModeName(name)) {
-                return {
-                    create: "unit_or_mode",
-                    verify: "ignore",
-                    rule: "string-unit-ignore",
-                    source: "regex",
-                };
-            }
-            // Identity token lists (not *Name) stay identifier/exact before free-text.
-            if (isIdentityListName(name)) {
-                return {
-                    create: "identifier",
-                    verify: "exact",
-                    rule: "string-identifier-exact",
-                    source: "regex",
-                };
-            }
-            // Free-text before generic *Name identifier so trackName/location stay soft.
-            if (isFreeTextName(name) || isLooseCollectionElementName(name)) {
-                return {
-                    create: "free_text",
-                    verify: "nonempty",
-                    rule: isLooseCollectionElementName(name)
-                        ? "string-collection-element-nonempty"
-                        : "string-free-text-nonempty",
-                    source: "regex",
-                };
-            }
-            if (isDateName(name)) {
-                return {
-                    create: "temporal",
-                    verify: "exact",
-                    rule: "string-date-exact",
-                    source: "regex",
-                };
-            }
-            if (isTimeName(name)) {
-                return {
-                    create: "temporal",
-                    verify: "nonempty",
-                    rule: "string-time-nonempty",
-                    source: "regex",
-                };
-            }
-            if (isIdentifierName(name)) {
-                return {
-                    create: "identifier",
-                    verify: "exact",
-                    rule: "string-identifier-exact",
-                    source: "regex",
-                };
-            }
-            // Unmatched open strings: soft free_text/nonempty (not a legacy default rule id).
-            return {
-                create: "free_text",
-                verify: "nonempty",
-                rule: "string-open-soft-nonempty",
-                source: "regex",
-            };
-        }
+        case "string":
+            return classifyStringFieldRegex(name, spec, optional);
     }
 }
 
@@ -607,18 +610,143 @@ export async function classifyActionParameterFieldWithFallback(
     });
 }
 
+type ParameterGraderLlmContext = {
+    schemaName: string;
+    actionName: string;
+    parametersSummary?: string;
+    description?: string;
+    llm: ParameterGraderLlm;
+    promptPack?: TranslationBenchParameterGraderPromptPack;
+};
+
+function buildClassifierPrompt(
+    pack: TranslationBenchParameterGraderPromptPack,
+    fieldName: string,
+    spec: ParamSpec,
+    optional: boolean,
+    context: ParameterGraderLlmContext,
+    verifierFeedback: string,
+): string {
+    const baseSummary = context.parametersSummary?.trim() || "(none)";
+    return renderTranslationBenchPromptTemplate(pack.policyClassifier.template, {
+        schema_name: context.schemaName,
+        action_name: context.actionName,
+        action_description_block:
+            context.description !== undefined && context.description.trim()
+                ? `Action description: ${context.description.trim()}`
+                : "Action description: (none)",
+        field_name: fieldName,
+        optional: optional ? "true" : "false",
+        field_type_json: JSON.stringify(spec, null, 2),
+        parameters_summary: verifierFeedback
+            ? `${baseSummary}\n\nPrior verifier feedback (fix):\n${verifierFeedback}`
+            : baseSummary,
+        create_policies: pack.policyClassifier.createPolicies
+            .filter((p) => CREATE_SET.has(p))
+            .join(", "),
+        verify_modes: pack.policyClassifier.verifyModes.join(", "),
+    });
+}
+
+function isVerifierApproved(
+    verdict: z.infer<typeof parameterGraderLlmVerifierSchema>,
+    threshold: number,
+): boolean {
+    const scores = verdict.scores;
+    const scoresOk =
+        scores.typeConsistency >= threshold &&
+        scores.createVerifyCoherence >= threshold &&
+        scores.scoreModeSoundness >= threshold &&
+        scores.ruleSpecificity >= threshold;
+    const issuesEmpty =
+        verdict.issues === undefined || verdict.issues.length === 0;
+    return verdict.decision === "approve" && scoresOk && issuesEmpty;
+}
+
+async function runPolicyVerifier(
+    pack: TranslationBenchParameterGraderPromptPack,
+    fieldName: string,
+    spec: ParamSpec,
+    optional: boolean,
+    context: ParameterGraderLlmContext,
+    decision: ParameterGraderLlmDecision,
+    attempt: number,
+): Promise<
+    | { ok: true }
+    | { ok: false; feedback: string; error: string }
+> {
+    const candidate = {
+        create: decision.create,
+        verify: decision.verify,
+        rule: decision.rule,
+    };
+    const verifierPrompt = renderTranslationBenchPromptTemplate(
+        pack.policyVerifier.template,
+        {
+            schema_name: context.schemaName,
+            action_name: context.actionName,
+            field_name: fieldName,
+            optional: optional ? "true" : "false",
+            field_type_json: JSON.stringify(spec, null, 2),
+            candidate_policy_json: JSON.stringify(candidate, null, 2),
+            approve_score_threshold: String(
+                pack.policyVerifier.approveScoreThreshold,
+            ),
+            issue_codes: pack.policyVerifier.issueCodes.join(", "),
+        },
+    );
+    const verifierText = await context.llm.complete(verifierPrompt);
+    let verdict: z.infer<typeof parameterGraderLlmVerifierSchema>;
+    try {
+        verdict = parseLlmJsonWithZod(
+            verifierText,
+            parameterGraderLlmVerifierSchema,
+            `Parameter-grader verifier (${context.schemaName}.${context.actionName}.${fieldName} attempt ${attempt})`,
+        );
+    } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return { ok: false, feedback: msg, error: msg };
+    }
+
+    if (isVerifierApproved(verdict, pack.policyVerifier.approveScoreThreshold)) {
+        return { ok: true };
+    }
+
+    const issuesEmpty =
+        verdict.issues === undefined || verdict.issues.length === 0;
+    const error = `Verifier ${verdict.decision} (issues=${issuesEmpty ? 0 : verdict.issues?.length}): ${verdict.summary ?? ""}`;
+    return {
+        ok: false,
+        error,
+        feedback: JSON.stringify(
+            {
+                decision: verdict.decision,
+                scores: verdict.scores,
+                issues: verdict.issues ?? [],
+                summary: verdict.summary,
+            },
+            null,
+            2,
+        ),
+    };
+}
+
+function toLlmFieldDecision(
+    decision: ParameterGraderLlmDecision,
+): FieldGraderDecision {
+    return {
+        create: decision.create,
+        verify: decision.verify,
+        rule: `llm:${decision.rule}`,
+        source: "llm",
+    };
+}
+
 export async function classifyActionParameterFieldWithLlm(
     fieldName: string,
     spec: ParamSpec,
     optional: boolean,
-    context: {
-        schemaName: string;
-        actionName: string;
-        parametersSummary?: string;
-        description?: string;
-        llm: ParameterGraderLlm;
-        promptPack?: TranslationBenchParameterGraderPromptPack;
-    },
+    context: ParameterGraderLlmContext,
 ): Promise<FieldGraderDecision> {
     const pack =
         context.promptPack ?? loadTranslationBenchParameterGraderPromptPack();
@@ -629,31 +757,13 @@ export async function classifyActionParameterFieldWithLlm(
     let verifierFeedback = "";
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-        const prompt = renderTranslationBenchPromptTemplate(
-            pack.policyClassifier.template,
-            {
-                schema_name: context.schemaName,
-                action_name: context.actionName,
-                action_description_block:
-                    context.description !== undefined &&
-                    context.description.trim()
-                        ? `Action description: ${context.description.trim()}`
-                        : "Action description: (none)",
-                field_name: fieldName,
-                optional: optional ? "true" : "false",
-                field_type_json: JSON.stringify(spec, null, 2),
-                parameters_summary:
-                    context.parametersSummary?.trim() || "(none)",
-                create_policies: pack.policyClassifier.createPolicies
-                    .filter((p) => CREATE_SET.has(p))
-                    .join(", "),
-                verify_modes: pack.policyClassifier.verifyModes.join(", "),
-                ...(verifierFeedback
-                    ? {
-                          parameters_summary: `${context.parametersSummary?.trim() || "(none)"}\n\nPrior verifier feedback (fix):\n${verifierFeedback}`,
-                      }
-                    : {}),
-            },
+        const prompt = buildClassifierPrompt(
+            pack,
+            fieldName,
+            spec,
+            optional,
+            context,
+            verifierFeedback,
         );
         const text = await context.llm.complete(prompt);
         let decision: ParameterGraderLlmDecision;
@@ -676,78 +786,23 @@ export async function classifyActionParameterFieldWithLlm(
         }
 
         if (!requireVerifier) {
-            return {
-                create: decision.create,
-                verify: decision.verify,
-                rule: `llm:${decision.rule}`,
-                source: "llm",
-            };
+            return toLlmFieldDecision(decision);
         }
 
-        const candidate = {
-            create: decision.create,
-            verify: decision.verify,
-            rule: decision.rule,
-        };
-        const verifierPrompt = renderTranslationBenchPromptTemplate(
-            pack.policyVerifier.template,
-            {
-                schema_name: context.schemaName,
-                action_name: context.actionName,
-                field_name: fieldName,
-                optional: optional ? "true" : "false",
-                field_type_json: JSON.stringify(spec, null, 2),
-                candidate_policy_json: JSON.stringify(candidate, null, 2),
-                approve_score_threshold: String(
-                    pack.policyVerifier.approveScoreThreshold,
-                ),
-                issue_codes: pack.policyVerifier.issueCodes.join(", "),
-            },
+        const verified = await runPolicyVerifier(
+            pack,
+            fieldName,
+            spec,
+            optional,
+            context,
+            decision,
+            attempt,
         );
-        const verifierText = await context.llm.complete(verifierPrompt);
-        let verdict: z.infer<typeof parameterGraderLlmVerifierSchema>;
-        try {
-            verdict = parseLlmJsonWithZod(
-                verifierText,
-                parameterGraderLlmVerifierSchema,
-                `Parameter-grader verifier (${context.schemaName}.${context.actionName}.${fieldName} attempt ${attempt})`,
-            );
-        } catch (error) {
-            lastError = error instanceof Error ? error.message : String(error);
-            verifierFeedback = lastError;
-            continue;
+        if (verified.ok) {
+            return toLlmFieldDecision(decision);
         }
-
-        const threshold = pack.policyVerifier.approveScoreThreshold;
-        const scores = verdict.scores;
-        const scoresOk =
-            scores.typeConsistency >= threshold &&
-            scores.createVerifyCoherence >= threshold &&
-            scores.scoreModeSoundness >= threshold &&
-            scores.ruleSpecificity >= threshold;
-        const issuesEmpty =
-            verdict.issues === undefined || verdict.issues.length === 0;
-
-        if (verdict.decision === "approve" && scoresOk && issuesEmpty) {
-            return {
-                create: decision.create,
-                verify: decision.verify,
-                rule: `llm:${decision.rule}`,
-                source: "llm",
-            };
-        }
-
-        lastError = `Verifier ${verdict.decision} (scoresOk=${scoresOk}, issues=${issuesEmpty ? 0 : verdict.issues?.length}): ${verdict.summary ?? ""}`;
-        verifierFeedback = JSON.stringify(
-            {
-                decision: verdict.decision,
-                scores: verdict.scores,
-                issues: verdict.issues ?? [],
-                summary: verdict.summary,
-            },
-            null,
-            2,
-        );
+        lastError = verified.error;
+        verifierFeedback = verified.feedback;
     }
 
     throw new Error(
@@ -1143,98 +1198,86 @@ export function loadActionParametersGraderCatalogFile(
     return raw as unknown as ActionParametersGraderCatalog;
 }
 
-export async function buildActionParametersGraderCatalog(
-    catalog: GeneratedActionCatalog,
-    options?: {
-        generatedAt?: string;
-        llm?: ParameterGraderLlm;
-        /** Prior grader output for incremental merge. Omit or pass forceFull to rebuild all. */
-        previous?: ActionParametersGraderCatalog;
-        forceFull?: boolean;
-        onProgress?: (done: number, total: number) => void;
-        /** When true, attach lastDiff on the returned object (default true for callers). */
-        includeLastDiff?: boolean;
-    },
-): Promise<ActionParametersGraderCatalog> {
-    const previous =
-        options?.forceFull === true ? undefined : options?.previous;
-    const diff = diffActionParametersGrader(catalog, previous);
-    const rebuildIds = new Set([...diff.added, ...diff.updated]);
-    const byAction: Record<string, ActionParametersGraderEntry> = {};
-
-    const actionsById = new Map<string, CatalogActionRow>();
-    for (const action of catalog.actions) {
-        actionsById.set(actionId(action.schemaName, action.actionName), action);
+function priorEntryStillValid(
+    entry: ActionParametersGraderEntry,
+    catalogRow: CatalogActionRow,
+): boolean {
+    if (!isParamSpec(catalogRow.paramSpec)) {
+        throw new Error(
+            `Invalid paramSpec for ${entry.schemaName}.${entry.actionName}`,
+        );
     }
-
-    // Keep unchanged entries only after integrity checks vs live catalog.
-    if (previous !== undefined) {
-        for (const id of diff.unchanged) {
-            const entry = previous.byAction[id];
-            const catalogRow = actionsById.get(id);
-            if (entry === undefined || catalogRow === undefined) {
-                rebuildIds.add(id);
-                continue;
-            }
-            if (!isParamSpec(catalogRow.paramSpec)) {
-                throw new Error(`Invalid paramSpec for ${id}`);
-            }
-            // Catalog paramSpec must still canonicalize-equal stored paramSpec.
-            if (!nestedParamSpecEqual(catalogRow.paramSpec, entry.paramSpec)) {
-                rebuildIds.add(id);
-                continue;
-            }
-            // Re-verify fingerprint against current rules version + catalog shape.
-            const liveFp = actionParameterSourceFingerprint(
-                catalogRow.paramSpec,
-            );
-            if (
-                entry.sourceFingerprint !== liveFp ||
-                actionParameterSourceFingerprint(entry.paramSpec) !==
-                    entry.sourceFingerprint
-            ) {
-                rebuildIds.add(id);
-                continue;
-            }
-            if (entry.paramSpec.kind === "object") {
-                const expected = new Set(Object.keys(entry.paramSpec.fields));
-                const actual = new Set(Object.keys(entry.fields));
-                if (
-                    expected.size !== actual.size ||
-                    [...expected].some((k) => !actual.has(k))
-                ) {
-                    rebuildIds.add(id);
-                    continue;
-                }
-                // parameterScore must stay in lockstep with fields.verify
-                let scoreOk = true;
-                for (const name of expected) {
-                    if (
-                        entry.parameterScore.fields[name] !==
-                        entry.fields[name]?.verify
-                    ) {
-                        scoreOk = false;
-                        break;
-                    }
-                }
-                if (!scoreOk) {
-                    rebuildIds.add(id);
-                    continue;
-                }
-            }
-            byAction[id] = entry;
+    // Catalog paramSpec must still canonicalize-equal stored paramSpec.
+    if (!nestedParamSpecEqual(catalogRow.paramSpec, entry.paramSpec)) {
+        return false;
+    }
+    // Re-verify fingerprint against current rules version + catalog shape.
+    const liveFp = actionParameterSourceFingerprint(catalogRow.paramSpec);
+    if (
+        entry.sourceFingerprint !== liveFp ||
+        actionParameterSourceFingerprint(entry.paramSpec) !==
+            entry.sourceFingerprint
+    ) {
+        return false;
+    }
+    if (entry.paramSpec.kind !== "object") {
+        return true;
+    }
+    const expected = new Set(Object.keys(entry.paramSpec.fields));
+    const actual = new Set(Object.keys(entry.fields));
+    if (
+        expected.size !== actual.size ||
+        [...expected].some((k) => !actual.has(k))
+    ) {
+        return false;
+    }
+    // parameterScore must stay in lockstep with fields.verify
+    for (const name of expected) {
+        if (entry.parameterScore.fields[name] !== entry.fields[name]?.verify) {
+            return false;
         }
     }
+    return true;
+}
 
-    // Drop ids moved from unchanged to rebuild.
-    for (const id of rebuildIds) {
-        delete byAction[id];
+function keepUnchangedGraderEntries(
+    previous: ActionParametersGraderCatalog | undefined,
+    unchangedIds: string[],
+    actionsById: Map<string, CatalogActionRow>,
+    rebuildIds: Set<string>,
+): Record<string, ActionParametersGraderEntry> {
+    const byAction: Record<string, ActionParametersGraderEntry> = {};
+    if (previous === undefined) {
+        return byAction;
     }
-    // Recompute added/updated labels for progress when integrity forced rebuild.
-    const effectiveRebuild = [...rebuildIds].sort();
+    for (const id of unchangedIds) {
+        const entry = previous.byAction[id];
+        const catalogRow = actionsById.get(id);
+        if (entry === undefined || catalogRow === undefined) {
+            rebuildIds.add(id);
+            continue;
+        }
+        if (!priorEntryStillValid(entry, catalogRow)) {
+            rebuildIds.add(id);
+            continue;
+        }
+        byAction[id] = entry;
+    }
+    return byAction;
+}
 
+async function rebuildGraderEntries(
+    rebuildIds: string[],
+    actionsById: Map<string, CatalogActionRow>,
+    previous: ActionParametersGraderCatalog | undefined,
+    options?: {
+        llm?: ParameterGraderLlm;
+        onProgress?: (done: number, total: number) => void;
+    },
+): Promise<Record<string, ActionParametersGraderEntry>> {
+    const byAction: Record<string, ActionParametersGraderEntry> = {};
     let done = 0;
-    for (const id of effectiveRebuild) {
+    for (const id of rebuildIds) {
         const action = actionsById.get(id);
         if (action === undefined) {
             throw new Error(`Missing catalog action for '${id}'`);
@@ -1260,20 +1303,102 @@ export async function buildActionParametersGraderCatalog(
             },
         );
         done += 1;
-        options?.onProgress?.(done, effectiveRebuild.length);
+        options?.onProgress?.(done, rebuildIds.length);
     }
+    return byAction;
+}
 
-    let llmFallbackCount = 0;
-    let regexMatchCount = 0;
+function countCatalogFieldSources(
+    byAction: Record<string, ActionParametersGraderEntry>,
+): { llm: number; regex: number } {
+    let llm = 0;
+    let regex = 0;
     for (const entry of Object.values(byAction)) {
         const counts = countFieldSources(
             entry.fields,
             `${entry.schemaName}.${entry.actionName}`,
         );
-        llmFallbackCount += counts.llm;
-        regexMatchCount += counts.regex;
+        llm += counts.llm;
+        regex += counts.regex;
+    }
+    return { llm, regex };
+}
+
+function attachLastDiff(
+    result: ActionParametersGraderCatalog,
+    catalog: GeneratedActionCatalog,
+    previous: ActionParametersGraderCatalog | undefined,
+    effectiveRebuild: string[],
+): void {
+    // Refresh diff counts after integrity-driven rebuilds.
+    const refreshed = diffActionParametersGrader(catalog, previous);
+    // Mark integrity rebuilds as updated if they were previously unchanged.
+    for (const id of effectiveRebuild) {
+        if (
+            refreshed.unchanged.includes(id) ||
+            (!refreshed.added.includes(id) && !refreshed.updated.includes(id))
+        ) {
+            refreshed.unchanged = refreshed.unchanged.filter((x) => x !== id);
+            if (
+                !refreshed.updated.includes(id) &&
+                !refreshed.added.includes(id)
+            ) {
+                refreshed.updated.push(id);
+                refreshed.updated.sort();
+            }
+        }
+    }
+    result.lastDiff = refreshed;
+}
+
+export async function buildActionParametersGraderCatalog(
+    catalog: GeneratedActionCatalog,
+    options?: {
+        generatedAt?: string;
+        llm?: ParameterGraderLlm;
+        /** Prior grader output for incremental merge. Omit or pass forceFull to rebuild all. */
+        previous?: ActionParametersGraderCatalog;
+        forceFull?: boolean;
+        onProgress?: (done: number, total: number) => void;
+        /** When true, attach lastDiff on the returned object (default true for callers). */
+        includeLastDiff?: boolean;
+    },
+): Promise<ActionParametersGraderCatalog> {
+    const previous =
+        options?.forceFull === true ? undefined : options?.previous;
+    const diff = diffActionParametersGrader(catalog, previous);
+    const rebuildIds = new Set([...diff.added, ...diff.updated]);
+
+    const actionsById = new Map<string, CatalogActionRow>();
+    for (const action of catalog.actions) {
+        actionsById.set(actionId(action.schemaName, action.actionName), action);
     }
 
+    // Keep unchanged entries only after integrity checks vs live catalog.
+    const byAction = keepUnchangedGraderEntries(
+        previous,
+        diff.unchanged,
+        actionsById,
+        rebuildIds,
+    );
+
+    // Drop ids moved from unchanged to rebuild.
+    for (const id of rebuildIds) {
+        delete byAction[id];
+    }
+    // Recompute added/updated labels for progress when integrity forced rebuild.
+    const effectiveRebuild = [...rebuildIds].sort();
+    Object.assign(
+        byAction,
+        await rebuildGraderEntries(effectiveRebuild, actionsById, previous, {
+            ...(options?.llm !== undefined ? { llm: options.llm } : {}),
+            ...(options?.onProgress !== undefined
+                ? { onProgress: options.onProgress }
+                : {}),
+        }),
+    );
+
+    const counts = countCatalogFieldSources(byAction);
     const result: ActionParametersGraderCatalog = {
         version: 1,
         description:
@@ -1288,35 +1413,11 @@ export async function buildActionParametersGraderCatalog(
         modes: { ...ACTION_PARAM_VERIFY_MODE_DOCS },
         createPolicies: { ...ACTION_PARAM_CREATE_POLICY_DOCS },
         byAction,
-        llmFallbackCount,
-        regexMatchCount,
+        llmFallbackCount: counts.llm,
+        regexMatchCount: counts.regex,
     };
     if (options?.includeLastDiff !== false) {
-        // Refresh diff counts after integrity-driven rebuilds.
-        const refreshed = diffActionParametersGrader(
-            catalog,
-            options?.forceFull === true ? undefined : options?.previous,
-        );
-        // Mark integrity rebuilds as updated if they were previously unchanged.
-        for (const id of effectiveRebuild) {
-            if (
-                refreshed.unchanged.includes(id) ||
-                (!refreshed.added.includes(id) &&
-                    !refreshed.updated.includes(id))
-            ) {
-                refreshed.unchanged = refreshed.unchanged.filter(
-                    (x) => x !== id,
-                );
-                if (
-                    !refreshed.updated.includes(id) &&
-                    !refreshed.added.includes(id)
-                ) {
-                    refreshed.updated.push(id);
-                    refreshed.updated.sort();
-                }
-            }
-        }
-        result.lastDiff = refreshed;
+        attachLastDiff(result, catalog, previous, effectiveRebuild);
     }
     return result;
 }

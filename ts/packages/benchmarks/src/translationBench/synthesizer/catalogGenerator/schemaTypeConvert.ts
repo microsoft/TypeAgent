@@ -196,12 +196,49 @@ function mergeObjectParamSpecs(
     return { kind: "object", fields };
 }
 
-export function renderSchemaType(
-    t: SchemaTypeNode | undefined,
-    depth = 0,
+function renderTypeUnion(
+    t: SchemaTypeNode,
+    depth: number,
     options?: { omitUndefined?: boolean },
 ): string {
-    if (!t || depth > MAX_RENDER_DEPTH) return "any";
+    // Transparent depth; drop undefined arms when field is already optional.
+    const arms = options?.omitUndefined
+        ? nonUndefinedArms(t.types)
+        : (t.types ?? []);
+    if (arms.length === 0) {
+        return options?.omitUndefined ? "any" : "undefined";
+    }
+    if (arms.length === 1) {
+        return renderSchemaType(arms[0], depth, options);
+    }
+    const unique: string[] = [];
+    for (const arm of arms) {
+        const r = renderSchemaType(arm, depth, options);
+        if (r && !unique.includes(r)) unique.push(r);
+    }
+    return unique.length === 0 ? "any" : unique.join("|");
+}
+
+function renderObjectSchemaType(
+    t: SchemaTypeNode,
+    depth: number,
+): string {
+    if (!t.fields) return "object";
+    const inner = Object.entries(t.fields)
+        .map(([n, f]) => {
+            const rendered = renderSchemaType(f.type, depth + 1, {
+                omitUndefined: !!f.optional,
+            });
+            return `${n}${f.optional ? "?" : ""}: ${rendered}`;
+        })
+        .join(", ");
+    return `{ ${inner} }`;
+}
+
+function renderPrimitiveSchemaType(
+    t: SchemaTypeNode,
+    options?: { omitUndefined?: boolean },
+): string | undefined {
     switch (t.type) {
         case "string":
             return "string";
@@ -217,44 +254,30 @@ export function renderSchemaType(
             return options?.omitUndefined ? "" : "undefined";
         case "any":
             return "any";
-        case "array":
-            return `${renderSchemaType(t.elementType, depth + 1)}[]`;
         case "string-union":
             return t.typeEnum && t.typeEnum.length > 0
                 ? t.typeEnum.map((v) => JSON.stringify(v)).join("|")
                 : "string";
-        case "type-union": {
-            // Transparent depth; drop undefined arms when field is already optional.
-            const arms = options?.omitUndefined
-                ? nonUndefinedArms(t.types)
-                : (t.types ?? []);
-            if (arms.length === 0) {
-                return options?.omitUndefined ? "any" : "undefined";
-            }
-            if (arms.length === 1) {
-                return renderSchemaType(arms[0], depth, options);
-            }
-            const rendered = arms.map((arm) =>
-                renderSchemaType(arm, depth, options),
-            );
-            const unique: string[] = [];
-            for (const r of rendered) {
-                if (r && !unique.includes(r)) unique.push(r);
-            }
-            return unique.length === 0 ? "any" : unique.join("|");
-        }
-        case "object": {
-            if (!t.fields) return "object";
-            const inner = Object.entries(t.fields)
-                .map(([n, f]) => {
-                    const rendered = renderSchemaType(f.type, depth + 1, {
-                        omitUndefined: !!f.optional,
-                    });
-                    return `${n}${f.optional ? "?" : ""}: ${rendered}`;
-                })
-                .join(", ");
-            return `{ ${inner} }`;
-        }
+        default:
+            return undefined;
+    }
+}
+
+export function renderSchemaType(
+    t: SchemaTypeNode | undefined,
+    depth = 0,
+    options?: { omitUndefined?: boolean },
+): string {
+    if (!t || depth > MAX_RENDER_DEPTH) return "any";
+    const primitive = renderPrimitiveSchemaType(t, options);
+    if (primitive !== undefined) return primitive;
+    switch (t.type) {
+        case "array":
+            return `${renderSchemaType(t.elementType, depth + 1)}[]`;
+        case "type-union":
+            return renderTypeUnion(t, depth, options);
+        case "object":
+            return renderObjectSchemaType(t, depth);
         case "type-reference":
             // Transparent for depth — aliases must not fake "any" on leaves.
             if (t.definition?.type) {
