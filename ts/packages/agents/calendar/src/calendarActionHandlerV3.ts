@@ -42,7 +42,7 @@ import {
     evaluateGraphReadiness,
     getAvailableProviders,
     GoogleCalendarClient,
-    graphProviderSetupHint,
+    graphProviderSetupError,
     probeCurrentGraphConfig,
 } from "@typeagent/graph-utils";
 import {
@@ -77,6 +77,13 @@ export class CalendarClientLoginCommandHandler
         const providerType = context.sessionContext.agentContext.providerType;
 
         if (provider === undefined) {
+            // No provider at all usually means nothing is configured yet, so
+            // point at the config keys instead of an opaque "not initialized".
+            // Thrown (not returned) so the dispatcher renders the markdown.
+            const config = probeCurrentGraphConfig();
+            if (!config.msGraphConfigured && !config.googleConfigured) {
+                throw graphProviderSetupError("calendar");
+            }
             throw new Error("Calendar provider not initialized");
         }
 
@@ -1290,9 +1297,10 @@ async function offerCalendarLogin(
     const ctx = actionContext.sessionContext.agentContext;
     const config = probeCurrentGraphConfig();
     if (!config.msGraphConfigured && !config.googleConfigured) {
-        return createActionResultFromError(
-            `No calendar provider configured.\n${graphProviderSetupHint("calendar")}`,
-        );
+        // Thrown rather than returned: the dispatcher only attaches
+        // `errorDisplayContent` on the throw path, and without it the hint's
+        // markdown renders as literal text.
+        throw graphProviderSetupError("calendar");
     }
     if (!ctx.calendarProvider) {
         ctx.calendarProvider = createCalendarProviderFromConfig();

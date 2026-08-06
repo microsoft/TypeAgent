@@ -9,7 +9,11 @@
 // for the pattern this mirrors.
 
 import type { ReadinessReport } from "@typeagent/agent-sdk";
-import { configSetupHint, tryReloadConfigSync } from "@typeagent/config";
+import {
+    ConfigSetupError,
+    configSetupHint,
+    tryReloadConfigSync,
+} from "@typeagent/config";
 
 export type GraphAgentName = "calendar" | "email";
 
@@ -87,6 +91,23 @@ export function graphProviderSetupHint(agentName: GraphAgentName): string {
         "",
         `Then run \`@config agent refresh ${agentName}\`.`,
     ].join("\n");
+}
+
+// The same hint as a throwable error.
+//
+// `configSetupError` can't be used here: it takes a single var list, while
+// this hint offers two alternative provider blocks. Throwing (rather than
+// returning a plain-string error result) is what gets the markdown rendered
+// — the dispatcher only attaches `errorDisplayContent` on the throw path.
+export function graphProviderSetupError(
+    agentName: GraphAgentName,
+): ConfigSetupError {
+    const Agent = agentName[0].toUpperCase() + agentName.slice(1);
+    const message = `${Agent} agent has no provider configured.`;
+    return new ConfigSetupError(
+        message,
+        `${message}\n\n${graphProviderSetupHint(agentName)}`,
+    );
 }
 
 // Pure decision: probe → ReadinessReport.

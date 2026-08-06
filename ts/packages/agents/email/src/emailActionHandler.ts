@@ -10,7 +10,7 @@ import {
     claimSilentRestoreAnnouncement,
     evaluateGraphReadiness,
     GoogleEmailClient,
-    graphProviderSetupHint,
+    graphProviderSetupError,
     parseDayRange,
     probeCurrentGraphConfig,
 } from "@typeagent/graph-utils";
@@ -413,9 +413,10 @@ async function setupEmail(
     const ctx = actionContext.sessionContext.agentContext;
     const config = probeCurrentGraphConfig();
     if (!config.msGraphConfigured && !config.googleConfigured) {
-        return createActionResultFromError(
-            `No email provider configured.\n${graphProviderSetupHint("email")}`,
-        );
+        // Thrown rather than returned: the dispatcher only attaches
+        // `errorDisplayContent` on the throw path, and without it the hint's
+        // markdown renders as literal text.
+        throw graphProviderSetupError("email");
     }
     if (!ctx.emailProvider) {
         ctx.emailProvider = createEmailProviderFromConfig();
