@@ -114,6 +114,39 @@ describe("telemetry bootstrap", () => {
         expect(configReads).toBe(1);
     });
 
+    it("initializes a configured provider only once across repeated calls", async () => {
+        const coordinator = createCoordinator();
+        const traceProvider = new TestTraceProvider();
+        let firstFactoryCalls = 0;
+        let secondFactoryCalls = 0;
+        const firstOptions = {
+            config: { traces: { otlp: OTLP } },
+            factories: {
+                createTraceProvider() {
+                    firstFactoryCalls++;
+                    return { provider: traceProvider };
+                },
+            },
+        };
+        const secondOptions = {
+            config: { traces: { otlp: OTLP } },
+            factories: {
+                createTraceProvider() {
+                    secondFactoryCalls++;
+                    return { provider: new TestTraceProvider() };
+                },
+            },
+        };
+
+        const first = coordinator.init(firstOptions);
+        const second = coordinator.init(secondOptions);
+        await Promise.all([first, second]);
+        await coordinator.init(secondOptions);
+
+        expect(firstFactoryCalls).toBe(1);
+        expect(secondFactoryCalls).toBe(0);
+    });
+
     it("creates only requested signals and shares one resource", async () => {
         const coordinator = createCoordinator();
         const resources: Resource[] = [];
