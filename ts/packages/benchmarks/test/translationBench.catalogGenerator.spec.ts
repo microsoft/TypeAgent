@@ -573,10 +573,7 @@ describe("schemaTypeToParamSpec type-union", () => {
 
     it("keeps heterogeneous scalar unions as any", () => {
         expect(
-            mergeUnionParamSpecs([
-                { kind: "string" },
-                { kind: "number" },
-            ]),
+            mergeUnionParamSpecs([{ kind: "string" }, { kind: "number" }]),
         ).toEqual({ kind: "any" });
     });
 
@@ -791,9 +788,9 @@ describe("paramTypes discriminant kind", () => {
     });
 
     it("canonicalizeParamSpec sorts enums and keeps kind key only", () => {
-        expect(canonicalizeParamSpec({ kind: "string", enum: ["b", "a"] })).toEqual(
-            { kind: "string", enum: ["a", "b"] },
-        );
+        expect(
+            canonicalizeParamSpec({ kind: "string", enum: ["b", "a"] }),
+        ).toEqual({ kind: "string", enum: ["a", "b"] });
         const canon = canonicalizeParamSpec({ kind: "string" }) as Record<
             string,
             unknown
@@ -1266,7 +1263,8 @@ describe("incremental grader catalog", () => {
             { generatedAt: "2026-01-01T00:00:00.000Z" },
         );
         // Corrupt fingerprint string while keeping shape — looks "stable" to naive diffs.
-        first.byAction["list.createList"]!.sourceFingerprint = "deadbeefdeadbeef";
+        first.byAction["list.createList"]!.sourceFingerprint =
+            "deadbeefdeadbeef";
         // Also poison verify so rebuild is observable.
         first.byAction["list.createList"]!.fields.listName!.verify = "ignore";
         first.byAction["list.createList"]!.parameterScore.fields.listName =
@@ -1304,9 +1302,9 @@ describe("incremental grader catalog", () => {
         expect(
             rebuilt.byAction["list.createList"]!.fields.listName?.verify,
         ).toBe("exact");
-        expect(
-            rebuilt.byAction["list.createList"]!.sourceFingerprint,
-        ).toBe(actionParameterSourceFingerprint(listSpec));
+        expect(rebuilt.byAction["list.createList"]!.sourceFingerprint).toBe(
+            actionParameterSourceFingerprint(listSpec),
+        );
     });
 });
 
@@ -1337,10 +1335,7 @@ describe("genCatalog import path (OOM guard)", () => {
                 here,
                 "../../src/translationBench/scripts/genCatalog.ts",
             ),
-            path.resolve(
-                here,
-                "../src/translationBench/scripts/genCatalog.ts",
-            ),
+            path.resolve(here, "../src/translationBench/scripts/genCatalog.ts"),
         ];
         const src = candidates.find((p) => {
             try {
@@ -1394,8 +1389,6 @@ describe("genCatalog import path (OOM guard)", () => {
         expect(codeOnly).not.toMatch(
             /["'][^"']*actionSchemaFileCache[^"']*["']/i,
         );
-        expect(codeOnly).not.toMatch(
-            /import\s*\([^)]*actionSchemaFileCache/i,
-        );
+        expect(codeOnly).not.toMatch(/import\s*\([^)]*actionSchemaFileCache/i);
     });
 });

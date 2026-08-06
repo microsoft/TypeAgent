@@ -28,7 +28,8 @@ import {
 } from "../synthesizer/synthesizerPrompts.js";
 
 const DEFAULT_CATALOG = "src/translationBench/catalog.generated.json";
-const DEFAULT_OUT = "src/translationBench/action-parameters-grader.generated.json";
+const DEFAULT_OUT =
+    "src/translationBench/action-parameters-grader.generated.json";
 
 function parseCli(argv: string[]) {
     const program = new Command()
@@ -42,11 +43,7 @@ function parseCli(argv: string[]) {
             DEFAULT_CATALOG,
         )
         .option("--out <path>", "grader output path", DEFAULT_OUT)
-        .option(
-            "--force",
-            "full rebuild (default is incremental)",
-            false,
-        )
+        .option("--force", "full rebuild (default is incremental)", false)
         .option("--model <name>", "chat model for regex-miss LLM fallback")
         .argument("[catalog]", "optional positional catalog path")
         .argument("[out]", "optional positional out path")

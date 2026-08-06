@@ -204,7 +204,8 @@ export const translationBenchQualityVerifierPromptPackSchema =
         },
         semanticChecker: {
             template: parsed.semantic_checker.template,
-            approveScoreThreshold: parsed.semantic_checker.approve_score_threshold,
+            approveScoreThreshold:
+                parsed.semantic_checker.approve_score_threshold,
             issueCodes: parsed.semantic_checker.issue_codes,
             modelConfiguration: parsed.semantic_checker.model_configuration,
         },
@@ -233,7 +234,8 @@ export const translationBenchParameterGraderPromptPackSchema =
         },
         policyVerifier: {
             template: parsed.policy_verifier.template,
-            approveScoreThreshold: parsed.policy_verifier.approve_score_threshold,
+            approveScoreThreshold:
+                parsed.policy_verifier.approve_score_threshold,
             issueCodes: parsed.policy_verifier.issue_codes,
             modelConfiguration: parsed.policy_verifier.model_configuration,
         },
@@ -299,11 +301,7 @@ export function parseTranslationBenchModelConfiguration(
     value: unknown,
     label: string,
 ): TranslationBenchModelConfiguration {
-    return parseWithZod(
-        translationBenchModelConfigurationSchema,
-        value,
-        label,
-    );
+    return parseWithZod(translationBenchModelConfigurationSchema, value, label);
 }
 
 /**
@@ -344,14 +342,17 @@ export function renderTranslationBenchPromptTemplate(
         vars,
         "template_vars",
     );
-    return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) => {
-        if (!(key in safeVars)) {
-            throw new Error(
-                `Translation-bench prompt template missing variable '{{${key}}}'`,
-            );
-        }
-        return String(safeVars[key]);
-    });
+    return template.replace(
+        /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
+        (_, key: string) => {
+            if (!(key in safeVars)) {
+                throw new Error(
+                    `Translation-bench prompt template missing variable '{{${key}}}'`,
+                );
+            }
+            return String(safeVars[key]);
+        },
+    );
 }
 
 export function resolveTranslationBenchPromptsDir(

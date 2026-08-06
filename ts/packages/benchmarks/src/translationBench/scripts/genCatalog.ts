@@ -49,7 +49,9 @@ interface ActionTypeNode {
 
 interface ActionConfigLike {
     schemaName: string;
-    schemaType: string | { action?: string; activity?: string; entity?: string };
+    schemaType:
+        | string
+        | { action?: string; activity?: string; entity?: string };
     schemaFile:
         | { format: string; content: string; config?: string }
         | (() => { format: string; content: string; config?: string });
@@ -113,9 +115,11 @@ function resolveSchemaContent(config: ActionConfigLike): {
 }
 
 function parseActionConfig(config: ActionConfigLike): ParsedActionSchema {
-    const { format, content, config: schemaConfigJson } = resolveSchemaContent(
-        config,
-    );
+    const {
+        format,
+        content,
+        config: schemaConfigJson,
+    } = resolveSchemaContent(config);
     if (!content) {
         throw new Error(`Empty schema content for '${config.schemaName}'`);
     }
@@ -251,7 +255,9 @@ function loadAgentManifest(
 }
 
 /** Built-in dispatcher + system manifests (paths relative to dispatcher package). */
-function builtinManifests(dispatcherRoot: string): Record<string, AppAgentManifest> {
+function builtinManifests(
+    dispatcherRoot: string,
+): Record<string, AppAgentManifest> {
     const resolve = (rel: string) => path.resolve(dispatcherRoot, rel);
     return {
         dispatcher: {
@@ -297,8 +303,7 @@ function builtinManifests(dispatcherRoot: string): Record<string, AppAgentManife
                 activity: {
                     transient: true,
                     schema: {
-                        description:
-                            "Action that manages activity context.",
+                        description: "Action that manages activity context.",
                         schemaFile: resolve(
                             "src/context/dispatcher/schema/activityActionSchema.ts",
                         ),
@@ -378,8 +383,7 @@ function builtinManifests(dispatcherRoot: string): Record<string, AppAgentManife
                 },
                 settings: {
                     schema: {
-                        description:
-                            "System agent that helps manage settings.",
+                        description: "System agent that helps manage settings.",
                         schemaFile: resolve(
                             "src/context/system/schema/settingsActionSchema.ts",
                         ),
@@ -388,8 +392,7 @@ function builtinManifests(dispatcherRoot: string): Record<string, AppAgentManife
                 },
                 help: {
                     schema: {
-                        description:
-                            "Answer questions about TypeAgent itself.",
+                        description: "Answer questions about TypeAgent itself.",
                         schemaFile: resolve(
                             "src/context/system/schema/helpActionSchema.ts",
                         ),
@@ -403,7 +406,7 @@ function builtinManifests(dispatcherRoot: string): Record<string, AppAgentManife
 
 type CatalogWriteStream = {
     writeAction: (action: GeneratedAction, isLast: boolean) => Promise<void>;
-    
+
     end: () => Promise<void>;
     tmpPath: string;
     outPath: string;
@@ -569,7 +572,9 @@ function collectActionConfigs(
 function parseCli(argv: string[]) {
     const program = new Command()
         .name("genCatalog")
-        .description("Generate catalog.generated.json from agent action schemas")
+        .description(
+            "Generate catalog.generated.json from agent action schemas",
+        )
         .option(
             "--allow-unloadable",
             "write partial catalog when some schemas fail",

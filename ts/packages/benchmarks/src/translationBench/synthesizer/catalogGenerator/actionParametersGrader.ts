@@ -74,7 +74,7 @@ export interface ActionParametersGraderEntry {
     schemaName: string;
     actionName: string;
     paramSpec: ParamSpec;
-    
+
     sourceFingerprint: string;
     fields: Record<string, ActionParameterFieldGrader>;
     parameterScore: {
@@ -101,7 +101,7 @@ export interface ActionParametersGraderCatalog {
     /** Fields that required LLM because regex did not match. */
     llmFallbackCount: number;
     regexMatchCount: number;
-    
+
     lastDiff?: ActionParametersGraderDiff;
 }
 
@@ -123,8 +123,7 @@ export const ACTION_PARAM_VERIFY_MODE_DOCS: Record<
     string
 > = {
     exact: "Chosen value must deep-equal expected",
-    exists:
-        "Key must be present; value ignored (hand-authored seeds; not emitted by regex gen)",
+    exists: "Key must be present; value ignored (hand-authored seeds; not emitted by regex gen)",
     nonempty: "Key must be present and non-empty string/array",
     ignore: "Field not scored",
 };
@@ -139,8 +138,7 @@ export const ACTION_PARAM_CREATE_POLICY_DOCS: Record<
     identifier: "Mint a stable name/id/path-like token; exact verify",
     temporal: "Mint a date/time string; verify mode depends on field role",
     unit_or_mode: "Mint a unit/mode/kind token; often ignored at soft verify",
-    record:
-        "Mint a nested object. Runner scores the top-level key only: pure soft-leaf objects use nonempty; mixed/exact leaves use deep-equal exact. Nested free-text (e.g. lookup.site[]) is not dotted-scored until the runner supports nested paths.",
+    record: "Mint a nested object. Runner scores the top-level key only: pure soft-leaf objects use nonempty; mixed/exact leaves use deep-equal exact. Nested free-text (e.g. lookup.site[]) is not dotted-scored until the runner supports nested paths.",
     opaque: "Type is any/unknown; avoid relying on exact structure",
 };
 
@@ -149,7 +147,7 @@ export interface FieldGraderDecision {
     verify: ActionParamVerifyMode;
     rule: string;
     source: ActionParamClassifySource;
-    
+
     item?: FieldGraderDecision;
 }
 
@@ -237,9 +235,7 @@ export function actionId(schemaName: string, actionName: string): string {
     return `${schemaName}.${actionName}`;
 }
 
-function wrapArrayDecision(
-    item: FieldGraderDecision,
-): FieldGraderDecision {
+function wrapArrayDecision(item: FieldGraderDecision): FieldGraderDecision {
     const looseVerify = loosenArrayVerifyMode(item);
     return {
         // Top-level create mirrors the element (creator mints element values).
@@ -673,8 +669,7 @@ export async function classifyActionParameterFieldWithLlm(
                 `Parameter-grader classifier (${context.schemaName}.${context.actionName}.${fieldName} attempt ${attempt})`,
             );
         } catch (error) {
-            lastError =
-                error instanceof Error ? error.message : String(error);
+            lastError = error instanceof Error ? error.message : String(error);
             verifierFeedback = lastError;
             continue;
         }
@@ -723,8 +718,7 @@ export async function classifyActionParameterFieldWithLlm(
                 `Parameter-grader verifier (${context.schemaName}.${context.actionName}.${fieldName} attempt ${attempt})`,
             );
         } catch (error) {
-            lastError =
-                error instanceof Error ? error.message : String(error);
+            lastError = error instanceof Error ? error.message : String(error);
             verifierFeedback = lastError;
             continue;
         }
@@ -876,9 +870,7 @@ function countFieldSources(
         } else if (field.source === "regex") {
             regex += 1;
         } else {
-            throw new Error(
-                `Field '${actionLabel}.${label}' missing source`,
-            );
+            throw new Error(`Field '${actionLabel}.${label}' missing source`);
         }
         if (LEGACY_RULE_RE.test(field.rule) || /default/i.test(field.rule)) {
             throw new Error(
@@ -1023,18 +1015,12 @@ function validateFieldGrader(
             `Invalid field grader for ${actionIdLabel}.${fieldName}: typeKind`,
         );
     }
-    if (
-        typeof field.create !== "string" ||
-        !CREATE_SET.has(field.create)
-    ) {
+    if (typeof field.create !== "string" || !CREATE_SET.has(field.create)) {
         throw new Error(
             `Invalid field grader for ${actionIdLabel}.${fieldName}: create`,
         );
     }
-    if (
-        typeof field.verify !== "string" ||
-        !VERIFY_SET.has(field.verify)
-    ) {
+    if (typeof field.verify !== "string" || !VERIFY_SET.has(field.verify)) {
         throw new Error(
             `Invalid field grader for ${actionIdLabel}.${fieldName}: verify`,
         );
@@ -1202,9 +1188,7 @@ export async function buildActionParametersGraderCatalog(
                 throw new Error(`Invalid paramSpec for ${id}`);
             }
             // Catalog paramSpec must still canonicalize-equal stored paramSpec.
-            if (
-                !nestedParamSpecEqual(catalogRow.paramSpec, entry.paramSpec)
-            ) {
+            if (!nestedParamSpecEqual(catalogRow.paramSpec, entry.paramSpec)) {
                 rebuildIds.add(id);
                 continue;
             }
@@ -1363,8 +1347,7 @@ export function loosenArrayVerifyMode(
 ): ActionParamVerifyMode {
     const elementVerify =
         typeof element === "string" ? element : element.verify;
-    const create =
-        typeof element === "string" ? undefined : element.create;
+    const create = typeof element === "string" ? undefined : element.create;
 
     if (
         elementVerify === "ignore" ||

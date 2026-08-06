@@ -23,7 +23,9 @@ const MAX_SPEC_DEPTH = 8;
 const MAX_RENDER_DEPTH = 8;
 
 /** Drop pure-undefined arms; used so optional unions do not charge depth. */
-function nonUndefinedArms(types: SchemaTypeNode[] | undefined): SchemaTypeNode[] {
+function nonUndefinedArms(
+    types: SchemaTypeNode[] | undefined,
+): SchemaTypeNode[] {
     return (types ?? []).filter((arm) => arm?.type !== "undefined");
 }
 
@@ -187,8 +189,7 @@ function mergeObjectParamSpecs(
             if (f !== undefined) present.push(f);
         }
         const optional =
-            present.length < objects.length ||
-            present.some((f) => f.optional);
+            present.length < objects.length || present.some((f) => f.optional);
         const specs = present.map((f) => f.spec);
         fields[name] = {
             optional,
