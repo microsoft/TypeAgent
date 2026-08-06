@@ -1314,14 +1314,12 @@ describe("GRADER_RULES_VERSION contract", () => {
         expect(REGEX_RULE_IDS.length).toBeGreaterThan(5);
         expect(REGEX_RULE_IDS).toContain("string-open-soft-nonempty");
         expect(REGEX_RULE_IDS).toContain("type-object-soft-nonempty");
-        // Pin a hash of the allowlist so silent id edits without a version bump
-        // are visible in review (update both together intentionally).
+        // Pin a hash of the allowlist so silent id edits without a version bump are visible in review (update both together intentionally).
         const hash = createHash("sha256")
             .update(JSON.stringify([...REGEX_RULE_IDS].sort()))
             .digest("hex")
             .slice(0, 16);
-        // Pin: bump GRADER_RULES_VERSION and update this hash together when
-        // REGEX_RULE_IDS / heuristics change.
+        // Pin: bump GRADER_RULES_VERSION and update this hash together when REGEX_RULE_IDS / heuristics change.
         expect(hash).toBe("d059bd043da09e1a");
     });
 });

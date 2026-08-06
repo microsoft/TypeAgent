@@ -1,15 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# Translation-bench parameter policy grader
-# Parallel shape to quality-verifier.prompt.yaml:
-#   1) regex_checker      — deterministic name/type rules (no LLM)
-#   2) policy_classifier  — LLM invents create+verify when regex misses
-#   3) policy_verifier    — independent LLM judge of the classifier decision
-#
-# A field policy is accepted when regex matches OR
-# (classifier emits JSON AND policy_verifier approves).
-# Never invent a random default when regex misses.
+# Translation-bench parameter policy grader Parallel shape to quality-verifier.prompt.yaml: 1) regex_checker      — deterministic name/type rules (no LLM) 2) policy_classifier  — LLM invents create+verify when regex misses 3) policy_verifier    — independent LLM judge of the classifier decision A field policy is accepted when regex matches OR (classifier emits JSON AND policy_verifier approves). Never invent a random default when regex misses.
 
 name: translation-bench-parameter-grader
 version: 1

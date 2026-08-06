@@ -74,9 +74,7 @@ export function schemaTypeToParamSpec(
             // Transparent: resolving a named alias does not add structural depth.
             return schemaTypeToParamSpec(t.definition?.type, depth);
         case "type-union": {
-            // Transparent like type-reference. Strip undefined arms so
-            // `T | undefined` (common on optional fields) does not waste depth
-            // or collapse the remaining structured arm to any.
+            // Transparent like type-reference. Strip undefined arms so `T | undefined` (common on optional fields) does not waste depth or collapse the remaining structured arm to any.
             const arms = nonUndefinedArms(t.types);
             if (arms.length === 0) return { kind: "any" };
             if (arms.length === 1) {
@@ -156,8 +154,7 @@ export function mergeUnionParamSpecs(arms: ParamSpec[]): ParamSpec {
         );
     }
 
-    // Heterogeneous structural mix: keep arms so graders can still see shape
-    // (e.g. object|string is rare; prefer union over silent any).
+    // Heterogeneous structural mix: keep arms so graders can still see shape (e.g. object|string is rare; prefer union over silent any).
     const structural = flat.filter(
         (a) => a.kind === "object" || a.kind === "array" || a.kind === "union",
     );
@@ -227,8 +224,7 @@ export function renderSchemaType(
                 ? t.typeEnum.map((v) => JSON.stringify(v)).join("|")
                 : "string";
         case "type-union": {
-            // Transparent depth (same as type-reference). Optionally drop
-            // undefined arms when the surrounding field is already optional.
+            // Transparent depth (same as type-reference). Optionally drop undefined arms when the surrounding field is already optional.
             const arms = options?.omitUndefined
                 ? nonUndefinedArms(t.types)
                 : (t.types ?? []);

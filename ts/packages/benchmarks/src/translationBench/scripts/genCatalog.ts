@@ -61,8 +61,7 @@ interface ActionConfigLike {
 
 /** Package roots relative to this script's compiled location (dist/...). */
 function packageRoot(name: "defaultAgentProvider" | "dispatcher"): string {
-    // dist/translationBench/scripts → …/packages/benchmarks/dist/translationBench/scripts
-    // ../../../.. → …/packages
+    // dist/translationBench/scripts → …/packages/benchmarks/dist/translationBench/scripts ../../../.. → …/packages
     const here = path.dirname(fileURLToPath(import.meta.url));
     const packagesDir = path.resolve(here, "../../../..");
     if (name === "defaultAgentProvider") {
@@ -517,8 +516,7 @@ async function writeCatalogAtomic(
         const n = payload.actions.length;
         for (let i = 0; i < n; i += 1) {
             await writer.writeAction(payload.actions[i]!, i === n - 1);
-            // Allow GC of large paramSpec trees progressively when caller
-            // nulls slots (optional).
+            // Allow GC of large paramSpec trees progressively when caller nulls slots (optional).
             (payload.actions as Array<GeneratedAction | undefined>)[i] =
                 undefined;
         }
@@ -689,8 +687,7 @@ async function main(): Promise<void> {
 
     const out = path.resolve(args.outPath);
     const unloadableNames = unloadable.map((u) => u.schemaName);
-    // Keep prior behavior: schemaNames minus unloadable (includes label-excluded
-    // parents still present in the registry list).
+    // Keep prior behavior: schemaNames minus unloadable (includes label-excluded parents still present in the registry list).
     const activeForCatalog = schemaNames.filter(
         (s) => !unloadableNames.includes(s),
     );

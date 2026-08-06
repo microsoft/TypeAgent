@@ -1,16 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * Loads translation-bench synthesizer / quality-verifier prompts from YAML
- * beside this module:
- *   synthesizer.prompt.yaml
- *   quality-verifier.prompt.yaml
- *   parameter-grader.prompt.yaml
- *
- * Pack shape is validated with Zod. YAML uses snake_case; pack types are camelCase.
- * Docs-only keys (e.g. acceptance.notes) are stripped, not rejected.
- */
+/** Loads translation-bench synthesizer / quality-verifier prompts from YAML beside this module: synthesizer.prompt.yaml quality-verifier.prompt.yaml parameter-grader.prompt.yaml Pack shape is validated with Zod. YAML uses snake_case; pack types are camelCase. Docs-only keys (e.g. acceptance.notes) are stripped, not rejected. */
 
 import * as fs from "node:fs";
 import path from "node:path";
@@ -52,10 +43,7 @@ export type TranslationBenchModelConfiguration = z.infer<
     typeof translationBenchModelConfigurationSchema
 >;
 
-/**
- * Completion settings taken only from the prompt pack model_configuration.
- * Rebuilds without explicit `undefined` (exactOptionalPropertyTypes).
- */
+/** Completion settings taken only from the prompt pack model_configuration. Rebuilds without explicit `undefined` (exactOptionalPropertyTypes). */
 export const translationBenchCompletionSettingsSchema =
     translationBenchModelConfigurationSchema.transform((config) => ({
         temperature: config.temperature,
@@ -293,10 +281,7 @@ export function parseTranslationBenchPromptYaml(text: string): unknown {
     }
 }
 
-/**
- * Parse YAML `model_configuration` as ground truth.
- * `temperature` is required; unknown keys are rejected so the pack stays explicit.
- */
+/** Parse YAML `model_configuration` as ground truth. `temperature` is required; unknown keys are rejected so the pack stays explicit. */
 export function parseTranslationBenchModelConfiguration(
     value: unknown,
     label: string,
@@ -304,11 +289,7 @@ export function parseTranslationBenchModelConfiguration(
     return parseWithZod(translationBenchModelConfigurationSchema, value, label);
 }
 
-/**
- * Completion settings taken only from the prompt pack model_configuration.
- * Pipeline-required fields (e.g. response_format) are layered by the caller
- * around this object; pack fields always win on conflict.
- */
+/** Completion settings taken only from the prompt pack model_configuration. Pipeline-required fields (e.g. response_format) are layered by the caller around this object; pack fields always win on conflict. */
 export function completionSettingsFromModelConfiguration(
     config: TranslationBenchModelConfiguration,
 ): TranslationBenchCompletionSettings {
@@ -319,9 +300,7 @@ export function completionSettingsFromModelConfiguration(
     );
 }
 
-/**
- * Serialize a JSON-compatible value as YAML for prompt injection.
- */
+/** Serialize a JSON-compatible value as YAML for prompt injection. */
 export function toTranslationBenchPromptYaml(value: unknown): string {
     const data = parseWithZod(yamlJsonValueSchema, value, "yaml_value");
     return yaml
@@ -368,10 +347,7 @@ function readPromptYaml(filePath: string): unknown {
     return parseTranslationBenchPromptYaml(fs.readFileSync(filePath, "utf8"));
 }
 
-/**
- * Prefer the on-disk YAML object as `raw` (pre-transform), so callers still see
- * docs-only keys that pack schemas strip from nested objects.
- */
+/** Prefer the on-disk YAML object as `raw` (pre-transform), so callers still see docs-only keys that pack schemas strip from nested objects. */
 function loadPack<T>(
     fileName: string,
     schema: z.ZodType<T>,
