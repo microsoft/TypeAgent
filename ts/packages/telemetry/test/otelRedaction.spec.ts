@@ -98,7 +98,7 @@ describe("redactObject", () => {
         expect(filterCalls).toBe(1);
     });
 
-    it("returns top-level values that JSON does not serialize", () => {
+    it("returns values without strings unchanged", () => {
         expect(redactObject(undefined)).toBeUndefined();
     });
 
