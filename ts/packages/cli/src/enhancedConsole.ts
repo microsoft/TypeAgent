@@ -2406,6 +2406,16 @@ function initializeEnhancedConsole(
     _rl?: readline.promises.Interface,
     dispatcherRef?: { current?: Dispatcher },
 ) {
+    const cliGlobal = globalThis as typeof globalThis & {
+        __typeagentCliEarlySigintHandler?: () => void;
+    };
+    if (cliGlobal.__typeagentCliEarlySigintHandler !== undefined) {
+        process.removeListener(
+            "SIGINT",
+            cliGlobal.__typeagentCliEarlySigintHandler,
+        );
+        delete cliGlobal.__typeagentCliEarlySigintHandler;
+    }
     process.on("SIGINT", () => {
         if (isProcessing && dispatcherRef?.current) {
             const now = Date.now();

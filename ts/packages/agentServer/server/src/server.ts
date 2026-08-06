@@ -33,7 +33,7 @@ import {
 } from "@typeagent/agent-server-client";
 import registerDebug from "debug";
 import os from "node:os";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { DefaultAzureCredential } from "@azure/identity";
 import { otel } from "@typeagent/telemetry";
 
@@ -69,8 +69,8 @@ function clearConsoleForRestart() {
 // a restart reuses the exact console instead of orphaning a dead-pipe zombie.
 // Restart = the worker exits RESTART_EXIT_CODE and we relaunch it in place; any
 // other exit ends the supervisor with that same code.
-if (process.env.TYPEAGENT_SUPERVISED !== "1") {
-    let code: number | null = RESTART_EXIT_CODE;
+async function superviseWorker(): Promise<number> {
+    let code = RESTART_EXIT_CODE;
     let relaunching = false;
     while (code === RESTART_EXIT_CODE) {
         // On an in-place restart (every iteration after the first), wipe the
@@ -78,7 +78,15 @@ if (process.env.TYPEAGENT_SUPERVISED !== "1") {
         if (relaunching) {
             clearConsoleForRestart();
         }
-        const result = spawnSync(
+        code = await runWorker();
+        relaunching = true;
+    }
+    return code;
+}
+
+function runWorker(): Promise<number> {
+    return new Promise((resolve) => {
+        const worker = spawn(
             process.execPath,
             [...process.execArgv, ...process.argv.slice(1)],
             {
@@ -87,17 +95,41 @@ if (process.env.TYPEAGENT_SUPERVISED !== "1") {
                 env: { ...process.env, TYPEAGENT_SUPERVISED: "1" },
             },
         );
-        if (result.error) {
+        let terminating = false;
+        const forwardSignal = (signal: NodeJS.Signals) => {
+            terminating = true;
+            try {
+                worker.kill(signal);
+            } catch {
+                worker.kill();
+            }
+        };
+        const onSigint = () => forwardSignal("SIGINT");
+        const onSigterm = () => forwardSignal("SIGTERM");
+        process.once("SIGINT", onSigint);
+        process.once("SIGTERM", onSigterm);
+
+        const cleanup = () => {
+            process.removeListener("SIGINT", onSigint);
+            process.removeListener("SIGTERM", onSigterm);
+        };
+        worker.once("error", (error) => {
+            cleanup();
             console.error(
                 "[agent-server] supervisor could not launch the worker:",
-                result.error,
+                error,
             );
-            process.exit(1);
-        }
-        code = result.status;
-        relaunching = true;
-    }
-    process.exit(code ?? 0);
+            resolve(1);
+        });
+        worker.once("close", (exitCode) => {
+            cleanup();
+            resolve(terminating ? 1 : (exitCode ?? 1));
+        });
+    });
+}
+
+if (process.env.TYPEAGENT_SUPERVISED !== "1") {
+    process.exit(await superviseWorker());
 }
 
 // ===== From here down we are the worker: the real agent server. =====

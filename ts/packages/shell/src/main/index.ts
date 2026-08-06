@@ -202,7 +202,6 @@ async function initializeKeys(appPath: string) {
 async function initialize() {
     debugShellInit("Ready", performance.now() - time);
 
-    initializeQuit();
     const appPath = app.getAppPath();
     await initializeKeys(appPath);
     await otel.initTelemetry();
@@ -397,6 +396,13 @@ async function initialize() {
     });
 }
 
+initializeQuit();
+process.once("SIGINT", () => {
+    app.quit();
+});
+process.once("SIGTERM", () => {
+    app.quit();
+});
 app.whenReady().then(initialize).catch(fatal);
 
 // Defense-in-depth: log unhandled promise rejections instead of crashing.

@@ -66,6 +66,12 @@ process.on("SIGTERM", () => {
         `SIGTERM received, exiting '${agentName}': ${modulePath}`,
     );
 });
+process.on("SIGINT", () => {
+    void exitAgentProcess(
+        -2,
+        `SIGINT received, exiting '${agentName}': ${modulePath}`,
+    );
+});
 
 async function startAgentProcess(): Promise<void> {
     //=================================================================

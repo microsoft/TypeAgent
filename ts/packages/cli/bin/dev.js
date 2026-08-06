@@ -7,11 +7,14 @@ import { otel } from "@typeagent/telemetry";
 loadConfigSync();
 
 let signalShutdown;
-process.once("SIGTERM", () => {
+const shutdownOnSignal = () => {
     signalShutdown ??= otel.shutdownTelemetry().finally(() => {
         process.exit(0);
     });
-});
+};
+globalThis.__typeagentCliEarlySigintHandler = shutdownOnSignal;
+process.once("SIGINT", shutdownOnSignal);
+process.once("SIGTERM", shutdownOnSignal);
 
 // eslint-disable-next-line node/shebang
 async function main() {
