@@ -72,6 +72,7 @@
     "@typeagent/config": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
     "@typeagent/typechat-utils": "workspace:*",
     "@typeagent/websocket-channel-server": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",

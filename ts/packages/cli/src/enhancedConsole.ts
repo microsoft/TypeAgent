@@ -68,6 +68,7 @@ import {
 } from "./debugInterceptor.js";
 import { stopAgentServer } from "@typeagent/agent-server-client";
 import { randomUUID } from "crypto";
+import { exitCli } from "./telemetry.js";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
@@ -968,7 +969,7 @@ export function createEnhancedClientIO(
                 currentSpinner.stop();
                 currentSpinner = null;
             }
-            process.exit(0);
+            exitCli(0);
         },
         shutdown(): void {
             if (currentSpinner) {
@@ -994,7 +995,7 @@ export function createEnhancedClientIO(
                     // Best-effort: server may already be stopped.
                 })
                 .finally(() => {
-                    process.exit(0);
+                    exitCli(0);
                 });
         },
 
@@ -2205,7 +2206,7 @@ async function questionWithCompletion(
                 // Ctrl+C — clear bottom rule + hint before exit
                 stdout.write("\n\n\x1b[K\n");
                 cleanup();
-                process.exit(0);
+                exitCli(0);
             } else if (code === 4) {
                 // Ctrl+D — cycle debug panel: off → compact → full → off
                 const dp = getDebugPanel();
@@ -2414,7 +2415,7 @@ function initializeEnhancedConsole(
                     currentSpinner.stop();
                     currentSpinner = null;
                 }
-                process.exit(0);
+                exitCli(0);
             }
             lastCtrlCTime = now;
             if (currentRequestId) {
@@ -2430,7 +2431,7 @@ function initializeEnhancedConsole(
             currentSpinner.stop();
             currentSpinner = null;
         }
-        process.exit(0);
+        exitCli(0);
     });
 }
 
@@ -2598,7 +2599,7 @@ function startExecutionKeyListener(
                     currentSpinner.stop();
                     currentSpinner = null;
                 }
-                process.exit(0);
+                exitCli(0);
             }
             lastCtrlCTime = now;
             if (!tryCancelRunning()) {
@@ -2674,7 +2675,7 @@ export async function processCommandsEnhanced<T>(
         rl.on("SIGINT", () => {
             const now = Date.now();
             if (now - lastCtrlCTime < 1000) {
-                process.exit(0);
+                exitCli(0);
             }
             lastCtrlCTime = now;
             if (tryCancelRunningHead(getDispatcher())) {

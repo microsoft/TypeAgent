@@ -30,7 +30,7 @@ registerDebug.enable("typeagent:webserver:*");
 
 export interface WebDispatcher {
     connect(ws: WebSocket): void;
-    close(): void;
+    close(): Promise<void>;
     handleAction(action: FullAction): Promise<CommandResult>;
 }
 
@@ -191,8 +191,8 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
             // Always update setting on first connect
             updateSettingSummary(true);
         },
-        close: () => {
-            dispatcher.close();
+        close: async () => {
+            await dispatcher.close();
         },
         handleAction: handleAction,
     };

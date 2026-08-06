@@ -35,6 +35,7 @@ import registerDebug from "debug";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { DefaultAzureCredential } from "@azure/identity";
+import { otel } from "@typeagent/telemetry";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
@@ -101,9 +102,30 @@ if (process.env.TYPEAGENT_SUPERVISED !== "1") {
 
 // ===== From here down we are the worker: the real agent server. =====
 
+let workerExitPromise: Promise<void> | undefined;
+let exitWorker = (exitCode: number): Promise<void> => {
+    workerExitPromise ??= otel
+        .shutdownTelemetry()
+        .catch((error) => {
+            console.error("[agent-server] Telemetry shutdown failed:", error);
+        })
+        .then(() => {
+            process.exit(exitCode);
+        });
+    return workerExitPromise;
+};
+
+process.once("SIGINT", () => {
+    void exitWorker(0);
+});
+process.once("SIGTERM", () => {
+    void exitWorker(0);
+});
+
 // Load config from YAML layers + Key Vault (replacing legacy dotenv).
 // vault.shared is auto-discovered from config.local.yaml / config.defaults.yaml.
 await loadConfig({ keyVault: {}, strict: false });
+const telemetryInit = otel.initTelemetry();
 
 // Snapshot whether this server's local config differs from the shared Key
 // Vault, so clients can be warned on connect (same delivery path as the
@@ -215,6 +237,7 @@ if (!process.env.TYPEAGENT_USER_NAME?.trim()) {
 }
 
 async function main() {
+    await telemetryInit;
     debugStartup(`pid=${process.pid} resolving instance dir + traceId`);
     const [instanceDir, traceId] = await Promise.all([
         getInstanceDirAsync(),
@@ -319,16 +342,34 @@ async function main() {
     // Stop listening, close conversations (which releases the instance-dir
     // lock), and drop the PID file. Shared by shutdown and restart so a
     // relaunched successor finds the port free and the lock released.
-    async function teardownServer() {
-        wss.close();
-        await conversationManager.close();
-        removeServerPid(port);
+    let teardownPromise: Promise<void> | undefined;
+    function teardownServer(): Promise<void> {
+        teardownPromise ??= (async () => {
+            wss.close();
+            await conversationManager.close();
+            removeServerPid(port);
+        })();
+        return teardownPromise;
     }
+
+    async function exitServer(exitCode: number) {
+        try {
+            await teardownServer();
+        } catch (error) {
+            console.error("[agent-server] Server cleanup failed:", error);
+        }
+        try {
+            await otel.shutdownTelemetry();
+        } catch (error) {
+            console.error("[agent-server] Telemetry shutdown failed:", error);
+        }
+        process.exit(exitCode);
+    }
+    exitWorker = exitServer;
 
     async function shutdownServer() {
         console.log("Shutdown requested, stopping agent server...");
-        await teardownServer();
-        process.exit(0);
+        await exitServer(0);
     }
 
     // Restart in place: tear this process down, then exit with
@@ -342,8 +383,7 @@ async function main() {
         process.stderr.write(
             "\x1b[38;2;0;0;0;43m Restart requested - relaunching agent server... \x1b[0m\n",
         );
-        await teardownServer();
-        process.exit(RESTART_EXIT_CODE);
+        await exitServer(RESTART_EXIT_CODE);
     }
 
     function scheduleIdleShutdown() {
@@ -449,12 +489,22 @@ process.on("uncaughtException", (err) => {
 });
 
 await main().catch((err: any) => {
-    if (err?.code === "ERR_INSTANCE_LOCKED") {
-        // Friendly, single-line message — no stack trace for this expected
-        // case (another shell/server already owns the profile directory).
-        console.error(`\n[agent-server] ${err.message}\n`);
-        process.exit(1);
-    }
-    console.error("[agent-server] Fatal startup error:", err);
-    process.exit(1);
+    return otel
+        .shutdownTelemetry()
+        .catch((shutdownError) => {
+            console.error(
+                "[agent-server] Telemetry shutdown failed:",
+                shutdownError,
+            );
+        })
+        .then(() => {
+            if (err?.code === "ERR_INSTANCE_LOCKED") {
+                // Friendly, single-line message — no stack trace for this expected
+                // case (another shell/server already owns the profile directory).
+                console.error(`\n[agent-server] ${err.message}\n`);
+            } else {
+                console.error("[agent-server] Fatal startup error:", err);
+            }
+            process.exit(1);
+        });
 });
