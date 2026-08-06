@@ -38,6 +38,31 @@ export function authModeFromString(s: string | undefined): AuthMode {
 /** Whether a deployment is pay-as-you-go or provisioned-throughput. */
 export type DeploymentMode = "PAYG" | "PTU";
 
+/**
+ * Wire protocol / request-response shape a deployment endpoint speaks.
+ * The pool routing layer is unaffected by this — it picks *which*
+ * endpoint to call; `wireApi` then selects the wire-api provider that
+ * encodes the request body/headers and decodes the response.
+ *
+ * - `chat_completions` (default): `/chat/completions` shape TypeAgent
+ *   has always spoken. Omitting `wireApi` is exactly equivalent to this
+ *   value, so existing configs are byte-for-byte unchanged.
+ * - `responses`: `/responses` request/response shape.
+ * - `messages`: `/v1/messages` request/response shape.
+ */
+export type WireApi = "chat_completions" | "responses" | "messages";
+
+/** The wire-api assumed when a deployment/endpoint omits `wireApi`. */
+export const DEFAULT_WIRE_API = "chat_completions" as const satisfies WireApi;
+
+/** Narrow an arbitrary string to a known `WireApi`, else `undefined`. */
+export function wireApiFromString(s: string | undefined): WireApi | undefined {
+    if (s === "chat_completions" || s === "responses" || s === "messages") {
+        return s;
+    }
+    return undefined;
+}
+
 /** A single regional endpoint of an Azure OpenAI deployment. */
 export interface DeploymentEndpoint {
     /** Full chat/completions/embeddings/images URL. */
@@ -57,6 +82,13 @@ export interface DeploymentEndpoint {
     readonly capacity?: number | undefined;
     /** Declared TPM (for pool routing weight); from legacy POOL override JSON. */
     readonly tpm?: number | undefined;
+    /**
+     * Wire protocol this endpoint speaks. Absent ⇒ `chat_completions`
+     * (see {@link DEFAULT_WIRE_API}); the builder never fabricates this
+     * field for a default endpoint, so the round-trip stays lossless and
+     * pre-existing configs project back to identical env vars.
+     */
+    readonly wireApi?: WireApi | undefined;
 }
 
 /**

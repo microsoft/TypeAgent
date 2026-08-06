@@ -22,6 +22,8 @@ class WebSocketManager {
     private val nextCallId = AtomicInteger(0)
     private val connectionGeneration = AtomicInteger(0)
     private val pendingInvokes = mutableMapOf<Int, PendingInvoke>()
+    private val displayThreads = mutableMapOf<String, AgentDisplayThread>()
+    private val displayMessageIds = mutableMapOf<String, String>()
 
     private var webSocket: WebSocket? = null
     private var conversationId: String? = null
@@ -68,6 +70,8 @@ class WebSocketManager {
             pendingUserInteraction = null
             conversationId = null
             connectionId = null
+            displayThreads.clear()
+            displayMessageIds.clear()
         }
         _pendingYesNoPrompt.value = null
         webSocket?.cancel()
@@ -108,6 +112,7 @@ class WebSocketManager {
                     pendingUserInteraction = null
                     conversationId = null
                     connectionId = null
+                    finalizeOpenDisplayThreads()
                 }
                 _pendingYesNoPrompt.value = null
                 _connectionStatus.value = ConnectionStatus(
@@ -127,6 +132,7 @@ class WebSocketManager {
                 failPendingInvokes(errorMessage)
                 synchronized(lock) {
                     pendingUserInteraction = null
+                    finalizeOpenDisplayThreads()
                 }
                 _pendingYesNoPrompt.value = null
                 _connectionStatus.value = ConnectionStatus(
@@ -207,6 +213,7 @@ class WebSocketManager {
         webSocket = null
         synchronized(lock) {
             pendingUserInteraction = null
+            finalizeOpenDisplayThreads()
         }
         _pendingYesNoPrompt.value = null
         failPendingInvokes("App closed")
@@ -328,9 +335,14 @@ class WebSocketManager {
                 requestId = null,
                 content = text
             )
-            appendAssistantContent(
+            applyDisplay(
                 requestId = null,
-                content = ParsedDisplayContent(text = text, format = MessageFormat.TEXT)
+                content = ParsedDisplayContent(text = text, format = MessageFormat.TEXT),
+                // STEP seals the bubble immediately. Without it every
+                // unparseable frame in the session would accumulate into the
+                // same no-requestId bubble, which would never be finalized and
+                // would show "Responding..." forever.
+                mode = DisplayAppendMode.STEP
             )
         }
     }
@@ -391,15 +403,17 @@ class WebSocketManager {
         when (methodName) {
             "appendDisplay" -> {
                 val requestId = extractRequestId(args.opt(0))
+                val kind = extractAgentMessageKind(args.opt(0))
                 val content = extractAgentMessageContent(args.opt(0))
-                val mode = args.optString(1)
+                val mode = parseDisplayAppendMode(args.optString(1))
                 logInboundEvent(
                     type = "append-display",
                     requestId = requestId,
-                    content = content.text
+                    content = content.text,
+                    detail = "mode=$mode kind=${kind.orEmpty()}"
                 )
-                if (shouldAppendToAssistantBubble(content, mode)) {
-                    appendAssistantContent(requestId = requestId, content = content)
+                if (!isEphemeralAgentMessageKind(kind)) {
+                    applyDisplay(requestId = requestId, content = content, mode = mode)
                 }
             }
 
@@ -425,13 +439,21 @@ class WebSocketManager {
 
             "setDisplay" -> {
                 val requestId = extractRequestId(args.opt(0))
+                val kind = extractAgentMessageKind(args.opt(0))
                 val content = extractAgentMessageContent(args.opt(0))
                 logInboundEvent(
                     type = "set-display",
                     requestId = requestId,
-                    content = content.text
+                    content = content.text,
+                    detail = "kind=${kind.orEmpty()}"
                 )
-                replaceAssistantContent(requestId = requestId, content = content)
+                if (!isEphemeralAgentMessageKind(kind)) {
+                    applyDisplay(
+                        requestId = requestId,
+                        content = content,
+                        mode = DisplayAppendMode.REPLACE
+                    )
+                }
             }
 
             "notify" -> {
@@ -529,11 +551,14 @@ class WebSocketManager {
             TAG,
             "takeAction received action=$actionName requestId=${requestId.orEmpty()} data=${stringifyDisplayValue(actionData)}"
         )
-        if (actionName != "set-alarm") {
-            Log.d(TAG, "takeAction ignored: unsupported action=$actionName")
-            return
+        when (actionName) {
+            "set-alarm" -> handleSetAlarmAction(actionData)
+            "set-timer" -> handleSetTimerAction(actionData)
+            else -> Log.d(TAG, "takeAction ignored: unsupported action=$actionName")
         }
+    }
 
+    private fun handleSetAlarmAction(actionData: Any?) {
         val alarm = parseSetAlarmActionPayload(actionData)
         if (alarm == null) {
             Log.e(
@@ -542,14 +567,10 @@ class WebSocketManager {
             )
             return
         }
-        val handler = synchronized(lock) { clientActionHandler }
-        if (handler == null) {
-            Log.e(
-                TAG,
-                "set-alarm parsed (hour=${alarm.hour} minute=${alarm.minute}) but no client action handler is registered"
-            )
-            return
-        }
+        val handler = requireClientActionHandler(
+            "set-alarm",
+            "hour=${alarm.hour} minute=${alarm.minute}"
+        ) ?: return
         Log.d(
             TAG,
             "Dispatching set-alarm to client handler hour=${alarm.hour} minute=${alarm.minute}"
@@ -557,14 +578,62 @@ class WebSocketManager {
         handler.onSetAlarm(alarm)
     }
 
+    private fun handleSetTimerAction(actionData: Any?) {
+        val timer = parseSetTimerActionPayload(actionData)
+        if (timer == null) {
+            Log.e(
+                TAG,
+                "Invalid set-timer payload: ${stringifyDisplayValue(actionData)}"
+            )
+            return
+        }
+        val handler = requireClientActionHandler(
+            "set-timer",
+            "durationInSeconds=${timer.durationInSeconds}"
+        ) ?: return
+        Log.d(
+            TAG,
+            "Dispatching set-timer to client handler durationInSeconds=${timer.durationInSeconds}"
+        )
+        handler.onSetTimer(timer)
+    }
+
+    private fun requireClientActionHandler(
+        actionName: String,
+        detail: String
+    ): ClientActionHandler? {
+        val handler = synchronized(lock) { clientActionHandler }
+        if (handler == null) {
+            Log.e(
+                TAG,
+                "$actionName parsed ($detail) but no client action handler is registered"
+            )
+        }
+        return handler
+    }
+
     private fun handleDisplayLogEvent(event: JSONObject) {
         val eventType = event.optString("type")
         when (eventType) {
             "append-display" -> {
                 val requestId = extractRequestId(event.opt("requestId")) ?: extractRequestId(event.optJSONObject("message"))
+                val kind = extractAgentMessageKind(event.opt("message"))
+                val content = extractAgentMessageContent(event.opt("message"))
+                val mode = parseDisplayAppendMode(event.optString("mode"))
+                logInboundEvent(eventType, requestId, content.text, "mode=$mode")
+                if (!isEphemeralAgentMessageKind(kind)) {
+                    applyDisplay(requestId, content, mode)
+                }
+            }
+
+            "set-display" -> {
+                val requestId = extractRequestId(event.opt("requestId")) ?: extractRequestId(event.optJSONObject("message"))
+                val kind = extractAgentMessageKind(event.opt("message"))
                 val content = extractAgentMessageContent(event.opt("message"))
                 logInboundEvent(eventType, requestId, content.text)
-                appendAssistantContent(requestId, content)
+                if (!isEphemeralAgentMessageKind(kind)) {
+                    applyDisplay(requestId, content, DisplayAppendMode.REPLACE)
+                }
             }
 
             "set-display-info" -> {
@@ -604,66 +673,111 @@ class WebSocketManager {
         }
     }
 
-    private fun appendAssistantContent(requestId: String?, content: ParsedDisplayContent) {
-        val normalizedText = normalizeAssistantContentText(content)
-        if (normalizedText.isEmpty()) {
-            return
-        }
-
+    /**
+     * Port of the shell's `ChatPanel.addAgentMessage` / `replaceAgentMessage`:
+     * all display content for one request accumulates in a single bubble, and a
+     * trailing `temporary` status chunk is discarded as soon as the next update
+     * arrives.
+     */
+    private fun applyDisplay(
+        requestId: String?,
+        content: ParsedDisplayContent,
+        mode: DisplayAppendMode
+    ) {
         synchronized(lock) {
-            val updated = _messages.value.toMutableList()
-            val existingIndex = updated.indexOfLast {
-                !it.isUser && it.requestId == requestId && !it.isFinal
+            val key = threadKey(requestId)
+            val thread = displayThreads.getOrPut(key) { AgentDisplayThread() }
+            thread.setMessage(content, mode)
+            syncThreadMessage(key, requestId, thread)
+            if (mode == DisplayAppendMode.STEP) {
+                commitThread(key, requestId, thread)
             }
-            if (existingIndex >= 0) {
-                val existing = updated[existingIndex]
-                updated[existingIndex] = existing.copy(
-                    text = existing.text + normalizedText,
-                    format = existing.format.mergeWith(content.format)
-                )
+        }
+    }
+
+    private fun threadKey(requestId: String?): String {
+        return requestId ?: DEFAULT_THREAD_KEY
+    }
+
+    private fun syncThreadMessage(
+        key: String,
+        requestId: String?,
+        thread: AgentDisplayThread
+    ) {
+        val rendered = thread.render()
+        val updated = _messages.value.toMutableList()
+        val messageId = displayMessageIds[key]
+        val index = if (messageId == null) -1 else updated.indexOfFirst { it.id == messageId }
+
+        if (index >= 0) {
+            if (rendered.isEmpty) {
+                updated.removeAt(index)
+                displayMessageIds.remove(key)
             } else {
-                updated += Message(
-                    text = normalizedText,
-                    format = content.format,
-                    isUser = false,
-                    requestId = requestId
-                )
+                updated[index] = updated[index].copy(segments = rendered.segments)
             }
+        } else {
+            if (rendered.isEmpty) {
+                return
+            }
+            val message = Message(
+                segments = rendered.segments,
+                isUser = false,
+                requestId = requestId
+            )
+            displayMessageIds[key] = message.id
+            updated += message
+        }
+        _messages.value = updated
+    }
+
+    /**
+     * Equivalent of the shell's `completeRequest`: drop any lingering temporary
+     * status text, seal the bubble, and forget the thread so the next display
+     * update starts a fresh bubble.
+     */
+    private fun commitThread(
+        key: String,
+        requestId: String?,
+        thread: AgentDisplayThread
+    ) {
+        thread.flushTemporary()
+        syncThreadMessage(key, requestId, thread)
+        displayThreads.remove(key)
+        val messageId = displayMessageIds.remove(key) ?: return
+        val updated = _messages.value.toMutableList()
+        val index = updated.indexOfFirst { it.id == messageId }
+        if (index >= 0) {
+            updated[index] = updated[index].copy(isFinal = true)
             _messages.value = updated
         }
     }
 
-    private fun replaceAssistantContent(requestId: String?, content: ParsedDisplayContent) {
-        val normalizedText = normalizeAssistantContentText(content)
-        if (normalizedText.isEmpty()) {
-            return
+    /**
+     * Seals every bubble that still has an open display thread. Used when the
+     * socket goes away mid-request so a bubble is not stranded showing
+     * "Responding..." forever, and so the per-request state is not retained
+     * across a reconnect.
+     */
+    private fun finalizeOpenDisplayThreads() {
+        for (key in displayThreads.keys.toList()) {
+            val thread = displayThreads[key] ?: continue
+            val requestId = if (key == DEFAULT_THREAD_KEY) null else key
+            commitThread(key, requestId, thread)
         }
-
-        synchronized(lock) {
-            val updated = _messages.value.toMutableList()
-            val existingIndex = updated.indexOfLast {
-                !it.isUser && it.requestId == requestId && !it.isFinal
-            }
-            if (existingIndex >= 0) {
-                val existing = updated[existingIndex]
-                updated[existingIndex] = existing.copy(
-                    text = normalizedText,
-                    format = content.format
-                )
-            } else {
-                updated += Message(
-                    text = normalizedText,
-                    format = content.format,
-                    isUser = false,
-                    requestId = requestId
-                )
-            }
-            _messages.value = updated
-        }
+        displayThreads.clear()
+        displayMessageIds.clear()
     }
 
     private fun finalizeAssistantMessage(requestId: String?) {
         synchronized(lock) {
+            val key = threadKey(requestId)
+            val thread = displayThreads[key]
+            if (thread != null) {
+                commitThread(key, requestId, thread)
+                return
+            }
+
             val updated = _messages.value.toMutableList()
             val existingIndex = if (requestId == null) {
                 updated.indexOfLast { !it.isUser && !it.isFinal }
@@ -761,10 +875,15 @@ class WebSocketManager {
         pending.forEach { it.onError(reason) }
     }
 
-    private fun logInboundEvent(type: String, requestId: String?, content: String) {
+    private fun logInboundEvent(
+        type: String,
+        requestId: String?,
+        content: String,
+        detail: String? = null
+    ) {
         Log.d(
             TAG,
-            "Inbound event type=$type requestId=${requestId.orEmpty()} connectionId=${connectionId.orEmpty()} contentLength=${content.length}"
+            "Inbound event type=$type requestId=${requestId.orEmpty()} connectionId=${connectionId.orEmpty()} contentLength=${content.length}${detail?.let { " $it" }.orEmpty()}"
         )
     }
 
@@ -789,23 +908,6 @@ class WebSocketManager {
 
             else -> null
         }
-    }
-
-    private fun shouldAppendToAssistantBubble(content: ParsedDisplayContent, mode: String): Boolean {
-        if (content.text.isEmpty()) {
-            return false
-        }
-        if (mode == "temporary") {
-            return false
-        }
-        if (content.format == MessageFormat.MARKDOWN) {
-            return true
-        }
-        return !content.text.startsWith("[")
-    }
-
-    private fun normalizeAssistantContentText(content: ParsedDisplayContent): String {
-        return content.text
     }
 
     private fun handleRequestChoiceCall(args: JSONArray) {
@@ -1095,12 +1197,13 @@ class WebSocketManager {
                 "${choiceLines.joinToString("\n")}\nType the option number."
             }
         }
-        appendAssistantContent(
+        applyDisplay(
             requestId = requestId,
             content = ParsedDisplayContent(
                 text = "$displayPrompt\n$instructions",
                 format = MessageFormat.TEXT
-            )
+            ),
+            mode = DisplayAppendMode.BLOCK
         )
     }
 
@@ -1168,10 +1271,12 @@ class WebSocketManager {
         private const val NORMAL_CLOSURE_STATUS = 1000
         private const val AGENT_SERVER_CHANNEL = "agent-server"
         private const val CLIENT_IO_CHANNEL_PREFIX = "clientio:"
+        private const val DEFAULT_THREAD_KEY = "__no_request__"
     }
 
-    internal fun interface ClientActionHandler {
+    internal interface ClientActionHandler {
         fun onSetAlarm(action: SetAlarmAction)
+        fun onSetTimer(action: SetTimerAction)
     }
 }
 

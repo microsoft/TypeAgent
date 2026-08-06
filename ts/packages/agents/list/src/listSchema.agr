@@ -5,42 +5,57 @@
 // This file contains common patterns for user requests
 // Types: wildcard = 1+ words, word = exactly 1 word
 
-// addItems - add one or more items to a list
+// ---------------------------------------------------------------------------
+// Named-list only. Bare / ambiguous references are intentionally unmatched so
+// translation (LLM + history) resolves them — e.g. "add ham to the list",
+// "put cheese on the list", "add cheese to both", "add ham to my list".
 //
-// TODO: these rules bind a bare determiner as the list name — "add ham to the
-// list" / "add ham to that list" match here and yield listName="the" / "that"
-// instead of letting the LLM clarify which list. As a stopgap the translate
-// stability test marks that case with "skipGrammar" (see translate-e2e.json and
-// translateTestCommon.ts) so it bypasses grammar matching. Proper fix: constrain
-// $(listName:...) to reject bare determiners (the/a/an/this/that/these/those/
-// my/your/... + "list") via a registered entity type, then drop skipGrammar.
-//
-// Confirmed 2026-07-17: the `put ... on (the)? ... (list)?` alternative below has
-// the same bug — "put cheese on the list" yields listName="the". With grammar
-// off, the LLM resolves it to the active list from history 10/10. See the schema
-// tuning guide (docs/guides/build-an-agent/schema-tuning.md, note #5).
-<AddItems> = add $(item:wildcard) to (the)? (my)? $(listName:wildcard) list -> {
+// Safe shape: fixed "the"/"my" + real name + trailing "list". That way the
+// determiner cannot be captured as listName. Do not reintroduce optional
+// (the)?/(my)? before $(listName), or "to $(listName)" without trailing list.
+// Determinerless "add milk to grocery list" also falls through to the LLM
+// (same as bare refs); that is not a functional regression — only grammar
+// speed — and avoids reopening determiner capture via "to $(listName) list".
+// ---------------------------------------------------------------------------
+
+// addItems
+<AddItems> =
+    (can you)? add $(item:wildcard) to the $(listName:wildcard) list -> {
     actionName: "addItems",
     parameters: {
         items: [item],
         listName
     }
 }
-  | (can you)? add $(item:wildcard) to (the)? $(listName:wildcard) -> {
+  | (can you)? add $(item:wildcard) to my $(listName:wildcard) list -> {
     actionName: "addItems",
     parameters: {
         items: [item],
         listName
     }
 }
-  | put $(item:wildcard) on (the)? (my)? $(listName:wildcard) (list)? -> {
+  | put $(item:wildcard) on the $(listName:wildcard) list -> {
     actionName: "addItems",
     parameters: {
         items: [item],
         listName
     }
 }
-  | add $(item1:wildcard) and $(item2:wildcard) to (the)? $(listName:wildcard) -> {
+  | put $(item:wildcard) on my $(listName:wildcard) list -> {
+    actionName: "addItems",
+    parameters: {
+        items: [item],
+        listName
+    }
+}
+  | (can you)? add $(item1:wildcard) and $(item2:wildcard) to the $(listName:wildcard) list -> {
+    actionName: "addItems",
+    parameters: {
+        items: [item1, item2],
+        listName
+    }
+}
+  | (can you)? add $(item1:wildcard) and $(item2:wildcard) to my $(listName:wildcard) list -> {
     actionName: "addItems",
     parameters: {
         items: [item1, item2],
@@ -48,22 +63,44 @@
     }
 };
 
-// removeItems - remove one or more items from a list
-<RemoveItems> = remove $(item:wildcard) from (the)? (my)? $(listName:wildcard) list -> {
+// removeItems
+<RemoveItems> =
+    remove $(item:wildcard) from the $(listName:wildcard) list -> {
     actionName: "removeItems",
     parameters: {
         items: [item],
         listName
     }
 }
-  | (can you)? delete $(item:wildcard) from (the)? $(listName:wildcard) -> {
+  | remove $(item:wildcard) from my $(listName:wildcard) list -> {
     actionName: "removeItems",
     parameters: {
         items: [item],
         listName
     }
 }
-  | take $(item:wildcard) off (the)? (my)? $(listName:wildcard) (list)? -> {
+  | (can you)? delete $(item:wildcard) from the $(listName:wildcard) list -> {
+    actionName: "removeItems",
+    parameters: {
+        items: [item],
+        listName
+    }
+}
+  | (can you)? delete $(item:wildcard) from my $(listName:wildcard) list -> {
+    actionName: "removeItems",
+    parameters: {
+        items: [item],
+        listName
+    }
+}
+  | take $(item:wildcard) off the $(listName:wildcard) list -> {
+    actionName: "removeItems",
+    parameters: {
+        items: [item],
+        listName
+    }
+}
+  | take $(item:wildcard) off my $(listName:wildcard) list -> {
     actionName: "removeItems",
     parameters: {
         items: [item],
@@ -71,12 +108,8 @@
     }
 };
 
-// createList - create a new list
-//
-// The alternatives come in two word orders: "<name> list" (name before the
-// literal "list") and "list (named|called) <name>" (name after). Both are
-// common phrasings and must each be listed explicitly since the grammar has
-// no way to make "list" optionally precede or follow the wildcard.
+// createList — any listName including "my" is fine; reference resolution is
+// translation's job, not the list agent.
 <CreateList> = create (a)? (new)? $(listName:wildcard) list -> {
     actionName: "createList",
     parameters: {
@@ -114,65 +147,139 @@
     }
 };
 
-// getList - show what's on the list
-// Note: Each rule must have at least one distinctive required word before the wildcard
-<GetList> = what's on (the)? (my)? $(listName:wildcard) (list)? -> {
+// getList — same named-only shape (not bare "the list" / "my list")
+<GetList> =
+    what's on the $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
         listName
     }
 }
-  | what (is)? on (the)? (my)? $(listName:wildcard) (list)? -> {
+  | what's on my $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
         listName
     }
 }
-  | what's (the)? (my)? $(listName:wildcard) list -> {
+  | what (is)? on the $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
         listName
     }
 }
-  | show (me)? (the)? (my)? $(listName:wildcard) list -> {
+  | what (is)? on my $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
         listName
     }
 }
-  | (can you)? show (me)? (the)? $(listName:wildcard) list -> {
+  | what's the $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
         listName
     }
 }
-  | what (do)? I have on (the)? (my)? $(listName:wildcard) list -> {
+  | what's my $(listName:wildcard) list -> {
+    actionName: "getList",
+    parameters: {
+        listName
+    }
+}
+  | (can you)? show (me)? the $(listName:wildcard) list -> {
+    actionName: "getList",
+    parameters: {
+        listName
+    }
+}
+  | (can you)? show (me)? my $(listName:wildcard) list -> {
+    actionName: "getList",
+    parameters: {
+        listName
+    }
+}
+  | what (do)? I have on the $(listName:wildcard) list -> {
+    actionName: "getList",
+    parameters: {
+        listName
+    }
+}
+  | what (do)? I have on my $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
         listName
     }
 };
 
-// clearList - clear all items from a list
-<ClearList> = clear (the)? (my)? $(listName:wildcard) list -> {
+// clearList — require a clear intent word so this does not steal
+// "delete <item> from the <name> list" from removeItems.
+<ClearList> =
+    clear the $(listName:wildcard) list -> {
     actionName: "clearList",
     parameters: {
         listName
     }
 }
-  | (can you)? empty (the)? (my)? $(listName:wildcard) (list)? -> {
+  | clear my $(listName:wildcard) list -> {
     actionName: "clearList",
     parameters: {
         listName
     }
 }
-  | delete (everything)? (all items)? from (the)? (my)? $(listName:wildcard) list -> {
+  | (can you)? empty the $(listName:wildcard) list -> {
     actionName: "clearList",
     parameters: {
         listName
     }
 }
-  | clear (everything)? (all items)? from (the)? (my)? $(listName:wildcard) list -> {
+  | (can you)? empty my $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+}
+  | delete everything from the $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+}
+  | delete everything from my $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+}
+  | delete all items from the $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+}
+  | delete all items from my $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+}
+  | clear everything from the $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+}
+  | clear everything from my $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+}
+  | clear all items from the $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+}
+  | clear all items from my $(listName:wildcard) list -> {
     actionName: "clearList",
     parameters: {
         listName
@@ -183,46 +290,62 @@
 // Distinguished from <ClearList>'s "delete ... from ... list" alternative by
 // the absence of "from": "delete the grocery list" deletes the list, while
 // "delete everything from the grocery list" (has "from") clears it.
-<DeleteList> = (can you)? delete (the)? (my)? $(listName:wildcard) list -> {
+<DeleteList> = (can you)? delete the $(listName:wildcard) list -> {
     actionName: "deleteList",
     parameters: {
         listName
     }
 }
-  | (can you)? delete (the)? (my)? list (named | called) $(listName:wildcard) -> {
+  | (can you)? delete my $(listName:wildcard) list -> {
     actionName: "deleteList",
     parameters: {
         listName
     }
 }
-  | (can you)? remove (the)? (my)? $(listName:wildcard) list -> {
+  | (can you)? delete (the | my)? list (named | called) $(listName:wildcard) -> {
     actionName: "deleteList",
     parameters: {
         listName
     }
 }
-  | (can you)? remove (the)? (my)? list (named | called) $(listName:wildcard) -> {
+  | (can you)? remove the $(listName:wildcard) list -> {
     actionName: "deleteList",
     parameters: {
         listName
     }
 }
-  | get rid of (the)? (my)? $(listName:wildcard) list -> {
+  | (can you)? remove my $(listName:wildcard) list -> {
     actionName: "deleteList",
     parameters: {
         listName
     }
 }
-  | get rid of (the)? (my)? list (named | called) $(listName:wildcard) -> {
+  | (can you)? remove (the | my)? list (named | called) $(listName:wildcard) -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | get rid of the $(listName:wildcard) list -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | get rid of my $(listName:wildcard) list -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | get rid of (the | my)? list (named | called) $(listName:wildcard) -> {
     actionName: "deleteList",
     parameters: {
         listName
     }
 };
 
-// listLists - show which lists exist
-// The literal word "lists" anchors these rules so they beat wildcard-heavy
-// patterns and the system.conversation listConversation rule.
+// listLists
 <ListLists> = (can you)? (list | show | display) (me)? (all | my | the)? lists -> {
     actionName: "listLists",
     parameters: {}
@@ -242,10 +365,12 @@
 
 import { ListAction } from "./listSchema.ts";
 
+// ClearList before RemoveItems so "delete everything|all items from … list"
+// is not stolen by removeItems with item="everything".
 <Start> : ListAction = <AddItems>
-  | <RemoveItems>
   | <CreateList>
   | <GetList>
   | <ClearList>
   | <DeleteList>
+  | <RemoveItems>
   | <ListLists>;

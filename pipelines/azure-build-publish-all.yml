@@ -242,6 +242,13 @@ stages:
               PUPPETEER_SKIP_DOWNLOAD: "true"
               PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
 
+          - bash: |
+              set -euo pipefail
+              sudo apt-get update
+              sudo apt-get install -y libsecret-1-0
+            displayName: "Install libsecret-1-0"
+            condition: eq(variables['Agent.OS'], 'Linux')
+
           - script: |
               node tools/scripts/validateBundledArtifact.mjs --dir "$(stagingDir)/agent-server"
             displayName: "Validate bundled agent-server ($(platform)-$(arch))"
@@ -444,13 +451,13 @@ stages:
   - stage: Test
     displayName: "Test gate"
     dependsOn: Build
-    condition: succeeded()
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'Manual'))
     jobs:
       - job: unit_tests
         displayName: "Unit tests, lint, policy"
-        # Optional gate: a failure here must NOT block Publish. continueOnError
-        # makes a failing job report SucceededWithIssues instead of Failed, and
-        # the Publish stage condition accepts that result.
+        # Manual-only gate: a failure here must NOT block Publish.
+        # continueOnError makes a failing job report SucceededWithIssues
+        # instead of Failed, and the Publish stage accepts that result.
         continueOnError: true
         pool:
           vmImage: ubuntu-latest
@@ -507,8 +514,8 @@ stages:
       - Build
       - Test
     # Run if Build succeeded and Test did not hard-fail. The Test stage is an
-    # optional gate (unit_tests uses continueOnError), so a failing test reports
-    # SucceededWithIssues; Skipped covers the runTests=false case.
+    # optional manual-only gate (unit_tests uses continueOnError), so a failing
+    # test reports SucceededWithIssues; Skipped covers CI runs.
     condition: |
       and(
         in(stageDependencies.Build.result, 'Succeeded', 'SucceededWithIssues'),

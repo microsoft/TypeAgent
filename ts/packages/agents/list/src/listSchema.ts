@@ -59,10 +59,7 @@ export type GetListAction = {
 
 // remove all items from a list but keep the (now empty) list itself, for
 // example "clear my grocery list", "empty the to do list". Use "deleteList"
-// instead if the user wants the list itself gone, not just emptied. If it's
-// genuinely unclear whether the user wants the list emptied or removed
-// entirely, prefer "clearList" — it's the non-destructive, reversible choice
-// (the list still exists afterward), whereas "deleteList" cannot be undone.
+// instead if the user wants the list itself gone, not just emptied.
 export type ClearListAction = {
     actionName: "clearList";
     parameters: {
@@ -73,9 +70,7 @@ export type ClearListAction = {
 // permanently remove a list itself (not just its items), for example
 // "delete my grocery list", "remove the to do list", "get rid of the packing
 // list". Use "clearList" instead if the user only wants the items emptied
-// while keeping the list. Only use "deleteList" when the user's intent to
-// remove the list itself (not just its contents) is unambiguous — if unsure,
-// prefer "clearList" since it can't be undone.
+// while keeping the list.
 export type DeleteListAction = {
     actionName: "deleteList";
     parameters: {

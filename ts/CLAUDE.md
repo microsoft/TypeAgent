@@ -1,5 +1,53 @@
 # TypeAgent — AI Assistant Instructions
 
+## First-run setup (fresh checkout)
+
+A fresh checkout of this repo — a new clone, a git worktree (each Copilot CLI
+session gets its own), or a cloud/container workspace — has the committed files
+but **not** the gitignored files that let the repo install and run. Those must be
+provisioned once. From `ts/`:
+
+```bash
+pnpm run setup            # provision .npmrc + config.local.yaml, then install
+pnpm run setup --build    # same, plus a full build at the end
+```
+
+On a brand-new machine where pnpm isn't cached yet, `pnpm run setup` can't
+bootstrap itself (corepack would try to fetch pnpm from the blocked public
+registry). Start with the pnpm-free entrypoint instead — it provisions `.npmrc`
+(which also seeds corepack's pnpm) before it uses pnpm:
+
+```bash
+node tools/scripts/setupWorktree.mjs
+```
+
+`setup` does **not** build by default — a full build of every package is
+redundant for most sessions. `fluid-build` is incremental and dependency-aware,
+so build just the package you touch, on demand (`pnpm run build <package>`). Use
+`--build` only when you want a full build warmed up front.
+
+Order matters, and `setup` handles it:
+
+1. **`ts/.npmrc`** points pnpm at the internal Azure Artifacts feed. It must
+   exist **before `pnpm install`**, or pnpm/corepack reach the (blocked) public
+   npm registry and install fails. `setup` copies it from the main checkout
+   when available; if it can't, setup runs `node tools/scripts/getNPMRC.mjs`
+   automatically (fetches only an npm token, no secrets, and seeds corepack's
+   pnpm — invoked via node so it works before pnpm is available).
+2. **`pnpm install`**.
+3. **`ts/config.local.yaml`** holds API keys. `setup` copies it from the main
+   checkout when available; if it can't, setup warns and continues (only
+   running the app needs keys) and prints the `pnpm run getKeys` command.
+
+Never build or run before `setup` has provisioned `ts/.npmrc`: the first `pnpm`
+command otherwise hits the blocked public npm registry.
+
+`setup` auto-provisions `.npmrc` (copy, else `getNPMRC`) but treats
+`config.local.yaml` differently: it only **copies** it and never runs `getKeys`
+itself, because `getKeys` signs in to Azure and fetches secrets (it can open a
+browser sign-in). **Agent: never run `getKeys` automatically. Ask the user
+first** and run it only after they approve, or let the user run it.
+
 ## Build & Test
 
 This is a **pnpm monorepo** rooted at `ts/`. All commands run from the `ts/` directory.
@@ -38,6 +86,17 @@ pnpm run prettier:fix        # Fix formatting
 ```
 
 Tests run against compiled output in `dist/test/` — you must build before running tests.
+
+**Before considering any change complete**, run a formatting check in addition to build and tests —
+CI enforces this separately and it is easy to miss if you only build/test:
+
+```bash
+pnpm run prettier:changed:fix   # Fix formatting for files changed vs origin/main (matches CI's check)
+```
+
+Do not rely on a bare `npx prettier` for validation — always use the repo's pinned version
+(`node_modules/.bin/prettier`, `pnpm exec prettier`, or `npx prettier@<version from package.json>`),
+since a newer/older Prettier version can produce spurious reformatting diffs.
 
 ## Architecture
 

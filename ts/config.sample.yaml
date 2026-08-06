@@ -86,6 +86,25 @@ azureOpenAI:
     gpt_v:
       - endpoint: https://my-resource.openai.azure.com/openai/deployments/gpt-v/chat/completions?api-version=2025-01-01-preview
 
+    # `wireApi` selects the wire protocol an endpoint speaks. It is
+    # applied *after* the routing pool has picked an endpoint, so it does
+    # not affect priority/capacity/cooldown routing at all. Omit it (as
+    # every deployment above does) to get the default `chat_completions`
+    # shape TypeAgent has always spoken — existing configs are unchanged.
+    # Supported values: chat_completions (default) | responses |
+    # messages.
+    gpt_5_codex:
+      endpoints:
+        - endpoint: https://my-resource.cognitiveservices.azure.com/openai/responses?api-version=2025-04-01-preview
+          region: eastus
+          wireApi: responses
+
+    claude_sonnet:
+      endpoints:
+        - endpoint: https://my-resource.cognitiveservices.azure.com/anthropic/v1/messages?api-version=2025-04-01-preview
+          region: eastus
+          wireApi: messages
+
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  OpenAI (non-Azure)                                              ║
 # ╚═══════════════════════════════════════════════════════════════════╝

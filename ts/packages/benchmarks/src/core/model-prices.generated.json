@@ -1,6 +1,4 @@
 {
-  "source": "https://models.dev/api.json",
-  "version": "2026-07-31T02:08:45.776Z",
   "unit": "USD per 1M tokens",
   "provider": "openai",
   "rates": {

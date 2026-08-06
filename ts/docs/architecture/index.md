@@ -73,6 +73,11 @@ The browser agent is large enough to warrant its own set of docs:
 - [Browser RPC](./browser/browserRpc.md)
 - [Browser scenarios](./browser/browserScenarios.md)
 
+## Telemetry
+
+- [OpenTelemetry in TypeAgent](./telemetry/opentelemetry.md) — the shared
+  instrumentation, local diagnostics, export, and partner-integration design.
+
 ## Workflow system
 
 The design of TypeAgent's workflow DSL and intermediate representation (IR) —
