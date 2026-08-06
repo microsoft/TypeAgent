@@ -267,7 +267,11 @@ function classifyObjectFieldRegex(
         };
     }
     for (const [n, f] of fieldEntries) {
-        const leaf = tryClassifyActionParameterFieldRegex(n, f.spec, f.optional);
+        const leaf = tryClassifyActionParameterFieldRegex(
+            n,
+            f.spec,
+            f.optional,
+        );
         if (leaf === undefined || !isSoftVerify(leaf.verify)) {
             return {
                 create: "record",
@@ -628,24 +632,27 @@ function buildClassifierPrompt(
     verifierFeedback: string,
 ): string {
     const baseSummary = context.parametersSummary?.trim() || "(none)";
-    return renderTranslationBenchPromptTemplate(pack.policyClassifier.template, {
-        schema_name: context.schemaName,
-        action_name: context.actionName,
-        action_description_block:
-            context.description !== undefined && context.description.trim()
-                ? `Action description: ${context.description.trim()}`
-                : "Action description: (none)",
-        field_name: fieldName,
-        optional: optional ? "true" : "false",
-        field_type_json: JSON.stringify(spec, null, 2),
-        parameters_summary: verifierFeedback
-            ? `${baseSummary}\n\nPrior verifier feedback (fix):\n${verifierFeedback}`
-            : baseSummary,
-        create_policies: pack.policyClassifier.createPolicies
-            .filter((p) => CREATE_SET.has(p))
-            .join(", "),
-        verify_modes: pack.policyClassifier.verifyModes.join(", "),
-    });
+    return renderTranslationBenchPromptTemplate(
+        pack.policyClassifier.template,
+        {
+            schema_name: context.schemaName,
+            action_name: context.actionName,
+            action_description_block:
+                context.description !== undefined && context.description.trim()
+                    ? `Action description: ${context.description.trim()}`
+                    : "Action description: (none)",
+            field_name: fieldName,
+            optional: optional ? "true" : "false",
+            field_type_json: JSON.stringify(spec, null, 2),
+            parameters_summary: verifierFeedback
+                ? `${baseSummary}\n\nPrior verifier feedback (fix):\n${verifierFeedback}`
+                : baseSummary,
+            create_policies: pack.policyClassifier.createPolicies
+                .filter((p) => CREATE_SET.has(p))
+                .join(", "),
+            verify_modes: pack.policyClassifier.verifyModes.join(", "),
+        },
+    );
 }
 
 function isVerifierApproved(
@@ -671,10 +678,7 @@ async function runPolicyVerifier(
     context: ParameterGraderLlmContext,
     decision: ParameterGraderLlmDecision,
     attempt: number,
-): Promise<
-    | { ok: true }
-    | { ok: false; feedback: string; error: string }
-> {
+): Promise<{ ok: true } | { ok: false; feedback: string; error: string }> {
     const candidate = {
         create: decision.create,
         verify: decision.verify,
@@ -708,7 +712,9 @@ async function runPolicyVerifier(
         return { ok: false, feedback: msg, error: msg };
     }
 
-    if (isVerifierApproved(verdict, pack.policyVerifier.approveScoreThreshold)) {
+    if (
+        isVerifierApproved(verdict, pack.policyVerifier.approveScoreThreshold)
+    ) {
         return { ok: true };
     }
 

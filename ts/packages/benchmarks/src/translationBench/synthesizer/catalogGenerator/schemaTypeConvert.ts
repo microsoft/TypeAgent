@@ -219,10 +219,7 @@ function renderTypeUnion(
     return unique.length === 0 ? "any" : unique.join("|");
 }
 
-function renderObjectSchemaType(
-    t: SchemaTypeNode,
-    depth: number,
-): string {
+function renderObjectSchemaType(t: SchemaTypeNode, depth: number): string {
     if (!t.fields) return "object";
     const inner = Object.entries(t.fields)
         .map(([n, f]) => {
