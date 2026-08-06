@@ -242,6 +242,13 @@ stages:
               PUPPETEER_SKIP_DOWNLOAD: "true"
               PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
 
+          - bash: |
+              set -euo pipefail
+              sudo apt-get update
+              sudo apt-get install -y libsecret-1-0
+            displayName: "Install libsecret-1-0"
+            condition: eq(variables['Agent.OS'], 'Linux')
+
           - script: |
               node tools/scripts/validateBundledArtifact.mjs --dir "$(stagingDir)/agent-server"
             displayName: "Validate bundled agent-server ($(platform)-$(arch))"

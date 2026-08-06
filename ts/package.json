@@ -66,6 +66,7 @@
     "rebuild": "fluid-build . -t build --rebuild",
     "regen": "pnpm -C packages/cli run regen",
     "regen:builtin": "pnpm -C packages/cli run regen:builtin",
+    "setup": "node tools/scripts/setupWorktree.mjs",
     "shell": "pnpm -C packages/shell run start",
     "shell:dev": "pnpm -C packages/shell run dev",
     "shell:nosandbox": "pnpm -C packages/shell run start:nosandbox",
