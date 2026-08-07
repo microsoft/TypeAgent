@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=5762507c405029da954f36305995f11ec2039dfa781f598fe4189ea254bcc86b -->
+<!-- AUTOGEN:DOCS:HASH:sha256=e9f10d2e1bfd855476b7166edfc82532bac02d0db567a2d5e2a84d9272a09fd5 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-TypeAgent translation benchmark (catalog + action-parameters grader)
+TypeAgent translation bench: catalog, action-parameters grader, simple-action dataset synthesizer
 
 ## Reference
 
@@ -20,7 +20,9 @@ TypeAgent translation benchmark (catalog + action-parameters grader)
 
 ### Entry points
 
-_No public exports declared in `package.json`._
+- default → `./dist/index.js` _(not found on disk)_
+- `./translationBench` → `./dist/translationBench/index.js` _(not found on disk)_
+- `./internal` → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -34,12 +36,26 @@ Workspace:
 
 External: `commander`, `js-yaml`, `zod`
 
+### Used by
+
+_None._
+
 ### Files of interest
 
-`./src/translationBench/synthesizer/catalogGenerator/index.ts`, `./src/core/model-prices.generated.json`, `./src/core/paths.ts`, …and 14 more under `./src/`.
+- [./src/index.ts](./src/index.ts)
+- [./src/translationBench/index.ts](./src/translationBench/index.ts)
+- [./src/translationBench/synthesizer/catalogGenerator/index.ts](./src/translationBench/synthesizer/catalogGenerator/index.ts)
+- [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
+- [./src/core/model-prices.generated.json](./src/core/model-prices.generated.json)
+- [./src/core/paths.ts](./src/core/paths.ts)
+- [./src/core/prices.ts](./src/core/prices.ts)
+- [./src/core/types.ts](./src/core/types.ts)
+- [./src/translationBench/action-parameters-grader.generated.json](./src/translationBench/action-parameters-grader.generated.json)
+- [./src/translationBench/catalog.generated.json](./src/translationBench/catalog.generated.json)
+- _…and 26 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `1695aa46c404b03063bc4bba0cbdff61c0dcf999` on `2026-08-06T06:04:52.369Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `5ac504c39cf1010d7e79b7eb73c09ae2550ed79f` on `2026-08-07T01:09:28.526Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

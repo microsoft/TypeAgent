@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/benchmarks",
   "version": "0.0.1",
-  "description": "TypeAgent translation benchmark (catalog + action-parameters grader)",
+  "description": "TypeAgent translation bench: catalog, action-parameters grader, simple-action dataset synthesizer",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -11,6 +11,15 @@
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./translationBench": "./dist/translationBench/index.js",
+    "./internal": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/test"
+  ],
   "scripts": {
     "build": "tsc -b && node ./scripts/copyAssets.mjs",
     "clean": "node ./scripts/clean.mjs",

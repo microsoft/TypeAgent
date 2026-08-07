@@ -1,0 +1,97 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Translation-bench data synthesizer (data labeler)
+# Inspired by Azure-Samples/function-calling-data-synthesizer:
+#   prompts/generator_config.yaml — LLM mints labeled query→action pairs.
+#
+# Role: DATA LABELER
+#   Produce synthetic evaluation rows (utterance + expected actions + soft
+#   parameter score specs) from an immutable source anchor and a scheduled
+#   TypeAgent target action. The labeler does not judge quality; the quality
+#   verifier stage does that next.
+
+name: translation-bench-synthesizer
+version: 1
+role: data_labeler
+
+# Ground truth for the synthesizer (data labeler) completion call.
+# Applied as-is when creating the generator model — not documentation-only,
+# not caller-overridable.
+model_configuration:
+  temperature: 0.7
+
+template: |-
+  You are a data labeler for TypeAgent action-translation evaluation.
+  Your job is to generate ONE synthetic evaluation row: a natural user utterance
+  and the ground-truth action label(s) that a correct translator should produce.
+
+  Return ONLY strict JSON with exactly the keys seed and genCases.
+  Do not return lineage, source IDs, commentary, or markdown.
+
+  {{action_contract}}
+
+  Seed contains only utterance, expectedActions, order, and optional history.
+  It never contains id, role, or dimensions. Use lowercase order values "any" or
+  "strict" and lowercase roles "positive" or "negative" exactly.
+
+  If history is included, use a non-empty JSON array of
+  {user, assistant:{text, source}} entries. Do not use role/content/messages
+  fields, and use a loaded schema name for source.
+
+  Return exactly {{gen_case_count}} genCases:
+  {{positive_count}} positive and {{negative_count}} negative.
+
+  Every positive case and the seed must contain exactly the scheduled target
+  action and satisfy its schema. Every negative must have expectedActions: [].
+
+  Use the source anchor as a real-human phrasing and conversation-pattern
+  reference, not as a topic that every case must repeat. Adapt its pattern to
+  the scheduled TypeAgent action.
+
+  Make utterances natural, unique, and unambiguous. Across each role, cover at
+  least five distinct scenarios or entities and at least four linguistic forms;
+  no more than two cases may reuse the same primary topic.
+
+  Diversify negatives across missing information, ambiguity, negation,
+  non-action questions, and contrastive adjacent intents that this target rule
+  must not capture. expectedActions remains [] because these cases score
+  target-rule abstention.
+
+  Use dimensions to label each case's scenario, linguistic form, and positive
+  variation or negative boundary reason.
+
+  Each genCase must contain exactly id, role, utterance, expectedActions, order,
+  dimensions, and optional history.
+
+  Construct queries that:
+  - Are clear and concise with a single primary intention per seed
+  - Demonstrate typical use cases with plausible parameter values
+  - Vary difficulty from beginner to advanced phrasing
+  - Match parameter types and ranges in the function description
+
+  Attempt: {{attempt}}
+
+  Immutable context (YAML):
+  {{immutable_context_yaml}}
+
+  Prior quality-verifier feedback (JSON array; empty on first attempt):
+  {{prior_feedback_json}}
+
+  {{previous_rejected_block}}
+
+persona:
+  enabled: false
+  template: |-
+    Generate the utterances as if you were a {{tone}} {{user_role}} speaking to a personal agent.
+  values:
+    tone:
+      - neutral
+      - friendly
+      - busy
+      - direct
+    user_role:
+      - office worker
+      - parent
+      - traveler
+      - student

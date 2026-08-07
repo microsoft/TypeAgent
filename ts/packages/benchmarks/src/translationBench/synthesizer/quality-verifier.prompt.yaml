@@ -1,0 +1,90 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Translation-bench data quality verifier
+# Inspired by Azure-Samples/function-calling-data-synthesizer multi-stage verify:
+#   1) format_checker  — deterministic structural checks (no LLM)
+#   2) semantic_checker — independent LLM judge (data quality eval)
+#
+# This is the LAST stage of the synthesizer pipeline. A row is accepted only
+# when format_checker passes AND semantic_checker decides approve.
+
+name: translation-bench-quality-verifier
+version: 1
+role: data_quality_eval
+
+# Stage 1 — deterministic (implemented in code; listed here for operators)
+format_checker:
+  description: |-
+    Structural validation against the target tool schema and generation contract.
+    Fail-closed: any violation rejects the candidate without calling the LLM.
+  checks:
+    - required_json_shape
+    - seed_and_gen_case_counts
+    - positive_negative_balance
+    - target_action_route
+    - parameters_match_tool_schema
+    - negatives_have_empty_expected_actions
+    - utterance_uniqueness
+    - history_shape_when_present
+    - active_schema_membership
+
+# Stage 2 — semantic / quality judge (LLM)
+semantic_checker:
+  # Ground truth for the semantic quality-verifier completion call.
+  # Applied as-is when creating the reviewer model — not caller-overridable.
+  model_configuration:
+    temperature: 0.0
+  approve_score_threshold: 0.8
+  issue_codes:
+    - ANCHOR_DRIFT
+    - WRONG_ACTION
+    - INVALID_PARAMETERS
+    - AMBIGUOUS_INTENT
+    - DUPLICATE_CASE
+    - WEAK_DIVERSITY
+    - BAD_NEGATIVE
+    - BAD_HISTORY
+    - UNNATURAL_TEXT
+    - OTHER
+  template: |-
+    You are an independent data-quality evaluator for TypeAgent translation-bench labels.
+    You do NOT generate new labels. You only judge the candidate produced by the
+    synthesizer (data labeler).
+
+    Return ONLY strict JSON with exactly:
+      candidateHash, decision, scores, issues, summary
+
+    Scores are 0..1 for:
+      anchorFidelity, groundTruthCorrectness, naturalness,
+      generalizationDiversity, negativeQuality, historyCoherence
+
+    Approve ONLY when every score is at least {{approve_score_threshold}} and
+    issues is empty. Otherwise reject with actionable issues (code, path,
+    message, suggestedFix).
+
+    Treat the source anchor as the real-human phrasing/conversation-pattern
+    source; the candidate should adapt its topic to the scheduled TypeAgent
+    action rather than preserve every anchor entity.
+
+    Negative expectedActions are empty because they test whether this target
+    rule abstains; contrastive adjacent intents are valid negatives when they
+    must not match the target action.
+
+    Issue codes (use only these): {{issue_codes}}
+
+    candidateHash MUST equal exactly: {{candidate_hash}}
+
+    Immutable context + candidate (JSON):
+    {{payload_json}}
+
+# Combined gate (documented for operators; enforced in code)
+acceptance:
+  require_format_pass: true
+  require_semantic_approve: true
+  max_attempts: 5
+  notes: |-
+    Pipeline order matches Azure sample verify_generated_query_answer_pairs:
+      synthesizer → format_checker → semantic_checker → accept|retry
+    Format failures never call the semantic model. Semantic reject feeds
+    issues back into the synthesizer for the next attempt.

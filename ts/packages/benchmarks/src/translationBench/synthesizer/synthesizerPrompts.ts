@@ -10,6 +10,8 @@ import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 import { z } from "zod";
 
+import { TRANSLATION_BENCH_DEFAULT_APPROVE_SCORE_THRESHOLD } from "./benchmark.js";
+
 /** Directory containing *.prompt.yaml next to this module (src or dist). */
 export const TRANSLATION_BENCH_SYNTHESIZER_PROMPTS_DIR = path.dirname(
     fileURLToPath(import.meta.url),
@@ -113,16 +115,19 @@ const qualityVerifierYamlSchema = z
         semantic_checker: z
             .object({
                 template: nonEmptyString,
-                approve_score_threshold: finiteNumber.default(0.8),
+                approve_score_threshold: finiteNumber.default(
+                    TRANSLATION_BENCH_DEFAULT_APPROVE_SCORE_THRESHOLD,
+                ),
                 issue_codes: stringListSchema,
                 model_configuration: translationBenchModelConfigurationSchema,
             })
             .strip(),
         acceptance: z
             .object({
-                require_format_pass: z.boolean().default(true),
-                require_semantic_approve: z.boolean().default(true),
-                max_attempts: finiteNumber.default(5),
+                // Closed: LLM-derived rows always need format + semantic approve.
+                require_format_pass: z.literal(true).default(true),
+                require_semantic_approve: z.literal(true).default(true),
+                max_attempts: finiteNumber.min(1).max(5).default(5),
             })
             .strip()
             .default({
@@ -150,7 +155,9 @@ const parameterGraderYamlSchema = z
         policy_verifier: z
             .object({
                 template: nonEmptyString,
-                approve_score_threshold: finiteNumber.default(0.8),
+                approve_score_threshold: finiteNumber.default(
+                    TRANSLATION_BENCH_DEFAULT_APPROVE_SCORE_THRESHOLD,
+                ),
                 issue_codes: stringListSchema,
                 model_configuration: translationBenchModelConfigurationSchema,
             })
@@ -268,10 +275,10 @@ function parseWithZod<T>(
     return parsed.data;
 }
 
-/** Load prompt-pack YAML via js-yaml (same library as config/shell). */
+/** Load prompt-pack YAML via js-yaml JSON_SCHEMA (monorepo-safe, no JS types). */
 export function parseTranslationBenchPromptYaml(text: string): unknown {
     try {
-        return yaml.load(text, { schema: yaml.DEFAULT_SCHEMA }) ?? {};
+        return yaml.load(text, { schema: yaml.JSON_SCHEMA }) ?? {};
     } catch (error) {
         throw new Error(
             `Invalid translation-bench prompt YAML: ${

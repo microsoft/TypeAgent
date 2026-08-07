@@ -1,0 +1,8 @@
+{
+  "dataset": "typeagent/examples/seed-qa",
+  "revision": "v1",
+  "config": "seed_qa_jsonl",
+  "split": "examples",
+  "sourceUrl": "https://example.invalid/typeagent/examples/seed-qa/v1/seed_qa_dataset.jsonl",
+  "sourceFileHash": "fd1692d43c491e11724d006c2620ad52ec8678f9255ad2dd6c29e87634fefe6a"
+}
