@@ -231,7 +231,8 @@ export function assertTranslationBenchSourceManifest(
 export const assertTranslationBenchPinnedSourceManifest =
     assertTranslationBenchSourceManifest;
 
-export interface TranslationBenchImportSourceOptions extends TranslationBenchSourceImportOptions {
+export interface TranslationBenchImportSourceOptions
+    extends TranslationBenchSourceImportOptions {
     adapter?: string | TranslationBenchSourceAdapter;
 }
 

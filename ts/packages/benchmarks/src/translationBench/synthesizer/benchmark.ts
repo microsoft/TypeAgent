@@ -74,12 +74,14 @@ export interface TranslationBenchSelectionAnnotation {
     confidence: number;
 }
 
-export interface TranslationBenchPublicProbe extends TranslationBenchBenchmarkProbePayload {
+export interface TranslationBenchPublicProbe
+    extends TranslationBenchBenchmarkProbePayload {
     lineage: TranslationBenchPublicTurnLineage;
     selection: TranslationBenchSelectionAnnotation;
 }
 
-export interface TranslationBenchShapeOnlyProbe extends TranslationBenchBenchmarkProbePayload {
+export interface TranslationBenchShapeOnlyProbe
+    extends TranslationBenchBenchmarkProbePayload {
     id: string;
     scored: false;
     origin: "llm-authored";
