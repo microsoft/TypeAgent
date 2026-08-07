@@ -355,7 +355,9 @@ async function writeGraderArtifact(
     renameSync(tmpPath, outPath);
 }
 
-export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
+export async function main(
+    argv: string[] = process.argv.slice(2),
+): Promise<void> {
     const args = parseCli(argv);
     const catalogPath = path.resolve(args.catalogPath);
     const outPath = path.resolve(args.outPath);

@@ -1520,7 +1520,6 @@ function isIdentifierName(name: string): boolean {
     );
 }
 
-
 /**
  * Runner-ready parameterScore specs aligned 1:1 with expectedActions.
  * Missing grader entries yield `undefined` slots (runner falls back to exact).
@@ -1677,8 +1676,7 @@ export function auditActionParametersGraderAgainstDataset(
             }
             if (
                 mode === "exact" &&
-                (field.create === "record" ||
-                    field.typeKind.includes("object"))
+                (field.create === "record" || field.typeKind.includes("object"))
             ) {
                 nestedObjectExact += 1;
             }
@@ -1780,4 +1778,3 @@ export function auditActionParametersGraderAgainstDataset(
         },
     };
 }
-
