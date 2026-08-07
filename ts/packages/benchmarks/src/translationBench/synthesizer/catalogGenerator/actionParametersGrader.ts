@@ -19,7 +19,7 @@ import {
     type ParamSpec,
 } from "./paramTypes.js";
 
-export const GRADER_RULES_VERSION = 3;
+export const GRADER_RULES_VERSION = 5;
 
 export const REGEX_RULE_IDS = [
     "empty-name",
@@ -37,13 +37,19 @@ export const REGEX_RULE_IDS = [
     "string-collection-element-nonempty",
     "string-free-text-nonempty",
     "string-open-soft-nonempty",
-    "string-date-exact",
+    "string-date-nonempty",
     "string-time-nonempty",
     "string-identifier-exact",
+    "string-llm-as-a-judge",
 ] as const;
 
 /** Runner soft-score modes (must stay aligned with runner.ts). */
-export type ActionParamVerifyMode = "exact" | "exists" | "nonempty" | "ignore";
+export type ActionParamVerifyMode =
+    | "exact"
+    | "exists"
+    | "nonempty"
+    | "ignore"
+    | "llmAsAJudge";
 
 export type ActionParamCreatePolicy =
     | "enum_literal"
@@ -95,6 +101,13 @@ export interface ActionParametersGraderCatalog {
     description: string;
     catalogVersion: string;
     generatedAt: string;
+    /**
+     * Catalog-level policy/heuristic fingerprint. When it drifts (or is
+     * missing on an old catalog), incremental build reclassifies all actions.
+     * Per-action `sourceFingerprint` stays paramSpec-only, so policy PRs do
+     * not churn every entry.
+     */
+    rulesFingerprint?: string;
     modes: Record<ActionParamVerifyMode, string>;
     createPolicies: Record<ActionParamCreatePolicy, string>;
     byAction: Record<string, ActionParametersGraderEntry>;
@@ -126,6 +139,8 @@ export const ACTION_PARAM_VERIFY_MODE_DOCS: Record<
     exists: "Key must be present; value ignored (hand-authored seeds; not emitted by regex gen)",
     nonempty: "Key must be present and non-empty string/array",
     ignore: "Field not scored",
+    llmAsAJudge:
+        "Semantic equivalence needs an LLM judge (code/script/program payloads; many surface forms can be correct)",
 };
 
 export const ACTION_PARAM_CREATE_POLICY_DOCS: Record<
@@ -151,6 +166,137 @@ export interface FieldGraderDecision {
     item?: FieldGraderDecision;
 }
 
+/**
+ * Hardcoded action.parameter pairs that always need llmAsAJudge offline.
+ * Everything else is left to the LLM classifier (verify=llmAsAJudge) when --model.
+ * Literal short commands (e.g. gh alias set) stay exact — not listed here.
+ */
+export const LLM_JUDGE_PARAMETERS = [
+    "browser.actionDiscovery.createWebFlowFromRecording.recordedSteps",
+    "browser.executeAdHocScript.script",
+    "browser.webFlows.editWebFlow.script",
+    "code.code-editor.createCodeBlock.body",
+    "code.code-editor.createCodeBlock.codeSnippet",
+    "code.code-editor.createCodeBlock.declaration",
+    "code.code-editor.createFunction.body",
+    "code.code-editor.createFunction.functionDeclaration",
+    "code.code-workbench.openInIntegratedTerminal.commandToExecute",
+    "markdown.streamingUpdateDocument.generatedContent",
+    "markdown.streamingUpdateDocument.validationResults",
+    "powershell.createPowerShellFlow.script",
+    "powershell.editPowerShellFlow.script",
+    "powershell.executePowerShellFlow.flowArgs",
+    "powershell.executePowerShellFlow.flowParametersJson",
+    "visualStudio.executeCommand.commandArgs",
+] as const;
+
+const LLM_JUDGE_PARAMETER_SET = new Set<string>(LLM_JUDGE_PARAMETERS);
+
+/** Literal stored strings that must deep-equal (not soft / not llm judge). */
+const EXACT_PARAMETERS = new Set<string>(["github-cli.aliasSet.command"]);
+
+export const HEURISTIC_SOURCE_HASH: string = createHash("sha256")
+    .update(
+        JSON.stringify({
+            rules: [...REGEX_RULE_IDS].sort(),
+            llmJudge: [...LLM_JUDGE_PARAMETERS],
+        }),
+    )
+    .digest("hex")
+    .slice(0, 16);
+
+const LLM_JUDGE_SOFT_CREATE = new Set<ActionParamCreatePolicy>([
+    "free_text",
+    "opaque",
+]);
+
+export interface LlmJudgeFieldContext {
+    create?: ActionParamCreatePolicy;
+    actionId?: string;
+    siblingFieldNames?: readonly string[];
+}
+
+function isLlmJudgeSoftCreate(
+    create: ActionParamCreatePolicy | undefined,
+): boolean {
+    return create === undefined || LLM_JUDGE_SOFT_CREATE.has(create);
+}
+
+export function parameterRequiresLlmJudge(
+    fieldName: string,
+    createOrContext?: ActionParamCreatePolicy | LlmJudgeFieldContext,
+): boolean {
+    let ctx: LlmJudgeFieldContext;
+    if (createOrContext === undefined) {
+        ctx = {};
+    } else if (typeof createOrContext === "string") {
+        ctx = { create: createOrContext };
+    } else {
+        ctx = createOrContext;
+    }
+    const name = fieldName.trim();
+    const actionId = ctx.actionId?.trim();
+    if (!name || !actionId || !isLlmJudgeSoftCreate(ctx.create)) {
+        return false;
+    }
+    return LLM_JUDGE_PARAMETER_SET.has(`${actionId}.${name}`);
+}
+
+export function applyLlmAsAJudgeVerify(
+    fieldName: string,
+    decision: FieldGraderDecision,
+    context?: Omit<LlmJudgeFieldContext, "create">,
+): FieldGraderDecision {
+    let item = decision.item;
+    if (item !== undefined) {
+        item = applyLlmAsAJudgeVerify(fieldName, item, context);
+    }
+    const needs = parameterRequiresLlmJudge(fieldName, {
+        create: decision.create,
+        ...(context?.actionId !== undefined
+            ? { actionId: context.actionId }
+            : {}),
+        ...(context?.siblingFieldNames !== undefined
+            ? { siblingFieldNames: context.siblingFieldNames }
+            : {}),
+    });
+    const itemNeeds = item?.verify === "llmAsAJudge";
+    if (!needs && !itemNeeds) {
+        if (item === decision.item) {
+            return decision;
+        }
+        if (item === undefined) {
+            const { item: _drop, ...rest } = decision;
+            return rest;
+        }
+        return { ...decision, item };
+    }
+    if (itemNeeds && item !== undefined) {
+        return {
+            create: decision.create,
+            verify: "llmAsAJudge",
+            rule: `array-items:string-llm-as-a-judge`,
+            source: decision.source,
+            item,
+        };
+    }
+    if (item !== undefined) {
+        return {
+            create: decision.create,
+            verify: "llmAsAJudge",
+            rule: "string-llm-as-a-judge",
+            source: decision.source,
+            item,
+        };
+    }
+    return {
+        create: decision.create,
+        verify: "llmAsAJudge",
+        rule: "string-llm-as-a-judge",
+        source: decision.source,
+    };
+}
+
 export interface ParameterGraderLlm {
     model: string;
     complete(prompt: string): Promise<string>;
@@ -172,6 +318,7 @@ const VERIFY_MODES = [
     "exists",
     "nonempty",
     "ignore",
+    "llmAsAJudge",
 ] as const satisfies readonly ActionParamVerifyMode[];
 
 const CREATE_SET = new Set<string>(CREATE_POLICIES);
@@ -217,16 +364,23 @@ const parameterGraderLlmVerifierSchema = z
     })
     .passthrough();
 
-export function actionParameterSourceFingerprint(
-    paramSpec: ParamSpec,
-    _parametersSummary?: string,
-): string {
-    const payload = {
-        rulesVersion: GRADER_RULES_VERSION,
-        paramSpec: canonicalizeParamSpec(paramSpec),
-    };
+/** Schema identity of an action's parameters (paramSpec only, not policy rules). */
+export function actionParameterSourceFingerprint(paramSpec: ParamSpec): string {
     return createHash("sha256")
-        .update(JSON.stringify(payload))
+        .update(JSON.stringify(canonicalizeParamSpec(paramSpec)))
+        .digest("hex")
+        .slice(0, 16);
+}
+
+/** Catalog-level policy code identity (rules version + heuristic bodies). */
+export function graderRulesFingerprint(): string {
+    return createHash("sha256")
+        .update(
+            JSON.stringify({
+                rulesVersion: GRADER_RULES_VERSION,
+                heuristicSourceHash: HEURISTIC_SOURCE_HASH,
+            }),
+        )
         .digest("hex")
         .slice(0, 16);
 }
@@ -342,10 +496,12 @@ function classifyStringFieldRegex(
         };
     }
     if (isDateName(name)) {
+        // NL relative dates dominate synthesis ("next Tuesday", "this week").
+        // Exact string match is unfair at eval; align with time → nonempty.
         return {
             create: "temporal",
-            verify: "exact",
-            rule: "string-date-exact",
+            verify: "nonempty",
+            rule: "string-date-nonempty",
             source: "regex",
         };
     }
@@ -890,12 +1046,25 @@ export async function buildActionParametersGraderEntry(
                         : {}),
                 },
             );
+            const id = actionId(schemaName, actionName);
+            let judged = applyLlmAsAJudgeVerify(name, decision, {
+                actionId: id,
+                siblingFieldNames: Object.keys(paramSpec.fields),
+            });
+            if (EXACT_PARAMETERS.has(`${id}.${name}`)) {
+                judged = {
+                    create: "identifier",
+                    verify: "exact",
+                    rule: "string-identifier-exact",
+                    source: judged.source,
+                };
+            }
             fields[name] = fieldGraderFromDecision(
                 field.optional,
                 field.spec,
-                decision,
+                judged,
             );
-            scoreFields[name] = decision.verify;
+            scoreFields[name] = judged.verify;
         }
     }
 
@@ -1214,16 +1383,8 @@ function priorEntryStillValid(
         );
     }
     // Catalog paramSpec must still canonicalize-equal stored paramSpec.
+    // (paramSpec equality implies fingerprint equality by construction.)
     if (!nestedParamSpecEqual(catalogRow.paramSpec, entry.paramSpec)) {
-        return false;
-    }
-    // Re-verify fingerprint against current rules version + catalog shape.
-    const liveFp = actionParameterSourceFingerprint(catalogRow.paramSpec);
-    if (
-        entry.sourceFingerprint !== liveFp ||
-        actionParameterSourceFingerprint(entry.paramSpec) !==
-            entry.sourceFingerprint
-    ) {
         return false;
     }
     if (entry.paramSpec.kind !== "object") {
@@ -1370,8 +1531,15 @@ export async function buildActionParametersGraderCatalog(
         includeLastDiff?: boolean;
     },
 ): Promise<ActionParametersGraderCatalog> {
+    const rulesFp = graderRulesFingerprint();
+    // Rules/heuristic code change → full reclassify; keep per-action
+    // sourceFingerprint as paramSpec-only so schema-stable rows stay stable.
     const previous =
-        options?.forceFull === true ? undefined : options?.previous;
+        options?.forceFull === true ||
+        (options?.previous !== undefined &&
+            options.previous.rulesFingerprint !== rulesFp)
+            ? undefined
+            : options?.previous;
     const diff = diffActionParametersGrader(catalog, previous);
     const rebuildIds = new Set([...diff.added, ...diff.updated]);
 
@@ -1409,13 +1577,16 @@ export async function buildActionParametersGraderCatalog(
         version: 1,
         description:
             "Create+verify policies per action parameter. " +
-            "Incremental: only added/updated actions are reclassified; unchanged fingerprints are kept. " +
+            "sourceFingerprint is paramSpec-only (stable across policy edits); " +
+            "rulesFingerprint is catalog-level and forces a full reclassify when it drifts. " +
+            "Incremental: only added/updated actions are reclassified. " +
             "Regex first, LLM prior reuse (not regex priors), LLM+verifier fallback. " +
             "Open strings without a name heuristic use structural free_text/nonempty. " +
-            "`create` guides the synthesizer; `verify` / `parameterScore` drive runner soft matching. " +
+            "`create` guides the synthesizer; `verify` / `parameterScore` drive runner soft matching. `llmAsAJudge` marks code/script params that need semantic LLM scoring. " +
             "Object containers with only soft leaves use nonempty; mixed objects stay exact (no nested dotted paths yet).",
         catalogVersion: catalog.catalogVersion,
         generatedAt: options?.generatedAt ?? new Date().toISOString(),
+        rulesFingerprint: rulesFp,
         modes: { ...ACTION_PARAM_VERIFY_MODE_DOCS },
         createPolicies: { ...ACTION_PARAM_CREATE_POLICY_DOCS },
         byAction,
@@ -1451,7 +1622,8 @@ export function loosenArrayVerifyMode(
     if (
         elementVerify === "ignore" ||
         elementVerify === "exists" ||
-        elementVerify === "nonempty"
+        elementVerify === "nonempty" ||
+        elementVerify === "llmAsAJudge"
     ) {
         return elementVerify;
     }
@@ -1516,4 +1688,75 @@ function isIdentifierName(name: string): boolean {
         /(Id|ID|Names?|Path|Email|Code|Token|File)$/.test(name) ||
         /_(id|code|token|name|file|dir)$/i.test(name)
     );
+}
+
+/**
+ * Runner-ready parameterScore specs aligned 1:1 with expectedActions.
+ * Missing grader entries yield `undefined` slots (runner falls back to exact).
+ */
+export function parameterScoreSpecsForExpectedActions(
+    grader: ActionParametersGraderCatalog,
+    expectedActions: ReadonlyArray<{
+        schemaName: string;
+        actionName: string;
+    }>,
+): Array<
+    | {
+          defaultMode: ActionParamVerifyMode;
+          fields: Record<string, ActionParamVerifyMode>;
+      }
+    | undefined
+> {
+    return expectedActions.map((action) => {
+        const entry =
+            grader.byAction[actionId(action.schemaName, action.actionName)];
+        if (entry === undefined) {
+            return undefined;
+        }
+        const fields = entry.parameterScore.fields;
+        if (Object.keys(fields).length === 0) {
+            return undefined;
+        }
+        return {
+            defaultMode: entry.parameterScore.defaultMode,
+            fields: { ...fields },
+        };
+    });
+}
+
+/** True when at least one expected action has a non-empty parameterScore map. */
+export function hasUsableParameterScoreSpecs(
+    specs: ReadonlyArray<
+        | {
+              defaultMode: ActionParamVerifyMode;
+              fields: Record<string, ActionParamVerifyMode>;
+          }
+        | undefined
+    >,
+): boolean {
+    return specs.some((spec) => spec !== undefined);
+}
+
+function fieldTreeIsLlmAsAJudge(
+    field: Pick<ActionParameterFieldGrader, "verify" | "item">,
+): boolean {
+    if (field.verify === "llmAsAJudge") return true;
+    if (field.item !== undefined && fieldTreeIsLlmAsAJudge(field.item)) {
+        return true;
+    }
+    return false;
+}
+
+/** Actions with any verify=llmAsAJudge field — derived from the main grader JSON. */
+export function listLlmAsAJudgeExcludedActions(
+    catalog: ActionParametersGraderCatalog,
+): string[] {
+    const out: string[] = [];
+    for (const id of Object.keys(catalog.byAction).sort()) {
+        const fields = catalog.byAction[id]!.fields;
+        if (Object.values(fields).some((f) => fieldTreeIsLlmAsAJudge(f))) {
+            out.push(id);
+        }
+    }
+    return out;
 }
