@@ -1434,9 +1434,9 @@ describe("llmAsAJudge verify mode", () => {
             grader.byAction["browser.executeAdHocScript"]!.parameterScore.fields
                 .script,
         ).toBe("llmAsAJudge");
-        expect(grader.byAction["list.createList"]!.fields.listName?.verify).not.toBe(
-            "llmAsAJudge",
-        );
+        expect(
+            grader.byAction["list.createList"]!.fields.listName?.verify,
+        ).not.toBe("llmAsAJudge");
     });
 });
 
