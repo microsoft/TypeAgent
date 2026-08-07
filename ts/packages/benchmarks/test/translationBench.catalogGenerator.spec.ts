@@ -29,6 +29,7 @@ import {
     tryReusePriorFieldGraderDecision,
     type ParamSpec,
 } from "../src/translationBench/synthesizer/catalogGenerator/index.js";
+import { countEligibleTranslationBenchActions } from "../src/translationBench/synthesizer/eligibleActions.js";
 
 function objectSpec(
     fields: Record<string, { optional: boolean; spec: ParamSpec }>,
@@ -1398,6 +1399,33 @@ describe("GRADER_RULES_VERSION contract", () => {
             .slice(0, 16);
         // Bump GRADER_RULES_VERSION with this hash when rules change.
         expect(hash).toBe("f2c1d77d772926e9");
+    });
+});
+
+describe("eligible action coverage counting", () => {
+    it("subtracts excluded actions from the catalog total", () => {
+        const schemas = [
+            {
+                schemaName: "alpha",
+                tools: [
+                    { function: { name: "keep" } },
+                    { function: { name: "drop" } },
+                ],
+            },
+            {
+                schemaName: "beta",
+                tools: [{ function: { name: "keep" } }],
+            },
+        ];
+        expect(
+            countEligibleTranslationBenchActions(
+                schemas,
+                new Set(["alpha.drop"]),
+            ),
+        ).toBe(2);
+        expect(countEligibleTranslationBenchActions(schemas, new Set())).toBe(
+            3,
+        );
     });
 });
 

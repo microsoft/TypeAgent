@@ -3,7 +3,6 @@
 
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
-import { createRequire } from "node:module";
 
 import { fromJSONParsedActionSchema } from "@typeagent/action-schema";
 import type { CompletionJsonSchema } from "@typeagent/aiclient";
@@ -67,34 +66,17 @@ import {
     summarizeTranslationBenchConfusableSiblings,
 } from "./utteranceDisambiguation.js";
 import {
-    listLlmAsAJudgeExcludedActions,
-    loadActionParametersGraderCatalogFile,
-} from "./catalogGenerator/actionParametersGrader.js";
-
-const require = createRequire(import.meta.url);
-
-let cachedLlmJudgeExcludedActions: ReadonlySet<string> | undefined;
+    clearPackagedLlmJudgeExcludedActionsCacheForTests,
+    countEligibleTranslationBenchActions,
+    getPackagedLlmJudgeExcludedActions,
+} from "./eligibleActions.js";
 
 export function getTranslationBenchLlmJudgeExcludedActions(): ReadonlySet<string> {
-    if (cachedLlmJudgeExcludedActions === undefined) {
-        const graderPath = require.resolve(
-            "../action-parameters-grader.generated.json",
-        );
-        const grader = loadActionParametersGraderCatalogFile(graderPath);
-        if (grader === undefined) {
-            throw new Error(
-                `Missing packaged action-parameters grader at ${graderPath}`,
-            );
-        }
-        cachedLlmJudgeExcludedActions = new Set(
-            listLlmAsAJudgeExcludedActions(grader),
-        );
-    }
-    return cachedLlmJudgeExcludedActions;
+    return getPackagedLlmJudgeExcludedActions();
 }
 
 export function clearTranslationBenchLlmJudgeExcludedActionsCacheForTests(): void {
-    cachedLlmJudgeExcludedActions = undefined;
+    clearPackagedLlmJudgeExcludedActionsCacheForTests();
 }
 
 export {
@@ -264,8 +246,7 @@ export function createTranslationBenchGenerationSchedule(
     requirePositiveInteger(options.caseCount, "Translation bench case count");
     const census = getTranslationBenchCatalogCensus(catalog);
     const excludedActionIds =
-        options.excludedActionIds ??
-        getTranslationBenchLlmJudgeExcludedActions();
+        options.excludedActionIds ?? getPackagedLlmJudgeExcludedActions();
     const qualified = census.qualifiedActionKeys
         .map((key) => {
             const [schemaName, actionName] = JSON.parse(key) as [
@@ -280,8 +261,11 @@ export function createTranslationBenchGenerationSchedule(
                     `${action.schemaName}.${action.actionName}`,
                 ),
         );
-    const eligibleActionCount = qualified.length;
-    if (eligibleActionCount === 0) {
+    const eligibleActionCount = countEligibleTranslationBenchActions(
+        catalog,
+        excludedActionIds,
+    );
+    if (eligibleActionCount === 0 || qualified.length === 0) {
         throw new Error(
             "Translation bench generation schedule has no eligible actions after llmAsAJudge exclusions",
         );
