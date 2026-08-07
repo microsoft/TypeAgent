@@ -4,17 +4,10 @@
 
 import { loadConfigSync } from "@typeagent/config";
 import { otel } from "@typeagent/telemetry";
+import { registerEarlyTelemetrySignalHandlers } from "../dist/telemetry.js";
 loadConfigSync();
 
-let signalShutdown;
-const shutdownOnSignal = () => {
-    signalShutdown ??= otel.shutdownTelemetry().finally(() => {
-        process.exit(0);
-    });
-};
-globalThis.__typeagentCliEarlySigintHandler = shutdownOnSignal;
-process.once("SIGINT", shutdownOnSignal);
-process.once("SIGTERM", shutdownOnSignal);
+registerEarlyTelemetrySignalHandlers();
 
 async function main() {
     const { flush, handle, run } = await import("@oclif/core");
