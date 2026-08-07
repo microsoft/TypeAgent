@@ -41,6 +41,37 @@
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
   },
+  "fluidBuild": {
+    "tasks": {
+      "agc": {
+        "dependsOn": [
+          "@typeagent/action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/discordSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/discordSchema.ag.json",
+            "dist/discordSchema.ag.map.json"
+          ]
+        }
+      },
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/discordSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/discordSchema.pas.json"
+          ]
+        }
+      }
+    }
+  },
   "typeagent": {
     "defaultAgentName": "discord"
   }
