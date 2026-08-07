@@ -38,12 +38,12 @@ type ChatCompletionChoice = {
     finish_reason?: string;
 };
 
-// Raw provider usage. Cache hits may be nested; flatten to CompletionUsageStats.
+// OpenAI/Azure chat usage. Cache hits are always nested under
+// prompt_tokens_details (see OpenAI prompt-caching docs).
 type ProviderUsage = {
     completion_tokens: number;
     prompt_tokens: number;
     total_tokens: number;
-    cached_tokens?: number;
     prompt_tokens_details?: { cached_tokens?: number };
 };
 
@@ -68,8 +68,7 @@ type ChatCompletionChunk = {
 };
 
 function flattenUsage(usage: ProviderUsage): CompletionUsageStats {
-    const cached =
-        usage.prompt_tokens_details?.cached_tokens ?? usage.cached_tokens;
+    const cached = usage.prompt_tokens_details?.cached_tokens;
     return {
         completion_tokens: usage.completion_tokens,
         prompt_tokens: usage.prompt_tokens,

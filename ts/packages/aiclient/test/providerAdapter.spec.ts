@@ -402,6 +402,23 @@ describe("ResponsesWireApiProvider", () => {
         });
     });
 
+    test("extractUsage tracks nested input_tokens_details.cached_tokens", () => {
+        expect(
+            adapter.extractUsage({
+                usage: {
+                    input_tokens: 2006,
+                    output_tokens: 300,
+                    input_tokens_details: { cached_tokens: 1920 },
+                },
+            }),
+        ).toEqual({
+            prompt_tokens: 2006,
+            completion_tokens: 300,
+            total_tokens: 2306,
+            cached_tokens: 1920,
+        });
+    });
+
     test("streaming decoder emits response.output_text.delta content", () => {
         const decoder = adapter.createStreamDecoder!(makeRequest());
         const piece = decoder.push(

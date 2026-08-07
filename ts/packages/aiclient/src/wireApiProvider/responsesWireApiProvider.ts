@@ -23,10 +23,17 @@ type ResponsesOutputItem = {
     name?: string;
     arguments?: string;
 };
+// Responses API nests cache hits under input_tokens_details (OpenAI/Azure).
+type ResponsesUsage = {
+    input_tokens?: number;
+    output_tokens?: number;
+    input_tokens_details?: { cached_tokens?: number };
+};
+
 type ResponsesResult = {
     output_text?: string;
     output?: ResponsesOutputItem[];
-    usage?: { input_tokens?: number; output_tokens?: number };
+    usage?: ResponsesUsage;
 };
 
 export class ResponsesWireApiProvider implements ProviderAdapter {
@@ -88,7 +95,11 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
 
     extractUsage(data: unknown): CompletionUsageStats | undefined {
         const usage = (data as ResponsesResult).usage;
-        return usageFromInputOutput(usage?.input_tokens, usage?.output_tokens);
+        return usageFromInputOutput(
+            usage?.input_tokens,
+            usage?.output_tokens,
+            usage?.input_tokens_details?.cached_tokens,
+        );
     }
 
     createStreamDecoder(): StreamDecoder {
@@ -98,10 +109,7 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
                     type?: string;
                     delta?: string;
                     response?: {
-                        usage?: {
-                            input_tokens?: number;
-                            output_tokens?: number;
-                        };
+                        usage?: ResponsesUsage;
                     };
                 };
                 const piece: StreamPiece = {};
@@ -116,6 +124,7 @@ export class ResponsesWireApiProvider implements ProviderAdapter {
                     piece.usage = usageFromInputOutput(
                         usage.input_tokens,
                         usage.output_tokens,
+                        usage.input_tokens_details?.cached_tokens,
                     );
                 }
                 return piece;
