@@ -18,12 +18,18 @@ import {
 import {
     computeTranslationBenchCanonicalJsonHash,
     parseTranslationBenchDatasetBuilderJson,
+    type TranslationBenchBenchmarkSchema,
 } from "./benchmark.js";
 import {
     loadTranslationBenchQualityVerifierPromptPack,
     renderTranslationBenchPromptTemplate,
     type TranslationBenchQualityVerifierPromptPack,
 } from "./synthesizerPrompts.js";
+import {
+    checkTranslationBenchCandidateDisambiguation,
+    findTranslationBenchConfusableSiblings,
+    summarizeTranslationBenchConfusableSiblings,
+} from "./utteranceDisambiguation.js";
 
 export type TranslationBenchQualityStage =
     | "format_checker"
@@ -92,6 +98,12 @@ function semanticValidationIssue(error: unknown): TranslationBenchReviewIssue {
     };
 }
 
+function catalogForLoop(
+    loop: TranslationBenchGenerationQualityLoopOptions,
+): readonly TranslationBenchBenchmarkSchema[] {
+    return loop.catalogSchemas ?? [loop.schema];
+}
+
 export function runTranslationBenchFormatChecker(
     synthesizerOutput: unknown,
     loop: TranslationBenchGenerationQualityLoopOptions,
@@ -130,6 +142,19 @@ export function runTranslationBenchFormatChecker(
                 };
             }
         }
+        const disambiguationIssues = checkTranslationBenchCandidateDisambiguation(
+            candidate,
+            loop.targetAction,
+            catalogForLoop(loop),
+        );
+        if (disambiguationIssues.length > 0) {
+            return {
+                stage: "format_checker",
+                passed: false,
+                issues: disambiguationIssues,
+                candidate,
+            };
+        }
         return {
             stage: "format_checker",
             passed: true,
@@ -152,6 +177,11 @@ export function buildTranslationBenchSemanticCheckerPrompt(
     candidateHash: string,
 ): string {
     const threshold = pack.semanticChecker.approveScoreThreshold;
+    const catalog = catalogForLoop(loop);
+    const confusableSiblings = findTranslationBenchConfusableSiblings(
+        loop.targetAction,
+        catalog,
+    );
     const payload = {
         candidateHash,
         immutableContext: {
@@ -168,6 +198,12 @@ export function buildTranslationBenchSemanticCheckerPrompt(
                 (tool) => tool.function.name === loop.targetAction.actionName,
             ),
             activeSchemas: loop.activeSchemas,
+            confusableSiblings: summarizeTranslationBenchConfusableSiblings(
+                loop.targetAction,
+                confusableSiblings,
+            ),
+            disambiguationRule:
+                "Reject positives (AMBIGUOUS_INTENT) when a careful reader could equally choose a confusable sibling. Seed and every positive must uniquely identify the target action.",
         },
         candidate,
         formatCheckerChecks: pack.formatChecker.checks,

@@ -61,6 +61,10 @@ import {
     toTranslationBenchPromptYaml,
     type TranslationBenchSynthesizerPromptPack,
 } from "./synthesizerPrompts.js";
+import {
+    findTranslationBenchConfusableSiblings,
+    summarizeTranslationBenchConfusableSiblings,
+} from "./utteranceDisambiguation.js";
 
 export {
     parseTranslationBenchGeneratedCandidate,
@@ -113,6 +117,8 @@ export interface TranslationBenchAcceptedGeneration {
 export interface TranslationBenchGenerationQualityLoopOptions {
     targetAction: TranslationBenchTargetAction;
     schema: TranslationBenchBenchmarkSchema;
+    /** Full catalog used for confusable-sibling disambiguation (defaults to [schema]). */
+    catalogSchemas?: readonly TranslationBenchBenchmarkSchema[];
     anchor: TranslationBenchSourceCandidate;
     activeSchemas: string[];
     genCaseCount: number;
@@ -465,6 +471,11 @@ function formatSynthesizerPrompt(
         previousRejectedCandidate === undefined
             ? "Previous rejected candidate: (none)"
             : `Previous rejected candidate (JSON):\n${JSON.stringify(previousRejectedCandidate)}`;
+    const catalog = options.catalogSchemas ?? [options.schema];
+    const confusableSiblings = findTranslationBenchConfusableSiblings(
+        options.targetAction,
+        catalog,
+    );
     return renderTranslationBenchPromptTemplate(pack.template, {
         action_contract: actionContract,
         gen_case_count: options.genCaseCount,
@@ -485,6 +496,12 @@ function formatSynthesizerPrompt(
             targetTool,
             schemaDescription: options.schema.description,
             activeSchemas: options.activeSchemas,
+            confusableSiblings: summarizeTranslationBenchConfusableSiblings(
+                options.targetAction,
+                confusableSiblings,
+            ),
+            disambiguationRule:
+                "Every seed and positive utterance must uniquely identify the target action. If confusableSiblings is non-empty, include target-only cues and never use phrasing that fits a sibling equally well.",
         }),
         prior_feedback_json: JSON.stringify(feedback),
         previous_rejected_block: previousRejectedBlock,
@@ -1070,6 +1087,7 @@ export async function generateTranslationBenchBenchmark(
                 actionName: entry.actionName,
             },
             schema,
+            catalogSchemas: catalog,
             anchor: anchors[entry.slot]!,
             activeSchemas,
             genCaseCount: options.genCaseCount,

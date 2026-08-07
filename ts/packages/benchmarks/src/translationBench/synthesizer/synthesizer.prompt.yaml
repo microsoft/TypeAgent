@@ -53,6 +53,19 @@ template: |-
   least five distinct scenarios or entities and at least four linguistic forms;
   no more than two cases may reuse the same primary topic.
 
+  Disambiguation (hard requirement for seed + every positive):
+  - Immutable context may list confusableSiblings — nearby TypeAgent tools a
+    careful reader could confuse with the target.
+  - When confusableSiblings is non-empty, every seed/positive utterance MUST
+    uniquely mean the target action. Prefer the listed preferTargetCues and
+    never rely on phrasing that also fits a sibling (avoidCuesThatMeanSibling).
+  - Example collision to avoid: "Open the Apple stock quote in a new tab" can
+    mean either browser.openWebPage or browser.followLinkByText. Prefer
+    "Go to the Apple stock quote website" (openWebPage) or "Click the link
+    titled Apple stock quote" (followLinkByText).
+  - Double-meaning positives are rejected by the format checker as
+    AMBIGUOUS_INTENT before semantic review.
+
   Diversify negatives across missing information, ambiguity, negation,
   non-action questions, and contrastive adjacent intents that this target rule
   must not capture. expectedActions remains [] because these cases score
