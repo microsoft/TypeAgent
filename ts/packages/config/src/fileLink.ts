@@ -42,6 +42,7 @@ export function isAllowedConfigFilePath(
 ): boolean {
     if (
         candidate.length === 0 ||
+        candidate.includes("\0") ||
         !path.isAbsolute(candidate) ||
         candidate.startsWith("\\\\") ||
         candidate.startsWith("//") ||
@@ -52,7 +53,6 @@ export function isAllowedConfigFilePath(
     const resolvedCandidate = path.resolve(candidate);
     const resolvedExpected = path.resolve(expectedConfigPath);
     return process.platform === "win32"
-        ? resolvedCandidate.toLocaleLowerCase() ===
-              resolvedExpected.toLocaleLowerCase()
+        ? resolvedCandidate.toLowerCase() === resolvedExpected.toLowerCase()
         : resolvedCandidate === resolvedExpected;
 }

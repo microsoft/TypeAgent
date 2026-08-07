@@ -28,6 +28,8 @@ import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
 
 function isAllowedConfigPath(candidate: string): boolean {
     if (
+        candidate.length === 0 ||
+        candidate.includes("\0") ||
         !path.isAbsolute(candidate) ||
         candidate.startsWith("\\\\") ||
         candidate.startsWith("//") ||
@@ -37,9 +39,7 @@ function isAllowedConfigPath(candidate: string): boolean {
     }
     const normalize = (value: string) => {
         const resolved = path.resolve(value);
-        return process.platform === "win32"
-            ? resolved.toLocaleLowerCase()
-            : resolved;
+        return process.platform === "win32" ? resolved.toLowerCase() : resolved;
     };
     const allowed = new Set<string>();
     const add = (value: string | undefined) => {

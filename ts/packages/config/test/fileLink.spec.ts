@@ -32,7 +32,11 @@ describe("isAllowedConfigFilePath", () => {
         ).toBe(false);
     });
 
-    test("rejects traversal to a same-named file and UNC paths", () => {
+    test("rejects malformed, traversal, and UNC paths", () => {
+        expect(isAllowedConfigFilePath("", allowed)).toBe(false);
+        expect(isAllowedConfigFilePath(`${allowed}\0ignored`, allowed)).toBe(
+            false,
+        );
         const traversal =
             path.join(path.dirname(allowed), "child") +
             `${path.sep}..${path.sep}config.local.yaml`;
