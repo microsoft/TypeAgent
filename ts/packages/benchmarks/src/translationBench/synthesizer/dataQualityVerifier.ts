@@ -4,17 +4,17 @@
 import type { CompletionJsonSchema } from "@typeagent/aiclient";
 
 import type {
-    TranslationBenchGeneratedCandidate,
     TranslationBenchGenerationLlm,
     TranslationBenchGenerationQualityLoopOptions,
-    TranslationBenchReviewIssue,
-    TranslationBenchReviewerDecision,
-    TranslationBenchReviewerScores,
 } from "./datasetGenerator.js";
 import {
     parseTranslationBenchGeneratedCandidate,
     parseTranslationBenchReviewerDecision,
-} from "./datasetGenerator.js";
+    type TranslationBenchGeneratedCandidate,
+    type TranslationBenchReviewIssue,
+    type TranslationBenchReviewerDecision,
+    type TranslationBenchReviewerScores,
+} from "./generationCandidate.js";
 import {
     computeTranslationBenchCanonicalJsonHash,
     parseTranslationBenchDatasetBuilderJson,
