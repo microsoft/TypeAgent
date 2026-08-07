@@ -61,6 +61,11 @@ export function verifyFilterResults(filterResult: FilterResult) {
 
 export type { Filter, FilterError, FilterResult };
 
+/**
+ * Build CompletionUsageStats under OpenAI-style accounting:
+ * `inputTokens` is the full prompt total; `cachedTokens` (when set) is a
+ * subset of that total, not an extra additive field.
+ */
 export function usageFromInputOutput(
     inputTokens: number | undefined,
     outputTokens: number | undefined,

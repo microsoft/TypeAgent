@@ -334,7 +334,9 @@ describe("MessagesWireApiProvider", () => {
         });
     });
 
-    test("extractUsage tracks cache_read_input_tokens as cached_tokens", () => {
+    test("extractUsage normalizes Anthropic cache buckets to OpenAI-style totals", () => {
+        // Anthropic: exclusive buckets. OpenAI-style prompt_tokens = sum of all
+        // three; cached_tokens = cache_read only (subset, not additive).
         expect(
             adapter.extractUsage({
                 content: [],
@@ -346,10 +348,29 @@ describe("MessagesWireApiProvider", () => {
                 },
             }),
         ).toEqual({
-            prompt_tokens: 900,
+            prompt_tokens: 2400,
             completion_tokens: 4,
-            total_tokens: 904,
+            total_tokens: 2404,
             cached_tokens: 700,
+        });
+    });
+
+    test("extractUsage cache-read-only hit folds into prompt_tokens", () => {
+        expect(
+            adapter.extractUsage({
+                content: [],
+                usage: {
+                    input_tokens: 50,
+                    output_tokens: 4,
+                    cache_creation_input_tokens: 0,
+                    cache_read_input_tokens: 100000,
+                },
+            }),
+        ).toEqual({
+            prompt_tokens: 100050,
+            completion_tokens: 4,
+            total_tokens: 100054,
+            cached_tokens: 100000,
         });
     });
 

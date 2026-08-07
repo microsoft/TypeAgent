@@ -23,7 +23,8 @@ type ResponsesOutputItem = {
     name?: string;
     arguments?: string;
 };
-// Responses API nests cache hits under input_tokens_details (OpenAI/Azure).
+// Responses API: input_tokens is the full input; cache hits are a subset
+// under input_tokens_details (OpenAI/Azure prompt-caching).
 type ResponsesUsage = {
     input_tokens?: number;
     output_tokens?: number;

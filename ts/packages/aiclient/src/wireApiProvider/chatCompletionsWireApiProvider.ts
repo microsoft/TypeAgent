@@ -38,8 +38,8 @@ type ChatCompletionChoice = {
     finish_reason?: string;
 };
 
-// OpenAI/Azure chat usage. Cache hits are always nested under
-// prompt_tokens_details (see OpenAI prompt-caching docs).
+// OpenAI/Azure chat usage. prompt_tokens is the full input; cache hits are a
+// subset nested under prompt_tokens_details (OpenAI prompt-caching docs).
 type ProviderUsage = {
     completion_tokens: number;
     prompt_tokens: number;
