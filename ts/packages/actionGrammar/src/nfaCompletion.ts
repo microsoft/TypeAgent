@@ -130,6 +130,157 @@ interface CapturedSlot {
     startTokenIndex: number;
 }
 
+interface WildcardCaptureUpdate {
+    activeCapture: CapturedSlot | undefined;
+    stepCapture: CapturedSlot | undefined;
+}
+
+function findWildcardCaptureStart(
+    nfa: NFA,
+    stateIds: number[],
+    tokenIndex: number,
+): CapturedSlot | undefined {
+    for (const stateId of stateIds) {
+        const state = nfa.states[stateId];
+        if (state === undefined) continue;
+        for (const transition of state.transitions) {
+            if (
+                transition.type === "wildcard" &&
+                transition.propertyPath !== undefined
+            ) {
+                return {
+                    propertyPath: transition.propertyPath,
+                    text: "",
+                    startTokenIndex: tokenIndex,
+                };
+            }
+        }
+    }
+    return undefined;
+}
+
+function updateWildcardCapture(
+    nfa: NFA,
+    stateIds: number[],
+    isWildcardStep: boolean,
+    activeCapture: CapturedSlot | undefined,
+    tokens: string[],
+    starts: number[],
+    tokenIndex: number,
+    input?: string,
+): WildcardCaptureUpdate {
+    if (!isWildcardStep) {
+        return { activeCapture: undefined, stepCapture: undefined };
+    }
+
+    const capture =
+        findWildcardCaptureStart(nfa, stateIds, tokenIndex) ?? activeCapture;
+    if (capture === undefined) {
+        return { activeCapture: undefined, stepCapture: undefined };
+    }
+
+    const captureEnd = starts[tokenIndex] + tokens[tokenIndex].length;
+    const stepCapture: CapturedSlot = {
+        propertyPath: capture.propertyPath,
+        startTokenIndex: capture.startTokenIndex,
+        text:
+            input !== undefined
+                ? input.substring(starts[capture.startTokenIndex], captureEnd)
+                : tokens
+                      .slice(capture.startTokenIndex, tokenIndex + 1)
+                      .join(" "),
+    };
+    return { activeCapture: stepCapture, stepCapture };
+}
+
+interface TransitionMatches {
+    tokenMatched: number[];
+    wildcardMatched: number[];
+    matchedDisplayLength: number;
+    matchedInputTokenCount: number;
+}
+
+function findMatchingTransitions(
+    nfa: NFA,
+    stateIds: number[],
+    tokens: string[],
+    tokenIndex: number,
+): TransitionMatches {
+    const token = tokens[tokenIndex];
+    const lowerToken = token.toLowerCase();
+    const tokenMatched: number[] = [];
+    const wildcardMatched: number[] = [];
+    let matchedDisplayLength = token.length;
+    let matchedInputTokenCount = 1;
+
+    for (const stateId of stateIds) {
+        const state = nfa.states[stateId];
+        if (state === undefined) continue;
+
+        for (const transition of state.transitions) {
+            if (transition.type === "wildcard") {
+                debugCompletion(
+                    `  walkPrefix: state ${stateId} --*${transition.variable || ""}:${transition.typeName || "any"}--> ${transition.to} (wildcard candidate "${token}")`,
+                );
+                wildcardMatched.push(transition.to);
+                continue;
+            }
+            if (transition.type !== "token" || !transition.tokens) continue;
+
+            let matchIndex = transition.tokens.findIndex(
+                (candidate) => candidate.toLowerCase() === lowerToken,
+            );
+            let spanConsumed = 1;
+            if (matchIndex === -1) {
+                for (
+                    let grammarIndex = 0;
+                    grammarIndex < transition.tokens.length;
+                    grammarIndex++
+                ) {
+                    const grammarToken = transition.tokens[grammarIndex];
+                    if (!/\s/.test(grammarToken)) continue;
+                    const wordCount = grammarToken
+                        .split(/\s+/)
+                        .filter(Boolean).length;
+                    if (
+                        wordCount < 2 ||
+                        tokenIndex + wordCount > tokens.length
+                    ) {
+                        continue;
+                    }
+                    const inputSpan = tokens
+                        .slice(tokenIndex, tokenIndex + wordCount)
+                        .map((inputToken) => inputToken.toLowerCase())
+                        .join(" ");
+                    if (inputSpan === grammarToken.toLowerCase()) {
+                        matchIndex = grammarIndex;
+                        spanConsumed = wordCount;
+                        break;
+                    }
+                }
+            }
+            if (matchIndex === -1) continue;
+
+            debugCompletion(
+                `  walkPrefix: state ${stateId} --[${transition.tokens.join("|")}]--> ${transition.to} (token matched, span=${spanConsumed})`,
+            );
+            tokenMatched.push(transition.to);
+            const displayToken =
+                transition.displayTokens?.[matchIndex] ??
+                transition.tokens[matchIndex];
+            matchedDisplayLength = displayToken.length;
+            matchedInputTokenCount = spanConsumed;
+        }
+    }
+
+    return {
+        tokenMatched,
+        wildcardMatched,
+        matchedDisplayLength,
+        matchedInputTokenCount,
+    };
+}
+
 function walkPrefixTokens(
     nfa: NFA,
     tokens: string[],
@@ -169,75 +320,12 @@ function walkPrefixTokens(
     let activeCapture: CapturedSlot | undefined;
     while (consumed < tokens.length) {
         const token = tokens[consumed];
-        const tokenMatched: number[] = [];
-        const wildcardMatched: number[] = [];
-        const lowerToken = token.toLowerCase();
-        // Capture the matched display token's length so the caller can
-        // compute matchedPrefixLength precisely.  Default to the input
-        // token's length when no display info is available.
-        let matchedDisplayLength = token.length;
-        // Most grammar transitions consume one input token.  A grammar
-        // token with internal whitespace (escape-space authoring, e.g.
-        // `hello world`) consumes a span of multiple consecutive input
-        // tokens (`hello`, `world`).
-        let matchedInputTokenCount = 1;
-
-        for (const stateId of currentStates) {
-            const state = nfa.states[stateId];
-            if (!state) continue;
-
-            for (const trans of state.transitions) {
-                if (trans.type === "token" && trans.tokens) {
-                    // Try single-token match first (the common case).
-                    let matchIdx = trans.tokens.findIndex(
-                        (t) => t.toLowerCase() === lowerToken,
-                    );
-                    let spanConsumed = 1;
-                    // Then try multi-token match for grammar tokens
-                    // containing internal whitespace (escape-space).
-                    if (matchIdx === -1) {
-                        for (let gi = 0; gi < trans.tokens.length; gi++) {
-                            const gt = trans.tokens[gi];
-                            if (!/\s/.test(gt)) continue;
-                            const wordCount = gt
-                                .split(/\s+/)
-                                .filter(Boolean).length;
-                            if (
-                                wordCount < 2 ||
-                                consumed + wordCount > tokens.length
-                            ) {
-                                continue;
-                            }
-                            const inputSpan = tokens
-                                .slice(consumed, consumed + wordCount)
-                                .map((t) => t.toLowerCase())
-                                .join(" ");
-                            if (inputSpan === gt.toLowerCase()) {
-                                matchIdx = gi;
-                                spanConsumed = wordCount;
-                                break;
-                            }
-                        }
-                    }
-                    if (matchIdx !== -1) {
-                        debugCompletion(
-                            `  walkPrefix: state ${stateId} --[${trans.tokens.join("|")}]--> ${trans.to} (token matched, span=${spanConsumed})`,
-                        );
-                        tokenMatched.push(trans.to);
-                        const displayTok =
-                            trans.displayTokens?.[matchIdx] ??
-                            trans.tokens[matchIdx];
-                        matchedDisplayLength = displayTok.length;
-                        matchedInputTokenCount = spanConsumed;
-                    }
-                } else if (trans.type === "wildcard") {
-                    debugCompletion(
-                        `  walkPrefix: state ${stateId} --*${trans.variable || ""}:${trans.typeName || "any"}--> ${trans.to} (wildcard candidate "${token}")`,
-                    );
-                    wildcardMatched.push(trans.to);
-                }
-            }
-        }
+        const {
+            tokenMatched,
+            wildcardMatched,
+            matchedDisplayLength,
+            matchedInputTokenCount,
+        } = findMatchingTransitions(nfa, currentStates, tokens, consumed);
 
         // Prefer token transitions; fall back to wildcard only when no token matches
         const nextStates =
@@ -306,47 +394,18 @@ function walkPrefixTokens(
         // Wildcard entry transitions identify the property. Self-loop
         // transitions are unannotated, so carry the active property forward
         // and snapshot the complete span on every wildcard step.
-        let stepCapture: CapturedSlot | undefined;
-        if (isWildcardStep) {
-            outer: for (const sid of currentStates) {
-                const st = nfa.states[sid];
-                if (!st) continue;
-                for (const t of st.transitions) {
-                    if (t.type === "wildcard" && t.propertyPath !== undefined) {
-                        stepCapture = {
-                            propertyPath: t.propertyPath,
-                            text: "",
-                            startTokenIndex: consumed,
-                        };
-                        break outer;
-                    }
-                }
-            }
-            activeCapture = stepCapture ?? activeCapture;
-            if (activeCapture !== undefined) {
-                const captureEnd = spanStart + token.length;
-                stepCapture = {
-                    propertyPath: activeCapture.propertyPath,
-                    startTokenIndex: activeCapture.startTokenIndex,
-                    text:
-                        input !== undefined
-                            ? input.substring(
-                                  starts[activeCapture.startTokenIndex],
-                                  captureEnd,
-                              )
-                            : tokens
-                                  .slice(
-                                      activeCapture.startTokenIndex,
-                                      consumed + 1,
-                                  )
-                                  .join(" "),
-                };
-                activeCapture = stepCapture;
-            }
-        } else {
-            activeCapture = undefined;
-        }
-        capturedSlotsPerStep.push(stepCapture);
+        const captureUpdate = updateWildcardCapture(
+            nfa,
+            currentStates,
+            isWildcardStep,
+            activeCapture,
+            tokens,
+            starts,
+            consumed,
+            input,
+        );
+        activeCapture = captureUpdate.activeCapture;
+        capturedSlotsPerStep.push(captureUpdate.stepCapture);
         // Compute the input position where this step ends.  For token
         // matches: span start + grammar display length (capped at input
         // length).  For wildcard matches: end of the (single) input token
