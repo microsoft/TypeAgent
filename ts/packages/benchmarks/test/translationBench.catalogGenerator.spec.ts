@@ -21,6 +21,9 @@ import {
     loadActionParametersGraderCatalogFile,
     mergeUnionParamSpecs,
     parameterRequiresLlmJudge,
+    ignoredGoldParameterNames,
+    isIgnoredGoldParameter,
+    stripIgnoredGoldParameters,
     REGEX_RULE_IDS,
     renderSchemaType,
     schemaTypeToParamSpec,
@@ -1426,6 +1429,38 @@ describe("eligible action coverage counting", () => {
         expect(countEligibleTranslationBenchActions(schemas, new Set())).toBe(
             3,
         );
+    });
+});
+
+describe("stripIgnoredGoldParameters", () => {
+    it("removes ignore-listed keys and drops empty parameter objects", () => {
+        expect(
+            isIgnoredGoldParameter("github-cli", "starRepo", "unstar"),
+        ).toBe(true);
+        expect(
+            ignoredGoldParameterNames("github-cli", "starRepo"),
+        ).toEqual(["unstar"]);
+        const stripped = stripIgnoredGoldParameters(
+            "github-cli",
+            "starRepo",
+            { repo: "microsoft/TypeScript", unstar: false },
+        );
+        expect(stripped.removed).toEqual(["unstar"]);
+        expect(stripped.parameters).toEqual({ repo: "microsoft/TypeScript" });
+        const onlyDefault = stripIgnoredGoldParameters(
+            "github-cli",
+            "starRepo",
+            { unstar: false },
+        );
+        expect(onlyDefault.removed).toEqual(["unstar"]);
+        expect(onlyDefault.parameters).toBeUndefined();
+        const untouched = stripIgnoredGoldParameters(
+            "list",
+            "removeItems",
+            { listName: "groceries" },
+        );
+        expect(untouched.removed).toEqual([]);
+        expect(untouched.parameters).toEqual({ listName: "groceries" });
     });
 });
 

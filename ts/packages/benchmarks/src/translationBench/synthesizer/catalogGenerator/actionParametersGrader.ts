@@ -255,6 +255,61 @@ export const NONEMPTY_PARAMETERS = [
 
 const NONEMPTY_PARAMETER_SET = new Set<string>(NONEMPTY_PARAMETERS);
 
+/** True when action.parameter is on the ungrounded-optional ignore list. */
+export function isIgnoredGoldParameter(
+    schemaName: string,
+    actionName: string,
+    fieldName: string,
+): boolean {
+    return IGNORE_PARAMETER_SET.has(
+        `${schemaName}.${actionName}.${fieldName}`,
+    );
+}
+
+/** Field names on IGNORE_PARAMETERS for one action (empty when none). */
+export function ignoredGoldParameterNames(
+    schemaName: string,
+    actionName: string,
+): string[] {
+    const prefix = `${schemaName}.${actionName}.`;
+    return IGNORE_PARAMETERS.filter((full) => full.startsWith(prefix)).map(
+        (full) => full.slice(prefix.length),
+    );
+}
+
+/**
+ * Drop IGNORE_PARAMETERS keys from gold parameters.
+ * Returns a new object; omits `parameters` entirely when nothing remains.
+ */
+export function stripIgnoredGoldParameters(
+    schemaName: string,
+    actionName: string,
+    parameters: Record<string, unknown> | undefined,
+): {
+    parameters: Record<string, unknown> | undefined;
+    removed: string[];
+} {
+    if (parameters === undefined) {
+        return { parameters: undefined, removed: [] };
+    }
+    const removed: string[] = [];
+    const next: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(parameters)) {
+        if (isIgnoredGoldParameter(schemaName, actionName, key)) {
+            removed.push(key);
+            continue;
+        }
+        next[key] = value;
+    }
+    if (removed.length === 0) {
+        return { parameters, removed };
+    }
+    return {
+        parameters: Object.keys(next).length > 0 ? next : undefined,
+        removed,
+    };
+}
+
 export const HEURISTIC_SOURCE_HASH: string = createHash("sha256")
     .update(
         JSON.stringify({

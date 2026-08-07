@@ -54,6 +54,7 @@ import {
     runTranslationBenchDataQualityVerifier,
     runTranslationBenchFormatChecker,
 } from "./dataQualityVerifier.js";
+import { ignoredGoldParameterNames } from "./catalogGenerator/actionParametersGrader.js";
 import {
     loadTranslationBenchQualityVerifierPromptPack,
     loadTranslationBenchSynthesizerPromptPack,
@@ -500,10 +501,18 @@ function formatSynthesizerPrompt(
         (tool) => tool.function.name === options.targetAction.actionName,
     )!;
     const parameterField = targetParameterField(options);
+    const omitParams = ignoredGoldParameterNames(
+        options.targetAction.schemaName,
+        options.targetAction.actionName,
+    );
+    const omitClause =
+        omitParams.length === 0
+            ? ""
+            : ` omitUngroundedParameters=${JSON.stringify(omitParams)} — these optional keys must be ABSENT from gold parameters (do not mint defaults, empty values, or dual fields).`;
     const actionContract =
         parameterField === undefined
             ? `Every expected action must use exactly {"schemaName":"${options.targetAction.schemaName}","actionName":"${options.targetAction.actionName}"}; omit parameters entirely for this parameterless action. Never use name/arguments or a qualified-name string.`
-            : `Every expected action must use exactly {"schemaName":"${options.targetAction.schemaName}","actionName":"${options.targetAction.actionName}","parameters":{...}} with schema-valid parameters${parameterField.optional ? " when parameters are present" : ""}. Never use name/arguments or a qualified-name string.`;
+            : `Every expected action must use exactly {"schemaName":"${options.targetAction.schemaName}","actionName":"${options.targetAction.actionName}","parameters":{...}} with schema-valid parameters${parameterField.optional ? " when parameters are present" : ""}. Never use name/arguments or a qualified-name string.${omitClause}`;
     const positiveCount = options.genCaseCount / 2;
     const previousRejectedBlock =
         previousRejectedCandidate === undefined

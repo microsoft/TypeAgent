@@ -83,6 +83,15 @@ template: |-
   - Vary difficulty from beginner to advanced phrasing
   - Match parameter types and ranges in the function description
 
+  Gold parameters (hard requirement for seed + every positive):
+  - Only include parameters the utterance (or allowed history) clearly supports.
+  - NEVER mint schema defaults, polarity flags set to the no-op value, empty
+    strings, empty arrays, invented URLs/nonces/editor state, or dual fields
+    that restate another parameter (e.g. private:false with public:true).
+  - When omitUngroundedParameters is listed for the target action, those keys
+    must be ABSENT from every expectedActions[].parameters object. Prefer omit
+    over false / "" / [].
+
   Attempt: {{attempt}}
 
   Immutable context (YAML):

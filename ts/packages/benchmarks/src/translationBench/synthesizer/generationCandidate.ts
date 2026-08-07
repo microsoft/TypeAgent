@@ -22,6 +22,7 @@ import {
     normalizeTranslationBenchActionShapePolicy,
     type TranslationBenchActionShapePolicy,
 } from "./actionShape.js";
+import { stripIgnoredGoldParameters } from "./catalogGenerator/actionParametersGrader.js";
 
 export interface TranslationBenchGeneratedCase {
     id: string;
@@ -280,7 +281,54 @@ export function parseTranslationBenchGeneratedCandidate(
             `Generated candidate requires ${expectedPerRole} positive and ${expectedPerRole} negative gen cases`,
         );
     }
-    return structuredClone(parsed);
+    // Gold hygiene: never keep ungrounded optional defaults on labeled actions.
+    return stripIgnoredGoldParametersFromCandidate(structuredClone(parsed));
+}
+
+function stripIgnoredGoldParametersFromActions(
+    actions: TranslationBenchBenchmarkAction[],
+): TranslationBenchBenchmarkAction[] {
+    return actions.map((action) => {
+        const { parameters } = stripIgnoredGoldParameters(
+            action.schemaName,
+            action.actionName,
+            action.parameters,
+        );
+        if (parameters === action.parameters) {
+            return action;
+        }
+        if (parameters === undefined) {
+            const { parameters: _drop, ...rest } = action;
+            return rest;
+        }
+        return { ...action, parameters };
+    });
+}
+
+/** Deterministic gold cleanup shared by parse + format checker. */
+export function stripIgnoredGoldParametersFromCandidate(
+    candidate: TranslationBenchGeneratedCandidate,
+): TranslationBenchGeneratedCandidate {
+    return {
+        ...candidate,
+        seed: {
+            ...candidate.seed,
+            expectedActions: stripIgnoredGoldParametersFromActions(
+                candidate.seed.expectedActions,
+            ),
+        },
+        genCases: candidate.genCases.map((probe) => {
+            if (probe.role !== "positive") {
+                return probe;
+            }
+            return {
+                ...probe,
+                expectedActions: stripIgnoredGoldParametersFromActions(
+                    probe.expectedActions,
+                ),
+            };
+        }),
+    };
 }
 
 export function parseTranslationBenchReviewerDecision(

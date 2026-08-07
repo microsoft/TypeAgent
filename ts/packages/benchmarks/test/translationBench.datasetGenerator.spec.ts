@@ -613,6 +613,111 @@ describe("translation bench generation quality loop", () => {
         );
     });
 
+    it("strips ignore-listed defaults from gold and prompts omit list", async () => {
+        const parsed = parseToolsJsonSchema([
+            {
+                name: "starRepo",
+                description: "Star a GitHub repository",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        repo: { type: "string" },
+                        unstar: { type: "boolean" },
+                    },
+                    required: ["repo"],
+                    additionalProperties: false,
+                },
+            },
+        ]);
+        const tools = generateActionActionFunctionJsonSchemas({
+            entry: parsed.entry.action!,
+            actionSchemas: parsed.actionSchemas,
+        }).map((tool) => ({
+            type: "function" as const,
+            function: {
+                name: tool.function.name,
+                ...(tool.function.description !== undefined
+                    ? { description: tool.function.description }
+                    : {}),
+                parameters: tool.function.parameters as Record<string, unknown>,
+            },
+        }));
+        const schema: TranslationBenchBenchmarkSchema = {
+            schemaName: "github-cli",
+            description: "github-cli actions",
+            tools,
+            typeAgent: {
+                sourceHash: `github-cli-${HASH}`,
+                schemaType: "GithubCliAction",
+                parsedActionSchema: toJSONParsedActionSchema(parsed),
+            },
+        };
+        const target = targetAction("github-cli", "starRepo");
+        const dirty = generatedCandidate(target, 2);
+        // Mint ungrounded default the format checker must strip.
+        dirty.seed.expectedActions = [
+            {
+                ...target,
+                parameters: { query: "seed", unstar: false, repo: "a/b" },
+            },
+        ];
+        // generatedCandidate uses {query} but schema wants repo — fix all positives
+        for (const probe of [dirty.seed, ...dirty.genCases]) {
+            if (probe.expectedActions.length === 0) continue;
+            probe.expectedActions = [
+                {
+                    ...target,
+                    parameters: {
+                        repo: "microsoft/TypeScript",
+                        unstar: false,
+                    },
+                },
+            ];
+        }
+        // seed utterance uniqueness with gen cases - generatedCandidate already unique
+        let generatorPrompt = "";
+        const result = await runTranslationBenchGenerationQualityLoop({
+            targetAction: target,
+            schema,
+            anchor: sourceAnchor(),
+            activeSchemas: [schema.schemaName],
+            genCaseCount: 2,
+            maxAttempts: 5,
+            generator: {
+                model: "generator-model",
+                async complete(prompt) {
+                    generatorPrompt = prompt;
+                    return JSON.stringify(dirty);
+                },
+            },
+            reviewer: {
+                model: "reviewer-model",
+                async complete(prompt) {
+                    return JSON.stringify(
+                        reviewerDecision(
+                            candidateHashFromPrompt(prompt),
+                            "approve",
+                        ),
+                    );
+                },
+            },
+        });
+        expect(generatorPrompt).toContain("omitUngroundedParameters");
+        expect(generatorPrompt).toContain("unstar");
+        expect(result.candidate.seed.expectedActions[0]!.parameters).toEqual({
+            repo: "microsoft/TypeScript",
+        });
+        for (const probe of result.candidate.genCases) {
+            if (probe.role !== "positive") continue;
+            expect(probe.expectedActions[0]!.parameters).toEqual({
+                repo: "microsoft/TypeScript",
+            });
+            expect(probe.expectedActions[0]!.parameters).not.toHaveProperty(
+                "unstar",
+            );
+        }
+    });
+
     it("uses separate generator and reviewer passes", async () => {
         const generatorPrompts: string[] = [];
         const reviewerPrompts: string[] = [];
