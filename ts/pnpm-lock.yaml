@@ -4039,19 +4039,46 @@ importers:
 
   packages/benchmarks:
     dependencies:
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../actionSchema
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
+      commander:
+        specifier: ^12.1.0
+        version: 12.1.0
       default-agent-provider:
         specifier: workspace:*
         version: link:../defaultAgentProvider
+      js-yaml:
+        specifier: ^4.3.0
+        version: 4.3.0
+      zod:
+        specifier: ^4.1.13
+        version: 4.1.13
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/js-yaml':
+        specifier: ^4.0.9
+        version: 4.0.9
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.1
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@26.1.2)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
