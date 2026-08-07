@@ -4058,8 +4058,8 @@ importers:
         specifier: workspace:*
         version: link:../defaultAgentProvider
       js-yaml:
-        specifier: ^4.3.1
-        version: 4.3.1
+        specifier: ^4.3.0
+        version: 4.3.0
       zod:
         specifier: ^4.1.13
         version: 4.1.13
@@ -4559,8 +4559,8 @@ importers:
         specifier: ^16.3.1
         version: 16.5.0
       js-yaml:
-        specifier: ^4.3.1
-        version: 4.3.1
+        specifier: ^4.3.0
+        version: 4.3.0
       zod:
         specifier: ^3.23.8
         version: 3.25.76
@@ -5894,8 +5894,8 @@ importers:
         specifier: ^5.9.6
         version: 5.10.0
       js-yaml:
-        specifier: ^4.3.1
-        version: 4.3.1
+        specifier: ^4.3.0
+        version: 4.3.0
       markdown-it:
         specifier: ^14.2.0
         version: 14.2.0
@@ -6689,8 +6689,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
       js-yaml:
-        specifier: ^4.3.1
-        version: 4.3.1
+        specifier: ^4.3.0
+        version: 4.3.0
       lodash-es:
         specifier: ^4.18.1
         version: 4.18.1
@@ -14901,10 +14901,6 @@ packages:
 
   js-yaml@4.3.0:
     resolution: {integrity: sha512-1td788aAnnZ5qs7V2QIRl1owjtYpbKt749Y3xauqQgwIIGF/xXWz1wMTEBx5O3LK3lXLVuqXPdPxj2BoFHaW9Q==}
-    hasBin: true
-
-  js-yaml@4.3.1:
-    resolution: {integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==}
     hasBin: true
 
   jsbi@2.0.5:
@@ -30101,10 +30097,6 @@ snapshots:
       esprima: 4.0.1
 
   js-yaml@4.3.0:
-    dependencies:
-      argparse: 2.0.1
-
-  js-yaml@4.3.1:
     dependencies:
       argparse: 2.0.1
 
