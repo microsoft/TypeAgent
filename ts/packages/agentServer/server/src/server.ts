@@ -390,7 +390,9 @@ async function main() {
 
     // Shared shutdown logic — used by RPC handler, idle timer, and clientIO intercept.
     // The wss variable is assigned after createWebSocketChannelServer resolves below.
-    let wss: Awaited<ReturnType<typeof createWebSocketChannelServer>>;
+    let wss:
+        | Awaited<ReturnType<typeof createWebSocketChannelServer>>
+        | undefined;
 
     // Stop listening, close conversations (which releases the instance-dir
     // lock), and drop the PID file. Shared by shutdown and restart so a
@@ -398,7 +400,7 @@ async function main() {
     let teardownPromise: Promise<void> | undefined;
     function teardownServer(): Promise<void> {
         teardownPromise ??= (async () => {
-            wss.close();
+            wss?.close();
             await conversationManager.close();
             removeServerPid(port);
         })();
