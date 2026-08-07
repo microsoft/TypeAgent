@@ -116,7 +116,19 @@ import { CalendarActionV3 } from "./calendarActionsSchemaV3.ts";
   | <FindEvents>
   | <AddParticipant>
   | <FindTodaysEvents>
-  | <FindThisWeeksEvents>;
+  | <FindThisWeeksEvents>
+  | <CalendarLogin>
+  | <CalendarLogout>
+  | <CalendarGoogleAuth>;
+
+<CalendarLogin> = (log in | login | sign in) (to)? (my)? (calendar | google calendar | outlook calendar)
+    -> { actionName: "calendarLogin" };
+
+<CalendarLogout> = (log out | logout | sign out) (of)? (my)? (calendar | google calendar | outlook calendar)
+    -> { actionName: "calendarLogout" };
+
+<CalendarGoogleAuth> = (complete | finish) google calendar (authorization | authentication | oauth) (with)? (code)? $(code:wildcard)
+    -> { actionName: "calendarGoogleAuth", parameters: { code } };
 
 <FindThisWeeksEvents> = what's happening this week -> {
     actionName: "findThisWeeksEvents"

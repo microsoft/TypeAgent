@@ -8,6 +8,11 @@ import {
 } from "../schema/notificationActionSchema.js";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { processCommandNoLock } from "../../../command/command.js";
+import { executeCommandFromHandlers } from "@typeagent/agent-sdk/helpers/command";
+import {
+    notifyCommandHandlers,
+    STATUS_NOTICE_DEFAULT_MESSAGE,
+} from "../handlers/notifyCommandHandler.js";
 
 export async function executeNotificationAction(
     action: AppAction,
@@ -32,6 +37,39 @@ export async function executeNotificationAction(
             await processCommandNoLock(
                 `@notify clear`,
                 context.sessionContext.agentContext,
+            );
+            break;
+        case "testNotification":
+            await executeCommandFromHandlers(
+                notifyCommandHandlers,
+                ["test"],
+                {
+                    args: { message: notificationAction.parameters.message },
+                    flags: {
+                        mode: notificationAction.parameters.mode ?? "toast",
+                    },
+                },
+                context,
+            );
+            break;
+        case "testStatusNotice":
+            await executeCommandFromHandlers(
+                notifyCommandHandlers,
+                ["status"],
+                {
+                    args: {
+                        message:
+                            notificationAction.parameters?.message ??
+                            STATUS_NOTICE_DEFAULT_MESSAGE,
+                    },
+                    flags: {
+                        level:
+                            notificationAction.parameters?.level ?? "warning",
+                        restart:
+                            notificationAction.parameters?.restart ?? false,
+                    },
+                },
+                context,
             );
             break;
         default:

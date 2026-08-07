@@ -16,6 +16,10 @@ import { getStatusSummary } from "../../../helpers/status.js";
 
 export class RunCommandScriptHandler implements CommandHandler {
     public readonly description = "Run a command script file";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "runCommandScript",
+    };
     public readonly parameters = {
         args: {
             input: {

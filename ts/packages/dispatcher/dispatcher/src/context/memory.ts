@@ -23,7 +23,7 @@ import type {
 } from "@typeagent/agent-sdk";
 import { ExecutableAction, getFullActionName } from "@typeagent/agent-cache";
 import { CachedImageWithDetails } from "@typeagent/typechat-utils";
-import { getAppAgentName } from "../internal.js";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     CommandHandler,
     CommandHandlerTable,
@@ -339,6 +339,10 @@ function ensureMemory(context: ActionContext<CommandHandlerContext>) {
 
 class MemorySearchCommandHandler implements CommandHandler {
     public readonly description = "Search conversation memory";
+    public readonly action = {
+        schema: "system.memory",
+        actionName: "queryMemory",
+    };
     public readonly parameters = {
         args: {
             terms: {
@@ -465,7 +469,13 @@ class MemoryAnswerCommandHandler implements CommandHandler {
             },
         },
     } as const;
-    constructor(private search: boolean) {}
+    constructor(
+        private search: boolean,
+        public readonly action: {
+            schema: string;
+            actionName: string;
+        },
+    ) {}
 
     private async getResult(
         memory: ConversationMemory,
@@ -538,22 +548,32 @@ export function getMemoryCommandHandlers(): CommandHandlerTable {
     return {
         description: "Memory commands",
         commands: {
-            legacy: getToggleHandlerTable("legacy", async (context, enable) => {
-                await changeContextConfig(
-                    {
-                        execution: {
-                            memory: {
-                                legacy: enable,
+            legacy: getToggleHandlerTable(
+                "legacy",
+                async (context, enable) => {
+                    await changeContextConfig(
+                        {
+                            execution: {
+                                memory: {
+                                    legacy: enable,
+                                },
                             },
                         },
-                    },
-                    context,
-                );
-            }),
+                        context,
+                    );
+                },
+                { schema: "system.memory", actionName: "setLegacyMemory" },
+            ),
 
             query: new MemorySearchCommandHandler(),
-            search: new MemoryAnswerCommandHandler(true),
-            answer: new MemoryAnswerCommandHandler(false),
+            search: new MemoryAnswerCommandHandler(true, {
+                schema: "system.memory",
+                actionName: "searchMemory",
+            }),
+            answer: new MemoryAnswerCommandHandler(false, {
+                schema: "system.memory",
+                actionName: "answerFromMemory",
+            }),
         },
     };
 }

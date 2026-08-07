@@ -28,6 +28,10 @@ import { askYesNoWithContext } from "../../interactiveIO.js";
 class CopilotImportCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Import GitHub Copilot Chat sessions as conversation mirrors";
+    public readonly action = {
+        schema: "system.copilot",
+        actionName: "importCopilotSessions",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         const importCopilot = context.sessionContext.agentContext.copilotImport;
         if (importCopilot === undefined) {
@@ -229,6 +233,10 @@ function describeAttachments(
 class FixWithCopilotCommandHandler implements CommandHandler {
     public readonly description =
         "Hand the current conversation to GitHub Copilot Chat in VS Code to diagnose and fix";
+    public readonly action = {
+        schema: "system.copilot",
+        actionName: "fixWithCopilot",
+    };
     public readonly parameters = {
         args: {
             instructions: {
@@ -452,6 +460,10 @@ function openUrl(url: string): void {
 class CopilotLoginCommandHandler implements CommandHandler {
     public readonly description =
         "Sign in to GitHub Copilot via the browser device flow";
+    public readonly action = {
+        schema: "system.copilot",
+        actionName: "loginToCopilot",
+    };
     public readonly parameters = {
         flags: {
             host: {
@@ -657,14 +669,16 @@ class CopilotLoginCommandHandler implements CommandHandler {
     }
 }
 
+export const copilotCommandHandlers: CommandHandlerTable = {
+    description: "GitHub Copilot session commands",
+    defaultSubCommand: "import",
+    commands: {
+        import: new CopilotImportCommandHandler(),
+        fix: new FixWithCopilotCommandHandler(),
+        login: new CopilotLoginCommandHandler(),
+    },
+};
+
 export function getCopilotCommandHandlers(): CommandHandlerTable {
-    return {
-        description: "GitHub Copilot session commands",
-        defaultSubCommand: "import",
-        commands: {
-            import: new CopilotImportCommandHandler(),
-            fix: new FixWithCopilotCommandHandler(),
-            login: new CopilotLoginCommandHandler(),
-        },
-    };
+    return copilotCommandHandlers;
 }

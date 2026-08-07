@@ -7,6 +7,10 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
+    CommandHandlerTable,
+    executeCommandFromHandlers,
+} from "@typeagent/agent-sdk/helpers/command";
+import {
     createActionResultFromTextDisplay,
     createActionResultFromHtmlDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
@@ -14,10 +18,43 @@ import { StoredGrammarRule } from "@typeagent/action-grammar";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { GrammarAction } from "../schema/grammarActionSchema.js";
 
+/** Returns `{ [key]: value }` when value is defined, `{}` otherwise. */
+function opt(value: unknown, key: string): Record<string, unknown> {
+    return value !== undefined ? { [key]: value } : {};
+}
+
+function executeScanGrammarCollisionsAction(
+    action: TypeAgentAction<GrammarAction>,
+    context: ActionContext<CommandHandlerContext>,
+    systemHandlers: CommandHandlerTable,
+): Promise<ActionResult | undefined> {
+    return executeCommandFromHandlers(
+        systemHandlers,
+        ["grammar", "collisions"],
+        {
+            args: {},
+            flags: { ...opt(action.parameters?.jsonPath, "json") },
+        },
+        context,
+    );
+}
+
 export async function executeGrammarAction(
     action: TypeAgentAction<GrammarAction>,
     context: ActionContext<CommandHandlerContext>,
+    systemHandlers?: CommandHandlerTable,
 ): Promise<ActionResult | undefined> {
+    if (action.actionName === "scanGrammarCollisions") {
+        if (systemHandlers === undefined) {
+            throw new Error("System command handlers are unavailable.");
+        }
+        return executeScanGrammarCollisionsAction(
+            action,
+            context,
+            systemHandlers,
+        );
+    }
+
     const chc = context.sessionContext.agentContext;
     const store = chc.persistedGrammarStore;
 

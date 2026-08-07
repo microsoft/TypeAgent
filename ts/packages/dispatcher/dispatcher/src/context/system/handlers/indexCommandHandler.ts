@@ -18,6 +18,10 @@ import { expandHome } from "../../../utils/fsUtils.js";
 
 class IndexListCommandHandler implements CommandHandler {
     public readonly description = "List indexes";
+    public readonly action = {
+        schema: "system.index",
+        actionName: "listIndexes",
+    };
     public readonly parameters = {} as const;
 
     public async run(
@@ -48,6 +52,10 @@ class IndexListCommandHandler implements CommandHandler {
 
 class IndexInfoCommandHandler implements CommandHandler {
     public readonly description = "Show index details";
+    public readonly action = {
+        schema: "system.index",
+        actionName: "showIndexInfo",
+    };
     public readonly parameters = {
         flags: {},
         args: {
@@ -90,6 +98,10 @@ class IndexInfoCommandHandler implements CommandHandler {
 
 class IndexCreateCommandHandler implements CommandHandler {
     public readonly description = "Create a new index";
+    public readonly action = {
+        schema: "system.index",
+        actionName: "createIndex",
+    };
     public readonly parameters = {
         flags: {},
         args: {
@@ -154,6 +166,10 @@ class IndexCreateCommandHandler implements CommandHandler {
 
 class IndexDeleteCommandHandler implements CommandHandler {
     public readonly description = "Delete an index";
+    public readonly action = {
+        schema: "system.index",
+        actionName: "deleteIndex",
+    };
     public readonly parameters = {
         args: {
             name: {
@@ -190,18 +206,20 @@ class IndexDeleteCommandHandler implements CommandHandler {
 /*
  * Gets all of the available indexing commands
  */
+export const indexCommandHandlers: CommandHandlerTable = {
+    description: "Indexing commands",
+    defaultSubCommand: "list",
+    commands: {
+        list: new IndexListCommandHandler(),
+        create: new IndexCreateCommandHandler(),
+        delete: new IndexDeleteCommandHandler(),
+        info: new IndexInfoCommandHandler(),
+        // TODO: implement
+        // rebuild: new IndexRebuildCommandHandler(), // is this necessary?
+        // watch: new IndexWatchCommandHandler(),     // Toggle file watching
+    },
+};
+
 export function getIndexCommandHandlers(): CommandHandlerTable {
-    return {
-        description: "Indexing commands",
-        defaultSubCommand: "list",
-        commands: {
-            list: new IndexListCommandHandler(),
-            create: new IndexCreateCommandHandler(),
-            delete: new IndexDeleteCommandHandler(),
-            info: new IndexInfoCommandHandler(),
-            // TODO: implement
-            // rebuild: new IndexRebuildCommandHandler(), // is this necessary?
-            // watch: new IndexWatchCommandHandler(),     // Toggle file watching
-        },
-    };
+    return indexCommandHandlers;
 }

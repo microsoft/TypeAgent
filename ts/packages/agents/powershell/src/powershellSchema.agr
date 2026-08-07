@@ -3,10 +3,14 @@
 
 import { PowerShellActions } from "./schema/scriptActions.mts";
 
-<Start> : PowerShellActions = <listPowerShellFlows> | <deletePowerShellFlow> | <importPowerShellFlow>;
+<Start> : PowerShellActions = <listPowerShellFlows> | <showPowerShellFlow> | <deletePowerShellFlow> | <importPowerShellFlow>;
 
 // Built-in action rules (dynamic flows are registered at runtime via addGeneratedRules)
 <listPowerShellFlows> = (<Polite>)? (<Greeting>)? (<Acknowledgement>)? (show me | list | display) (all)? (the)? (available)? powershell flows -> { actionName: "listPowerShellFlows" };
+
+<showPowerShellFlow> [spacing=optional] =
+    (show | describe | inspect) (me)? (the)? powershell flow $(flowName:wildcard)
+      -> { actionName: "showPowerShellFlow", parameters: { flowName } };
 
 <deletePowerShellFlow> [spacing=optional] =
     (delete | remove) (the)? powershell flow $(name:wildcard)

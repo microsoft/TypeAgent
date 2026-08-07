@@ -32,6 +32,10 @@ import { appAgentStateKeys } from "../../appAgentStateConfig.js";
 
 class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";
+    public readonly action = {
+        schema: "system.session",
+        actionName: "newSession",
+    };
     public readonly parameters = {
         flags: {
             keep: {
@@ -82,6 +86,10 @@ class SessionNewCommandHandler implements CommandHandler {
 
 class SessionOpenCommandHandler implements CommandHandler {
     public readonly description = "Open an existing session";
+    public readonly action = {
+        schema: "system.session",
+        actionName: "openSession",
+    };
     public readonly parameters = {
         args: {
             session: {
@@ -110,6 +118,10 @@ class SessionOpenCommandHandler implements CommandHandler {
 
 class SessionResetCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Reset config on session and keep the data";
+    public readonly action = {
+        schema: "system.session",
+        actionName: "resetSession",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         await changeContextConfig(null, context);
         displaySuccess(`Session settings revert to default.`, context);
@@ -119,6 +131,10 @@ class SessionResetCommandHandler implements CommandHandlerNoParams {
 class SessionClearCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Delete all data on the current sessions, keeping current settings";
+    public readonly action = {
+        schema: "system.session",
+        actionName: "clearSession",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         if (systemContext.session.sessionDirPath === undefined) {
@@ -148,6 +164,10 @@ class SessionClearCommandHandler implements CommandHandlerNoParams {
 class SessionDeleteCommandHandler implements CommandHandler {
     public readonly description =
         "Delete a session. If no session is specified, delete the current session and start a new session.\n-a to delete all sessions";
+    public readonly action = {
+        schema: "system.session",
+        actionName: "deleteSession",
+    };
     public readonly parameters = {
         args: {
             session: {
@@ -224,6 +244,10 @@ class SessionDeleteCommandHandler implements CommandHandler {
 class SessionListCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "List all sessions. The current session is marked green.";
+    public readonly action = {
+        schema: "system.session",
+        actionName: "listSessions",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         if (systemContext.persistDir === undefined) {
@@ -245,6 +269,10 @@ class SessionListCommandHandler implements CommandHandlerNoParams {
 
 class SessionInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show info about the current session";
+    public readonly action = {
+        schema: "system.session",
+        actionName: "showSessionInfo",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const constructionFiles = systemContext.session.sessionDirPath
@@ -316,17 +344,19 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
     }
 }
 
+export const sessionCommandHandlers: CommandHandlerTable = {
+    description: "Session commands",
+    commands: {
+        new: new SessionNewCommandHandler(),
+        open: new SessionOpenCommandHandler(),
+        reset: new SessionResetCommandHandler(),
+        clear: new SessionClearCommandHandler(),
+        list: new SessionListCommandHandler(),
+        delete: new SessionDeleteCommandHandler(),
+        info: new SessionInfoCommandHandler(),
+    },
+};
+
 export function getSessionCommandHandlers(): CommandHandlerTable {
-    return {
-        description: "Session commands",
-        commands: {
-            new: new SessionNewCommandHandler(),
-            open: new SessionOpenCommandHandler(),
-            reset: new SessionResetCommandHandler(),
-            clear: new SessionClearCommandHandler(),
-            list: new SessionListCommandHandler(),
-            delete: new SessionDeleteCommandHandler(),
-            info: new SessionInfoCommandHandler(),
-        },
-    };
+    return sessionCommandHandlers;
 }

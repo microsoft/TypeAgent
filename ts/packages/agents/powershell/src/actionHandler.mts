@@ -28,6 +28,7 @@ import { homedir } from "os";
 import { ScriptAnalyzer } from "./analysis/scriptAnalyzer.mjs";
 import { fileURLToPath } from "url";
 import { PowerShellStore } from "./store/powerShellStore.mjs";
+import { formatPowerShellFlowDetails } from "./flowDetails.mjs";
 import type { PowerShellFlowDefinition } from "./store/powerShellStore.mjs";
 import {
     type ScriptRecipe,
@@ -250,6 +251,35 @@ async function handlePowerShellFlowAction(
             );
             return createActionResultFromTextDisplay(
                 `Script flows (${entries.length}):\n${lines.join("\n")}`,
+            );
+        }
+
+        case "showPowerShellFlow": {
+            if (!flowStore) {
+                return createActionResultFromError(
+                    "Script flow store not available",
+                );
+            }
+            const flowName = action.parameters?.flowName as string | undefined;
+            if (!flowName) {
+                return createActionResultFromError(
+                    "Missing required parameter: flowName",
+                );
+            }
+            const flow = await flowStore.getFlow(flowName);
+            if (!flow) {
+                return createActionResultFromError(
+                    `Unknown PowerShell flow '${flowName}'. Use '@powershell list' to see available flows.`,
+                );
+            }
+            const script = await flowStore.getScript(flowName);
+            const usageCount =
+                flowStore
+                    .listFlows()
+                    .find((entry) => entry.actionName === flowName)
+                    ?.usageCount ?? 0;
+            return createActionResultFromTextDisplay(
+                formatPowerShellFlowDetails(flow, script, usageCount),
             );
         }
 
@@ -728,9 +758,18 @@ async function handlePowerShellFlowAction(
 
 let _agentStore: PowerShellStore | undefined;
 
+function executeBuiltInPowerShellAction(
+    action: { actionName: string; parameters?: Record<string, unknown> },
+    context: ActionContext<PowerShellAgentContext>,
+): Promise<ActionResult> {
+    (context as any).__store = _agentStore;
+    return handlePowerShellFlowAction(action, context);
+}
+
 class ImportScriptHandler implements CommandHandler {
     public readonly description =
         "Import a PowerShell script as a reusable PowerShell flow";
+    public readonly action = "importPowerShellFlow";
     public readonly parameters = {
         args: {
             filePath: {
@@ -749,83 +788,35 @@ class ImportScriptHandler implements CommandHandler {
         context: ActionContext<PowerShellAgentContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const store = _agentStore;
-        if (!store) {
-            throw new Error("Script flow store not available");
-        }
-
-        const filePath = params.args.filePath;
-        if (!filePath) {
-            throw new Error("Missing required argument: filePath");
-        }
-
-        const resolvedPath = isAbsolute(filePath)
-            ? filePath
-            : resolve(process.cwd(), filePath);
-
-        if (!existsSync(resolvedPath)) {
-            throw new Error(`File not found: ${resolvedPath}`);
-        }
-
-        if (extname(resolvedPath).toLowerCase() !== ".ps1") {
-            throw new Error("Only PowerShell (.ps1) files can be imported");
-        }
-
-        const scriptContent = readFileSync(resolvedPath, "utf8");
-        if (!scriptContent.trim()) {
-            throw new Error("Script file is empty");
-        }
-
-        const analyzer = new ScriptAnalyzer();
-        const overrideName = params.flags.actionName;
-        const recipe = await analyzer.analyze(
-            scriptContent,
-            resolvedPath,
-            overrideName,
-        );
-
-        if (store.hasFlow(recipe.actionName)) {
-            throw new Error(
-                `A flow named '${recipe.actionName}' already exists. Delete it first or use --actionName to specify a different name.`,
-            );
-        }
-
-        await store.saveFlow(recipe, "manual");
-        await context.sessionContext.reloadAgentSchema();
-
-        const patternList = recipe.grammarPatterns
-            .map((p) => `  "${p.pattern}"`)
-            .join("\n");
-        context.actionIO.setDisplay(
-            `Imported PowerShell flow '${recipe.actionName}': ${recipe.description}\n\nGrammar patterns:\n${patternList}`,
+        return executeBuiltInPowerShellAction(
+            {
+                actionName: "importPowerShellFlow",
+                parameters: {
+                    filePath: params.args.filePath,
+                    ...(params.flags.actionName === undefined
+                        ? {}
+                        : { actionName: params.flags.actionName }),
+                },
+            },
+            context,
         );
     }
 }
 
 class ListHandler implements CommandHandlerNoParams {
     public readonly description = "List all registered PowerShell flows";
+    public readonly action = "listPowerShellFlows";
     public async run(context: ActionContext<PowerShellAgentContext>) {
-        const store = _agentStore;
-        if (!store) {
-            throw new Error("Script flow store not available");
-        }
-        const entries = store.listFlows();
-        if (entries.length === 0) {
-            context.actionIO.setDisplay("No PowerShell flows registered.");
-            return;
-        }
-        const lines = entries.map(
-            (e) =>
-                `  ${e.actionName}: ${e.description} [usage: ${e.usageCount}]${e.source === "seed" ? " (sample)" : ""}`,
-        );
-        context.actionIO.setDisplay(
-            `Script flows (${entries.length}):\n${lines.join("\n")}`,
+        return executeBuiltInPowerShellAction(
+            { actionName: "listPowerShellFlows" },
+            context,
         );
     }
 }
 
 class RunHandler implements CommandHandler {
     public readonly description = "Execute a PowerShell flow by name";
+    public readonly action = "executePowerShellFlow";
     public readonly parameters = {
         args: {
             flowName: {
@@ -844,76 +835,27 @@ class RunHandler implements CommandHandler {
         context: ActionContext<PowerShellAgentContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const store = _agentStore;
-        if (!store) {
-            throw new Error("Script flow store not available");
-        }
-
-        const flowName = params.args.flowName;
-        if (!flowName) {
-            throw new Error("Missing required argument: flowName");
-        }
-
-        const flow = await store.getFlow(flowName);
-        if (!flow) {
-            throw new Error(
-                `Unknown PowerShell flow '${flowName}'. Use '@powershell list' to see available flows.`,
-            );
-        }
-
-        const script = await store.getScript(flowName);
-        if (!script) {
-            throw new Error(`Script not found for flow: ${flowName}`);
-        }
-
-        let flowParameters: Record<string, unknown> = {};
-        if (params.flags.flowParametersJson) {
-            try {
-                flowParameters = JSON.parse(params.flags.flowParametersJson);
-            } catch {
-                throw new Error(
-                    `Invalid JSON in --flowParametersJson: ${params.flags.flowParametersJson}`,
-                );
-            }
-        }
-
-        expandEnvVarsInParams(flowParameters, flow.parameters);
-        const pathError = validatePathParameters(
-            flowParameters,
-            flow.parameters,
+        return executeBuiltInPowerShellAction(
+            {
+                actionName: "executePowerShellFlow",
+                parameters: {
+                    flowName: params.args.flowName,
+                    ...(params.flags.flowParametersJson === undefined
+                        ? {}
+                        : {
+                              flowParametersJson:
+                                  params.flags.flowParametersJson,
+                          }),
+                },
+            },
+            context,
         );
-        if (pathError) {
-            throw new Error(pathError);
-        }
-        const validationError = validateParameterRules(
-            flowParameters,
-            flow.parameters,
-        );
-        if (validationError) {
-            throw new Error(validationError);
-        }
-
-        const result = await executeFlowScript(flow, script, flowParameters);
-        if (result.error !== undefined) {
-            throw new Error(String(result.error));
-        }
-
-        await store.recordUsage(flowName);
-        if ("displayContent" in result && result.displayContent) {
-            const content = result.displayContent;
-            const text =
-                typeof content === "string"
-                    ? content
-                    : "content" in content
-                      ? content.content
-                      : String(content);
-            context.actionIO.setDisplay(text);
-        }
     }
 }
 
 class DeleteHandler implements CommandHandler {
     public readonly description = "Delete a PowerShell flow by name";
+    public readonly action = "deletePowerShellFlow";
     public readonly parameters = {
         args: {
             name: {
@@ -925,28 +867,19 @@ class DeleteHandler implements CommandHandler {
         context: ActionContext<PowerShellAgentContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const store = _agentStore;
-        if (!store) {
-            throw new Error("Script flow store not available");
-        }
-
-        const name = params.args.name;
-        if (!name) {
-            throw new Error("Missing required argument: name");
-        }
-
-        const deleted = await store.deleteFlow(name);
-        if (!deleted) {
-            throw new Error(`Script flow not found: ${name}`);
-        }
-
-        await context.sessionContext.reloadAgentSchema();
-        context.actionIO.setDisplay(`Deleted PowerShell flow: ${name}`);
+        return executeBuiltInPowerShellAction(
+            {
+                actionName: "deletePowerShellFlow",
+                parameters: { name: params.args.name },
+            },
+            context,
+        );
     }
 }
 
 class ShowHandler implements CommandHandler {
     public readonly description = "Show details of a PowerShell flow";
+    public readonly action = "showPowerShellFlow";
     public readonly parameters = {
         args: {
             flowName: {
@@ -958,61 +891,13 @@ class ShowHandler implements CommandHandler {
         context: ActionContext<PowerShellAgentContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const store = _agentStore;
-        if (!store) {
-            throw new Error("Script flow store not available");
-        }
-
-        const flowName = params.args.flowName;
-        if (!flowName) {
-            throw new Error("Missing required argument: flowName");
-        }
-
-        const flow = await store.getFlow(flowName);
-        if (!flow) {
-            throw new Error(
-                `Unknown PowerShell flow '${flowName}'. Use '@powershell list' to see available flows.`,
-            );
-        }
-
-        const script = await store.getScript(flowName);
-        const entries = store.listFlows();
-        const entry = entries.find((e) => e.actionName === flowName);
-
-        const paramLines = flow.parameters.map(
-            (p) =>
-                `    ${p.name} (${p.type}${p.required ? ", required" : ""}): ${p.description}${p.default !== undefined ? ` [default: ${p.default}]` : ""}`,
+        return executeBuiltInPowerShellAction(
+            {
+                actionName: "showPowerShellFlow",
+                parameters: { flowName: params.args.flowName },
+            },
+            context,
         );
-        const grammarLines = flow.grammarPatterns.map(
-            (g) => `    "${g.pattern}"${g.isAlias ? " (alias)" : ""}`,
-        );
-        const cmdletList = flow.sandbox.allowedCmdlets.join(", ");
-
-        const output = [
-            `Flow: ${flow.actionName}`,
-            `Description: ${flow.description}`,
-            `Display Name: ${flow.displayName}`,
-            `Source: ${flow.source?.type ?? "unknown"}`,
-            `Usage Count: ${entry?.usageCount ?? 0}`,
-            "",
-            "Parameters:",
-            paramLines.length > 0 ? paramLines.join("\n") : "    (none)",
-            "",
-            "Grammar Patterns:",
-            grammarLines.length > 0 ? grammarLines.join("\n") : "    (none)",
-            "",
-            "Sandbox:",
-            `    Cmdlets: ${cmdletList || "(none)"}`,
-            `    Timeout: ${flow.sandbox.maxExecutionTime}s`,
-            `    Network: ${flow.sandbox.networkAccess ? "allowed" : "blocked"}`,
-            "",
-            "Script:",
-            "```powershell",
-            script ?? "(script not found)",
-            "```",
-        ];
-
-        context.actionIO.setDisplay(output.join("\n"));
     }
 }
 
@@ -1031,6 +916,7 @@ const handlers: CommandHandlerTable = {
 // in that schema is a dynamic, user-created flow.
 const POWERSHELL_BUILTIN_ACTIONS = new Set([
     "listPowerShellFlows",
+    "showPowerShellFlow",
     "deletePowerShellFlow",
     "executePowerShellFlow",
     "createPowerShellFlow",

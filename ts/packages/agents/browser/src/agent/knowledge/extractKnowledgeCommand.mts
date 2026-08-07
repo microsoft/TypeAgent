@@ -309,6 +309,10 @@ async function performKnowledgeExtraction(
 
 export class ExtractKnowledgeHandler implements CommandHandlerNoParams {
     public readonly description = "Extract knowledge from the current web page";
+    public readonly action = {
+        schema: "browser.pageTools",
+        actionName: "extractCurrentPageKnowledge",
+    };
 
     public async run(
         context: ActionContext<BrowserActionContext>,

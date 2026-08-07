@@ -2313,6 +2313,9 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
     devDependencies:
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../../actionGrammar
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
         version: link:../../actionGrammarCompiler
@@ -2588,6 +2591,9 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
     devDependencies:
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../../actionGrammar
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
@@ -2668,9 +2674,15 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -3184,6 +3196,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../../actionGrammar
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
         version: link:../../actionGrammarCompiler
@@ -3233,6 +3248,9 @@ importers:
         specifier: ^1.1.6
         version: 1.1.6
     devDependencies:
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../../actionGrammar
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
         version: link:../../actionGrammarCompiler
@@ -3276,6 +3294,9 @@ importers:
         specifier: ^4.3.4
         version: 4.4.3(supports-color@8.1.1)
     devDependencies:
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../../actionGrammar
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
         version: link:../../actionGrammarCompiler
@@ -6741,6 +6762,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/defaultAgentProvider
     devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@26.1.2)(ts-node@10.9.2(@types/node@26.1.2)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -20626,7 +20653,7 @@ snapshots:
       fs-extra: 10.1.0
       isbinaryfile: 4.0.10
       minimist: 1.2.8
-      plist: 3.1.0
+      plist: 3.1.1
     transitivePeerDependencies:
       - supports-color
 
@@ -20649,7 +20676,7 @@ snapshots:
       dir-compare: 4.2.0
       fs-extra: 11.4.0
       minimatch: 9.0.9
-      plist: 3.1.0
+      plist: 3.1.1
     transitivePeerDependencies:
       - supports-color
 
@@ -25386,8 +25413,7 @@ snapshots:
 
   '@xmldom/xmldom@0.8.13': {}
 
-  '@xmldom/xmldom@0.9.10':
-    optional: true
+  '@xmldom/xmldom@0.9.10': {}
 
   '@xtuc/ieee754@1.2.0': {}
 
@@ -29997,7 +30023,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 26.1.2
+      '@types/node': 22.20.1
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
@@ -31392,7 +31418,7 @@ snapshots:
 
   node-abi@4.33.0:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.5
 
   node-addon-api@1.7.2:
     optional: true
@@ -31403,7 +31429,7 @@ snapshots:
 
   node-api-version@0.2.1:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.5
 
   node-domexception@1.0.0: {}
 
@@ -31432,7 +31458,7 @@ snapshots:
       graceful-fs: 4.2.11
       nopt: 9.0.0
       proc-log: 6.1.0
-      semver: 7.7.4
+      semver: 7.8.5
       tar: 7.5.22
       tinyglobby: 0.2.17
       undici: 6.28.0
@@ -31967,7 +31993,6 @@ snapshots:
       '@xmldom/xmldom': 0.9.10
       base64-js: 1.5.1
       xmlbuilder: 15.1.1
-    optional: true
 
   pluralize@2.0.0: {}
 

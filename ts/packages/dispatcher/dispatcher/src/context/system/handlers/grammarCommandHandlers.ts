@@ -7,7 +7,6 @@ import {
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import {
-    displayResult,
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
@@ -32,10 +31,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getGrammarContent } from "../../../translation/actionConfig.js";
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
-import {
-    renderRulesTable,
-    renderRuleDetail,
-} from "../action/grammarActionHandler.js";
+import { executeGrammarAction } from "../action/grammarActionHandler.js";
 
 // ---------------------------------------------------------------------------
 // Stored grammar rules (mirrors system.grammar NL actions)
@@ -44,6 +40,7 @@ import {
 class GrammarListCommandHandler implements CommandHandler {
     public readonly description =
         "List grammar rules learned at runtime (optionally filtered by agent)";
+    public readonly action = "listRules";
     public readonly parameters = {
         args: {
             agent: {
@@ -58,35 +55,22 @@ class GrammarListCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const systemContext = context.sessionContext.agentContext;
-        const store = systemContext.persistedGrammarStore;
-        if (!store) {
-            displayWarn(
-                "Grammar rule management is not available in this session (no session directory).",
-                context,
-            );
-            return;
-        }
-        const agentFilter = params.args.agent?.toLowerCase().trim();
-        let rules = store.getAllRules();
-        if (agentFilter) {
-            rules = rules.filter(
-                (r) => r.schemaName.toLowerCase() === agentFilter,
-            );
-        }
-        rules.sort((a, b) => b.timestamp - a.timestamp);
-        const title = agentFilter
-            ? `Grammar rules for "${agentFilter}"`
-            : "All grammar rules";
-        context.actionIO.appendDisplay({
-            type: "html",
-            content: renderRulesTable(rules, title),
-        });
+        return executeGrammarAction(
+            {
+                schemaName: "system.grammar",
+                actionName: "listRules",
+                ...(params.args.agent === undefined
+                    ? {}
+                    : { parameters: { agentName: params.args.agent } }),
+            },
+            context,
+        );
     }
 }
 
 class GrammarShowCommandHandler implements CommandHandler {
     public readonly description = "Show a stored grammar rule by ID";
+    public readonly action = "showRule";
     public readonly parameters = {
         args: {
             id: {
@@ -100,33 +84,20 @@ class GrammarShowCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const systemContext = context.sessionContext.agentContext;
-        const store = systemContext.persistedGrammarStore;
-        if (!store) {
-            displayWarn(
-                "Grammar rule management is not available in this session (no session directory).",
-                context,
-            );
-            return;
-        }
-        const id = params.args.id;
-        const rule = store.getAllRules().find((r) => r.id === id);
-        if (!rule) {
-            displayResult(
-                `No grammar rule with ID ${id}. Use '@grammar list' to see available IDs.`,
-                context,
-            );
-            return;
-        }
-        context.actionIO.appendDisplay({
-            type: "html",
-            content: renderRuleDetail(rule),
-        });
+        return executeGrammarAction(
+            {
+                schemaName: "system.grammar",
+                actionName: "showRule",
+                parameters: { id: params.args.id },
+            },
+            context,
+        );
     }
 }
 
 class GrammarDeleteCommandHandler implements CommandHandler {
     public readonly description = "Delete a stored grammar rule by ID";
+    public readonly action = "deleteRule";
     public readonly parameters = {
         args: {
             id: {
@@ -140,27 +111,12 @@ class GrammarDeleteCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const systemContext = context.sessionContext.agentContext;
-        const store = systemContext.persistedGrammarStore;
-        if (!store) {
-            displayWarn(
-                "Grammar rule management is not available in this session (no session directory).",
-                context,
-            );
-            return;
-        }
-        const id = params.args.id;
-        const deleted = await store.deleteRuleById(id);
-        if (!deleted) {
-            displayResult(
-                `No grammar rule with ID ${id}. Use '@grammar list' to see available IDs.`,
-                context,
-            );
-            return;
-        }
-        systemContext.agentCache.syncAgentGrammar(deleted.schemaName);
-        displayResult(
-            `Deleted rule #${id} (${deleted.schemaName}${deleted.actionName ? `.${deleted.actionName}` : ""}).`,
+        return executeGrammarAction(
+            {
+                schemaName: "system.grammar",
+                actionName: "deleteRule",
+                parameters: { id: params.args.id },
+            },
             context,
         );
     }
@@ -169,6 +125,7 @@ class GrammarDeleteCommandHandler implements CommandHandler {
 class GrammarClearCommandHandler implements CommandHandler {
     public readonly description =
         "Clear stored grammar rules (optionally for a specific agent)";
+    public readonly action = "clearRules";
     public readonly parameters = {
         args: {
             agent: {
@@ -184,30 +141,14 @@ class GrammarClearCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const systemContext = context.sessionContext.agentContext;
-        const store = systemContext.persistedGrammarStore;
-        if (!store) {
-            displayWarn(
-                "Grammar rule management is not available in this session (no session directory).",
-                context,
-            );
-            return;
-        }
-        const agentFilter = params.args.agent?.trim();
-        const schemas = agentFilter ? [agentFilter] : store.getSchemaNames();
-        let totalCount = 0;
-        for (const schema of schemas) {
-            const count = await store.clearSchema(schema);
-            if (count > 0) {
-                systemContext.agentCache.syncAgentGrammar(schema);
-                totalCount += count;
-            }
-        }
-        const scope = agentFilter ? ` for "${agentFilter}"` : "";
-        displayResult(
-            totalCount === 0
-                ? `No grammar rules found${scope}.`
-                : `Cleared ${totalCount} rule${totalCount === 1 ? "" : "s"}${scope}.`,
+        return executeGrammarAction(
+            {
+                schemaName: "system.grammar",
+                actionName: "clearRules",
+                ...(params.args.agent === undefined
+                    ? {}
+                    : { parameters: { agentName: params.args.agent } }),
+            },
             context,
         );
     }
@@ -228,6 +169,10 @@ class GrammarClearCommandHandler implements CommandHandler {
 class GrammarCollisionsCommandHandler implements CommandHandler {
     public readonly description =
         "Scan all loaded agent grammars for cross-agent collisions, with concrete witness inputs";
+    public readonly action = {
+        schema: "system.grammar",
+        actionName: "scanGrammarCollisions",
+    };
     public readonly parameters = {
         flags: {
             json: {

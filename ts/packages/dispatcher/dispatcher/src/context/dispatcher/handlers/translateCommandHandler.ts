@@ -19,6 +19,10 @@ import { createHistoryContext } from "../../../translation/interpretRequest.js";
 
 export class TranslateCommandHandler implements CommandHandler {
     public readonly description = "Translate a request";
+    public readonly action = {
+        schema: "dispatcher.diagnostics",
+        actionName: "translateDispatcherRequest",
+    };
     public readonly parameters = {
         args: {
             request: {

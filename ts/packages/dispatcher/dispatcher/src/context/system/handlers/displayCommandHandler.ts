@@ -7,6 +7,10 @@ import { CommandHandlerContext } from "../../commandHandlerContext.js";
 
 export class DisplayCommandHandler implements CommandHandler {
     public readonly description = "Send text to display";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "displayContent",
+    };
     public readonly parameters = {
         flags: {
             speak: {

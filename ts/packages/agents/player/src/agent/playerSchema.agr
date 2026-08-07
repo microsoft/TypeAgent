@@ -8,7 +8,10 @@ import { PlayerActions } from "./playerSchema.ts";
           | <Resume>
           | <Next>
           | <PlayCommand>
-          | <SelectDevice>;
+          | <SelectDevice>
+          | <SpotifyLogin>
+          | <SpotifyLogout>
+          | <LoadSpotifyUserData>;
 <Pause> = pause   ->  { actionName: "pause" }
           | pause music   ->  { actionName: "pause" }
           | pause the music   ->  { actionName: "pause" };
@@ -18,6 +21,12 @@ import { PlayerActions } from "./playerSchema.ts";
 <Next> = next   ->  { actionName: "next" }
          | skip   ->  { actionName: "next" }
          | skip <TrackTerm>   ->  { actionName: "next" };
+<SpotifyLogin> = (log in | login | sign in) (to)? spotify
+    -> { actionName: "spotifyLogin" };
+<SpotifyLogout> = (log out | logout | sign out) (of)? spotify
+    -> { actionName: "spotifyLogout" };
+<LoadSpotifyUserData> = (load | import) (my)? spotify (user)? data (from)? $(file:wildcard)
+    -> { actionName: "loadSpotifyUserData", parameters: { file } };
 <PlayCommand> = <PlayTrackNumberCommand> | <PlaySpecificTrack>;
 <PlayTrackNumberCommand> =
     play (the)? $(n:<Ordinal>) (<Item>)? -> {

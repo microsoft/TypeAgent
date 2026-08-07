@@ -8,6 +8,8 @@ import {
     DeleteHistoryAction,
     HistoryAction,
 } from "../schema/historyActionSchema.js";
+import { executeCommandFromHandlers } from "@typeagent/agent-sdk/helpers/command";
+import { historyCommandHandlers } from "../handlers/historyCommandHandler.js";
 
 export async function executeHistoryAction(
     action: AppAction,
@@ -32,6 +34,51 @@ export async function executeHistoryAction(
             await processCommandNoLock(
                 `@history list`,
                 context.sessionContext.agentContext,
+            );
+            break;
+        case "saveHistory":
+            await executeCommandFromHandlers(
+                historyCommandHandlers,
+                ["save"],
+                {
+                    args: { file: historyAction.parameters.file },
+                    flags: undefined,
+                },
+                context,
+            );
+            break;
+        case "insertHistory":
+            await executeCommandFromHandlers(
+                historyCommandHandlers,
+                ["insert"],
+                {
+                    args: {
+                        messages: JSON.parse(
+                            historyAction.parameters.messagesJson,
+                        ),
+                    },
+                    flags: undefined,
+                } as any,
+                context,
+            );
+            break;
+        case "listHistoryEntities":
+            await executeCommandFromHandlers(
+                historyCommandHandlers,
+                ["entities", "list"],
+                { args: {}, flags: undefined },
+                context,
+            );
+            break;
+        case "deleteHistoryEntity":
+            await executeCommandFromHandlers(
+                historyCommandHandlers,
+                ["entities", "delete"],
+                {
+                    args: { entityId: historyAction.parameters.entityId },
+                    flags: undefined,
+                },
+                context,
             );
             break;
         default:

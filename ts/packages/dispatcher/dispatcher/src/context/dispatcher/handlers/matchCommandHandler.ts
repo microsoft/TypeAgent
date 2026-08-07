@@ -20,6 +20,10 @@ import { requestCompletion } from "../../../translation/requestCompletion.js";
 
 export class MatchCommandHandler implements CommandHandler {
     public readonly description = "Match a request";
+    public readonly action = {
+        schema: "dispatcher.diagnostics",
+        actionName: "matchDispatcherRequest",
+    };
     public readonly parameters = {
         args: {
             request: {

@@ -14,7 +14,15 @@ import { extractPhrasings, extractCompiledPhrasings } from "./phrasings.js";
 import { collectCommands } from "./commands.js";
 import { categoryForAgent } from "./categories.js";
 import { joinComments } from "./util.js";
-import type { ActionInfo, AgentInfo, Catalog, SchemaInfo } from "./types.js";
+import type {
+    ActionInfo,
+    AgentInfo,
+    Catalog,
+    CommandActionGap,
+    CommandActionLinkIssue,
+    CommandInfo,
+    SchemaInfo,
+} from "./types.js";
 
 /**
  * Collect the full capability catalog from the workspace's bundled agents.
@@ -26,7 +34,13 @@ import type { ActionInfo, AgentInfo, Catalog, SchemaInfo } from "./types.js";
  * capabilities (MCP tools, recorded web flows) are intentionally out of scope
  * so the catalog stays reproducible for the documentation build.
  */
-export async function collectCatalog(): Promise<Catalog> {
+export type CollectCatalogOptions = {
+    strict?: boolean;
+};
+
+export async function collectCatalog(
+    options: CollectCatalogOptions = {},
+): Promise<Catalog> {
     // `undefined` builds only the static bundled-agent provider (no instance
     // directory, so no installed/MCP agents are pulled in).
     const providers = getDefaultAppAgentProviders(undefined);
@@ -37,8 +51,12 @@ export async function collectCatalog(): Promise<Catalog> {
         for (const name of provider.getAppAgentNames()) {
             try {
                 manifests[name] = await provider.getAppAgentManifest(name);
-            } catch {
-                // Skip agents whose manifest can't be resolved statically.
+            } catch (error) {
+                if (options.strict) {
+                    throw new Error(
+                        `Failed to load manifest for agent "${name}": ${getErrorMessage(error)}`,
+                    );
+                }
             }
         }
     }
@@ -61,6 +79,7 @@ export async function collectCatalog(): Promise<Catalog> {
     }
 
     const agents: AgentInfo[] = [];
+    const runtimeOnlySchemas: string[] = [];
     let actionCount = 0;
 
     for (const [agentName, agentConfigs] of [...configsByAgent].sort((a, b) =>
@@ -68,7 +87,15 @@ export async function collectCatalog(): Promise<Catalog> {
     )) {
         const schemas: SchemaInfo[] = [];
         for (const config of sortSchemas(agentConfigs, agentName)) {
-            const actions = collectActions(provider, config);
+            if (isRuntimeOnlySchema(config)) {
+                runtimeOnlySchemas.push(config.schemaName);
+                continue;
+            }
+            const actions = collectActions(
+                provider,
+                config,
+                options.strict ?? false,
+            );
             actionCount += actions.length;
             schemas.push({
                 schemaName: config.schemaName,
@@ -91,17 +118,140 @@ export async function collectCatalog(): Promise<Catalog> {
         });
     }
 
-    const commands = await collectCommands();
+    const commands = await collectCommands({
+        strict: options.strict ?? false,
+    });
+    const commandActionLinkIssues = resolveCommandActionLinks(agents, commands);
+    const missingCommandActions = findMissingCommandActions(commands);
+    const commandEndpoints = commands.filter((command) => command.executable);
+    const linkedCommandEndpoints = commandEndpoints.filter(
+        (command) => command.action?.resolvedSchema !== undefined,
+    ).length;
 
     return {
         generatedAt: new Date().toISOString(),
         agents,
         commands,
+        commandActionLinkIssues,
+        missingCommandActions,
+        runtimeOnlySchemas: runtimeOnlySchemas.sort(),
         counts: {
             agents: agents.length,
             actions: actionCount,
             commands: commands.length,
+            commandEndpoints: commandEndpoints.length,
+            linkedCommandEndpoints,
+            missingCommandActions: missingCommandActions.length,
+            invalidCommandActionLinks: commandActionLinkIssues.length,
         },
+    };
+}
+
+export function isRuntimeOnlySchema(config: ActionConfig): boolean {
+    if (
+        config.schemaFilePath !== undefined ||
+        config.originalSchemaFilePath !== undefined
+    ) {
+        return false;
+    }
+    try {
+        const schema =
+            typeof config.schemaFile === "function"
+                ? config.schemaFile()
+                : config.schemaFile;
+        return schema.content.trim().length === 0;
+    } catch {
+        return false;
+    }
+}
+
+/** Resolve every declared command link to exactly one registered action. */
+export function resolveCommandActionLinks(
+    agents: AgentInfo[],
+    commands: CommandInfo[],
+): CommandActionLinkIssue[] {
+    const schemasByAgent = new Map<string, SchemaInfo[]>();
+    for (const agent of agents) {
+        schemasByAgent.set(agent.name, agent.schemas);
+    }
+
+    const issues: CommandActionLinkIssue[] = [];
+    for (const command of commands) {
+        const link = command.action;
+        if (link === undefined) {
+            continue;
+        }
+        delete link.resolvedSchema;
+
+        const schemas = schemasByAgent.get(command.host) ?? [];
+        const candidates =
+            link.schema === undefined
+                ? schemas.filter((schema) =>
+                      schema.actions.some(
+                          (action) => action.actionName === link.actionName,
+                      ),
+                  )
+                : schemas.filter((schema) => schema.schemaName === link.schema);
+
+        if (link.schema !== undefined && candidates.length === 0) {
+            issues.push(
+                createLinkIssue(
+                    command,
+                    `Schema "${link.schema}" is not registered for host "${command.host}".`,
+                ),
+            );
+            continue;
+        }
+
+        const matches = candidates.filter((schema) =>
+            schema.actions.some(
+                (action) => action.actionName === link.actionName,
+            ),
+        );
+        if (matches.length === 0) {
+            issues.push(
+                createLinkIssue(
+                    command,
+                    link.schema === undefined
+                        ? `Action "${link.actionName}" is not registered for host "${command.host}".`
+                        : `Action "${link.actionName}" is not registered in schema "${link.schema}".`,
+                ),
+            );
+            continue;
+        }
+        if (matches.length > 1) {
+            issues.push(
+                createLinkIssue(
+                    command,
+                    `Action "${link.actionName}" is ambiguous across schemas: ${matches.map((schema) => schema.schemaName).join(", ")}.`,
+                ),
+            );
+            continue;
+        }
+        link.resolvedSchema = matches[0].schemaName;
+    }
+    return issues;
+}
+
+export function findMissingCommandActions(
+    commands: CommandInfo[],
+): CommandActionGap[] {
+    return commands
+        .filter((command) => command.executable && command.action === undefined)
+        .map((command) => ({ host: command.host, path: command.path }));
+}
+
+function createLinkIssue(
+    command: CommandInfo,
+    message: string,
+): CommandActionLinkIssue {
+    const link = command.action!;
+    return {
+        host: command.host,
+        path: command.path,
+        actionName: link.actionName,
+        ...(link.schema === undefined ? {} : { schema: link.schema }),
+        message,
     };
 }
 
@@ -126,6 +276,7 @@ function collectActions(
         ReturnType<typeof getAllActionConfigProvider>
     >["provider"],
     config: ActionConfig,
+    strict: boolean,
 ): ActionInfo[] {
     const phrasings = collectPhrasings(config);
 
@@ -133,7 +284,12 @@ function collectActions(
     try {
         const schemaFile = provider.getActionSchemaFileForConfig(config);
         actionSchemas = schemaFile.parsedActionSchema.actionSchemas;
-    } catch {
+    } catch (error) {
+        if (strict) {
+            throw new Error(
+                `Failed to load action schema "${config.schemaName}": ${getErrorMessage(error)}`,
+            );
+        }
         return [];
     }
 
@@ -150,6 +306,10 @@ function collectActions(
     return actions;
 }
 
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
 /** Load and parse the schema's grammar file into per-action phrasings. */
 function collectPhrasings(config: ActionConfig): Map<string, string[]> {
     const grammar = grammarContentOf(config);
@@ -162,7 +322,7 @@ function collectPhrasings(config: ActionConfig): Map<string, string[]> {
         return extractPhrasings(`${config.schemaName}.agr`, grammar.content);
     }
     if (grammar.format === "ag") {
-        return extractCompiledPhrasings(grammar.content);
+        return extractCompiledPhrasings(grammar.content, grammar.sourceMap);
     }
     return new Map();
 }

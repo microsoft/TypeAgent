@@ -2,13 +2,22 @@
 // Licensed under the MIT License.
 
 // Email Management Grammar
-// Covers: sendEmail, replyEmail, forwardEmail, findEmail actions
+// Covers email management, authentication, and indexing actions
 
 import { EmailAction } from "./emailActionsSchema.ts";
 
-<Start> : EmailAction = <sendEmail> | <replyEmail> | <forwardEmail> | <findEmail>;
+<Start> : EmailAction = <emailLogin> | <emailLogout> | <emailGoogleAuth> | <sendEmail> | <replyEmail> | <forwardEmail> | <findEmail> | <indexInbox>;
 
 // ===== Main Action Rules =====
+
+<emailLogin> = (log in | login | sign in) (to)? (my)? (email | gmail | outlook)
+    -> { actionName: "emailLogin" };
+
+<emailLogout> = (log out | logout | sign out) (of)? (my)? (email | gmail | outlook)
+    -> { actionName: "emailLogout" };
+
+<emailGoogleAuth> = (complete | finish) (google | gmail) (email)? (authorization | authentication | oauth) (with)? (code)? $(code:wildcard)
+    -> { actionName: "emailGoogleAuth", parameters: { code } };
 
 <sendEmail> = <SendEmailPhrase> $(to:string) <WithSubject> $(subject:string) <WithBody> $(body:string) $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? $(attachments:<AttachmentsOptional>)? -> { actionName: "sendEmail", parameters: { to: to, subject: subject, body: body, cc: cc, bcc: bcc, attachments: attachments } }
               | <SendEmailPhrase> $(to:string) <WithBody> $(body:string) <WithSubject> $(subject:string) $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? $(attachments:<AttachmentsOptional>)? -> { actionName: "sendEmail", parameters: { to: to, subject: subject, body: body, cc: cc, bcc: bcc, attachments: attachments } }
@@ -23,6 +32,11 @@ import { EmailAction } from "./emailActionsSchema.ts";
 
 <findEmail> = <FindPhrase> $(messageRef:string) -> { actionName: "findEmail", parameters: { messageRef: messageRef } }
               | <FindPhrase> ('with' | 'having')? ('message' | 'msg')? ('reference' | 'ref' | 'id') $(messageRef:string) -> { actionName: "findEmail", parameters: { messageRef: messageRef } };
+
+<indexInbox> = (index | reindex) (my | the)? (email)? inbox
+                                 -> { actionName: "indexInbox" }
+                             | (build | rebuild) (my | the)? email index
+                                 -> { actionName: "indexInbox" };
 
 // ===== Shared Sub-Rules =====
 

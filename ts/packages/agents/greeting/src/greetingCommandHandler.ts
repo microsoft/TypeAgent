@@ -7,6 +7,7 @@ import {
     ActionResult,
     ActionResultSuccess,
     ParsedCommandParams,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createTypeChat } from "@typeagent/agent-runtime";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
@@ -36,6 +37,7 @@ const debug = registerDebug("typeagent:greeting");
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeGreetingAgentContext,
+        executeAction: executeGreetingAction,
         ...getCommandInterface(handlers),
     };
 }
@@ -123,6 +125,7 @@ export interface GenericGreeting {
 export class GreetingCommandHandler implements CommandHandler {
     public readonly description =
         "Have the agent generate a personalized greeting.";
+    public readonly action = "personalizedGreetingAction";
     public readonly parameters = {
         flags: {
             mock: {
@@ -143,11 +146,20 @@ export class GreetingCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ): Promise<ActionResult | undefined> {
         if (params.flags.mock) {
-            context.actionIO.appendDisplay("Hello.  How can I help you today?");
-            // Mock path makes no LLM call — report all-zero usage so the UI
-            // can distinguish "no tokens used" from "not reported".
+            const result = (await executeGreetingAction(
+                {
+                    schemaName: "greeting",
+                    actionName: "personalizedGreetingAction",
+                    parameters: {
+                        mock: true,
+                        originalRequest: "@greeting --mock",
+                        possibleGreetings: [],
+                    },
+                },
+                context,
+            )) as ActionResultSuccess;
             return {
-                entities: [],
+                ...result,
                 tokenUsage: {
                     prompt_tokens: 0,
                     completion_tokens: 0,
@@ -182,31 +194,14 @@ export class GreetingCommandHandler implements CommandHandler {
 
         if (response.success) {
             context.actionIO.appendDiagnosticData(response.data);
-
-            const action: GreetingAction = response.data as GreetingAction;
-            let result: ActionResultSuccess | undefined = undefined;
-            switch (action.actionName) {
-                case "personalizedGreetingAction":
-                    result = (await handlePersonalizedGreetingAction(
-                        action as PersonalizedGreetingAction,
-                        context,
-                    )) as ActionResultSuccess;
-
-                    context.actionIO.appendDisplay(
-                        result.displayContent,
-                        "block",
-                    );
-                    break;
-
-                // case "contextualGreetingAction":
-
-                //     result = await handleContextualGreetingAction(
-                //         action as ContextualGreetingAction,
-                //     ) as ActionResultSuccess;
-
-                //     displayResult(result.literalText!, context);
-                //     break;
-            }
+            const result = (await executeGreetingAction(
+                {
+                    ...response.data,
+                    schemaName: "greeting",
+                },
+                context,
+            )) as ActionResultSuccess;
+            return { ...result, tokenUsage };
         } else {
             displayError("Unable to generate greeting.", context);
         }
@@ -331,6 +326,10 @@ async function handlePersonalizedGreetingAction(
     greetingAction: PersonalizedGreetingAction,
     context: ActionContext<GreetingAgentContext>,
 ): Promise<ActionResult> {
+    if (greetingAction.parameters.mock === true) {
+        return createActionResult("Hello.  How can I help you today?");
+    }
+
     let result = createActionResult("Hi!", true, undefined);
     if (greetingAction.parameters !== undefined) {
         const count = greetingAction.parameters.possibleGreetings.length;
@@ -364,6 +363,16 @@ async function handlePersonalizedGreetingAction(
         // }
     }
     return result;
+}
+
+async function executeGreetingAction(
+    action: TypeAgentAction<GreetingAction>,
+    context: ActionContext<GreetingAgentContext>,
+): Promise<ActionResult> {
+    switch (action.actionName) {
+        case "personalizedGreetingAction":
+            return handlePersonalizedGreetingAction(action, context);
+    }
 }
 
 // function handleContextualGreetingAction(

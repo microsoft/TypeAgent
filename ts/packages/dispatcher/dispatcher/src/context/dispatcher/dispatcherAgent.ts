@@ -54,22 +54,27 @@ import {
     executeReasoning as executeCopilotReasoning,
 } from "../../reasoning/copilot.js";
 import { ReasonCommandHandler } from "./handlers/reasonCommandHandler.js";
+import { DispatcherDiagnosticsActions } from "./schema/diagnosticsActionSchema.js";
+import { executeDispatcherDiagnosticsAction } from "./diagnosticsActionHandler.js";
 import registerDebug from "debug";
 
 const debugConversationAnswer = registerDebug(
     "typeagent:dispatcher:conversationAnswer",
 );
 
+const reasonCommandHandler = new ReasonCommandHandler();
+const diagnosticsCommandHandlers = {
+    request: new RequestCommandHandler(),
+    match: new MatchCommandHandler(),
+    translate: new TranslateCommandHandler(),
+    reason: reasonCommandHandler,
+    reasoning: reasonCommandHandler,
+    explain: new ExplainCommandHandler(),
+};
+
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
-    commands: {
-        request: new RequestCommandHandler(),
-        match: new MatchCommandHandler(),
-        translate: new TranslateCommandHandler(),
-        reason: new ReasonCommandHandler(),
-        reasoning: new ReasonCommandHandler(),
-        explain: new ExplainCommandHandler(),
-    },
+    commands: diagnosticsCommandHandlers,
 };
 
 /**
@@ -111,10 +116,17 @@ async function executeDispatcherAction(
         | ActivityActions
         | ClarifyEntityAction
         | ReasoningAction
+        | DispatcherDiagnosticsActions
     >,
     context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.schemaName) {
+        case "dispatcher.diagnostics":
+            return executeDispatcherDiagnosticsAction(
+                action as TypeAgentAction<DispatcherDiagnosticsActions>,
+                context,
+                diagnosticsCommandHandlers,
+            );
         case "dispatcher.clarify":
             switch (action.actionName) {
                 case "clarifyMultiplePossibleActionName":
@@ -549,6 +561,17 @@ export const dispatcherManifest: AppAgentManifest = {
         cached: false,
     },
     subActionManifests: {
+        diagnostics: {
+            schema: {
+                description:
+                    "Explicit TypeAgent dispatcher diagnostics for submitting, matching, translating, reasoning about, and explaining nested requests.",
+                schemaFile:
+                    "./src/context/dispatcher/schema/diagnosticsActionSchema.ts",
+                schemaType: "DispatcherDiagnosticsActions",
+                injected: true,
+                cached: false,
+            },
+        },
         clarify: {
             schema: {
                 description: "Action that helps you clarify your request.",

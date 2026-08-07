@@ -1,71 +1,105 @@
-# Status — agent `@`-commands → NL actions
+# Status: natural-language actions for every `@` command
 
-Tracks progress against [PLAN.md](./PLAN.md). Update the checkboxes and notes as
-each phase lands.
+Tracks [PLAN.md](./PLAN.md). Counts come from strict executable-endpoint
+collection, not manual estimates.
+
+## Baseline (2026-07-31)
+
+| Metric                               |               Count |
+| ------------------------------------ | ------------------: |
+| Executable command endpoints         |                 387 |
+| Valid linked endpoints               |                  13 |
+| Missing action declarations          |                 374 |
+| Invalid / dangling / ambiguous links |                   0 |
+| Runtime-only static omissions        | 1 (`mcpfilesystem`) |
+
+## Current coverage
+
+| Metric                               |               Count |
+| ------------------------------------ | ------------------: |
+| Executable command endpoints         |                 387 |
+| Valid linked endpoints               |                 387 |
+| Missing action declarations          |                   0 |
+| Invalid / dangling / ambiguous links |                   0 |
+| Runtime-only static omissions        | 1 (`mcpfilesystem`) |
 
 ## Phase checklist
 
-- [ ] **Phase 1 — Pilot: localPlayer (linking only)** — add 15 `readonly action`
-      links, build, regenerate catalog (without-action −15), enable + smoke-test.
-- [ ] **Phase 2 — Link remaining matches** — powershell (4), osNotifications (2),
-      selfhelp (1), browser page-ops (7); verify `ask`→`searchWebMemories`.
-- [ ] **Phase 3 — New auth actions** — calendarLogin/Logout, emailLogin/Logout,
-      spotifyLogin/Logout (schema + grammar + handler + link + tests).
-- [ ] **Phase 4 — New action: email `index`** (`indexInbox`).
-- [ ] **Phase 5 — New browser config / search-provider actions** (config
-      sub-schema; collision-aware; last).
+- [x] Add schema-aware action-link resolution.
+- [x] Reject unknown schemas/actions and ambiguous bare names.
+- [x] Preserve qualified schema identity in rendered forward/reverse links.
+- [x] Enumerate bare, inline-default, and string-default endpoints.
+- [x] Exclude namespace-only groups from endpoint totals.
+- [x] Fail strict manifest, authored-schema, and command-table collection.
+- [x] Report runtime-only schema omissions explicitly.
+- [x] Add missing/invalid endpoint counters and migration check mode.
+- [x] Generate and maintain the per-host endpoint ledger.
+- [x] Audit and link exact existing equivalents.
+- [x] Complete all remaining agent-host actions.
+- [x] Complete existing system action families.
+- [x] Add remaining system action families.
+- [x] Enable permanent zero-gap regression check.
 
-## Per-command tracking
+## Implemented hosts and slices
 
-### Linking (existing actions)
+| Host            | Coverage completed in this milestone                                                      |
+| --------------- | ----------------------------------------------------------------------------------------- |
+| localPlayer     | All 16 endpoints, including bare status default, general play, and mute/shuffle toggles.  |
+| osNotifications | `sync`, `test`.                                                                           |
+| selfhelp        | Bare default and `ask`.                                                                   |
+| powershell      | All five management endpoints: `list`, `run`, `delete`, `show`, and `import`.             |
+| browser         | All 31 endpoints, including config, automation lifecycle, extraction, Q&A, and recording. |
+| email           | All 5 endpoints: login default, logout, Google auth, and inbox indexing.                  |
+| greeting        | Bare command, including deterministic `--mock` action parity.                             |
+| player          | All 3 Spotify management endpoints: load, login, and logout.                              |
+| calendar        | All 4 auth endpoints, including the bare login default and Google auth.                   |
+| dispatcher      | All 6 request/match/translate/reason/explain diagnostics.                                 |
 
-| Command                  | Action                             | Done |
-| ------------------------ | ---------------------------------- | :--: |
-| localPlayer play         | playFile                           |  ☐   |
-| localPlayer pause        | pause                              |  ☐   |
-| localPlayer resume       | resume                             |  ☐   |
-| localPlayer stop         | stop                               |  ☐   |
-| localPlayer next         | next                               |  ☐   |
-| localPlayer prev         | previous                           |  ☐   |
-| localPlayer shuffle      | shuffle                            |  ☐   |
-| localPlayer status       | status                             |  ☐   |
-| localPlayer list         | listFiles                          |  ☐   |
-| localPlayer queue        | showQueue                          |  ☐   |
-| localPlayer clear        | clearQueue                         |  ☐   |
-| localPlayer mute         | mute                               |  ☐   |
-| localPlayer volume       | setVolume                          |  ☐   |
-| localPlayer setfolder    | setMusicFolder                     |  ☐   |
-| localPlayer folder       | showMusicFolder                    |  ☐   |
-| powershell list          | listPowerShellFlows                |  ☐   |
-| powershell run           | executePowerShellFlow              |  ☐   |
-| powershell delete        | deletePowerShellFlow               |  ☐   |
-| powershell import        | importPowerShellFlow               |  ☐   |
-| osNotifications sync     | syncOsNotifications                |  ☐   |
-| osNotifications test     | testOsNotification                 |  ☐   |
-| selfhelp ask             | answerTypeAgentQuestion            |  ☐   |
-| browser open             | openWebPage                        |  ☐   |
-| browser close            | closeWebPage                       |  ☐   |
-| browser extractKnowledge | extractPageKnowledge               |  ☐   |
-| browser learn            | startGoalDrivenTask                |  ☐   |
-| browser actions match    | detectPageActions                  |  ☐   |
-| browser actions infer    | inferActions                       |  ☐   |
-| browser actions record   | createWebFlowFromRecording         |  ☐   |
-| browser ask              | searchWebMemories (verify/partial) |  ☐   |
+All non-system command hosts are now fully covered.
 
-### New actions
+## System progress
 
-| Command                                        | New action                     | Done |
-| ---------------------------------------------- | ------------------------------ | :--: |
-| email index                                    | indexInbox                     |  ☐   |
-| calendar login / logout                        | calendarLogin / calendarLogout |  ☐   |
-| email login / logout                           | emailLogin / emailLogout       |  ☐   |
-| player spotify login / logout                  | spotifyLogin / spotifyLogout   |  ☐   |
-| browser external on/off                        | (config sub-schema)            |  ☐   |
-| browser resolver history/keyword/list          | (config sub-schema)            |  ☐   |
-| browser lookup mode/status                     | (config sub-schema)            |  ☐   |
-| browser search add/import/list/remove/set/show | (config sub-schema)            |  ☐   |
+| Family       | Completed in this milestone                                                                      |
+| ------------ | ------------------------------------------------------------------------------------------------ |
+| conversation | Added help and completed every conversation endpoint.                                            |
+| grammar      | Linked rule management and collision scanning, including the bare default.                       |
+| describe     | Added exact multiplexing for `@describe`.                                                        |
+| settings     | Completed all seven persistent user-setting endpoints.                                           |
+| notify       | Completed all eight notification endpoints.                                                      |
+| history      | Completed all history, entity, attachment, and transcript endpoints.                             |
+| index        | Added create/list/show/delete actions for all five endpoints.                                    |
+| diagnostics  | Added environment, token, and random-request actions for all nine endpoints.                     |
+| session      | Added create/open/reset/clear/list/delete/info actions for all seven endpoints.                  |
+| memory       | Added legacy toggle, query, search, and answer actions for all six endpoints.                    |
+| copilot      | Added import, fix handoff, and login actions for all four endpoints.                             |
+| feedback     | Added list/summary/filter/export/count actions for all six endpoints.                            |
+| operations   | Added help, display, scripts, tracing, debugging, lifecycle, demo, and other small operations.   |
+| construction | Added store lifecycle, inspection, import, pruning, and toggle actions for all 24 endpoints.     |
+| collision    | Added telemetry, corpus, keyword, neighborhood, optimization, and preference actions (30 total). |
+| config       | Added an explicit 165-path config action that delegates to the canonical command parser.         |
 
-### Excluded (for now)
+The strict coverage check is:
 
-`google-auth` (calendar, email); dispatcher `request`/`match`/`translate`/`reason`/`reasoning`/`explain`;
-`powershell show`; browser `auto launch hidden|standalone`, `auto close`, `actions stop recording`.
+```text
+Command action coverage: 387 / 387 endpoints (0 missing, 0 invalid)
+Runtime-only schemas omitted: mcpfilesystem
+```
+
+## Commands
+
+```powershell
+pnpm --filter @typeagent/action-browser build
+pnpm --filter @typeagent/action-browser test:local
+node tools/actionBrowser/dist/cli.js --check --allow-missing
+```
+
+Permanent regression coverage is also enforced by
+`test/commandActionCoverage.spec.ts`. The strict completion command is:
+
+```powershell
+node tools/actionBrowser/dist/cli.js --check
+```
+
+No bundled executable command is excluded. `mcpfilesystem` remains an explicit
+runtime-only action-schema omission because its actions are generated from the
+connected MCP server rather than authored statically.

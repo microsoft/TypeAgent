@@ -309,6 +309,7 @@ export async function buildAndRetrySync(
 class OsNotificationsSyncCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Re-emit currently-present OS notifications through the agent pipeline. Windows only — Linux/macOS do not expose existing notifications.";
+    public readonly action = "syncOsNotifications";
     public async run(
         actionContext: ActionContext<AgentContext>,
     ): Promise<ActionResult> {
@@ -323,6 +324,7 @@ class OsNotificationsSyncCommandHandler implements CommandHandlerNoParams {
 class OsNotificationsTestCommandHandler implements CommandHandler {
     public readonly description =
         "Inject a synthetic notification through the agent pipeline (filters, rate limit, dismiss tracking) — useful for verifying the agent end-to-end without an OS notification source.";
+    public readonly action = "testOsNotification";
     public readonly parameters = {
         args: {
             message: {

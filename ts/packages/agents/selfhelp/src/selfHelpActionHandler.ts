@@ -154,6 +154,7 @@ async function executeAction(
 class AskCommandHandler implements CommandHandler {
     public readonly description =
         "Find the TypeAgent command for what you want to do (e.g. 'create a new conversation').";
+    public readonly action = "answerTypeAgentQuestion";
     public readonly parameters = {
         args: {
             question: {

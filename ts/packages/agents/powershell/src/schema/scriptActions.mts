@@ -6,6 +6,17 @@ export type ListPowerShellFlows = {
     actionName: "listPowerShellFlows";
 };
 
+// user: show me the details for the cleanup PowerShell flow
+// agent: { "actionName": "showPowerShellFlow", "parameters": { "flowName": "cleanup" } }
+// Show the saved definition and script for a PowerShell flow.
+export type ShowPowerShellFlow = {
+    actionName: "showPowerShellFlow";
+    parameters: {
+        // Name of the PowerShell flow to show.
+        flowName: string;
+    };
+};
+
 // Delete a PowerShell flow by name
 export type DeletePowerShellFlow = {
     actionName: "deletePowerShellFlow";
@@ -91,6 +102,7 @@ export type ImportPowerShellFlow = {
 
 export type PowerShellActions =
     | ListPowerShellFlows
+    | ShowPowerShellFlow
     | DeletePowerShellFlow
     | ExecutePowerShellFlow
     | CreatePowerShellFlow

@@ -13,6 +13,10 @@ import chalk from "chalk";
 
 export class ExplainCommandHandler implements CommandHandler {
     public readonly description = "Explain a translated request with action";
+    public readonly action = {
+        schema: "dispatcher.diagnostics",
+        actionName: "explainDispatcherRequest",
+    };
     public readonly parameters = {
         args: {
             requestAction: {
