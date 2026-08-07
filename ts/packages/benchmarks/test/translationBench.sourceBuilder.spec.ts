@@ -20,7 +20,10 @@ import {
     type TranslationBenchSourceBuilderDecision,
     type TranslationBenchSourceManifest,
 } from "../src/translationBench/synthesizer/sourceBuilder.js";
-import type { ActionConfig, ActionConfigProvider } from "agent-dispatcher/internal";
+import type {
+    ActionConfig,
+    ActionConfigProvider,
+} from "agent-dispatcher/internal";
 
 type ActionSchemaFile = ReturnType<
     ActionConfigProvider["getActionSchemaFileForConfig"]
@@ -197,7 +200,9 @@ function materialize(
     overrides: {
         decisions?: unknown;
         candidates?: ReturnType<typeof imported>;
-        catalog?: ReturnType<typeof createTranslationBenchTypeAgentSchemaCatalog>;
+        catalog?: ReturnType<
+            typeof createTranslationBenchTypeAgentSchemaCatalog
+        >;
     } = {},
 ) {
     return materializeTranslationBenchBenchmarkFromSource({

@@ -2,7 +2,10 @@ import { z } from "zod";
 
 import { parseWithZod } from "./zodJson.js";
 
-export const translationBenchActionShapeModeSchema = z.enum(["simple", "multi"]);
+export const translationBenchActionShapeModeSchema = z.enum([
+    "simple",
+    "multi",
+]);
 
 export const translationBenchActionShapePolicySchema = z
     .object({
@@ -22,7 +25,8 @@ export const translationBenchActionShapePolicySchema = z
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 path: ["mode"],
-                message: "multi-action shape is not implemented yet; use simple",
+                message:
+                    "multi-action shape is not implemented yet; use simple",
             });
         }
     });
@@ -66,7 +70,9 @@ export function assertTranslationBenchExpectedActionArity(
     );
     if (role === "negative") {
         if (actions.length !== 0) {
-            throw new Error(`${path} negative case must have no expected actions`);
+            throw new Error(
+                `${path} negative case must have no expected actions`,
+            );
         }
         return;
     }

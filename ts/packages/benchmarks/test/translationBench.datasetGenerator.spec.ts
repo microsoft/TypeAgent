@@ -245,8 +245,14 @@ describe("translation bench generation schedule", () => {
         ];
         const options = { caseCount: 6, requireCompleteCoverage: true };
 
-        const first = createTranslationBenchGenerationSchedule(catalog, options);
-        const second = createTranslationBenchGenerationSchedule(catalog, options);
+        const first = createTranslationBenchGenerationSchedule(
+            catalog,
+            options,
+        );
+        const second = createTranslationBenchGenerationSchedule(
+            catalog,
+            options,
+        );
 
         expect(second).toEqual(first);
         expect(first.entries).toHaveLength(6);
@@ -277,7 +283,10 @@ describe("translation bench generation schedule", () => {
         ];
         const options = { caseCount: 10, requireCompleteCoverage: false };
 
-        const schedule = createTranslationBenchGenerationSchedule(catalog, options);
+        const schedule = createTranslationBenchGenerationSchedule(
+            catalog,
+            options,
+        );
 
         expect(schedule).toEqual(
             createTranslationBenchGenerationSchedule(catalog, options),
@@ -365,7 +374,9 @@ describe("generated translation bench candidate validation", () => {
     it("canonicalizes generated payload hashes across checkpoint key sorting", () => {
         const schemas = [catalogSchema("tools", ["lookup"])] as const;
         const canonicalHash = computeTranslationBenchCanonicalPayloadHash as (
-            probe: Parameters<typeof computeTranslationBenchCanonicalPayloadHash>[0],
+            probe: Parameters<
+                typeof computeTranslationBenchCanonicalPayloadHash
+            >[0],
             catalog: Parameters<
                 typeof computeTranslationBenchCanonicalPayloadHash
             >[1],
@@ -519,9 +530,7 @@ describe("translation bench generation quality loop", () => {
         await runTranslationBenchGenerationQualityLoop(options);
 
         expect(generatorPrompt).toContain("non-empty JSON array of");
-        expect(generatorPrompt).toContain(
-            "{user, assistant:{text, source}}",
-        );
+        expect(generatorPrompt).toContain("{user, assistant:{text, source}}");
         expect(JSON.stringify(generationSchema)).toContain(
             '\"history\":{\"type\":\"array\",\"minItems\":1',
         );
@@ -656,7 +665,8 @@ describe("translation bench generation quality loop", () => {
             },
         );
 
-        const accepted = await runTranslationBenchGenerationQualityLoop(options);
+        const accepted =
+            await runTranslationBenchGenerationQualityLoop(options);
 
         expect(generations).toBe(2);
         expect(reviews).toBe(2);

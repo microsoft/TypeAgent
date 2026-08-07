@@ -3,8 +3,7 @@ import { z } from "zod";
 export function formatZodIssues(error: z.ZodError, root = "$"): string {
     return error.issues
         .map((issue) => {
-            const path =
-                issue.path.length === 0 ? root : issue.path.join(".");
+            const path = issue.path.length === 0 ? root : issue.path.join(".");
             return `${path}: ${issue.message}`;
         })
         .join("; ");

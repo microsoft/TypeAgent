@@ -126,7 +126,8 @@ const REVIEW_ISSUE_CODES = [
 const TRANSLATION_BENCH_GENERATION_CONTRACT_VERSION =
     2 satisfies TranslationBenchGenerationContractVersion;
 
-export type TranslationBenchReviewIssueCode = (typeof REVIEW_ISSUE_CODES)[number];
+export type TranslationBenchReviewIssueCode =
+    (typeof REVIEW_ISSUE_CODES)[number];
 
 export interface TranslationBenchReviewIssue {
     code: TranslationBenchReviewIssueCode;
@@ -427,7 +428,10 @@ export function parseTranslationBenchGeneratedCandidate(
         actionShape?: TranslationBenchActionShapePolicy;
     },
 ): TranslationBenchGeneratedCandidate {
-    requirePositiveInteger(context.genCaseCount, "Translation bench gen-case count");
+    requirePositiveInteger(
+        context.genCaseCount,
+        "Translation bench gen-case count",
+    );
     if (context.genCaseCount % 2 !== 0) {
         throw new Error("Translation bench gen-case count must be even");
     }
@@ -589,7 +593,9 @@ function completionRecord(
     };
 }
 
-function targetParameterField(options: TranslationBenchGenerationQualityLoopOptions) {
+function targetParameterField(
+    options: TranslationBenchGenerationQualityLoopOptions,
+) {
     const definition = fromJSONParsedActionSchema(
         structuredClone(options.schema.typeAgent!.parsedActionSchema),
     ).actionSchemas.get(options.targetAction.actionName);
@@ -777,8 +783,14 @@ function validationIssue(error: unknown): TranslationBenchReviewIssue {
 export async function runTranslationBenchGenerationQualityLoop(
     options: TranslationBenchGenerationQualityLoopOptions,
 ): Promise<TranslationBenchAcceptedGeneration> {
-    requirePositiveInteger(options.maxAttempts, "Translation bench maximum attempts");
-    requirePositiveInteger(options.genCaseCount, "Translation bench gen-case count");
+    requirePositiveInteger(
+        options.maxAttempts,
+        "Translation bench maximum attempts",
+    );
+    requirePositiveInteger(
+        options.genCaseCount,
+        "Translation bench gen-case count",
+    );
     if (options.genCaseCount % 2 !== 0) {
         throw new Error("Translation bench gen-case count must be even");
     }
@@ -795,7 +807,9 @@ export async function runTranslationBenchGenerationQualityLoop(
     );
     const attempts: TranslationBenchGeneratedAttempt[] = [];
     let feedback: TranslationBenchReviewIssue[] = [];
-    let previousRejectedCandidate: TranslationBenchGeneratedCandidate | undefined;
+    let previousRejectedCandidate:
+        | TranslationBenchGeneratedCandidate
+        | undefined;
     for (let attempt = 1; attempt <= options.maxAttempts; attempt += 1) {
         const generatorPrompt = formatSynthesizerPrompt(
             options,
@@ -834,14 +848,18 @@ export async function runTranslationBenchGenerationQualityLoop(
         }
 
         // Stage 1 — format checker (deterministic). No LLM.
-        const format = runTranslationBenchFormatChecker(synthesizerJson, options);
+        const format = runTranslationBenchFormatChecker(
+            synthesizerJson,
+            options,
+        );
         if (!format.passed || format.candidate === undefined) {
             feedback = format.issues;
             record.validationIssues = feedback;
             continue;
         }
         const candidate = format.candidate;
-        const candidateHash = computeTranslationBenchCanonicalJsonHash(candidate);
+        const candidateHash =
+            computeTranslationBenchCanonicalJsonHash(candidate);
 
         // Stage 2 — full quality verifier ending in semantic checker (LLM).
         const verify = await runTranslationBenchDataQualityVerifier({
@@ -855,10 +873,7 @@ export async function runTranslationBenchGenerationQualityLoop(
                 : {}),
         });
 
-        if (
-            !verify.format.passed ||
-            verify.format.candidate === undefined
-        ) {
+        if (!verify.format.passed || verify.format.candidate === undefined) {
             feedback = verify.feedback;
             record.validationIssues = feedback;
             previousRejectedCandidate = candidate;
@@ -1199,13 +1214,17 @@ function loadCheckpointCases(
     schedule: TranslationBenchGenerationScheduleEntry[],
 ): Map<number, TranslationBenchBenchmarkCaseRecord> {
     const checkpoint =
-        readTranslationBenchCheckpoint<TranslationBenchBenchmarkCaseRecord>(checkpointPath);
+        readTranslationBenchCheckpoint<TranslationBenchBenchmarkCaseRecord>(
+            checkpointPath,
+        );
     if (
         checkpoint.header.runFingerprint !== header.runFingerprint ||
         canonicalJson(checkpoint.header.settings) !==
             canonicalJson(header.settings)
     ) {
-        throw new Error("Translation bench generation checkpoint is incompatible");
+        throw new Error(
+            "Translation bench generation checkpoint is incompatible",
+        );
     }
     const settings = generationCheckpointSettings(header.settings);
     const bySlot = new Map<number, TranslationBenchBenchmarkCaseRecord>();
@@ -1250,15 +1269,23 @@ export async function generateTranslationBenchBenchmark(
 ): Promise<TranslationBenchGeneratedBenchmarkResult> {
     assertTranslationBenchSourceManifest(options.sourceManifest);
     requirePositiveInteger(options.caseCount, "Translation bench case count");
-    requirePositiveInteger(options.genCaseCount, "Translation bench gen-case count");
-    requirePositiveInteger(options.maxAttempts, "Translation bench maximum attempts");
+    requirePositiveInteger(
+        options.genCaseCount,
+        "Translation bench gen-case count",
+    );
+    requirePositiveInteger(
+        options.maxAttempts,
+        "Translation bench maximum attempts",
+    );
     if (options.genCaseCount % 2 !== 0) {
         throw new Error("Translation bench gen-case count must be even");
     }
     if (options.maxAttempts > 5) {
         throw new Error("Translation bench maximum attempts must not exceed 5");
     }
-    const catalog = createTranslationBenchTypeAgentSchemaCatalog(options.provider);
+    const catalog = createTranslationBenchTypeAgentSchemaCatalog(
+        options.provider,
+    );
     const schedule = createTranslationBenchGenerationSchedule(catalog, {
         caseCount: options.caseCount,
         requireCompleteCoverage: options.requireCompleteCoverage,
@@ -1355,9 +1382,11 @@ export async function generateTranslationBenchBenchmark(
                     ),
                     value: evalCase,
                 };
-            appendTranslationBenchCheckpointRows(options.checkpointPath, header, [
-                row,
-            ]);
+            appendTranslationBenchCheckpointRows(
+                options.checkpointPath,
+                header,
+                [row],
+            );
         }
         options.onProgress?.(casesBySlot.size, options.caseCount);
     }
@@ -1416,7 +1445,8 @@ export async function generateTranslationBenchBenchmark(
                 ),
                 decisionLedger: decisionLedger(cases),
                 generation: {
-                    contractVersion: TRANSLATION_BENCH_GENERATION_CONTRACT_VERSION,
+                    contractVersion:
+                        TRANSLATION_BENCH_GENERATION_CONTRACT_VERSION,
                     generatorModel: options.generator.model,
                     reviewerModel: options.reviewer.model,
                     caseCount: options.caseCount,

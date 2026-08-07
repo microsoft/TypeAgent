@@ -108,7 +108,8 @@ function candidate(
             sourceUrl: TRANSLATION_BENCH_PINNED_SOURCE.sourceUrl,
             sourcePart: options.sourcePart ?? "messages[0]",
             rawRowHash: computeTranslationBenchRawRowHash(rawRow),
-            sourceSliceHash: computeTranslationBenchSourceSliceHash(sourceSlice),
+            sourceSliceHash:
+                computeTranslationBenchSourceSliceHash(sourceSlice),
             canonicalPayloadHash: computeTranslationBenchCanonicalPayloadHash(
                 probe,
                 schemas,
@@ -193,7 +194,10 @@ describe("translation-bench benchmark JSONL", () => {
         });
         expect(formatTranslationBenchBenchmarkJsonl(benchmark)).toBe(jsonl);
         expect(
-            parseTranslationBenchBenchmarkForEvaluation(jsonl, "benchmark.jsonl"),
+            parseTranslationBenchBenchmarkForEvaluation(
+                jsonl,
+                "benchmark.jsonl",
+            ),
         ).toEqual(benchmark);
     });
 
@@ -270,9 +274,9 @@ describe("translation-bench benchmark JSONL", () => {
     it("requires approval and detects changes after approval", () => {
         const draft = materialize();
         const jsonl = formatTranslationBenchBenchmarkJsonl(draft);
-        expect(() => parseTranslationBenchBenchmarkForEvaluation(jsonl)).toThrow(
-            /not approved/,
-        );
+        expect(() =>
+            parseTranslationBenchBenchmarkForEvaluation(jsonl),
+        ).toThrow(/not approved/);
 
         const approved = approveTranslationBenchBenchmark(draft, {
             reviewedBy: "reviewer",
@@ -368,7 +372,9 @@ describe("LLM-assisted translation-bench materialization", () => {
 
         expect(prompts).toHaveLength(1);
         expect(prompts[0]).toBe(
-            formatTranslationBenchDatasetBuilderPrompt([...candidates].reverse()),
+            formatTranslationBenchDatasetBuilderPrompt(
+                [...candidates].reverse(),
+            ),
         );
         expect(benchmark.metadata.construction).toMatchObject({
             method: "llm-assisted",

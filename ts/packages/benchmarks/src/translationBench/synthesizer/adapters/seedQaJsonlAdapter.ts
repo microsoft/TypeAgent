@@ -143,11 +143,7 @@ function parseCalls(
             `${rowLabel} function_calls[${index}] name`,
         );
         const args = record.arguments ?? record.parameters ?? {};
-        if (
-            typeof args !== "object" ||
-            args === null ||
-            Array.isArray(args)
-        ) {
+        if (typeof args !== "object" || args === null || Array.isArray(args)) {
             throw new Error(
                 `${rowLabel} function_calls[${index}] arguments must be an object`,
             );
@@ -184,7 +180,10 @@ const seedQaRowEnvelopeSchema = z
     .object({ version: z.number().int().positive().default(1) })
     .passthrough();
 
-function parseSeedQaRow(value: unknown, label: string): z.infer<typeof seedQaRowV1Schema> {
+function parseSeedQaRow(
+    value: unknown,
+    label: string,
+): z.infer<typeof seedQaRowV1Schema> {
     const envelope = seedQaRowEnvelopeSchema.safeParse(value);
     if (!envelope.success) {
         throw new Error(`${label}: invalid seed-qa row envelope`);
@@ -194,7 +193,9 @@ function parseSeedQaRow(value: unknown, label: string): z.infer<typeof seedQaRow
     if (schema === undefined) {
         throw new Error(`${label}: unsupported seed-qa row version ${version}`);
     }
-    return parseWithZod(schema, value, label) as z.infer<typeof seedQaRowV1Schema>;
+    return parseWithZod(schema, value, label) as z.infer<
+        typeof seedQaRowV1Schema
+    >;
 }
 
 function parseJsonl(text: string): unknown[] {
@@ -218,7 +219,10 @@ function parseJsonl(text: string): unknown[] {
         throw new Error("seed-qa source is empty");
     }
     return lines.map((line, index) =>
-        parseSeedQaRow(parseJsonText(line, `seed-qa line ${index + 1}`), `seed-qa line ${index + 1}`),
+        parseSeedQaRow(
+            parseJsonText(line, `seed-qa line ${index + 1}`),
+            `seed-qa line ${index + 1}`,
+        ),
     );
 }
 
@@ -228,9 +232,7 @@ function importCandidates(
 ): TranslationBenchSourceCandidate[] {
     validateManifest(options.manifest);
     if (sha256Text(sourceText) !== options.manifest.sourceFileHash) {
-        throw new Error(
-            "source file hash does not match the pinned manifest",
-        );
+        throw new Error("source file hash does not match the pinned manifest");
     }
     const rows = parseJsonl(sourceText);
     const selectedRows =
@@ -289,7 +291,10 @@ function importCandidates(
                 typeof row.dimensions === "object" &&
                 row.dimensions !== null &&
                 !Array.isArray(row.dimensions)
-                    ? (structuredClone(row.dimensions) as Record<string, unknown>)
+                    ? (structuredClone(row.dimensions) as Record<
+                          string,
+                          unknown
+                      >)
                     : {};
             // Only plain scalar dimensions; drop reserved provenance keys from source.
             const dimensions: Record<string, string | number | boolean> = {};

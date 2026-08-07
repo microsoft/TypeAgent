@@ -95,7 +95,11 @@
       "function": {
         "name": "pause",
         "description": "Pause playback",
-        "parameters": { "type": "object", "properties": {}, "additionalProperties": false }
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
       }
     },
     {

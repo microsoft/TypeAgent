@@ -1,4 +1,3 @@
-
 import type { ChatHistoryInput } from "agent-dispatcher/internal";
 
 import type {
@@ -43,8 +42,8 @@ export interface TranslationBenchSourceImportOptions {
 }
 
 export interface TranslationBenchSourceAdapter {
-        readonly id: string;
-        readonly description: string;
+    readonly id: string;
+    readonly description: string;
     importCandidates(
         sourceText: string,
         options: TranslationBenchSourceImportOptions,

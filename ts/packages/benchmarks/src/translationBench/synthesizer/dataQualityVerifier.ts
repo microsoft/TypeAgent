@@ -1,4 +1,3 @@
-
 import type { CompletionJsonSchema } from "@typeagent/aiclient";
 
 import type {
@@ -23,7 +22,9 @@ import {
     type TranslationBenchQualityVerifierPromptPack,
 } from "./synthesizerPrompts.js";
 
-export type TranslationBenchQualityStage = "format_checker" | "semantic_checker";
+export type TranslationBenchQualityStage =
+    | "format_checker"
+    | "semantic_checker";
 
 export interface TranslationBenchFormatCheckResult {
     stage: "format_checker";
@@ -245,7 +246,10 @@ function enforceApproveThreshold(
     if (decision.decision !== "approve") return decision;
     const scores = decision.scores;
     const below = (
-        Object.entries(scores) as [keyof TranslationBenchReviewerScores, number][]
+        Object.entries(scores) as [
+            keyof TranslationBenchReviewerScores,
+            number,
+        ][]
     ).filter(([, value]) => value < threshold);
     if (below.length === 0 && decision.issues.length === 0) return decision;
     return {
@@ -288,8 +292,7 @@ export async function runTranslationBenchSemanticChecker(options: {
             options.pack.semanticChecker.issueCodes,
         ),
     );
-    const text =
-        typeof completion === "string" ? completion : completion.text;
+    const text = typeof completion === "string" ? completion : completion.text;
     try {
         const parsed = parseTranslationBenchReviewerDecision(
             parseTranslationBenchDatasetBuilderJson(

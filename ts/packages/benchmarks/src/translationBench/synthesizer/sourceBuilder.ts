@@ -115,7 +115,7 @@ export interface TranslationBenchSourceLlmBuildOptions {
     provider: ActionConfigProvider;
     llm: TranslationBenchDatasetBuilderLlm;
     sourceManifest: TranslationBenchSourceManifest;
-        adapter?: string | TranslationBenchSourceAdapter;
+    adapter?: string | TranslationBenchSourceAdapter;
     rowIndices?: number[];
     maxCandidates?: number;
     schemaNames?: string[];
@@ -233,7 +233,7 @@ export const assertTranslationBenchPinnedSourceManifest =
 
 export interface TranslationBenchImportSourceOptions
     extends TranslationBenchSourceImportOptions {
-        adapter?: string | TranslationBenchSourceAdapter;
+    adapter?: string | TranslationBenchSourceAdapter;
 }
 
 export function importTranslationBenchSourceCandidates(
@@ -344,7 +344,9 @@ export function formatTranslationBenchSourceBuilderPrompt(
 export function parseTranslationBenchSourceBuilderDecisions(
     value: unknown,
 ): TranslationBenchSourceBuilderDecision[] {
-    return decisionsSchema.parse(value) as TranslationBenchSourceBuilderDecision[];
+    return decisionsSchema.parse(
+        value,
+    ) as TranslationBenchSourceBuilderDecision[];
 }
 
 function candidateMap(candidates: TranslationBenchSourceCandidate[]) {
@@ -450,7 +452,9 @@ export function materializeTranslationBenchBenchmarkFromSource(
 ): TranslationBenchBenchmark {
     const candidates = candidateMap(options.candidates);
     const catalog = catalogMap(options.catalog);
-    const decisions = parseTranslationBenchSourceBuilderDecisions(options.decisions);
+    const decisions = parseTranslationBenchSourceBuilderDecisions(
+        options.decisions,
+    );
     const decided = new Set<string>();
     for (const decision of decisions) {
         if (!candidates.has(decision.candidateId)) {
@@ -683,16 +687,21 @@ export async function buildTranslationBenchBenchmarkFromSourceWithLlm(
     if (!options.llm.model.trim()) {
         throw new Error("source dataset-builder LLM model is required");
     }
-    const candidates = importTranslationBenchSourceCandidates(options.sourceText, {
-        ...(options.adapter !== undefined ? { adapter: options.adapter } : {}),
-        manifest: options.sourceManifest,
-        ...(options.rowIndices !== undefined
-            ? { rowIndices: options.rowIndices }
-            : {}),
-        ...(options.maxCandidates !== undefined
-            ? { maxCandidates: options.maxCandidates }
-            : {}),
-    });
+    const candidates = importTranslationBenchSourceCandidates(
+        options.sourceText,
+        {
+            ...(options.adapter !== undefined
+                ? { adapter: options.adapter }
+                : {}),
+            manifest: options.sourceManifest,
+            ...(options.rowIndices !== undefined
+                ? { rowIndices: options.rowIndices }
+                : {}),
+            ...(options.maxCandidates !== undefined
+                ? { maxCandidates: options.maxCandidates }
+                : {}),
+        },
+    );
     const catalog = createTranslationBenchTypeAgentSchemaCatalog(
         options.provider,
         options.schemaNames,
@@ -701,7 +710,10 @@ export async function buildTranslationBenchBenchmarkFromSourceWithLlm(
         catalog,
         options.minimumActionCount ?? 1,
     );
-    const prompt = formatTranslationBenchSourceBuilderPrompt(candidates, catalog);
+    const prompt = formatTranslationBenchSourceBuilderPrompt(
+        candidates,
+        catalog,
+    );
     return completeTranslationBenchDatasetBuilderWithRepair({
         prompt,
         label: "source dataset-builder LLM",
@@ -770,11 +782,16 @@ export function assertTranslationBenchSourceBenchmarkTrust(
             ),
         ),
     ];
-    const candidates = importTranslationBenchSourceCandidates(options.sourceText, {
-        ...(options.adapter !== undefined ? { adapter: options.adapter } : {}),
-        manifest: options.sourceManifest,
-        rowIndices,
-    });
+    const candidates = importTranslationBenchSourceCandidates(
+        options.sourceText,
+        {
+            ...(options.adapter !== undefined
+                ? { adapter: options.adapter }
+                : {}),
+            manifest: options.sourceManifest,
+            rowIndices,
+        },
+    );
     const bySource = new Map(
         candidates.map((candidate) => [candidate.candidateId, candidate]),
     );

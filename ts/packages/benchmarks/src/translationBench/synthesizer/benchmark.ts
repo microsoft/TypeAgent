@@ -74,7 +74,8 @@ export interface TranslationBenchSelectionAnnotation {
     confidence: number;
 }
 
-export interface TranslationBenchPublicProbe extends TranslationBenchBenchmarkProbePayload {
+export interface TranslationBenchPublicProbe
+    extends TranslationBenchBenchmarkProbePayload {
     lineage: TranslationBenchPublicTurnLineage;
     selection: TranslationBenchSelectionAnnotation;
 }
@@ -311,7 +312,8 @@ export const TRANSLATION_BENCH_EXAMPLE_SOURCE_PIN: Readonly<TranslationBenchSour
             "fd1692d43c491e11724d006c2620ad52ec8678f9255ad2dd6c29e87634fefe6a",
     });
 
-export const TRANSLATION_BENCH_PINNED_SOURCE = TRANSLATION_BENCH_EXAMPLE_SOURCE_PIN;
+export const TRANSLATION_BENCH_PINNED_SOURCE =
+    TRANSLATION_BENCH_EXAMPLE_SOURCE_PIN;
 
 export type TranslationBenchPinnedSource = TranslationBenchSourcePin;
 
@@ -803,7 +805,9 @@ function parseJsonlRow(value: unknown, lineNumber: number, source?: string) {
     }
     const { recordType, version } = envelope.data;
     if (recordType === "metadata") {
-        const schema = (translationBenchMetadataSchemas as Record<number, z.ZodTypeAny>)[version];
+        const schema = (
+            translationBenchMetadataSchemas as Record<number, z.ZodTypeAny>
+        )[version];
         if (schema === undefined) {
             throw new TranslationBenchBenchmarkJsonlError(
                 source,
@@ -821,7 +825,9 @@ function parseJsonlRow(value: unknown, lineNumber: number, source?: string) {
         }
         return parsed.data as TranslationBenchBenchmarkMetadataRecord;
     }
-    const schema = (translationBenchCaseRecordSchemas as Record<number, z.ZodTypeAny>)[version];
+    const schema = (
+        translationBenchCaseRecordSchemas as Record<number, z.ZodTypeAny>
+    )[version];
     if (schema === undefined) {
         throw new TranslationBenchBenchmarkJsonlError(
             source,
@@ -865,7 +871,9 @@ function hashText(value: string): string {
     return createHash("sha256").update(value).digest("hex");
 }
 
-export function computeTranslationBenchCanonicalJsonHash(value: unknown): string {
+export function computeTranslationBenchCanonicalJsonHash(
+    value: unknown,
+): string {
     return hashText(canonicalJson(value));
 }
 
@@ -1045,7 +1053,9 @@ export function computeTranslationBenchRawRowHash(rawRow: unknown): string {
     return hashJson(rawRow);
 }
 
-export function computeTranslationBenchSourceSliceHash(sourceSlice: unknown): string {
+export function computeTranslationBenchSourceSliceHash(
+    sourceSlice: unknown,
+): string {
     return hashJson(sourceSlice);
 }
 
@@ -1353,7 +1363,9 @@ export function materializeTranslationBenchBenchmark(
     options: TranslationBenchMaterializeOptions,
 ): TranslationBenchBenchmark {
     if (!options.name.trim()) throw new Error("Benchmark name is required");
-    const selections = parseTranslationBenchBuilderSelections(options.selections);
+    const selections = parseTranslationBenchBuilderSelections(
+        options.selections,
+    );
     const candidates = new Map<string, TranslationBenchPublicCandidate>();
     for (const candidate of options.candidates) {
         if (
@@ -1546,7 +1558,9 @@ export async function buildTranslationBenchBenchmarkWithLlm(
     if (!options.llm.model.trim()) {
         throw new Error("Dataset-builder LLM model is required");
     }
-    const prompt = formatTranslationBenchDatasetBuilderPrompt(options.candidates);
+    const prompt = formatTranslationBenchDatasetBuilderPrompt(
+        options.candidates,
+    );
     const { llm, ...materializeOptions } = options;
     return completeTranslationBenchDatasetBuilderWithRepair({
         prompt,
@@ -1684,7 +1698,9 @@ function formatTranslationBenchDatasetBuilderRepairPrompt(
     ].join("\n");
 }
 
-export async function completeTranslationBenchDatasetBuilderWithRepair<T>(options: {
+export async function completeTranslationBenchDatasetBuilderWithRepair<
+    T,
+>(options: {
     prompt: string;
     label: string;
     llm: TranslationBenchDatasetBuilderLlm;
@@ -1715,7 +1731,9 @@ export async function completeTranslationBenchDatasetBuilderWithRepair<T>(option
             return options.materialize({
                 decisions,
                 completion:
-                    aggregateTranslationBenchDatasetBuilderCompletions(completions),
+                    aggregateTranslationBenchDatasetBuilderCompletions(
+                        completions,
+                    ),
                 promptHash: hashText(options.prompt),
                 responseHash: hashText(completion.text),
                 attemptCount: attempt,
@@ -1804,7 +1822,9 @@ export function assertTranslationBenchBenchmarkApproved(
 ): void {
     const approval = benchmark.metadata.approval;
     if (approval.status !== "approved") {
-        throw new Error("Translation-bench benchmark is not approved for evaluation");
+        throw new Error(
+            "Translation-bench benchmark is not approved for evaluation",
+        );
     }
     if (
         approval.benchmarkHash !==
@@ -2083,7 +2103,9 @@ export function validateTranslationBenchBenchmark(
         );
     }
     if (benchmark.cases.length === 0) {
-        throw new Error("Translation-bench benchmark requires at least one case");
+        throw new Error(
+            "Translation-bench benchmark requires at least one case",
+        );
     }
     const generation = benchmark.metadata.construction.generation;
     if (generation !== undefined) {

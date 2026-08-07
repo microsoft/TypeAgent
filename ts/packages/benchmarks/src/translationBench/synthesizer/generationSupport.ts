@@ -172,7 +172,11 @@ export function getTranslationBenchShardIndex(
 export function translationBenchResumeKey(
     identity: TranslationBenchWorkIdentity,
 ): string {
-    const normalized = parseWithZod(workIdentitySchema, identity, "work identity");
+    const normalized = parseWithZod(
+        workIdentitySchema,
+        identity,
+        "work identity",
+    );
     return JSON.stringify([
         normalized.phase,
         normalized.model,
@@ -210,7 +214,9 @@ function assertCompatibleHeaders(
         );
     }
     if (!settingsEqual(actual.settings, expected.settings)) {
-        throw new Error("Translation bench checkpoint settings are incompatible");
+        throw new Error(
+            "Translation bench checkpoint settings are incompatible",
+        );
     }
     if (
         actual.shardIndex !== expected.shardIndex ||
@@ -222,7 +228,9 @@ function assertCompatibleHeaders(
     }
 }
 
-export function createTranslationBenchRunFingerprint(runInputs: unknown): string {
+export function createTranslationBenchRunFingerprint(
+    runInputs: unknown,
+): string {
     return sha256(canonicalJson(runInputs));
 }
 
