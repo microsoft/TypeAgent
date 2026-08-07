@@ -193,6 +193,19 @@ describe("setContent code blocks", () => {
         );
     });
 
+    it("keeps highlighted source text inert", () => {
+        const elm = render({
+            type: "markdown",
+            content:
+                '```json\n{"value": "</span><img src=x onerror=alert(1)>"}\n```',
+        });
+        const code = elm.querySelector("pre > code")!;
+        expect(code.querySelector("img")).toBeNull();
+        expect(code.textContent).toContain(
+            "</span><img src=x onerror=alert(1)>",
+        );
+    });
+
     it("leaves blocks in unknown languages alone", () => {
         const elm = render({
             type: "markdown",

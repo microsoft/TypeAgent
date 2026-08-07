@@ -63,6 +63,7 @@ import {
     saveUserData,
     addUserDataStrings,
     UserData,
+    type SpotifyUserData,
     type MusicItemInfo,
     type HistorySourceData,
     MAX_ITEM_TIMESTAMPS,
@@ -214,6 +215,11 @@ interface SpotifyRecord {
     spotify_track_uri: string | null;
 }
 
+interface SpotifyTrackRecord extends SpotifyRecord {
+    master_metadata_track_name: string;
+    spotify_track_uri: string;
+}
+
 function getIdPart(uri: string | null) {
     if (uri && uri.startsWith("spotify:track:")) {
         const parts = uri.split(":");
@@ -224,6 +230,17 @@ function getIdPart(uri: string | null) {
         debugSpotify(`Skipping row with non-track uri: ${uri}`);
         return "";
     }
+}
+
+function isSpotifyTrackRecord(
+    record: SpotifyRecord,
+): record is SpotifyTrackRecord {
+    return (
+        typeof record.master_metadata_track_name === "string" &&
+        record.master_metadata_track_name.trim().length > 0 &&
+        typeof record.spotify_track_uri === "string" &&
+        getIdPart(record.spotify_track_uri) !== ""
+    );
 }
 
 // A single streaming history JSON file to load, along with how to read it.
@@ -433,22 +450,22 @@ export async function loadHistoryFile(
             result.loaded.push(source.name);
             continue;
         }
-        const tracks = data.filter(
-            (r) =>
-                typeof r.master_metadata_track_name === "string" &&
-                r.master_metadata_track_name.trim().length > 0 &&
-                getIdPart(r.spotify_track_uri) !== "",
-        );
+        const tracks = data.filter(isSpotifyTrackRecord);
         const sourceData: HistorySourceData = {
             fingerprint,
             tracks: aggregateItems(
                 tracks.map((r) => ({
                     timestamps: [r.ts],
                     freq: 1,
-                    name: r.master_metadata_track_name!,
-                    albumArtist:
-                        r.master_metadata_album_artist_name ?? undefined,
-                    albumName: r.master_metadata_album_album_name ?? undefined,
+                    name: r.master_metadata_track_name,
+                    ...(r.master_metadata_album_artist_name === null
+                        ? {}
+                        : {
+                              albumArtist: r.master_metadata_album_artist_name,
+                          }),
+                    ...(r.master_metadata_album_album_name === null
+                        ? {}
+                        : { albumName: r.master_metadata_album_album_name }),
                     id: getIdPart(r.spotify_track_uri),
                 })),
             ),
@@ -495,16 +512,19 @@ function cloneUserData(userData: SpotifyUserData): SpotifyUserData {
                 { ...item, timestamps: [...item.timestamps] },
             ]),
         );
+    const {
+        historySources,
+        nameMap: _discardedNameMap,
+        ...userDataWithoutDerivedState
+    } = userData;
     return {
-        ...userData,
+        ...userDataWithoutDerivedState,
         tracks: cloneMap(userData.tracks),
         artists: cloneMap(userData.artists),
         albums: cloneMap(userData.albums),
-        historySources:
-            userData.historySources === undefined
-                ? undefined
-                : structuredClone(userData.historySources),
-        nameMap: undefined,
+        ...(historySources === undefined
+            ? {}
+            : { historySources: structuredClone(historySources) }),
     };
 }
 

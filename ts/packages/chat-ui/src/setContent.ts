@@ -783,21 +783,28 @@ async function copyInlineCommand(code: HTMLElement): Promise<void> {
 
 // Colorize fenced blocks whose language we can highlight cheaply. The
 // markdown renderer emits `language-<lang>` on the <code>. Guarded by a
-// data flag because `innerHTML +=` re-serializes the container: the spans
-// survive that round-trip and must not be re-scanned as source text.
+// data flag because later container serialization preserves the spans,
+// which must not be re-scanned as source text.
 function highlightCodeBlock(code: HTMLElement): void {
     if (code.dataset.highlighted === "true") {
         return;
     }
     const lang = /(?:^|\s)language-([\w-]+)/.exec(code.className)?.[1];
     const source = code.textContent ?? "";
+    let highlighted: string;
     if (lang === "yaml" || lang === "yml") {
-        code.innerHTML = highlightYaml(source);
+        highlighted = highlightYaml(source);
     } else if (lang === "json") {
-        code.innerHTML = highlightJson(source);
+        highlighted = highlightJson(source);
     } else {
         return;
     }
+    const fragment = DOMPurify.sanitize(highlighted, {
+        ALLOWED_TAGS: ["span"],
+        ALLOWED_ATTR: ["class"],
+        RETURN_DOM_FRAGMENT: true,
+    });
+    code.replaceChildren(fragment);
     code.dataset.highlighted = "true";
 }
 

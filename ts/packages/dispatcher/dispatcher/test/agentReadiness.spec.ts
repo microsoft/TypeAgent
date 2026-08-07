@@ -392,6 +392,15 @@ describe("checkAgentReady (pre-flight gate)", () => {
                 kind: "warning",
                 content: expect.stringContaining("```yaml"),
             });
+            if (
+                typeof display !== "object" ||
+                display === null ||
+                Array.isArray(display) ||
+                !("type" in display) ||
+                display.type !== "markdown"
+            ) {
+                throw new Error("Expected markdown setup display");
+            }
             expect(display.content).toContain("@config agent refresh player");
         });
     });

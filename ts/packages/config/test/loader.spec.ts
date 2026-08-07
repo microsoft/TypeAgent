@@ -442,56 +442,52 @@ describe("reloadConfigKeysSync", () => {
             reloadConfigKeysSync(["SPOTIFY_APP_CLI"], {
                 workspaceRoot: root,
             });
-
-            test("deletes a startup local value after its override is removed", () => {
-                const root = makeTempWorkspace();
-                try {
-                    const file = path.join(root, "config.local.yaml");
-                    fs.writeFileSync(
-                        file,
-                        "spotify:\n  clientId: startup-local\n",
-                    );
-                    loadConfigSync({ workspaceRoot: root });
-                    expect(process.env.SPOTIFY_APP_CLI).toBe("startup-local");
-                    fs.writeFileSync(file, "{}\n");
-                    reloadConfigKeysSync(["SPOTIFY_APP_CLI"], {
-                        workspaceRoot: root,
-                    });
-                    expect(process.env.SPOTIFY_APP_CLI).toBeUndefined();
-                } finally {
-                    fs.rmSync(root, { recursive: true, force: true });
-                }
-            });
-
-            test("restores a Key Vault value hidden by a startup local override", async () => {
-                const root = makeTempWorkspace();
-                try {
-                    const file = path.join(root, "config.local.yaml");
-                    fs.writeFileSync(file, "spotify:\n  clientId: local-id\n");
-                    await loadConfig({
-                        workspaceRoot: root,
-                        keyVault: {
-                            vaultName: "test",
-                            fetcher: async () =>
-                                "spotify:\n  clientId: vault-id\n",
-                        },
-                    });
-                    expect(process.env.SPOTIFY_APP_CLI).toBe("local-id");
-                    fs.writeFileSync(file, "{}\n");
-                    reloadConfigKeysSync(["SPOTIFY_APP_CLI"], {
-                        workspaceRoot: root,
-                    });
-                    expect(process.env.SPOTIFY_APP_CLI).toBe("vault-id");
-                } finally {
-                    fs.rmSync(root, { recursive: true, force: true });
-                }
-            });
             expect(process.env.SPOTIFY_APP_CLI).toBe("local");
             fs.writeFileSync(file, "{}\n");
             reloadConfigKeysSync(["SPOTIFY_APP_CLI"], {
                 workspaceRoot: root,
             });
             expect(process.env.SPOTIFY_APP_CLI).toBe("vault-like-value");
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test("deletes a startup local value after its override is removed", () => {
+        const root = makeTempWorkspace();
+        try {
+            const file = path.join(root, "config.local.yaml");
+            fs.writeFileSync(file, "spotify:\n  clientId: startup-local\n");
+            loadConfigSync({ workspaceRoot: root });
+            expect(process.env.SPOTIFY_APP_CLI).toBe("startup-local");
+            fs.writeFileSync(file, "{}\n");
+            reloadConfigKeysSync(["SPOTIFY_APP_CLI"], {
+                workspaceRoot: root,
+            });
+            expect(process.env.SPOTIFY_APP_CLI).toBeUndefined();
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test("restores a Key Vault value hidden by a startup local override", async () => {
+        const root = makeTempWorkspace();
+        try {
+            const file = path.join(root, "config.local.yaml");
+            fs.writeFileSync(file, "spotify:\n  clientId: local-id\n");
+            await loadConfig({
+                workspaceRoot: root,
+                keyVault: {
+                    vaultName: "test",
+                    fetcher: async () => "spotify:\n  clientId: vault-id\n",
+                },
+            });
+            expect(process.env.SPOTIFY_APP_CLI).toBe("local-id");
+            fs.writeFileSync(file, "{}\n");
+            reloadConfigKeysSync(["SPOTIFY_APP_CLI"], {
+                workspaceRoot: root,
+            });
+            expect(process.env.SPOTIFY_APP_CLI).toBe("vault-id");
         } finally {
             fs.rmSync(root, { recursive: true, force: true });
         }

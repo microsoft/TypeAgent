@@ -5,9 +5,9 @@
  * Tiny syntax highlighters shared by the chat renderers.
  *
  * Both return HTML with <span class="json-*"> wrappers and escape `<`,
- * `>` and `&` on every character that passes through, so the output is
- * safe to assign to innerHTML. The token class names are shared between
- * the two languages so a single set of CSS rules colors both.
+ * `>` and `&` on every character that passes through. The renderer also
+ * sanitizes this markup into a DOM fragment before insertion. The token
+ * class names are shared so one set of CSS rules colors both languages.
  */
 // Lightweight JSON syntax highlighter — returns HTML with span wrappers
 // around tokens. Implemented as a hand-rolled scanner rather than a
@@ -100,8 +100,7 @@ export function highlightJson(json: string): string {
 // `key: value` pairs and comments, not the full YAML grammar — and it
 // reuses the JSON token classes so one set of CSS colors both.
 //
-// Like highlightJson, it escapes every character it passes through, so
-// the result is safe to assign to innerHTML.
+// Like highlightJson, it escapes every character it passes through.
 export function highlightYaml(yaml: string): string {
     const esc = (s: string): string =>
         s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

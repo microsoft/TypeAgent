@@ -106,7 +106,9 @@ async function loadUserData(
             tracks: itemsToMap(json.tracks),
             artists: itemsToMap(json.artists),
             albums: itemsToMap(json.albums),
-            historySources: json.historySources,
+            ...(json.historySources === undefined
+                ? {}
+                : { historySources: json.historySources }),
         };
     }
     return {
@@ -126,7 +128,9 @@ export async function saveUserData(
         tracks: Array.from(userData.tracks.values()),
         artists: Array.from(userData.artists.values()),
         albums: Array.from(userData.albums.values()),
-        historySources: userData.historySources,
+        ...(userData.historySources === undefined
+            ? {}
+            : { historySources: userData.historySources }),
     };
     await storage.write(getUserDataFilePath(), JSON.stringify(json, null, 2));
 }

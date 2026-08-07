@@ -77,7 +77,7 @@ function render(node: Node, indent: number, out: string[]): void {
  * `env:` passthrough block (which `flatten()` copies verbatim into the
  * flat env namespace).
  */
-export function configYamlSnippet(vars: ConfigHintVar[]): string {
+export function configYamlSnippet(vars: readonly ConfigHintVar[]): string {
     const root: Node = new Map();
     for (const v of vars) {
         const { envVar, placeholder } = normalize(v);
@@ -123,7 +123,10 @@ export function configLocalFileLink(): string {
  * and an optional agent-specific note (where to obtain the values, which
  * command to run afterwards, ...).
  */
-export function configSetupHint(vars: ConfigHintVar[], note?: string): string {
+export function configSetupHint(
+    vars: readonly ConfigHintVar[],
+    note?: string,
+): string {
     const lines = [
         `Add to ${configLocalFileLink()} (see \`${CONFIG_SAMPLE_FILE}\` for the full format):`,
         "",
@@ -142,7 +145,7 @@ export function configSetupHint(vars: ConfigHintVar[], note?: string): string {
  * message ("missing: spotify.clientId, spotify.clientSecret"). Unmapped
  * vars keep their env var name.
  */
-export function configKeyNames(vars: ConfigHintVar[]): string[] {
+export function configKeyNames(vars: readonly ConfigHintVar[]): string[] {
     return vars.map((v) => {
         const { envVar } = normalize(v);
         return configPathForEnvVar(envVar) ?? envVar;

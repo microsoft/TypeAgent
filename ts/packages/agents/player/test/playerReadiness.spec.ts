@@ -26,10 +26,13 @@ const ENV_KEYS = [
 // Point the config loader at a scratch dir BEFORE the agent module is
 // imported: importing it loads config, and the developer's real
 // config.local.yaml would otherwise decide the outcome of every case.
-const configDir = fs.mkdtempSync(path.join(os.tmpdir(), "player-readiness-"));
+const importConfigDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "player-readiness-import-"),
+);
 const savedConfigDir = process.env.TYPEAGENT_CONFIG_DIR;
-process.env.TYPEAGENT_CONFIG_DIR = configDir;
-const localConfigPath = path.join(configDir, "config.local.yaml");
+process.env.TYPEAGENT_CONFIG_DIR = importConfigDir;
+let configDir: string;
+let localConfigPath: string;
 
 let checkPlayerReadiness: () => Promise<ReadinessReport>;
 
@@ -40,13 +43,16 @@ beforeAll(async () => {
 afterAll(() => {
     if (savedConfigDir === undefined) delete process.env.TYPEAGENT_CONFIG_DIR;
     else process.env.TYPEAGENT_CONFIG_DIR = savedConfigDir;
-    fs.rmSync(configDir, { recursive: true, force: true });
+    fs.rmSync(importConfigDir, { recursive: true, force: true });
 });
 
 describe("checkPlayerReadiness", () => {
     let saved: Record<string, string | undefined>;
 
     beforeEach(() => {
+        configDir = fs.mkdtempSync(path.join(os.tmpdir(), "player-readiness-"));
+        localConfigPath = path.join(configDir, "config.local.yaml");
+        process.env.TYPEAGENT_CONFIG_DIR = configDir;
         saved = {};
         for (const k of ENV_KEYS) {
             saved[k] = process.env[k];
@@ -60,6 +66,7 @@ describe("checkPlayerReadiness", () => {
             if (saved[k] === undefined) delete process.env[k];
             else process.env[k] = saved[k];
         }
+        fs.rmSync(configDir, { recursive: true, force: true });
     });
 
     test("ready when all three vars are set with a valid port", async () => {

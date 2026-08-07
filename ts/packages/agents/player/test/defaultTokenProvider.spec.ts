@@ -23,10 +23,13 @@ const ENV_KEYS = [
 
 // Set before the module is imported: importing it loads config, and the
 // developer's real config.local.yaml would otherwise leak into the results.
-const configDir = fs.mkdtempSync(path.join(os.tmpdir(), "player-token-"));
+const importConfigDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "player-token-import-"),
+);
 const savedConfigDir = process.env.TYPEAGENT_CONFIG_DIR;
-process.env.TYPEAGENT_CONFIG_DIR = configDir;
-const localConfigPath = path.join(configDir, "config.local.yaml");
+process.env.TYPEAGENT_CONFIG_DIR = importConfigDir;
+let configDir: string;
+let localConfigPath: string;
 
 let createTokenProvider: (storage?: any) => Promise<unknown>;
 
@@ -37,13 +40,16 @@ beforeAll(async () => {
 afterAll(() => {
     if (savedConfigDir === undefined) delete process.env.TYPEAGENT_CONFIG_DIR;
     else process.env.TYPEAGENT_CONFIG_DIR = savedConfigDir;
-    fs.rmSync(configDir, { recursive: true, force: true });
+    fs.rmSync(importConfigDir, { recursive: true, force: true });
 });
 
 describe("createTokenProvider", () => {
     let saved: Record<string, string | undefined>;
 
     beforeEach(() => {
+        configDir = fs.mkdtempSync(path.join(os.tmpdir(), "player-token-"));
+        localConfigPath = path.join(configDir, "config.local.yaml");
+        process.env.TYPEAGENT_CONFIG_DIR = configDir;
         saved = {};
         for (const k of ENV_KEYS) {
             saved[k] = process.env[k];
@@ -57,6 +63,7 @@ describe("createTokenProvider", () => {
             if (saved[k] === undefined) delete process.env[k];
             else process.env[k] = saved[k];
         }
+        fs.rmSync(configDir, { recursive: true, force: true });
     });
 
     test("reports missing settings with a pasteable markdown hint", async () => {
