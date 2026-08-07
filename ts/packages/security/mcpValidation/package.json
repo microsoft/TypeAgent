@@ -34,7 +34,7 @@
   ],
   "scripts": {
     "build": "npm run tsc",
-    "clean": "rimraf dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "demo": "tsx demo/run-demo.ts",
     "demo:server": "tsx demo/server.ts",
     "dev": "tsc -b && node dist/index.js",
