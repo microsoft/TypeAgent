@@ -1505,8 +1505,7 @@ describe("hardcoded ignore for ungrounded optionals", () => {
         ).toBe("ignore");
         // non-listed fields stay scored
         expect(
-            grader.byAction["github-cli.starRepo"]!.parameterScore.fields
-                .owner,
+            grader.byAction["github-cli.starRepo"]!.parameterScore.fields.owner,
         ).not.toBe("ignore");
     });
 });
@@ -1560,8 +1559,7 @@ describe("hardcoded nonempty for conversation topic titles", () => {
                 .parameterScore.fields.name,
         ).toBe("nonempty");
         expect(
-            grader.byAction["list.removeItems"]!.parameterScore.fields
-                .listName,
+            grader.byAction["list.removeItems"]!.parameterScore.fields.listName,
         ).toBe("exact");
     });
 });
