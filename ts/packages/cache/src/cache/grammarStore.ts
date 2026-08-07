@@ -35,7 +35,10 @@ import {
     shouldPreferNewResult,
 } from "../constructions/constructionCache.js";
 import { MatchResult, GrammarStore } from "./types.js";
-import { getSchemaNamespaceKey, splitSchemaNamespaceKey } from "./cache.js";
+import {
+    getSchemaNamespaceKey,
+    splitSchemaNamespaceKey,
+} from "./schemaNamespace.js";
 import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import {
     createExecutableAction,

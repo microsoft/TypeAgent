@@ -58,7 +58,7 @@ export { computeActionSchemaFileHash } from "./explanation/schemaInfoProvider.js
 export {
     getSchemaNamespaceKey,
     splitSchemaNamespaceKey,
-} from "./cache/cache.js";
+} from "./cache/schemaNamespace.js";
 export { WildcardMode } from "./constructions/constructions.js";
 
 // Testing
