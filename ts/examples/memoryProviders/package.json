@@ -34,7 +34,7 @@
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/knowledge-processor": "workspace:*",
-    "better-sqlite3": "12.6.2",
+    "better-sqlite3": "12.8.0",
     "debug": "^4.4.0",
     "typechat": "^0.1.1"
   },
