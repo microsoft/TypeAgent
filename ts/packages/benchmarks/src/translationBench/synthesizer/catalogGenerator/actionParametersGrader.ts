@@ -101,6 +101,14 @@ export interface ActionParametersGraderCatalog {
     description: string;
     catalogVersion: string;
     generatedAt: string;
+    /**
+     * Policy/heuristic code fingerprint (not per-action). When this drifts,
+     * incremental build discards prior entries and reclassifies all actions.
+     * Per-action `sourceFingerprint` stays paramSpec-only so schema-stable
+     * actions do not churn fingerprints across policy PRs.
+     */
+    /** Present on newly written catalogs; missing → treat as rules drift. */
+    rulesFingerprint?: string;
     modes: Record<ActionParamVerifyMode, string>;
     createPolicies: Record<ActionParamCreatePolicy, string>;
     byAction: Record<string, ActionParametersGraderEntry>;
@@ -357,17 +365,30 @@ const parameterGraderLlmVerifierSchema = z
     })
     .passthrough();
 
+/**
+ * Stable identity of an action's parameter schema only.
+ * Does NOT include rules/heuristic versions — those live on
+ * catalog.rulesFingerprint so policy PRs do not rewrite every entry.
+ */
 export function actionParameterSourceFingerprint(
     paramSpec: ParamSpec,
     _parametersSummary?: string,
 ): string {
-    const payload = {
-        rulesVersion: GRADER_RULES_VERSION,
-        heuristicSourceHash: HEURISTIC_SOURCE_HASH,
-        paramSpec: canonicalizeParamSpec(paramSpec),
-    };
     return createHash("sha256")
-        .update(JSON.stringify(payload))
+        .update(JSON.stringify(canonicalizeParamSpec(paramSpec)))
+        .digest("hex")
+        .slice(0, 16);
+}
+
+/** Catalog-level policy code identity (rules version + heuristic bodies). */
+export function graderRulesFingerprint(): string {
+    return createHash("sha256")
+        .update(
+            JSON.stringify({
+                rulesVersion: GRADER_RULES_VERSION,
+                heuristicSourceHash: HEURISTIC_SOURCE_HASH,
+            }),
+        )
         .digest("hex")
         .slice(0, 16);
 }
@@ -1373,7 +1394,7 @@ function priorEntryStillValid(
     if (!nestedParamSpecEqual(catalogRow.paramSpec, entry.paramSpec)) {
         return false;
     }
-    // Re-verify fingerprint against current rules version + catalog shape.
+    // Re-verify schema fingerprint only (rules drift handled at catalog level).
     const liveFp = actionParameterSourceFingerprint(catalogRow.paramSpec);
     if (
         entry.sourceFingerprint !== liveFp ||
@@ -1526,8 +1547,15 @@ export async function buildActionParametersGraderCatalog(
         includeLastDiff?: boolean;
     },
 ): Promise<ActionParametersGraderCatalog> {
+    const rulesFp = graderRulesFingerprint();
+    // Rules/heuristic code change → full reclassify; keep per-action
+    // sourceFingerprint as paramSpec-only so schema-stable rows stay stable.
     const previous =
-        options?.forceFull === true ? undefined : options?.previous;
+        options?.forceFull === true ||
+        (options?.previous !== undefined &&
+            options.previous.rulesFingerprint !== rulesFp)
+            ? undefined
+            : options?.previous;
     const diff = diffActionParametersGrader(catalog, previous);
     const rebuildIds = new Set([...diff.added, ...diff.updated]);
 
@@ -1565,6 +1593,8 @@ export async function buildActionParametersGraderCatalog(
         version: 1,
         description:
             "Create+verify policies per action parameter. " +
+            "sourceFingerprint is paramSpec-only (stable across policy edits). " +
+            "rulesFingerprint is catalog-level; when it drifts, all actions reclassify. " +
             "Incremental: only added/updated actions are reclassified; unchanged fingerprints are kept. " +
             "Regex first, LLM prior reuse (not regex priors), LLM+verifier fallback. " +
             "Open strings without a name heuristic use structural free_text/nonempty. " +
@@ -1572,6 +1602,7 @@ export async function buildActionParametersGraderCatalog(
             "Object containers with only soft leaves use nonempty; mixed objects stay exact (no nested dotted paths yet).",
         catalogVersion: catalog.catalogVersion,
         generatedAt: options?.generatedAt ?? new Date().toISOString(),
+        rulesFingerprint: rulesFp,
         modes: { ...ACTION_PARAM_VERIFY_MODE_DOCS },
         createPolicies: { ...ACTION_PARAM_CREATE_POLICY_DOCS },
         byAction,

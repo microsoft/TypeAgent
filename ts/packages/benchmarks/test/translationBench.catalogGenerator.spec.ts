@@ -1195,6 +1195,74 @@ describe("incremental grader catalog", () => {
         );
     });
 
+    it("sourceFingerprint is paramSpec-only (stable across policy metadata)", async () => {
+        const listSpec = objectSpec({
+            listName: { optional: false, spec: { kind: "string" } },
+        });
+        const first = await buildActionParametersGraderCatalog(
+            {
+                catalogVersion: "2026-01-01",
+                actions: [
+                    {
+                        schemaName: "list",
+                        actionName: "createList",
+                        paramSpec: listSpec,
+                    },
+                ],
+            },
+            { generatedAt: "2026-01-01T00:00:00.000Z" },
+        );
+        const fp = first.byAction["list.createList"]!.sourceFingerprint;
+        expect(fp).toBe(actionParameterSourceFingerprint(listSpec));
+        expect(first.rulesFingerprint).toMatch(/^[0-9a-f]{16}$/);
+
+        // Same schema + matching rulesFingerprint → incremental keeps entry.
+        const second = await buildActionParametersGraderCatalog(
+            {
+                catalogVersion: "2026-01-02",
+                actions: [
+                    {
+                        schemaName: "list",
+                        actionName: "createList",
+                        paramSpec: listSpec,
+                    },
+                ],
+            },
+            {
+                previous: first,
+                generatedAt: "2026-01-02T00:00:00.000Z",
+            },
+        );
+        expect(second.byAction["list.createList"]!.sourceFingerprint).toBe(fp);
+        expect(second.lastDiff?.unchanged).toContain("list.createList");
+
+        // Rules drift (stale catalog rulesFingerprint) → full reclassify, but
+        // sourceFingerprint stays the same because paramSpec did not change.
+        const staleRules = {
+            ...first,
+            rulesFingerprint: "0000000000000000",
+        };
+        const third = await buildActionParametersGraderCatalog(
+            {
+                catalogVersion: "2026-01-03",
+                actions: [
+                    {
+                        schemaName: "list",
+                        actionName: "createList",
+                        paramSpec: listSpec,
+                    },
+                ],
+            },
+            {
+                previous: staleRules,
+                generatedAt: "2026-01-03T00:00:00.000Z",
+            },
+        );
+        expect(third.byAction["list.createList"]!.sourceFingerprint).toBe(fp);
+        expect(third.rulesFingerprint).toBe(first.rulesFingerprint);
+        expect(third.lastDiff?.added).toContain("list.createList");
+    });
+
     it("diff reports full add when no previous catalog", () => {
         const diff = diffActionParametersGrader(
             {
