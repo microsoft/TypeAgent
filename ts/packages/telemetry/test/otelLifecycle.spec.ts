@@ -160,12 +160,14 @@ describe("TelemetryLifecycle", () => {
     });
 
     it("rejects an invalid component timeout", () => {
-        expect(() =>
-            createTelemetryLifecycle({ componentTimeoutMs: 0 }),
-        ).toThrow(/positive finite number/);
+        for (const componentTimeoutMs of [0, 1.5, Number.NaN, 2_147_483_648]) {
+            expect(() =>
+                createTelemetryLifecycle({ componentTimeoutMs }),
+            ).toThrow(/positive integer/);
+        }
     });
 
-    it("bounds the total shutdown time across components", async () => {
+    it("attempts remaining components after the total deadline", async () => {
         const lifecycle = createTelemetryLifecycle({
             totalTimeoutMs: 20,
             componentTimeoutMs: 100,
@@ -181,14 +183,21 @@ describe("TelemetryLifecycle", () => {
             throw new Error("expected shutdown() to reject");
         } catch (error) {
             expect(error).toBeInstanceOf(AggregateError);
-            expect((error as AggregateError).errors).toHaveLength(2);
+            expect((error as AggregateError).errors).toHaveLength(1);
         }
-        expect(remainingComponentRan).toBe(false);
+        expect(remainingComponentRan).toBe(true);
     });
 
     it("rejects an invalid total timeout", () => {
-        expect(() => createTelemetryLifecycle({ totalTimeoutMs: 0 })).toThrow(
-            /positive finite number/,
-        );
+        for (const totalTimeoutMs of [
+            0,
+            1.5,
+            Number.POSITIVE_INFINITY,
+            2_147_483_648,
+        ]) {
+            expect(() => createTelemetryLifecycle({ totalTimeoutMs })).toThrow(
+                /positive integer/,
+            );
+        }
     });
 });

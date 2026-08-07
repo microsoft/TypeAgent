@@ -22,6 +22,20 @@ export {
 } from "./lifecycle.js";
 
 export {
+    createTelemetryCoordinator,
+    initTelemetry,
+    shutdownTelemetry,
+    TelemetryProviderOwnershipError,
+    type InitTelemetryOptions,
+    type TelemetryCoordinator,
+    type TelemetryOwnedComponent,
+    type TelemetryProvider,
+    type TelemetryProviderBundle,
+    type TelemetryProviderFactories,
+    type TelemetrySignal,
+} from "./bootstrap.js";
+
+export {
     createProcessResource,
     type ProcessResourceOptions,
 } from "./resources.js";
