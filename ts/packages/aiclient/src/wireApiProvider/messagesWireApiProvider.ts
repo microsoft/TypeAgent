@@ -60,10 +60,7 @@ function toTools(schemas: FunctionCallingJsonSchema[]): Tool[] {
 
 /** Anthropic cache hits are top-level cache_read_input_tokens (null when absent). */
 function cachedFromMessagesUsage(
-    usage:
-        | { cache_read_input_tokens?: number | null }
-        | null
-        | undefined,
+    usage: { cache_read_input_tokens?: number | null } | null | undefined,
 ): number | undefined {
     const cached = usage?.cache_read_input_tokens;
     return cached == null ? undefined : cached;
