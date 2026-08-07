@@ -25,12 +25,22 @@ export interface MusicItemInfo {
     albumArtist?: string;
 }
 
+export const MAX_ITEM_TIMESTAMPS = 32;
+
+export interface HistorySourceData {
+    fingerprint: string;
+    tracks: MusicItemInfo[];
+    artists: MusicItemInfo[];
+    albums: MusicItemInfo[];
+}
+
 export interface SpotifyUserData {
     lastUpdated: number;
     playlists?: SpotifyApi.PlaylistObjectSimplified[];
     tracks: Map<string, MusicItemInfo>;
     artists: Map<string, MusicItemInfo>;
     albums: Map<string, MusicItemInfo>;
+    historySources?: Record<string, HistorySourceData>;
     nameMap?: Map<string, MusicItemInfo>;
 }
 
@@ -39,6 +49,7 @@ interface SpotifyUserDataJSON {
     tracks: MusicItemInfo[];
     artists: MusicItemInfo[];
     albums: MusicItemInfo[];
+    historySources?: Record<string, HistorySourceData>;
 }
 
 function getUserDataFilePath() {
@@ -80,11 +91,24 @@ async function loadUserData(
     if (await instanceStorage.exists(userDataPath)) {
         const content = await instanceStorage.read(userDataPath, "utf8");
         const json: SpotifyUserDataJSON = JSON.parse(content);
+        const itemsToMap = (items: MusicItemInfo[]) =>
+            new Map(
+                items.map((item) => [
+                    item.id,
+                    {
+                        ...item,
+                        timestamps: boundedTimestamps([...item.timestamps]),
+                    },
+                ]),
+            );
         return {
             lastUpdated: json.lastUpdated,
-            tracks: new Map(json.tracks.map((t) => [t.id, t])),
-            artists: new Map(json.artists.map((a) => [a.id, a])),
-            albums: new Map(json.albums.map((a) => [a.id, a])),
+            tracks: itemsToMap(json.tracks),
+            artists: itemsToMap(json.artists),
+            albums: itemsToMap(json.albums),
+            ...(json.historySources === undefined
+                ? {}
+                : { historySources: json.historySources }),
         };
     }
     return {
@@ -104,6 +128,9 @@ export async function saveUserData(
         tracks: Array.from(userData.tracks.values()),
         artists: Array.from(userData.artists.values()),
         albums: Array.from(userData.albums.values()),
+        ...(userData.historySources === undefined
+            ? {}
+            : { historySources: userData.historySources }),
     };
     await storage.write(getUserDataFilePath(), JSON.stringify(json, null, 2));
 }
@@ -116,16 +143,54 @@ export function mergeUserDataKind(
     for (const newItem of newItems) {
         const info = existing.get(newItem.id);
         if (!info) {
-            existing.set(newItem.id, newItem);
+            existing.set(newItem.id, {
+                ...newItem,
+                timestamps: boundedTimestamps([...newItem.timestamps]),
+            });
             added++;
         } else {
             // Update the frequency and timestamps
             info.freq += newItem.freq;
-            info.timestamps = info.timestamps.concat(newItem.timestamps).sort();
+            info.timestamps = boundedTimestamps(
+                info.timestamps.concat(newItem.timestamps),
+            );
             info.name = newItem.name;
         }
     }
     return added;
+}
+
+function boundedTimestamps(timestamps: string[]): string[] {
+    timestamps.sort();
+    return timestamps.slice(-MAX_ITEM_TIMESTAMPS);
+}
+
+export function removeUserDataKind(
+    existing: Map<string, MusicItemInfo>,
+    oldItems: MusicItemInfo[],
+): void {
+    for (const oldItem of oldItems) {
+        const info = existing.get(oldItem.id);
+        if (info === undefined) {
+            continue;
+        }
+        info.freq -= oldItem.freq;
+        const removed = new Map<string, number>();
+        for (const timestamp of oldItem.timestamps) {
+            removed.set(timestamp, (removed.get(timestamp) ?? 0) + 1);
+        }
+        info.timestamps = info.timestamps.filter((timestamp) => {
+            const count = removed.get(timestamp) ?? 0;
+            if (count === 0) {
+                return true;
+            }
+            removed.set(timestamp, count - 1);
+            return false;
+        });
+        if (info.freq <= 0) {
+            existing.delete(oldItem.id);
+        }
+    }
 }
 
 function trackToJSON(track: SpotifyApi.TrackObjectSimplified): MusicItemInfo {
@@ -204,8 +269,10 @@ function mergeTracksWithTimestamps(
         } else {
             // Update the frequency and timestamps
             info.freq++;
-            info.timestamps.push(track.played_at);
-            info.timestamps.sort();
+            info.timestamps = boundedTimestamps([
+                ...info.timestamps,
+                track.played_at,
+            ]);
         }
     }
     return [added, 0, 0];
@@ -246,62 +313,76 @@ export function getUserDataCompletions(
     artist = false,
     album = false,
     playlist = false,
+    partialValue?: string,
+    limit = 100,
 ): string[] {
     const completions: string[] = [];
     if (track) {
         // return names of tracks, sorted by timestamp
-        const trackNames = Array.from(userData.tracks.values())
-            .sort((a, b) => {
-                const aTime =
-                    a.timestamps.length > 0
-                        ? new Date(
-                              a.timestamps[a.timestamps.length - 1],
-                          ).getTime()
-                        : 0;
-                const bTime =
-                    b.timestamps.length > 0
-                        ? new Date(
-                              b.timestamps[b.timestamps.length - 1],
-                          ).getTime()
-                        : 0;
-                return bTime - aTime;
-            })
-            .map((t) => t.name);
+        const trackNames = rankedItems(userData.tracks).map((t) => t.name);
         completions.push(...trackNames);
     }
     if (artist) {
         // return names of artists, sorted by timestamp
-        const artistNames = Array.from(userData.artists.values())
-            .sort((a, b) => {
-                const aTime =
-                    a.timestamps.length > 0
-                        ? new Date(
-                              a.timestamps[a.timestamps.length - 1],
-                          ).getTime()
-                        : 0;
-                const bTime =
-                    b.timestamps.length > 0
-                        ? new Date(
-                              b.timestamps[b.timestamps.length - 1],
-                          ).getTime()
-                        : 0;
-                return bTime - aTime;
-            })
-            .map((a) => a.name);
+        const artistNames = rankedItems(userData.artists).map((a) => a.name);
         completions.push(...artistNames);
     }
     if (album) {
         // for now just return names no sorting
-        const albumNames = Array.from(userData.albums.values()).map(
-            (a) => a.name,
-        );
+        const albumNames = rankedItems(userData.albums).map((a) => a.name);
         completions.push(...albumNames);
     }
     if (playlist && userData.playlists) {
         const playlistNames = userData.playlists.map((p) => p.name);
         completions.push(...playlistNames);
     }
-    return completions;
+    // The same artist or album can appear both as a history-derived entry
+    // (keyed by name) and as an API-derived one (keyed by its Spotify id),
+    // so drop repeats while keeping the established ordering.
+    const uniqueCompletions = dedupe(completions);
+    if (partialValue === undefined) {
+        return uniqueCompletions;
+    }
+    const query = partialValue.trim().toLocaleLowerCase();
+    return uniqueCompletions
+        .filter(
+            (name) =>
+                query.length === 0 || name.toLocaleLowerCase().includes(query),
+        )
+        .slice(0, limit);
+}
+
+function rankedItems(items: Map<string, MusicItemInfo>): MusicItemInfo[] {
+    return Array.from(items.values())
+        .map((item) => ({
+            item,
+            recency:
+                item.timestamps.length === 0
+                    ? 0
+                    : Date.parse(item.timestamps[item.timestamps.length - 1]),
+        }))
+        .sort(
+            (a, b) =>
+                b.recency - a.recency ||
+                b.item.freq - a.item.freq ||
+                a.item.name.localeCompare(b.item.name),
+        )
+        .map(({ item }) => item);
+}
+
+function dedupe(names: string[]): string[] {
+    const seen = new Set<string>();
+    return names.filter((name) => {
+        if (name === undefined || name === null) {
+            return false;
+        }
+        const key = name.toLocaleLowerCase();
+        if (seen.has(key)) {
+            return false;
+        }
+        seen.add(key);
+        return true;
+    });
 }
 
 export function addFullTracks(
