@@ -1,13 +1,15 @@
 {
   "version": 1,
-  "description": "Create+verify policies per action parameter. Incremental: only added/updated actions are reclassified; unchanged fingerprints are kept. Regex first, LLM prior reuse (not regex priors), LLM+verifier fallback. Open strings without a name heuristic use structural free_text/nonempty. `create` guides the synthesizer; `verify` / `parameterScore` drive runner soft matching. Object containers with only soft leaves use nonempty; mixed objects stay exact (no nested dotted paths yet).",
+  "description": "Create+verify policies per action parameter. sourceFingerprint is paramSpec-only (stable across policy edits). rulesFingerprint is catalog-level; when it drifts, all actions reclassify. Incremental: only added/updated actions are reclassified; unchanged fingerprints are kept. Regex first, LLM prior reuse (not regex priors), LLM+verifier fallback. Open strings without a name heuristic use structural free_text/nonempty. `create` guides the synthesizer; `verify` / `parameterScore` drive runner soft matching. `llmAsAJudge` marks code/script params that need semantic LLM scoring. Object containers with only soft leaves use nonempty; mixed objects stay exact (no nested dotted paths yet).",
   "catalogVersion": "2026-08-06",
-  "generatedAt": "2026-08-06T04:36:51.682Z",
+  "generatedAt": "2026-08-07T18:21:36.367Z",
+  "rulesFingerprint": "ed8397a82fd660ef",
   "modes": {
     "exact": "Chosen value must deep-equal expected",
     "exists": "Key must be present; value ignored (hand-authored seeds; not emitted by regex gen)",
     "nonempty": "Key must be present and non-empty string/array",
-    "ignore": "Field not scored"
+    "ignore": "Field not scored",
+    "llmAsAJudge": "Semantic equivalence needs an LLM judge (code/script/program payloads; many surface forms can be correct)"
   },
   "createPolicies": {
     "enum_literal": "Mint a value from the field's string enum",
@@ -104,7 +106,7 @@
           }
         }
       },
-      "sourceFingerprint": "432486256328fc3a",
+      "sourceFingerprint": "b7a291afabd099f9",
       "fields": {
         "selectedIndices": {
           "optional": false,
@@ -296,7 +298,7 @@
           }
         }
       },
-      "sourceFingerprint": "f097a89d863e8b5a",
+      "sourceFingerprint": "f1ddd2188a2c48aa",
       "fields": {
         "actionName": {
           "optional": false,
@@ -327,8 +329,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "existingActionNames": {
@@ -434,7 +436,7 @@
         "fields": {
           "actionName": "exact",
           "actionDescription": "nonempty",
-          "recordedSteps": "nonempty",
+          "recordedSteps": "llmAsAJudge",
           "existingActionNames": "exact",
           "startUrl": "nonempty",
           "screenshots": "nonempty",
@@ -456,7 +458,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -497,7 +499,7 @@
           }
         }
       },
-      "sourceFingerprint": "77052cf08915c2e1",
+      "sourceFingerprint": "ce6c07d764a30e9c",
       "fields": {
         "registerAgent": {
           "optional": true,
@@ -537,7 +539,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -558,7 +560,7 @@
           }
         }
       },
-      "sourceFingerprint": "f7a453e70de932e9",
+      "sourceFingerprint": "b92703603bc717e0",
       "fields": {
         "domain": {
           "optional": false,
@@ -586,7 +588,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -607,7 +609,7 @@
           }
         }
       },
-      "sourceFingerprint": "7877da485568f647",
+      "sourceFingerprint": "d72154752e2d3c5f",
       "fields": {
         "agentName": {
           "optional": true,
@@ -635,7 +637,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -649,7 +651,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -670,7 +672,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -711,7 +713,7 @@
           }
         }
       },
-      "sourceFingerprint": "8297620a2968af13",
+      "sourceFingerprint": "4e051fc33e432a52",
       "fields": {
         "tabDescription": {
           "optional": false,
@@ -751,7 +753,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -765,7 +767,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -786,7 +788,7 @@
           }
         }
       },
-      "sourceFingerprint": "ebb72416915b0c8e",
+      "sourceFingerprint": "62a2eeefae2b4a9f",
       "fields": {
         "selection": {
           "optional": false,
@@ -833,7 +835,7 @@
           }
         }
       },
-      "sourceFingerprint": "d33a958ad7406477",
+      "sourceFingerprint": "4d7ff984de301a74",
       "fields": {
         "script": {
           "optional": false,
@@ -842,8 +844,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-free-text-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "params": {
@@ -872,7 +874,7 @@
       "parameterScore": {
         "defaultMode": "exact",
         "fields": {
-          "script": "nonempty",
+          "script": "llmAsAJudge",
           "params": "nonempty",
           "timeout": "exact"
         }
@@ -892,7 +894,7 @@
           }
         }
       },
-      "sourceFingerprint": "9afa22e6753c734b",
+      "sourceFingerprint": "8ea5994c31245bd7",
       "fields": {
         "url": {
           "optional": false,
@@ -927,7 +929,7 @@
           }
         }
       },
-      "sourceFingerprint": "9ce3778514c214cc",
+      "sourceFingerprint": "5fa22f74c2220fb1",
       "fields": {
         "title": {
           "optional": true,
@@ -962,7 +964,7 @@
           }
         }
       },
-      "sourceFingerprint": "9ce3778514c214cc",
+      "sourceFingerprint": "5fa22f74c2220fb1",
       "fields": {
         "title": {
           "optional": true,
@@ -997,7 +999,7 @@
           }
         }
       },
-      "sourceFingerprint": "6133c9c8ab5c6265",
+      "sourceFingerprint": "20c23eefddf02c7d",
       "fields": {
         "keywords": {
           "optional": false,
@@ -1072,7 +1074,7 @@
           }
         }
       },
-      "sourceFingerprint": "a5337adf4742f1f2",
+      "sourceFingerprint": "6da00fcdd0898bae",
       "fields": {
         "keywords": {
           "optional": false,
@@ -1165,7 +1167,7 @@
           }
         }
       },
-      "sourceFingerprint": "28f80fdfd5dc86de",
+      "sourceFingerprint": "1b9c679436db1eef",
       "fields": {
         "url": {
           "optional": true,
@@ -1212,7 +1214,7 @@
           }
         }
       },
-      "sourceFingerprint": "438a29e101b359a8",
+      "sourceFingerprint": "59cb440a7f9250d9",
       "fields": {
         "position": {
           "optional": false,
@@ -1247,7 +1249,7 @@
           }
         }
       },
-      "sourceFingerprint": "6133c9c8ab5c6265",
+      "sourceFingerprint": "20c23eefddf02c7d",
       "fields": {
         "keywords": {
           "optional": false,
@@ -1288,7 +1290,7 @@
           }
         }
       },
-      "sourceFingerprint": "633a11917abcbd16",
+      "sourceFingerprint": "720e2eeb8e8c538c",
       "fields": {
         "position": {
           "optional": false,
@@ -1341,7 +1343,7 @@
           }
         }
       },
-      "sourceFingerprint": "f70002795ef3e4a8",
+      "sourceFingerprint": "e623104fea6dcf10",
       "fields": {
         "keywords": {
           "optional": false,
@@ -1395,7 +1397,7 @@
           }
         }
       },
-      "sourceFingerprint": "851e4d67cee55834",
+      "sourceFingerprint": "a772db067917c369",
       "fields": {
         "groupBy": {
           "optional": true,
@@ -1436,7 +1438,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -1450,7 +1452,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -1489,7 +1491,7 @@
           }
         }
       },
-      "sourceFingerprint": "c855ed9d904768ca",
+      "sourceFingerprint": "59d6347044ab67e6",
       "fields": {
         "originalRequest": {
           "optional": false,
@@ -1584,7 +1586,7 @@
           }
         }
       },
-      "sourceFingerprint": "a8827fe583450091",
+      "sourceFingerprint": "12ff8cb046687f73",
       "fields": {
         "position": {
           "optional": true,
@@ -1662,7 +1664,7 @@
           }
         }
       },
-      "sourceFingerprint": "5a0039bc603e9733",
+      "sourceFingerprint": "3616e9df83ec2d86",
       "fields": {
         "site": {
           "optional": false,
@@ -1703,7 +1705,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -1717,7 +1719,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -1731,7 +1733,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -1745,7 +1747,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -1778,7 +1780,7 @@
           }
         }
       },
-      "sourceFingerprint": "af1b382782c4e61a",
+      "sourceFingerprint": "fb67bf4e23d6f9e9",
       "fields": {
         "originalRequest": {
           "optional": false,
@@ -1830,7 +1832,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -1851,7 +1853,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -1898,7 +1900,7 @@
           }
         }
       },
-      "sourceFingerprint": "76f69aa530592261",
+      "sourceFingerprint": "aab9d92d5d1b7b4f",
       "fields": {
         "name": {
           "optional": false,
@@ -1918,8 +1920,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-free-text-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "description": {
@@ -1938,7 +1940,7 @@
         "defaultMode": "exact",
         "fields": {
           "name": "exact",
-          "script": "nonempty",
+          "script": "llmAsAJudge",
           "description": "nonempty"
         }
       }
@@ -1973,7 +1975,7 @@
           }
         }
       },
-      "sourceFingerprint": "5ee5abec1e1573cb",
+      "sourceFingerprint": "68539b9274dc3bd6",
       "fields": {
         "name": {
           "optional": false,
@@ -2054,7 +2056,7 @@
           }
         }
       },
-      "sourceFingerprint": "2d6b1f602e5c62d5",
+      "sourceFingerprint": "8c58cbeabf2219e2",
       "fields": {
         "traceId": {
           "optional": false,
@@ -2119,7 +2121,7 @@
           }
         }
       },
-      "sourceFingerprint": "47ccc9f009de99c4",
+      "sourceFingerprint": "a1d1efb1205cfcf3",
       "fields": {
         "description": {
           "optional": false,
@@ -2167,7 +2169,7 @@
           }
         }
       },
-      "sourceFingerprint": "717c98c4dda9a681",
+      "sourceFingerprint": "8b1ea5bf2c5ca5a6",
       "fields": {
         "scope": {
           "optional": true,
@@ -2215,7 +2217,7 @@
           }
         }
       },
-      "sourceFingerprint": "f28eb2cd3603b97b",
+      "sourceFingerprint": "9046ccc0dde5d25a",
       "fields": {
         "goal": {
           "optional": false,
@@ -2267,7 +2269,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -2281,7 +2283,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -2295,7 +2297,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -2322,7 +2324,7 @@
           }
         }
       },
-      "sourceFingerprint": "595afd09db1dacaf",
+      "sourceFingerprint": "ce95bd408f806d4c",
       "fields": {
         "description": {
           "optional": false,
@@ -2381,7 +2383,7 @@
           }
         }
       },
-      "sourceFingerprint": "94bb2f6831dfaa06",
+      "sourceFingerprint": "2740d8fff5d2696a",
       "fields": {
         "date": {
           "optional": true,
@@ -2390,8 +2392,8 @@
           },
           "typeKind": "string",
           "create": "temporal",
-          "verify": "exact",
-          "rule": "string-date-exact",
+          "verify": "nonempty",
+          "rule": "string-date-nonempty",
           "source": "regex"
         },
         "description": {
@@ -2420,7 +2422,7 @@
       "parameterScore": {
         "defaultMode": "exact",
         "fields": {
-          "date": "exact",
+          "date": "nonempty",
           "description": "nonempty",
           "participant": "nonempty"
         }
@@ -2433,7 +2435,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -2447,7 +2449,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -2474,7 +2476,7 @@
           }
         }
       },
-      "sourceFingerprint": "db49b775802677ee",
+      "sourceFingerprint": "ad3f2bfb555720be",
       "fields": {
         "description": {
           "optional": false,
@@ -2494,8 +2496,8 @@
           },
           "typeKind": "string",
           "create": "temporal",
-          "verify": "exact",
-          "rule": "string-date-exact",
+          "verify": "nonempty",
+          "rule": "string-date-nonempty",
           "source": "regex"
         }
       },
@@ -2503,7 +2505,7 @@
         "defaultMode": "exact",
         "fields": {
           "description": "nonempty",
-          "date": "exact"
+          "date": "nonempty"
         }
       }
     },
@@ -2545,7 +2547,7 @@
           }
         }
       },
-      "sourceFingerprint": "5854e572e4be67a0",
+      "sourceFingerprint": "6d9fc84b9e82a20c",
       "fields": {
         "description": {
           "optional": false,
@@ -2565,8 +2567,8 @@
           },
           "typeKind": "string",
           "create": "temporal",
-          "verify": "exact",
-          "rule": "string-date-exact",
+          "verify": "nonempty",
+          "rule": "string-date-nonempty",
           "source": "regex"
         },
         "time": {
@@ -2607,7 +2609,7 @@
         "defaultMode": "exact",
         "fields": {
           "description": "nonempty",
-          "date": "exact",
+          "date": "nonempty",
           "time": "nonempty",
           "location": "nonempty",
           "participant": "nonempty"
@@ -2695,7 +2697,7 @@
           }
         }
       },
-      "sourceFingerprint": "be0c4aaede4876e5",
+      "sourceFingerprint": "5ce89013f6f23ced",
       "fields": {
         "originalRequest": {
           "optional": false,
@@ -2842,7 +2844,7 @@
           }
         }
       },
-      "sourceFingerprint": "51d34aad37a00bfa",
+      "sourceFingerprint": "aaaf69d9776e53c8",
       "fields": {
         "files": {
           "optional": false,
@@ -2899,7 +2901,7 @@
           }
         }
       },
-      "sourceFingerprint": "eebab532977d02c3",
+      "sourceFingerprint": "c11de5ece2326197",
       "fields": {
         "theme": {
           "optional": false,
@@ -2948,7 +2950,7 @@
           }
         }
       },
-      "sourceFingerprint": "a9c587e69a7a2a57",
+      "sourceFingerprint": "c18c05576a0c36bc",
       "fields": {
         "columnCount": {
           "optional": true,
@@ -2977,7 +2979,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3010,7 +3012,7 @@
           }
         }
       },
-      "sourceFingerprint": "5af4bd539f3b7123",
+      "sourceFingerprint": "ae16bf72b946cabc",
       "fields": {
         "line": {
           "optional": false,
@@ -3081,7 +3083,7 @@
           }
         }
       },
-      "sourceFingerprint": "5af4bd539f3b7123",
+      "sourceFingerprint": "ae16bf72b946cabc",
       "fields": {
         "line": {
           "optional": false,
@@ -3133,7 +3135,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3147,7 +3149,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3174,7 +3176,7 @@
           }
         }
       },
-      "sourceFingerprint": "42f0955365e571ee",
+      "sourceFingerprint": "0edb00b99ec951d9",
       "fields": {
         "configurationName": {
           "optional": true,
@@ -3222,7 +3224,7 @@
           }
         }
       },
-      "sourceFingerprint": "f9db24351a266fb1",
+      "sourceFingerprint": "a89c3ac7555743e8",
       "fields": {
         "stepType": {
           "optional": false,
@@ -3251,7 +3253,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3284,7 +3286,7 @@
           }
         }
       },
-      "sourceFingerprint": "5af4bd539f3b7123",
+      "sourceFingerprint": "ae16bf72b946cabc",
       "fields": {
         "line": {
           "optional": false,
@@ -3336,7 +3338,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3350,7 +3352,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3364,7 +3366,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3378,7 +3380,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3392,7 +3394,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3406,7 +3408,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3420,7 +3422,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3434,7 +3436,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3448,7 +3450,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3462,7 +3464,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3476,7 +3478,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3490,7 +3492,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3504,7 +3506,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -3518,7 +3520,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -4008,7 +4010,7 @@
           }
         }
       },
-      "sourceFingerprint": "1e0358dbed7f26f4",
+      "sourceFingerprint": "3ed806310e243a52",
       "fields": {
         "language": {
           "optional": false,
@@ -4039,8 +4041,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "body": {
@@ -4050,8 +4052,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-free-text-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "codeSnippet": {
@@ -4061,8 +4063,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "isPartial": {
@@ -4531,9 +4533,9 @@
         "fields": {
           "language": "nonempty",
           "docstring": "nonempty",
-          "declaration": "nonempty",
-          "body": "nonempty",
-          "codeSnippet": "nonempty",
+          "declaration": "llmAsAJudge",
+          "body": "llmAsAJudge",
+          "codeSnippet": "llmAsAJudge",
           "isPartial": "exact",
           "file": "exact",
           "position": "exact"
@@ -4602,7 +4604,7 @@
           }
         }
       },
-      "sourceFingerprint": "5312956b640a231f",
+      "sourceFingerprint": "ea03679989c7460d",
       "fields": {
         "fileName": {
           "optional": true,
@@ -5237,7 +5239,7 @@
           }
         }
       },
-      "sourceFingerprint": "4260c9c3186b80c3",
+      "sourceFingerprint": "5cf50202433c2e95",
       "fields": {
         "language": {
           "optional": false,
@@ -5257,8 +5259,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "body": {
@@ -5268,8 +5270,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-free-text-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "docstring": {
@@ -5810,8 +5812,8 @@
         "defaultMode": "exact",
         "fields": {
           "language": "nonempty",
-          "functionDeclaration": "nonempty",
-          "body": "nonempty",
+          "functionDeclaration": "llmAsAJudge",
+          "body": "llmAsAJudge",
           "docstring": "nonempty",
           "name": "exact",
           "args": "exact",
@@ -6283,7 +6285,7 @@
           }
         }
       },
-      "sourceFingerprint": "50f77d0b0d00726a",
+      "sourceFingerprint": "b1ba5e2aba382b34",
       "fields": {
         "target": {
           "optional": false,
@@ -7245,7 +7247,7 @@
           }
         }
       },
-      "sourceFingerprint": "fa58853525fd3c6b",
+      "sourceFingerprint": "20e1278e62f021b9",
       "fields": {
         "strategy": {
           "optional": false,
@@ -8222,7 +8224,7 @@
           }
         }
       },
-      "sourceFingerprint": "f72268888b485c2e",
+      "sourceFingerprint": "a37b6aa47dff5b80",
       "fields": {
         "text": {
           "optional": false,
@@ -9165,7 +9167,7 @@
           }
         }
       },
-      "sourceFingerprint": "ba0cc51af9853cda",
+      "sourceFingerprint": "4e187e30f5846088",
       "fields": {
         "operation": {
           "optional": false,
@@ -9717,7 +9719,7 @@
           }
         }
       },
-      "sourceFingerprint": "6cce28b5178b37ba",
+      "sourceFingerprint": "15142823a6d282fb",
       "fields": {
         "query": {
           "optional": false,
@@ -10274,7 +10276,7 @@
           }
         }
       },
-      "sourceFingerprint": "0549b68209c7f5c2",
+      "sourceFingerprint": "b8ba536a37780391",
       "fields": {
         "target": {
           "optional": false,
@@ -10772,7 +10774,7 @@
           }
         }
       },
-      "sourceFingerprint": "6a074f5381d9cb51",
+      "sourceFingerprint": "59b850389cae791e",
       "fields": {
         "onlyDirty": {
           "optional": true,
@@ -10843,7 +10845,7 @@
           }
         }
       },
-      "sourceFingerprint": "8dd395144f2bcfb6",
+      "sourceFingerprint": "cbeb75c6f593030f",
       "fields": {
         "showErrorIfNoActiveEditor": {
           "optional": true,
@@ -10948,7 +10950,7 @@
           }
         }
       },
-      "sourceFingerprint": "1966b1b988fca0f2",
+      "sourceFingerprint": "47330d778d5c99d6",
       "fields": {
         "filterByUserQuery": {
           "optional": true,
@@ -11053,7 +11055,7 @@
           }
         }
       },
-      "sourceFingerprint": "eacc1b4f44dba6ad",
+      "sourceFingerprint": "4debbd7580f166c6",
       "fields": {
         "extensionQuery": {
           "optional": false,
@@ -11124,7 +11126,7 @@
           }
         }
       },
-      "sourceFingerprint": "eacc1b4f44dba6ad",
+      "sourceFingerprint": "4debbd7580f166c6",
       "fields": {
         "extensionQuery": {
           "optional": false,
@@ -11195,7 +11197,7 @@
           }
         }
       },
-      "sourceFingerprint": "eacc1b4f44dba6ad",
+      "sourceFingerprint": "4debbd7580f166c6",
       "fields": {
         "extensionQuery": {
           "optional": false,
@@ -11247,7 +11249,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -11261,7 +11263,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -11289,7 +11291,7 @@
           }
         }
       },
-      "sourceFingerprint": "c5e27914b301fa61",
+      "sourceFingerprint": "088dde4239c3dcf7",
       "fields": {
         "goto": {
           "optional": true,
@@ -11330,7 +11332,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -11344,7 +11346,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -11358,7 +11360,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -11398,7 +11400,7 @@
           }
         }
       },
-      "sourceFingerprint": "e390db308a512236",
+      "sourceFingerprint": "ab6f86f92fdbc71e",
       "fields": {
         "folderName": {
           "optional": true,
@@ -11418,8 +11420,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "commandRiskLevel": {
@@ -11450,7 +11452,7 @@
         "defaultMode": "exact",
         "fields": {
           "folderName": "exact",
-          "commandToExecute": "nonempty",
+          "commandToExecute": "llmAsAJudge",
           "commandRiskLevel": "exact",
           "reuseExistingTerminal": "exact"
         }
@@ -11483,7 +11485,7 @@
           }
         }
       },
-      "sourceFingerprint": "d46d4bc9c98ac62c",
+      "sourceFingerprint": "50baf99d3325d5f5",
       "fields": {
         "task": {
           "optional": false,
@@ -11556,7 +11558,7 @@
           }
         }
       },
-      "sourceFingerprint": "e1397d0fed4c7cc8",
+      "sourceFingerprint": "707e17099e128604",
       "fields": {
         "folderName": {
           "optional": false,
@@ -11638,7 +11640,7 @@
           }
         }
       },
-      "sourceFingerprint": "6d3bacc153f38c5e",
+      "sourceFingerprint": "99671af6dc49758d",
       "fields": {
         "fileName": {
           "optional": false,
@@ -11731,7 +11733,7 @@
           }
         }
       },
-      "sourceFingerprint": "0d3c649a0acdd1ba",
+      "sourceFingerprint": "027fb37fee1b96c5",
       "fields": {
         "folderName": {
           "optional": false,
@@ -11783,7 +11785,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -11804,7 +11806,7 @@
           }
         }
       },
-      "sourceFingerprint": "3e1d185ed1b195cd",
+      "sourceFingerprint": "7dbe8617ceebce0b",
       "fields": {
         "fileName": {
           "optional": true,
@@ -11851,7 +11853,7 @@
           }
         }
       },
-      "sourceFingerprint": "ba42d7e94ba5f5a7",
+      "sourceFingerprint": "47489c5a5dcdf862",
       "fields": {
         "fileName": {
           "optional": false,
@@ -11903,7 +11905,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -11917,7 +11919,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -11980,7 +11982,7 @@
           }
         }
       },
-      "sourceFingerprint": "62559c5c44b71bcb",
+      "sourceFingerprint": "4ead50cd369e8b3d",
       "fields": {
         "query": {
           "optional": true,
@@ -12106,7 +12108,7 @@
           }
         }
       },
-      "sourceFingerprint": "e4b003921a769e93",
+      "sourceFingerprint": "b4e37911a3969577",
       "fields": {
         "mode": {
           "optional": false,
@@ -12147,7 +12149,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -12188,7 +12190,7 @@
           }
         }
       },
-      "sourceFingerprint": "b034ceb9c6d9a3c8",
+      "sourceFingerprint": "64e5b2a75b3ea9ab",
       "fields": {
         "fileName": {
           "optional": false,
@@ -12261,7 +12263,7 @@
           }
         }
       },
-      "sourceFingerprint": "b77e5a671fa32225",
+      "sourceFingerprint": "385f1a953a3e24c8",
       "fields": {
         "fileName": {
           "optional": false,
@@ -12314,7 +12316,7 @@
           }
         }
       },
-      "sourceFingerprint": "b77e5a671fa32225",
+      "sourceFingerprint": "385f1a953a3e24c8",
       "fields": {
         "fileName": {
           "optional": false,
@@ -12374,7 +12376,7 @@
           }
         }
       },
-      "sourceFingerprint": "181aa803bd7de9cc",
+      "sourceFingerprint": "0f516ee0a2a089df",
       "fields": {
         "direction": {
           "optional": true,
@@ -12435,7 +12437,7 @@
           }
         }
       },
-      "sourceFingerprint": "235f9e7bfabdf421",
+      "sourceFingerprint": "6902d4fcbac1164a",
       "fields": {
         "brightnessLevel": {
           "optional": false,
@@ -12478,7 +12480,7 @@
           }
         }
       },
-      "sourceFingerprint": "d427844645f3c56b",
+      "sourceFingerprint": "50468d2d13dbe479",
       "fields": {
         "direction": {
           "optional": false,
@@ -12532,7 +12534,7 @@
           }
         }
       },
-      "sourceFingerprint": "10ecadb737d22f99",
+      "sourceFingerprint": "23c5063d91449776",
       "fields": {
         "filePath": {
           "optional": false,
@@ -12579,7 +12581,7 @@
           }
         }
       },
-      "sourceFingerprint": "4449a8ba6b37a584",
+      "sourceFingerprint": "682fe31ee5eecfa2",
       "fields": {
         "enableBluetooth": {
           "optional": true,
@@ -12614,7 +12616,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -12655,7 +12657,7 @@
           }
         }
       },
-      "sourceFingerprint": "225a8db1e47eb4e2",
+      "sourceFingerprint": "5a2e0ebd5172ea6f",
       "fields": {
         "ssid": {
           "optional": false,
@@ -12705,7 +12707,7 @@
           }
         }
       },
-      "sourceFingerprint": "f6d02451c156d4e6",
+      "sourceFingerprint": "c7aa3d4585ce3a3d",
       "fields": {
         "names": {
           "optional": false,
@@ -12742,7 +12744,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -12756,7 +12758,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -12777,7 +12779,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -12812,7 +12814,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -12840,7 +12842,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -12854,7 +12856,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -12875,7 +12877,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -12910,7 +12912,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -12951,7 +12953,7 @@
           }
         }
       },
-      "sourceFingerprint": "01f0daaf662bcf46",
+      "sourceFingerprint": "171482db789e0d5c",
       "fields": {
         "name": {
           "optional": false,
@@ -12998,7 +13000,7 @@
           }
         }
       },
-      "sourceFingerprint": "923602039ee86c33",
+      "sourceFingerprint": "4ce9ebe6291b1fef",
       "fields": {
         "on": {
           "optional": false,
@@ -13026,7 +13028,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -13047,7 +13049,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -13075,7 +13077,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -13109,7 +13111,7 @@
           }
         }
       },
-      "sourceFingerprint": "520f691565b0ce9d",
+      "sourceFingerprint": "ea52bf9c7b995ea3",
       "fields": {
         "service": {
           "optional": false,
@@ -13162,7 +13164,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -13195,7 +13197,7 @@
           }
         }
       },
-      "sourceFingerprint": "1b039b49679119d8",
+      "sourceFingerprint": "f7a864eb4fa537e5",
       "fields": {
         "width": {
           "optional": false,
@@ -13254,7 +13256,7 @@
           }
         }
       },
-      "sourceFingerprint": "3216fc951c55dd88",
+      "sourceFingerprint": "dfc4af4414c82cb9",
       "fields": {
         "size": {
           "optional": false,
@@ -13290,7 +13292,7 @@
           }
         }
       },
-      "sourceFingerprint": "34c14c5cbb447fb7",
+      "sourceFingerprint": "6352e3c708b9784b",
       "fields": {
         "mode": {
           "optional": false,
@@ -13332,7 +13334,7 @@
           }
         }
       },
-      "sourceFingerprint": "cf263b3d2894e02a",
+      "sourceFingerprint": "d893e5963007538a",
       "fields": {
         "filePath": {
           "optional": true,
@@ -13379,7 +13381,7 @@
           }
         }
       },
-      "sourceFingerprint": "59a5bd61508c3e94",
+      "sourceFingerprint": "e430fe72c82f1bd4",
       "fields": {
         "desktopId": {
           "optional": false,
@@ -13414,7 +13416,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -13455,7 +13457,7 @@
           }
         }
       },
-      "sourceFingerprint": "653c7c987f6cd852",
+      "sourceFingerprint": "b6fa7c8d02a529c6",
       "fields": {
         "leftWindow": {
           "optional": false,
@@ -13502,7 +13504,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -13537,7 +13539,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -13572,7 +13574,7 @@
           }
         }
       },
-      "sourceFingerprint": "5173bb5752d54d28",
+      "sourceFingerprint": "d5db14f32da0f287",
       "fields": {
         "targetVolume": {
           "optional": false,
@@ -13608,7 +13610,7 @@
           }
         }
       },
-      "sourceFingerprint": "d5dc8a82284f5322",
+      "sourceFingerprint": "04f3952e81b4dd59",
       "fields": {
         "filterEffect": {
           "optional": true,
@@ -13645,7 +13647,7 @@
           }
         }
       },
-      "sourceFingerprint": "7cb7b96dab05f287",
+      "sourceFingerprint": "bbda859c285a7a86",
       "fields": {
         "orientation": {
           "optional": false,
@@ -13674,7 +13676,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -13695,7 +13697,7 @@
           }
         }
       },
-      "sourceFingerprint": "c67b52a36968359b",
+      "sourceFingerprint": "0b6d90a6e5a43d19",
       "fields": {
         "sizeOverride": {
           "optional": false,
@@ -13736,7 +13738,7 @@
           }
         }
       },
-      "sourceFingerprint": "d6a4b19e7361da98",
+      "sourceFingerprint": "6f26ec0203e753a1",
       "fields": {
         "schedule": {
           "optional": false,
@@ -13776,7 +13778,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -13797,7 +13799,7 @@
           }
         }
       },
-      "sourceFingerprint": "9c2b61c22f311279",
+      "sourceFingerprint": "fc55461f21b7ec9d",
       "fields": {
         "enable": {
           "optional": true,
@@ -13833,7 +13835,7 @@
           }
         }
       },
-      "sourceFingerprint": "7042309eac9c7d44",
+      "sourceFingerprint": "05bf4a6bac2a8cc6",
       "fields": {
         "sizeAdjustment": {
           "optional": false,
@@ -13875,7 +13877,7 @@
           }
         }
       },
-      "sourceFingerprint": "7e0e7852330494a2",
+      "sourceFingerprint": "971ed793bd7314e0",
       "fields": {
         "enable": {
           "optional": false,
@@ -13922,7 +13924,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -13957,7 +13959,7 @@
           }
         }
       },
-      "sourceFingerprint": "9c2b61c22f311279",
+      "sourceFingerprint": "fc55461f21b7ec9d",
       "fields": {
         "enable": {
           "optional": true,
@@ -13998,7 +14000,7 @@
           }
         }
       },
-      "sourceFingerprint": "0ca605baa83d48b7",
+      "sourceFingerprint": "c38f4872929e62e3",
       "fields": {
         "speedLevel": {
           "optional": false,
@@ -14051,7 +14053,7 @@
           }
         }
       },
-      "sourceFingerprint": "d129ca6c773a168f",
+      "sourceFingerprint": "262be81db9d41536",
       "fields": {
         "color": {
           "optional": false,
@@ -14098,7 +14100,7 @@
           }
         }
       },
-      "sourceFingerprint": "ad4fb231360ccc5a",
+      "sourceFingerprint": "dae23efb0657bdb8",
       "fields": {
         "scrollLines": {
           "optional": false,
@@ -14134,7 +14136,7 @@
           }
         }
       },
-      "sourceFingerprint": "c94aef00a761d99e",
+      "sourceFingerprint": "943d02aeede5fbdc",
       "fields": {
         "primaryButton": {
           "optional": false,
@@ -14170,7 +14172,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -14205,7 +14207,7 @@
           }
         }
       },
-      "sourceFingerprint": "4c1987dbfafef7e0",
+      "sourceFingerprint": "dd51eca2bec94a4d",
       "fields": {
         "speed": {
           "optional": true,
@@ -14240,7 +14242,7 @@
           }
         }
       },
-      "sourceFingerprint": "a4c06a6b073f1ad1",
+      "sourceFingerprint": "408360317ccb1bb2",
       "fields": {
         "enableColor": {
           "optional": false,
@@ -14275,7 +14277,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -14303,7 +14305,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -14325,7 +14327,7 @@
           }
         }
       },
-      "sourceFingerprint": "8b74c4a7ac9676dd",
+      "sourceFingerprint": "1e695f2d6b23249a",
       "fields": {
         "mode": {
           "optional": false,
@@ -14361,7 +14363,7 @@
           }
         }
       },
-      "sourceFingerprint": "1164007b8c1cc023",
+      "sourceFingerprint": "624fc075c6b313ea",
       "fields": {
         "thresholdValue": {
           "optional": false,
@@ -14396,7 +14398,7 @@
           }
         }
       },
-      "sourceFingerprint": "97296ac9779d3b56",
+      "sourceFingerprint": "25e3e2f9fecfb0a7",
       "fields": {
         "mode": {
           "optional": true,
@@ -14432,7 +14434,7 @@
           }
         }
       },
-      "sourceFingerprint": "89a263819af84760",
+      "sourceFingerprint": "3386801a9d5e3490",
       "fields": {
         "powerMode": {
           "optional": false,
@@ -14469,7 +14471,7 @@
           }
         }
       },
-      "sourceFingerprint": "a60131dd27485083",
+      "sourceFingerprint": "9e1a03d42b65dc12",
       "fields": {
         "accessSetting": {
           "optional": true,
@@ -14506,7 +14508,7 @@
           }
         }
       },
-      "sourceFingerprint": "a60131dd27485083",
+      "sourceFingerprint": "9e1a03d42b65dc12",
       "fields": {
         "accessSetting": {
           "optional": true,
@@ -14543,7 +14545,7 @@
           }
         }
       },
-      "sourceFingerprint": "ac010d4d371fd8f6",
+      "sourceFingerprint": "cc29fd16312821df",
       "fields": {
         "accessSetting": {
           "optional": false,
@@ -14579,7 +14581,7 @@
           }
         }
       },
-      "sourceFingerprint": "9c2b61c22f311279",
+      "sourceFingerprint": "fc55461f21b7ec9d",
       "fields": {
         "enable": {
           "optional": true,
@@ -14614,7 +14616,7 @@
           }
         }
       },
-      "sourceFingerprint": "1bed458e0a658970",
+      "sourceFingerprint": "46928135c64101f2",
       "fields": {
         "enableAutoTimeSync": {
           "optional": false,
@@ -14649,7 +14651,7 @@
           }
         }
       },
-      "sourceFingerprint": "9c2b61c22f311279",
+      "sourceFingerprint": "fc55461f21b7ec9d",
       "fields": {
         "enable": {
           "optional": true,
@@ -14677,7 +14679,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -14698,7 +14700,7 @@
           }
         }
       },
-      "sourceFingerprint": "9c2b61c22f311279",
+      "sourceFingerprint": "fc55461f21b7ec9d",
       "fields": {
         "enable": {
           "optional": true,
@@ -14733,7 +14735,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -14768,7 +14770,7 @@
           }
         }
       },
-      "sourceFingerprint": "9c2b61c22f311279",
+      "sourceFingerprint": "fc55461f21b7ec9d",
       "fields": {
         "enable": {
           "optional": true,
@@ -14809,7 +14811,7 @@
           }
         }
       },
-      "sourceFingerprint": "c130256cc2fea2e5",
+      "sourceFingerprint": "4aff46bc9b75917e",
       "fields": {
         "startHour": {
           "optional": true,
@@ -14856,7 +14858,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -14891,7 +14893,7 @@
           }
         }
       },
-      "sourceFingerprint": "9c2b61c22f311279",
+      "sourceFingerprint": "fc55461f21b7ec9d",
       "fields": {
         "enable": {
           "optional": true,
@@ -14926,7 +14928,7 @@
           }
         }
       },
-      "sourceFingerprint": "9c2b61c22f311279",
+      "sourceFingerprint": "fc55461f21b7ec9d",
       "fields": {
         "enable": {
           "optional": true,
@@ -14961,7 +14963,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -14996,7 +14998,7 @@
           }
         }
       },
-      "sourceFingerprint": "9c2b61c22f311279",
+      "sourceFingerprint": "fc55461f21b7ec9d",
       "fields": {
         "enable": {
           "optional": true,
@@ -15031,7 +15033,7 @@
           }
         }
       },
-      "sourceFingerprint": "9c2b61c22f311279",
+      "sourceFingerprint": "fc55461f21b7ec9d",
       "fields": {
         "enable": {
           "optional": true,
@@ -15072,7 +15074,7 @@
           }
         }
       },
-      "sourceFingerprint": "28804a0e67f6611b",
+      "sourceFingerprint": "894b55663d6c4b98",
       "fields": {
         "hideWhenNotUsing": {
           "optional": false,
@@ -15119,7 +15121,7 @@
           }
         }
       },
-      "sourceFingerprint": "9c2b61c22f311279",
+      "sourceFingerprint": "fc55461f21b7ec9d",
       "fields": {
         "enable": {
           "optional": true,
@@ -15154,7 +15156,7 @@
           }
         }
       },
-      "sourceFingerprint": "9c2b61c22f311279",
+      "sourceFingerprint": "fc55461f21b7ec9d",
       "fields": {
         "enable": {
           "optional": true,
@@ -15189,7 +15191,7 @@
           }
         }
       },
-      "sourceFingerprint": "0c972514e8e804ad",
+      "sourceFingerprint": "cbc9ebfa30ed6fb3",
       "fields": {
         "enableBadging": {
           "optional": true,
@@ -15224,7 +15226,7 @@
           }
         }
       },
-      "sourceFingerprint": "8e344f2b44849a22",
+      "sourceFingerprint": "0e81875d57dc5335",
       "fields": {
         "visibility": {
           "optional": false,
@@ -15260,7 +15262,7 @@
           }
         }
       },
-      "sourceFingerprint": "7a7fee24606e0c37",
+      "sourceFingerprint": "5836e755f24fa923",
       "fields": {
         "alignment": {
           "optional": false,
@@ -15297,7 +15299,7 @@
           }
         }
       },
-      "sourceFingerprint": "0e13abead75f05cc",
+      "sourceFingerprint": "c17766e25a1b80f4",
       "fields": {
         "visibility": {
           "optional": false,
@@ -15339,7 +15341,7 @@
           }
         }
       },
-      "sourceFingerprint": "034958cee090c9eb",
+      "sourceFingerprint": "f5110cece3a8d2b9",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -15398,7 +15400,7 @@
           }
         }
       },
-      "sourceFingerprint": "cdd6986b45040086",
+      "sourceFingerprint": "c344387f8c285587",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -15487,7 +15489,7 @@
           }
         }
       },
-      "sourceFingerprint": "d02e4572748a9cd0",
+      "sourceFingerprint": "5d1b0c869d1c555a",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -15582,7 +15584,7 @@
           }
         }
       },
-      "sourceFingerprint": "fe5aa2dac846cd44",
+      "sourceFingerprint": "7885a594d4c9a69d",
       "fields": {
         "recipient_id": {
           "optional": false,
@@ -15626,7 +15628,7 @@
           }
         }
       },
-      "sourceFingerprint": "92cd8badd55a112e",
+      "sourceFingerprint": "5198ddfdcbaaf68c",
       "fields": {
         "access_tokens": {
           "optional": true,
@@ -15694,7 +15696,7 @@
           }
         }
       },
-      "sourceFingerprint": "4c8fb419258d9d56",
+      "sourceFingerprint": "96288e93116d8aa4",
       "fields": {
         "name": {
           "optional": false,
@@ -15771,7 +15773,7 @@
           }
         }
       },
-      "sourceFingerprint": "be603a50d6b6284a",
+      "sourceFingerprint": "698bef7f25616d63",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -15854,7 +15856,7 @@
           }
         }
       },
-      "sourceFingerprint": "eb535c9d5d99332b",
+      "sourceFingerprint": "f849567a3e1093ab",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -15913,7 +15915,7 @@
           }
         }
       },
-      "sourceFingerprint": "e5d24de85445824b",
+      "sourceFingerprint": "1f8b8a022c29308a",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -15954,7 +15956,7 @@
           }
         }
       },
-      "sourceFingerprint": "74735ca54d0a2d45",
+      "sourceFingerprint": "360291d44686f783",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -16001,7 +16003,7 @@
           }
         }
       },
-      "sourceFingerprint": "510412ef8d304de4",
+      "sourceFingerprint": "ab0700efb4055117",
       "fields": {
         "invite_code": {
           "optional": false,
@@ -16060,7 +16062,7 @@
           }
         }
       },
-      "sourceFingerprint": "c1a047485ef3cec3",
+      "sourceFingerprint": "a0515f6d6ab28419",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -16173,7 +16175,7 @@
           }
         }
       },
-      "sourceFingerprint": "780fe0d4fe76e8f4",
+      "sourceFingerprint": "a6d94e1da42c7435",
       "fields": {
         "webhook_id": {
           "optional": false,
@@ -16274,7 +16276,7 @@
           }
         }
       },
-      "sourceFingerprint": "1fdb55bf8dd56ed8",
+      "sourceFingerprint": "6f8b1e62d9b51929",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -16321,7 +16323,7 @@
           }
         }
       },
-      "sourceFingerprint": "e5d24de85445824b",
+      "sourceFingerprint": "1f8b8a022c29308a",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -16356,7 +16358,7 @@
           }
         }
       },
-      "sourceFingerprint": "e5d24de85445824b",
+      "sourceFingerprint": "1f8b8a022c29308a",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -16409,7 +16411,7 @@
           }
         }
       },
-      "sourceFingerprint": "f31a4aa0cb8a87d6",
+      "sourceFingerprint": "0cea2835f47668ef",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -16473,7 +16475,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -16494,7 +16496,7 @@
           }
         }
       },
-      "sourceFingerprint": "7907b9a3515e6a1d",
+      "sourceFingerprint": "88bde51923426e63",
       "fields": {
         "application_id": {
           "optional": false,
@@ -16522,7 +16524,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -16543,7 +16545,7 @@
           }
         }
       },
-      "sourceFingerprint": "f129309c580fd9a4",
+      "sourceFingerprint": "90449c495b243772",
       "fields": {
         "guild_id": {
           "optional": false,
@@ -16596,7 +16598,7 @@
           }
         }
       },
-      "sourceFingerprint": "bcecf554427f0ac1",
+      "sourceFingerprint": "e000dca59f5ca017",
       "fields": {
         "before": {
           "optional": true,
@@ -16667,7 +16669,7 @@
           }
         }
       },
-      "sourceFingerprint": "f129309c580fd9a4",
+      "sourceFingerprint": "90449c495b243772",
       "fields": {
         "guild_id": {
           "optional": false,
@@ -16714,7 +16716,7 @@
           }
         }
       },
-      "sourceFingerprint": "c873c0cbc292a235",
+      "sourceFingerprint": "83cdd6b2e3bc4133",
       "fields": {
         "invite_code": {
           "optional": false,
@@ -16773,7 +16775,7 @@
           }
         }
       },
-      "sourceFingerprint": "510412ef8d304de4",
+      "sourceFingerprint": "ab0700efb4055117",
       "fields": {
         "invite_code": {
           "optional": false,
@@ -16808,7 +16810,7 @@
           }
         }
       },
-      "sourceFingerprint": "510412ef8d304de4",
+      "sourceFingerprint": "ab0700efb4055117",
       "fields": {
         "invite_code": {
           "optional": false,
@@ -16849,7 +16851,7 @@
           }
         }
       },
-      "sourceFingerprint": "034958cee090c9eb",
+      "sourceFingerprint": "f5110cece3a8d2b9",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -16896,7 +16898,7 @@
           }
         }
       },
-      "sourceFingerprint": "ff26f1b0282fbb36",
+      "sourceFingerprint": "a80f1c8aeff0b8a5",
       "fields": {
         "user_id": {
           "optional": false,
@@ -16931,7 +16933,7 @@
           }
         }
       },
-      "sourceFingerprint": "fecb6c02b95b3d74",
+      "sourceFingerprint": "2e96f937b578ad29",
       "fields": {
         "webhook_id": {
           "optional": false,
@@ -16984,7 +16986,7 @@
           }
         }
       },
-      "sourceFingerprint": "c57244fe146e8b0c",
+      "sourceFingerprint": "2d139f108f655970",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -17061,7 +17063,7 @@
           }
         }
       },
-      "sourceFingerprint": "034958cee090c9eb",
+      "sourceFingerprint": "f5110cece3a8d2b9",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -17108,7 +17110,7 @@
           }
         }
       },
-      "sourceFingerprint": "e5d24de85445824b",
+      "sourceFingerprint": "1f8b8a022c29308a",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -17143,7 +17145,7 @@
           }
         }
       },
-      "sourceFingerprint": "f129309c580fd9a4",
+      "sourceFingerprint": "90449c495b243772",
       "fields": {
         "guild_id": {
           "optional": false,
@@ -17178,7 +17180,7 @@
           }
         }
       },
-      "sourceFingerprint": "e5d24de85445824b",
+      "sourceFingerprint": "1f8b8a022c29308a",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -17206,7 +17208,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -17239,7 +17241,7 @@
           }
         }
       },
-      "sourceFingerprint": "112857a883d731aa",
+      "sourceFingerprint": "911c01eacf5f3c56",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -17310,7 +17312,7 @@
           }
         }
       },
-      "sourceFingerprint": "112857a883d731aa",
+      "sourceFingerprint": "911c01eacf5f3c56",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -17381,7 +17383,7 @@
           }
         }
       },
-      "sourceFingerprint": "112857a883d731aa",
+      "sourceFingerprint": "911c01eacf5f3c56",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -17440,7 +17442,7 @@
           }
         }
       },
-      "sourceFingerprint": "e5d24de85445824b",
+      "sourceFingerprint": "1f8b8a022c29308a",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -17493,7 +17495,7 @@
           }
         }
       },
-      "sourceFingerprint": "c596086888ab1b70",
+      "sourceFingerprint": "0e748b572050d25a",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -17576,7 +17578,7 @@
           }
         }
       },
-      "sourceFingerprint": "2fa39c2b62858577",
+      "sourceFingerprint": "2fc0ee5534ebd865",
       "fields": {
         "username": {
           "optional": true,
@@ -17628,7 +17630,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -17655,7 +17657,7 @@
           }
         }
       },
-      "sourceFingerprint": "034958cee090c9eb",
+      "sourceFingerprint": "f5110cece3a8d2b9",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -17702,7 +17704,7 @@
           }
         }
       },
-      "sourceFingerprint": "f129309c580fd9a4",
+      "sourceFingerprint": "90449c495b243772",
       "fields": {
         "guild_id": {
           "optional": false,
@@ -17743,7 +17745,7 @@
           }
         }
       },
-      "sourceFingerprint": "c735354cb776efc6",
+      "sourceFingerprint": "5e8eb80ee1db438d",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -17802,7 +17804,7 @@
           }
         }
       },
-      "sourceFingerprint": "b297db2d449e3919",
+      "sourceFingerprint": "66b2e52a63bba724",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -17873,7 +17875,7 @@
           }
         }
       },
-      "sourceFingerprint": "f1c9abf2810012cb",
+      "sourceFingerprint": "09eafbd4b9216876",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -17950,7 +17952,7 @@
           }
         }
       },
-      "sourceFingerprint": "41f0dacdea4d9459",
+      "sourceFingerprint": "66611bbdb5ae9200",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -18021,7 +18023,7 @@
           }
         }
       },
-      "sourceFingerprint": "e5d24de85445824b",
+      "sourceFingerprint": "1f8b8a022c29308a",
       "fields": {
         "channel_id": {
           "optional": false,
@@ -18074,7 +18076,7 @@
           }
         }
       },
-      "sourceFingerprint": "de5e2c97ba04df79",
+      "sourceFingerprint": "8a41f471e0e25768",
       "fields": {
         "application_id": {
           "optional": true,
@@ -18151,7 +18153,7 @@
           }
         }
       },
-      "sourceFingerprint": "9d2058e41b24b4d7",
+      "sourceFingerprint": "92bf238a99543f01",
       "fields": {
         "invite_code": {
           "optional": false,
@@ -18191,7 +18193,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -18230,7 +18232,7 @@
           }
         }
       },
-      "sourceFingerprint": "4ef7418ca0e66ddf",
+      "sourceFingerprint": "c6dc247d3412b899",
       "fields": {
         "request": {
           "optional": false,
@@ -18336,7 +18338,7 @@
           }
         }
       },
-      "sourceFingerprint": "77526da78f95014b",
+      "sourceFingerprint": "ee7590be8347dbfa",
       "fields": {
         "request": {
           "optional": false,
@@ -18439,7 +18441,7 @@
           }
         }
       },
-      "sourceFingerprint": "4bf509c3a7ec3ddd",
+      "sourceFingerprint": "6e11cd433ad7eee7",
       "fields": {
         "request": {
           "optional": false,
@@ -18531,7 +18533,7 @@
           }
         }
       },
-      "sourceFingerprint": "b0bdf580f8065fc3",
+      "sourceFingerprint": "fe283c3a9540a373",
       "fields": {
         "request": {
           "optional": false,
@@ -18777,7 +18779,7 @@
           }
         }
       },
-      "sourceFingerprint": "ae640eb2f9cf3e75",
+      "sourceFingerprint": "8fa5fe85ed90f872",
       "fields": {
         "originalRequest": {
           "optional": false,
@@ -19011,7 +19013,7 @@
           }
         }
       },
-      "sourceFingerprint": "99d48c5e15e57a8b",
+      "sourceFingerprint": "1dc356e853bd47af",
       "fields": {
         "lookup": {
           "optional": false,
@@ -19082,7 +19084,7 @@
           }
         }
       },
-      "sourceFingerprint": "2735c8953bba729e",
+      "sourceFingerprint": "cec67081b9531327",
       "fields": {
         "originalRequest": {
           "optional": false,
@@ -19220,7 +19222,7 @@
           }
         }
       },
-      "sourceFingerprint": "76ab0056622513b8",
+      "sourceFingerprint": "4cf01d153cfab2a0",
       "fields": {
         "messageRef": {
           "optional": false,
@@ -19296,15 +19298,15 @@
           },
           "typeKind": "object",
           "create": "record",
-          "verify": "exact",
-          "rule": "type-object-exact",
+          "verify": "nonempty",
+          "rule": "type-object-soft-nonempty",
           "source": "regex"
         }
       },
       "parameterScore": {
         "defaultMode": "exact",
         "fields": {
-          "messageRef": "exact"
+          "messageRef": "nonempty"
         }
       }
     },
@@ -19422,7 +19424,7 @@
           }
         }
       },
-      "sourceFingerprint": "fee172a1f74b313a",
+      "sourceFingerprint": "cf9da7487c1a7cc6",
       "fields": {
         "to": {
           "optional": false,
@@ -19569,8 +19571,8 @@
           },
           "typeKind": "object",
           "create": "record",
-          "verify": "exact",
-          "rule": "type-object-exact",
+          "verify": "nonempty",
+          "rule": "type-object-soft-nonempty",
           "source": "regex"
         }
       },
@@ -19581,7 +19583,7 @@
           "cc": "nonempty",
           "bcc": "nonempty",
           "additionalMessage": "nonempty",
-          "messageRef": "exact"
+          "messageRef": "nonempty"
         }
       }
     },
@@ -19699,7 +19701,7 @@
           }
         }
       },
-      "sourceFingerprint": "43c0337f4d6e8f0b",
+      "sourceFingerprint": "3bd2f72e5b9d9207",
       "fields": {
         "body": {
           "optional": true,
@@ -19846,8 +19848,8 @@
           },
           "typeKind": "object",
           "create": "record",
-          "verify": "exact",
-          "rule": "type-object-exact",
+          "verify": "nonempty",
+          "rule": "type-object-soft-nonempty",
           "source": "regex"
         }
       },
@@ -19858,7 +19860,7 @@
           "cc": "nonempty",
           "bcc": "nonempty",
           "attachments": "nonempty",
-          "messageRef": "exact"
+          "messageRef": "nonempty"
         }
       }
     },
@@ -19938,7 +19940,7 @@
           }
         }
       },
-      "sourceFingerprint": "403f4ad059a66356",
+      "sourceFingerprint": "77ef2d9f7728d604",
       "fields": {
         "subject": {
           "optional": false,
@@ -20095,7 +20097,7 @@
           }
         }
       },
-      "sourceFingerprint": "7f2aec51489e3a2b",
+      "sourceFingerprint": "46aa4ed96faca2ea",
       "fields": {
         "task": {
           "optional": true,
@@ -20136,7 +20138,7 @@
           }
         }
       },
-      "sourceFingerprint": "7a942f860d67c895",
+      "sourceFingerprint": "4175311a7e449e03",
       "fields": {
         "name": {
           "optional": true,
@@ -20155,9 +20157,9 @@
             "kind": "string"
           },
           "typeKind": "string",
-          "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "create": "identifier",
+          "verify": "exact",
+          "rule": "string-identifier-exact",
           "source": "regex"
         }
       },
@@ -20165,7 +20167,7 @@
         "defaultMode": "exact",
         "fields": {
           "name": "exact",
-          "command": "nonempty"
+          "command": "exact"
         }
       }
     },
@@ -20195,7 +20197,7 @@
           }
         }
       },
-      "sourceFingerprint": "64a1bc7125d3f31f",
+      "sourceFingerprint": "0a6058f96ddd82fe",
       "fields": {
         "method": {
           "optional": true,
@@ -20260,7 +20262,7 @@
           }
         }
       },
-      "sourceFingerprint": "4d9a8834537474ed",
+      "sourceFingerprint": "92e8a37890dfbe87",
       "fields": {
         "artifact": {
           "optional": true,
@@ -20319,7 +20321,7 @@
           }
         }
       },
-      "sourceFingerprint": "573a718a1378119c",
+      "sourceFingerprint": "4a2aa0cae6999cd2",
       "fields": {
         "hostname": {
           "optional": true,
@@ -20378,7 +20380,7 @@
           }
         }
       },
-      "sourceFingerprint": "53139403c63d64f4",
+      "sourceFingerprint": "1c15dfb64ee24df3",
       "fields": {
         "hostname": {
           "optional": true,
@@ -20419,7 +20421,7 @@
           }
         }
       },
-      "sourceFingerprint": "4152f2d6d69164ff",
+      "sourceFingerprint": "cb25bc1304a28b12",
       "fields": {
         "hostname": {
           "optional": true,
@@ -20466,7 +20468,7 @@
           }
         }
       },
-      "sourceFingerprint": "a5d0f07bc8638359",
+      "sourceFingerprint": "524303638c4561ba",
       "fields": {
         "number": {
           "optional": true,
@@ -20501,7 +20503,7 @@
           }
         }
       },
-      "sourceFingerprint": "a5d0f07bc8638359",
+      "sourceFingerprint": "524303638c4561ba",
       "fields": {
         "number": {
           "optional": true,
@@ -20548,7 +20550,7 @@
           }
         }
       },
-      "sourceFingerprint": "2ecd5696fbfdd60e",
+      "sourceFingerprint": "fb9551d6d4289802",
       "fields": {
         "branch": {
           "optional": true,
@@ -20607,7 +20609,7 @@
           }
         }
       },
-      "sourceFingerprint": "516eedadd56dc97c",
+      "sourceFingerprint": "16a46e866a6d09cb",
       "fields": {
         "id": {
           "optional": true,
@@ -20635,7 +20637,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -20668,7 +20670,7 @@
           }
         }
       },
-      "sourceFingerprint": "23b7d54a674ba9b4",
+      "sourceFingerprint": "e4defb5f05b46868",
       "fields": {
         "repo": {
           "optional": true,
@@ -20727,7 +20729,7 @@
           }
         }
       },
-      "sourceFingerprint": "a59f608a2eea4d19",
+      "sourceFingerprint": "77b55fd063672de9",
       "fields": {
         "name": {
           "optional": true,
@@ -20755,7 +20757,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -20776,7 +20778,7 @@
           }
         }
       },
-      "sourceFingerprint": "3b00e727a374d9c3",
+      "sourceFingerprint": "4c29a2375b5fb72f",
       "fields": {
         "shell": {
           "optional": true,
@@ -20817,7 +20819,7 @@
           }
         }
       },
-      "sourceFingerprint": "1a26edba22d1eb8c",
+      "sourceFingerprint": "570a918179f7da41",
       "fields": {
         "name": {
           "optional": true,
@@ -20864,7 +20866,7 @@
           }
         }
       },
-      "sourceFingerprint": "7f2aec51489e3a2b",
+      "sourceFingerprint": "46aa4ed96faca2ea",
       "fields": {
         "task": {
           "optional": true,
@@ -20911,7 +20913,7 @@
           }
         }
       },
-      "sourceFingerprint": "a548b48744b12781",
+      "sourceFingerprint": "a66412e43217ddc7",
       "fields": {
         "repo": {
           "optional": true,
@@ -20970,7 +20972,7 @@
           }
         }
       },
-      "sourceFingerprint": "a59f608a2eea4d19",
+      "sourceFingerprint": "77b55fd063672de9",
       "fields": {
         "name": {
           "optional": true,
@@ -21011,7 +21013,7 @@
           }
         }
       },
-      "sourceFingerprint": "aa460ddc0378f10e",
+      "sourceFingerprint": "aff9a3e7c60522c9",
       "fields": {
         "public": {
           "optional": true,
@@ -21058,7 +21060,7 @@
           }
         }
       },
-      "sourceFingerprint": "516eedadd56dc97c",
+      "sourceFingerprint": "16a46e866a6d09cb",
       "fields": {
         "id": {
           "optional": true,
@@ -21093,7 +21095,7 @@
           }
         }
       },
-      "sourceFingerprint": "09884eb87077ad4c",
+      "sourceFingerprint": "89b075469f1d60a2",
       "fields": {
         "public": {
           "optional": true,
@@ -21128,7 +21130,7 @@
           }
         }
       },
-      "sourceFingerprint": "8988dda2f8636edb",
+      "sourceFingerprint": "7c406dbb1c6f8880",
       "fields": {
         "key": {
           "optional": true,
@@ -21175,7 +21177,7 @@
           }
         }
       },
-      "sourceFingerprint": "d1001d5ea7e4e2ba",
+      "sourceFingerprint": "69d1eb4a545581e4",
       "fields": {
         "number": {
           "optional": false,
@@ -21234,7 +21236,7 @@
           }
         }
       },
-      "sourceFingerprint": "a5d0f07bc8638359",
+      "sourceFingerprint": "524303638c4561ba",
       "fields": {
         "number": {
           "optional": true,
@@ -21293,7 +21295,7 @@
           }
         }
       },
-      "sourceFingerprint": "1a372d9b0b5df544",
+      "sourceFingerprint": "933ee4aac4204e38",
       "fields": {
         "repo": {
           "optional": true,
@@ -21382,7 +21384,7 @@
           }
         }
       },
-      "sourceFingerprint": "5d3177f9e5e11087",
+      "sourceFingerprint": "89353fdcba389be1",
       "fields": {
         "number": {
           "optional": false,
@@ -21459,7 +21461,7 @@
           }
         }
       },
-      "sourceFingerprint": "81751dadd4bc2375",
+      "sourceFingerprint": "0ad1b48c1ee6cf27",
       "fields": {
         "repo": {
           "optional": true,
@@ -21554,7 +21556,7 @@
           }
         }
       },
-      "sourceFingerprint": "a5d0f07bc8638359",
+      "sourceFingerprint": "524303638c4561ba",
       "fields": {
         "number": {
           "optional": true,
@@ -21595,7 +21597,7 @@
           }
         }
       },
-      "sourceFingerprint": "9513d051bb5e9e54",
+      "sourceFingerprint": "beafe617d7d3c62c",
       "fields": {
         "number": {
           "optional": true,
@@ -21648,7 +21650,7 @@
           }
         }
       },
-      "sourceFingerprint": "f9a0cf4566067162",
+      "sourceFingerprint": "6950f87d09fc3958",
       "fields": {
         "name": {
           "optional": true,
@@ -21688,7 +21690,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -21709,7 +21711,7 @@
           }
         }
       },
-      "sourceFingerprint": "bdf4b6ba21fe60cf",
+      "sourceFingerprint": "f61213e88a4fdfea",
       "fields": {
         "limit": {
           "optional": true,
@@ -21756,7 +21758,7 @@
           }
         }
       },
-      "sourceFingerprint": "da200ec778d675ea",
+      "sourceFingerprint": "cfc4c74a7dd3b117",
       "fields": {
         "state": {
           "optional": true,
@@ -21808,7 +21810,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -21829,7 +21831,7 @@
           }
         }
       },
-      "sourceFingerprint": "a59f608a2eea4d19",
+      "sourceFingerprint": "77b55fd063672de9",
       "fields": {
         "name": {
           "optional": true,
@@ -21870,7 +21872,7 @@
           }
         }
       },
-      "sourceFingerprint": "2496a371cf981506",
+      "sourceFingerprint": "3018c1216cf65470",
       "fields": {
         "number": {
           "optional": true,
@@ -21923,7 +21925,7 @@
           }
         }
       },
-      "sourceFingerprint": "5d3177f9e5e11087",
+      "sourceFingerprint": "89353fdcba389be1",
       "fields": {
         "number": {
           "optional": false,
@@ -21970,7 +21972,7 @@
           }
         }
       },
-      "sourceFingerprint": "a5d0f07bc8638359",
+      "sourceFingerprint": "524303638c4561ba",
       "fields": {
         "number": {
           "optional": true,
@@ -22029,7 +22031,7 @@
           }
         }
       },
-      "sourceFingerprint": "d5147187f0147aa0",
+      "sourceFingerprint": "6394cce5be09e9ea",
       "fields": {
         "title": {
           "optional": true,
@@ -22142,7 +22144,7 @@
           }
         }
       },
-      "sourceFingerprint": "81751dadd4bc2375",
+      "sourceFingerprint": "0ad1b48c1ee6cf27",
       "fields": {
         "repo": {
           "optional": true,
@@ -22243,7 +22245,7 @@
           }
         }
       },
-      "sourceFingerprint": "40b6d5cafdc260e5",
+      "sourceFingerprint": "5dae3030c710fe05",
       "fields": {
         "number": {
           "optional": true,
@@ -22308,7 +22310,7 @@
           }
         }
       },
-      "sourceFingerprint": "b1212d8f8b094a74",
+      "sourceFingerprint": "c15ef75aa4c9b6bd",
       "fields": {
         "branch": {
           "optional": false,
@@ -22385,7 +22387,7 @@
           }
         }
       },
-      "sourceFingerprint": "9513d051bb5e9e54",
+      "sourceFingerprint": "beafe617d7d3c62c",
       "fields": {
         "number": {
           "optional": true,
@@ -22432,7 +22434,7 @@
           }
         }
       },
-      "sourceFingerprint": "ce5fcda65772160b",
+      "sourceFingerprint": "ee755926384f9309",
       "fields": {
         "feature": {
           "optional": true,
@@ -22473,7 +22475,7 @@
           }
         }
       },
-      "sourceFingerprint": "ea5ccb9d937b4ed4",
+      "sourceFingerprint": "c236369e0ba403d0",
       "fields": {
         "name": {
           "optional": true,
@@ -22520,7 +22522,7 @@
           }
         }
       },
-      "sourceFingerprint": "516eedadd56dc97c",
+      "sourceFingerprint": "16a46e866a6d09cb",
       "fields": {
         "id": {
           "optional": true,
@@ -22548,7 +22550,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -22581,7 +22583,7 @@
           }
         }
       },
-      "sourceFingerprint": "665c82dffe6ad174",
+      "sourceFingerprint": "0a0a72d9332751dc",
       "fields": {
         "tag": {
           "optional": true,
@@ -22640,7 +22642,7 @@
           }
         }
       },
-      "sourceFingerprint": "516eedadd56dc97c",
+      "sourceFingerprint": "16a46e866a6d09cb",
       "fields": {
         "id": {
           "optional": true,
@@ -22675,7 +22677,7 @@
           }
         }
       },
-      "sourceFingerprint": "ec890e0f1c1399d2",
+      "sourceFingerprint": "c634082e840b6ed7",
       "fields": {
         "repo": {
           "optional": true,
@@ -22716,7 +22718,7 @@
           }
         }
       },
-      "sourceFingerprint": "b94c51f85f747ab5",
+      "sourceFingerprint": "0f693141620f2e24",
       "fields": {
         "repo": {
           "optional": true,
@@ -22781,7 +22783,7 @@
           }
         }
       },
-      "sourceFingerprint": "5b82979427da58c1",
+      "sourceFingerprint": "f883ee007917c915",
       "fields": {
         "name": {
           "optional": true,
@@ -22852,7 +22854,7 @@
           }
         }
       },
-      "sourceFingerprint": "ec890e0f1c1399d2",
+      "sourceFingerprint": "c634082e840b6ed7",
       "fields": {
         "repo": {
           "optional": true,
@@ -22893,7 +22895,7 @@
           }
         }
       },
-      "sourceFingerprint": "693fa3ec1f5a2b5e",
+      "sourceFingerprint": "15057403a584246d",
       "fields": {
         "repo": {
           "optional": true,
@@ -22946,7 +22948,7 @@
           }
         }
       },
-      "sourceFingerprint": "92425531636cc606",
+      "sourceFingerprint": "86684a6f779bc3c4",
       "fields": {
         "repo": {
           "optional": true,
@@ -22993,7 +22995,7 @@
           }
         }
       },
-      "sourceFingerprint": "ec890e0f1c1399d2",
+      "sourceFingerprint": "c634082e840b6ed7",
       "fields": {
         "repo": {
           "optional": true,
@@ -23028,7 +23030,7 @@
           }
         }
       },
-      "sourceFingerprint": "516eedadd56dc97c",
+      "sourceFingerprint": "16a46e866a6d09cb",
       "fields": {
         "id": {
           "optional": true,
@@ -23063,7 +23065,7 @@
           }
         }
       },
-      "sourceFingerprint": "e1c464fd446e2dc6",
+      "sourceFingerprint": "3c68070625554195",
       "fields": {
         "query": {
           "optional": true,
@@ -23104,7 +23106,7 @@
           }
         }
       },
-      "sourceFingerprint": "1a26edba22d1eb8c",
+      "sourceFingerprint": "570a918179f7da41",
       "fields": {
         "name": {
           "optional": true,
@@ -23151,7 +23153,7 @@
           }
         }
       },
-      "sourceFingerprint": "8988dda2f8636edb",
+      "sourceFingerprint": "7c406dbb1c6f8880",
       "fields": {
         "key": {
           "optional": true,
@@ -23192,7 +23194,7 @@
           }
         }
       },
-      "sourceFingerprint": "b8b4811adf9d6126",
+      "sourceFingerprint": "45f35722c3c784d7",
       "fields": {
         "repo": {
           "optional": true,
@@ -23232,7 +23234,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -23259,7 +23261,7 @@
           }
         }
       },
-      "sourceFingerprint": "1a26edba22d1eb8c",
+      "sourceFingerprint": "570a918179f7da41",
       "fields": {
         "name": {
           "optional": true,
@@ -23306,7 +23308,7 @@
           }
         }
       },
-      "sourceFingerprint": "516eedadd56dc97c",
+      "sourceFingerprint": "16a46e866a6d09cb",
       "fields": {
         "id": {
           "optional": true,
@@ -23353,7 +23355,7 @@
           }
         }
       },
-      "sourceFingerprint": "e94b219b533aeada",
+      "sourceFingerprint": "2377e3f0ea0eefe2",
       "fields": {
         "originalRequest": {
           "optional": false,
@@ -23424,7 +23426,7 @@
           }
         }
       },
-      "sourceFingerprint": "19ffde4a8bf3edc0",
+      "sourceFingerprint": "fe608df10e869254",
       "fields": {
         "originalRequest": {
           "optional": false,
@@ -23476,7 +23478,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -23490,7 +23492,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -23504,7 +23506,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -23518,7 +23520,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -23532,7 +23534,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -23559,7 +23561,7 @@
           }
         }
       },
-      "sourceFingerprint": "cf6d3c67060e4857",
+      "sourceFingerprint": "43ca1d8848b38fbe",
       "fields": {
         "adapter": {
           "optional": false,
@@ -23612,7 +23614,7 @@
           }
         }
       },
-      "sourceFingerprint": "cf6d3c67060e4857",
+      "sourceFingerprint": "43ca1d8848b38fbe",
       "fields": {
         "adapter": {
           "optional": false,
@@ -23652,7 +23654,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -23666,7 +23668,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -23687,7 +23689,7 @@
           }
         }
       },
-      "sourceFingerprint": "3877df445ab87f20",
+      "sourceFingerprint": "63c53fb057d0c591",
       "fields": {
         "adapter": {
           "optional": true,
@@ -23722,7 +23724,7 @@
           }
         }
       },
-      "sourceFingerprint": "3877df445ab87f20",
+      "sourceFingerprint": "63c53fb057d0c591",
       "fields": {
         "adapter": {
           "optional": true,
@@ -23757,7 +23759,7 @@
           }
         }
       },
-      "sourceFingerprint": "3877df445ab87f20",
+      "sourceFingerprint": "63c53fb057d0c591",
       "fields": {
         "adapter": {
           "optional": true,
@@ -23792,7 +23794,7 @@
           }
         }
       },
-      "sourceFingerprint": "3877df445ab87f20",
+      "sourceFingerprint": "63c53fb057d0c591",
       "fields": {
         "adapter": {
           "optional": true,
@@ -23836,7 +23838,7 @@
           }
         }
       },
-      "sourceFingerprint": "5d9f1da86dfc44cf",
+      "sourceFingerprint": "57a0d2ba2b24509e",
       "fields": {
         "items": {
           "optional": false,
@@ -23892,7 +23894,7 @@
           }
         }
       },
-      "sourceFingerprint": "5b67a8b0ff23ab12",
+      "sourceFingerprint": "568d8dfe2de9557f",
       "fields": {
         "listName": {
           "optional": false,
@@ -23927,7 +23929,7 @@
           }
         }
       },
-      "sourceFingerprint": "5b67a8b0ff23ab12",
+      "sourceFingerprint": "568d8dfe2de9557f",
       "fields": {
         "listName": {
           "optional": false,
@@ -23962,7 +23964,7 @@
           }
         }
       },
-      "sourceFingerprint": "5b67a8b0ff23ab12",
+      "sourceFingerprint": "568d8dfe2de9557f",
       "fields": {
         "listName": {
           "optional": false,
@@ -23990,7 +23992,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -24020,7 +24022,7 @@
           }
         }
       },
-      "sourceFingerprint": "5d9f1da86dfc44cf",
+      "sourceFingerprint": "57a0d2ba2b24509e",
       "fields": {
         "items": {
           "optional": false,
@@ -24076,7 +24078,7 @@
           }
         }
       },
-      "sourceFingerprint": "5b67a8b0ff23ab12",
+      "sourceFingerprint": "568d8dfe2de9557f",
       "fields": {
         "listName": {
           "optional": false,
@@ -24111,7 +24113,7 @@
           }
         }
       },
-      "sourceFingerprint": "bc8cde91f134a634",
+      "sourceFingerprint": "3817c284f843aff2",
       "fields": {
         "fileName": {
           "optional": false,
@@ -24146,7 +24148,7 @@
           }
         }
       },
-      "sourceFingerprint": "e9e5b7d8c5ffa561",
+      "sourceFingerprint": "698e213a1797c733",
       "fields": {
         "amount": {
           "optional": false,
@@ -24174,7 +24176,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -24195,7 +24197,7 @@
           }
         }
       },
-      "sourceFingerprint": "161c97720384e30f",
+      "sourceFingerprint": "65e771beea036990",
       "fields": {
         "folderPath": {
           "optional": true,
@@ -24230,7 +24232,7 @@
           }
         }
       },
-      "sourceFingerprint": "a81761e1bb3165ba",
+      "sourceFingerprint": "ea23ee6b7a73074c",
       "fields": {
         "isMuted": {
           "optional": false,
@@ -24258,7 +24260,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -24272,7 +24274,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -24293,7 +24295,7 @@
           }
         }
       },
-      "sourceFingerprint": "bc8cde91f134a634",
+      "sourceFingerprint": "3817c284f843aff2",
       "fields": {
         "fileName": {
           "optional": false,
@@ -24334,7 +24336,7 @@
           }
         }
       },
-      "sourceFingerprint": "36a536eef8aa753e",
+      "sourceFingerprint": "af59f11783edced5",
       "fields": {
         "folderPath": {
           "optional": true,
@@ -24381,7 +24383,7 @@
           }
         }
       },
-      "sourceFingerprint": "eb6e402dcdc2645b",
+      "sourceFingerprint": "4af7b88c89dde094",
       "fields": {
         "trackNumber": {
           "optional": false,
@@ -24409,7 +24411,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -24431,7 +24433,7 @@
           }
         }
       },
-      "sourceFingerprint": "33400f8e0a49a585",
+      "sourceFingerprint": "49ad96af3eaa385d",
       "fields": {
         "mode": {
           "optional": false,
@@ -24460,7 +24462,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -24481,7 +24483,7 @@
           }
         }
       },
-      "sourceFingerprint": "bd8fa071dadd94a0",
+      "sourceFingerprint": "08e36adede515c2b",
       "fields": {
         "query": {
           "optional": false,
@@ -24516,7 +24518,7 @@
           }
         }
       },
-      "sourceFingerprint": "c14f9afe47a26d25",
+      "sourceFingerprint": "c5cd96dcbce48635",
       "fields": {
         "folderPath": {
           "optional": false,
@@ -24551,7 +24553,7 @@
           }
         }
       },
-      "sourceFingerprint": "1505c9d7862135ea",
+      "sourceFingerprint": "719102e940bdd220",
       "fields": {
         "level": {
           "optional": false,
@@ -24579,7 +24581,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -24593,7 +24595,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -24614,7 +24616,7 @@
           }
         }
       },
-      "sourceFingerprint": "923602039ee86c33",
+      "sourceFingerprint": "4ce9ebe6291b1fef",
       "fields": {
         "on": {
           "optional": false,
@@ -24642,7 +24644,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -24656,7 +24658,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -24677,7 +24679,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -24712,7 +24714,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -24784,7 +24786,7 @@
           }
         }
       },
-      "sourceFingerprint": "8f1ec2b210ad1716",
+      "sourceFingerprint": "f5e4a70c6de396d8",
       "fields": {
         "originalRequest": {
           "optional": false,
@@ -24826,8 +24828,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-free-text-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "progressStatus": {
@@ -24848,8 +24850,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "aiCommand": {
@@ -24871,9 +24873,9 @@
           "originalRequest": "nonempty",
           "cursorPosition": "exact",
           "context": "nonempty",
-          "generatedContent": "nonempty",
+          "generatedContent": "llmAsAJudge",
           "progressStatus": "nonempty",
-          "validationResults": "nonempty",
+          "validationResults": "llmAsAJudge",
           "aiCommand": "exact"
         }
       }
@@ -24904,7 +24906,7 @@
           }
         }
       },
-      "sourceFingerprint": "2f7ceed1d8e0cc25",
+      "sourceFingerprint": "00b9f8c9316aaa20",
       "fields": {
         "originalRequest": {
           "optional": false,
@@ -24981,7 +24983,7 @@
           }
         }
       },
-      "sourceFingerprint": "d49e1f3b4b3201d8",
+      "sourceFingerprint": "8754712acff85729",
       "fields": {
         "title": {
           "optional": false,
@@ -25064,7 +25066,7 @@
           }
         }
       },
-      "sourceFingerprint": "fa7b69186e158770",
+      "sourceFingerprint": "87b5afc35bf78bec",
       "fields": {
         "title": {
           "optional": false,
@@ -25111,7 +25113,7 @@
           }
         }
       },
-      "sourceFingerprint": "7ec5f596859e6cf8",
+      "sourceFingerprint": "41793cd3b2495963",
       "fields": {
         "title": {
           "optional": false,
@@ -25170,7 +25172,7 @@
           }
         }
       },
-      "sourceFingerprint": "891f36ccb7cb4b7d",
+      "sourceFingerprint": "2eefc2087cd89130",
       "fields": {
         "title": {
           "optional": false,
@@ -25252,7 +25254,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -25273,7 +25275,7 @@
           }
         }
       },
-      "sourceFingerprint": "7ec5f596859e6cf8",
+      "sourceFingerprint": "41793cd3b2495963",
       "fields": {
         "title": {
           "optional": false,
@@ -25301,7 +25303,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -25340,7 +25342,7 @@
           }
         }
       },
-      "sourceFingerprint": "fcda810816dfb525",
+      "sourceFingerprint": "4eabfcdfe9a91a1d",
       "fields": {
         "mergedMontageTitle": {
           "optional": false,
@@ -25417,7 +25419,7 @@
           }
         }
       },
-      "sourceFingerprint": "7ec5f596859e6cf8",
+      "sourceFingerprint": "41793cd3b2495963",
       "fields": {
         "title": {
           "optional": false,
@@ -25486,7 +25488,7 @@
           }
         }
       },
-      "sourceFingerprint": "bc67378abcff18fe",
+      "sourceFingerprint": "5359c6961c46a86b",
       "fields": {
         "title": {
           "optional": false,
@@ -25624,7 +25626,7 @@
           }
         }
       },
-      "sourceFingerprint": "54cc98a394a5e551",
+      "sourceFingerprint": "96a8be4c74190cec",
       "fields": {
         "title": {
           "optional": false,
@@ -25723,7 +25725,7 @@
           }
         }
       },
-      "sourceFingerprint": "85350c15c7f3fc96",
+      "sourceFingerprint": "8470667c2493e890",
       "fields": {
         "viewMode": {
           "optional": false,
@@ -25765,7 +25767,7 @@
           }
         }
       },
-      "sourceFingerprint": "24845d635e80f86c",
+      "sourceFingerprint": "7e016477a926ad9c",
       "fields": {
         "minSearchScore": {
           "optional": true,
@@ -25805,7 +25807,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -25826,7 +25828,7 @@
           }
         }
       },
-      "sourceFingerprint": "7ec5f596859e6cf8",
+      "sourceFingerprint": "41793cd3b2495963",
       "fields": {
         "title": {
           "optional": false,
@@ -25861,7 +25863,7 @@
           }
         }
       },
-      "sourceFingerprint": "bb8006d56476ac7e",
+      "sourceFingerprint": "5e07b1c1bb5510d9",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -25897,7 +25899,7 @@
           }
         }
       },
-      "sourceFingerprint": "5dd2ada54cad241c",
+      "sourceFingerprint": "827d08c767eea976",
       "fields": {
         "status": {
           "optional": true,
@@ -25951,7 +25953,7 @@
           }
         }
       },
-      "sourceFingerprint": "74516b10e0998502",
+      "sourceFingerprint": "e9d89f5dec621d44",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26040,7 +26042,7 @@
           }
         }
       },
-      "sourceFingerprint": "d32223ce8f999948",
+      "sourceFingerprint": "6a9b1687a3e4f605",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26111,7 +26113,7 @@
           }
         }
       },
-      "sourceFingerprint": "6ff5956f01079f2c",
+      "sourceFingerprint": "fbfb1311f999121b",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26170,7 +26172,7 @@
           }
         }
       },
-      "sourceFingerprint": "bb8006d56476ac7e",
+      "sourceFingerprint": "5e07b1c1bb5510d9",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26211,7 +26213,7 @@
           }
         }
       },
-      "sourceFingerprint": "aa00d24bcb1d2998",
+      "sourceFingerprint": "b61e7e33521a5743",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26258,7 +26260,7 @@
           }
         }
       },
-      "sourceFingerprint": "bb8006d56476ac7e",
+      "sourceFingerprint": "5e07b1c1bb5510d9",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26293,7 +26295,7 @@
           }
         }
       },
-      "sourceFingerprint": "bb8006d56476ac7e",
+      "sourceFingerprint": "5e07b1c1bb5510d9",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26328,7 +26330,7 @@
           }
         }
       },
-      "sourceFingerprint": "bb8006d56476ac7e",
+      "sourceFingerprint": "5e07b1c1bb5510d9",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26369,7 +26371,7 @@
           }
         }
       },
-      "sourceFingerprint": "eb682aefbb7e3bf8",
+      "sourceFingerprint": "9fa1d5bd8aa72869",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26416,7 +26418,7 @@
           }
         }
       },
-      "sourceFingerprint": "bb8006d56476ac7e",
+      "sourceFingerprint": "5e07b1c1bb5510d9",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26457,7 +26459,7 @@
           }
         }
       },
-      "sourceFingerprint": "c071800a4a1136a6",
+      "sourceFingerprint": "9fe580ab00d38511",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26504,7 +26506,7 @@
           }
         }
       },
-      "sourceFingerprint": "bb8006d56476ac7e",
+      "sourceFingerprint": "5e07b1c1bb5510d9",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26551,7 +26553,7 @@
           }
         }
       },
-      "sourceFingerprint": "5ac27920b7fa2c0f",
+      "sourceFingerprint": "50ce8d740da4f22c",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26610,7 +26612,7 @@
           }
         }
       },
-      "sourceFingerprint": "bb8006d56476ac7e",
+      "sourceFingerprint": "5e07b1c1bb5510d9",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26660,7 +26662,7 @@
           }
         }
       },
-      "sourceFingerprint": "666a2387d9c99d3a",
+      "sourceFingerprint": "89d82ed11ac267c7",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26740,7 +26742,7 @@
           }
         }
       },
-      "sourceFingerprint": "5ac27920b7fa2c0f",
+      "sourceFingerprint": "50ce8d740da4f22c",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26792,7 +26794,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -26806,7 +26808,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -26856,7 +26858,7 @@
           }
         }
       },
-      "sourceFingerprint": "4e06777a2057de75",
+      "sourceFingerprint": "f8ee54bcdfc77558",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -26957,7 +26959,7 @@
           }
         }
       },
-      "sourceFingerprint": "cd6b923589a94d0a",
+      "sourceFingerprint": "16b195f941837451",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -27023,7 +27025,7 @@
           }
         }
       },
-      "sourceFingerprint": "bb8006d56476ac7e",
+      "sourceFingerprint": "5e07b1c1bb5510d9",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -27058,7 +27060,7 @@
           }
         }
       },
-      "sourceFingerprint": "bb8006d56476ac7e",
+      "sourceFingerprint": "5e07b1c1bb5510d9",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -27099,7 +27101,7 @@
           }
         }
       },
-      "sourceFingerprint": "6d7a9a2699e2d0c8",
+      "sourceFingerprint": "c8ffcb30631c9e3a",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -27146,7 +27148,7 @@
           }
         }
       },
-      "sourceFingerprint": "bb8006d56476ac7e",
+      "sourceFingerprint": "5e07b1c1bb5510d9",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -27181,7 +27183,7 @@
           }
         }
       },
-      "sourceFingerprint": "bb8006d56476ac7e",
+      "sourceFingerprint": "5e07b1c1bb5510d9",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -27223,7 +27225,7 @@
           }
         }
       },
-      "sourceFingerprint": "b4b707352d4a80ba",
+      "sourceFingerprint": "e1cc1e2817c16419",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -27280,7 +27282,7 @@
           }
         }
       },
-      "sourceFingerprint": "8d17f0357f51d293",
+      "sourceFingerprint": "9eef80b3d1d05108",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -27351,7 +27353,7 @@
           }
         }
       },
-      "sourceFingerprint": "327c95da4995482e",
+      "sourceFingerprint": "9e11a4159943a065",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -27434,7 +27436,7 @@
           }
         }
       },
-      "sourceFingerprint": "bc2df670edb0dc70",
+      "sourceFingerprint": "7846db5091c665cc",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -27503,7 +27505,7 @@
           }
         }
       },
-      "sourceFingerprint": "ca0be853bae8fcc8",
+      "sourceFingerprint": "1fe76b7fabd57343",
       "fields": {
         "integrationName": {
           "optional": false,
@@ -27556,7 +27558,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -27589,7 +27591,7 @@
           }
         }
       },
-      "sourceFingerprint": "b708575df9355b43",
+      "sourceFingerprint": "6d736fc02c2cecb7",
       "fields": {
         "message": {
           "optional": false,
@@ -27648,7 +27650,7 @@
           }
         }
       },
-      "sourceFingerprint": "872162eed5cab755",
+      "sourceFingerprint": "998e220c99af4b8c",
       "fields": {
         "originalRequest": {
           "optional": false,
@@ -27683,7 +27685,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -27747,7 +27749,7 @@
           }
         }
       },
-      "sourceFingerprint": "c46c10cedacde17a",
+      "sourceFingerprint": "c7836f0bff355885",
       "fields": {
         "name": {
           "optional": false,
@@ -27835,7 +27837,7 @@
           }
         }
       },
-      "sourceFingerprint": "1187b9fd58170cd8",
+      "sourceFingerprint": "3ed158477e240a65",
       "fields": {
         "name": {
           "optional": false,
@@ -27894,7 +27896,7 @@
           }
         }
       },
-      "sourceFingerprint": "502da7c7ae80c435",
+      "sourceFingerprint": "d96d40a265cd3079",
       "fields": {
         "volumeChangePercentage": {
           "optional": false,
@@ -27958,7 +27960,7 @@
           }
         }
       },
-      "sourceFingerprint": "56ab8c6801d7f66f",
+      "sourceFingerprint": "7ae680d18a010564",
       "fields": {
         "name": {
           "optional": false,
@@ -28034,7 +28036,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -28137,7 +28139,7 @@
           }
         }
       },
-      "sourceFingerprint": "3daeac96afc85dfc",
+      "sourceFingerprint": "c69291e63ab06514",
       "fields": {
         "target": {
           "optional": false,
@@ -28245,7 +28247,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -28266,7 +28268,7 @@
           }
         }
       },
-      "sourceFingerprint": "538b6bd83601a51e",
+      "sourceFingerprint": "311e0c1865345b35",
       "fields": {
         "count": {
           "optional": true,
@@ -28301,7 +28303,7 @@
           }
         }
       },
-      "sourceFingerprint": "b42b3676bdc727a9",
+      "sourceFingerprint": "e9ec65e536e7895c",
       "fields": {
         "playlistNumber": {
           "optional": false,
@@ -28336,7 +28338,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -28364,7 +28366,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -28378,7 +28380,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -28392,7 +28394,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -28406,7 +28408,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -28420,7 +28422,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -28441,7 +28443,7 @@
           }
         }
       },
-      "sourceFingerprint": "eb6e402dcdc2645b",
+      "sourceFingerprint": "4af7b88c89dde094",
       "fields": {
         "trackNumber": {
           "optional": false,
@@ -28538,7 +28540,7 @@
           }
         }
       },
-      "sourceFingerprint": "0411c71108fca61e",
+      "sourceFingerprint": "f726f346e1cdd8fd",
       "fields": {
         "target": {
           "optional": false,
@@ -28641,7 +28643,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -28669,7 +28671,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -28683,7 +28685,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -28704,7 +28706,7 @@
           }
         }
       },
-      "sourceFingerprint": "d8cee0729be2acf6",
+      "sourceFingerprint": "1ca54f82fdc14881",
       "fields": {
         "deviceName": {
           "optional": false,
@@ -28739,7 +28741,7 @@
           }
         }
       },
-      "sourceFingerprint": "0ea322072b50023a",
+      "sourceFingerprint": "f423cf1f14aa5ee2",
       "fields": {
         "deviceName": {
           "optional": true,
@@ -28774,7 +28776,7 @@
           }
         }
       },
-      "sourceFingerprint": "a4ea089fa5591efe",
+      "sourceFingerprint": "de43e9045711f449",
       "fields": {
         "newMaxVolumeLevel": {
           "optional": false,
@@ -28809,7 +28811,7 @@
           }
         }
       },
-      "sourceFingerprint": "ef1f9209d2976a79",
+      "sourceFingerprint": "e0d8e2084ee779a3",
       "fields": {
         "newVolumeLevel": {
           "optional": false,
@@ -28837,7 +28839,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -28858,7 +28860,7 @@
           }
         }
       },
-      "sourceFingerprint": "923602039ee86c33",
+      "sourceFingerprint": "4ce9ebe6291b1fef",
       "fields": {
         "on": {
           "optional": false,
@@ -28886,7 +28888,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -29008,7 +29010,7 @@
           }
         }
       },
-      "sourceFingerprint": "747227570b899b47",
+      "sourceFingerprint": "b4d6eb670a999157",
       "fields": {
         "actionName": {
           "optional": false,
@@ -29050,8 +29052,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-free-text-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "scriptParameters": {
@@ -29188,7 +29190,7 @@
           "actionName": "exact",
           "description": "nonempty",
           "displayName": "exact",
-          "script": "nonempty",
+          "script": "llmAsAJudge",
           "scriptParameters": "exact",
           "grammarPatterns": "exact",
           "allowedCmdlets": "exact",
@@ -29210,7 +29212,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -29269,7 +29271,7 @@
           }
         }
       },
-      "sourceFingerprint": "596e9f772c321d41",
+      "sourceFingerprint": "1f3addeeddf96a2c",
       "fields": {
         "flowName": {
           "optional": false,
@@ -29289,8 +29291,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-free-text-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "allowedCmdlets": {
@@ -29338,7 +29340,7 @@
         "defaultMode": "exact",
         "fields": {
           "flowName": "exact",
-          "script": "nonempty",
+          "script": "llmAsAJudge",
           "allowedCmdlets": "exact",
           "allowedModules": "exact"
         }
@@ -29370,7 +29372,7 @@
           }
         }
       },
-      "sourceFingerprint": "1737ded8ad24ed1c",
+      "sourceFingerprint": "f35469281ab71144",
       "fields": {
         "flowName": {
           "optional": false,
@@ -29390,8 +29392,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "flowParametersJson": {
@@ -29401,8 +29403,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         }
       },
@@ -29410,8 +29412,8 @@
         "defaultMode": "exact",
         "fields": {
           "flowName": "exact",
-          "flowArgs": "nonempty",
-          "flowParametersJson": "nonempty"
+          "flowArgs": "llmAsAJudge",
+          "flowParametersJson": "llmAsAJudge"
         }
       }
     },
@@ -29435,7 +29437,7 @@
           }
         }
       },
-      "sourceFingerprint": "ddcd636ad6199bad",
+      "sourceFingerprint": "f43014554478d7bf",
       "fields": {
         "filePath": {
           "optional": false,
@@ -29475,7 +29477,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -29489,7 +29491,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -29522,7 +29524,7 @@
           }
         }
       },
-      "sourceFingerprint": "edf888eb36121139",
+      "sourceFingerprint": "32701a23c243bbfb",
       "fields": {
         "target": {
           "optional": true,
@@ -29581,7 +29583,7 @@
           }
         }
       },
-      "sourceFingerprint": "dc30d96546dfb669",
+      "sourceFingerprint": "350973530ddb3c1c",
       "fields": {
         "target": {
           "optional": true,
@@ -29609,7 +29611,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -29630,7 +29632,7 @@
           }
         }
       },
-      "sourceFingerprint": "dc30d96546dfb669",
+      "sourceFingerprint": "350973530ddb3c1c",
       "fields": {
         "target": {
           "optional": true,
@@ -29665,7 +29667,7 @@
           }
         }
       },
-      "sourceFingerprint": "872162eed5cab755",
+      "sourceFingerprint": "998e220c99af4b8c",
       "fields": {
         "originalRequest": {
           "optional": false,
@@ -29700,7 +29702,7 @@
           }
         }
       },
-      "sourceFingerprint": "872162eed5cab755",
+      "sourceFingerprint": "998e220c99af4b8c",
       "fields": {
         "originalRequest": {
           "optional": false,
@@ -29728,7 +29730,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -29742,7 +29744,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -29763,7 +29765,7 @@
           }
         }
       },
-      "sourceFingerprint": "bdf4b6ba21fe60cf",
+      "sourceFingerprint": "f61213e88a4fdfea",
       "fields": {
         "limit": {
           "optional": true,
@@ -29798,7 +29800,7 @@
           }
         }
       },
-      "sourceFingerprint": "47ef55c49fbea563",
+      "sourceFingerprint": "e1098a64c581c93b",
       "fields": {
         "agentName": {
           "optional": false,
@@ -29826,7 +29828,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -29840,7 +29842,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -29870,7 +29872,7 @@
           }
         }
       },
-      "sourceFingerprint": "b05c198adab401b6",
+      "sourceFingerprint": "7e6f3faa031b7549",
       "fields": {
         "enable": {
           "optional": false,
@@ -29926,7 +29928,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -29961,7 +29963,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -29996,7 +29998,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -30031,7 +30033,7 @@
           }
         }
       },
-      "sourceFingerprint": "bd8fa071dadd94a0",
+      "sourceFingerprint": "08e36adede515c2b",
       "fields": {
         "query": {
           "optional": false,
@@ -30059,7 +30061,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -30080,7 +30082,7 @@
           }
         }
       },
-      "sourceFingerprint": "a59f608a2eea4d19",
+      "sourceFingerprint": "77b55fd063672de9",
       "fields": {
         "name": {
           "optional": true,
@@ -30108,7 +30110,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -30129,7 +30131,7 @@
           }
         }
       },
-      "sourceFingerprint": "a59f608a2eea4d19",
+      "sourceFingerprint": "77b55fd063672de9",
       "fields": {
         "name": {
           "optional": true,
@@ -30157,7 +30159,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -30171,7 +30173,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -30198,7 +30200,7 @@
           }
         }
       },
-      "sourceFingerprint": "93ea6b57100d47a1",
+      "sourceFingerprint": "5e7829e09c098987",
       "fields": {
         "name": {
           "optional": true,
@@ -30245,7 +30247,7 @@
           }
         }
       },
-      "sourceFingerprint": "bd8fa071dadd94a0",
+      "sourceFingerprint": "08e36adede515c2b",
       "fields": {
         "query": {
           "optional": false,
@@ -30273,7 +30275,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -30294,7 +30296,7 @@
           }
         }
       },
-      "sourceFingerprint": "a59f608a2eea4d19",
+      "sourceFingerprint": "77b55fd063672de9",
       "fields": {
         "name": {
           "optional": true,
@@ -30329,7 +30331,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -30364,7 +30366,7 @@
           }
         }
       },
-      "sourceFingerprint": "7877da485568f647",
+      "sourceFingerprint": "d72154752e2d3c5f",
       "fields": {
         "agentName": {
           "optional": true,
@@ -30399,7 +30401,7 @@
           }
         }
       },
-      "sourceFingerprint": "bdf82a88174b0c61",
+      "sourceFingerprint": "4c9c7de03a450fd7",
       "fields": {
         "id": {
           "optional": false,
@@ -30434,7 +30436,7 @@
           }
         }
       },
-      "sourceFingerprint": "7877da485568f647",
+      "sourceFingerprint": "d72154752e2d3c5f",
       "fields": {
         "agentName": {
           "optional": true,
@@ -30469,7 +30471,7 @@
           }
         }
       },
-      "sourceFingerprint": "bdf82a88174b0c61",
+      "sourceFingerprint": "4c9c7de03a450fd7",
       "fields": {
         "id": {
           "optional": false,
@@ -30504,7 +30506,7 @@
           }
         }
       },
-      "sourceFingerprint": "c2c15162083afff1",
+      "sourceFingerprint": "501e66f2caf0372b",
       "fields": {
         "question": {
           "optional": false,
@@ -30545,7 +30547,7 @@
           }
         }
       },
-      "sourceFingerprint": "8750546ebb94cdb7",
+      "sourceFingerprint": "2f589ed228867462",
       "fields": {
         "actionName": {
           "optional": false,
@@ -30598,7 +30600,7 @@
           }
         }
       },
-      "sourceFingerprint": "5db5f953d7fd93fa",
+      "sourceFingerprint": "d8091050563098d2",
       "fields": {
         "agentName": {
           "optional": false,
@@ -30638,7 +30640,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -30659,7 +30661,7 @@
           }
         }
       },
-      "sourceFingerprint": "b8fd54d539b6c258",
+      "sourceFingerprint": "579b6b3fc2e4cb8b",
       "fields": {
         "messageNumber": {
           "optional": false,
@@ -30687,7 +30689,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -30701,7 +30703,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -30715,7 +30717,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -30737,7 +30739,7 @@
           }
         }
       },
-      "sourceFingerprint": "6f06efd0200d5278",
+      "sourceFingerprint": "8688d151f49be91d",
       "fields": {
         "filter": {
           "optional": false,
@@ -30773,7 +30775,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -30808,7 +30810,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -30843,7 +30845,7 @@
           }
         }
       },
-      "sourceFingerprint": "d9557e50b5905a5e",
+      "sourceFingerprint": "0e7bfd2e8eac8adb",
       "fields": {
         "seconds": {
           "optional": false,
@@ -30878,7 +30880,7 @@
           }
         }
       },
-      "sourceFingerprint": "80c6bbb6c219681a",
+      "sourceFingerprint": "25a098cf9fbb627d",
       "fields": {
         "enable": {
           "optional": false,
@@ -30913,7 +30915,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -30941,7 +30943,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -30962,7 +30964,7 @@
           }
         }
       },
-      "sourceFingerprint": "ca45057a2d3d54fb",
+      "sourceFingerprint": "7af96d453ef0dae2",
       "fields": {
         "id": {
           "optional": false,
@@ -30990,7 +30992,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -31030,7 +31032,7 @@
           }
         }
       },
-      "sourceFingerprint": "d9f1073aa6c57601",
+      "sourceFingerprint": "2bf0b0a8ad99d739",
       "fields": {
         "message": {
           "optional": false,
@@ -31115,7 +31117,7 @@
           }
         }
       },
-      "sourceFingerprint": "7f89a5a8c0925009",
+      "sourceFingerprint": "78261bb18bece5ca",
       "fields": {
         "message": {
           "optional": false,
@@ -31193,7 +31195,7 @@
           }
         }
       },
-      "sourceFingerprint": "cbee78653cf357fc",
+      "sourceFingerprint": "ffc64b63676826cc",
       "fields": {
         "goal": {
           "optional": false,
@@ -31288,7 +31290,7 @@
           }
         }
       },
-      "sourceFingerprint": "18d623128f810494",
+      "sourceFingerprint": "2de19d9e3bde86e1",
       "fields": {
         "input": {
           "optional": false,
@@ -31371,7 +31373,7 @@
           }
         }
       },
-      "sourceFingerprint": "09f86bb34def6d4b",
+      "sourceFingerprint": "b6afa6407e829ff9",
       "fields": {
         "path": {
           "optional": false,
@@ -31406,7 +31408,7 @@
           }
         }
       },
-      "sourceFingerprint": "9afa22e6753c734b",
+      "sourceFingerprint": "8ea5994c31245bd7",
       "fields": {
         "url": {
           "optional": false,
@@ -31447,7 +31449,7 @@
           }
         }
       },
-      "sourceFingerprint": "08b3285f32a53c86",
+      "sourceFingerprint": "ffadb4818711a16c",
       "fields": {
         "query": {
           "optional": false,
@@ -31500,7 +31502,7 @@
           }
         }
       },
-      "sourceFingerprint": "c7c3acf936953b35",
+      "sourceFingerprint": "d805101626f651ef",
       "fields": {
         "path": {
           "optional": false,
@@ -31569,7 +31571,7 @@
           }
         }
       },
-      "sourceFingerprint": "e77b260b1208a7a1",
+      "sourceFingerprint": "0f364a920e926c0c",
       "fields": {
         "originalRequest": {
           "optional": false,
@@ -31662,7 +31664,7 @@
           }
         }
       },
-      "sourceFingerprint": "a3ac618a087bca4a",
+      "sourceFingerprint": "4a526367f311302e",
       "fields": {
         "file": {
           "optional": false,
@@ -31714,7 +31716,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -31735,7 +31737,7 @@
           }
         }
       },
-      "sourceFingerprint": "b894115d617ca646",
+      "sourceFingerprint": "27181390f4fdb217",
       "fields": {
         "waitForCompletion": {
           "optional": true,
@@ -31770,7 +31772,7 @@
           }
         }
       },
-      "sourceFingerprint": "b894115d617ca646",
+      "sourceFingerprint": "27181390f4fdb217",
       "fields": {
         "waitForCompletion": {
           "optional": true,
@@ -31805,7 +31807,7 @@
           }
         }
       },
-      "sourceFingerprint": "83ef189022e46403",
+      "sourceFingerprint": "8e20f0855851565d",
       "fields": {
         "saveChanges": {
           "optional": true,
@@ -31833,7 +31835,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -31860,7 +31862,7 @@
           }
         }
       },
-      "sourceFingerprint": "dbba4283336f586c",
+      "sourceFingerprint": "5abd5d9f78e93ee6",
       "fields": {
         "commandName": {
           "optional": false,
@@ -31880,8 +31882,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         }
       },
@@ -31889,7 +31891,7 @@
         "defaultMode": "exact",
         "fields": {
           "commandName": "exact",
-          "commandArgs": "nonempty"
+          "commandArgs": "llmAsAJudge"
         }
       }
     },
@@ -31913,7 +31915,7 @@
           }
         }
       },
-      "sourceFingerprint": "8ea3c0df9030b8a6",
+      "sourceFingerprint": "688e66c0abfbd87a",
       "fields": {
         "searchTerm": {
           "optional": false,
@@ -31978,7 +31980,7 @@
           }
         }
       },
-      "sourceFingerprint": "b4be4cf2aa1202c6",
+      "sourceFingerprint": "b2c2441bb09cf0d4",
       "fields": {
         "text": {
           "optional": false,
@@ -32042,7 +32044,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32069,7 +32071,7 @@
           }
         }
       },
-      "sourceFingerprint": "060c36faf60b62b3",
+      "sourceFingerprint": "964e621e41e5b540",
       "fields": {
         "line": {
           "optional": false,
@@ -32123,7 +32125,7 @@
           }
         }
       },
-      "sourceFingerprint": "42eed0099c0cd534",
+      "sourceFingerprint": "181cd236a8e586d9",
       "fields": {
         "filePath": {
           "optional": false,
@@ -32164,7 +32166,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32197,7 +32199,7 @@
           }
         }
       },
-      "sourceFingerprint": "621a71c9845d4ef0",
+      "sourceFingerprint": "76bd3079f2cdc020",
       "fields": {
         "breakpointId": {
           "optional": true,
@@ -32249,7 +32251,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32263,7 +32265,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32277,7 +32279,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32291,7 +32293,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32305,7 +32307,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32319,7 +32321,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32333,7 +32335,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32354,7 +32356,7 @@
           }
         }
       },
-      "sourceFingerprint": "55676be4c3c89064",
+      "sourceFingerprint": "bf5ca56363915193",
       "fields": {
         "location": {
           "optional": false,
@@ -32396,7 +32398,7 @@
           }
         }
       },
-      "sourceFingerprint": "e2cedfd378aff5fc",
+      "sourceFingerprint": "93368fe79eb0098e",
       "fields": {
         "location": {
           "optional": false,
@@ -32457,7 +32459,7 @@
           }
         }
       },
-      "sourceFingerprint": "921364102db7fef8",
+      "sourceFingerprint": "2b0453a7db801293",
       "fields": {
         "location": {
           "optional": false,
@@ -32523,7 +32525,7 @@
           }
         }
       },
-      "sourceFingerprint": "0fe3b154b7a4ee88",
+      "sourceFingerprint": "ded2c8bf97f0d24c",
       "fields": {
         "cityQuery": {
           "optional": false,
@@ -32582,7 +32584,7 @@
           }
         }
       },
-      "sourceFingerprint": "5f9e8387edbd79cb",
+      "sourceFingerprint": "cf8dbbd2b0ddf9ce",
       "fields": {
         "alarmName": {
           "optional": false,
@@ -32634,7 +32636,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32648,7 +32650,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32662,7 +32664,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32676,7 +32678,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32690,7 +32692,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32704,7 +32706,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32725,7 +32727,7 @@
           }
         }
       },
-      "sourceFingerprint": "04e6f12d05f9a576",
+      "sourceFingerprint": "cad57926602c247d",
       "fields": {
         "name": {
           "optional": false,
@@ -32760,7 +32762,7 @@
           }
         }
       },
-      "sourceFingerprint": "92e69855659618a5",
+      "sourceFingerprint": "67854f5f15f859dd",
       "fields": {
         "enabled": {
           "optional": false,
@@ -32795,7 +32797,7 @@
           }
         }
       },
-      "sourceFingerprint": "08052e819abd4b22",
+      "sourceFingerprint": "80a6f34d08dbc6b4",
       "fields": {
         "running": {
           "optional": false,
@@ -32830,7 +32832,7 @@
           }
         }
       },
-      "sourceFingerprint": "08052e819abd4b22",
+      "sourceFingerprint": "80a6f34d08dbc6b4",
       "fields": {
         "running": {
           "optional": false,
@@ -32866,7 +32868,7 @@
           }
         }
       },
-      "sourceFingerprint": "648b68c7267455be",
+      "sourceFingerprint": "31caf90c27993167",
       "fields": {
         "mode": {
           "optional": false,
@@ -32895,7 +32897,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
@@ -32909,7 +32911,7 @@
         "kind": "object",
         "fields": {}
       },
-      "sourceFingerprint": "d5fb294404546931",
+      "sourceFingerprint": "29878ac3ef3708ec",
       "fields": {},
       "parameterScore": {
         "defaultMode": "exact",
