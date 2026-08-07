@@ -116,6 +116,7 @@ export interface InitTelemetryOptions {
     readonly serviceName?: string;
     readonly serviceVersion?: string;
     readonly serviceInstanceId?: string;
+    readonly deploymentEnvironment?: string;
     readonly resourceAttributes?: Readonly<Record<string, AttributeValue>>;
     /** Provider factories for tests or host-specific pipelines. */
     readonly factories?: Partial<TelemetryProviderFactories>;
@@ -242,6 +243,11 @@ export function createTelemetryCoordinator(): TelemetryCoordinator {
                 ...(options.serviceInstanceId === undefined
                     ? {}
                     : { serviceInstanceId: options.serviceInstanceId }),
+                ...(options.deploymentEnvironment === undefined
+                    ? {}
+                    : {
+                          deploymentEnvironment: options.deploymentEnvironment,
+                      }),
                 ...(options.resourceAttributes === undefined
                     ? {}
                     : { attributes: options.resourceAttributes }),

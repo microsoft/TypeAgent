@@ -127,6 +127,9 @@ describe("telemetry bootstrap", () => {
                 logs: { logFile: "telemetry.jsonl" },
             },
             serviceName: "bootstrap-test",
+            serviceVersion: "1.2.3",
+            serviceInstanceId: "bootstrap-instance",
+            deploymentEnvironment: "test",
             factories: {
                 createTraceProvider(_config, resource) {
                     resources.push(resource);
@@ -147,6 +150,19 @@ describe("telemetry bootstrap", () => {
         expect(resources).toHaveLength(2);
         expect(resources[0]).toBe(resources[1]);
         expect(resources[0].attributes["service.name"]).toBe("bootstrap-test");
+        expect(resources[0].attributes["service.version"]).toBe("1.2.3");
+        expect(resources[0].attributes["service.instance.id"]).toBe(
+            "bootstrap-instance",
+        );
+        expect(resources[0].attributes["deployment.environment.name"]).toBe(
+            "test",
+        );
+        expect(resources[0].attributes["host.name"]).toBeDefined();
+        expect(resources[0].attributes["process.pid"]).toBe(process.pid);
+        expect(resources[0].attributes["process.runtime.name"]).toBe("nodejs");
+        expect(resources[0].attributes["process.runtime.version"]).toBe(
+            process.versions.node,
+        );
         expect(logs.getLoggerProvider()).toBe(logProvider);
     });
 
