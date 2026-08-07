@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 

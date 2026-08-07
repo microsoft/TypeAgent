@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 # Translation-bench data synthesizer (data labeler)
 # Inspired by Azure-Samples/function-calling-data-synthesizer:
 #   prompts/generator_config.yaml — LLM mints labeled query→action pairs.

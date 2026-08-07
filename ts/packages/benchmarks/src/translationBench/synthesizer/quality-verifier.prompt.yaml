@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 # Translation-bench data quality verifier
 # Inspired by Azure-Samples/function-calling-data-synthesizer multi-stage verify:
 #   1) format_checker  — deterministic structural checks (no LLM)

@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { z } from "zod";
 
 export function formatZodIssues(error: z.ZodError, root = "$"): string {
