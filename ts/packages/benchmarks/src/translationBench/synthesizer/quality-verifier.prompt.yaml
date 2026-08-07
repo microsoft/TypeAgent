@@ -28,6 +28,7 @@ format_checker:
     - utterance_uniqueness
     - history_shape_when_present
     - active_schema_membership
+    - utterance_action_disambiguation
 
 # Stage 2 — semantic / quality judge (LLM)
 semantic_checker:
@@ -70,6 +71,16 @@ semantic_checker:
     Negative expectedActions are empty because they test whether this target
     rule abstains; contrastive adjacent intents are valid negatives when they
     must not match the target action.
+
+    Disambiguation (groundTruthCorrectness / AMBIGUOUS_INTENT):
+    - immutableContext.confusableSiblings lists nearby tools that collide with
+      the target under vague phrasing.
+    - Reject any seed or positive whose natural reading could equally select a
+      confusable sibling. Prefer target-only cues; reject double-meaning labels
+      such as "Open the Apple stock quote in a new tab" for either
+      openWebPage or followLinkByText without link/URL-specific wording.
+    - Negatives that intentionally use adjacent intents are fine when
+      expectedActions is empty.
 
     Issue codes (use only these): {{issue_codes}}
 
