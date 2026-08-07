@@ -139,5 +139,5 @@ acceptance:
       regex_checker → (miss) policy_classifier → policy_verifier → accept|retry
     Regex hits never call the LLM. Verifier reject feeds issues back into
     the classifier for the next attempt. No random default when regex misses.
-    llmAsAJudge parameters are listed in action-parameters-grader-llm.generated.json;
+    llmAsAJudge is a verify mode on action-parameters-grader.generated.json;
     synthesizer excludes those entire actions from simple-action coverage.

@@ -159,59 +159,40 @@ export interface FieldGraderDecision {
     item?: FieldGraderDecision;
 }
 
-const LLM_JUDGE_HEURISTIC_PATTERNS = {
-    exact: {
-        source: "^(recordedSteps|script|codeSnippet|declaration|functionDeclaration|commandToExecute|commandArgs|flowArgs|flowParametersJson|validationResults|generatedContent|sourceCode|programSource)$",
-        flags: "i",
-    },
-    suffix: {
-        source: "(RecordedSteps|CodeSnippet|FunctionDeclaration|ParametersJson|SourceCode|CommandArgs)$",
-        flags: "",
-    },
-    freeTextCodeExact: {
-        source: "^(command)$",
-        flags: "i",
-    },
-    commandActionAllowSuffix: {
-        source: "(aliasSet)$",
-        flags: "i",
-    },
-    codeBodySiblingExact: {
-        source: "^(declaration|codeSnippet|functionDeclaration|script)$",
-        flags: "i",
-    },
-    logicTag: {
-        source: "v1-llmAsAJudge-verify-mode",
-        flags: "",
-    },
-} as const;
+/**
+ * Hardcoded action.parameter pairs that always need llmAsAJudge offline.
+ * Everything else is left to the LLM classifier (verify=llmAsAJudge) when --model.
+ * Literal short commands (e.g. gh alias set) stay exact — not listed here.
+ */
+export const LLM_JUDGE_PARAMETERS = [
+    "browser.actionDiscovery.createWebFlowFromRecording.recordedSteps",
+    "browser.executeAdHocScript.script",
+    "browser.webFlows.editWebFlow.script",
+    "code.code-editor.createCodeBlock.body",
+    "code.code-editor.createCodeBlock.codeSnippet",
+    "code.code-editor.createCodeBlock.declaration",
+    "code.code-editor.createFunction.body",
+    "code.code-editor.createFunction.functionDeclaration",
+    "code.code-workbench.openInIntegratedTerminal.commandToExecute",
+    "markdown.streamingUpdateDocument.generatedContent",
+    "markdown.streamingUpdateDocument.validationResults",
+    "powershell.createPowerShellFlow.script",
+    "powershell.editPowerShellFlow.script",
+    "powershell.executePowerShellFlow.flowArgs",
+    "powershell.executePowerShellFlow.flowParametersJson",
+    "visualStudio.executeCommand.commandArgs",
+] as const;
 
-const LLM_JUDGE_EXACT_RE = new RegExp(
-    LLM_JUDGE_HEURISTIC_PATTERNS.exact.source,
-    LLM_JUDGE_HEURISTIC_PATTERNS.exact.flags,
-);
-const LLM_JUDGE_SUFFIX_RE = new RegExp(
-    LLM_JUDGE_HEURISTIC_PATTERNS.suffix.source,
-    LLM_JUDGE_HEURISTIC_PATTERNS.suffix.flags,
-);
-const LLM_JUDGE_FREE_TEXT_CODE_RE = new RegExp(
-    LLM_JUDGE_HEURISTIC_PATTERNS.freeTextCodeExact.source,
-    LLM_JUDGE_HEURISTIC_PATTERNS.freeTextCodeExact.flags,
-);
-const LLM_JUDGE_COMMAND_ACTION_ALLOW_RE = new RegExp(
-    LLM_JUDGE_HEURISTIC_PATTERNS.commandActionAllowSuffix.source,
-    LLM_JUDGE_HEURISTIC_PATTERNS.commandActionAllowSuffix.flags,
-);
-const LLM_JUDGE_CODE_BODY_SIBLING_RE = new RegExp(
-    LLM_JUDGE_HEURISTIC_PATTERNS.codeBodySiblingExact.source,
-    LLM_JUDGE_HEURISTIC_PATTERNS.codeBodySiblingExact.flags,
-);
+const LLM_JUDGE_PARAMETER_SET = new Set<string>(LLM_JUDGE_PARAMETERS);
+
+/** Literal stored strings that must deep-equal (not soft / not llm judge). */
+const EXACT_PARAMETERS = new Set<string>(["github-cli.aliasSet.command"]);
 
 export const HEURISTIC_SOURCE_HASH: string = createHash("sha256")
     .update(
         JSON.stringify({
             rules: [...REGEX_RULE_IDS].sort(),
-            llmJudge: LLM_JUDGE_HEURISTIC_PATTERNS,
+            llmJudge: [...LLM_JUDGE_PARAMETERS],
         }),
     )
     .digest("hex")
@@ -247,24 +228,11 @@ export function parameterRequiresLlmJudge(
         ctx = createOrContext;
     }
     const name = fieldName.trim();
-    if (!name) return false;
-    if (!isLlmJudgeSoftCreate(ctx.create)) {
+    const actionId = ctx.actionId?.trim();
+    if (!name || !actionId || !isLlmJudgeSoftCreate(ctx.create)) {
         return false;
     }
-    if (LLM_JUDGE_EXACT_RE.test(name) || LLM_JUDGE_SUFFIX_RE.test(name)) {
-        return true;
-    }
-    if (/^body$/i.test(name)) {
-        const siblings = ctx.siblingFieldNames ?? [];
-        return siblings.some((s) => LLM_JUDGE_CODE_BODY_SIBLING_RE.test(s));
-    }
-    if (LLM_JUDGE_FREE_TEXT_CODE_RE.test(name)) {
-        if (ctx.actionId !== undefined && ctx.actionId.trim()) {
-            return LLM_JUDGE_COMMAND_ACTION_ALLOW_RE.test(ctx.actionId.trim());
-        }
-        return true;
-    }
-    return false;
+    return LLM_JUDGE_PARAMETER_SET.has(`${actionId}.${name}`);
 }
 
 export function applyLlmAsAJudgeVerify(
@@ -1065,10 +1033,19 @@ export async function buildActionParametersGraderEntry(
                         : {}),
                 },
             );
-            const judged = applyLlmAsAJudgeVerify(name, decision, {
-                actionId: actionId(schemaName, actionName),
+            const id = actionId(schemaName, actionName);
+            let judged = applyLlmAsAJudgeVerify(name, decision, {
+                actionId: id,
                 siblingFieldNames: Object.keys(paramSpec.fields),
             });
+            if (EXACT_PARAMETERS.has(`${id}.${name}`)) {
+                judged = {
+                    create: "identifier",
+                    verify: "exact",
+                    rule: "string-identifier-exact",
+                    source: judged.source,
+                };
+            }
             fields[name] = fieldGraderFromDecision(
                 field.optional,
                 field.spec,
@@ -1745,21 +1722,6 @@ export function hasUsableParameterScoreSpecs(
     return specs.some((spec) => spec !== undefined);
 }
 
-export interface ActionParameterLlmJudgePair {
-    action: string;
-    parameter: string;
-}
-
-export interface ActionParametersLlmJudgeCatalog {
-    version: 1;
-    description: string;
-    catalogVersion: string;
-    catalogContentHash?: string;
-    generatedAt: string;
-    parameters: ActionParameterLlmJudgePair[];
-    excludedActions: string[];
-}
-
 function fieldTreeIsLlmAsAJudge(
     field: Pick<ActionParameterFieldGrader, "verify" | "item">,
 ): boolean {
@@ -1770,146 +1732,16 @@ function fieldTreeIsLlmAsAJudge(
     return false;
 }
 
-export function toActionParameterLlmJudgePairs(
+/** Actions with any verify=llmAsAJudge field — derived from the main grader JSON. */
+export function listLlmAsAJudgeExcludedActions(
     catalog: ActionParametersGraderCatalog,
-): ActionParameterLlmJudgePair[] {
-    const pairs: ActionParameterLlmJudgePair[] = [];
-    for (const id of Object.keys(catalog.byAction).sort()) {
-        const entry = catalog.byAction[id]!;
-        for (const name of Object.keys(entry.fields).sort()) {
-            if (fieldTreeIsLlmAsAJudge(entry.fields[name]!)) {
-                pairs.push({ action: id, parameter: name });
-            }
-        }
-    }
-    return pairs;
-}
-
-export function listExcludedActions(
-    catalogOrPairs:
-        | ActionParametersGraderCatalog
-        | readonly ActionParameterLlmJudgePair[],
 ): string[] {
-    const pairs =
-        "byAction" in catalogOrPairs
-            ? toActionParameterLlmJudgePairs(catalogOrPairs)
-            : catalogOrPairs;
-    return [...new Set(pairs.map((p) => p.action))].sort();
-}
-
-export function buildActionParametersLlmJudgeCatalog(
-    grader: ActionParametersGraderCatalog,
-    options?: {
-        generatedAt?: string;
-        description?: string;
-        catalogContentHash?: string;
-    },
-): ActionParametersLlmJudgeCatalog {
-    const parameters = toActionParameterLlmJudgePairs(grader);
-    const excludedActions = listExcludedActions(parameters);
-    const catalogContentHash =
-        options?.catalogContentHash ??
-        (
-            grader as ActionParametersGraderCatalog & {
-                catalogContentHash?: string;
-            }
-        ).catalogContentHash;
-    return {
-        version: 1,
-        description:
-            options?.description ??
-            "Action parameters with verify=llmAsAJudge (code/script/program payloads). Synthesizer excludes excludedActions.",
-        catalogVersion: grader.catalogVersion,
-        ...(catalogContentHash !== undefined ? { catalogContentHash } : {}),
-        generatedAt: options?.generatedAt ?? grader.generatedAt,
-        parameters,
-        excludedActions,
-    };
-}
-
-export function parseActionParametersLlmJudgeCatalog(
-    raw: unknown,
-    label: string,
-): ActionParametersLlmJudgeCatalog {
-    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-        throw new Error(`Invalid ${label}: expected object`);
-    }
-    const o = raw as Record<string, unknown>;
-    if (o.version !== 1) {
-        throw new Error(`Invalid ${label}: version`);
-    }
-    if (typeof o.catalogVersion !== "string" || !o.catalogVersion) {
-        throw new Error(`Invalid ${label}: catalogVersion`);
-    }
-    if (typeof o.generatedAt !== "string" || !o.generatedAt) {
-        throw new Error(`Invalid ${label}: generatedAt`);
-    }
-    if (typeof o.description !== "string") {
-        throw new Error(`Invalid ${label}: description`);
-    }
-    if (!Array.isArray(o.parameters)) {
-        throw new Error(`Invalid ${label}: parameters`);
-    }
-    const parameters: ActionParameterLlmJudgePair[] = [];
-    for (let i = 0; i < o.parameters.length; i += 1) {
-        const row = o.parameters[i];
-        if (row === null || typeof row !== "object" || Array.isArray(row)) {
-            throw new Error(`Invalid ${label}: parameters[${i}]`);
-        }
-        const r = row as Record<string, unknown>;
-        if (typeof r.action !== "string" || !r.action) {
-            throw new Error(`Invalid ${label}: parameters[${i}].action`);
-        }
-        if (typeof r.parameter !== "string" || !r.parameter) {
-            throw new Error(`Invalid ${label}: parameters[${i}].parameter`);
-        }
-        parameters.push({ action: r.action, parameter: r.parameter });
-    }
-    let excludedActions: string[];
-    if (o.excludedActions === undefined) {
-        excludedActions = listExcludedActions(parameters);
-    } else if (!Array.isArray(o.excludedActions)) {
-        throw new Error(`Invalid ${label}: excludedActions`);
-    } else {
-        excludedActions = [];
-        for (let i = 0; i < o.excludedActions.length; i += 1) {
-            const id = o.excludedActions[i];
-            if (typeof id !== "string" || !id) {
-                throw new Error(`Invalid ${label}: excludedActions[${i}]`);
-            }
-            excludedActions.push(id);
-        }
-        const expected = listExcludedActions(parameters);
-        if (
-            excludedActions.length !== expected.length ||
-            excludedActions.some((id, i) => id !== expected[i])
-        ) {
-            throw new Error(
-                `Invalid ${label}: excludedActions must match distinct sorted actions from parameters`,
-            );
+    const out: string[] = [];
+    for (const id of Object.keys(catalog.byAction).sort()) {
+        const fields = catalog.byAction[id]!.fields;
+        if (Object.values(fields).some((f) => fieldTreeIsLlmAsAJudge(f))) {
+            out.push(id);
         }
     }
-    return {
-        version: 1,
-        description: o.description,
-        catalogVersion: o.catalogVersion,
-        ...(typeof o.catalogContentHash === "string"
-            ? { catalogContentHash: o.catalogContentHash }
-            : {}),
-        generatedAt: o.generatedAt,
-        parameters,
-        excludedActions,
-    };
-}
-
-export function loadActionParametersLlmJudgeCatalogFile(
-    filePath: string,
-): ActionParametersLlmJudgeCatalog | undefined {
-    if (!existsSync(filePath)) {
-        return undefined;
-    }
-    return parseActionParametersLlmJudgeCatalog(
-        JSON.parse(readFileSync(filePath, "utf8")) as unknown,
-        filePath,
-    );
+    return out;
 }

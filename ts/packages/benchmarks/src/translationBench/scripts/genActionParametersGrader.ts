@@ -7,7 +7,6 @@ import {
     readFileSync,
     renameSync,
     unlinkSync,
-    writeFileSync,
 } from "node:fs";
 import path from "node:path";
 import { finished } from "node:stream/promises";
@@ -17,11 +16,10 @@ import { getChatModelNames, openai as llmClient } from "@typeagent/aiclient";
 
 import {
     buildActionParametersGraderCatalog,
-    buildActionParametersLlmJudgeCatalog,
     diffActionParametersGrader,
+    listLlmAsAJudgeExcludedActions,
     loadActionParametersGraderCatalogFile,
     type ActionParametersGraderCatalog,
-    type ActionParametersLlmJudgeCatalog,
     type GeneratedActionCatalog,
     type ParameterGraderLlm,
 } from "../synthesizer/catalogGenerator/index.js";
@@ -34,26 +32,11 @@ const DEFAULT_CATALOG = "src/translationBench/catalog.generated.json";
 const DEFAULT_OUT =
     "src/translationBench/action-parameters-grader.generated.json";
 
-function defaultLlmOutPath(outPath: string): string {
-    const dir = path.dirname(outPath);
-    const base = path.basename(outPath);
-    if (base.includes("action-parameters-grader")) {
-        return path.join(
-            dir,
-            base.replace(
-                "action-parameters-grader",
-                "action-parameters-grader-llm",
-            ),
-        );
-    }
-    return path.join(dir, "action-parameters-grader-llm.generated.json");
-}
-
 export function parseCli(argv: string[]) {
     const program = new Command()
         .name("genActionParametersGrader")
         .description(
-            "Build action-parameters-grader.generated.json (+ llmAsAJudge sibling list)",
+            "Build action-parameters-grader.generated.json (llmAsAJudge derived from verify modes)",
         )
         .option(
             "--catalog <path>",
@@ -61,10 +44,6 @@ export function parseCli(argv: string[]) {
             DEFAULT_CATALOG,
         )
         .option("--out <path>", "grader output path", DEFAULT_OUT)
-        .option(
-            "--llm-out <path>",
-            "llmAsAJudge pair list output path (default: beside --out)",
-        )
         .option("--force", "full rebuild (default is incremental)", false)
         .option("--model <name>", "chat model for regex-miss LLM fallback")
         .argument("[catalog]", "optional positional catalog path")
@@ -75,16 +54,13 @@ export function parseCli(argv: string[]) {
     const opts = program.opts<{
         catalog: string;
         out: string;
-        llmOut?: string;
         force: boolean;
         model?: string;
     }>();
     const [posCatalog, posOut] = program.args;
-    const outPath = posOut ?? opts.out;
     return {
         catalogPath: posCatalog ?? opts.catalog,
-        outPath,
-        llmOutPath: opts.llmOut ?? defaultLlmOutPath(outPath),
+        outPath: posOut ?? opts.out,
         force: opts.force === true,
         model: opts.model,
     };
@@ -186,19 +162,12 @@ async function writeGraderArtifact(
     renameSync(tmpPath, outPath);
 }
 
-function writeJsonArtifactAtomic(outPath: string, value: unknown): void {
-    const tmpPath = `${outPath}.tmp`;
-    writeFileSync(tmpPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-    renameSync(tmpPath, outPath);
-}
-
 export async function main(
     argv: string[] = process.argv.slice(2),
 ): Promise<void> {
     const args = parseCli(argv);
     const catalogPath = path.resolve(args.catalogPath);
     const outPath = path.resolve(args.outPath);
-    const llmOutPath = path.resolve(args.llmOutPath);
     const force = args.force;
 
     if (!existsSync(catalogPath)) {
@@ -246,35 +215,26 @@ export async function main(
 
     previous = undefined;
 
-    const llmCatalog: ActionParametersLlmJudgeCatalog =
-        buildActionParametersLlmJudgeCatalog(grader);
-
     try {
         await writeGraderArtifact(outPath, grader);
-        writeJsonArtifactAtomic(llmOutPath, llmCatalog);
     } catch (error) {
-        for (const p of [`${outPath}.tmp`, `${llmOutPath}.tmp`]) {
-            try {
-                unlinkSync(p);
-            } catch {
-                // ignore
-            }
+        try {
+            unlinkSync(`${outPath}.tmp`);
+        } catch {
+            // ignore
         }
         throw error;
     }
 
     const d = grader.lastDiff ?? preview;
+    const excluded = listLlmAsAJudgeExcludedActions(grader);
     process.stderr.write(
         `[genActionParametersGrader] wrote ${outPath}: ` +
             `${Object.keys(grader.byAction).length} actions ` +
             `(+${d.added.length} ~${d.updated.length} -${d.removed.length} =${d.unchanged.length}); ` +
             `regexFields=${grader.regexMatchCount} llmFields=${grader.llmFallbackCount}; ` +
+            `llmAsAJudgeActions=${excluded.length}; ` +
             `catalogVersion=${catalog.catalogVersion}\n`,
-    );
-    process.stderr.write(
-        `[genActionParametersGrader] wrote ${llmOutPath}: ` +
-            `${llmCatalog.parameters.length} llmAsAJudge parameter(s), ` +
-            `${llmCatalog.excludedActions.length} excluded action(s)\n`,
     );
 }
 

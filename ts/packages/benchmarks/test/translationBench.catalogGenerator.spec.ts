@@ -13,7 +13,6 @@ import {
     applyLlmAsAJudgeVerify,
     buildActionParametersGraderCatalog,
     buildActionParametersGraderEntry,
-    buildActionParametersLlmJudgeCatalog,
     canonicalizeParamSpec,
     classifyActionParameterFieldWithFallback,
     diffActionParametersGrader,
@@ -1335,67 +1334,64 @@ describe("GRADER_RULES_VERSION contract", () => {
 });
 
 describe("llmAsAJudge verify mode", () => {
-    it("flags script/code parameters and leaves ordinary free text alone", () => {
-        expect(parameterRequiresLlmJudge("script", "free_text")).toBe(true);
-        expect(parameterRequiresLlmJudge("codeSnippet", "free_text")).toBe(
-            true,
-        );
-        expect(parameterRequiresLlmJudge("commandToExecute", "free_text")).toBe(
-            true,
-        );
-        expect(parameterRequiresLlmJudge("description", "free_text")).toBe(
-            false,
-        );
-        expect(parameterRequiresLlmJudge("script", "identifier")).toBe(false);
+    it("uses hardcoded action.parameter pairs; LLM may still emit llmAsAJudge", () => {
         expect(
-            parameterRequiresLlmJudge("body", {
+            parameterRequiresLlmJudge("script", {
                 create: "free_text",
-                siblingFieldNames: ["declaration", "language"],
+                actionId: "browser.executeAdHocScript",
             }),
         ).toBe(true);
-        expect(
-            parameterRequiresLlmJudge("body", {
-                create: "free_text",
-                siblingFieldNames: ["message"],
-            }),
-        ).toBe(false);
         expect(
             parameterRequiresLlmJudge("command", {
                 create: "free_text",
                 actionId: "github-cli.aliasSet",
             }),
-        ).toBe(true);
+        ).toBe(false); // gh alias set stores a literal command → exact, not judge
         expect(
-            parameterRequiresLlmJudge("command", {
+            parameterRequiresLlmJudge("description", {
                 create: "free_text",
-                actionId: "browser.openWebPage",
+                actionId: "browser.executeAdHocScript",
+            }),
+        ).toBe(false);
+        expect(
+            parameterRequiresLlmJudge("script", {
+                create: "identifier",
+                actionId: "browser.executeAdHocScript",
             }),
         ).toBe(false);
     });
 
-    it("upgrades field verify to llmAsAJudge without changing create", () => {
-        const upgraded = applyLlmAsAJudgeVerify("script", {
-            create: "free_text",
-            verify: "nonempty",
-            rule: "string-free-text-nonempty",
-            source: "regex",
-        });
+    it("upgrades hardcoded pairs to llmAsAJudge without changing create", () => {
+        const upgraded = applyLlmAsAJudgeVerify(
+            "script",
+            {
+                create: "free_text",
+                verify: "nonempty",
+                rule: "string-free-text-nonempty",
+                source: "regex",
+            },
+            { actionId: "browser.executeAdHocScript" },
+        );
         expect(upgraded).toEqual({
             create: "free_text",
             verify: "llmAsAJudge",
             rule: "string-llm-as-a-judge",
             source: "regex",
         });
-        const plain = applyLlmAsAJudgeVerify("title", {
-            create: "free_text",
-            verify: "nonempty",
-            rule: "string-free-text-nonempty",
-            source: "regex",
-        });
+        const plain = applyLlmAsAJudgeVerify(
+            "title",
+            {
+                create: "free_text",
+                verify: "nonempty",
+                rule: "string-free-text-nonempty",
+                source: "regex",
+            },
+            { actionId: "browser.executeAdHocScript" },
+        );
         expect(plain.verify).toBe("nonempty");
     });
 
-    it("builds llm sibling catalog excludedActions from llmAsAJudge fields", async () => {
+    it("marks hardcoded pairs on build; other actions stay non-judge offline", async () => {
         const catalog = {
             catalogVersion: "test",
             generatedAt: "2026-01-01T00:00:00.000Z",
@@ -1438,16 +1434,9 @@ describe("llmAsAJudge verify mode", () => {
             grader.byAction["browser.executeAdHocScript"]!.parameterScore.fields
                 .script,
         ).toBe("llmAsAJudge");
-        const llmCatalog = buildActionParametersLlmJudgeCatalog(grader);
-        expect(llmCatalog.parameters).toEqual([
-            {
-                action: "browser.executeAdHocScript",
-                parameter: "script",
-            },
-        ]);
-        expect(llmCatalog.excludedActions).toEqual([
-            "browser.executeAdHocScript",
-        ]);
+        expect(grader.byAction["list.createList"]!.fields.listName?.verify).not.toBe(
+            "llmAsAJudge",
+        );
     });
 });
 

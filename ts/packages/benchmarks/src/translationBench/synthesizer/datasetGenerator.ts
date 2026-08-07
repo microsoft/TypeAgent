@@ -66,7 +66,10 @@ import {
     findTranslationBenchConfusableSiblings,
     summarizeTranslationBenchConfusableSiblings,
 } from "./utteranceDisambiguation.js";
-import { parseActionParametersLlmJudgeCatalog } from "./catalogGenerator/actionParametersGrader.js";
+import {
+    listLlmAsAJudgeExcludedActions,
+    loadActionParametersGraderCatalogFile,
+} from "./catalogGenerator/actionParametersGrader.js";
 
 const require = createRequire(import.meta.url);
 
@@ -74,15 +77,18 @@ let cachedLlmJudgeExcludedActions: ReadonlySet<string> | undefined;
 
 export function getTranslationBenchLlmJudgeExcludedActions(): ReadonlySet<string> {
     if (cachedLlmJudgeExcludedActions === undefined) {
-        const llmPath = require.resolve(
-            "../action-parameters-grader-llm.generated.json",
+        const graderPath = require.resolve(
+            "../action-parameters-grader.generated.json",
         );
-        const raw = JSON.parse(fs.readFileSync(llmPath, "utf8")) as unknown;
-        const catalog = parseActionParametersLlmJudgeCatalog(
-            raw,
-            `packaged llmAsAJudge catalog at ${llmPath}`,
+        const grader = loadActionParametersGraderCatalogFile(graderPath);
+        if (grader === undefined) {
+            throw new Error(
+                `Missing packaged action-parameters grader at ${graderPath}`,
+            );
+        }
+        cachedLlmJudgeExcludedActions = new Set(
+            listLlmAsAJudgeExcludedActions(grader),
         );
-        cachedLlmJudgeExcludedActions = new Set(catalog.excludedActions);
     }
     return cachedLlmJudgeExcludedActions;
 }
