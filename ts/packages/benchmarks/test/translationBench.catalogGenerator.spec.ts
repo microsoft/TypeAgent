@@ -1429,8 +1429,8 @@ describe("eligible action coverage counting", () => {
     });
 });
 
-describe("hardcoded nonempty verify mode", () => {
-    it("forces lookupAndAnswerInternet freeform params to nonempty", async () => {
+describe("hardcoded llmAsAJudge for internet lookup params", () => {
+    it("forces lookupAndAnswerInternet freeform params to llmAsAJudge", async () => {
         const catalog = {
             catalogVersion: "test",
             generatedAt: "2026-01-01T00:00:00.000Z",
@@ -1465,13 +1465,19 @@ describe("hardcoded nonempty verify mode", () => {
         const entry =
             grader.byAction["browser.lookupAndAnswer.lookupAndAnswerInternet"]!;
         expect(entry.parameterScore.fields).toEqual({
-            originalRequest: "nonempty",
-            internetLookups: "nonempty",
-            sites: "nonempty",
+            originalRequest: "llmAsAJudge",
+            internetLookups: "llmAsAJudge",
+            sites: "llmAsAJudge",
         });
-        expect(entry.fields.internetLookups.verify).toBe("nonempty");
-        expect(entry.fields.originalRequest.verify).toBe("nonempty");
-        expect(entry.fields.sites.verify).toBe("nonempty");
+        expect(entry.fields.internetLookups.verify).toBe("llmAsAJudge");
+        expect(entry.fields.originalRequest.verify).toBe("llmAsAJudge");
+        expect(entry.fields.sites.verify).toBe("llmAsAJudge");
+        expect(
+            parameterRequiresLlmJudge("originalRequest", {
+                create: "free_text",
+                actionId: "browser.lookupAndAnswer.lookupAndAnswerInternet",
+            }),
+        ).toBe(true);
     });
 });
 
