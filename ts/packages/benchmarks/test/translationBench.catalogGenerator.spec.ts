@@ -201,7 +201,11 @@ describe("tryClassifyActionParameterFieldRegex", () => {
                 { kind: "string" },
                 false,
             ),
-        ).toMatchObject({ create: "temporal", verify: "exact" });
+        ).toMatchObject({
+            create: "temporal",
+            verify: "nonempty",
+            rule: "string-date-nonempty",
+        });
         expect(
             tryClassifyActionParameterFieldRegex(
                 "time",
@@ -1310,9 +1314,11 @@ describe("incremental grader catalog", () => {
 
 describe("GRADER_RULES_VERSION contract", () => {
     it("exports a stable REGEX_RULE_IDS allowlist tied to version bumps", () => {
-        expect(GRADER_RULES_VERSION).toBeGreaterThanOrEqual(3);
+        expect(GRADER_RULES_VERSION).toBeGreaterThanOrEqual(4);
         expect(REGEX_RULE_IDS.length).toBeGreaterThan(5);
         expect(REGEX_RULE_IDS).toContain("string-open-soft-nonempty");
+        expect(REGEX_RULE_IDS).toContain("string-date-nonempty");
+        expect(REGEX_RULE_IDS).not.toContain("string-date-exact");
         expect(REGEX_RULE_IDS).toContain("type-object-soft-nonempty");
         // Pin allowlist hash; bump GRADER_RULES_VERSION with id edits.
         const hash = createHash("sha256")
@@ -1320,7 +1326,7 @@ describe("GRADER_RULES_VERSION contract", () => {
             .digest("hex")
             .slice(0, 16);
         // Bump GRADER_RULES_VERSION with this hash when rules change.
-        expect(hash).toBe("d059bd043da09e1a");
+        expect(hash).toBe("1bb2d20d025f9e18");
     });
 });
 

@@ -19,7 +19,7 @@ import {
     type ParamSpec,
 } from "./paramTypes.js";
 
-export const GRADER_RULES_VERSION = 3;
+export const GRADER_RULES_VERSION = 4;
 
 export const REGEX_RULE_IDS = [
     "empty-name",
@@ -37,7 +37,7 @@ export const REGEX_RULE_IDS = [
     "string-collection-element-nonempty",
     "string-free-text-nonempty",
     "string-open-soft-nonempty",
-    "string-date-exact",
+    "string-date-nonempty",
     "string-time-nonempty",
     "string-identifier-exact",
 ] as const;
@@ -342,10 +342,12 @@ function classifyStringFieldRegex(
         };
     }
     if (isDateName(name)) {
+        // NL relative dates dominate synthesis ("next Tuesday", "this week").
+        // Exact string match is unfair at eval; align with time → nonempty.
         return {
             create: "temporal",
-            verify: "exact",
-            rule: "string-date-exact",
+            verify: "nonempty",
+            rule: "string-date-nonempty",
             source: "regex",
         };
     }
@@ -1517,3 +1519,265 @@ function isIdentifierName(name: string): boolean {
         /_(id|code|token|name|file|dir)$/i.test(name)
     );
 }
+
+
+/**
+ * Runner-ready parameterScore specs aligned 1:1 with expectedActions.
+ * Missing grader entries yield `undefined` slots (runner falls back to exact).
+ */
+export function parameterScoreSpecsForExpectedActions(
+    grader: ActionParametersGraderCatalog,
+    expectedActions: ReadonlyArray<{
+        schemaName: string;
+        actionName: string;
+    }>,
+): Array<
+    | {
+          defaultMode: ActionParamVerifyMode;
+          fields: Record<string, ActionParamVerifyMode>;
+      }
+    | undefined
+> {
+    return expectedActions.map((action) => {
+        const entry =
+            grader.byAction[actionId(action.schemaName, action.actionName)];
+        if (entry === undefined) {
+            return undefined;
+        }
+        const fields = entry.parameterScore.fields;
+        if (Object.keys(fields).length === 0) {
+            return undefined;
+        }
+        return {
+            defaultMode: entry.parameterScore.defaultMode,
+            fields: { ...fields },
+        };
+    });
+}
+
+/** True when at least one expected action has a non-empty parameterScore map. */
+export function hasUsableParameterScoreSpecs(
+    specs: ReadonlyArray<
+        | {
+              defaultMode: ActionParamVerifyMode;
+              fields: Record<string, ActionParamVerifyMode>;
+          }
+        | undefined
+    >,
+): boolean {
+    return specs.some((spec) => spec !== undefined);
+}
+
+export interface ActionParametersGraderDatasetAuditFinding {
+    severity: "error" | "warning";
+    code: string;
+    message: string;
+    actionId?: string;
+    field?: string;
+    count?: number;
+}
+
+export interface ActionParametersGraderDatasetAuditReport {
+    caseCount: number;
+    uniqueActions: number;
+    findings: ActionParametersGraderDatasetAuditFinding[];
+    ok: boolean;
+    stats: {
+        paramsScoredExact: number;
+        paramsScoredNonempty: number;
+        paramsScoredIgnore: number;
+        paramsScoredExists: number;
+        missingGraderActions: number;
+        missingGraderFields: number;
+        freeTextExactRisk: number;
+        temporalExactRisk: number;
+        nestedObjectExact: number;
+    };
+}
+
+/**
+ * Audit generated benchmark cases against the grader catalog.
+ * Errors: missing grader actions/fields for dataset params.
+ * Warnings: free_text/temporal exact and nested object exact over-strictness.
+ */
+export function auditActionParametersGraderAgainstDataset(
+    grader: ActionParametersGraderCatalog,
+    cases: ReadonlyArray<{
+        id?: string;
+        seed?: {
+            expectedActions?: ReadonlyArray<{
+                schemaName: string;
+                actionName: string;
+                parameters?: Record<string, unknown>;
+            }>;
+        };
+        generalizations?: ReadonlyArray<{
+            expectedActions?: ReadonlyArray<{
+                schemaName: string;
+                actionName: string;
+                parameters?: Record<string, unknown>;
+            }>;
+        }>;
+        targetAction?: { schemaName: string; actionName: string };
+    }>,
+): ActionParametersGraderDatasetAuditReport {
+    const findings: ActionParametersGraderDatasetAuditFinding[] = [];
+    const missingActions = new Map<string, number>();
+    const missingFields = new Map<string, number>();
+    let paramsScoredExact = 0;
+    let paramsScoredNonempty = 0;
+    let paramsScoredIgnore = 0;
+    let paramsScoredExists = 0;
+    let freeTextExactRisk = 0;
+    let temporalExactRisk = 0;
+    let nestedObjectExact = 0;
+    const seenActions = new Set<string>();
+
+    const bump = (map: Map<string, number>, key: string) => {
+        map.set(key, (map.get(key) ?? 0) + 1);
+    };
+
+    const visitAction = (
+        schemaName: string,
+        actionName: string,
+        parameters: Record<string, unknown> | undefined,
+    ) => {
+        const id = actionId(schemaName, actionName);
+        seenActions.add(id);
+        const entry = grader.byAction[id];
+        if (entry === undefined) {
+            bump(missingActions, id);
+            return;
+        }
+        if (parameters === undefined) {
+            return;
+        }
+        for (const [fieldName, value] of Object.entries(parameters)) {
+            const field = entry.fields[fieldName];
+            if (field === undefined) {
+                bump(missingFields, `${id}\u0000${fieldName}`);
+                continue;
+            }
+            const mode = field.verify;
+            if (mode === "exact") {
+                paramsScoredExact += 1;
+            } else if (mode === "nonempty") {
+                paramsScoredNonempty += 1;
+            } else if (mode === "ignore") {
+                paramsScoredIgnore += 1;
+            } else if (mode === "exists") {
+                paramsScoredExists += 1;
+            }
+
+            if (mode === "exact" && field.create === "free_text") {
+                freeTextExactRisk += 1;
+            }
+            if (mode === "exact" && field.create === "temporal") {
+                temporalExactRisk += 1;
+            }
+            if (
+                mode === "exact" &&
+                (field.create === "record" ||
+                    field.typeKind.includes("object"))
+            ) {
+                nestedObjectExact += 1;
+            }
+            void value;
+        }
+    };
+
+    for (const row of cases) {
+        const probes = [row.seed, ...(row.generalizations ?? [])];
+        for (const probe of probes) {
+            if (probe === undefined) {
+                continue;
+            }
+            for (const action of probe.expectedActions ?? []) {
+                visitAction(
+                    action.schemaName,
+                    action.actionName,
+                    action.parameters,
+                );
+            }
+        }
+        if (row.targetAction !== undefined) {
+            const id = actionId(
+                row.targetAction.schemaName,
+                row.targetAction.actionName,
+            );
+            seenActions.add(id);
+            if (grader.byAction[id] === undefined) {
+                bump(missingActions, id);
+            }
+        }
+    }
+
+    for (const [id, count] of [...missingActions.entries()].sort()) {
+        findings.push({
+            severity: "error",
+            code: "missing_grader_action",
+            message: `Dataset references action '${id}' with no grader entry`,
+            actionId: id,
+            count,
+        });
+    }
+    for (const [key, count] of [...missingFields.entries()].sort()) {
+        const sep = key.indexOf("\u0000");
+        const action = key.slice(0, sep);
+        const field = key.slice(sep + 1);
+        findings.push({
+            severity: "error",
+            code: "missing_grader_field",
+            message: `Dataset param '${field}' on '${action}' missing from grader fields`,
+            actionId: action,
+            field,
+            count,
+        });
+    }
+    if (freeTextExactRisk > 0) {
+        findings.push({
+            severity: "warning",
+            code: "free_text_exact",
+            message: `${freeTextExactRisk} free_text params scored exact (likely unfair soft-match)`,
+            count: freeTextExactRisk,
+        });
+    }
+    if (temporalExactRisk > 0) {
+        findings.push({
+            severity: "warning",
+            code: "temporal_exact",
+            message: `${temporalExactRisk} temporal params scored exact (NL dates/times will fail)`,
+            count: temporalExactRisk,
+        });
+    }
+    if (nestedObjectExact > 0) {
+        findings.push({
+            severity: "warning",
+            code: "nested_object_exact",
+            message:
+                `${nestedObjectExact} object/record params scored exact ` +
+                `(deep-equal; nested free-text over-strict until dotted paths)`,
+            count: nestedObjectExact,
+        });
+    }
+
+    const errors = findings.filter((f) => f.severity === "error");
+    return {
+        caseCount: cases.length,
+        uniqueActions: seenActions.size,
+        findings,
+        ok: errors.length === 0,
+        stats: {
+            paramsScoredExact,
+            paramsScoredNonempty,
+            paramsScoredIgnore,
+            paramsScoredExists,
+            missingGraderActions: missingActions.size,
+            missingGraderFields: missingFields.size,
+            freeTextExactRisk,
+            temporalExactRisk,
+            nestedObjectExact,
+        },
+    };
+}
+

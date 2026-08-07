@@ -20,7 +20,7 @@ regex_checker:
     - string_enum_exact_or_unit
     - string_unit_or_mode_ignore
     - string_free_text_nonempty
-    - string_date_exact
+    - string_date_nonempty
     - string_time_nonempty
     - string_identifier_exact
 
@@ -60,7 +60,7 @@ policy_classifier:
     Guidelines:
     - Free-form natural language → free_text + nonempty
     - Stable ids/names/paths/urls → identifier + exact
-    - Dates → temporal + exact; times/when → temporal + nonempty
+    - Dates → temporal + nonempty; times/when → temporal + nonempty
     - Units/modes/kinds (often optional defaults) → unit_or_mode + ignore
     - Enums → enum_literal + exact (optional unit/mode enums may ignore)
     - Booleans/numbers → typed_literal + exact

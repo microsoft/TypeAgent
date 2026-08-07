@@ -6,6 +6,15 @@ Action-translation eval for TypeAgent: pinned catalogs, model prices, and scorin
 
 Pinned `catalog.generated.json` and `action-parameters-grader.generated.json`. Regenerate with `pnpm run gen-catalog` (grader is incremental by default; pass `--force` for a full rebuild, `--model <name>` for LLM fallback). Tests: `pnpm run test:local`.
 
+NL date fields use soft `nonempty` verify (not exact). Coverage check against a benchmark JSONL:
+
+```bash
+pnpm gen-action-parameters-grader -- --audit-only \
+  --audit-dataset path/to/benchmark-approved-1000.jsonl
+```
+
+Or rebuild + audit: `--force --audit-dataset <path>`.
+
 ## Dataset synthesizer (part 3)
 
 Simple-action dataset generation only (one expected action per positive/seed).
