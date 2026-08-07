@@ -29,7 +29,8 @@ export interface TranslationBenchActionRef {
     description?: string;
 }
 
-export interface TranslationBenchConfusableSibling extends TranslationBenchActionRef {
+export interface TranslationBenchConfusableSibling
+    extends TranslationBenchActionRef {
     reason: string;
 }
 
@@ -59,12 +60,18 @@ const KNOWN_CONFUSABLE_PAIRS: ReadonlyArray<
     ],
     [
         { schemaName: "browser.actionDiscovery", actionName: "getAllWebFlows" },
-        { schemaName: "browser.actionDiscovery", actionName: "detectPageActions" },
+        {
+            schemaName: "browser.actionDiscovery",
+            actionName: "detectPageActions",
+        },
         "page capabilities / flows discovery",
     ],
     [
         { schemaName: "browser.actionDiscovery", actionName: "inferActions" },
-        { schemaName: "browser.actionDiscovery", actionName: "detectPageActions" },
+        {
+            schemaName: "browser.actionDiscovery",
+            actionName: "detectPageActions",
+        },
         "infer vs detect page actions",
     ],
     [
@@ -78,85 +85,86 @@ const KNOWN_CONFUSABLE_PAIRS: ReadonlyArray<
  * Lexical cues that uniquely favor a target action family.
  * Matched case-insensitively as substrings of the utterance.
  */
-const ACTION_DISAMBIGUATION_CUES: Readonly<Record<string, readonly string[]>> = {
-    "browser.followLinkByText": [
-        "link that",
-        "link titled",
-        "link named",
-        "link labeled",
-        "link saying",
-        "link which says",
-        "hyperlink",
-        "click the link",
-        "click link",
-        "anchor text",
-        "the link",
-    ],
-    "browser.followLinkByPosition": [
-        "link number",
-        "nth link",
-        "link at position",
-        "link in position",
-        "the first link",
-        "the second link",
-        "the third link",
-        "follow the",
-    ],
-    "browser.openSearchResult": [
-        "search result",
-        "from the results",
-        "from search results",
-        "result number",
-        "results list",
-        "hit number",
-    ],
-    "browser.openWebPage": [
-        "go to",
-        "navigate to",
-        "visit",
-        "open the website",
-        "open website",
-        "open the site",
-        "open url",
-        "open the url",
-        "browse to",
-    ],
-    "browser.closeWebPage": [
-        "this page",
-        "current page",
-        "close the page",
-        "close page",
-        "close this webpage",
-    ],
-    "browser.external.closeTab": [
-        "tab titled",
-        "tab named",
-        "tab called",
-        "browser tab",
-        "close the tab",
-        "close tab",
-    ],
-    "browser.actionDiscovery.getAllWebFlows": [
-        "web flow",
-        "web flows",
-        "flows on this page",
-        "available flows",
-        "list flows",
-    ],
-    "browser.actionDiscovery.detectPageActions": [
-        "detect",
-        "discover actions",
-        "scan the page for actions",
-        "what actions can i take",
-        "what can i do on this page",
-    ],
-    "browser.actionDiscovery.inferActions": [
-        "infer actions",
-        "infer what i can do",
-        "guess the actions",
-        "unfamiliar",
-    ],
-};
+const ACTION_DISAMBIGUATION_CUES: Readonly<Record<string, readonly string[]>> =
+    {
+        "browser.followLinkByText": [
+            "link that",
+            "link titled",
+            "link named",
+            "link labeled",
+            "link saying",
+            "link which says",
+            "hyperlink",
+            "click the link",
+            "click link",
+            "anchor text",
+            "the link",
+        ],
+        "browser.followLinkByPosition": [
+            "link number",
+            "nth link",
+            "link at position",
+            "link in position",
+            "the first link",
+            "the second link",
+            "the third link",
+            "follow the",
+        ],
+        "browser.openSearchResult": [
+            "search result",
+            "from the results",
+            "from search results",
+            "result number",
+            "results list",
+            "hit number",
+        ],
+        "browser.openWebPage": [
+            "go to",
+            "navigate to",
+            "visit",
+            "open the website",
+            "open website",
+            "open the site",
+            "open url",
+            "open the url",
+            "browse to",
+        ],
+        "browser.closeWebPage": [
+            "this page",
+            "current page",
+            "close the page",
+            "close page",
+            "close this webpage",
+        ],
+        "browser.external.closeTab": [
+            "tab titled",
+            "tab named",
+            "tab called",
+            "browser tab",
+            "close the tab",
+            "close tab",
+        ],
+        "browser.actionDiscovery.getAllWebFlows": [
+            "web flow",
+            "web flows",
+            "flows on this page",
+            "available flows",
+            "list flows",
+        ],
+        "browser.actionDiscovery.detectPageActions": [
+            "detect",
+            "discover actions",
+            "scan the page for actions",
+            "what actions can i take",
+            "what can i do on this page",
+        ],
+        "browser.actionDiscovery.inferActions": [
+            "infer actions",
+            "infer what i can do",
+            "guess the actions",
+            "unfamiliar",
+        ],
+    };
 
 function keyOf(ref: TranslationBenchActionRef): string {
     return `${ref.schemaName}.${ref.actionName}`;
@@ -270,7 +278,10 @@ export function findTranslationBenchConfusableSiblings(
     for (const action of all) {
         if (action.schemaName !== target.schemaName) continue;
         if (sameAction(action, target)) continue;
-        const overlap = jaccard(targetTokens, significantTokens(action.actionName));
+        const overlap = jaccard(
+            targetTokens,
+            significantTokens(action.actionName),
+        );
         if (overlap >= 0.34) {
             add(
                 action,
@@ -279,9 +290,7 @@ export function findTranslationBenchConfusableSiblings(
         }
     }
 
-    return [...found.values()].sort((a, b) =>
-        keyOf(a).localeCompare(keyOf(b)),
-    );
+    return [...found.values()].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));
 }
 
 function normalizeUtterance(text: string): string {

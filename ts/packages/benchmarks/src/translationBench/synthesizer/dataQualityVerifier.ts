@@ -142,11 +142,12 @@ export function runTranslationBenchFormatChecker(
                 };
             }
         }
-        const disambiguationIssues = checkTranslationBenchCandidateDisambiguation(
-            candidate,
-            loop.targetAction,
-            catalogForLoop(loop),
-        );
+        const disambiguationIssues =
+            checkTranslationBenchCandidateDisambiguation(
+                candidate,
+                loop.targetAction,
+                catalogForLoop(loop),
+            );
         if (disambiguationIssues.length > 0) {
             return {
                 stage: "format_checker",
