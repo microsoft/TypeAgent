@@ -177,10 +177,7 @@ export {
     normalizeToken,
     type NFAGrammarMatchResult,
 } from "./nfaMatcher.js";
-export {
-    computeNFACompletions,
-    computeNFACompletionsFromInput,
-} from "./nfaCompletion.js";
+export { computeNFACompletions } from "./nfaCompletion.js";
 
 // DFA system
 export type {
@@ -206,7 +203,6 @@ export {
     matchDFAToASTWithSplitting,
     evaluateMatchAST,
     getDFACompletions,
-    getDFACompletionsFromInput,
     printDFA,
     type DFAMatchResult,
     type DFAASTMatchResult,

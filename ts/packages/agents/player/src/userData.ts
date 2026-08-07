@@ -313,7 +313,7 @@ export function getUserDataCompletions(
     artist = false,
     album = false,
     playlist = false,
-    partialValue = "",
+    partialValue?: string,
     limit = 100,
 ): string[] {
     const completions: string[] = [];
@@ -339,8 +339,12 @@ export function getUserDataCompletions(
     // The same artist or album can appear both as a history-derived entry
     // (keyed by name) and as an API-derived one (keyed by its Spotify id),
     // so drop repeats while keeping the established ordering.
+    const uniqueCompletions = dedupe(completions);
+    if (partialValue === undefined) {
+        return uniqueCompletions;
+    }
     const query = partialValue.trim().toLocaleLowerCase();
-    return dedupe(completions)
+    return uniqueCompletions
         .filter(
             (name) =>
                 query.length === 0 || name.toLocaleLowerCase().includes(query),

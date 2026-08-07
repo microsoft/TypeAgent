@@ -145,6 +145,42 @@ describe("getUserDataCompletions — tracks sorted by timestamp", () => {
             expect(result[0]).toBe("Needle 149");
             expect(result).not.toContain("Unrelated");
         });
+
+        test("returns the full ranked list when the current property is absent", async () => {
+            const data = emptyUserData();
+            for (let i = 0; i < 101; i++) {
+                data.tracks.set(
+                    String(i),
+                    makeItem(
+                        `Recent unrelated track ${i}`,
+                        new Date(Date.UTC(2024, 0, 1, 0, i)).toISOString(),
+                    ),
+                );
+            }
+            data.tracks.set(
+                "bohemian",
+                makeItem("Bohemian Rhapsody", "2000-01-01T00:00:00Z"),
+            );
+
+            const result = await getPlayerActionCompletion(
+                {
+                    agentContext: {
+                        spotify: {
+                            userData: { data },
+                        },
+                    },
+                } as any,
+                {
+                    actionName: "playMusic",
+                    parameters: { target: { kind: "track" } },
+                } as any,
+                "parameters.target.trackName",
+            );
+
+            expect(result).toHaveLength(102);
+            expect(result).toContain("Bohemian Rhapsody");
+            expect(result[0]).toBe("Recent unrelated track 100");
+        });
     });
 
     test("filters, ranks, and caps large completion sets", () => {

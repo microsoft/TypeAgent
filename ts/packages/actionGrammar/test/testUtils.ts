@@ -268,9 +268,6 @@ function normalizeCompletionResult(r: GrammarCompletionResult) {
     return {
         ...r,
         groups: normalizeGroups(r.groups),
-        properties: r.properties?.map(({ partialValue: _, ...property }) => ({
-            ...property,
-        })),
     };
 }
 
@@ -686,23 +683,24 @@ export function expectMetadata(
                     ),
             );
 
-        // Optional metadata is stripped when omitted from expectations so
-        // existing tests can focus on the fields relevant to their scenario.
+        // When the expected property objects omit separatorMode, strip it
+        // from actuals so existing tests don't break.  Tests that want to
+        // assert separatorMode include it explicitly.
         const checkSeparatorMode = (expected.properties ?? []).some(
             (p) => "separatorMode" in p,
         );
-        const checkPartialValue = (expected.properties ?? []).some(
-            (p) => "partialValue" in p,
-        );
-        const stripped = (result.properties ?? []).map((property) => {
-            const copy: Partial<GrammarCompletionProperty> = { ...property };
-            if (!checkSeparatorMode) delete copy.separatorMode;
-            if (!checkPartialValue) delete copy.partialValue;
-            return copy;
-        });
-        expect(sortProps(stripped)).toEqual(
-            sortProps(expected.properties ?? []),
-        );
+        if (checkSeparatorMode) {
+            expect(sortProps(result.properties ?? [])).toEqual(
+                sortProps(expected.properties ?? []),
+            );
+        } else {
+            const stripped = (result.properties ?? []).map(
+                ({ separatorMode: _, ...rest }) => rest,
+            );
+            expect(sortProps(stripped)).toEqual(
+                sortProps(expected.properties ?? []),
+            );
+        }
     }
 }
 

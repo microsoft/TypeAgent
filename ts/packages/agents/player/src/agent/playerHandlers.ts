@@ -595,7 +595,13 @@ export async function getPlayerActionCompletion(
     return result;
 }
 
-function filterCompletions(names: string[], partialValue: string): string[] {
+function filterCompletions(
+    names: string[],
+    partialValue: string | undefined,
+): string[] {
+    if (partialValue === undefined) {
+        return names;
+    }
     const query = partialValue.trim().toLocaleLowerCase();
     return names
         .filter(
@@ -608,7 +614,7 @@ function filterCompletions(names: string[], partialValue: string): string[] {
 function getPartialPropertyValue(
     action: AppAction,
     propertyName: string,
-): string {
+): string | undefined {
     let value: unknown = action;
     for (const segment of propertyName.split(".")) {
         if (
@@ -616,9 +622,9 @@ function getPartialPropertyValue(
             value === null ||
             !(segment in value)
         ) {
-            return "";
+            return undefined;
         }
         value = (value as Record<string, unknown>)[segment];
     }
-    return typeof value === "string" ? value : "";
+    return typeof value === "string" ? value : undefined;
 }
