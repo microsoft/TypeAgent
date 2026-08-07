@@ -154,6 +154,7 @@ The `--plugin-dir` flag loads the plugin from a local directory. On first launch
 > @typeagent status
 > @typeagent mode direct
 > @typeagent mode mcp
+> @typeagent mode dev
 > @typeagent powershell on
 > @typeagent run list the playlists
 ```
@@ -244,7 +245,7 @@ pnpm run register    # re-copies the fresh build (runs `copilot plugin update`)
 
 ## Integration Modes
 
-The plugin supports two modes, switchable at runtime:
+The plugin supports three routing modes, plus bypass:
 
 ### Direct Mode (default)
 
@@ -260,11 +261,31 @@ The hook injects a directive into the prompt context, instructing the LLM to cal
 - **Pros:** Streaming output visible during processing, LLM-formatted responses
 - **Cons:** Slower (~3-5s), consumes LLM tokens
 
+### Dev Mode
+
+The hook asks TypeAgent to handle only registered PowerShell flows. Ordinary
+requests are translated against the `powershell` schema with reasoning
+disabled. A miss falls through to Copilot without running TypeAgent reasoning.
+
+Recording directives such as `learn:`, `record`, and `dev: learn:` are sent to
+the configured TypeAgent reasoning engine with a PowerShell flow recording
+profile.
+
+The broad TypeAgent MCP tools and PowerShell pre-tool redirect are disabled in
+this mode. Once the hook returns a miss, the Copilot runtime handles the request
+with its normal tool set.
+
+- **Pros:** Reuses deterministic development actions without taking over normal
+  Copilot coding requests
+- **Cons:** Requires an agent-server version that supports request-scoped schema
+  selection and command dispositions
+
 **Switch modes:**
 
 ```
 > @typeagent mode direct    # fastest, skips LLM
 > @typeagent mode mcp       # streaming, uses LLM
+> @typeagent mode dev       # PowerShell flows first, Copilot on misses
 ```
 
 Or set permanently via environment variable before launching:
@@ -291,12 +312,12 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 
 **Environment variable overrides** (take precedence over config file):
 
-| Variable                | Default                | Description           |
-| ----------------------- | ---------------------- | --------------------- |
-| `TYPEAGENT_MODE`        | `direct`               | `direct` or `mcp`     |
-| `TYPEAGENT_HOST`        | `localhost`            | TypeAgent server host |
-| `TYPEAGENT_PORT`        | `8999`                 | TypeAgent server port |
-| `TYPEAGENT_PLUGIN_DATA` | `~/.typeagent-copilot` | Config directory      |
+| Variable                | Default                | Description                         |
+| ----------------------- | ---------------------- | ----------------------------------- |
+| `TYPEAGENT_MODE`        | `direct`               | `direct`, `mcp`, `dev`, or `bypass` |
+| `TYPEAGENT_HOST`        | `localhost`            | TypeAgent server host               |
+| `TYPEAGENT_PORT`        | `8999`                 | TypeAgent server port               |
+| `TYPEAGENT_PLUGIN_DATA` | `~/.typeagent-copilot` | Config directory                    |
 
 ---
 
