@@ -2,8 +2,8 @@
   "version": 1,
   "description": "Create+verify policies per action parameter. sourceFingerprint is paramSpec-only (stable across policy edits). rulesFingerprint is catalog-level; when it drifts, all actions reclassify. Incremental: only added/updated actions are reclassified; unchanged fingerprints are kept. Regex first, LLM prior reuse (not regex priors), LLM+verifier fallback. Open strings without a name heuristic use structural free_text/nonempty. `create` guides the synthesizer; `verify` / `parameterScore` drive runner soft matching. `llmAsAJudge` marks code/script params that need semantic LLM scoring. Object containers with only soft leaves use nonempty; mixed objects stay exact (no nested dotted paths yet).",
   "catalogVersion": "2026-08-06",
-  "generatedAt": "2026-08-07T23:29:18.858Z",
-  "rulesFingerprint": "32c014c7072f2860",
+  "generatedAt": "2026-08-07T23:34:55.817Z",
+  "rulesFingerprint": "9e5cc2fe1703d258",
   "modes": {
     "exact": "Chosen value must deep-equal expected",
     "exists": "Key must be present; value ignored (hand-authored seeds; not emitted by regex gen)",
@@ -1617,8 +1617,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-free-text-nonempty",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         },
         "openInNewTab": {
@@ -1638,7 +1638,7 @@
         "fields": {
           "position": "exact",
           "title": "nonempty",
-          "url": "nonempty",
+          "url": "ignore",
           "openInNewTab": "exact"
         }
       }
@@ -3196,8 +3196,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -3205,7 +3205,7 @@
         "defaultMode": "exact",
         "fields": {
           "configurationName": "exact",
-          "noDebug": "exact"
+          "noDebug": "ignore"
         }
       }
     },
@@ -9751,8 +9751,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         },
         "attachScreenshot": {
@@ -9776,8 +9776,8 @@
           },
           "typeKind": "array<string>",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "array-items:string-collection-element-nonempty",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex",
           "item": {
             "create": "free_text",
@@ -9815,9 +9815,9 @@
         "fields": {
           "query": "nonempty",
           "mode": "ignore",
-          "isPartialQuery": "exact",
+          "isPartialQuery": "ignore",
           "attachScreenshot": "exact",
-          "attachFiles": "nonempty",
+          "attachFiles": "ignore",
           "newSession": "exact",
           "newSessionLocation": "exact"
         }
@@ -10783,8 +10783,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         },
         "excludeUntitled": {
@@ -10813,7 +10813,7 @@
       "parameterScore": {
         "defaultMode": "exact",
         "fields": {
-          "onlyDirty": "exact",
+          "onlyDirty": "ignore",
           "excludeUntitled": "exact",
           "logResult": "exact"
         }
@@ -10854,8 +10854,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         },
         "onlyDirty": {
@@ -10876,17 +10876,17 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
       "parameterScore": {
         "defaultMode": "exact",
         "fields": {
-          "showErrorIfNoActiveEditor": "exact",
+          "showErrorIfNoActiveEditor": "ignore",
           "onlyDirty": "exact",
-          "excludeUntitled": "exact"
+          "excludeUntitled": "ignore"
         }
       }
     },
@@ -11443,8 +11443,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -11454,7 +11454,7 @@
           "folderName": "exact",
           "commandToExecute": "llmAsAJudge",
           "commandRiskLevel": "exact",
-          "reuseExistingTerminal": "exact"
+          "reuseExistingTerminal": "ignore"
         }
       }
     },
@@ -11590,8 +11590,8 @@
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
-          "verify": "exact",
-          "rule": "string-enum-exact",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -11600,7 +11600,7 @@
         "fields": {
           "folderName": "exact",
           "relativeTo": "nonempty",
-          "resolutionHint": "exact"
+          "resolutionHint": "ignore"
         }
       }
     },
@@ -11661,8 +11661,8 @@
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
-          "verify": "exact",
-          "rule": "string-enum-exact",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         },
         "extensions": {
@@ -11675,8 +11675,8 @@
           },
           "typeKind": "array<string>",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "array-items:string-collection-element-nonempty",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex",
           "item": {
             "create": "free_text",
@@ -11692,8 +11692,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -11701,9 +11701,9 @@
         "defaultMode": "exact",
         "fields": {
           "fileName": "exact",
-          "matchStrategy": "exact",
-          "extensions": "nonempty",
-          "includeGenerated": "exact"
+          "matchStrategy": "ignore",
+          "extensions": "ignore",
+          "includeGenerated": "ignore"
         }
       }
     },
@@ -12038,8 +12038,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         },
         "attachScreenshot": {
@@ -12063,8 +12063,8 @@
           },
           "typeKind": "array<string>",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "array-items:string-collection-element-nonempty",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex",
           "item": {
             "create": "free_text",
@@ -12081,9 +12081,9 @@
           "provider": "exact",
           "newSessionLocation": "exact",
           "mode": "ignore",
-          "isPartialQuery": "exact",
+          "isPartialQuery": "ignore",
           "attachScreenshot": "exact",
-          "attachFiles": "nonempty"
+          "attachFiles": "ignore"
         }
       }
     },
@@ -12554,8 +12554,8 @@
           },
           "typeKind": "string",
           "create": "identifier",
-          "verify": "exact",
-          "rule": "string-identifier-exact",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -12563,7 +12563,7 @@
         "defaultMode": "exact",
         "fields": {
           "filePath": "exact",
-          "themeName": "exact"
+          "themeName": "ignore"
         }
       }
     },
@@ -13143,8 +13143,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -13153,7 +13153,7 @@
         "fields": {
           "service": "exact",
           "matchBy": "exact",
-          "elevate": "exact"
+          "elevate": "ignore"
         }
       }
     },
@@ -14020,8 +14020,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -14029,7 +14029,7 @@
         "defaultMode": "exact",
         "fields": {
           "speedLevel": "exact",
-          "reduceSpeed": "exact"
+          "reduceSpeed": "ignore"
         }
       }
     },
@@ -15520,8 +15520,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         },
         "max_uses": {
@@ -15563,7 +15563,7 @@
         "fields": {
           "channel_id": "exact",
           "max_age": "exact",
-          "never_expires": "exact",
+          "never_expires": "ignore",
           "max_uses": "exact",
           "temporary": "exact",
           "unique": "exact"
@@ -15804,8 +15804,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         },
         "tts": {
@@ -15815,8 +15815,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -15825,8 +15825,8 @@
         "fields": {
           "channel_id": "exact",
           "content": "nonempty",
-          "nonce": "nonempty",
-          "tts": "exact"
+          "nonce": "ignore",
+          "tts": "ignore"
         }
       }
     },
@@ -16607,8 +16607,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         },
         "after": {
@@ -16618,8 +16618,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         },
         "limit": {
@@ -16648,8 +16648,8 @@
       "parameterScore": {
         "defaultMode": "exact",
         "fields": {
-          "before": "nonempty",
-          "after": "nonempty",
+          "before": "ignore",
+          "after": "ignore",
           "limit": "exact",
           "with_counts": "exact"
         }
@@ -17994,8 +17994,8 @@
           },
           "typeKind": "number",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-number",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -18005,7 +18005,7 @@
           "channel_id": "exact",
           "name": "exact",
           "auto_archive_duration": "exact",
-          "type": "exact"
+          "type": "ignore"
         }
       }
     },
@@ -20282,8 +20282,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -20291,7 +20291,7 @@
         "defaultMode": "exact",
         "fields": {
           "artifact": "nonempty",
-          "type": "nonempty"
+          "type": "ignore"
         }
       }
     },
@@ -20352,8 +20352,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-open-soft-nonempty",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -20362,7 +20362,7 @@
         "fields": {
           "hostname": "nonempty",
           "web": "exact",
-          "token": "nonempty"
+          "token": "ignore"
         }
       }
     },
@@ -22825,8 +22825,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -22836,7 +22836,7 @@
           "name": "exact",
           "description": "nonempty",
           "public": "exact",
-          "private": "exact"
+          "private": "ignore"
         }
       }
     },
@@ -23214,8 +23214,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -23223,7 +23223,7 @@
         "defaultMode": "exact",
         "fields": {
           "repo": "exact",
-          "unstar": "exact"
+          "unstar": "ignore"
         }
       }
     },
@@ -24926,8 +24926,8 @@
           },
           "typeKind": "number",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-number",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         },
         "context": {
@@ -24937,8 +24937,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-free-text-nonempty",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -24946,8 +24946,8 @@
         "defaultMode": "exact",
         "fields": {
           "originalRequest": "nonempty",
-          "cursorPosition": "exact",
-          "context": "nonempty"
+          "cursorPosition": "ignore",
+          "context": "ignore"
         }
       }
     },
@@ -25026,8 +25026,8 @@
           },
           "typeKind": "array<string>",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "array-items:string-collection-element-nonempty",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex",
           "item": {
             "create": "free_text",
@@ -25042,7 +25042,7 @@
         "fields": {
           "title": "nonempty",
           "files": "nonempty",
-          "search_filters": "nonempty"
+          "search_filters": "ignore"
         }
       }
     },
@@ -25531,8 +25531,8 @@
           },
           "typeKind": "array<number>",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "array-items:type-number",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex",
           "item": {
             "create": "typed_literal",
@@ -25563,8 +25563,8 @@
           },
           "typeKind": "array<string>",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "array-items:string-collection-element-nonempty",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex",
           "item": {
             "create": "free_text",
@@ -25579,9 +25579,9 @@
         "fields": {
           "title": "nonempty",
           "search_filters": "nonempty",
-          "indices": "exact",
+          "indices": "ignore",
           "selected": "exact",
-          "files": "nonempty"
+          "files": "ignore"
         }
       }
     },
@@ -28215,8 +28215,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         },
         "quantity": {
@@ -28235,7 +28235,7 @@
         "defaultMode": "exact",
         "fields": {
           "target": "exact",
-          "play": "exact",
+          "play": "ignore",
           "quantity": "exact"
         }
       }
@@ -30090,16 +30090,16 @@
             "kind": "string"
           },
           "typeKind": "string",
-          "create": "identifier",
-          "verify": "exact",
-          "rule": "string-identifier-exact",
+          "create": "free_text",
+          "verify": "nonempty",
+          "rule": "string-free-text-nonempty",
           "source": "regex"
         }
       },
       "parameterScore": {
         "defaultMode": "exact",
         "fields": {
-          "name": "exact"
+          "name": "nonempty"
         }
       }
     },
@@ -30139,16 +30139,16 @@
             "kind": "string"
           },
           "typeKind": "string",
-          "create": "identifier",
-          "verify": "exact",
-          "rule": "string-identifier-exact",
+          "create": "free_text",
+          "verify": "nonempty",
+          "rule": "string-free-text-nonempty",
           "source": "regex"
         }
       },
       "parameterScore": {
         "defaultMode": "exact",
         "fields": {
-          "name": "exact"
+          "name": "nonempty"
         }
       }
     },
@@ -30304,16 +30304,16 @@
             "kind": "string"
           },
           "typeKind": "string",
-          "create": "identifier",
-          "verify": "exact",
-          "rule": "string-identifier-exact",
+          "create": "free_text",
+          "verify": "nonempty",
+          "rule": "string-free-text-nonempty",
           "source": "regex"
         }
       },
       "parameterScore": {
         "defaultMode": "exact",
         "fields": {
-          "name": "exact"
+          "name": "nonempty"
         }
       }
     },
@@ -30620,8 +30620,8 @@
           },
           "typeKind": "boolean",
           "create": "typed_literal",
-          "verify": "exact",
-          "rule": "type-boolean",
+          "verify": "ignore",
+          "rule": "hardcoded-ungrounded-ignore",
           "source": "regex"
         }
       },
@@ -30629,7 +30629,7 @@
         "defaultMode": "exact",
         "fields": {
           "agentName": "exact",
-          "all": "exact"
+          "all": "ignore"
         }
       }
     },

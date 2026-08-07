@@ -1429,6 +1429,143 @@ describe("eligible action coverage counting", () => {
     });
 });
 
+describe("hardcoded ignore for ungrounded optionals", () => {
+    it("forces default-polarity and invented-context params to ignore", async () => {
+        const catalog = {
+            catalogVersion: "test",
+            generatedAt: "2026-01-01T00:00:00.000Z",
+            actions: [
+                {
+                    schemaName: "github-cli",
+                    actionName: "starRepo",
+                    paramSpec: objectSpec({
+                        owner: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                        repo: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                        unstar: {
+                            optional: true,
+                            spec: { kind: "boolean" },
+                        },
+                    }),
+                },
+                {
+                    schemaName: "browser",
+                    actionName: "openSearchResult",
+                    paramSpec: objectSpec({
+                        position: {
+                            optional: false,
+                            spec: { kind: "number" },
+                        },
+                        url: {
+                            optional: true,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+                {
+                    schemaName: "code",
+                    actionName: "launchCopilotChat",
+                    paramSpec: objectSpec({
+                        attachFiles: {
+                            optional: true,
+                            spec: {
+                                kind: "array",
+                                item: { kind: "string" },
+                            },
+                        },
+                        isPartialQuery: {
+                            optional: true,
+                            spec: { kind: "boolean" },
+                        },
+                    }),
+                },
+            ],
+        };
+        const grader = await buildActionParametersGraderCatalog(catalog);
+        expect(
+            grader.byAction["github-cli.starRepo"]!.parameterScore.fields
+                .unstar,
+        ).toBe("ignore");
+        expect(
+            grader.byAction["browser.openSearchResult"]!.parameterScore.fields
+                .url,
+        ).toBe("ignore");
+        expect(
+            grader.byAction["code.launchCopilotChat"]!.parameterScore.fields
+                .attachFiles,
+        ).toBe("ignore");
+        expect(
+            grader.byAction["code.launchCopilotChat"]!.parameterScore.fields
+                .isPartialQuery,
+        ).toBe("ignore");
+        // non-listed fields stay scored
+        expect(
+            grader.byAction["github-cli.starRepo"]!.parameterScore.fields
+                .owner,
+        ).not.toBe("ignore");
+    });
+});
+
+describe("hardcoded nonempty for conversation topic titles", () => {
+    it("soft-scores conversation name params without loosening identity names", async () => {
+        const catalog = {
+            catalogVersion: "test",
+            generatedAt: "2026-01-01T00:00:00.000Z",
+            actions: [
+                {
+                    schemaName: "system.conversation",
+                    actionName: "summarizeConversation",
+                    paramSpec: objectSpec({
+                        name: {
+                            optional: true,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+                {
+                    schemaName: "system.conversation",
+                    actionName: "indexConversation",
+                    paramSpec: objectSpec({
+                        name: {
+                            optional: true,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+                {
+                    // identity name must stay exact (not in NONEMPTY list)
+                    schemaName: "list",
+                    actionName: "removeItems",
+                    paramSpec: objectSpec({
+                        listName: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+            ],
+        };
+        const grader = await buildActionParametersGraderCatalog(catalog);
+        expect(
+            grader.byAction["system.conversation.summarizeConversation"]!
+                .parameterScore.fields.name,
+        ).toBe("nonempty");
+        expect(
+            grader.byAction["system.conversation.indexConversation"]!
+                .parameterScore.fields.name,
+        ).toBe("nonempty");
+        expect(
+            grader.byAction["list.removeItems"]!.parameterScore.fields
+                .listName,
+        ).toBe("exact");
+    });
+});
+
 describe("hardcoded llmAsAJudge for internet lookup params", () => {
     it("forces lookupAndAnswerInternet freeform params to llmAsAJudge", async () => {
         const catalog = {

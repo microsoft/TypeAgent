@@ -199,11 +199,69 @@ const LLM_JUDGE_PARAMETER_SET = new Set<string>(LLM_JUDGE_PARAMETERS);
 /** Literal stored strings that must deep-equal (not soft / not llm judge). */
 const EXACT_PARAMETERS = new Set<string>(["github-cli.aliasSet.command"]);
 
+/**
+ * Optional params that gold often mints as ungrounded defaults / empties /
+ * dual fields / runtime context. Missing key must not fail paramScore —
+ * only `ignore` (not nonempty) treats omit as pass.
+ */
+export const IGNORE_PARAMETERS = [
+    "browser.openSearchResult.url",
+    "code.code-debug.startDebugging.noDebug",
+    "code.code-editor.launchCopilotChat.attachFiles",
+    "code.code-editor.launchCopilotChat.isPartialQuery",
+    "code.code-editor.saveAllFiles.onlyDirty",
+    "code.code-editor.saveCurrentFile.excludeUntitled",
+    "code.code-editor.saveCurrentFile.showErrorIfNoActiveEditor",
+    "code.code-workbench.openInIntegratedTerminal.reuseExistingTerminal",
+    "code.code-workbench.workbenchCreateFolderFromExplorer.resolutionHint",
+    "code.code-workbench.workbenchOpenFile.extensions",
+    "code.code-workbench.workbenchOpenFile.includeGenerated",
+    "code.code-workbench.workbenchOpenFile.matchStrategy",
+    "code.launchCopilotChat.attachFiles",
+    "code.launchCopilotChat.isPartialQuery",
+    "desktop.ApplyTheme.themeName",
+    "desktop.RestartService.elevate",
+    "desktop.desktop-input.MouseCursorSpeed.reduceSpeed",
+    "discord.createChannelInvite.never_expires",
+    "discord.createMessage.nonce",
+    "discord.createMessage.tts",
+    "discord.getCurrentUserGuilds.after",
+    "discord.getCurrentUserGuilds.before",
+    "discord.startThreadWithoutMessage.type",
+    "github-cli.attestationCreate.type",
+    "github-cli.authLogin.token",
+    "github-cli.repoCreate.private",
+    "github-cli.starRepo.unstar",
+    "markdown.updateDocument.context",
+    "markdown.updateDocument.cursorPosition",
+    "montage.addPhotos.search_filters",
+    "montage.removePhotos.files",
+    "montage.removePhotos.indices",
+    "player.findMusic.play",
+    "system.help.describeAgent.all",
+] as const;
+
+const IGNORE_PARAMETER_SET = new Set<string>(IGNORE_PARAMETERS);
+
+/**
+ * Conversation topic titles are freeform NL (paraphrase-OK), not resource ids.
+ * Action-scoped so webflow/playlist `name` stays identifier/exact.
+ */
+export const NONEMPTY_PARAMETERS = [
+    "system.conversation.indexConversation.name",
+    "system.conversation.newConversation.name",
+    "system.conversation.summarizeConversation.name",
+] as const;
+
+const NONEMPTY_PARAMETER_SET = new Set<string>(NONEMPTY_PARAMETERS);
+
 export const HEURISTIC_SOURCE_HASH: string = createHash("sha256")
     .update(
         JSON.stringify({
             rules: [...REGEX_RULE_IDS].sort(),
             llmJudge: [...LLM_JUDGE_PARAMETERS],
+            ignore: [...IGNORE_PARAMETERS],
+            nonempty: [...NONEMPTY_PARAMETERS],
             exact: [...EXACT_PARAMETERS].sort(),
         }),
     )
@@ -1063,11 +1121,27 @@ export async function buildActionParametersGraderEntry(
                 actionId: id,
                 siblingFieldNames: Object.keys(paramSpec.fields),
             });
-            if (EXACT_PARAMETERS.has(`${id}.${name}`)) {
+            const fullName = `${id}.${name}`;
+            if (EXACT_PARAMETERS.has(fullName)) {
                 judged = {
                     create: "identifier",
                     verify: "exact",
                     rule: "string-identifier-exact",
+                    source: judged.source,
+                };
+            } else if (IGNORE_PARAMETER_SET.has(fullName)) {
+                // Omit-OK optionals: keep create, drop from paramScore.
+                judged = {
+                    ...judged,
+                    verify: "ignore",
+                    rule: "hardcoded-ungrounded-ignore",
+                };
+            } else if (NONEMPTY_PARAMETER_SET.has(fullName)) {
+                // Topic titles: presence matters, exact wording does not.
+                judged = {
+                    create: "free_text",
+                    verify: "nonempty",
+                    rule: "string-free-text-nonempty",
                     source: judged.source,
                 };
             }
