@@ -52,6 +52,9 @@
       "tsc": {
         "dependsOn": [
           "@typeagent/action-schema#tsc"
+        ],
+        "after": [
+          "^*"
         ]
       }
     }

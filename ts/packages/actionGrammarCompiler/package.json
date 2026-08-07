@@ -55,6 +55,9 @@
         "dependsOn": [
           "@typeagent/action-grammar#tsc",
           "@typeagent/action-schema#tsc"
+        ],
+        "after": [
+          "^*"
         ]
       }
     }

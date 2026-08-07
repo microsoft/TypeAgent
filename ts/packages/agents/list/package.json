@@ -81,6 +81,9 @@
       "tsc": {
         "dependsOn": [
           "@typeagent/action-grammar#tsc"
+        ],
+        "after": [
+          "^*"
         ]
       }
     }
