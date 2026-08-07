@@ -16,6 +16,7 @@ import { AppAgentManager } from "../src/context/appAgentManager.js";
 import { PortRegistrar } from "../src/context/portRegistrar.js";
 import { checkAgentReady } from "../src/execute/actionHandlers.js";
 import { getErrorDisplayContent } from "../src/execute/agentNotReadyError.js";
+import { getManualAgentSetupDisplay } from "../src/context/system/handlers/configCommandHandlers.js";
 import type {
     ActionContext,
     ActionResult,
@@ -375,6 +376,24 @@ describe("checkAgentReady (pre-flight gate)", () => {
         const sys = fakeSystemContext({ readiness: new Map() });
         const out = await checkAgentReady("agentA", sys, fakeActionContext());
         expect(out).toBeUndefined();
+    });
+
+    describe("@config agent setup manual instructions", () => {
+        test("renders setup details as markdown", () => {
+            const display = getManualAgentSetupDisplay("player", {
+                state: "setup-required",
+                message: "Spotify is not configured.",
+                details:
+                    "Add to `ts/config.local.yaml`:\n\n```yaml\nspotify:\n  clientId: <value>\n```",
+            });
+
+            expect(display).toEqual({
+                type: "markdown",
+                kind: "warning",
+                content: expect.stringContaining("```yaml"),
+            });
+            expect(display.content).toContain("@config agent refresh player");
+        });
     });
 
     test("throws with a setup hint when state is setup-required and the agent has setup", async () => {

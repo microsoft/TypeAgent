@@ -23,10 +23,21 @@ describe("fileLinkToPath", () => {
         );
     });
 
-    it("recovers a UNC path", () => {
+    it("rejects UNC paths", () => {
         expect(
             fileLinkToPath("typeagent-file://server/share/config.yaml"),
-        ).toBe("\\\\server\\share\\config.yaml");
+        ).toBeUndefined();
+    });
+
+    it("rejects encoded traversal and malformed escapes", () => {
+        expect(
+            fileLinkToPath(
+                "typeagent-file:///D:/repo/ts/%2e%2e/other/config.local.yaml",
+            ),
+        ).toBeUndefined();
+        expect(
+            fileLinkToPath("typeagent-file:///D:/repo/%E0%A4%A"),
+        ).toBeUndefined();
     });
 
     it("ignores other schemes", () => {

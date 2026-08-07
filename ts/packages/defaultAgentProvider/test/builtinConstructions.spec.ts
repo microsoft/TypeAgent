@@ -1,10 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Guards the shipped built-in construction cache.
+// Guards every built-in construction cache registered by the production
+// explainer factory. This coupling is intentional: a cache is runtime data
+// keyed by the current action-schema hashes, so changing a schema without
+// regenerating its cache must fail offline tests.
 //
 // Two independent ways this file has silently rotted, both of which disable
-// request completion for the player agent (no song / artist suggestions):
+// request completion:
 //
 //  1. An invalid construction (e.g. a part that is both `optional` and
 //     captured) makes the whole file fail to load. `setupBuiltInCache`
@@ -15,12 +18,17 @@
 //     its constructions are reachable, because the dispatcher looks them up
 //     under the *current* hash.
 //
-// Both are fixed by `pnpm cli data regenerate -b v5 --constructions --updateHash`.
+// The error for each cache includes its exact offline regeneration command.
 
-import { loadConstructionCacheFile } from "@typeagent/agent-cache";
+import {
+    getSchemaNamespaceKey,
+    loadConstructionCacheFile,
+    splitSchemaNamespaceKey,
+} from "@typeagent/agent-cache";
 import {
     getAllActionConfigProvider,
     createSchemaInfoProvider,
+    getCacheFactory,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
@@ -28,41 +36,100 @@ import {
     getDefaultConstructionProvider,
 } from "../src/index.js";
 
-const builtinFile =
-    getDefaultConstructionProvider().getBuiltinConstructionConfig("v5")?.file;
+const regenerationCommand = (explainerName: string) =>
+    `pnpm cli data regenerate -b ${explainerName} --constructions --updateHash`;
 
-// Throws (taking every construction in the file with it) when any construction
-// violates the ConstructionPart invariants.
-async function loadBuiltinCache() {
-    expect(builtinFile).toBeDefined();
-    const cache = await loadConstructionCacheFile(builtinFile!);
-    expect(cache).toBeDefined();
-    return cache!;
+function getBuiltinConfigs() {
+    const provider = getDefaultConstructionProvider();
+    return getCacheFactory()
+        .getExplainerNames()
+        .flatMap((explainerName) => {
+            const config = provider.getBuiltinConstructionConfig(explainerName);
+            return config === undefined ? [] : [{ explainerName, config }];
+        });
+}
+
+async function loadBuiltinCaches() {
+    const configs = getBuiltinConfigs();
+    expect(configs.length).toBeGreaterThan(0);
+    return Promise.all(
+        configs.map(async ({ explainerName, config }) => {
+            let cache;
+            try {
+                cache = await loadConstructionCacheFile(config.file);
+            } catch (error) {
+                throw new Error(
+                    `Unable to load built-in cache for '${explainerName}': ${
+                        error instanceof Error ? error.message : String(error)
+                    }. Regenerate it offline with: ${regenerationCommand(explainerName)}`,
+                );
+            }
+            if (cache === undefined) {
+                throw new Error(
+                    `Unable to load built-in cache for '${explainerName}'. Regenerate it offline with: ${regenerationCommand(explainerName)}`,
+                );
+            }
+            return { explainerName, cache };
+        }),
+    );
 }
 
 describe("Built-in construction cache", () => {
     it("loads without error", async () => {
-        const cache = await loadBuiltinCache();
-        expect(cache.count).toBeGreaterThan(0);
+        for (const { explainerName, cache } of await loadBuiltinCaches()) {
+            if (cache.count === 0) {
+                throw new Error(
+                    `Built-in cache '${explainerName}' is empty. Regenerate it offline with: ${regenerationCommand(explainerName)}`,
+                );
+            }
+        }
     });
 
-    it("is keyed to the current player schema hash", async () => {
+    it("uses exact current schema namespaces", async () => {
         const { provider } = await getAllActionConfigProvider(
             getDefaultAppAgentProviders(getInstanceDir()),
         );
         const schemaInfoProvider = createSchemaInfoProvider(provider);
-        const hash = schemaInfoProvider.getActionSchemaFileHash("player");
 
-        const cache = await loadBuiltinCache();
-        const namespaces = cache.getConstructionNamespaces();
-        expect(namespaces.some((n) => n.includes(hash))).toBe(true);
+        for (const { explainerName, cache } of await loadBuiltinCaches()) {
+            for (const namespace of cache.getConstructionNamespaces()) {
+                const namespaceKeys = namespace.split("|");
+                const expectedKeys = namespaceKeys.map((namespaceKey) => {
+                    const { schemaName, hash, activityName } =
+                        splitSchemaNamespaceKey(namespaceKey);
+                    const currentHash =
+                        schemaInfoProvider.getActionSchemaFileHash(schemaName);
+                    if (hash !== currentHash) {
+                        throw new Error(
+                            `Built-in cache '${explainerName}' has a stale schema hash for '${schemaName}'. Regenerate it offline with: ${regenerationCommand(explainerName)}`,
+                        );
+                    }
+                    return getSchemaNamespaceKey(
+                        schemaName,
+                        activityName,
+                        schemaInfoProvider,
+                    );
+                });
+                expect(namespace).toBe(expectedKeys.join("|"));
+            }
+        }
     });
 
     it("offers the track name property for completion after 'play '", async () => {
-        const cache = await loadBuiltinCache();
-        const result = cache.completion("play ", {
+        const { provider } = await getAllActionConfigProvider(
+            getDefaultAppAgentProviders(getInstanceDir()),
+        );
+        const schemaInfoProvider = createSchemaInfoProvider(provider);
+        const builtins = await loadBuiltinCaches();
+        const cache = builtins.find(
+            ({ explainerName }) => explainerName === "v5",
+        )?.cache;
+        expect(cache).toBeDefined();
+        const result = cache!.completion("play ", {
             wildcard: true,
-            namespaceKeys: cache.getConstructionNamespaces(),
+            namespaceKeys: [
+                getSchemaNamespaceKey("player", undefined, schemaInfoProvider),
+            ],
         });
         const names = (result?.properties ?? []).flatMap((p) => p.names);
         expect(names).toContain("parameters.target.trackName");

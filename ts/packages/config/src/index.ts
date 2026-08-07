@@ -4,8 +4,8 @@
 export {
     loadConfig,
     loadConfigSync,
-    reloadConfigSync,
-    tryReloadConfigSync,
+    reloadConfigKeysSync,
+    tryReloadConfigKeysSync,
     getConfigProblems,
     computeConfigDrift,
     resolveLocalConfigPath,
@@ -44,7 +44,19 @@ export {
     configYamlSnippet,
     type ConfigHintVar,
 } from "./hints.js";
-export { fileLinkHref, FILE_LINK_SCHEME } from "./fileLink.js";
+export {
+    fileLinkHref,
+    isAllowedConfigFilePath,
+    FILE_LINK_SCHEME,
+} from "./fileLink.js";
+export {
+    SIMPLE_CONFIG_MAPPINGS,
+    SIMPLE_CONFIG_MAPPING_LIST,
+    simpleConfigMappingForEnvVar,
+    simpleConfigMappingsForSection,
+    type SimpleConfigMapping,
+    type SimpleConfigValueKind,
+} from "./mappings.js";
 export {
     ConfigSetupError,
     configSetupError,

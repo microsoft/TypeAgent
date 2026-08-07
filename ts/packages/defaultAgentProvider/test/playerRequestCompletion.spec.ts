@@ -22,6 +22,8 @@
 // namespaces when each instance is created), hence the dynamic imports.
 
 import type { Dispatcher } from "agent-dispatcher";
+import fs from "node:fs";
+import path from "node:path";
 
 const errorNamespace = "typeagent:command:completion:error";
 
@@ -29,37 +31,59 @@ describe("Player request completion", () => {
     let dispatcher: Dispatcher;
     const errors: string[] = [];
     let originalWrite: typeof process.stderr.write;
+    const originalDebug = process.env.DEBUG;
+    const originalConfigDir = process.env.TYPEAGENT_CONFIG_DIR;
+    const configDir = path.join(
+        process.cwd(),
+        `.player-request-completion-${process.pid}`,
+    );
 
     beforeAll(async () => {
+        fs.rmSync(configDir, { recursive: true, force: true });
+        fs.mkdirSync(configDir, { recursive: true });
+        process.env.TYPEAGENT_CONFIG_DIR = configDir;
         process.env.DEBUG = errorNamespace;
-
-        const { createDispatcher } = await import("agent-dispatcher");
-        const { getDefaultAppAgentProviders, getDefaultConstructionProvider } =
-            await import("../src/index.js");
-
-        // debug logs through process.stderr.write on node; capturing there
-        // avoids depending on which copy of the debug module got loaded.
-        originalWrite = process.stderr.write.bind(process.stderr);
+        originalWrite = process.stderr.write;
         process.stderr.write = ((chunk: any, ...rest: any[]) => {
             const text = typeof chunk === "string" ? chunk : String(chunk);
             if (text.includes(errorNamespace)) {
                 errors.push(text);
             }
-            return (originalWrite as any)(chunk, ...rest);
+            return (originalWrite as any).call(process.stderr, chunk, ...rest);
         }) as typeof process.stderr.write;
 
-        dispatcher = await createDispatcher("completion-test", {
-            appAgentProviders: getDefaultAppAgentProviders(undefined),
-            constructionProvider: getDefaultConstructionProvider(),
-        });
+        try {
+            const { createDispatcher } = await import("agent-dispatcher");
+            const {
+                getDefaultAppAgentProviders,
+                getDefaultConstructionProvider,
+            } = await import("../src/index.js");
+            dispatcher = await createDispatcher("completion-test", {
+                appAgentProviders: getDefaultAppAgentProviders(undefined),
+                constructionProvider: getDefaultConstructionProvider(),
+            });
+        } catch (error) {
+            process.stderr.write = originalWrite;
+            throw error;
+        }
     }, 120000);
 
     afterAll(async () => {
-        if (originalWrite !== undefined) {
-            process.stderr.write = originalWrite;
+        try {
+            await dispatcher?.close();
+        } finally {
+            if (originalWrite !== undefined) {
+                process.stderr.write = originalWrite;
+            }
+            if (originalDebug === undefined) delete process.env.DEBUG;
+            else process.env.DEBUG = originalDebug;
+            if (originalConfigDir === undefined) {
+                delete process.env.TYPEAGENT_CONFIG_DIR;
+            } else {
+                process.env.TYPEAGENT_CONFIG_DIR = originalConfigDir;
+            }
+            fs.rmSync(configDir, { recursive: true, force: true });
         }
-        delete process.env.DEBUG;
-        await dispatcher?.close();
     });
 
     it.each(["play ", "play music by ", "listen to "])(

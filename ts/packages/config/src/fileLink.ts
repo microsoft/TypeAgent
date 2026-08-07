@@ -13,6 +13,7 @@
  */
 
 import { pathToFileURL } from "node:url";
+import path from "node:path";
 
 /** Scheme used for "open this local file" links in chat content. */
 export const FILE_LINK_SCHEME = "typeagent-file:";
@@ -26,4 +27,32 @@ export function fileLinkHref(filePath: string | undefined): string | undefined {
         return undefined;
     }
     return pathToFileURL(filePath).href.replace(/^file:/, FILE_LINK_SCHEME);
+}
+
+/**
+ * Validate the only local-file target chat content is allowed to open.
+ *
+ * This check must also run in each host process that opens the file; rendered
+ * message content is untrusted and renderer-side checks are not a security
+ * boundary.
+ */
+export function isAllowedConfigFilePath(
+    candidate: string,
+    expectedConfigPath: string,
+): boolean {
+    if (
+        candidate.length === 0 ||
+        !path.isAbsolute(candidate) ||
+        candidate.startsWith("\\\\") ||
+        candidate.startsWith("//") ||
+        candidate.split(/[\\/]/).some((segment) => segment === "..")
+    ) {
+        return false;
+    }
+    const resolvedCandidate = path.resolve(candidate);
+    const resolvedExpected = path.resolve(expectedConfigPath);
+    return process.platform === "win32"
+        ? resolvedCandidate.toLocaleLowerCase() ===
+              resolvedExpected.toLocaleLowerCase()
+        : resolvedCandidate === resolvedExpected;
 }

@@ -12,10 +12,22 @@ import type { ReadinessReport } from "@typeagent/agent-sdk";
 import {
     ConfigSetupError,
     configSetupHint,
-    tryReloadConfigSync,
+    getConfigProblems,
+    tryReloadConfigKeysSync,
 } from "@typeagent/config";
 
 export type GraphAgentName = "calendar" | "email";
+export const GRAPH_CONFIG_KEYS = [
+    "MSGRAPH_APP_CLIENTID",
+    "MSGRAPH_APP_CLIENTSECRET",
+    "MSGRAPH_APP_TENANTID",
+    "MSGRAPH_APP_USERNAME",
+    "MSGRAPH_APP_PASSWD",
+    "MSGRAPH_APP_AUTH_MODE",
+    "MSGRAPH_APP_REDIRECT_PORT",
+    "GOOGLE_CALENDAR_CLIENT_ID",
+    "GOOGLE_CALENDAR_CLIENT_SECRET",
+] as const;
 
 // Inputs for the readiness decision. All three slots are independent so the
 // pure evaluator can be unit-tested without env or provider mocking.
@@ -37,6 +49,7 @@ export type GraphReadinessProbe = {
     // Used only for nicer messaging ("Microsoft 365" vs "Google"); the
     // decision logic doesn't depend on it.
     providerName: string | undefined;
+    configProblem?: string;
 };
 
 // Cheap env probe — pulls just the booleans the evaluator needs.
@@ -68,9 +81,16 @@ export function probeGraphConfig(env: NodeJS.ProcessEnv): {
 export function probeCurrentGraphConfig(): {
     msGraphConfigured: boolean;
     googleConfigured: boolean;
+    configProblem?: string;
 } {
-    tryReloadConfigSync();
-    return probeGraphConfig(process.env);
+    tryReloadConfigKeysSync(GRAPH_CONFIG_KEYS);
+    const result = probeGraphConfig(process.env);
+    const problem = getConfigProblems().find(
+        ({ section }) => section === "msGraph" || section === "googleCalendar",
+    );
+    return problem === undefined
+        ? result
+        : { ...result, configProblem: problem.message };
 }
 
 // The "no provider configured" instructions, shared by the readiness
@@ -125,6 +145,14 @@ export function evaluateGraphReadiness(
     probe: GraphReadinessProbe,
 ): ReadinessReport {
     const Agent = agentName[0].toUpperCase() + agentName.slice(1);
+
+    if (probe.configProblem !== undefined) {
+        return {
+            state: "setup-required",
+            message: `${Agent} configuration is invalid: ${probe.configProblem}`,
+            details: graphProviderSetupHint(agentName),
+        };
+    }
 
     if (!probe.msGraphConfigured && !probe.googleConfigured) {
         return {

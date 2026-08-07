@@ -3,7 +3,7 @@
 
 import {
     loadConfigSync,
-    tryReloadConfigSync,
+    tryReloadConfigKeysSync,
     configSetupError,
 } from "@typeagent/config";
 import { TokenProvider } from "./tokenProvider.js";
@@ -31,12 +31,17 @@ const scopes = [
 
 const CONFIG_NOTE =
     "`clientId` and `clientSecret` come from the Spotify developer dashboard for your app; `port` is the redirect port you registered there.";
+const SPOTIFY_CONFIG_KEYS = [
+    "SPOTIFY_APP_CLI",
+    "SPOTIFY_APP_CLISEC",
+    "SPOTIFY_APP_PORT",
+] as const;
 
 export async function createTokenProvider(storage?: Storage) {
     // Agent processes are forked with a snapshot of process.env, so re-read
     // the config files here: otherwise settings the user added since startup
     // (and confirmed with `@config agent refresh player`) stay invisible.
-    tryReloadConfigSync();
+    tryReloadConfigKeysSync(SPOTIFY_CONFIG_KEYS);
 
     const baseClientId = process.env.SPOTIFY_APP_CLI;
     const baseClientSecret = process.env.SPOTIFY_APP_CLISEC;

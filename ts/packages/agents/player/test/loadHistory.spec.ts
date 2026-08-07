@@ -179,6 +179,142 @@ describe("loadHistoryFile → completions", () => {
         expect(context.userData.data.tracks.has("")).toBe(false);
     });
 
+    test("rejects a mixed file instead of partially importing it", async () => {
+        writeHistory("history.json", [
+            record("Song A", "Artist A", "Album A", "aaa"),
+            { ts: "2024-01-02T00:00:00Z", spotify_track_uri: 42 },
+        ]);
+        await expect(
+            loadHistoryFile(
+                fakeStorage(dir),
+                path.join(dir, "history.json"),
+                context,
+            ),
+        ).rejects.toThrow(/not a spotify streaming history file/i);
+        expect(context.userData.data.tracks.size).toBe(0);
+    });
+
+    test("does not treat an empty array as a history file", async () => {
+        writeHistory("history.json", []);
+        await expect(
+            loadHistoryFile(
+                fakeStorage(dir),
+                path.join(dir, "history.json"),
+                context,
+            ),
+        ).rejects.toThrow(/not a spotify streaming history file/i);
+    });
+
+    test("skips null and empty track names", async () => {
+        writeHistory("history.json", [
+            record("Song A", "Artist A", "Album A", "aaa"),
+            {
+                ...record("", "Artist B", "Album B", "bbb"),
+                master_metadata_track_name: "",
+            },
+            {
+                ...record("unused", "Artist C", "Album C", "ccc"),
+                master_metadata_track_name: null,
+            },
+        ]);
+        const result = await loadHistoryFile(
+            fakeStorage(dir),
+            path.join(dir, "history.json"),
+            context,
+        );
+        expect(result.records).toBe(1);
+        expect(context.userData.data.tracks.size).toBe(1);
+        expect(() => addUserDataStrings(context.userData.data)).not.toThrow();
+    });
+
+    test("loading the same source twice is idempotent", async () => {
+        writeHistory("history.json", [
+            record("Song A", "Artist A", "Album A", "aaa"),
+            record("Song A", "Artist A", "Album A", "aaa"),
+        ]);
+        const storage = fakeStorage(dir);
+        await loadHistoryFile(storage, path.join(dir, "history.json"), context);
+        await loadHistoryFile(storage, path.join(dir, "history.json"), context);
+        expect(context.userData.data.tracks.get("aaa")?.freq).toBe(2);
+    });
+
+    test("bounds persisted timestamps without losing frequency", async () => {
+        writeHistory(
+            "history.json",
+            Array.from({ length: 100 }, (_, i) =>
+                record(
+                    "Song A",
+                    "Artist A",
+                    "Album A",
+                    "aaa",
+                    new Date(Date.UTC(2024, 0, 1, 0, i)).toISOString(),
+                ),
+            ),
+        );
+        await loadHistoryFile(
+            fakeStorage(dir),
+            path.join(dir, "history.json"),
+            context,
+        );
+        const track = context.userData.data.tracks.get("aaa");
+        expect(track.freq).toBe(100);
+        expect(track.timestamps).toHaveLength(32);
+        expect(track.timestamps[track.timestamps.length - 1]).toBe(
+            new Date(Date.UTC(2024, 0, 1, 0, 99)).toISOString(),
+        );
+    });
+
+    test("replaces contributions when a source is modified", async () => {
+        const file = path.join(dir, "history.json");
+        writeHistory("history.json", [
+            record("Old Song", "Old Artist", "Old Album", "aaa"),
+        ]);
+        const storage = fakeStorage(dir);
+        await loadHistoryFile(storage, file, context);
+        writeHistory("history.json", [
+            record("New Song", "New Artist", "New Album", "bbb"),
+        ]);
+        await loadHistoryFile(storage, file, context);
+        expect(context.userData.data.tracks.has("aaa")).toBe(false);
+        expect(context.userData.data.tracks.get("bbb")?.freq).toBe(1);
+        expect(context.userData.data.artists.has("name:old artist")).toBe(
+            false,
+        );
+    });
+
+    test("loads a file and directory from instance storage", async () => {
+        writeHistory("single.json", [
+            record("Single", "Artist", "Album", "single"),
+        ]);
+        writeHistory("folder.json", [
+            record("Folder", "Artist", "Album", "folder"),
+        ]);
+        fs.mkdirSync(path.join(dir, "history"));
+        fs.renameSync(
+            path.join(dir, "folder.json"),
+            path.join(dir, "history", "folder.json"),
+        );
+        const storage = fakeStorage(dir);
+        await loadHistoryFile(storage, "single.json", context);
+        await loadHistoryFile(storage, "history", context);
+        expect(context.userData.data.tracks.has("single")).toBe(true);
+        expect(context.userData.data.tracks.has("folder")).toBe(true);
+    });
+
+    test("does not mutate memory when a single-file save fails", async () => {
+        writeHistory("history.json", [
+            record("Song A", "Artist A", "Album A", "aaa"),
+        ]);
+        const storage = fakeStorage(dir);
+        storage.write = async () => {
+            throw new Error("disk full");
+        };
+        await expect(
+            loadHistoryFile(storage, path.join(dir, "history.json"), context),
+        ).rejects.toThrow("disk full");
+        expect(context.userData.data.tracks.size).toBe(0);
+    });
+
     test("a directory load reports which files were skipped", async () => {
         writeHistory("Streaming_History_Audio_2023.json", [
             record("Song A", "Artist A", "Album A", "aaa"),

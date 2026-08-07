@@ -3,6 +3,9 @@
 
 import yaml from "js-yaml";
 import { flatten } from "../src/flatten.js";
+import { SIMPLE_CONFIG_MAPPING_LIST } from "../src/mappings.js";
+import { buildConfig } from "../src/runtime/build.js";
+import { configToEnv } from "../src/runtime/shim.js";
 import {
     CONFIG_LOCAL_FILE,
     configKeyNames,
@@ -11,32 +14,10 @@ import {
     configYamlSnippet,
 } from "../src/hints.js";
 
-// Every env var the hint table claims to know, paired with the YAML path
-// it maps to. The first test flattens each path and asserts it really
-// produces that env var, so the table can't drift from tree.ts.
-const MAPPED_VARS = [
-    "SPOTIFY_APP_CLI",
-    "SPOTIFY_APP_CLISEC",
-    "SPOTIFY_APP_PORT",
-    "MSGRAPH_APP_CLIENTID",
-    "MSGRAPH_APP_CLIENTSECRET",
-    "MSGRAPH_APP_TENANTID",
-    "MSGRAPH_APP_USERNAME",
-    "MSGRAPH_APP_PASSWD",
-    "GOOGLE_CALENDAR_CLIENT_ID",
-    "GOOGLE_CALENDAR_CLIENT_SECRET",
-    "SPEECH_SDK_KEY",
-    "SPEECH_SDK_REGION",
-    "SPEECH_SDK_ENDPOINT",
-    "AZURE_MAPS_CLIENTID",
-    "AZURE_MAPS_ENDPOINT",
-    "COSMOSDB_CONNECTION_STRING",
-    "MONGODB_CONNECTION_STRING",
-];
-
-// spotify.port is typed as a number; everything else is a string.
 function sampleValue(configPath: string): string | number {
-    return configPath === "spotify.port" ? 9999 : "probe-value";
+    if (configPath === "spotify.port") return 9999;
+    if (configPath === "speech.region") return "eastus";
+    return "probe-value";
 }
 
 function treeFor(configPath: string): any {
@@ -49,16 +30,38 @@ function treeFor(configPath: string): any {
 }
 
 describe("configPathForEnvVar", () => {
-    test.each(MAPPED_VARS)(
-        "%s maps to a YAML path that flattens back to it",
-        (envVar) => {
-            const configPath = configPathForEnvVar(envVar);
-            expect(configPath).toBeDefined();
-            const flat = flatten(treeFor(configPath!));
-            expect(Object.keys(flat)).toContain(envVar);
-            expect(flat[envVar]).toBe(String(sampleValue(configPath!)));
+    test.each(SIMPLE_CONFIG_MAPPING_LIST)(
+        "$envVar maps to a YAML path that flattens back to it",
+        ({ envVar, configPath }) => {
+            expect(configPathForEnvVar(envVar)).toBe(configPath);
+            const flat = flatten(treeFor(configPath));
+            expect(flat[envVar]).toBe(String(sampleValue(configPath)));
         },
     );
+
+    test("registry env vars and config paths are unique", () => {
+        expect(
+            new Set(SIMPLE_CONFIG_MAPPING_LIST.map((entry) => entry.envVar))
+                .size,
+        ).toBe(SIMPLE_CONFIG_MAPPING_LIST.length);
+        expect(
+            new Set(SIMPLE_CONFIG_MAPPING_LIST.map((entry) => entry.configPath))
+                .size,
+        ).toBe(SIMPLE_CONFIG_MAPPING_LIST.length);
+    });
+
+    test("all registry entries round-trip through typed runtime config", () => {
+        const flat = Object.fromEntries(
+            SIMPLE_CONFIG_MAPPING_LIST.map(({ envVar, configPath }) => [
+                envVar,
+                String(sampleValue(configPath)),
+            ]),
+        );
+        const projected = configToEnv(buildConfig(flat));
+        for (const { envVar } of SIMPLE_CONFIG_MAPPING_LIST) {
+            expect(projected[envVar]).toBe(flat[envVar]);
+        }
+    });
 
     test("returns undefined for a var the typed schema doesn't model", () => {
         expect(configPathForEnvVar("DISCORD_BOT_TOKEN")).toBeUndefined();

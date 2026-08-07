@@ -11,56 +11,16 @@
  * translation plus the phrasing of the "here is what to add" message so
  * every agent says the same thing.
  *
- * `hints.spec.ts` verifies each mapping by flattening the YAML path and
- * checking it produces the mapped env var, so the table cannot drift
- * away from the real converter in `runtime/tree.ts`.
  */
 
 import { fileLinkHref } from "./fileLink.js";
 import { resolveLocalConfigPath } from "./loader.js";
+import { simpleConfigMappingForEnvVar } from "./mappings.js";
 
 /** Where users put their own settings. */
 export const CONFIG_LOCAL_FILE = "ts/config.local.yaml";
 /** Fully commented example of every supported section. */
 export const CONFIG_SAMPLE_FILE = "ts/config.sample.yaml";
-
-/**
- * Legacy env var name -> dotted path in the YAML config tree.
- *
- * Only the vars that appear in user-facing setup messages are listed;
- * anything missing falls back to the `env:` passthrough block, which is
- * the correct YAML form for a var the typed schema doesn't model.
- */
-const CONFIG_PATH_BY_ENV_VAR: Readonly<Record<string, string>> = {
-    // Spotify (player agent).
-    SPOTIFY_APP_CLI: "spotify.clientId",
-    SPOTIFY_APP_CLISEC: "spotify.clientSecret",
-    SPOTIFY_APP_PORT: "spotify.port",
-
-    // Microsoft Graph (calendar / email agents).
-    MSGRAPH_APP_CLIENTID: "msGraph.clientId",
-    MSGRAPH_APP_CLIENTSECRET: "msGraph.clientSecret",
-    MSGRAPH_APP_TENANTID: "msGraph.tenantId",
-    MSGRAPH_APP_USERNAME: "msGraph.username",
-    MSGRAPH_APP_PASSWD: "msGraph.password",
-
-    // Google (calendar / email agents).
-    GOOGLE_CALENDAR_CLIENT_ID: "googleCalendar.clientId",
-    GOOGLE_CALENDAR_CLIENT_SECRET: "googleCalendar.clientSecret",
-
-    // Speech (shell voice input).
-    SPEECH_SDK_KEY: "speech.auth",
-    SPEECH_SDK_REGION: "speech.region",
-    SPEECH_SDK_ENDPOINT: "speech.endpoint",
-
-    // Azure Maps.
-    AZURE_MAPS_CLIENTID: "maps.clientId",
-    AZURE_MAPS_ENDPOINT: "maps.endpoint",
-
-    // Telemetry / session storage backends.
-    COSMOSDB_CONNECTION_STRING: "storage.database.cosmosDbConnectionString",
-    MONGODB_CONNECTION_STRING: "storage.database.mongoDbConnectionString",
-};
 
 /**
  * A setting to mention in a hint: either the bare env var name, or the
@@ -73,7 +33,7 @@ export type ConfigHintVar = string | { envVar: string; placeholder?: string };
  * schema doesn't model it (in which case it belongs under `env:`).
  */
 export function configPathForEnvVar(envVar: string): string | undefined {
-    return CONFIG_PATH_BY_ENV_VAR[envVar];
+    return simpleConfigMappingForEnvVar(envVar)?.configPath;
 }
 
 function normalize(v: ConfigHintVar): { envVar: string; placeholder: string } {

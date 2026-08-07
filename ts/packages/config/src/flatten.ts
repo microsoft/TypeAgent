@@ -100,7 +100,13 @@ function walk(
             }
             if (path.length === 0 && isTypedSectionKey(rawKey)) {
                 tryTopLevel(rawKey, options, () => {
-                    const sub = typedSectionToFlat(rawKey, value);
+                    const sub = typedSectionToFlat(
+                        rawKey,
+                        value,
+                        options.onSectionError === undefined
+                            ? undefined
+                            : (error) => options.onSectionError!(rawKey, error),
+                    );
                     for (const [k, v] of Object.entries(sub)) {
                         out[k] = v;
                     }

@@ -61,6 +61,23 @@ describe("probeGraphConfig", () => {
 });
 
 describe("evaluateGraphReadiness", () => {
+    test("malformed config cannot be masked by stale ready values", () => {
+        expect(
+            evaluateGraphReadiness("calendar", {
+                msGraphConfigured: true,
+                googleConfigured: false,
+                isAuthenticated: true,
+                providerName: "microsoft",
+                configProblem: "Expected a string at 'msGraph.clientId'",
+            }),
+        ).toEqual(
+            expect.objectContaining({
+                state: "setup-required",
+                message: expect.stringContaining("invalid"),
+            }),
+        );
+    });
+
     test("setup-required when no provider is configured", () => {
         const r = evaluateGraphReadiness("calendar", {
             msGraphConfigured: false,

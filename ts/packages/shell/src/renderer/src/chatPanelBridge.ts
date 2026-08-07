@@ -660,7 +660,7 @@ export function createChatPanelClient(
                 // handles files as well as directories.
                 const filePath = fileLinkToPath(href);
                 if (filePath !== undefined) {
-                    getClientAPI().openFolder(filePath);
+                    getClientAPI().openConfigFile(filePath);
                     return;
                 }
                 getClientAPI().openUrlExternal(href);

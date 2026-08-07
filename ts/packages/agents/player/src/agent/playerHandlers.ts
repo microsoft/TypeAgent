@@ -26,7 +26,7 @@ import {
     configPathForEnvVar,
     configSetupHint,
     getConfigProblems,
-    reloadConfigSync,
+    reloadConfigKeysSync,
 } from "@typeagent/config";
 import { searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
@@ -50,6 +50,13 @@ import {
 
 const debugSpotify = registerDebug("typeagent:spotify");
 const debugError = registerDebug("typeagent:spotify:error");
+// Completion results cross the agent RPC boundary on every keystroke.
+const MAX_PLAYER_COMPLETIONS = 100;
+const SPOTIFY_CONFIG_KEYS = [
+    "SPOTIFY_APP_CLI",
+    "SPOTIFY_APP_CLISEC",
+    "SPOTIFY_APP_PORT",
+] as const;
 
 export function instantiate(): AppAgent {
     return {
@@ -82,11 +89,22 @@ export function instantiate(): AppAgent {
 // Exported for unit tests.
 export async function checkPlayerReadiness(): Promise<ReadinessReport> {
     try {
-        reloadConfigSync();
+        reloadConfigKeysSync(SPOTIFY_CONFIG_KEYS);
     } catch (e) {
         // Best-effort: a malformed config file shouldn't turn the probe
         // into a hard failure — fall through and report what's missing.
         debugError(`Failed to reload config during readiness check: ${e}`);
+    }
+    const problem = getConfigProblems().find((p) => p.section === "spotify");
+    if (problem !== undefined) {
+        return {
+            state: "setup-required",
+            message: `Spotify configuration is invalid and was ignored: ${problem.message}`,
+            details: configSetupHint(
+                SPOTIFY_CONFIG_KEYS,
+                "Replace any placeholder with a real value, then run `@config agent refresh player`.",
+            ),
+        };
     }
     const missing: string[] = [];
     if (!process.env.SPOTIFY_APP_CLI) missing.push("SPOTIFY_APP_CLI");
@@ -109,17 +127,6 @@ export async function checkPlayerReadiness(): Promise<ReadinessReport> {
     // section was rejected — a leftover `<value>` placeholder, a port
     // that isn't a number. Say so, otherwise the user is told to add
     // settings they can plainly see in the file.
-    const problem = getConfigProblems().find((p) => p.section === "spotify");
-    if (problem !== undefined) {
-        return {
-            state: "setup-required",
-            message: `Spotify configuration is invalid and was ignored: ${problem.message}`,
-            details: configSetupHint(
-                missing,
-                "Replace any placeholder with a real value — `clientId` and `clientSecret` come from the Spotify developer dashboard for your app, and `port` is the (unquoted, numeric) redirect port you registered there. Then run `@config agent refresh player`.",
-            ),
-        };
-    }
     return {
         state: "setup-required",
         message: `Spotify is not configured. Missing: ${configKeyNames(missing).join(", ")}.`,
@@ -489,7 +496,7 @@ async function getPlayerDynamicDisplay(
     throw new Error(`Invalid displayId ${displayId}`);
 }
 
-async function getPlayerActionCompletion(
+export async function getPlayerActionCompletion(
     context: SessionContext<PlayerActionContext>,
     action: AppAction,
     propertyName: string,
@@ -505,6 +512,7 @@ async function getPlayerActionCompletion(
     if (userData === undefined) {
         return result;
     }
+    const partialValue = getPartialPropertyValue(action, propertyName);
 
     let track = false;
     let artist = false;
@@ -552,7 +560,7 @@ async function getPlayerActionCompletion(
                     const names = userData.data.playlists
                         .map((pl) => pl.name)
                         .sort();
-                    result.push(...names);
+                    result.push(...filterCompletions(names, partialValue));
                 }
             }
             return result;
@@ -561,9 +569,12 @@ async function getPlayerActionCompletion(
                 const devices = await getUserDevices(clientContext.service);
                 if (devices !== undefined) {
                     result.push(
-                        ...devices.devices
-                            .filter((device) => device.id !== null)
-                            .map((device) => device.name),
+                        ...filterCompletions(
+                            devices.devices
+                                .filter((device) => device.id !== null)
+                                .map((device) => device.name),
+                            partialValue,
+                        ),
                     );
                 }
             }
@@ -577,7 +588,37 @@ async function getPlayerActionCompletion(
             artist,
             album,
             playlist,
+            partialValue,
+            MAX_PLAYER_COMPLETIONS,
         ),
     );
     return result;
+}
+
+function filterCompletions(names: string[], partialValue: string): string[] {
+    const query = partialValue.trim().toLocaleLowerCase();
+    return names
+        .filter(
+            (name) =>
+                query.length === 0 || name.toLocaleLowerCase().includes(query),
+        )
+        .slice(0, MAX_PLAYER_COMPLETIONS);
+}
+
+function getPartialPropertyValue(
+    action: AppAction,
+    propertyName: string,
+): string {
+    let value: unknown = action;
+    for (const segment of propertyName.split(".")) {
+        if (
+            typeof value !== "object" ||
+            value === null ||
+            !(segment in value)
+        ) {
+            return "";
+        }
+        value = (value as Record<string, unknown>)[segment];
+    }
+    return typeof value === "string" ? value : "";
 }

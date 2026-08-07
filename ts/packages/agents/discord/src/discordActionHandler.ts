@@ -16,7 +16,7 @@ import {
     createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ChatModel, openai } from "@typeagent/aiclient";
-import { configSetupError, tryReloadConfigSync } from "@typeagent/config";
+import { configSetupError, tryReloadConfigKeysSync } from "@typeagent/config";
 import { DiscordActions } from "./discordSchema.js";
 
 const DISCORD_API = "https://discord.com/api/v10";
@@ -150,14 +150,10 @@ async function discordFetch(
     path: string,
     options: RequestInit = {},
 ): Promise<Response> {
-    const token = process.env.DISCORD_BOT_TOKEN;
-    if (!token) {
-        // Re-read the config files before giving up: this agent runs in a
-        // forked process whose env is a startup snapshot, so a token added
-        // since then is only visible after a reload.
-        tryReloadConfigSync();
-    }
-    const botToken = token ?? process.env.DISCORD_BOT_TOKEN;
+    // Re-read this agent's key on every request so changed and removed local
+    // overrides take effect without touching unrelated inherited settings.
+    tryReloadConfigKeysSync(["DISCORD_BOT_TOKEN"]);
+    const botToken = process.env.DISCORD_BOT_TOKEN;
     if (!botToken) {
         throw configSetupError(
             "Discord is not configured.",

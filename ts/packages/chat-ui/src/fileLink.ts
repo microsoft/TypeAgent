@@ -8,7 +8,8 @@
  * URL (produced by `@typeagent/config`'s `fileLinkHref`) because `file:`
  * hrefs are sanitized away and are inert in Electron / webview hosts.
  * Hosts get the click through `PlatformAdapter.handleLinkClick` and use
- * this helper to recover the path before handing it to the OS.
+ * this helper to recover a local path. The host must still compare it with
+ * its allowlisted config path before opening it.
  */
 
 /** Scheme used for "open this local file" links in chat content. */
@@ -22,23 +23,41 @@ export function isFileLink(href: string): boolean {
 /**
  * The filesystem path a `typeagent-file:` link points at, or `undefined`
  * for any other href. Mirrors Node's `fileURLToPath` for the cases the
- * link generator can produce (including Windows drive letters and UNC
- * paths), without pulling in a Node dependency.
+ * link generator can produce, without pulling in a Node dependency. UNC paths
+ * are rejected because following a remote SMB path from message content can
+ * trigger network authentication or execute a remote file.
  */
 export function fileLinkToPath(href: string): string | undefined {
     if (!isFileLink(href)) {
         return undefined;
     }
+    const encodedPath = href.slice(FILE_LINK_SCHEME.length);
+    if (
+        /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(encodedPath) ||
+        /%2e%2e(?:%2f|%5c|[\\/]|$)/i.test(encodedPath)
+    ) {
+        return undefined;
+    }
     let url: URL;
     try {
-        url = new URL(`file:${href.slice(FILE_LINK_SCHEME.length)}`);
+        url = new URL(`file:${encodedPath}`);
     } catch {
         return undefined;
     }
-    const pathname = decodeURIComponent(url.pathname);
     if (url.hostname) {
-        // UNC: file://server/share/file -> \\server\share\file
-        return `\\\\${url.hostname}${pathname.replace(/\//g, "\\")}`;
+        return undefined;
+    }
+    let pathname: string;
+    try {
+        pathname = decodeURIComponent(url.pathname);
+    } catch {
+        return undefined;
+    }
+    if (
+        pathname.split(/[\\/]/).some((segment) => segment === "..") ||
+        pathname.includes("\0")
+    ) {
+        return undefined;
     }
     // Windows drive letters arrive as "/C:/dir/file".
     return /^\/[a-zA-Z]:/.test(pathname)

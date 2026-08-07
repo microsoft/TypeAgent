@@ -71,6 +71,8 @@ interface ResolvedConfigPaths {
     dotEnvPath: string;
 }
 
+type ConfigLayer = { source: ConfigSource; flat: FlatEnv };
+
 /**
  * Absolute path of the `config.local.yaml` this process would load, resolved
  * with the same precedence as {@link loadConfigSync}. Used by setup hints so
@@ -217,7 +219,7 @@ export function loadConfigSync(
         dotEnvPath,
     );
 
-    const layers: { source: ConfigSource; flat: FlatEnv }[] = [];
+    const layers: ConfigLayer[] = [];
 
     // .env (legacy fallback, lowest precedence)
     try {
@@ -276,6 +278,7 @@ export function loadConfigSync(
     }
 
     if (populateProcessEnv) {
+        rememberReloadState(localPath, layers);
         applyToProcessEnv(merged, sources);
     }
 
@@ -380,7 +383,7 @@ export async function loadConfig(
     // local
     pushYamlLayer(layers, ConfigSource.Local, localPath, strict);
 
-    return finalize(layers, populateProcessEnv, trackSources);
+    return finalize(layers, populateProcessEnv, trackSources, localPath);
 }
 
 /**
@@ -434,9 +437,10 @@ function pushYamlLayer(
  * and (optionally) push the result into `process.env`.
  */
 function finalize(
-    layers: { source: ConfigSource; flat: FlatEnv }[],
+    layers: ConfigLayer[],
     populateProcessEnv: boolean,
     trackSources: boolean,
+    localPath?: string,
 ): LoadConfigResult {
     const merged: FlatEnv = mergeFlat(...layers.map((l) => l.flat));
 
@@ -451,6 +455,9 @@ function finalize(
     }
 
     if (populateProcessEnv) {
+        if (localPath !== undefined) {
+            rememberReloadState(localPath, layers);
+        }
         applyToProcessEnv(merged, sources);
     }
 
@@ -463,31 +470,110 @@ function finalize(
     return sources !== undefined ? { env: merged, sources } : { env: merged };
 }
 
+interface ReloadState {
+    readonly inheritedValue: string | undefined;
+    readonly restoreInheritedValue: boolean;
+}
+
+const reloadState = new Map<string, ReloadState>();
+
+function rememberReloadState(
+    localPath: string,
+    layers: readonly ConfigLayer[],
+): void {
+    const local =
+        layers.find(({ source }) => source === ConfigSource.Local)?.flat ?? {};
+    const lower = mergeFlat(
+        ...layers
+            .filter(({ source }) => source !== ConfigSource.Local)
+            .map(({ flat }) => flat),
+    );
+    const lowerSources: SourceMap = {};
+    for (const layer of layers) {
+        if (layer.source === ConfigSource.Local) {
+            continue;
+        }
+        for (const key of Object.keys(layer.flat)) {
+            lowerSources[key] = layer.source;
+        }
+    }
+    const keys = new Set([...Object.keys(lower), ...Object.keys(local)]);
+    for (const key of keys) {
+        const stateKey = `${localPath}\0${key}`;
+        if (reloadState.has(stateKey)) {
+            continue;
+        }
+        const current = process.env[key];
+        const processValueWins =
+            current !== undefined && current !== local[key];
+        reloadState.set(stateKey, {
+            inheritedValue: processValueWins ? current : lower[key],
+            restoreInheritedValue:
+                processValueWins || lowerSources[key] === ConfigSource.KeyVault,
+        });
+    }
+}
+
 /**
- * Re-read the config files and push any changes into `process.env`.
+ * Re-read only the legacy env keys used by one agent.
  *
- * Normal loading never clobbers `process.env` (a shell export outranks
- * the files). A reload is different: it happens because the user just
- * edited `config.local.yaml` and asked for the new values to take
- * effect — `@config agent refresh`, say — so the files win for the keys
- * they define. That also matters for agents running in a forked child,
- * whose entire `process.env` is a snapshot of the parent taken at fork
- * time and cannot be told apart from a real shell export.
- *
- * Returns the keys whose values actually changed.
+ * Local values override the inherited startup value while present. Removing a
+ * local override restores that inherited value (including a value populated by
+ * Key Vault in the parent process), or deletes the key when no inherited value
+ * existed. Keys outside `keys` are never changed.
  */
-export function reloadConfigSync(options: LoadConfigOptions = {}): string[] {
-    const { env } = loadConfigSync({
-        strict: false,
+export function reloadConfigKeysSync(
+    keys: readonly string[],
+    options: LoadConfigOptions = {},
+): string[] {
+    const paths = resolveConfigPaths(options);
+    loadConfigSync({
         ...options,
+        strict: true,
         populateProcessEnv: false,
     });
+    const localTree = readYamlFile(paths.localPath);
+    const local = localTree
+        ? flatten(localTree, { onSectionError: () => {} })
+        : {};
+    const defaultsTree = readYamlFile(paths.defaultsPath);
+    const lower = mergeFlat(
+        readDotEnvFile(paths.dotEnvPath),
+        defaultsTree
+            ? flatten(defaultsTree, flattenOptions(paths.defaultsPath))
+            : {},
+    );
     const changed: string[] = [];
-    for (const [key, value] of Object.entries(env)) {
+    for (const key of keys) {
+        const stateKey = `${paths.localPath}\0${key}`;
+        let state = reloadState.get(stateKey);
+        if (state === undefined) {
+            const current = process.env[key];
+            const localValue = local[key];
+            const lowerValue = lower[key];
+            state = {
+                inheritedValue:
+                    current !== undefined && current !== localValue
+                        ? current
+                        : lowerValue,
+                restoreInheritedValue:
+                    current !== undefined &&
+                    current !== localValue &&
+                    current !== lowerValue,
+            };
+            reloadState.set(stateKey, state);
+        }
+        const value =
+            local[key] ??
+            (state.restoreInheritedValue ? state.inheritedValue : lower[key]);
         if (process.env[key] === value) {
             continue;
         }
-        process.env[key] = value;
+        if (value === undefined) {
+            delete process.env[key];
+        } else {
+            process.env[key] = value;
+        }
         changed.push(key);
     }
     debug("reloaded config, %d key(s) changed", changed.length);
@@ -495,7 +581,7 @@ export function reloadConfigSync(options: LoadConfigOptions = {}): string[] {
 }
 
 /**
- * `reloadConfigSync` for callers that must not fail because of it: a
+ * Scoped reload for callers that must not fail because of it: a
  * broken or unreadable config file leaves whatever was loaded at startup
  * in place rather than turning "your Spotify settings are missing" into
  * an unrelated parse error. Returns the keys that changed, or none.
@@ -505,9 +591,12 @@ export function reloadConfigSync(options: LoadConfigOptions = {}): string[] {
  * it can never observe an edit the user made after startup — which is
  * exactly what `@config agent refresh <agent>` promises to pick up.
  */
-export function tryReloadConfigSync(options: LoadConfigOptions = {}): string[] {
+export function tryReloadConfigKeysSync(
+    keys: readonly string[],
+    options: LoadConfigOptions = {},
+): string[] {
     try {
-        return reloadConfigSync(options);
+        return reloadConfigKeysSync(keys, options);
     } catch (e: any) {
         debug("config reload failed: %s", e?.message ?? e);
         return [];

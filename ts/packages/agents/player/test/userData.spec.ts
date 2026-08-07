@@ -3,9 +3,12 @@
 
 import {
     getUserDataCompletions,
+    MAX_ITEM_TIMESTAMPS,
+    mergeUserDataKind,
     MusicItemInfo,
     SpotifyUserData,
 } from "../src/userData.js";
+import { getPlayerActionCompletion } from "../src/agent/playerHandlers.js";
 
 function makeItem(name: string, lastTimestamp?: string): MusicItemInfo {
     return {
@@ -89,5 +92,84 @@ describe("getUserDataCompletions — tracks sorted by timestamp", () => {
         expect(result[0]).toBe("New Track");
         expect(result[1]).toBe("Mid Track");
         expect(result[2]).toBe("Old Track");
+    });
+
+    describe("mergeUserDataKind", () => {
+        test("bounds timestamps while preserving full frequency", () => {
+            const items = new Map<string, MusicItemInfo>();
+            mergeUserDataKind(items, [
+                {
+                    id: "track",
+                    name: "Track",
+                    freq: 100,
+                    timestamps: Array.from({ length: 100 }, (_, i) =>
+                        String(i).padStart(3, "0"),
+                    ),
+                },
+            ]);
+            expect(items.get("track")?.freq).toBe(100);
+            expect(items.get("track")?.timestamps).toHaveLength(
+                MAX_ITEM_TIMESTAMPS,
+            );
+        });
+    });
+
+    describe("player action completion RPC payload", () => {
+        test("uses the partial property value and caps results", async () => {
+            const data = emptyUserData();
+            for (let i = 0; i < 150; i++) {
+                data.tracks.set(
+                    String(i),
+                    makeItem(
+                        `Needle ${i}`,
+                        new Date(Date.UTC(2024, 0, 1, 0, i)).toISOString(),
+                    ),
+                );
+            }
+            data.tracks.set("other", makeItem("Unrelated"));
+            const result = await getPlayerActionCompletion(
+                {
+                    agentContext: {
+                        spotify: {
+                            userData: { data },
+                        },
+                    },
+                } as any,
+                {
+                    actionName: "playMusic",
+                    parameters: { target: { trackName: "needle" } },
+                } as any,
+                "parameters.target.trackName",
+            );
+            expect(result).toHaveLength(100);
+            expect(result[0]).toBe("Needle 149");
+            expect(result).not.toContain("Unrelated");
+        });
+    });
+
+    test("filters, ranks, and caps large completion sets", () => {
+        const data = emptyUserData();
+        for (let i = 0; i < 250; i++) {
+            data.tracks.set(
+                String(i),
+                makeItem(
+                    `Needle Track ${i}`,
+                    new Date(Date.UTC(2024, 0, 1, 0, i)).toISOString(),
+                ),
+            );
+        }
+        data.tracks.set("other", makeItem("Unrelated", "2030-01-01T00:00:00Z"));
+        const result = getUserDataCompletions(
+            data,
+            true,
+            false,
+            false,
+            false,
+            "needle",
+            100,
+        );
+        expect(result).toHaveLength(100);
+        expect(result[0]).toBe("Needle Track 249");
+        expect(result).not.toContain("Unrelated");
     });
 });
