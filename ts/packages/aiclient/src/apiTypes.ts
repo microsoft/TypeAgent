@@ -29,6 +29,8 @@ export type CompletionUsageStats = {
     prompt_tokens: number;
     // Total tokens (prompt + completion)
     total_tokens: number;
+    // Subset of prompt_tokens served from provider prompt cache (when reported).
+    cached_tokens?: number;
 };
 
 /**

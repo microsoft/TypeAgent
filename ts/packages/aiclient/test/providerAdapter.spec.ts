@@ -185,6 +185,26 @@ describe("ChatCompletionsWireApiProvider (default path is byte-identical)", () =
         );
     });
 
+    test("extractUsage tracks nested prompt_tokens_details.cached_tokens", () => {
+        expect(
+            adapter.extractUsage({
+                id: "x",
+                choices: [],
+                usage: {
+                    prompt_tokens: 100,
+                    completion_tokens: 20,
+                    total_tokens: 120,
+                    prompt_tokens_details: { cached_tokens: 40 },
+                },
+            }),
+        ).toEqual({
+            prompt_tokens: 100,
+            completion_tokens: 20,
+            total_tokens: 120,
+            cached_tokens: 40,
+        });
+    });
+
     test("streaming decoder assembles content deltas", () => {
         const decoder = adapter.createStreamDecoder!(makeRequest());
         const p1 = decoder.push(
