@@ -103,7 +103,7 @@
     "cross-env": "^7.0.3",
     "default-agent-provider": "workspace:*",
     "dispatcher-node-providers": "workspace:*",
-    "electron": "40.8.5",
+    "electron": "41.10.3",
     "electron-builder": "26.8.1",
     "electron-builder-squirrel-windows": "26.8.1",
     "electron-vite": "^4.0.1",
