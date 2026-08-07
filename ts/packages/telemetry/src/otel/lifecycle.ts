@@ -15,10 +15,13 @@
 /** An async (or sync) teardown action for one TypeAgent-owned component. */
 export type ShutdownCallback = () => void | Promise<void>;
 
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
 /** Options for {@link createTelemetryLifecycle}. */
 export interface TelemetryLifecycleOptions {
     /**
-     * Maximum total time allowed for telemetry shutdown.
+     * Deadline for awaited telemetry shutdown. Once reached, remaining
+     * callbacks are invoked best-effort without awaiting asynchronous work.
      * Defaults to 10 seconds.
      */
     readonly totalTimeoutMs?: number;
@@ -78,15 +81,17 @@ export interface TelemetryLifecycle {
     readonly isShutdown: boolean;
 
     /**
-     * Shut down every registered component in reverse registration order.
-     * A failing callback does not stop the remaining callbacks from running.
+     * Attempt to shut down every registered component in reverse registration
+     * order. A failing callback does not stop the remaining callbacks from
+     * running. Once the total deadline is reached, remaining callbacks are
+     * still invoked but asynchronous results are not awaited.
      *
      * Idempotent: the first call runs the registered callbacks; every call
      * (including the first) returns the same promise, so later callers
      * observe the same outcome without re-running anything.
      *
-     * @throws {AggregateError} if one or more callbacks failed. All
-     * callbacks still run to completion before this rejects.
+     * @throws {AggregateError} if one or more callbacks failed or timed out.
+     * Every callback is invoked before this rejects.
      */
     shutdown(): Promise<void>;
 }
@@ -102,16 +107,8 @@ export function createTelemetryLifecycle(
 ): TelemetryLifecycle {
     const totalTimeoutMs = options.totalTimeoutMs ?? 10_000;
     const componentTimeoutMs = options.componentTimeoutMs ?? 5_000;
-    if (!Number.isFinite(totalTimeoutMs) || totalTimeoutMs <= 0) {
-        throw new Error(
-            "Telemetry lifecycle totalTimeoutMs must be a positive finite number.",
-        );
-    }
-    if (!Number.isFinite(componentTimeoutMs) || componentTimeoutMs <= 0) {
-        throw new Error(
-            "Telemetry lifecycle componentTimeoutMs must be a positive finite number.",
-        );
-    }
+    validateTimerDelay(totalTimeoutMs, "totalTimeoutMs");
+    validateTimerDelay(componentTimeoutMs, "componentTimeoutMs");
     const components: RegisteredComponent[] = [];
     let shuttingDown = false;
     let shutdownPromise: Promise<void> | undefined;
@@ -127,9 +124,7 @@ export function createTelemetryLifecycle(
             const component = components[i];
             const remainingMs = deadline - Date.now();
             if (remainingMs <= 0) {
-                failures.push(
-                    new TelemetryShutdownTimeoutError(component.name, 0),
-                );
+                invokeBestEffort(component, failures);
                 continue;
             }
             const timeoutMs = Math.min(componentTimeoutMs, remainingMs);
@@ -201,4 +196,37 @@ export function createTelemetryLifecycle(
             return shutdownPromise;
         },
     };
+}
+
+function validateTimerDelay(value: number, optionName: string): void {
+    if (!Number.isInteger(value) || value <= 0 || value > MAX_TIMER_DELAY_MS) {
+        throw new Error(
+            `Telemetry lifecycle ${optionName} must be a positive integer no greater than ${MAX_TIMER_DELAY_MS}.`,
+        );
+    }
+}
+
+/**
+ * Start cleanup even when no deadline remains. Synchronous cleanup can still
+ * complete; asynchronous cleanup is left running without delaying shutdown.
+ */
+function invokeBestEffort(
+    component: RegisteredComponent,
+    failures: unknown[],
+): void {
+    try {
+        const result = component.onShutdown();
+        if (result !== undefined) {
+            void result.catch(() => undefined);
+            failures.push(new TelemetryShutdownTimeoutError(component.name, 0));
+        }
+    } catch (error) {
+        failures.push(
+            error instanceof Error
+                ? error
+                : new Error(
+                      `Telemetry component "${component.name}" failed to shut down: ${String(error)}`,
+                  ),
+        );
+    }
 }
