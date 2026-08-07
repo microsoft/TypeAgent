@@ -54,7 +54,7 @@
     "@typeagent/typechat-utils": "workspace:*",
     "@typeagent/websocket-channel-server": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "better-sqlite3": "12.6.2",
+    "better-sqlite3": "12.8.0",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dispatcher-node-providers": "workspace:*",

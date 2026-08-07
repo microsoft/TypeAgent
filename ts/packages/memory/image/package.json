@@ -35,7 +35,7 @@
     "@typeagent/memory-storage": "workspace:*",
     "@typeagent/telemetry": "workspace:*",
     "@typeagent/typechat-utils": "workspace:*",
-    "better-sqlite3": "12.6.2",
+    "better-sqlite3": "12.8.0",
     "debug": "^4.4.0",
     "get-folder-size": "^5.0.0",
     "typechat": "^0.1.1"
