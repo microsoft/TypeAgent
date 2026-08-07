@@ -334,6 +334,43 @@ describe("MessagesWireApiProvider", () => {
         });
     });
 
+    test("extractUsage tracks cache_read_input_tokens as cached_tokens", () => {
+        expect(
+            adapter.extractUsage({
+                content: [],
+                usage: {
+                    input_tokens: 900,
+                    output_tokens: 4,
+                    cache_creation_input_tokens: 800,
+                    cache_read_input_tokens: 700,
+                },
+            }),
+        ).toEqual({
+            prompt_tokens: 900,
+            completion_tokens: 4,
+            total_tokens: 904,
+            cached_tokens: 700,
+        });
+    });
+
+    test("extractUsage omits cached_tokens when cache_read_input_tokens is null", () => {
+        expect(
+            adapter.extractUsage({
+                content: [],
+                usage: {
+                    input_tokens: 10,
+                    output_tokens: 4,
+                    cache_creation_input_tokens: null,
+                    cache_read_input_tokens: null,
+                },
+            }),
+        ).toEqual({
+            prompt_tokens: 10,
+            completion_tokens: 4,
+            total_tokens: 14,
+        });
+    });
+
     test("streaming decoder emits text_delta content", () => {
         const decoder = adapter.createStreamDecoder!(makeRequest());
         const piece = decoder.push(

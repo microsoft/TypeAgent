@@ -58,6 +58,17 @@ function toTools(schemas: FunctionCallingJsonSchema[]): Tool[] {
     });
 }
 
+/** Anthropic cache hits are top-level cache_read_input_tokens (null when absent). */
+function cachedFromMessagesUsage(
+    usage:
+        | { cache_read_input_tokens?: number | null }
+        | null
+        | undefined,
+): number | undefined {
+    const cached = usage?.cache_read_input_tokens;
+    return cached == null ? undefined : cached;
+}
+
 export class MessagesWireApiProvider implements ProviderAdapter {
     readonly wireApi: WireApi = "messages";
 
@@ -132,7 +143,11 @@ export class MessagesWireApiProvider implements ProviderAdapter {
 
     extractUsage(data: unknown): CompletionUsageStats | undefined {
         const usage = (data as Message).usage;
-        return usageFromInputOutput(usage?.input_tokens, usage?.output_tokens);
+        return usageFromInputOutput(
+            usage?.input_tokens,
+            usage?.output_tokens,
+            cachedFromMessagesUsage(usage),
+        );
     }
 
     createStreamDecoder(): StreamDecoder {
@@ -152,11 +167,13 @@ export class MessagesWireApiProvider implements ProviderAdapter {
                     piece.usage = usageFromInputOutput(
                         evt.usage.input_tokens ?? undefined,
                         evt.usage.output_tokens,
+                        cachedFromMessagesUsage(evt.usage),
                     );
                 } else if (evt.type === "message_start") {
                     piece.usage = usageFromInputOutput(
                         evt.message.usage.input_tokens,
                         evt.message.usage.output_tokens,
+                        cachedFromMessagesUsage(evt.message.usage),
                     );
                 }
 
