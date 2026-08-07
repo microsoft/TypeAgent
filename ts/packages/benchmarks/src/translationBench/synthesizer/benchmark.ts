@@ -74,14 +74,12 @@ export interface TranslationBenchSelectionAnnotation {
     confidence: number;
 }
 
-export interface TranslationBenchPublicProbe
-    extends TranslationBenchBenchmarkProbePayload {
+export interface TranslationBenchPublicProbe extends TranslationBenchBenchmarkProbePayload {
     lineage: TranslationBenchPublicTurnLineage;
     selection: TranslationBenchSelectionAnnotation;
 }
 
-export interface TranslationBenchShapeOnlyProbe
-    extends TranslationBenchBenchmarkProbePayload {
+export interface TranslationBenchShapeOnlyProbe extends TranslationBenchBenchmarkProbePayload {
     id: string;
     scored: false;
     origin: "llm-authored";
@@ -1359,15 +1357,16 @@ function copyPublicProbe(
     };
 }
 
-export function materializeTranslationBenchBenchmark(
-    options: TranslationBenchMaterializeOptions,
-): TranslationBenchBenchmark {
-    if (!options.name.trim()) throw new Error("Benchmark name is required");
-    const selections = parseTranslationBenchBuilderSelections(
-        options.selections,
-    );
+type MaterializeBankEntry = {
+    selection: TranslationBenchBuilderSelection;
+    candidate: TranslationBenchPublicCandidate;
+};
+
+function indexPublicCandidates(
+    input: TranslationBenchPublicCandidate[],
+): Map<string, TranslationBenchPublicCandidate> {
     const candidates = new Map<string, TranslationBenchPublicCandidate>();
-    for (const candidate of options.candidates) {
+    for (const candidate of input) {
         if (
             !candidate.candidateId.trim() ||
             candidates.has(candidate.candidateId)
@@ -1379,16 +1378,16 @@ export function materializeTranslationBenchBenchmark(
         validateCandidate(candidate);
         candidates.set(candidate.candidateId, candidate);
     }
+    return candidates;
+}
 
+function groupSelectionsIntoBanks(
+    selections: TranslationBenchBuilderSelection[],
+    candidates: Map<string, TranslationBenchPublicCandidate>,
+): Map<string, MaterializeBankEntry[]> {
     const usedCandidates = new Set<string>();
     const usedTurns = new Set<string>();
-    const banks = new Map<
-        string,
-        {
-            selection: TranslationBenchBuilderSelection;
-            candidate: TranslationBenchPublicCandidate;
-        }[]
-    >();
+    const banks = new Map<string, MaterializeBankEntry[]>();
     for (const selection of selections) {
         const candidate = candidates.get(selection.candidateId);
         if (candidate === undefined) {
@@ -1419,50 +1418,72 @@ export function materializeTranslationBenchBenchmark(
         bank.push({ selection, candidate });
         banks.set(selection.bankId, bank);
     }
+    return banks;
+}
 
-    const schemaCatalog = new Map<string, TranslationBenchBenchmarkSchema>();
+function assertBankConsistency(
+    bankId: string,
+    entries: MaterializeBankEntry[],
+    schemaCatalog: Map<string, TranslationBenchBenchmarkSchema>,
+): {
+    seed: MaterializeBankEntry;
+    positives: MaterializeBankEntry[];
+    negatives: MaterializeBankEntry[];
+    target: TranslationBenchTargetAction;
+} {
+    const seeds = entries.filter(({ selection }) => selection.role === "seed");
+    const positives = entries.filter(
+        ({ selection }) => selection.role === "positive",
+    );
+    const negatives = entries.filter(
+        ({ selection }) => selection.role === "negative",
+    );
+    if (
+        seeds.length !== 1 ||
+        positives.length === 0 ||
+        negatives.length === 0
+    ) {
+        throw new Error(
+            `Bank '${bankId}' requires exactly one seed, at least one positive, and at least one negative`,
+        );
+    }
+    const seed = seeds[0]!;
+    const target = seed.selection.targetAction;
+    const toolsetHash = computeTranslationBenchToolsetHash(
+        seed.candidate.schemas,
+        seed.candidate.activeSchemas,
+    );
+    for (const entry of entries) {
+        if (!sameTarget(entry.selection.targetAction, target)) {
+            throw new Error(`Bank '${bankId}' mixes target actions`);
+        }
+        if (
+            computeTranslationBenchToolsetHash(
+                entry.candidate.schemas,
+                entry.candidate.activeSchemas,
+            ) !== toolsetHash
+        ) {
+            throw new Error(`Bank '${bankId}' mixes public toolsets`);
+        }
+        addSchemas(schemaCatalog, entry.candidate.schemas);
+    }
+    return { seed, positives, negatives, target };
+}
+
+function buildCasesFromBanks(
+    banks: Map<string, MaterializeBankEntry[]>,
+    options: TranslationBenchMaterializeOptions,
+    schemaCatalog: Map<string, TranslationBenchBenchmarkSchema>,
+): TranslationBenchBenchmarkCaseRecord[] {
     const cases: TranslationBenchBenchmarkCaseRecord[] = [];
     for (const [bankId, entries] of [...banks.entries()].sort(([a], [b]) =>
         a < b ? -1 : a > b ? 1 : 0,
     )) {
-        const seeds = entries.filter(
-            ({ selection }) => selection.role === "seed",
+        const { seed, positives, negatives, target } = assertBankConsistency(
+            bankId,
+            entries,
+            schemaCatalog,
         );
-        const positives = entries.filter(
-            ({ selection }) => selection.role === "positive",
-        );
-        const negatives = entries.filter(
-            ({ selection }) => selection.role === "negative",
-        );
-        if (
-            seeds.length !== 1 ||
-            positives.length === 0 ||
-            negatives.length === 0
-        ) {
-            throw new Error(
-                `Bank '${bankId}' requires exactly one seed, at least one positive, and at least one negative`,
-            );
-        }
-        const seed = seeds[0]!;
-        const target = seed.selection.targetAction;
-        const toolsetHash = computeTranslationBenchToolsetHash(
-            seed.candidate.schemas,
-            seed.candidate.activeSchemas,
-        );
-        for (const entry of entries) {
-            if (!sameTarget(entry.selection.targetAction, target)) {
-                throw new Error(`Bank '${bankId}' mixes target actions`);
-            }
-            if (
-                computeTranslationBenchToolsetHash(
-                    entry.candidate.schemas,
-                    entry.candidate.activeSchemas,
-                ) !== toolsetHash
-            ) {
-                throw new Error(`Bank '${bankId}' mixes public toolsets`);
-            }
-            addSchemas(schemaCatalog, entry.candidate.schemas);
-        }
         const orderedGeneralizations = [...positives, ...negatives].sort(
             (left, right) =>
                 left.candidate.candidateId < right.candidate.candidateId
@@ -1494,6 +1515,49 @@ export function materializeTranslationBenchBenchmark(
             dimensions: structuredClone(seed.selection.dimensions),
         });
     }
+    return cases;
+}
+
+function defaultScoreDecisionLedger(
+    selections: TranslationBenchBuilderSelection[],
+    candidates: Map<string, TranslationBenchPublicCandidate>,
+) {
+    return [...selections]
+        .sort((left, right) =>
+            left.candidateId < right.candidateId
+                ? -1
+                : left.candidateId > right.candidateId
+                  ? 1
+                  : 0,
+        )
+        .map((selection) => {
+            const candidate = candidates.get(selection.candidateId)!;
+            const { canonicalPayloadHash: _canonicalPayloadHash, ...lineage } =
+                candidate.lineage;
+            return {
+                decision: "score" as const,
+                candidateId: selection.candidateId,
+                lineage,
+                bankId: selection.bankId,
+                role: selection.role,
+                targetAction: structuredClone(selection.targetAction),
+                rationale: selection.rationale,
+                confidence: selection.confidence,
+            };
+        });
+}
+
+export function materializeTranslationBenchBenchmark(
+    options: TranslationBenchMaterializeOptions,
+): TranslationBenchBenchmark {
+    if (!options.name.trim()) throw new Error("Benchmark name is required");
+    const selections = parseTranslationBenchBuilderSelections(
+        options.selections,
+    );
+    const candidates = indexPublicCandidates(options.candidates);
+    const banks = groupSelectionsIntoBanks(selections, candidates);
+    const schemaCatalog = new Map<string, TranslationBenchBenchmarkSchema>();
+    const cases = buildCasesFromBanks(banks, options, schemaCatalog);
     for (const bankId of Object.keys(options.shapeOnly ?? {})) {
         if (!banks.has(bankId)) {
             throw new Error(
@@ -1504,31 +1568,10 @@ export function materializeTranslationBenchBenchmark(
 
     const construction = structuredClone(options.construction);
     if (construction.decisionLedger === undefined) {
-        construction.decisionLedger = [...selections]
-            .sort((left, right) =>
-                left.candidateId < right.candidateId
-                    ? -1
-                    : left.candidateId > right.candidateId
-                      ? 1
-                      : 0,
-            )
-            .map((selection) => {
-                const candidate = candidates.get(selection.candidateId)!;
-                const {
-                    canonicalPayloadHash: _canonicalPayloadHash,
-                    ...lineage
-                } = candidate.lineage;
-                return {
-                    decision: "score" as const,
-                    candidateId: selection.candidateId,
-                    lineage,
-                    bankId: selection.bankId,
-                    role: selection.role,
-                    targetAction: structuredClone(selection.targetAction),
-                    rationale: selection.rationale,
-                    confidence: selection.confidence,
-                };
-            });
+        construction.decisionLedger = defaultScoreDecisionLedger(
+            selections,
+            candidates,
+        );
     }
 
     const benchmark: TranslationBenchBenchmark = {
@@ -2093,20 +2136,9 @@ function validateGeneratedCaseProvenance(
     }
 }
 
-export function validateTranslationBenchBenchmark(
+function validateGenerationCoverage(
     benchmark: TranslationBenchBenchmark,
-): void {
-    const metadata = metadataSchemaV1.safeParse(benchmark.metadata);
-    if (!metadata.success) {
-        throw new Error(
-            `Invalid benchmark metadata: ${zodMessage(metadata.error)}`,
-        );
-    }
-    if (benchmark.cases.length === 0) {
-        throw new Error(
-            "Translation-bench benchmark requires at least one case",
-        );
-    }
+): TranslationBenchBenchmark["metadata"]["construction"]["generation"] {
     const generation = benchmark.metadata.construction.generation;
     if (generation !== undefined) {
         const catalogActionCount = benchmark.metadata.schemas.reduce(
@@ -2138,11 +2170,20 @@ export function validateTranslationBenchBenchmark(
         ) {
             throw new Error("Generated benchmark coverage metadata drift");
         }
-    } else if (benchmark.cases.some((evalCase) => evalCase.generation)) {
+        return generation;
+    }
+    if (benchmark.cases.some((evalCase) => evalCase.generation)) {
         throw new Error(
             "Generated benchmark cases require construction generation metadata",
         );
     }
+    return undefined;
+}
+
+function parseBenchmarkSchemas(benchmark: TranslationBenchBenchmark): {
+    schemaNames: Set<string>;
+    parsedSchemas: Map<string, ParsedActionSchema>;
+} {
     const schemaNames = new Set<string>();
     const parsedSchemas = new Map<string, ParsedActionSchema>();
     for (const schema of benchmark.metadata.schemas) {
@@ -2168,154 +2209,222 @@ export function validateTranslationBenchBenchmark(
         }
         parsedSchemas.set(schema.schemaName, parsed);
     }
+    return { schemaNames, parsedSchemas };
+}
+
+function validateCatalogSchemaHashes(
+    benchmark: TranslationBenchBenchmark,
+): void {
     const catalogSchemaHashes =
         benchmark.metadata.construction.catalogSchemaHashes;
-    if (catalogSchemaHashes !== undefined) {
+    if (catalogSchemaHashes === undefined) {
+        return;
+    }
+    if (
+        Object.keys(catalogSchemaHashes).length !==
+        benchmark.metadata.schemas.length
+    ) {
+        throw new Error(
+            "Construction catalog schema hashes do not cover every benchmark schema",
+        );
+    }
+    for (const schema of benchmark.metadata.schemas) {
         if (
-            Object.keys(catalogSchemaHashes).length !==
-            benchmark.metadata.schemas.length
+            schema.typeAgent === undefined ||
+            catalogSchemaHashes[schema.schemaName] !==
+                schema.typeAgent.sourceHash
         ) {
             throw new Error(
-                "Construction catalog schema hashes do not cover every benchmark schema",
+                `Construction catalog hash drift for TypeAgent schema '${schema.schemaName}'`,
             );
         }
-        for (const schema of benchmark.metadata.schemas) {
-            if (
-                schema.typeAgent === undefined ||
-                catalogSchemaHashes[schema.schemaName] !==
-                    schema.typeAgent.sourceHash
-            ) {
-                throw new Error(
-                    `Construction catalog hash drift for TypeAgent schema '${schema.schemaName}'`,
-                );
-            }
+    }
+}
+
+function validateExpectedActions(
+    label: string,
+    actions: TranslationBenchBenchmarkAction[],
+    activeSchemas: string[],
+    parsedSchemas: Map<string, ParsedActionSchema>,
+): void {
+    for (const action of actions) {
+        if (!activeSchemas.includes(action.schemaName)) {
+            throw new Error(
+                `${label} expects inactive schema '${action.schemaName}'`,
+            );
+        }
+        const definition = parsedSchemas
+            .get(action.schemaName)
+            ?.actionSchemas.get(action.actionName);
+        if (definition === undefined) {
+            throw new Error(
+                `${label} expects unknown existing TypeAgent action '${action.schemaName}.${action.actionName}'`,
+            );
+        }
+        validateAction(definition, action);
+    }
+}
+
+function validateCaseProbe(
+    evalCase: TranslationBenchBenchmarkCaseRecord,
+    probe: TranslationBenchPublicProbe,
+    benchmark: TranslationBenchBenchmark,
+    parsedSchemas: Map<string, ParsedActionSchema>,
+    publicTurns: Set<string>,
+): void {
+    const turnKey = getTranslationBenchPublicTurnKey(probe.lineage);
+    if (publicTurns.has(turnKey)) {
+        throw new Error(
+            `Public turn '${probe.lineage.rowId}:${probe.lineage.sourcePart}' is not unique`,
+        );
+    }
+    publicTurns.add(turnKey);
+    if (!sameTarget(probe.selection.targetAction, evalCase.targetAction)) {
+        throw new Error(`Case '${evalCase.id}' contains mixed target actions`);
+    }
+    validateProbeRole(
+        probe,
+        probe.selection.role,
+        evalCase.targetAction,
+        `Case '${evalCase.id}' probe`,
+    );
+    validateExpectedActions(
+        `Case '${evalCase.id}'`,
+        probe.expectedActions,
+        evalCase.activeSchemas,
+        parsedSchemas,
+    );
+    const transformVersion = probe.lineage.transformVersion;
+    if (transformVersion !== 1 && transformVersion !== 2) {
+        throw new Error(
+            `Case '${evalCase.id}' has unsupported transformVersion ${String(transformVersion)}`,
+        );
+    }
+    const actualHash = computeTranslationBenchCanonicalPayloadHash(
+        probe,
+        benchmark.metadata.schemas,
+        evalCase.activeSchemas,
+        transformVersion === 2,
+    );
+    if (actualHash !== probe.lineage.canonicalPayloadHash) {
+        throw new Error(
+            `Case '${evalCase.id}' ${probe.selection.role} canonical payload hash drift: stored ${probe.lineage.canonicalPayloadHash}, computed ${actualHash}`,
+        );
+    }
+}
+
+function validateShapeOnlyProbes(
+    evalCase: TranslationBenchBenchmarkCaseRecord,
+    parsedSchemas: Map<string, ParsedActionSchema>,
+): void {
+    // shapeOnly is unscored but still must be schema-valid simple probes.
+    for (const probe of evalCase.shapeOnly ?? []) {
+        assertTranslationBenchExpectedActionArity(
+            probe.expectedActions,
+            probe.expectedActions.length === 0 ? "negative" : "positive",
+            TRANSLATION_BENCH_DEFAULT_ACTION_SHAPE,
+            `Case '${evalCase.id}' shapeOnly '${probe.id}'`,
+        );
+        validateExpectedActions(
+            `Case '${evalCase.id}' shapeOnly`,
+            probe.expectedActions,
+            evalCase.activeSchemas,
+            parsedSchemas,
+        );
+    }
+}
+
+function validateBenchmarkCase(
+    evalCase: TranslationBenchBenchmarkCaseRecord,
+    benchmark: TranslationBenchBenchmark,
+    generation: TranslationBenchBenchmark["metadata"]["construction"]["generation"],
+    schemaNames: Set<string>,
+    parsedSchemas: Map<string, ParsedActionSchema>,
+    caseIds: Set<string>,
+    publicTurns: Set<string>,
+): void {
+    const parsedCase = caseRecordSchemaV1.safeParse(evalCase);
+    if (!parsedCase.success) {
+        throw new Error(
+            `Invalid benchmark case '${evalCase.id}': ${zodMessage(parsedCase.error)}`,
+        );
+    }
+    if (generation !== undefined) {
+        validateGeneratedCaseProvenance(
+            evalCase,
+            generation.genCaseCount,
+            generation.generatorModel,
+            generation.reviewerModel,
+            generation.maxAttempts,
+        );
+    }
+    if (caseIds.has(evalCase.id)) {
+        throw new Error(`Duplicate case '${evalCase.id}'`);
+    }
+    caseIds.add(evalCase.id);
+    for (const active of evalCase.activeSchemas) {
+        if (!schemaNames.has(active)) {
+            throw new Error(
+                `Case '${evalCase.id}' uses unknown active schema '${active}'`,
+            );
         }
     }
+    for (const probe of [evalCase.seed, ...evalCase.generalizations]) {
+        validateCaseProbe(
+            evalCase,
+            probe,
+            benchmark,
+            parsedSchemas,
+            publicTurns,
+        );
+    }
+    validateShapeOnlyProbes(evalCase, parsedSchemas);
+    if (evalCase.seed.selection.role !== "seed") {
+        throw new Error(`Case '${evalCase.id}' seed has a non-seed role`);
+    }
+    if (
+        !evalCase.generalizations.some(
+            (probe) => probe.selection.role === "positive",
+        ) ||
+        !evalCase.generalizations.some(
+            (probe) => probe.selection.role === "negative",
+        )
+    ) {
+        throw new Error(
+            `Case '${evalCase.id}' requires positive and negative generalizations`,
+        );
+    }
+}
+
+export function validateTranslationBenchBenchmark(
+    benchmark: TranslationBenchBenchmark,
+): void {
+    const metadata = metadataSchemaV1.safeParse(benchmark.metadata);
+    if (!metadata.success) {
+        throw new Error(
+            `Invalid benchmark metadata: ${zodMessage(metadata.error)}`,
+        );
+    }
+    if (benchmark.cases.length === 0) {
+        throw new Error(
+            "Translation-bench benchmark requires at least one case",
+        );
+    }
+    const generation = validateGenerationCoverage(benchmark);
+    const { schemaNames, parsedSchemas } = parseBenchmarkSchemas(benchmark);
+    validateCatalogSchemaHashes(benchmark);
     const caseIds = new Set<string>();
     const publicTurns = new Set<string>();
     for (const evalCase of benchmark.cases) {
-        const parsedCase = caseRecordSchemaV1.safeParse(evalCase);
-        if (!parsedCase.success) {
-            throw new Error(
-                `Invalid benchmark case '${evalCase.id}': ${zodMessage(parsedCase.error)}`,
-            );
-        }
-        if (generation !== undefined) {
-            validateGeneratedCaseProvenance(
-                evalCase,
-                generation.genCaseCount,
-                generation.generatorModel,
-                generation.reviewerModel,
-                generation.maxAttempts,
-            );
-        }
-        if (caseIds.has(evalCase.id)) {
-            throw new Error(`Duplicate case '${evalCase.id}'`);
-        }
-        caseIds.add(evalCase.id);
-        for (const active of evalCase.activeSchemas) {
-            if (!schemaNames.has(active)) {
-                throw new Error(
-                    `Case '${evalCase.id}' uses unknown active schema '${active}'`,
-                );
-            }
-        }
-        const probes = [evalCase.seed, ...evalCase.generalizations];
-        for (const probe of probes) {
-            const turnKey = getTranslationBenchPublicTurnKey(probe.lineage);
-            if (publicTurns.has(turnKey)) {
-                throw new Error(
-                    `Public turn '${probe.lineage.rowId}:${probe.lineage.sourcePart}' is not unique`,
-                );
-            }
-            publicTurns.add(turnKey);
-            if (
-                !sameTarget(probe.selection.targetAction, evalCase.targetAction)
-            ) {
-                throw new Error(
-                    `Case '${evalCase.id}' contains mixed target actions`,
-                );
-            }
-            validateProbeRole(
-                probe,
-                probe.selection.role,
-                evalCase.targetAction,
-                `Case '${evalCase.id}' probe`,
-            );
-            for (const action of probe.expectedActions) {
-                if (!evalCase.activeSchemas.includes(action.schemaName)) {
-                    throw new Error(
-                        `Case '${evalCase.id}' expects inactive schema '${action.schemaName}'`,
-                    );
-                }
-                const definition = parsedSchemas
-                    .get(action.schemaName)
-                    ?.actionSchemas.get(action.actionName);
-                if (definition === undefined) {
-                    throw new Error(
-                        `Case '${evalCase.id}' expects unknown existing TypeAgent action '${action.schemaName}.${action.actionName}'`,
-                    );
-                }
-                validateAction(definition, action);
-            }
-            const transformVersion = probe.lineage.transformVersion;
-            if (transformVersion !== 1 && transformVersion !== 2) {
-                throw new Error(
-                    `Case '${evalCase.id}' has unsupported transformVersion ${String(transformVersion)}`,
-                );
-            }
-            const actualHash = computeTranslationBenchCanonicalPayloadHash(
-                probe,
-                benchmark.metadata.schemas,
-                evalCase.activeSchemas,
-                transformVersion === 2,
-            );
-            if (actualHash !== probe.lineage.canonicalPayloadHash) {
-                throw new Error(
-                    `Case '${evalCase.id}' ${probe.selection.role} canonical payload hash drift: stored ${probe.lineage.canonicalPayloadHash}, computed ${actualHash}`,
-                );
-            }
-        }
-        // shapeOnly is unscored but still must be schema-valid simple probes.
-        for (const probe of evalCase.shapeOnly ?? []) {
-            assertTranslationBenchExpectedActionArity(
-                probe.expectedActions,
-                probe.expectedActions.length === 0 ? "negative" : "positive",
-                TRANSLATION_BENCH_DEFAULT_ACTION_SHAPE,
-                `Case '${evalCase.id}' shapeOnly '${probe.id}'`,
-            );
-            for (const action of probe.expectedActions) {
-                if (!evalCase.activeSchemas.includes(action.schemaName)) {
-                    throw new Error(
-                        `Case '${evalCase.id}' shapeOnly expects inactive schema '${action.schemaName}'`,
-                    );
-                }
-                const definition = parsedSchemas
-                    .get(action.schemaName)
-                    ?.actionSchemas.get(action.actionName);
-                if (definition === undefined) {
-                    throw new Error(
-                        `Case '${evalCase.id}' shapeOnly expects unknown action '${action.schemaName}.${action.actionName}'`,
-                    );
-                }
-                validateAction(definition, action);
-            }
-        }
-        if (evalCase.seed.selection.role !== "seed") {
-            throw new Error(`Case '${evalCase.id}' seed has a non-seed role`);
-        }
-        if (
-            !evalCase.generalizations.some(
-                (probe) => probe.selection.role === "positive",
-            ) ||
-            !evalCase.generalizations.some(
-                (probe) => probe.selection.role === "negative",
-            )
-        ) {
-            throw new Error(
-                `Case '${evalCase.id}' requires positive and negative generalizations`,
-            );
-        }
+        validateBenchmarkCase(
+            evalCase,
+            benchmark,
+            generation,
+            schemaNames,
+            parsedSchemas,
+            caseIds,
+            publicTurns,
+        );
     }
     if (benchmark.metadata.approval.status === "approved") {
         assertTranslationBenchBenchmarkApproved(benchmark);

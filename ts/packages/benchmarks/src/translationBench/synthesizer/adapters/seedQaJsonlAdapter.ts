@@ -226,6 +226,120 @@ function parseJsonl(text: string): unknown[] {
     );
 }
 
+function scalarDimensions(
+    value: unknown,
+): Record<string, string | number | boolean> {
+    const rawDimensions =
+        typeof value === "object" && value !== null && !Array.isArray(value)
+            ? (structuredClone(value) as Record<string, unknown>)
+            : {};
+    // Only plain scalar dimensions; drop reserved provenance keys from source.
+    const dimensions: Record<string, string | number | boolean> = {};
+    for (const [key, entry] of Object.entries(rawDimensions)) {
+        if (key === "adapter" || key === "sourceCallCount") continue;
+        if (
+            typeof entry === "string" ||
+            typeof entry === "number" ||
+            typeof entry === "boolean"
+        ) {
+            dimensions[key] = entry;
+        }
+    }
+    return dimensions;
+}
+
+function importCandidateFromRow(
+    rawRow: unknown,
+    rowIndex: number,
+    options: TranslationBenchSourceImportOptions,
+): TranslationBenchSourceCandidate {
+    if (typeof rawRow !== "object" || rawRow === null) {
+        throw new Error(`source row ${rowIndex} is invalid`);
+    }
+    const row = rawRow as Record<string, unknown>;
+    const rowLabel = `seed-qa row ${rowIndex}`;
+    const rowId =
+        typeof row.id === "string" && row.id.trim()
+            ? row.id.trim()
+            : `row-${rowIndex}`;
+    const utterance = requireString(
+        row.query ?? row.question ?? row.utterance,
+        `${rowLabel} query`,
+    );
+    const sourceCalls = parseCalls(
+        row.function_calls ?? row.calls ?? row.expected_calls ?? [],
+        rowLabel,
+    );
+    const sourceTools = parseTools(row.tools, rowLabel, sourceCalls);
+    let history: ChatHistoryInput | undefined;
+    if (row.history !== undefined) {
+        if (!isChatHistoryInput(row.history)) {
+            throw new Error(`${rowLabel} has invalid history`);
+        }
+        history = structuredClone(row.history);
+    }
+    const order =
+        row.order === "strict" || row.order === "any"
+            ? row.order
+            : sourceCalls.length > 1
+              ? "strict"
+              : "any";
+    const dimensions = scalarDimensions(row.dimensions);
+    const sourceResponses = sourceCalls.map((call) =>
+        JSON.stringify({
+            name: call.name,
+            arguments: call.parameters,
+        }),
+    );
+    const normalized = {
+        utterance,
+        ...(history !== undefined ? { history } : {}),
+        order,
+        sourceTools: structuredClone(sourceTools),
+        sourceCalls: structuredClone(sourceCalls),
+        sourceResponses: structuredClone(sourceResponses),
+    };
+    const sourceSlice = {
+        format: "seed-qa-jsonl",
+        version: 1 as const,
+        query: utterance,
+        function_calls: structuredClone(sourceCalls),
+        tools: structuredClone(sourceTools),
+        ...(history !== undefined ? { history } : {}),
+        normalized,
+    };
+    return {
+        candidateId: `${rowId}:query`,
+        rawRow: structuredClone(rawRow),
+        sourceSlice,
+        utterance,
+        ...(history !== undefined ? { history } : {}),
+        order,
+        sourceTools,
+        sourceCalls,
+        sourceResponses,
+        dimensions: {
+            ...dimensions,
+            adapter: "seed-qa-jsonl",
+            sourceCallCount: sourceCalls.length,
+        },
+        lineage: {
+            dataset: options.manifest.dataset,
+            revision: options.manifest.revision,
+            config: options.manifest.config,
+            split: options.manifest.split,
+            rowIndex,
+            rowId,
+            sourceUrl: options.manifest.sourceUrl,
+            sourcePart: "query",
+            rawRowHash: computeTranslationBenchRawRowHash(rawRow),
+            sourceSliceHash:
+                computeTranslationBenchSourceSliceHash(sourceSlice),
+            transformVersion: 1 as const,
+        },
+    };
+}
+
 function importCandidates(
     sourceText: string,
     options: TranslationBenchSourceImportOptions,
@@ -255,112 +369,9 @@ function importCandidates(
             throw new Error(`source row index ${rowIndex} is out of range`);
         }
         try {
-            const rawRow = rows[rowIndex];
-            if (typeof rawRow !== "object" || rawRow === null) {
-                throw new Error(`source row ${rowIndex} is invalid`);
-            }
-            const row = rawRow as Record<string, unknown>;
-            const rowLabel = `seed-qa row ${rowIndex}`;
-            const rowId =
-                typeof row.id === "string" && row.id.trim()
-                    ? row.id.trim()
-                    : `row-${rowIndex}`;
-            const utterance = requireString(
-                row.query ?? row.question ?? row.utterance,
-                `${rowLabel} query`,
+            candidates.push(
+                importCandidateFromRow(rows[rowIndex], rowIndex, options),
             );
-            const sourceCalls = parseCalls(
-                row.function_calls ?? row.calls ?? row.expected_calls ?? [],
-                rowLabel,
-            );
-            const sourceTools = parseTools(row.tools, rowLabel, sourceCalls);
-            let history: ChatHistoryInput | undefined;
-            if (row.history !== undefined) {
-                if (!isChatHistoryInput(row.history)) {
-                    throw new Error(`${rowLabel} has invalid history`);
-                }
-                history = structuredClone(row.history);
-            }
-            const order =
-                row.order === "strict" || row.order === "any"
-                    ? row.order
-                    : sourceCalls.length > 1
-                      ? "strict"
-                      : "any";
-            const rawDimensions =
-                typeof row.dimensions === "object" &&
-                row.dimensions !== null &&
-                !Array.isArray(row.dimensions)
-                    ? (structuredClone(row.dimensions) as Record<
-                          string,
-                          unknown
-                      >)
-                    : {};
-            // Only plain scalar dimensions; drop reserved provenance keys from source.
-            const dimensions: Record<string, string | number | boolean> = {};
-            for (const [key, value] of Object.entries(rawDimensions)) {
-                if (key === "adapter" || key === "sourceCallCount") continue;
-                if (
-                    typeof value === "string" ||
-                    typeof value === "number" ||
-                    typeof value === "boolean"
-                ) {
-                    dimensions[key] = value;
-                }
-            }
-            const sourceResponses = sourceCalls.map((call) =>
-                JSON.stringify({
-                    name: call.name,
-                    arguments: call.parameters,
-                }),
-            );
-            const normalized = {
-                utterance,
-                ...(history !== undefined ? { history } : {}),
-                order,
-                sourceTools: structuredClone(sourceTools),
-                sourceCalls: structuredClone(sourceCalls),
-                sourceResponses: structuredClone(sourceResponses),
-            };
-            const sourceSlice = {
-                format: "seed-qa-jsonl",
-                version: 1 as const,
-                query: utterance,
-                function_calls: structuredClone(sourceCalls),
-                tools: structuredClone(sourceTools),
-                ...(history !== undefined ? { history } : {}),
-                normalized,
-            };
-            candidates.push({
-                candidateId: `${rowId}:query`,
-                rawRow: structuredClone(rawRow),
-                sourceSlice,
-                utterance,
-                ...(history !== undefined ? { history } : {}),
-                order,
-                sourceTools,
-                sourceCalls,
-                sourceResponses,
-                dimensions: {
-                    ...dimensions,
-                    adapter: "seed-qa-jsonl",
-                    sourceCallCount: sourceCalls.length,
-                },
-                lineage: {
-                    dataset: options.manifest.dataset,
-                    revision: options.manifest.revision,
-                    config: options.manifest.config,
-                    split: options.manifest.split,
-                    rowIndex,
-                    rowId,
-                    sourceUrl: options.manifest.sourceUrl,
-                    sourcePart: "query",
-                    rawRowHash: computeTranslationBenchRawRowHash(rawRow),
-                    sourceSliceHash:
-                        computeTranslationBenchSourceSliceHash(sourceSlice),
-                    transformVersion: 1 as const,
-                },
-            });
             if (candidates.length >= maxCandidates) {
                 return candidates;
             }

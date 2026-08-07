@@ -231,8 +231,7 @@ export function assertTranslationBenchSourceManifest(
 export const assertTranslationBenchPinnedSourceManifest =
     assertTranslationBenchSourceManifest;
 
-export interface TranslationBenchImportSourceOptions
-    extends TranslationBenchSourceImportOptions {
+export interface TranslationBenchImportSourceOptions extends TranslationBenchSourceImportOptions {
     adapter?: string | TranslationBenchSourceAdapter;
 }
 
@@ -447,14 +446,10 @@ function mappedAction(
     };
 }
 
-export function materializeTranslationBenchBenchmarkFromSource(
-    options: TranslationBenchSourceMaterializeOptions,
-): TranslationBenchBenchmark {
-    const candidates = candidateMap(options.candidates);
-    const catalog = catalogMap(options.catalog);
-    const decisions = parseTranslationBenchSourceBuilderDecisions(
-        options.decisions,
-    );
+function assertDecisionsCoverCandidates(
+    decisions: TranslationBenchSourceBuilderDecision[],
+    candidates: Map<string, TranslationBenchSourceCandidate>,
+): void {
     const decided = new Set<string>();
     for (const decision of decisions) {
         if (!candidates.has(decision.candidateId)) {
@@ -476,6 +471,174 @@ export function materializeTranslationBenchBenchmarkFromSource(
             );
         }
     }
+}
+
+function applyShapeOnlyDecision(
+    decision: TranslationBenchSourceShapeOnlyDecision,
+    options: TranslationBenchSourceMaterializeOptions,
+    shapeOnly: Record<string, TranslationBenchShapeOnlyProbe[]>,
+): void {
+    const probes = shapeOnly[decision.bankId] ?? [];
+    probes.push({
+        id: `${decision.candidateId}:shape-only`,
+        scored: false,
+        origin: "llm-authored",
+        ...structuredClone(decision.probe),
+        dimensions: structuredClone(decision.dimensions),
+        generator: {
+            model: options.construction.model,
+            promptHash: options.construction.promptHash,
+        },
+    });
+    shapeOnly[decision.bankId] = probes;
+}
+
+function applyScoreDecision(
+    decision: TranslationBenchSourceScoreDecision,
+    candidate: TranslationBenchSourceCandidate,
+    options: TranslationBenchSourceMaterializeOptions,
+    catalog: Map<string, TranslationBenchBenchmarkSchema>,
+    activeSchemas: string[],
+    scoredCandidates: TranslationBenchPublicCandidate[],
+    selections: {
+        candidateId: string;
+        bankId: string;
+        role: TranslationBenchBuilderRole;
+        targetAction: TranslationBenchTargetAction;
+        dimensions: Record<string, string | number | boolean>;
+        rationale: string;
+        confidence: number;
+    }[],
+): void {
+    const sourceCallIndexes = decision.actionMappings.map(
+        (mapping) => mapping.sourceCallIndex,
+    );
+    if (new Set(sourceCallIndexes).size !== sourceCallIndexes.length) {
+        throw new Error(
+            `Candidate '${candidate.candidateId}' maps a source call more than once`,
+        );
+    }
+    if (decision.role === "negative") {
+        if (
+            candidate.sourceCalls.length !== 0 ||
+            decision.actionMappings.length !== 0
+        ) {
+            throw new Error(
+                `Candidate '${candidate.candidateId}' negative role requires a no-call source turn`,
+            );
+        }
+    } else if (
+        // Simple-action only: one source call mapped once. Multi reserved.
+        candidate.sourceCalls.length !== 1 ||
+        decision.actionMappings.length !== 1 ||
+        sourceCallIndexes[0] !== 0
+    ) {
+        throw new Error(
+            `Candidate '${candidate.candidateId}' simple-action score requires exactly one source call mapped at index 0`,
+        );
+    }
+    const expectedActions = decision.actionMappings.map((mapping) =>
+        mappedAction(candidate, mapping, catalog),
+    );
+    assertTranslationBenchExpectedActionArity(
+        expectedActions,
+        decision.role,
+        TRANSLATION_BENCH_DEFAULT_ACTION_SHAPE,
+        `Candidate '${candidate.candidateId}'`,
+    );
+    if (
+        decision.role !== "negative" &&
+        !expectedActions.some(
+            (action) =>
+                action.schemaName === decision.targetAction.schemaName &&
+                action.actionName === decision.targetAction.actionName,
+        )
+    ) {
+        throw new Error(
+            `Candidate '${candidate.candidateId}' does not map the bank target action`,
+        );
+    }
+    const probe: TranslationBenchBenchmarkProbePayload = {
+        utterance: candidate.utterance,
+        expectedActions,
+        order: candidate.order,
+        ...(candidate.history !== undefined
+            ? { history: structuredClone(candidate.history) }
+            : {}),
+    };
+    const lineage: TranslationBenchPublicTurnLineage = {
+        ...structuredClone(candidate.lineage),
+        canonicalPayloadHash: computeTranslationBenchCanonicalPayloadHash(
+            probe,
+            options.catalog,
+            activeSchemas,
+        ),
+    };
+    scoredCandidates.push({
+        candidateId: candidate.candidateId,
+        lineage,
+        rawRow: structuredClone(candidate.rawRow),
+        sourceSlice: structuredClone(candidate.sourceSlice),
+        schemas: structuredClone(options.catalog),
+        activeSchemas: structuredClone(activeSchemas),
+        probe,
+    });
+    selections.push({
+        candidateId: candidate.candidateId,
+        bankId: decision.bankId,
+        role: decision.role,
+        targetAction: structuredClone(decision.targetAction),
+        dimensions: structuredClone(decision.dimensions),
+        rationale: decision.rationale,
+        confidence: decision.confidence,
+    });
+}
+
+function sourceDecisionLedgerEntry(
+    decision: TranslationBenchSourceBuilderDecision,
+    candidates: Map<string, TranslationBenchSourceCandidate>,
+) {
+    const lineage = structuredClone(
+        candidates.get(decision.candidateId)!.lineage,
+    );
+    if (decision.decision === "skip") {
+        return {
+            decision: decision.decision,
+            candidateId: decision.candidateId,
+            lineage,
+            rationale: decision.rationale,
+        };
+    }
+    if (decision.decision === "shapeOnly") {
+        return {
+            decision: decision.decision,
+            candidateId: decision.candidateId,
+            lineage,
+            bankId: decision.bankId,
+            rationale: decision.rationale,
+        };
+    }
+    return {
+        decision: decision.decision,
+        candidateId: decision.candidateId,
+        lineage,
+        bankId: decision.bankId,
+        role: decision.role,
+        targetAction: structuredClone(decision.targetAction),
+        rationale: decision.rationale,
+        confidence: decision.confidence,
+    };
+}
+
+export function materializeTranslationBenchBenchmarkFromSource(
+    options: TranslationBenchSourceMaterializeOptions,
+): TranslationBenchBenchmark {
+    const candidates = candidateMap(options.candidates);
+    const catalog = catalogMap(options.catalog);
+    const decisions = parseTranslationBenchSourceBuilderDecisions(
+        options.decisions,
+    );
+    assertDecisionsCoverCandidates(decisions, candidates);
 
     const activeSchemas = [...catalog.keys()];
     const scoredCandidates: TranslationBenchPublicCandidate[] = [];
@@ -493,103 +656,18 @@ export function materializeTranslationBenchBenchmarkFromSource(
         const candidate = candidates.get(decision.candidateId)!;
         if (decision.decision === "skip") continue;
         if (decision.decision === "shapeOnly") {
-            const probes = shapeOnly[decision.bankId] ?? [];
-            probes.push({
-                id: `${decision.candidateId}:shape-only`,
-                scored: false,
-                origin: "llm-authored",
-                ...structuredClone(decision.probe),
-                dimensions: structuredClone(decision.dimensions),
-                generator: {
-                    model: options.construction.model,
-                    promptHash: options.construction.promptHash,
-                },
-            });
-            shapeOnly[decision.bankId] = probes;
+            applyShapeOnlyDecision(decision, options, shapeOnly);
             continue;
         }
-        const sourceCallIndexes = decision.actionMappings.map(
-            (mapping) => mapping.sourceCallIndex,
+        applyScoreDecision(
+            decision,
+            candidate,
+            options,
+            catalog,
+            activeSchemas,
+            scoredCandidates,
+            selections,
         );
-        if (new Set(sourceCallIndexes).size !== sourceCallIndexes.length) {
-            throw new Error(
-                `Candidate '${candidate.candidateId}' maps a source call more than once`,
-            );
-        }
-        if (decision.role === "negative") {
-            if (
-                candidate.sourceCalls.length !== 0 ||
-                decision.actionMappings.length !== 0
-            ) {
-                throw new Error(
-                    `Candidate '${candidate.candidateId}' negative role requires a no-call source turn`,
-                );
-            }
-        } else if (
-            // Simple-action only: one source call mapped once. Multi reserved.
-            candidate.sourceCalls.length !== 1 ||
-            decision.actionMappings.length !== 1 ||
-            sourceCallIndexes[0] !== 0
-        ) {
-            throw new Error(
-                `Candidate '${candidate.candidateId}' simple-action score requires exactly one source call mapped at index 0`,
-            );
-        }
-        const expectedActions = decision.actionMappings.map((mapping) =>
-            mappedAction(candidate, mapping, catalog),
-        );
-        assertTranslationBenchExpectedActionArity(
-            expectedActions,
-            decision.role,
-            TRANSLATION_BENCH_DEFAULT_ACTION_SHAPE,
-            `Candidate '${candidate.candidateId}'`,
-        );
-        if (
-            decision.role !== "negative" &&
-            !expectedActions.some(
-                (action) =>
-                    action.schemaName === decision.targetAction.schemaName &&
-                    action.actionName === decision.targetAction.actionName,
-            )
-        ) {
-            throw new Error(
-                `Candidate '${candidate.candidateId}' does not map the bank target action`,
-            );
-        }
-        const probe: TranslationBenchBenchmarkProbePayload = {
-            utterance: candidate.utterance,
-            expectedActions,
-            order: candidate.order,
-            ...(candidate.history !== undefined
-                ? { history: structuredClone(candidate.history) }
-                : {}),
-        };
-        const lineage: TranslationBenchPublicTurnLineage = {
-            ...structuredClone(candidate.lineage),
-            canonicalPayloadHash: computeTranslationBenchCanonicalPayloadHash(
-                probe,
-                options.catalog,
-                activeSchemas,
-            ),
-        };
-        scoredCandidates.push({
-            candidateId: candidate.candidateId,
-            lineage,
-            rawRow: structuredClone(candidate.rawRow),
-            sourceSlice: structuredClone(candidate.sourceSlice),
-            schemas: structuredClone(options.catalog),
-            activeSchemas: structuredClone(activeSchemas),
-            probe,
-        });
-        selections.push({
-            candidateId: candidate.candidateId,
-            bankId: decision.bankId,
-            role: decision.role,
-            targetAction: structuredClone(decision.targetAction),
-            dimensions: structuredClone(decision.dimensions),
-            rationale: decision.rationale,
-            confidence: decision.confidence,
-        });
     }
     if (selections.length === 0) {
         throw new Error("source builder produced no scored decisions");
@@ -628,38 +706,9 @@ export function materializeTranslationBenchBenchmarkFromSource(
                           ? 1
                           : 0,
                 )
-                .map((decision) => {
-                    const lineage = structuredClone(
-                        candidates.get(decision.candidateId)!.lineage,
-                    );
-                    if (decision.decision === "skip") {
-                        return {
-                            decision: decision.decision,
-                            candidateId: decision.candidateId,
-                            lineage,
-                            rationale: decision.rationale,
-                        };
-                    }
-                    if (decision.decision === "shapeOnly") {
-                        return {
-                            decision: decision.decision,
-                            candidateId: decision.candidateId,
-                            lineage,
-                            bankId: decision.bankId,
-                            rationale: decision.rationale,
-                        };
-                    }
-                    return {
-                        decision: decision.decision,
-                        candidateId: decision.candidateId,
-                        lineage,
-                        bankId: decision.bankId,
-                        role: decision.role,
-                        targetAction: structuredClone(decision.targetAction),
-                        rationale: decision.rationale,
-                        confidence: decision.confidence,
-                    };
-                }),
+                .map((decision) =>
+                    sourceDecisionLedgerEntry(decision, candidates),
+                ),
             ...(completion?.usage !== undefined
                 ? { usage: structuredClone(completion.usage) }
                 : {}),
@@ -759,6 +808,105 @@ function probeSourceKey(probe: TranslationBenchPublicProbe): string {
     return `${probe.lineage.rowId}:${probe.lineage.sourcePart}`;
 }
 
+function assertProbeLineageMatchesSource(
+    key: string,
+    probe: TranslationBenchPublicProbe,
+    candidate: TranslationBenchSourceCandidate,
+): void {
+    const lineage = probe.lineage;
+    for (const field of [
+        "dataset",
+        "revision",
+        "config",
+        "split",
+        "rowIndex",
+        "rowId",
+        "sourceUrl",
+        "sourcePart",
+        "rawRowHash",
+        "sourceSliceHash",
+    ] as const) {
+        if (lineage[field] !== candidate.lineage[field]) {
+            throw new Error(
+                `Translation-bench probe '${key}' differs from pinned source lineage.${field}`,
+            );
+        }
+    }
+}
+
+function assertProbePayloadMatchesSource(
+    key: string,
+    probe: TranslationBenchPublicProbe,
+    candidate: TranslationBenchSourceCandidate,
+): void {
+    if (probe.lineage.transformVersion !== candidate.lineage.transformVersion) {
+        throw new Error(
+            `Translation-bench probe '${key}' differs from pinned source lineage.transformVersion`,
+        );
+    }
+    if (
+        sha256Json({
+            utterance: probe.utterance,
+            ...(probe.history !== undefined ? { history: probe.history } : {}),
+            order: probe.order,
+        }) !==
+        sha256Json({
+            utterance: candidate.utterance,
+            ...(candidate.history !== undefined
+                ? { history: candidate.history }
+                : {}),
+            order: candidate.order,
+        })
+    ) {
+        throw new Error(
+            `Translation-bench probe '${key}' rewrites pinned source text or history`,
+        );
+    }
+    if (probe.expectedActions.length !== candidate.sourceCalls.length) {
+        throw new Error(
+            `Translation-bench probe '${key}' does not preserve the source-call count`,
+        );
+    }
+    for (let index = 0; index < candidate.sourceCalls.length; index++) {
+        if (
+            sha256Json(probe.expectedActions[index]!.parameters ?? {}) !==
+            sha256Json(candidate.sourceCalls[index]!.parameters)
+        ) {
+            throw new Error(
+                `Translation-bench probe '${key}' rewrites source-call arguments at index ${index}`,
+            );
+        }
+    }
+}
+
+function assertCaseProbesMatchSource(
+    evalCase: TranslationBenchBenchmark["cases"][number],
+    bySource: Map<string, TranslationBenchSourceCandidate>,
+): void {
+    for (const probe of [evalCase.seed, ...evalCase.generalizations]) {
+        const key = probeSourceKey(probe);
+        const candidate = bySource.get(key);
+        if (candidate === undefined) {
+            throw new Error(
+                `Translation-bench probe '${key}' is absent from the pinned source`,
+            );
+        }
+        assertProbeLineageMatchesSource(key, probe, candidate);
+        if (evalCase.generation !== undefined) {
+            if (
+                evalCase.generation.anchorCandidateId !== key ||
+                probe.lineage.transformVersion !== 2
+            ) {
+                throw new Error(
+                    `Translation-bench generated probe '${key}' has invalid derived lineage`,
+                );
+            }
+            continue;
+        }
+        assertProbePayloadMatchesSource(key, probe, candidate);
+    }
+}
+
 export function assertTranslationBenchSourceBenchmarkTrust(
     benchmark: TranslationBenchBenchmark,
     options: {
@@ -796,87 +944,6 @@ export function assertTranslationBenchSourceBenchmarkTrust(
         candidates.map((candidate) => [candidate.candidateId, candidate]),
     );
     for (const evalCase of benchmark.cases) {
-        for (const probe of [evalCase.seed, ...evalCase.generalizations]) {
-            const key = probeSourceKey(probe);
-            const candidate = bySource.get(key);
-            if (candidate === undefined) {
-                throw new Error(
-                    `Translation-bench probe '${key}' is absent from the pinned source`,
-                );
-            }
-            const lineage = probe.lineage;
-            for (const field of [
-                "dataset",
-                "revision",
-                "config",
-                "split",
-                "rowIndex",
-                "rowId",
-                "sourceUrl",
-                "sourcePart",
-                "rawRowHash",
-                "sourceSliceHash",
-            ] as const) {
-                if (lineage[field] !== candidate.lineage[field]) {
-                    throw new Error(
-                        `Translation-bench probe '${key}' differs from pinned source lineage.${field}`,
-                    );
-                }
-            }
-            if (evalCase.generation !== undefined) {
-                if (
-                    evalCase.generation.anchorCandidateId !== key ||
-                    lineage.transformVersion !== 2
-                ) {
-                    throw new Error(
-                        `Translation-bench generated probe '${key}' has invalid derived lineage`,
-                    );
-                }
-                continue;
-            }
-            if (
-                lineage.transformVersion !== candidate.lineage.transformVersion
-            ) {
-                throw new Error(
-                    `Translation-bench probe '${key}' differs from pinned source lineage.transformVersion`,
-                );
-            }
-            if (
-                sha256Json({
-                    utterance: probe.utterance,
-                    ...(probe.history !== undefined
-                        ? { history: probe.history }
-                        : {}),
-                    order: probe.order,
-                }) !==
-                sha256Json({
-                    utterance: candidate.utterance,
-                    ...(candidate.history !== undefined
-                        ? { history: candidate.history }
-                        : {}),
-                    order: candidate.order,
-                })
-            ) {
-                throw new Error(
-                    `Translation-bench probe '${key}' rewrites pinned source text or history`,
-                );
-            }
-            if (probe.expectedActions.length !== candidate.sourceCalls.length) {
-                throw new Error(
-                    `Translation-bench probe '${key}' does not preserve the source-call count`,
-                );
-            }
-            for (let index = 0; index < candidate.sourceCalls.length; index++) {
-                if (
-                    sha256Json(
-                        probe.expectedActions[index]!.parameters ?? {},
-                    ) !== sha256Json(candidate.sourceCalls[index]!.parameters)
-                ) {
-                    throw new Error(
-                        `Translation-bench probe '${key}' rewrites source-call arguments at index ${index}`,
-                    );
-                }
-            }
-        }
+        assertCaseProbesMatchSource(evalCase, bySource);
     }
 }
