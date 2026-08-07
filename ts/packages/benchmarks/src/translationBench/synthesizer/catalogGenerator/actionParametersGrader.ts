@@ -196,11 +196,26 @@ const LLM_JUDGE_PARAMETER_SET = new Set<string>(LLM_JUDGE_PARAMETERS);
 /** Literal stored strings that must deep-equal (not soft / not llm judge). */
 const EXACT_PARAMETERS = new Set<string>(["github-cli.aliasSet.command"]);
 
+/**
+ * Hardcoded action.parameter pairs that always verify as nonempty.
+ * Internet lookup query lists / freeform request strings have many valid
+ * surface forms; exact string match is an unfair param-score fail.
+ */
+export const NONEMPTY_PARAMETERS = [
+    "browser.lookupAndAnswer.lookupAndAnswerInternet.originalRequest",
+    "browser.lookupAndAnswer.lookupAndAnswerInternet.internetLookups",
+    "browser.lookupAndAnswer.lookupAndAnswerInternet.sites",
+] as const;
+
+const NONEMPTY_PARAMETER_SET = new Set<string>(NONEMPTY_PARAMETERS);
+
 export const HEURISTIC_SOURCE_HASH: string = createHash("sha256")
     .update(
         JSON.stringify({
             rules: [...REGEX_RULE_IDS].sort(),
             llmJudge: [...LLM_JUDGE_PARAMETERS],
+            nonempty: [...NONEMPTY_PARAMETERS],
+            exact: [...EXACT_PARAMETERS].sort(),
         }),
     )
     .digest("hex")
@@ -1065,6 +1080,27 @@ export async function buildActionParametersGraderEntry(
                     verify: "exact",
                     rule: "string-identifier-exact",
                     source: judged.source,
+                };
+            } else if (NONEMPTY_PARAMETER_SET.has(`${id}.${name}`)) {
+                // Force soft nonempty even if a prior/LLM decision said exact.
+                const isArray = field.spec.kind === "array";
+                judged = {
+                    create: "free_text",
+                    verify: "nonempty",
+                    rule: isArray
+                        ? "array-items:string-collection-element-nonempty"
+                        : "string-free-text-nonempty",
+                    source: judged.source,
+                    ...(isArray && field.spec.kind === "array"
+                        ? {
+                              item: {
+                                  create: "free_text" as const,
+                                  verify: "nonempty" as const,
+                                  rule: "string-collection-element-nonempty",
+                                  source: judged.source,
+                              },
+                          }
+                        : {}),
                 };
             }
             fields[name] = fieldGraderFromDecision(

@@ -1429,6 +1429,52 @@ describe("eligible action coverage counting", () => {
     });
 });
 
+describe("hardcoded nonempty verify mode", () => {
+    it("forces lookupAndAnswerInternet freeform params to nonempty", async () => {
+        const catalog = {
+            catalogVersion: "test",
+            generatedAt: "2026-01-01T00:00:00.000Z",
+            actions: [
+                {
+                    schemaName: "browser.lookupAndAnswer",
+                    actionName: "lookupAndAnswerInternet",
+                    paramSpec: objectSpec({
+                        originalRequest: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                        internetLookups: {
+                            optional: false,
+                            spec: {
+                                kind: "array",
+                                item: { kind: "string" },
+                            },
+                        },
+                        sites: {
+                            optional: true,
+                            spec: {
+                                kind: "array",
+                                item: { kind: "string" },
+                            },
+                        },
+                    }),
+                },
+            ],
+        };
+        const grader = await buildActionParametersGraderCatalog(catalog);
+        const entry =
+            grader.byAction["browser.lookupAndAnswer.lookupAndAnswerInternet"]!;
+        expect(entry.parameterScore.fields).toEqual({
+            originalRequest: "nonempty",
+            internetLookups: "nonempty",
+            sites: "nonempty",
+        });
+        expect(entry.fields.internetLookups.verify).toBe("nonempty");
+        expect(entry.fields.originalRequest.verify).toBe("nonempty");
+        expect(entry.fields.sites.verify).toBe("nonempty");
+    });
+});
+
 describe("llmAsAJudge verify mode", () => {
     it("uses hardcoded action.parameter pairs; LLM may still emit llmAsAJudge", () => {
         expect(
