@@ -1,11 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    filterSecrets,
-    filterSecretsFromObject,
-    type SecretFilter,
-} from "@typeagent/common-utils";
+import { filterSecrets, type SecretFilter } from "@typeagent/common-utils";
 
 /**
  * Shared pre-record sanitization helpers for telemetry. These wrap
@@ -37,52 +33,85 @@ export function redactText(text: string, options?: RedactionOptions): string {
 }
 
 /**
- * Redact known secret values and recognizable secret formats from every
- * string in a structured value (a log event payload, an attribute bag)
- * about to be recorded as telemetry. Returns a new value of the same shape;
- * non-string, non-plain-object values (numbers, booleans, `Date`, class
- * instances, ...) pass through unchanged.
+ * Redact known secret values and recognizable secret formats from a
+ * structured value (a log event payload or attribute bag) about to be
+ * recorded as telemetry.
+ *
+ * The strings are combined and filtered together, rather than running every
+ * secret detector separately for each nested value. The structure is rebuilt
+ * without mutating the input.
  */
 export function redactObject<T>(value: T, options?: RedactionOptions): T {
-    const secretFilter = options?.secretFilter;
-    if (!secretFilter) {
-        return filterSecretsFromObject(value);
+    const strings: string[] = [];
+    collectStrings(value, strings);
+    if (strings.length === 0) {
+        return value;
     }
-    return walkStrings(value, (text) => secretFilter.filter(text)) as T;
+
+    const separator = createSeparator(strings);
+    const redactedStrings = redactText(strings.join(separator), options).split(
+        separator,
+    );
+    if (redactedStrings.length !== strings.length) {
+        return mapStrings(value, (text) => redactText(text, options)) as T;
+    }
+
+    let index = 0;
+    return mapStrings(value, () => redactedStrings[index++]) as T;
 }
 
-/**
- * Recursively apply `redact` to every string in `value`, preserving its
- * shape. Only secret *detection* lives in `@typeagent/common-utils`
- * (`filterSecrets`); this walk exists solely to let a stateful
- * {@link SecretFilter} - which only exposes `filter(text)`, not its
- * underlying values - participate in structural redaction the same way
- * `filterSecretsFromObject` does for the stateless case above.
- */
-function walkStrings(
-    value: unknown,
-    redact: (text: string) => string,
-): unknown {
+function collectStrings(value: unknown, strings: string[]): void {
+    if (typeof value === "string") {
+        strings.push(value);
+        return;
+    }
+    if (!isTraversable(value)) {
+        return;
+    }
+    for (const item of Array.isArray(value)
+        ? value
+        : Object.values(value as Record<string, unknown>)) {
+        collectStrings(item, strings);
+    }
+}
+
+function mapStrings(value: unknown, redact: (text: string) => string): unknown {
     if (typeof value === "string") {
         return redact(value);
     }
-    if (value === null || typeof value !== "object") {
+    if (!isTraversable(value)) {
         return value;
     }
     if (Array.isArray(value)) {
-        return value.map((item) => walkStrings(item, redact));
+        return value.map((item) => mapStrings(item, redact));
     }
-    // Only recurse into plain objects, matching filterSecretsFromObject's
-    // handling of Date, RegExp, Map, and other class instances.
+    return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [
+            key,
+            mapStrings(item, redact),
+        ]),
+    );
+}
+
+function isTraversable(
+    value: unknown,
+): value is readonly unknown[] | Record<string, unknown> {
+    if (value === null || typeof value !== "object") {
+        return false;
+    }
+    if (Array.isArray(value)) {
+        return true;
+    }
     const proto = Object.getPrototypeOf(value);
-    if (proto !== Object.prototype && proto !== null) {
-        return value;
+    return proto === Object.prototype || proto === null;
+}
+
+function createSeparator(strings: readonly string[]): string {
+    // Surround the marker with whitespace so detectors that use ^ or
+    // whitespace as a token boundary behave as they do for each source string.
+    let separator = "\n\0typeagent-otel-redaction\0\n";
+    while (strings.some((text) => text.includes(separator))) {
+        separator += "\0";
     }
-    const out: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(
-        value as Record<string, unknown>,
-    )) {
-        out[key] = walkStrings(item, redact);
-    }
-    return out;
+    return separator;
 }

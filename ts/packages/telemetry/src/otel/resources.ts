@@ -23,6 +23,7 @@ import {
 } from "@opentelemetry/semantic-conventions/incubating";
 
 const PROCESS_INSTANCE_ID = randomUUID();
+
 /**
  * Constructs the process-level OTel {@link Resource} TypeAgent-owned hosts
  * attach to their providers. This module only builds resource attributes; it
@@ -40,8 +41,9 @@ export interface ProcessResourceOptions {
     /** `deployment.environment.name`, when known. */
     readonly deploymentEnvironment?: string;
     /**
-     * Additional caller-supplied resource attributes. These cannot override
-     * the service or process attributes defined by this helper.
+     * Additional caller-supplied resource attributes, e.g.
+     * `deployment.environment`. These cannot override the required
+     * service/process identity attributes below.
      */
     readonly attributes?: Readonly<Record<string, AttributeValue>>;
 }
@@ -52,7 +54,8 @@ export interface ProcessResourceOptions {
  * current process's host, PID, runtime name, and runtime version.
  *
  * `options.attributes` is merged in first, so it can supply anything not
- * covered above but cannot override the process attributes this function sets.
+ * covered above (e.g. `deployment.environment`) but cannot override the
+ * identity attributes this function sets.
  *
  * @throws {Error} if a supplied string attribute is empty or all whitespace.
  */
@@ -92,6 +95,8 @@ export function createProcessResource(
     for (const key of [
         ATTR_SERVICE_NAME,
         ATTR_SERVICE_INSTANCE_ID,
+        ATTR_SERVICE_VERSION,
+        ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
         ATTR_HOST_NAME,
         ATTR_OS_TYPE,
         ATTR_PROCESS_PID,

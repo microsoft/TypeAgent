@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.provider.AlarmClock
 import android.speech.RecognizerIntent
@@ -86,6 +87,10 @@ class MainActivity : ComponentActivity() {
             override fun onSetTimer(action: SetTimerAction) {
                 runOnUiThread { launchSetTimerIntent(action) }
             }
+
+            override fun onSearchNearby(action: SearchNearbyAction) {
+                runOnUiThread { launchSearchNearbyIntent(action) }
+            }
         })
         webSocketManager.connect(
             url = tunnelUrl,
@@ -118,7 +123,7 @@ class MainActivity : ComponentActivity() {
                 putExtra(AlarmClock.EXTRA_MESSAGE, action.originalRequest)
             }
         }
-        launchClockIntent(
+        launchExternalIntent(
             intent = intent,
             actionName = "set-alarm",
             detail = "hour=${action.hour} minute=${action.minute}",
@@ -138,7 +143,7 @@ class MainActivity : ComponentActivity() {
      * passes false; we diverge deliberately so a voice/chat request never
      * yanks the user out of the conversation. The confirmation toast is then
      * the only in-app feedback, so it is not optional - and it must not claim
-     * success when the launch was refused. See [launchClockIntent].
+     * success when the launch was refused. See [launchExternalIntent].
      */
     private fun launchSetTimerIntent(action: SetTimerAction) {
         val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
@@ -148,7 +153,7 @@ class MainActivity : ComponentActivity() {
                 putExtra(AlarmClock.EXTRA_MESSAGE, action.originalRequest)
             }
         }
-        launchClockIntent(
+        launchExternalIntent(
             intent = intent,
             actionName = "set-timer",
             detail = "durationInSeconds=${action.durationInSeconds}",
@@ -160,7 +165,27 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Starts a clock intent and reports the outcome truthfully.
+     * Opens the device maps app on a local search. The intent is left implicit
+     * rather than pinned to `com.google.android.apps.maps` as TypeAgent's
+     * `JavaScriptInterface.searchNearby` does, so it still resolves on devices
+     * without Google Maps.
+     */
+    private fun launchSearchNearbyIntent(action: SearchNearbyAction) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(buildGeoSearchUri(action.searchTerm)))
+        launchExternalIntent(
+            intent = intent,
+            actionName = "search-nearby",
+            detail = "searchTerm=${action.searchTerm}",
+            successMessage = "Searching nearby for ${action.searchTerm}",
+            missingAppMessage = "No maps app is available on this device.",
+            deniedMessage = "This app is not allowed to open the maps app.",
+            backgroundMessage = "Could not open maps while the app was in the background."
+        )
+    }
+
+    /**
+     * Starts an intent handled by another app and reports the outcome
+     * truthfully.
      *
      * Two failure modes are checked up front because neither raises an
      * exception:
@@ -172,8 +197,11 @@ class MainActivity : ComponentActivity() {
      *   warning. Without this guard the success toast would fire while no
      *   alarm or timer was created, and with `EXTRA_SKIP_UI` that toast is the
      *   user's only feedback.
+     *
+     * `resolveActivity` returns null on API 30+ unless the intent is declared
+     * in the manifest's `<queries>` block, so every new action needs an entry.
      */
-    private fun launchClockIntent(
+    private fun launchExternalIntent(
         intent: Intent,
         actionName: String,
         detail: String,
@@ -203,7 +231,7 @@ class MainActivity : ComponentActivity() {
         }
         try {
             startActivity(intent)
-            Log.d(TAG, "$actionName intent dispatched to clock app")
+            Log.d(TAG, "$actionName intent dispatched")
             Toast.makeText(this, successMessage, Toast.LENGTH_SHORT).show()
         } catch (_: ActivityNotFoundException) {
             Log.e(TAG, "No app available to handle $actionName intent")
