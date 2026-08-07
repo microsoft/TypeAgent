@@ -554,6 +554,7 @@ class WebSocketManager {
         when (actionName) {
             "set-alarm" -> handleSetAlarmAction(actionData)
             "set-timer" -> handleSetTimerAction(actionData)
+            "search-nearby" -> handleSearchNearbyAction(actionData)
             else -> Log.d(TAG, "takeAction ignored: unsupported action=$actionName")
         }
     }
@@ -596,6 +597,26 @@ class WebSocketManager {
             "Dispatching set-timer to client handler durationInSeconds=${timer.durationInSeconds}"
         )
         handler.onSetTimer(timer)
+    }
+
+    private fun handleSearchNearbyAction(actionData: Any?) {
+        val search = parseSearchNearbyActionPayload(actionData)
+        if (search == null) {
+            Log.e(
+                TAG,
+                "Invalid search-nearby payload: ${stringifyDisplayValue(actionData)}"
+            )
+            return
+        }
+        val handler = requireClientActionHandler(
+            "search-nearby",
+            "searchTerm=${search.searchTerm}"
+        ) ?: return
+        Log.d(
+            TAG,
+            "Dispatching search-nearby to client handler searchTerm=${search.searchTerm}"
+        )
+        handler.onSearchNearby(search)
     }
 
     private fun requireClientActionHandler(
@@ -1277,6 +1298,7 @@ class WebSocketManager {
     internal interface ClientActionHandler {
         fun onSetAlarm(action: SetAlarmAction)
         fun onSetTimer(action: SetTimerAction)
+        fun onSearchNearby(action: SearchNearbyAction)
     }
 }
 
