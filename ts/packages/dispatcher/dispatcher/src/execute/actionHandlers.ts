@@ -17,6 +17,7 @@ import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionResult,
+    ActionResultError,
     ActionContext,
     ParsedCommandParams,
     ParameterDefinitions,
@@ -383,6 +384,20 @@ function projectActionResultForDiagnostics(result: ActionResult): unknown {
     }
 }
 
+function displayActionResultError(
+    result: ActionResultError,
+    actionContext: ActionContext<unknown>,
+): void {
+    if (result.errorDisplayContent !== undefined) {
+        actionContext.actionIO.appendDisplay(
+            result.errorDisplayContent,
+            "block",
+        );
+    } else {
+        displayError(result.error, actionContext);
+    }
+}
+
 export function emitActionResult(
     result: ActionResult,
     actionContext: ActionContext<unknown>,
@@ -410,14 +425,7 @@ export function emitActionResult(
     }
     if (result.error !== undefined) {
         if (!("fallbackToReasoning" in result) || !result.fallbackToReasoning) {
-            if (result.errorDisplayContent !== undefined) {
-                actionContext.actionIO.appendDisplay(
-                    result.errorDisplayContent,
-                    "block",
-                );
-            } else {
-                displayError(result.error, actionContext);
-            }
+            displayActionResultError(result, actionContext);
         }
         return;
     }
