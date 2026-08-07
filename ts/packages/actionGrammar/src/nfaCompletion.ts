@@ -127,6 +127,7 @@ interface WalkResult {
 interface CapturedSlot {
     propertyPath: string;
     text: string;
+    startTokenIndex: number;
 }
 
 function walkPrefixTokens(
@@ -134,6 +135,7 @@ function walkPrefixTokens(
     tokens: string[],
     starts?: number[],
     inputLength?: number,
+    input?: string,
 ): WalkResult {
     // Legacy callers (token-only entry point) don't have character offsets;
     // synthesize them assuming single-space separators.  matchedPrefixLength
@@ -164,6 +166,7 @@ function walkPrefixTokens(
     const stepIsWildcard: boolean[] = [];
     const endPosPerStep: number[] = [];
     const capturedSlotsPerStep: (CapturedSlot | undefined)[] = [];
+    let activeCapture: CapturedSlot | undefined;
     while (consumed < tokens.length) {
         const token = tokens[consumed];
         const tokenMatched: number[] = [];
@@ -299,12 +302,10 @@ function walkPrefixTokens(
         }
         prevStatesPerStep.push(currentStates);
         stepIsWildcard.push(isWildcardStep);
-        // When this step is a wildcard, look at the wildcard transitions that
-        // could have fired and capture the first one carrying a propertyPath
-        // annotation along with the input text it consumed.  Loop self-
-        // transitions don't carry propertyPath (see nfaCompiler), so only the
-        // initial entry transition contributes a capture — multi-token
-        // wildcard captures truncate to the first token in this MVP.
+        const spanStart = starts[consumed];
+        // Wildcard entry transitions identify the property. Self-loop
+        // transitions are unannotated, so carry the active property forward
+        // and snapshot the complete span on every wildcard step.
         let stepCapture: CapturedSlot | undefined;
         if (isWildcardStep) {
             outer: for (const sid of currentStates) {
@@ -314,19 +315,42 @@ function walkPrefixTokens(
                     if (t.type === "wildcard" && t.propertyPath !== undefined) {
                         stepCapture = {
                             propertyPath: t.propertyPath,
-                            text: token,
+                            text: "",
+                            startTokenIndex: consumed,
                         };
                         break outer;
                     }
                 }
             }
+            activeCapture = stepCapture ?? activeCapture;
+            if (activeCapture !== undefined) {
+                const captureEnd = spanStart + token.length;
+                stepCapture = {
+                    propertyPath: activeCapture.propertyPath,
+                    startTokenIndex: activeCapture.startTokenIndex,
+                    text:
+                        input !== undefined
+                            ? input.substring(
+                                  starts[activeCapture.startTokenIndex],
+                                  captureEnd,
+                              )
+                            : tokens
+                                  .slice(
+                                      activeCapture.startTokenIndex,
+                                      consumed + 1,
+                                  )
+                                  .join(" "),
+                };
+                activeCapture = stepCapture;
+            }
+        } else {
+            activeCapture = undefined;
         }
         capturedSlotsPerStep.push(stepCapture);
         // Compute the input position where this step ends.  For token
         // matches: span start + grammar display length (capped at input
         // length).  For wildcard matches: end of the (single) input token
         // consumed.
-        const spanStart = starts[consumed];
         if (isWildcardStep) {
             endPos = spanStart + token.length;
         } else {
@@ -662,7 +686,7 @@ export function computeNFACompletionsFromInput(
         return finalizeCompletionResult(nfa, reachable, 0, false);
     }
 
-    const walk = walkPrefixTokens(nfa, tokens, starts, input.length);
+    const walk = walkPrefixTokens(nfa, tokens, starts, input.length, input);
     const {
         states,
         consumed,
@@ -702,24 +726,34 @@ export function computeNFACompletionsFromInput(
         consumed > 0 && !hasTrailingSeparator && prevStatesPerStep.length > 0;
 
     // Helper: build the rewound result.  matchedPrefixLength backs up to
-    // the END of the previous token (or 0 if rewinding off the first
-    // token), so the user can "delete the separator + retype the last
-    // word" with the position pinned just past the prior word.
+    // the END of the previous grammar part. A multi-token wildcard rewinds
+    // as one part while retaining its full text as the property partial.
     const buildRewound = (): GrammarCompletionResult => {
-        // Rewind by one GRAMMAR STEP (which may have spanned multiple
-        // input tokens for escape-space matches).
-        const lastStepIdx = stepCount - 1;
-        const rewoundStates = prevStatesPerStep[lastStepIdx];
+        let rewindStepIdx = stepCount - 1;
+        const rewindingWildcard = stepIsWildcard[rewindStepIdx];
+        while (
+            rewindingWildcard &&
+            rewindStepIdx > 0 &&
+            stepIsWildcard[rewindStepIdx - 1]
+        ) {
+            rewindStepIdx--;
+        }
+        const rewoundStates = prevStatesPerStep[rewindStepIdx];
         const rewoundPrefixLength =
-            lastStepIdx > 0 ? endPosPerStep[lastStepIdx - 1] : 0;
+            rewindStepIdx > 0 ? endPosPerStep[rewindStepIdx - 1] : 0;
         const rewoundTookWildcard = stepIsWildcard
-            .slice(0, lastStepIdx)
+            .slice(0, rewindStepIdx)
             .some(Boolean);
         const rewoundCaptures = collectCaptures(
-            capturedSlotsPerStep.slice(0, lastStepIdx),
+            rewindingWildcard
+                ? capturedSlotsPerStep
+                : capturedSlotsPerStep.slice(0, rewindStepIdx),
         );
+        const currentPartialValue = rewindingWildcard
+            ? input.substring(rewoundPrefixLength).replace(/^[\s\p{P}]+/u, "")
+            : undefined;
         debugCompletion(
-            `  rewind: step ${lastStepIdx} states=[${rewoundStates.join(", ")}] mpl=${rewoundPrefixLength} (was wildcard step? ${stepIsWildcard[lastStepIdx]})`,
+            `  rewind: step ${rewindStepIdx} states=[${rewoundStates.join(", ")}] mpl=${rewoundPrefixLength} (was wildcard step? ${rewindingWildcard})`,
         );
         return finalizeCompletionResult(
             nfa,
@@ -727,6 +761,7 @@ export function computeNFACompletionsFromInput(
             rewoundPrefixLength,
             rewoundTookWildcard,
             rewoundCaptures,
+            currentPartialValue,
         );
     };
 
@@ -787,6 +822,7 @@ function finalizeCompletionResult(
     matchedPrefixLength: number,
     tookWildcard: boolean,
     capturedSlots: CapturedSlot[] = [],
+    currentPartialValue?: string,
 ): GrammarCompletionResult {
     // directionSensitive: per canonical (grammarCompletion.ts:1690),
     // `matchedPrefixLength > 0` is the signal — any prefix consumption
@@ -822,6 +858,7 @@ function finalizeCompletionResult(
         nfa,
         properties,
         capturedSlots,
+        currentPartialValue,
     );
     // closedSet: the listed completions are exhaustive iff no property
     // completion arises at the frontier.  A frontier wildcard without
@@ -870,6 +907,7 @@ function buildGrammarProperties(
     nfa: NFA,
     properties: PropertyCompletion[],
     capturedSlots: CapturedSlot[],
+    currentPartialValue?: string,
 ): GrammarCompletionProperty[] {
     if (properties.length === 0) return [];
 
@@ -897,11 +935,24 @@ function buildGrammarProperties(
             setPathValue(match, capture.propertyPath, capture.text);
         }
 
-        result.push({
+        let partialValue: string | undefined;
+        for (let i = capturedSlots.length - 1; i >= 0; i--) {
+            if (capturedSlots[i].propertyPath === prop.propertyPath) {
+                partialValue = capturedSlots[i].text;
+                break;
+            }
+        }
+        const completionProperty: GrammarCompletionProperty = {
             match,
             propertyNames: [prop.propertyPath],
             separatorMode: "autoSpacePunctuation",
-        });
+        };
+        if (partialValue !== undefined) {
+            completionProperty.partialValue = partialValue;
+        } else if (currentPartialValue !== undefined) {
+            completionProperty.partialValue = currentPartialValue;
+        }
+        result.push(completionProperty);
     }
 
     return result;

@@ -876,6 +876,9 @@ export interface DFACompletionResult {
      * cross-rule merging which the DFA already encodes).
      */
     tookWildcard?: boolean;
+
+    /** Token index where the active wildcard at the frontier began. */
+    activeWildcardStartTokenIndex?: number;
 }
 
 /**
@@ -916,6 +919,7 @@ export function getDFACompletions(
     let skipCount = 0;
     let consumed = 0;
     let tookWildcard = false;
+    let activeWildcardStartTokenIndex: number | undefined;
     for (let pi = 0; pi < tokens.length; pi++) {
         if (skipCount > 0) {
             skipCount--;
@@ -949,6 +953,9 @@ export function getDFACompletions(
         if (nextStateId === undefined && currentState.wildcardTransition) {
             nextStateId = currentState.wildcardTransition.to;
             tookWildcard = true;
+            activeWildcardStartTokenIndex ??= pi;
+        } else if (nextStateId !== undefined) {
+            activeWildcardStartTokenIndex = undefined;
         }
 
         // Try phraseSet transitions
@@ -1146,6 +1153,9 @@ export function getDFACompletions(
         consumedTokenCount: consumed,
         tookWildcard,
     };
+    if (activeWildcardStartTokenIndex !== undefined) {
+        result.activeWildcardStartTokenIndex = activeWildcardStartTokenIndex;
+    }
     if (properties.length > 0) {
         result.properties = properties;
     }
@@ -1193,11 +1203,15 @@ export function getDFACompletionsFromInput(
         canRewind &&
         (direction === "backward" ||
             (exhaustedAllInput && forwardFrontierEmpty));
+    let partialValueStartTokenIndex: number | undefined;
     if (shouldRewind) {
-        const rewoundTokens = tokens.slice(0, forwardConsumed - 1);
+        const rewindTokenCount =
+            forwardRaw.activeWildcardStartTokenIndex ?? forwardConsumed - 1;
+        partialValueStartTokenIndex = forwardRaw.activeWildcardStartTokenIndex;
+        const rewoundTokens = tokens.slice(0, rewindTokenCount);
         raw = getDFACompletions(dfa, rewoundTokens);
         matchedPrefixLength =
-            forwardConsumed > 1 ? ends[forwardConsumed - 2] : 0;
+            rewindTokenCount > 0 ? ends[rewindTokenCount - 1] : 0;
     }
     // Silence unused-variable warning when `starts` isn't otherwise used
     // (it's destructured for symmetry with the NFA implementation).
@@ -1228,12 +1242,23 @@ export function getDFACompletionsFromInput(
         afterWildcard,
     };
     if (raw.properties && raw.properties.length > 0) {
+        const partialValue =
+            (partialValueStartTokenIndex ??
+                raw.activeWildcardStartTokenIndex) === undefined
+                ? ""
+                : input.substring(
+                      starts[
+                          (partialValueStartTokenIndex ??
+                              raw.activeWildcardStartTokenIndex)!
+                      ],
+                  );
         result.properties = raw.properties.map((p) => ({
             match: p.actionName
                 ? { actionName: p.actionName, parameters: {} }
                 : {},
             propertyNames: [p.propertyPath],
             separatorMode: "autoSpacePunctuation",
+            partialValue,
         }));
     }
     return result;

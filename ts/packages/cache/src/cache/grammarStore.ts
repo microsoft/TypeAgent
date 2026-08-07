@@ -10,11 +10,11 @@ import {
     NFA,
     compileGrammarToNFA,
     matchGrammarWithNFA,
-    computeNFACompletions,
+    computeNFACompletionsFromInput,
     DFA,
     compileNFAToDFA,
     matchDFAWithSplitting,
-    getDFACompletions,
+    getDFACompletionsFromInput,
     tokenizeRequest,
 } from "@typeagent/action-grammar";
 
@@ -326,100 +326,66 @@ export class GrammarStoreImpl implements GrammarStore {
             // setUseDFA() prevents in normal use, but isn't impossible
             // to construct directly).
             if (this.useNFA && entry.nfa) {
-                // NFA-based completions: tokenize into complete whole tokens
-                const tokens = input
-                    .trim()
-                    .split(/\s+/)
-                    .filter((t) => t.length > 0);
+                const partial = computeNFACompletionsFromInput(
+                    entry.nfa,
+                    input,
+                    direction,
+                );
+                const partialPrefixLength = partial.matchedPrefixLength ?? 0;
+                if (partialPrefixLength !== matchedPrefixLength) {
+                    const adopt = shouldPreferNewResult(
+                        matchedPrefixLength,
+                        afterWildcard,
+                        partialPrefixLength,
+                        partial.afterWildcard,
+                        input.length,
+                    );
+                    if (!adopt) continue;
 
-                const nfaResult = computeNFACompletions(entry.nfa, tokens);
-                for (const g of nfaResult.groups) {
-                    if (g.completions.length > 0) {
-                        groups.push({
-                            name: "Request Completions",
-                            completions: g.completions,
-                            separatorMode: g.separatorMode,
-                        });
-                    }
+                    matchedPrefixLength = partialPrefixLength;
+                    groups.length = 0;
+                    properties.length = 0;
+                    closedSet = undefined;
+                    directionSensitive = false;
+                    afterWildcard = undefined;
+                    grammarPartials = [];
                 }
-                if (
-                    nfaResult.properties !== undefined &&
-                    nfaResult.properties.length > 0
-                ) {
-                    // NFA schema name is stored in nfa.name, fall back to namespace key
+                if (partialPrefixLength === matchedPrefixLength) {
                     const schemaName =
                         entry.nfa.name ??
                         splitSchemaNamespaceKey(name).schemaName;
-                    for (const p of nfaResult.properties) {
-                        const action: any = p.match;
-                        // Same guard as the DFA branch below: a property can
-                        // come from a plain-object (non-action) grammar and
-                        // carry no match, which createExecutableAction can't
-                        // represent. Throwing here would abort completion for
-                        // the whole request, not just this grammar.
-                        if (action?.actionName === undefined) {
-                            continue;
-                        }
-                        properties.push({
-                            actions: [
-                                createExecutableAction(
-                                    schemaName,
-                                    action.actionName,
-                                    action.parameters,
-                                ),
-                            ],
-                            names: p.propertyNames,
-                            // Property completions represent free-form entity
-                            // slots — the actual values come from agents at
-                            // runtime, so the grammar cannot know the first
-                            // character.  "autoSpacePunctuation" defers
-                            // resolution to the shell, which inspects the
-                            // character pair per item.
-                            separatorMode: "autoSpacePunctuation",
-                        });
-                    }
+                    grammarPartials.push({ partial, schemaName });
                 }
             } else if (this.useDFA && entry.dfa) {
                 // DFA-based completions (recoverable fallback — see comment
                 // above the NFA branch for why NFA is preferred).
-                const tokens = input
-                    .trim()
-                    .split(/\s+/)
-                    .filter((t) => t.length > 0);
+                const partial = getDFACompletionsFromInput(
+                    entry.dfa,
+                    input,
+                    direction,
+                );
+                const partialPrefixLength = partial.matchedPrefixLength ?? 0;
+                if (partialPrefixLength !== matchedPrefixLength) {
+                    const adopt = shouldPreferNewResult(
+                        matchedPrefixLength,
+                        afterWildcard,
+                        partialPrefixLength,
+                        partial.afterWildcard,
+                        input.length,
+                    );
+                    if (!adopt) continue;
 
-                const dfaCompResult = getDFACompletions(entry.dfa, tokens);
-                if (
-                    dfaCompResult.completions &&
-                    dfaCompResult.completions.length > 0
-                ) {
-                    groups.push({
-                        name: "Request Completions",
-                        completions: dfaCompResult.completions,
-                    });
+                    matchedPrefixLength = partialPrefixLength;
+                    groups.length = 0;
+                    properties.length = 0;
+                    closedSet = undefined;
+                    directionSensitive = false;
+                    afterWildcard = undefined;
+                    grammarPartials = [];
                 }
-                if (
-                    dfaCompResult.properties &&
-                    dfaCompResult.properties.length > 0
-                ) {
+                if (partialPrefixLength === matchedPrefixLength) {
                     const { schemaName } = splitSchemaNamespaceKey(name);
-                    for (const p of dfaCompResult.properties) {
-                        // Skip properties with no actionName (plain-object
-                        // grammars).  createExecutableAction needs one; for
-                        // non-action grammars the DFA's property entry isn't
-                        // surfaced as a typed action.
-                        if (p.actionName === undefined) continue;
-                        properties.push({
-                            actions: [
-                                createExecutableAction(
-                                    schemaName,
-                                    p.actionName,
-                                    {},
-                                ),
-                            ],
-                            names: [p.propertyPath],
-                            separatorMode: "autoSpacePunctuation",
-                        });
-                    }
+                    grammarPartials.push({ partial, schemaName });
                 }
             } else {
                 // simple grammar-based completions
@@ -521,6 +487,7 @@ export class GrammarStoreImpl implements GrammarStore {
                         if (action?.actionName === undefined) {
                             continue;
                         }
+                        applyCompletionPartialValue(action, p);
                         properties.push({
                             actions: [
                                 createExecutableAction(
@@ -545,5 +512,38 @@ export class GrammarStoreImpl implements GrammarStore {
             directionSensitive,
             afterWildcard,
         };
+    }
+}
+
+function applyCompletionPartialValue(
+    match: Record<string, any>,
+    property: {
+        propertyNames: string[];
+        partialValue?: string | undefined;
+    },
+): void {
+    if (property.partialValue === undefined) return;
+    for (const propertyName of property.propertyNames) {
+        const parts = propertyName.split(".");
+        let target = match;
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            if (
+                part === "__proto__" ||
+                part === "constructor" ||
+                part === "prototype"
+            ) {
+                throw new Error("Invalid completion property path");
+            }
+            if (i === parts.length - 1) {
+                target[part] = property.partialValue;
+            } else {
+                const current = target[part];
+                target =
+                    current !== null && typeof current === "object"
+                        ? current
+                        : (target[part] = {});
+            }
+        }
     }
 }

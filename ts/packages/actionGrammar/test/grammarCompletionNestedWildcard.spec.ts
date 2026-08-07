@@ -2,7 +2,90 @@
 // Licensed under the MIT License.
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
-import { describeForEachCompletion, expectMetadata } from "./testUtils.js";
+import {
+    createTestCompletion,
+    describeForEachCompletion,
+    expectMetadata,
+    type CompletionVariant,
+} from "./testUtils.js";
+
+const terminalWildcardGrammar = loadGrammarRules(
+    "test.grammar",
+    `<Start> = play $(trackName:wildcard) -> { actionName: "playTrack", parameters: { trackName } };`,
+);
+
+describe.each<CompletionVariant>(["grammar", "nfa", "dfa"])(
+    "Terminal wildcard partial propagation [%s]",
+    (variant) => {
+        it("preserves the full multiword partial value", () => {
+            const result = createTestCompletion(variant)(
+                terminalWildcardGrammar,
+                "play Bohemian Rhap",
+            );
+
+            expect(result.properties).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        propertyNames: ["parameters.trackName"],
+                        partialValue: "Bohemian Rhap",
+                    }),
+                ]),
+            );
+        });
+    },
+);
+
+it("NFA carries a nested wildcard's full partial to its outer property", () => {
+    const nestedTerminalGrammar = loadGrammarRules(
+        "test.grammar",
+        [
+            `<Start> = play $(trackName:<TrackName>) -> { actionName: "playTrack", parameters: { trackName } };`,
+            `<TrackName> = $(x:wildcard);`,
+        ].join("\n"),
+    );
+
+    const result = createTestCompletion("nfa")(
+        nestedTerminalGrammar,
+        "play Bohemian Rhap",
+    );
+
+    expect(result.properties).toEqual(
+        expect.arrayContaining([
+            expect.objectContaining({
+                propertyNames: ["parameters.trackName"],
+                partialValue: "Bohemian Rhap",
+            }),
+        ]),
+    );
+});
+
+it("NFA preserves earlier multiword slots while completing a later slot", () => {
+    const grammar = loadGrammarRules(
+        "test.grammar",
+        `<Start> = play $(trackName:wildcard) by $(artist:wildcard) -> { actionName: "playTrack", parameters: { trackName, artist } };`,
+    );
+
+    const result = createTestCompletion("nfa")(
+        grammar,
+        "play Bohemian Rhapsody by Que",
+        undefined,
+        "backward",
+    );
+    const artist = result.properties?.find((property) =>
+        property.propertyNames.includes("parameters.artist"),
+    );
+
+    expect(artist).toEqual(
+        expect.objectContaining({
+            match: expect.objectContaining({
+                parameters: expect.objectContaining({
+                    trackName: "Bohemian Rhapsody",
+                }),
+            }),
+            partialValue: "Que",
+        }),
+    );
+});
 
 describeForEachCompletion(
     "Grammar Completion - nested wildcard through rules",
@@ -59,6 +142,26 @@ describeForEachCompletion(
                             },
                         },
                         propertyNames: ["parameters.trackName"],
+                    },
+                ],
+            });
+        });
+
+        it("propagates the full multiword partial for a terminal wildcard", () => {
+            const result = matchGrammarCompletion(
+                terminalWildcardGrammar,
+                "play Bohemian Rhap",
+            );
+
+            expectMetadata(result, {
+                properties: [
+                    {
+                        match: {
+                            actionName: "playTrack",
+                            parameters: { trackName: undefined },
+                        },
+                        propertyNames: ["parameters.trackName"],
+                        partialValue: "Bohemian Rhap",
                     },
                 ],
             });

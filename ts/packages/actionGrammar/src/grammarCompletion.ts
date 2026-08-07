@@ -294,6 +294,8 @@ export type GrammarCompletionProperty = {
     match: unknown;
     propertyNames: string[];
     separatorMode: SeparatorMode;
+    /** Text already entered for the property currently being completed. */
+    partialValue?: string | undefined;
 };
 
 // Describes how the grammar rules that produced completions at this
@@ -377,6 +379,7 @@ function getGrammarCompletionProperty(
     state: MatchState,
     valueId: number,
     spacingMode: CompiledSpacingMode,
+    partialValue: string,
 ): GrammarCompletionProperty | undefined {
     const temp = { ...state };
 
@@ -401,6 +404,7 @@ function getGrammarCompletionProperty(
         match,
         propertyNames: wildcardPropertyNames,
         separatorMode: spacingModeToSeparatorMode(spacingMode),
+        partialValue,
     };
 }
 
@@ -1636,6 +1640,12 @@ function materializeCandidates(
                 c.state,
                 c.valueId,
                 c.spacingMode,
+                getWildcardStr(
+                    input,
+                    c.state.pendingWildcard?.start ?? ctx.maxPrefixLength,
+                    input.length,
+                    c.spacingMode,
+                ) ?? "",
             );
             if (completionProperty !== undefined) {
                 properties.push(completionProperty);
@@ -1713,6 +1723,12 @@ function materializeCandidates(
                     c.state,
                     c.valueId,
                     c.spacingMode,
+                    getWildcardStr(
+                        input,
+                        ctx.maxPrefixLength,
+                        input.length,
+                        c.spacingMode,
+                    ) ?? "",
                 );
                 if (completionProperty !== undefined) {
                     properties.push(completionProperty);
