@@ -65,6 +65,19 @@ import {
     findTranslationBenchConfusableSiblings,
     summarizeTranslationBenchConfusableSiblings,
 } from "./utteranceDisambiguation.js";
+import {
+    clearPackagedLlmJudgeExcludedActionsCacheForTests,
+    countEligibleTranslationBenchActions,
+    getPackagedLlmJudgeExcludedActions,
+} from "./eligibleActions.js";
+
+export function getTranslationBenchLlmJudgeExcludedActions(): ReadonlySet<string> {
+    return getPackagedLlmJudgeExcludedActions();
+}
+
+export function clearTranslationBenchLlmJudgeExcludedActionsCacheForTests(): void {
+    clearPackagedLlmJudgeExcludedActionsCacheForTests();
+}
 
 export {
     parseTranslationBenchGeneratedCandidate,
@@ -224,22 +237,47 @@ function requirePositiveInteger(value: number, name: string): void {
 
 export function createTranslationBenchGenerationSchedule(
     catalog: TranslationBenchBenchmarkSchema[],
-    options: { caseCount: number; requireCompleteCoverage: boolean },
+    options: {
+        caseCount: number;
+        requireCompleteCoverage: boolean;
+        excludedActionIds?: ReadonlySet<string>;
+    },
 ): TranslationBenchGenerationSchedule {
     requirePositiveInteger(options.caseCount, "Translation bench case count");
     const census = getTranslationBenchCatalogCensus(catalog);
-    if (
-        options.requireCompleteCoverage &&
-        options.caseCount < census.actionCount
-    ) {
+    const excludedActionIds =
+        options.excludedActionIds ?? getPackagedLlmJudgeExcludedActions();
+    const qualified = census.qualifiedActionKeys
+        .map((key) => {
+            const [schemaName, actionName] = JSON.parse(key) as [
+                string,
+                string,
+            ];
+            return { schemaName, actionName };
+        })
+        .filter(
+            (action) =>
+                !excludedActionIds.has(
+                    `${action.schemaName}.${action.actionName}`,
+                ),
+        );
+    const eligibleActionCount = countEligibleTranslationBenchActions(
+        catalog,
+        excludedActionIds,
+    );
+    if (eligibleActionCount === 0 || qualified.length === 0) {
         throw new Error(
-            `Complete action coverage requires at least ${census.actionCount} cases; requested ${options.caseCount}`,
+            "Translation bench generation schedule has no eligible actions after llmAsAJudge exclusions",
         );
     }
-    const qualified = census.qualifiedActionKeys.map((key) => {
-        const [schemaName, actionName] = JSON.parse(key) as [string, string];
-        return { schemaName, actionName };
-    });
+    if (
+        options.requireCompleteCoverage &&
+        options.caseCount < eligibleActionCount
+    ) {
+        throw new Error(
+            `Complete action coverage requires at least ${eligibleActionCount} cases; requested ${options.caseCount}`,
+        );
+    }
     const selected =
         options.caseCount >= qualified.length
             ? Array.from({ length: options.caseCount }, (_, slot) => ({
@@ -258,7 +296,7 @@ export function createTranslationBenchGenerationSchedule(
             schemaCount: census.schemaCount,
             actionCount: census.actionCount,
             scheduledActionCount,
-            complete: scheduledActionCount === census.actionCount,
+            complete: scheduledActionCount === eligibleActionCount,
             catalogDigest: census.catalogDigest,
         },
     };
