@@ -10,8 +10,10 @@ import { fileURLToPath } from "node:url";
 
 import {
     actionParameterSourceFingerprint,
+    applyLlmAsAJudgeVerify,
     buildActionParametersGraderCatalog,
     buildActionParametersGraderEntry,
+    buildActionParametersLlmJudgeCatalog,
     canonicalizeParamSpec,
     classifyActionParameterFieldWithFallback,
     diffActionParametersGrader,
@@ -19,6 +21,7 @@ import {
     isParamSpec,
     loadActionParametersGraderCatalogFile,
     mergeUnionParamSpecs,
+    parameterRequiresLlmJudge,
     REGEX_RULE_IDS,
     renderSchemaType,
     schemaTypeToParamSpec,
@@ -1314,19 +1317,137 @@ describe("incremental grader catalog", () => {
 
 describe("GRADER_RULES_VERSION contract", () => {
     it("exports a stable REGEX_RULE_IDS allowlist tied to version bumps", () => {
-        expect(GRADER_RULES_VERSION).toBeGreaterThanOrEqual(4);
+        expect(GRADER_RULES_VERSION).toBeGreaterThanOrEqual(5);
         expect(REGEX_RULE_IDS.length).toBeGreaterThan(5);
         expect(REGEX_RULE_IDS).toContain("string-open-soft-nonempty");
         expect(REGEX_RULE_IDS).toContain("string-date-nonempty");
         expect(REGEX_RULE_IDS).not.toContain("string-date-exact");
         expect(REGEX_RULE_IDS).toContain("type-object-soft-nonempty");
+        expect(REGEX_RULE_IDS).toContain("string-llm-as-a-judge");
         // Pin allowlist hash; bump GRADER_RULES_VERSION with id edits.
         const hash = createHash("sha256")
             .update(JSON.stringify([...REGEX_RULE_IDS].sort()))
             .digest("hex")
             .slice(0, 16);
         // Bump GRADER_RULES_VERSION with this hash when rules change.
-        expect(hash).toBe("1bb2d20d025f9e18");
+        expect(hash).toBe("f2c1d77d772926e9");
+    });
+});
+
+describe("llmAsAJudge verify mode", () => {
+    it("flags script/code parameters and leaves ordinary free text alone", () => {
+        expect(parameterRequiresLlmJudge("script", "free_text")).toBe(true);
+        expect(parameterRequiresLlmJudge("codeSnippet", "free_text")).toBe(
+            true,
+        );
+        expect(parameterRequiresLlmJudge("commandToExecute", "free_text")).toBe(
+            true,
+        );
+        expect(parameterRequiresLlmJudge("description", "free_text")).toBe(
+            false,
+        );
+        expect(parameterRequiresLlmJudge("script", "identifier")).toBe(false);
+        expect(
+            parameterRequiresLlmJudge("body", {
+                create: "free_text",
+                siblingFieldNames: ["declaration", "language"],
+            }),
+        ).toBe(true);
+        expect(
+            parameterRequiresLlmJudge("body", {
+                create: "free_text",
+                siblingFieldNames: ["message"],
+            }),
+        ).toBe(false);
+        expect(
+            parameterRequiresLlmJudge("command", {
+                create: "free_text",
+                actionId: "github-cli.aliasSet",
+            }),
+        ).toBe(true);
+        expect(
+            parameterRequiresLlmJudge("command", {
+                create: "free_text",
+                actionId: "browser.openWebPage",
+            }),
+        ).toBe(false);
+    });
+
+    it("upgrades field verify to llmAsAJudge without changing create", () => {
+        const upgraded = applyLlmAsAJudgeVerify("script", {
+            create: "free_text",
+            verify: "nonempty",
+            rule: "string-free-text-nonempty",
+            source: "regex",
+        });
+        expect(upgraded).toEqual({
+            create: "free_text",
+            verify: "llmAsAJudge",
+            rule: "string-llm-as-a-judge",
+            source: "regex",
+        });
+        const plain = applyLlmAsAJudgeVerify("title", {
+            create: "free_text",
+            verify: "nonempty",
+            rule: "string-free-text-nonempty",
+            source: "regex",
+        });
+        expect(plain.verify).toBe("nonempty");
+    });
+
+    it("builds llm sibling catalog excludedActions from llmAsAJudge fields", async () => {
+        const catalog = {
+            catalogVersion: "test",
+            generatedAt: "2026-01-01T00:00:00.000Z",
+            actions: [
+                {
+                    schemaName: "browser",
+                    actionName: "executeAdHocScript",
+                    paramSpec: objectSpec({
+                        script: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                        timeout: {
+                            optional: true,
+                            spec: { kind: "number" },
+                        },
+                    }),
+                },
+                {
+                    schemaName: "list",
+                    actionName: "createList",
+                    paramSpec: objectSpec({
+                        listName: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+            ],
+        };
+        const grader = await buildActionParametersGraderCatalog(
+            catalog as any,
+            { forceFull: true },
+        );
+        expect(
+            grader.byAction["browser.executeAdHocScript"]!.fields.script
+                ?.verify,
+        ).toBe("llmAsAJudge");
+        expect(
+            grader.byAction["browser.executeAdHocScript"]!.parameterScore.fields
+                .script,
+        ).toBe("llmAsAJudge");
+        const llmCatalog = buildActionParametersLlmJudgeCatalog(grader);
+        expect(llmCatalog.parameters).toEqual([
+            {
+                action: "browser.executeAdHocScript",
+                parameter: "script",
+            },
+        ]);
+        expect(llmCatalog.excludedActions).toEqual([
+            "browser.executeAdHocScript",
+        ]);
     });
 });
 

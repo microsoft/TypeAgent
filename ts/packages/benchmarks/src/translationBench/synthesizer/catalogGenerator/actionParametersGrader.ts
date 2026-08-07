@@ -19,7 +19,7 @@ import {
     type ParamSpec,
 } from "./paramTypes.js";
 
-export const GRADER_RULES_VERSION = 4;
+export const GRADER_RULES_VERSION = 5;
 
 export const REGEX_RULE_IDS = [
     "empty-name",
@@ -40,10 +40,16 @@ export const REGEX_RULE_IDS = [
     "string-date-nonempty",
     "string-time-nonempty",
     "string-identifier-exact",
+    "string-llm-as-a-judge",
 ] as const;
 
 /** Runner soft-score modes (must stay aligned with runner.ts). */
-export type ActionParamVerifyMode = "exact" | "exists" | "nonempty" | "ignore";
+export type ActionParamVerifyMode =
+    | "exact"
+    | "exists"
+    | "nonempty"
+    | "ignore"
+    | "llmAsAJudge";
 
 export type ActionParamCreatePolicy =
     | "enum_literal"
@@ -126,6 +132,8 @@ export const ACTION_PARAM_VERIFY_MODE_DOCS: Record<
     exists: "Key must be present; value ignored (hand-authored seeds; not emitted by regex gen)",
     nonempty: "Key must be present and non-empty string/array",
     ignore: "Field not scored",
+    llmAsAJudge:
+        "Semantic equivalence needs an LLM judge (code/script/program payloads; many surface forms can be correct)",
 };
 
 export const ACTION_PARAM_CREATE_POLICY_DOCS: Record<
@@ -151,6 +159,169 @@ export interface FieldGraderDecision {
     item?: FieldGraderDecision;
 }
 
+const LLM_JUDGE_HEURISTIC_PATTERNS = {
+    exact: {
+        source: "^(recordedSteps|script|codeSnippet|declaration|functionDeclaration|commandToExecute|commandArgs|flowArgs|flowParametersJson|validationResults|generatedContent|sourceCode|programSource)$",
+        flags: "i",
+    },
+    suffix: {
+        source: "(RecordedSteps|CodeSnippet|FunctionDeclaration|ParametersJson|SourceCode|CommandArgs)$",
+        flags: "",
+    },
+    freeTextCodeExact: {
+        source: "^(command)$",
+        flags: "i",
+    },
+    commandActionAllowSuffix: {
+        source: "(aliasSet)$",
+        flags: "i",
+    },
+    codeBodySiblingExact: {
+        source: "^(declaration|codeSnippet|functionDeclaration|script)$",
+        flags: "i",
+    },
+    logicTag: {
+        source: "v1-llmAsAJudge-verify-mode",
+        flags: "",
+    },
+} as const;
+
+const LLM_JUDGE_EXACT_RE = new RegExp(
+    LLM_JUDGE_HEURISTIC_PATTERNS.exact.source,
+    LLM_JUDGE_HEURISTIC_PATTERNS.exact.flags,
+);
+const LLM_JUDGE_SUFFIX_RE = new RegExp(
+    LLM_JUDGE_HEURISTIC_PATTERNS.suffix.source,
+    LLM_JUDGE_HEURISTIC_PATTERNS.suffix.flags,
+);
+const LLM_JUDGE_FREE_TEXT_CODE_RE = new RegExp(
+    LLM_JUDGE_HEURISTIC_PATTERNS.freeTextCodeExact.source,
+    LLM_JUDGE_HEURISTIC_PATTERNS.freeTextCodeExact.flags,
+);
+const LLM_JUDGE_COMMAND_ACTION_ALLOW_RE = new RegExp(
+    LLM_JUDGE_HEURISTIC_PATTERNS.commandActionAllowSuffix.source,
+    LLM_JUDGE_HEURISTIC_PATTERNS.commandActionAllowSuffix.flags,
+);
+const LLM_JUDGE_CODE_BODY_SIBLING_RE = new RegExp(
+    LLM_JUDGE_HEURISTIC_PATTERNS.codeBodySiblingExact.source,
+    LLM_JUDGE_HEURISTIC_PATTERNS.codeBodySiblingExact.flags,
+);
+
+export const HEURISTIC_SOURCE_HASH: string = createHash("sha256")
+    .update(
+        JSON.stringify({
+            rules: [...REGEX_RULE_IDS].sort(),
+            llmJudge: LLM_JUDGE_HEURISTIC_PATTERNS,
+        }),
+    )
+    .digest("hex")
+    .slice(0, 16);
+
+const LLM_JUDGE_SOFT_CREATE = new Set<ActionParamCreatePolicy>([
+    "free_text",
+    "opaque",
+]);
+
+export interface LlmJudgeFieldContext {
+    create?: ActionParamCreatePolicy;
+    actionId?: string;
+    siblingFieldNames?: readonly string[];
+}
+
+function isLlmJudgeSoftCreate(
+    create: ActionParamCreatePolicy | undefined,
+): boolean {
+    return create === undefined || LLM_JUDGE_SOFT_CREATE.has(create);
+}
+
+export function parameterRequiresLlmJudge(
+    fieldName: string,
+    createOrContext?: ActionParamCreatePolicy | LlmJudgeFieldContext,
+): boolean {
+    let ctx: LlmJudgeFieldContext;
+    if (createOrContext === undefined) {
+        ctx = {};
+    } else if (typeof createOrContext === "string") {
+        ctx = { create: createOrContext };
+    } else {
+        ctx = createOrContext;
+    }
+    const name = fieldName.trim();
+    if (!name) return false;
+    if (!isLlmJudgeSoftCreate(ctx.create)) {
+        return false;
+    }
+    if (LLM_JUDGE_EXACT_RE.test(name) || LLM_JUDGE_SUFFIX_RE.test(name)) {
+        return true;
+    }
+    if (/^body$/i.test(name)) {
+        const siblings = ctx.siblingFieldNames ?? [];
+        return siblings.some((s) => LLM_JUDGE_CODE_BODY_SIBLING_RE.test(s));
+    }
+    if (LLM_JUDGE_FREE_TEXT_CODE_RE.test(name)) {
+        if (ctx.actionId !== undefined && ctx.actionId.trim()) {
+            return LLM_JUDGE_COMMAND_ACTION_ALLOW_RE.test(ctx.actionId.trim());
+        }
+        return true;
+    }
+    return false;
+}
+
+export function applyLlmAsAJudgeVerify(
+    fieldName: string,
+    decision: FieldGraderDecision,
+    context?: Omit<LlmJudgeFieldContext, "create">,
+): FieldGraderDecision {
+    let item = decision.item;
+    if (item !== undefined) {
+        item = applyLlmAsAJudgeVerify(fieldName, item, context);
+    }
+    const needs = parameterRequiresLlmJudge(fieldName, {
+        create: decision.create,
+        ...(context?.actionId !== undefined
+            ? { actionId: context.actionId }
+            : {}),
+        ...(context?.siblingFieldNames !== undefined
+            ? { siblingFieldNames: context.siblingFieldNames }
+            : {}),
+    });
+    const itemNeeds = item?.verify === "llmAsAJudge";
+    if (!needs && !itemNeeds) {
+        if (item === decision.item) {
+            return decision;
+        }
+        if (item === undefined) {
+            const { item: _drop, ...rest } = decision;
+            return rest;
+        }
+        return { ...decision, item };
+    }
+    if (itemNeeds && item !== undefined) {
+        return {
+            create: decision.create,
+            verify: "llmAsAJudge",
+            rule: `array-items:string-llm-as-a-judge`,
+            source: decision.source,
+            item,
+        };
+    }
+    if (item !== undefined) {
+        return {
+            create: decision.create,
+            verify: "llmAsAJudge",
+            rule: "string-llm-as-a-judge",
+            source: decision.source,
+            item,
+        };
+    }
+    return {
+        create: decision.create,
+        verify: "llmAsAJudge",
+        rule: "string-llm-as-a-judge",
+        source: decision.source,
+    };
+}
+
 export interface ParameterGraderLlm {
     model: string;
     complete(prompt: string): Promise<string>;
@@ -172,6 +343,7 @@ const VERIFY_MODES = [
     "exists",
     "nonempty",
     "ignore",
+    "llmAsAJudge",
 ] as const satisfies readonly ActionParamVerifyMode[];
 
 const CREATE_SET = new Set<string>(CREATE_POLICIES);
@@ -223,6 +395,7 @@ export function actionParameterSourceFingerprint(
 ): string {
     const payload = {
         rulesVersion: GRADER_RULES_VERSION,
+        heuristicSourceHash: HEURISTIC_SOURCE_HASH,
         paramSpec: canonicalizeParamSpec(paramSpec),
     };
     return createHash("sha256")
@@ -892,12 +1065,16 @@ export async function buildActionParametersGraderEntry(
                         : {}),
                 },
             );
+            const judged = applyLlmAsAJudgeVerify(name, decision, {
+                actionId: actionId(schemaName, actionName),
+                siblingFieldNames: Object.keys(paramSpec.fields),
+            });
             fields[name] = fieldGraderFromDecision(
                 field.optional,
                 field.spec,
-                decision,
+                judged,
             );
-            scoreFields[name] = decision.verify;
+            scoreFields[name] = judged.verify;
         }
     }
 
@@ -1414,7 +1591,7 @@ export async function buildActionParametersGraderCatalog(
             "Incremental: only added/updated actions are reclassified; unchanged fingerprints are kept. " +
             "Regex first, LLM prior reuse (not regex priors), LLM+verifier fallback. " +
             "Open strings without a name heuristic use structural free_text/nonempty. " +
-            "`create` guides the synthesizer; `verify` / `parameterScore` drive runner soft matching. " +
+            "`create` guides the synthesizer; `verify` / `parameterScore` drive runner soft matching. `llmAsAJudge` marks code/script params that need semantic LLM scoring. " +
             "Object containers with only soft leaves use nonempty; mixed objects stay exact (no nested dotted paths yet).",
         catalogVersion: catalog.catalogVersion,
         generatedAt: options?.generatedAt ?? new Date().toISOString(),
@@ -1453,7 +1630,8 @@ export function loosenArrayVerifyMode(
     if (
         elementVerify === "ignore" ||
         elementVerify === "exists" ||
-        elementVerify === "nonempty"
+        elementVerify === "nonempty" ||
+        elementVerify === "llmAsAJudge"
     ) {
         return elementVerify;
     }
@@ -1567,214 +1745,171 @@ export function hasUsableParameterScoreSpecs(
     return specs.some((spec) => spec !== undefined);
 }
 
-export interface ActionParametersGraderDatasetAuditFinding {
-    severity: "error" | "warning";
-    code: string;
-    message: string;
-    actionId?: string;
-    field?: string;
-    count?: number;
+export interface ActionParameterLlmJudgePair {
+    action: string;
+    parameter: string;
 }
 
-export interface ActionParametersGraderDatasetAuditReport {
-    caseCount: number;
-    uniqueActions: number;
-    findings: ActionParametersGraderDatasetAuditFinding[];
-    ok: boolean;
-    stats: {
-        paramsScoredExact: number;
-        paramsScoredNonempty: number;
-        paramsScoredIgnore: number;
-        paramsScoredExists: number;
-        missingGraderActions: number;
-        missingGraderFields: number;
-        freeTextExactRisk: number;
-        temporalExactRisk: number;
-        nestedObjectExact: number;
-    };
+export interface ActionParametersLlmJudgeCatalog {
+    version: 1;
+    description: string;
+    catalogVersion: string;
+    catalogContentHash?: string;
+    generatedAt: string;
+    parameters: ActionParameterLlmJudgePair[];
+    excludedActions: string[];
 }
 
-/**
- * Audit generated benchmark cases against the grader catalog.
- * Errors: missing grader actions/fields for dataset params.
- * Warnings: free_text/temporal exact and nested object exact over-strictness.
- */
-export function auditActionParametersGraderAgainstDataset(
+function fieldTreeIsLlmAsAJudge(
+    field: Pick<ActionParameterFieldGrader, "verify" | "item">,
+): boolean {
+    if (field.verify === "llmAsAJudge") return true;
+    if (field.item !== undefined && fieldTreeIsLlmAsAJudge(field.item)) {
+        return true;
+    }
+    return false;
+}
+
+export function toActionParameterLlmJudgePairs(
+    catalog: ActionParametersGraderCatalog,
+): ActionParameterLlmJudgePair[] {
+    const pairs: ActionParameterLlmJudgePair[] = [];
+    for (const id of Object.keys(catalog.byAction).sort()) {
+        const entry = catalog.byAction[id]!;
+        for (const name of Object.keys(entry.fields).sort()) {
+            if (fieldTreeIsLlmAsAJudge(entry.fields[name]!)) {
+                pairs.push({ action: id, parameter: name });
+            }
+        }
+    }
+    return pairs;
+}
+
+export function listExcludedActions(
+    catalogOrPairs:
+        | ActionParametersGraderCatalog
+        | readonly ActionParameterLlmJudgePair[],
+): string[] {
+    const pairs =
+        "byAction" in catalogOrPairs
+            ? toActionParameterLlmJudgePairs(catalogOrPairs)
+            : catalogOrPairs;
+    return [...new Set(pairs.map((p) => p.action))].sort();
+}
+
+export function buildActionParametersLlmJudgeCatalog(
     grader: ActionParametersGraderCatalog,
-    cases: ReadonlyArray<{
-        id?: string;
-        seed?: {
-            expectedActions?: ReadonlyArray<{
-                schemaName: string;
-                actionName: string;
-                parameters?: Record<string, unknown>;
-            }>;
-        };
-        generalizations?: ReadonlyArray<{
-            expectedActions?: ReadonlyArray<{
-                schemaName: string;
-                actionName: string;
-                parameters?: Record<string, unknown>;
-            }>;
-        }>;
-        targetAction?: { schemaName: string; actionName: string };
-    }>,
-): ActionParametersGraderDatasetAuditReport {
-    const findings: ActionParametersGraderDatasetAuditFinding[] = [];
-    const missingActions = new Map<string, number>();
-    const missingFields = new Map<string, number>();
-    let paramsScoredExact = 0;
-    let paramsScoredNonempty = 0;
-    let paramsScoredIgnore = 0;
-    let paramsScoredExists = 0;
-    let freeTextExactRisk = 0;
-    let temporalExactRisk = 0;
-    let nestedObjectExact = 0;
-    const seenActions = new Set<string>();
-
-    const bump = (map: Map<string, number>, key: string) => {
-        map.set(key, (map.get(key) ?? 0) + 1);
-    };
-
-    const visitAction = (
-        schemaName: string,
-        actionName: string,
-        parameters: Record<string, unknown> | undefined,
-    ) => {
-        const id = actionId(schemaName, actionName);
-        seenActions.add(id);
-        const entry = grader.byAction[id];
-        if (entry === undefined) {
-            bump(missingActions, id);
-            return;
-        }
-        if (parameters === undefined) {
-            return;
-        }
-        for (const [fieldName, value] of Object.entries(parameters)) {
-            const field = entry.fields[fieldName];
-            if (field === undefined) {
-                bump(missingFields, `${id}\u0000${fieldName}`);
-                continue;
+    options?: {
+        generatedAt?: string;
+        description?: string;
+        catalogContentHash?: string;
+    },
+): ActionParametersLlmJudgeCatalog {
+    const parameters = toActionParameterLlmJudgePairs(grader);
+    const excludedActions = listExcludedActions(parameters);
+    const catalogContentHash =
+        options?.catalogContentHash ??
+        (
+            grader as ActionParametersGraderCatalog & {
+                catalogContentHash?: string;
             }
-            const mode = field.verify;
-            if (mode === "exact") {
-                paramsScoredExact += 1;
-            } else if (mode === "nonempty") {
-                paramsScoredNonempty += 1;
-            } else if (mode === "ignore") {
-                paramsScoredIgnore += 1;
-            } else if (mode === "exists") {
-                paramsScoredExists += 1;
-            }
-
-            if (mode === "exact" && field.create === "free_text") {
-                freeTextExactRisk += 1;
-            }
-            if (mode === "exact" && field.create === "temporal") {
-                temporalExactRisk += 1;
-            }
-            if (
-                mode === "exact" &&
-                (field.create === "record" || field.typeKind.includes("object"))
-            ) {
-                nestedObjectExact += 1;
-            }
-            void value;
-        }
-    };
-
-    for (const row of cases) {
-        const probes = [row.seed, ...(row.generalizations ?? [])];
-        for (const probe of probes) {
-            if (probe === undefined) {
-                continue;
-            }
-            for (const action of probe.expectedActions ?? []) {
-                visitAction(
-                    action.schemaName,
-                    action.actionName,
-                    action.parameters,
-                );
-            }
-        }
-        if (row.targetAction !== undefined) {
-            const id = actionId(
-                row.targetAction.schemaName,
-                row.targetAction.actionName,
-            );
-            seenActions.add(id);
-            if (grader.byAction[id] === undefined) {
-                bump(missingActions, id);
-            }
-        }
-    }
-
-    for (const [id, count] of [...missingActions.entries()].sort()) {
-        findings.push({
-            severity: "error",
-            code: "missing_grader_action",
-            message: `Dataset references action '${id}' with no grader entry`,
-            actionId: id,
-            count,
-        });
-    }
-    for (const [key, count] of [...missingFields.entries()].sort()) {
-        const sep = key.indexOf("\u0000");
-        const action = key.slice(0, sep);
-        const field = key.slice(sep + 1);
-        findings.push({
-            severity: "error",
-            code: "missing_grader_field",
-            message: `Dataset param '${field}' on '${action}' missing from grader fields`,
-            actionId: action,
-            field,
-            count,
-        });
-    }
-    if (freeTextExactRisk > 0) {
-        findings.push({
-            severity: "warning",
-            code: "free_text_exact",
-            message: `${freeTextExactRisk} free_text params scored exact (likely unfair soft-match)`,
-            count: freeTextExactRisk,
-        });
-    }
-    if (temporalExactRisk > 0) {
-        findings.push({
-            severity: "warning",
-            code: "temporal_exact",
-            message: `${temporalExactRisk} temporal params scored exact (NL dates/times will fail)`,
-            count: temporalExactRisk,
-        });
-    }
-    if (nestedObjectExact > 0) {
-        findings.push({
-            severity: "warning",
-            code: "nested_object_exact",
-            message:
-                `${nestedObjectExact} object/record params scored exact ` +
-                `(deep-equal; nested free-text over-strict until dotted paths)`,
-            count: nestedObjectExact,
-        });
-    }
-
-    const errors = findings.filter((f) => f.severity === "error");
+        ).catalogContentHash;
     return {
-        caseCount: cases.length,
-        uniqueActions: seenActions.size,
-        findings,
-        ok: errors.length === 0,
-        stats: {
-            paramsScoredExact,
-            paramsScoredNonempty,
-            paramsScoredIgnore,
-            paramsScoredExists,
-            missingGraderActions: missingActions.size,
-            missingGraderFields: missingFields.size,
-            freeTextExactRisk,
-            temporalExactRisk,
-            nestedObjectExact,
-        },
+        version: 1,
+        description:
+            options?.description ??
+            "Action parameters with verify=llmAsAJudge (code/script/program payloads). Synthesizer excludes excludedActions.",
+        catalogVersion: grader.catalogVersion,
+        ...(catalogContentHash !== undefined ? { catalogContentHash } : {}),
+        generatedAt: options?.generatedAt ?? grader.generatedAt,
+        parameters,
+        excludedActions,
     };
+}
+
+export function parseActionParametersLlmJudgeCatalog(
+    raw: unknown,
+    label: string,
+): ActionParametersLlmJudgeCatalog {
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+        throw new Error(`Invalid ${label}: expected object`);
+    }
+    const o = raw as Record<string, unknown>;
+    if (o.version !== 1) {
+        throw new Error(`Invalid ${label}: version`);
+    }
+    if (typeof o.catalogVersion !== "string" || !o.catalogVersion) {
+        throw new Error(`Invalid ${label}: catalogVersion`);
+    }
+    if (typeof o.generatedAt !== "string" || !o.generatedAt) {
+        throw new Error(`Invalid ${label}: generatedAt`);
+    }
+    if (typeof o.description !== "string") {
+        throw new Error(`Invalid ${label}: description`);
+    }
+    if (!Array.isArray(o.parameters)) {
+        throw new Error(`Invalid ${label}: parameters`);
+    }
+    const parameters: ActionParameterLlmJudgePair[] = [];
+    for (let i = 0; i < o.parameters.length; i += 1) {
+        const row = o.parameters[i];
+        if (row === null || typeof row !== "object" || Array.isArray(row)) {
+            throw new Error(`Invalid ${label}: parameters[${i}]`);
+        }
+        const r = row as Record<string, unknown>;
+        if (typeof r.action !== "string" || !r.action) {
+            throw new Error(`Invalid ${label}: parameters[${i}].action`);
+        }
+        if (typeof r.parameter !== "string" || !r.parameter) {
+            throw new Error(`Invalid ${label}: parameters[${i}].parameter`);
+        }
+        parameters.push({ action: r.action, parameter: r.parameter });
+    }
+    let excludedActions: string[];
+    if (o.excludedActions === undefined) {
+        excludedActions = listExcludedActions(parameters);
+    } else if (!Array.isArray(o.excludedActions)) {
+        throw new Error(`Invalid ${label}: excludedActions`);
+    } else {
+        excludedActions = [];
+        for (let i = 0; i < o.excludedActions.length; i += 1) {
+            const id = o.excludedActions[i];
+            if (typeof id !== "string" || !id) {
+                throw new Error(`Invalid ${label}: excludedActions[${i}]`);
+            }
+            excludedActions.push(id);
+        }
+        const expected = listExcludedActions(parameters);
+        if (
+            excludedActions.length !== expected.length ||
+            excludedActions.some((id, i) => id !== expected[i])
+        ) {
+            throw new Error(
+                `Invalid ${label}: excludedActions must match distinct sorted actions from parameters`,
+            );
+        }
+    }
+    return {
+        version: 1,
+        description: o.description,
+        catalogVersion: o.catalogVersion,
+        ...(typeof o.catalogContentHash === "string"
+            ? { catalogContentHash: o.catalogContentHash }
+            : {}),
+        generatedAt: o.generatedAt,
+        parameters,
+        excludedActions,
+    };
+}
+
+export function loadActionParametersLlmJudgeCatalogFile(
+    filePath: string,
+): ActionParametersLlmJudgeCatalog | undefined {
+    if (!existsSync(filePath)) {
+        return undefined;
+    }
+    return parseActionParametersLlmJudgeCatalog(
+        JSON.parse(readFileSync(filePath, "utf8")) as unknown,
+        filePath,
+    );
 }

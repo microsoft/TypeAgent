@@ -1,13 +1,10 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# Parameter grader: regex → classifier → verifier; no random default on miss.
-
 name: translation-bench-parameter-grader
-version: 1
+version: 2
 role: parameter_policy_eval
 
-# Stage 1 — deterministic (implemented in code; listed here for operators)
 regex_checker:
   description: |-
     Confident structural + well-known field-name rules.
@@ -23,10 +20,9 @@ regex_checker:
     - string_date_nonempty
     - string_time_nonempty
     - string_identifier_exact
+    - string_llm_as_a_judge
 
-# Stage 2 — LLM policy classifier (only when regex_checker misses)
 policy_classifier:
-  # Ground truth for the classifier completion call — not caller-overridable.
   model_configuration:
     temperature: 0.0
   create_policies:
@@ -44,6 +40,7 @@ policy_classifier:
     - exists
     - nonempty
     - ignore
+    - llmAsAJudge
   template: |-
     You are a parameter-policy classifier for TypeAgent translation-bench.
     Regex rules did NOT match this field. You must invent create + verify
@@ -67,6 +64,13 @@ policy_classifier:
     - Arrays → keep the ELEMENT policy and loop items (loose container verify;
       do not require whole-list exact). Objects → record + exact
     - Unknown/any structure → opaque + ignore
+    - Code / scripts / program payloads that can be written many correct ways
+      (browser inject scripts, ad-hoc JS/TS, recorded automation steps,
+      function declarations, shell command bodies, flow parameter JSON, etc.)
+      → free_text (or opaque) + llmAsAJudge
+      NEVER use exact for these: many surface forms implement the same intent.
+    - Ordinary short NL (title, message, description, query, site, url) stays
+      free_text + nonempty — not llmAsAJudge.
 
     Action: {{schema_name}}.{{action_name}}
     {{action_description_block}}
@@ -79,9 +83,7 @@ policy_classifier:
     Full action parameters summary:
     {{parameters_summary}}
 
-# Stage 3 — independent policy verifier (LLM), last gate for classifier output
 policy_verifier:
-  # Ground truth for the verifier completion call — not caller-overridable.
   model_configuration:
     temperature: 0.0
   approve_score_threshold: 0.8
@@ -115,7 +117,9 @@ policy_verifier:
     create must be coherent with the structural type and field name.
     verify must be a runner soft-score mode that matches how noisy the value is:
       free text → nonempty/exists; ids/enums/bools/numbers → exact;
-      optional units/modes → ignore is often correct.
+      optional units/modes → ignore is often correct;
+      code/scripts/program payloads with many valid implementations → llmAsAJudge
+      (reject OVERSTRICT_VERIFY if candidate used exact on script/code bodies).
 
     Action: {{schema_name}}.{{action_name}}
     Field name: {{field_name}}
@@ -126,13 +130,14 @@ policy_verifier:
     Candidate policy (JSON):
     {{candidate_policy_json}}
 
-# Combined gate (documented for operators; enforced in code)
 acceptance:
   prefer_regex: true
   require_verifier_approve_for_llm: true
   max_classifier_attempts: 3
   notes: |-
-    Pipeline order mirrors quality-verifier stages:
+    Pipeline order:
       regex_checker → (miss) policy_classifier → policy_verifier → accept|retry
     Regex hits never call the LLM. Verifier reject feeds issues back into
     the classifier for the next attempt. No random default when regex misses.
+    llmAsAJudge parameters are listed in action-parameters-grader-llm.generated.json;
+    synthesizer excludes those entire actions from simple-action coverage.

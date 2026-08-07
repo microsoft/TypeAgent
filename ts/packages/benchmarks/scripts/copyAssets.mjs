@@ -46,6 +46,10 @@ const files = [
         "dist/translationBench/action-parameters-grader.generated.json",
     ],
     [
+        "src/translationBench/action-parameters-grader-llm.generated.json",
+        "dist/translationBench/action-parameters-grader-llm.generated.json",
+    ],
+    [
         "src/core/model-prices.generated.json",
         "dist/core/model-prices.generated.json",
     ],
