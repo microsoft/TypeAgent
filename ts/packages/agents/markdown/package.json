@@ -46,7 +46,7 @@
     "@typeagent/telemetry": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.3.4",
-    "dompurify": "^3.4.12",
+    "dompurify": "^3.4.13",
     "express": "^4.22.0",
     "express-rate-limit": "^7.5.0",
     "katex": "^0.16.21",
