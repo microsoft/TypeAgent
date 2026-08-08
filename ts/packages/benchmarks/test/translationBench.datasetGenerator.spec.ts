@@ -398,6 +398,23 @@ describe("generated translation bench candidate validation", () => {
         ).toThrow(/target|lookup|action/i);
     });
 
+    it("rejects after strip when a required parameter was only an empty placeholder", () => {
+        const emptyRequired = generatedCandidate();
+        for (const probe of [emptyRequired.seed, ...emptyRequired.genCases]) {
+            if (probe.expectedActions.length === 0) continue;
+            probe.expectedActions = [
+                {
+                    schemaName: "tools",
+                    actionName: "lookup",
+                    parameters: { query: "" },
+                },
+            ];
+        }
+        expect(() =>
+            parseTranslationBenchGeneratedCandidate(emptyRequired, context),
+        ).toThrow(/required|query|missing/i);
+    });
+
     it("canonicalizes generated payload hashes across checkpoint key sorting", () => {
         const schemas = [catalogSchema("tools", ["lookup"])] as const;
         const canonicalHash = computeTranslationBenchCanonicalPayloadHash as (
@@ -611,6 +628,107 @@ describe("translation bench generation quality loop", () => {
         expect(JSON.stringify(generationSchema)).not.toContain(
             '\"required\":[\"schemaName\",\"actionName\",\"parameters\"]',
         );
+    });
+
+    it("strips empty gold placeholders and prompts grounded-param rules", async () => {
+        const parsed = parseToolsJsonSchema([
+            {
+                name: "authLogin",
+                description: "Log in to GitHub CLI",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        hostname: { type: "string" },
+                        token: { type: "string" },
+                        web: { type: "boolean" },
+                    },
+                    required: ["hostname"],
+                    additionalProperties: false,
+                },
+            },
+        ]);
+        const tools = generateActionActionFunctionJsonSchemas({
+            entry: parsed.entry.action!,
+            actionSchemas: parsed.actionSchemas,
+        }).map((tool) => ({
+            type: "function" as const,
+            function: {
+                name: tool.function.name,
+                ...(tool.function.description !== undefined
+                    ? { description: tool.function.description }
+                    : {}),
+                parameters: tool.function.parameters as Record<string, unknown>,
+            },
+        }));
+        const schema: TranslationBenchBenchmarkSchema = {
+            schemaName: "github-cli",
+            description: "github-cli actions",
+            tools,
+            typeAgent: {
+                sourceHash: `github-cli-${HASH}`,
+                schemaType: "GithubCliAction",
+                parsedActionSchema: toJSONParsedActionSchema(parsed),
+            },
+        };
+        const target = targetAction("github-cli", "authLogin");
+        const dirty = generatedCandidate(target, 2);
+        for (const probe of [dirty.seed, ...dirty.genCases]) {
+            if (probe.expectedActions.length === 0) continue;
+            probe.expectedActions = [
+                {
+                    ...target,
+                    parameters: {
+                        hostname: "github.acme.example",
+                        web: true,
+                        token: "",
+                    },
+                },
+            ];
+        }
+        let generatorPrompt = "";
+        const result = await runTranslationBenchGenerationQualityLoop({
+            targetAction: target,
+            schema,
+            anchor: sourceAnchor(),
+            activeSchemas: [schema.schemaName],
+            genCaseCount: 2,
+            maxAttempts: 5,
+            generator: {
+                model: "generator-model",
+                async complete(prompt) {
+                    generatorPrompt = prompt;
+                    return JSON.stringify(dirty);
+                },
+            },
+            reviewer: {
+                model: "reviewer-model",
+                async complete(prompt) {
+                    return JSON.stringify(
+                        reviewerDecision(
+                            candidateHashFromPrompt(prompt),
+                            "approve",
+                        ),
+                    );
+                },
+            },
+        });
+        expect(generatorPrompt).toContain(
+            "Only include parameters clearly supported by the utterance",
+        );
+        expect(result.candidate.seed.expectedActions[0]!.parameters).toEqual({
+            hostname: "github.acme.example",
+            web: true,
+        });
+        for (const probe of result.candidate.genCases) {
+            if (probe.role !== "positive") continue;
+            expect(probe.expectedActions[0]!.parameters).toEqual({
+                hostname: "github.acme.example",
+                web: true,
+            });
+            expect(probe.expectedActions[0]!.parameters).not.toHaveProperty(
+                "token",
+            );
+        }
     });
 
     it("uses separate generator and reviewer passes", async () => {

@@ -1429,6 +1429,111 @@ describe("eligible action coverage counting", () => {
     });
 });
 
+describe("hardcoded nonempty for conversation topic titles", () => {
+    it("soft-scores conversation name params without loosening identity names", async () => {
+        const catalog = {
+            catalogVersion: "test",
+            generatedAt: "2026-01-01T00:00:00.000Z",
+            actions: [
+                {
+                    schemaName: "system.conversation",
+                    actionName: "summarizeConversation",
+                    paramSpec: objectSpec({
+                        name: {
+                            optional: true,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+                {
+                    schemaName: "system.conversation",
+                    actionName: "indexConversation",
+                    paramSpec: objectSpec({
+                        name: {
+                            optional: true,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+                {
+                    schemaName: "list",
+                    actionName: "removeItems",
+                    paramSpec: objectSpec({
+                        listName: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+            ],
+        };
+        const grader = await buildActionParametersGraderCatalog(catalog);
+        expect(
+            grader.byAction["system.conversation.summarizeConversation"]!
+                .parameterScore.fields.name,
+        ).toBe("nonempty");
+        expect(
+            grader.byAction["system.conversation.indexConversation"]!
+                .parameterScore.fields.name,
+        ).toBe("nonempty");
+        expect(
+            grader.byAction["list.removeItems"]!.parameterScore.fields.listName,
+        ).toBe("exact");
+    });
+});
+
+describe("hardcoded llmAsAJudge for internet lookup params", () => {
+    it("forces lookupAndAnswerInternet freeform params to llmAsAJudge", async () => {
+        const catalog = {
+            catalogVersion: "test",
+            generatedAt: "2026-01-01T00:00:00.000Z",
+            actions: [
+                {
+                    schemaName: "browser.lookupAndAnswer",
+                    actionName: "lookupAndAnswerInternet",
+                    paramSpec: objectSpec({
+                        originalRequest: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                        internetLookups: {
+                            optional: false,
+                            spec: {
+                                kind: "array",
+                                item: { kind: "string" },
+                            },
+                        },
+                        sites: {
+                            optional: true,
+                            spec: {
+                                kind: "array",
+                                item: { kind: "string" },
+                            },
+                        },
+                    }),
+                },
+            ],
+        };
+        const grader = await buildActionParametersGraderCatalog(catalog);
+        const entry =
+            grader.byAction["browser.lookupAndAnswer.lookupAndAnswerInternet"]!;
+        expect(entry.parameterScore.fields).toEqual({
+            originalRequest: "llmAsAJudge",
+            internetLookups: "llmAsAJudge",
+            sites: "llmAsAJudge",
+        });
+        expect(entry.fields.internetLookups.verify).toBe("llmAsAJudge");
+        expect(entry.fields.originalRequest.verify).toBe("llmAsAJudge");
+        expect(entry.fields.sites.verify).toBe("llmAsAJudge");
+        expect(
+            parameterRequiresLlmJudge("originalRequest", {
+                create: "free_text",
+                actionId: "browser.lookupAndAnswer.lookupAndAnswerInternet",
+            }),
+        ).toBe(true);
+    });
+});
+
 describe("llmAsAJudge verify mode", () => {
     it("uses hardcoded action.parameter pairs; LLM may still emit llmAsAJudge", () => {
         expect(
