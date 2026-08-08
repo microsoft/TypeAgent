@@ -9,18 +9,18 @@ import {
     TYPEAGENT_SPAN_NAMES,
 } from "../src/otel/traceContract.js";
 import {
-    createInMemorySpanHarness,
+    createInMemorySpanManager,
     type CapturedSpan,
-    type InMemorySpanHarness,
-} from "../src/otel/testing/inMemorySpanHarness.js";
-// Re-import the harness via the published subpath. This is a real load-time
+    type InMemorySpanManager,
+} from "../src/otel/testing/inMemorySpanManager.js";
+// Re-import the manager via the published subpath. This is a real load-time
 // exercise of the package.json `exports` map: if the subpath, output path,
 // or `files` allowlist ever breaks, this import fails at test time. The
 // module-object comparison below guarantees the subpath resolves to the same
 // implementation as the direct src import, so downstream steps consuming
-// `@typeagent/telemetry/testing/inMemorySpanHarness` do not silently pick up
+// `@typeagent/telemetry/testing/inMemorySpanManager` do not silently pick up
 // a stale build.
-import * as harnessSubpath from "@typeagent/telemetry/testing/inMemorySpanHarness";
+import * as managerSubpath from "@typeagent/telemetry/testing/inMemorySpanManager";
 
 describe("trace contract span-name and attribute-key constants", () => {
     it("uses the frozen typeagent.* span-name namespace the design doc calls out", () => {
@@ -49,14 +49,14 @@ describe("trace contract span-name and attribute-key constants", () => {
 });
 
 describe("setTypeAgentSpanAttributes", () => {
-    let harness: InMemorySpanHarness;
+    let manager: InMemorySpanManager;
 
     beforeEach(() => {
-        harness = createInMemorySpanHarness();
+        manager = createInMemorySpanManager();
     });
 
     afterEach(async () => {
-        await harness.shutdown();
+        await manager.shutdown();
     });
 
     function withSpan<T>(name: string, fn: (span: any) => T): T {
@@ -82,7 +82,7 @@ describe("setTypeAgentSpanAttributes", () => {
             });
         });
 
-        const [captured] = harness.findSpansByName("t");
+        const [captured] = manager.findSpansByName("t");
         expect(captured).toBeDefined();
         expect(captured.attributes).toEqual({
             "typeagent.agent.name": "player",
@@ -107,7 +107,7 @@ describe("setTypeAgentSpanAttributes", () => {
             setTypeAgentSpanAttributes(span, smuggled);
         });
 
-        const [captured] = harness.findSpansByName("t");
+        const [captured] = manager.findSpansByName("t");
         expect(captured.attributes).toEqual({
             "typeagent.agent.name": "player",
         });
@@ -130,7 +130,7 @@ describe("setTypeAgentSpanAttributes", () => {
             setTypeAgentSpanAttributes(span, withUndefinedAndBad);
         });
 
-        const [captured] = harness.findSpansByName("t");
+        const [captured] = manager.findSpansByName("t");
         expect(captured.attributes).toEqual({
             "typeagent.session.id": "sess-1",
         });
@@ -146,7 +146,7 @@ describe("setTypeAgentSpanAttributes", () => {
             });
         });
 
-        const [captured] = harness.findSpansByName("t");
+        const [captured] = manager.findSpansByName("t");
         const written = captured.attributes["typeagent.agent.name"];
         expect(typeof written).toBe("string");
         expect(written).not.toContain(withSecret);
@@ -171,22 +171,22 @@ describe("setTypeAgentSpanAttributes", () => {
             );
         });
 
-        const [captured] = harness.findSpansByName("t");
+        const [captured] = manager.findSpansByName("t");
         const written = captured.attributes["typeagent.agent.name"];
         expect(typeof written).toBe("string");
         expect(String(written)).not.toContain(knownSecret);
     });
 });
 
-describe("in-memory span harness", () => {
-    let harness: InMemorySpanHarness;
+describe("in-memory span manager", () => {
+    let manager: InMemorySpanManager;
 
     beforeEach(() => {
-        harness = createInMemorySpanHarness();
+        manager = createInMemorySpanManager();
     });
 
     afterEach(async () => {
-        await harness.shutdown();
+        await manager.shutdown();
     });
 
     it("captures finished spans through the OTel global provider", () => {
@@ -196,7 +196,7 @@ describe("in-memory span harness", () => {
         const s2 = tracer.startSpan("typeagent.translation");
         s2.end();
 
-        const spans = harness.getFinishedSpans();
+        const spans = manager.getFinishedSpans();
         expect(spans.map((s) => s.name)).toEqual([
             "typeagent.request",
             "typeagent.translation",
@@ -209,9 +209,9 @@ describe("in-memory span harness", () => {
         tracer.startSpan("typeagent.llm").end();
         tracer.startSpan("typeagent.action").end();
 
-        expect(harness.findSpansByName("typeagent.llm")).toHaveLength(2);
-        expect(harness.findSpansByName("typeagent.action")).toHaveLength(1);
-        expect(harness.findSpansByName("typeagent.nope")).toEqual([]);
+        expect(manager.findSpansByName("typeagent.llm")).toHaveLength(2);
+        expect(manager.findSpansByName("typeagent.action")).toHaveLength(1);
+        expect(manager.findSpansByName("typeagent.nope")).toEqual([]);
     });
 
     it("assertParentChild passes for a nested startActiveSpan call", () => {
@@ -223,20 +223,20 @@ describe("in-memory span harness", () => {
             parent.end();
         });
 
-        const [parent] = harness.findSpansByName("typeagent.request");
-        const [child] = harness.findSpansByName("typeagent.translation");
-        expect(() => harness.assertParentChild(parent, child)).not.toThrow();
+        const [parent] = manager.findSpansByName("typeagent.request");
+        const [child] = manager.findSpansByName("typeagent.translation");
+        expect(() => manager.assertParentChild(parent, child)).not.toThrow();
     });
 
     it("assertParentChild throws when the child has no parent span id", () => {
         const tracer = trace.getTracer("test");
         // A root span has no parent. Ask assertParentChild to treat it as
         // the child of itself: same trace id, but no parentSpanId. Exercises
-        // the second-arm error path of the harness so a future refactor
+        // the second-arm error path of the manager so a future refactor
         // that drops the check would fail this test.
         tracer.startSpan("root").end();
-        const [root] = harness.getFinishedSpans();
-        expect(() => harness.assertParentChild(root, root)).toThrow(
+        const [root] = manager.getFinishedSpans();
+        expect(() => manager.assertParentChild(root, root)).toThrow(
             /parent span id/,
         );
     });
@@ -255,9 +255,9 @@ describe("in-memory span harness", () => {
             });
             root.end();
         });
-        const [child] = harness.findSpansByName("child");
-        const [uncle] = harness.findSpansByName("uncle");
-        expect(() => harness.assertParentChild(child, uncle)).toThrow(
+        const [child] = manager.findSpansByName("child");
+        const [uncle] = manager.findSpansByName("uncle");
+        expect(() => manager.assertParentChild(child, uncle)).toThrow(
             /parent span id/,
         );
     });
@@ -266,48 +266,48 @@ describe("in-memory span harness", () => {
         const tracer = trace.getTracer("test");
         tracer.startSpan("a").end();
         tracer.startSpan("b").end();
-        const [a, b] = harness.getFinishedSpans();
-        expect(() => harness.assertParentChild(a, b)).toThrow(/trace id/);
+        const [a, b] = manager.getFinishedSpans();
+        expect(() => manager.assertParentChild(a, b)).toThrow(/trace id/);
     });
 
     it("reset() drops captured spans without disturbing the provider", () => {
         const tracer = trace.getTracer("test");
         tracer.startSpan("gone").end();
-        expect(harness.getFinishedSpans()).toHaveLength(1);
+        expect(manager.getFinishedSpans()).toHaveLength(1);
 
-        harness.reset();
-        expect(harness.getFinishedSpans()).toEqual([]);
+        manager.reset();
+        expect(manager.getFinishedSpans()).toEqual([]);
 
         tracer.startSpan("kept").end();
-        expect(harness.getFinishedSpans().map((s) => s.name)).toEqual(["kept"]);
+        expect(manager.getFinishedSpans().map((s) => s.name)).toEqual(["kept"]);
     });
 
     it("getFinishedSpans returns a defensive copy", () => {
         const tracer = trace.getTracer("test");
         tracer.startSpan("a").end();
-        const snapshot = harness.getFinishedSpans();
+        const snapshot = manager.getFinishedSpans();
         snapshot.length = 0;
-        expect(harness.getFinishedSpans()).toHaveLength(1);
+        expect(manager.getFinishedSpans()).toHaveLength(1);
     });
 
     it("shutdown() is idempotent", async () => {
-        await harness.shutdown();
-        await expect(harness.shutdown()).resolves.toBeUndefined();
+        await manager.shutdown();
+        await expect(manager.shutdown()).resolves.toBeUndefined();
     });
 
     it("shutdown() called concurrently returns the same promise", async () => {
         // Overlapping callers must all wait for the single in-flight
         // shutdown instead of racing the global-provider reset. If the
         // second call resolved eagerly while the first was still awaiting,
-        // the next harness install could observe a half-torn-down state.
-        const a = harness.shutdown();
-        const b = harness.shutdown();
+        // the next manager install could observe a half-torn-down state.
+        const a = manager.shutdown();
+        const b = manager.shutdown();
         expect(a).toBe(b);
         await Promise.all([a, b]);
     });
 
-    it("shutdown() unregisters the harness provider so a new tracer no-ops", async () => {
-        await harness.shutdown();
+    it("shutdown() unregisters the manager provider so a new tracer no-ops", async () => {
+        await manager.shutdown();
         // After shutdown, the OTel global reverts to a no-op provider. A
         // tracer obtained *after* shutdown produces spans that our former
         // exporter never sees.
@@ -318,7 +318,7 @@ describe("in-memory span harness", () => {
         // The exporter should still have the state it had at shutdown
         // (either whatever it captured before, or empty). Critically, the
         // *new* span should not appear in it.
-        const names = harness.exporter.getFinishedSpans().map((s) => s.name);
+        const names = manager.exporter.getFinishedSpans().map((s) => s.name);
         expect(names).not.toContain("post-shutdown");
     });
 
@@ -335,51 +335,51 @@ describe("in-memory span harness", () => {
         expect(carrier).toEqual({});
     });
 
-    it("back-to-back harnesses do not leak state between each other", async () => {
+    it("back-to-back managers do not leak state between each other", async () => {
         const tracer1 = trace.getTracer("test");
-        tracer1.startSpan("first-harness").end();
-        expect(harness.findSpansByName("first-harness")).toHaveLength(1);
+        tracer1.startSpan("first-manager").end();
+        expect(manager.findSpansByName("first-manager")).toHaveLength(1);
 
-        await harness.shutdown();
+        await manager.shutdown();
 
-        harness = createInMemorySpanHarness();
-        expect(harness.getFinishedSpans()).toEqual([]);
+        manager = createInMemorySpanManager();
+        expect(manager.getFinishedSpans()).toEqual([]);
         const tracer2 = trace.getTracer("test");
-        tracer2.startSpan("second-harness").end();
-        expect(harness.findSpansByName("first-harness")).toEqual([]);
-        expect(harness.findSpansByName("second-harness")).toHaveLength(1);
+        tracer2.startSpan("second-manager").end();
+        expect(manager.findSpansByName("first-manager")).toEqual([]);
+        expect(manager.findSpansByName("second-manager")).toHaveLength(1);
     });
 
     it("refuses to install over an already-registered global provider", () => {
-        // The outer beforeEach already installed one harness. A second
+        // The outer beforeEach already installed one manager. A second
         // install without teardown must fail loudly rather than silently
         // no-op.
-        expect(() => createInMemorySpanHarness()).toThrow(
+        expect(() => createInMemorySpanManager()).toThrow(
             /already globally registered/,
         );
     });
 });
 
 describe("published testing subpath export", () => {
-    it("resolves @typeagent/telemetry/testing/inMemorySpanHarness to the same module", async () => {
+    it("resolves @typeagent/telemetry/testing/inMemorySpanManager to the same module", async () => {
         // Guard against a broken `exports` subpath, wrong `dist` output
-        // path, or a `files` allowlist that would ship the harness to
+        // path, or a `files` allowlist that would ship the manager to
         // downstream consumers without it. The subpath and the direct src
         // import must expose the same public surface, so downstream steps
         // relying on the package specifier get the same behavior.
-        expect(typeof harnessSubpath.createInMemorySpanHarness).toBe(
+        expect(typeof managerSubpath.createInMemorySpanManager).toBe(
             "function",
         );
-        const h = harnessSubpath.createInMemorySpanHarness();
+        const manager = managerSubpath.createInMemorySpanManager();
         try {
             const tracer = trace.getTracer("test");
             tracer.startSpan("subpath").end();
-            const spans: CapturedSpan[] = h.findSpansByName("subpath");
+            const spans: CapturedSpan[] = manager.findSpansByName("subpath");
             expect(spans).toHaveLength(1);
         } finally {
             // Always tear down so this test does not leak the global
             // provider into whichever spec Jest schedules next.
-            await h.shutdown();
+            await manager.shutdown();
         }
     });
 });

@@ -10,15 +10,15 @@ import {
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 
 /**
- * Test-only in-memory trace harness. Not shipped by the main package entry
- * point - imported from `@typeagent/telemetry/testing/inMemorySpanHarness`
+ * Test-only in-memory span manager. Not shipped by the main package entry
+ * point - imported from `@typeagent/telemetry/testing/inMemorySpanManager`
  * (dist path) or directly from source in this package's own specs.
  *
- * The harness stands up a temporary `BasicTracerProvider` with an
+ * The manager stands up a temporary `BasicTracerProvider` with an
  * `InMemorySpanExporter` behind a `SimpleSpanProcessor`, registers it as
  * the global OTel tracer provider, and offers helpers to inspect and assert
  * over the captured spans. Teardown restores the previous global provider
- * exactly, so a spec that installs a harness cannot leak state into the
+ * exactly, so a spec that installs a manager cannot leak state into the
  * next spec.
  */
 
@@ -29,8 +29,8 @@ import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
  */
 export type CapturedSpan = ReadableSpan;
 
-/** Handle returned by {@link createInMemorySpanHarness}. */
-export interface InMemorySpanHarness {
+/** Handle returned by {@link createInMemorySpanManager}. */
+export interface InMemorySpanManager {
     /**
      * The temporary tracer provider registered as the OTel global. Exposed
      * only for tests that need to hand this exact provider to code under
@@ -70,8 +70,8 @@ export interface InMemorySpanHarness {
     reset(): void;
 
     /**
-     * Tear the harness down: shut down the provider and restore the tracer
-     * provider that was global before this harness was installed. Idempotent
+     * Tear the manager down: shut down the provider and restore the tracer
+     * provider that was global before this manager was installed. Idempotent
      * - a second call is a no-op. Returns a promise that resolves after the
      * underlying SDK shutdown completes.
      */
@@ -80,11 +80,11 @@ export interface InMemorySpanHarness {
 
 /**
  * Install a temporary in-memory OTel tracer provider globally and return a
- * harness that can inspect the captured spans. Always call `shutdown()` in
+ * manager that can inspect the captured spans. Always call `shutdown()` in
  * the spec's `afterEach`/`afterAll` (or a `try/finally`) to restore the
  * previous global provider.
  */
-export function createInMemorySpanHarness(): InMemorySpanHarness {
+export function createInMemorySpanManager(): InMemorySpanManager {
     const exporter = new InMemorySpanExporter();
     const processor = new SimpleSpanProcessor(exporter);
     const provider = new NodeTracerProvider({
@@ -93,7 +93,7 @@ export function createInMemorySpanHarness(): InMemorySpanHarness {
 
     // `provider.register()` sets the global tracer provider and installs a
     // Node AsyncHooks context manager so `startActiveSpan` correctly parents
-    // nested async work. Propagation is disabled because this harness does not
+    // nested async work. Propagation is disabled because this manager does not
     // test carrier injection and must not leak a global propagator. It returns
     // void, so detect an already-registered provider ahead of time and fail
     // loudly instead of silently no-oping.
@@ -104,9 +104,9 @@ export function createInMemorySpanHarness(): InMemorySpanHarness {
         !isNoopTracerProvider(existingDelegate)
     ) {
         throw new Error(
-            "createInMemorySpanHarness: an OTel tracer provider is already " +
+            "createInMemorySpanManager: an OTel tracer provider is already " +
                 "globally registered. Call trace.disable() (or shut down the " +
-                "previous provider) before installing this harness.",
+                "previous provider) before installing this manager.",
         );
     }
     provider.register({ propagator: null });
@@ -151,7 +151,7 @@ export function createInMemorySpanHarness(): InMemorySpanHarness {
         },
         shutdown(): Promise<void> {
             // Cache the shutdown promise so overlapping callers (e.g. a
-            // second `Promise.all([h.shutdown(), h.shutdown()])`) all wait
+            // second `Promise.all([m.shutdown(), m.shutdown()])`) all wait
             // for the same completion instead of racing the global-provider
             // reset.
             if (shutdownPromise === undefined) {
@@ -161,7 +161,7 @@ export function createInMemorySpanHarness(): InMemorySpanHarness {
                     } finally {
                         // Unregister the tracer provider and the AsyncHooks
                         // context manager `provider.register()` installed so
-                        // the next harness install (or any other caller)
+                        // the next manager install (or any other caller)
                         // sees a clean "no provider set" state.
                         trace.disable();
                         context.disable();
@@ -192,7 +192,7 @@ function isNoopTracerProvider(candidate: any): boolean {
 /**
  * Read the parent span id from a captured span. The `ReadableSpan` interface
  * has evolved across SDK versions: v1 exposed `parentSpanId`, and v2 uses
- * `parentSpanContext.spanId`. Check both so the harness stays compatible
+ * `parentSpanContext.spanId`. Check both so the manager stays compatible
  * with either shape without pinning a specific runtime property.
  */
 function readParentSpanId(span: CapturedSpan): string | undefined {

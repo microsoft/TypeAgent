@@ -15,9 +15,9 @@
     ".": {
       "node": "./dist/indexNode.js"
     },
-    "./testing/inMemorySpanHarness": {
-      "types": "./dist/otel/testing/inMemorySpanHarness.d.ts",
-      "node": "./dist/otel/testing/inMemorySpanHarness.js"
+    "./testing/inMemorySpanManager": {
+      "types": "./dist/otel/testing/inMemorySpanManager.d.ts",
+      "node": "./dist/otel/testing/inMemorySpanManager.js"
     }
   },
   "files": [
