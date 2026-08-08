@@ -52,6 +52,8 @@ function testMatchGrammarDFA(grammar: Grammar, request: string): unknown[] {
     const nfa = compileGrammarToNFA(grammar, "test.grammar");
     const dfa = compileNFAToDFA(nfa, "test.grammar");
     const tokens = tokenizeRequest(request);
+    // spacingContext.request also enables the trailing-punct peel retry so
+    // standalone grammar `\?` matches natural glued questions (hello?).
     const result = matchDFAWithSplitting(dfa, tokens, false, {
         request,
         grammar,
