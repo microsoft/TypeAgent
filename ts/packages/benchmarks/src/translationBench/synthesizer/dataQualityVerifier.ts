@@ -366,9 +366,10 @@ export async function runTranslationBenchSemanticChecker(options: {
 
         let fairnessIssues: TranslationBenchReviewIssue[];
         try {
-            const assessments = parseTranslationBenchNegativeFairnessAssessments(
-                rawAssessments === undefined ? [] : rawAssessments,
-            );
+            const assessments =
+                parseTranslationBenchNegativeFairnessAssessments(
+                    rawAssessments === undefined ? [] : rawAssessments,
+                );
             fairnessIssues = checkTranslationBenchCandidateNegativeFairness(
                 options.candidate,
                 options.loop.targetAction,
