@@ -67,24 +67,34 @@ template: |-
     AMBIGUOUS_INTENT before semantic review.
 
   Negatives (hard fairness requirement — empty expectedActions):
-  - Scorer treats expectedActions: [] as "translator must emit ZERO actions".
-    Only write negatives where that label is fair.
-  - ALLOWED negative kinds (set dimensions.negativeKind to one of these):
-      pure_refusal — explicit don't/never/stop of the target (no alternate command)
-      non_action_question — status/definition/meta only (not how-to-perform-target)
-      missing_info — underspecified ask that needs clarification, not an action
+  - Scorer treats expectedActions: [] as "translator must emit ZERO actions"
+    across the FULL active schema set (chat, help, history, lookup, and every
+    other loaded tool — not merely "not the target"). Only write negatives
+    where that zero-action gold is fair.
+  - ALLOWED empty-gold kind (set dimensions.negativeKind exactly):
+      pure_refusal — explicit don't/never/stop/leave-alone/cancel of the target
+        with NO alternate task, NO question, and NO request for explanation.
+        Prefer hard leave-alone: "Don't take a screenshot.", "Leave my tabs
+        alone.", "Do not open any websites right now."
   - FORBIDDEN as empty-gold negatives (semantic checker rejects BAD_NEGATIVE):
+      non_action_question / definition / meta / status ("What does goBack mean?",
+        "Is Bluetooth enabled?", "Has the flow been deleted?") — these invite
+        chat/help/history/lookup fires under a full catalog
+      missing_info that still invites a tool ("Which list?" → listLists)
       contrastive adjacent commands ("close only this tab" as neg for closeAll,
-      "search Bing for MSFT" as neg for changeSearchProvider, "click the link…"
-      as neg for openWebPage)
+        "search Bing for MSFT" as neg for changeSearchProvider, "click the link…"
+        as neg for openWebPage)
       refuse-then-alternate forms ("Don't close all; just close this one")
       partial constraints that still request an action ("open X but don't bookmark")
       how-to-perform-target / soft solicits ("How do I add X?", "Can you open Y?",
-      "Is there a way to close this tab?")
-      capability questions that still solicit the target action
-      any imperative / toolable request a correct translator would map to a tool
-  - Double-meaning / unfair contrastive negatives inflated false-positive rates
-    in prior 1k evals; do not regenerate that failure mode.
+        "Is there a way to close this tab?", "Would you mind taking a screenshot?")
+      capability questions; trailing "what should I do instead?"
+      any imperative / toolable / answerable request a correct translator would
+        map to ANY loaded tool
+  - Every negative in this row MUST be pure_refusal. Do not mint definition or
+    status questions as empty gold (they are not zero-action-safe).
+  - Double-meaning / unfair contrastive / Q&A empties crushed neg pass in prior
+    1k evals; do not regenerate those failure modes.
 
   Use dimensions to label each case's scenario, linguistic form, and positive
   variation or negativeKind / negative boundary reason.

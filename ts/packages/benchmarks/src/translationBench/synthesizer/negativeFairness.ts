@@ -24,11 +24,37 @@ export const TRANSLATION_BENCH_NEGATIVE_KINDS = [
 export type TranslationBenchNegativeKind =
     (typeof TRANSLATION_BENCH_NEGATIVE_KINDS)[number];
 
-const FAIR_KINDS = new Set<TranslationBenchNegativeKind>([
+/**
+ * Empty gold means the headless scorer requires ZERO actions across the full
+ * active catalog (chat/help/history/lookup included). Only hard-abstain forms
+ * clear that bar. Definition/status/meta questions are label-kinds for audit
+ * but must never be fairEmptyGold under zero-action scoring.
+ */
+const FAIR_KINDS = new Set<TranslationBenchNegativeKind>(["pure_refusal"]);
+
+export const TRANSLATION_BENCH_FAIR_EMPTY_GOLD_KINDS = [
     "pure_refusal",
-    "non_action_question",
-    "missing_info",
-]);
+] as const;
+
+export const TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE =
+    "Empty-gold negatives must be zero-action-safe under the FULL loaded tool " +
+    "catalog (not merely “not the target”): a careful translator must emit no " +
+    "actions at all — including chat.generateResponse, system.help.*, history, " +
+    "lookup, or any other tool. ALLOWED fair kind: pure_refusal only — explicit " +
+    "don't/never/stop/leave-alone/cancel of the target with no alternate task, " +
+    "no question, and no request for explanation. FORBIDDEN as empty gold: " +
+    "definition/meta/status/how-to questions (even non_action_question labels); " +
+    "missing_info that still invites lookup/list/clarify-via-tool; soft solicits; " +
+    "capability questions; contrastive adjacent commands; refuse-then-alternate; " +
+    "partial constraints that still request an action; any imperative a correct " +
+    "translator would map to any loaded tool.";
+
+const FIX =
+    "Rewrite as a hard-abstain empty-gold negative (pure_refusal / leave-alone " +
+    "only; no questions, no alternate task).";
+
+const PATH_MSG =
+    "negativeAssessments paths must cover negative genCases 1:1 (exact path, no duplicates).";
 
 const assessmentSchema = z
     .object({
@@ -51,19 +77,6 @@ export interface TranslationBenchNegativeFairnessResult {
     path: string;
     utterance: string;
 }
-
-export const TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE =
-    "Empty-gold negatives must be fair under zero-action scoring: pure refusal " +
-    "of the target, non-action status/definition/meta question, or missing-info " +
-    "clarification. Never use contrastive adjacent commands, refuse-then-alternate " +
-    "forms, capability questions that still solicit an action, how-to-perform-target " +
-    "or soft solicits, or any imperative a correct translator would map to another tool.";
-
-const FIX =
-    "Rewrite as a fair empty-gold negative (pure_refusal, non_action_question, or missing_info).";
-
-const PATH_MSG =
-    "negativeAssessments paths must cover negative genCases 1:1 (exact path, no duplicates).";
 
 function bad(path: string, message: string): TranslationBenchReviewIssue {
     return { code: "BAD_NEGATIVE", path, message, suggestedFix: FIX };
@@ -129,6 +142,21 @@ function pathsCover(
     return seen.size === expected.size;
 }
 
+function dimensionNegativeKind(
+    candidate: TranslationBenchGeneratedCandidate,
+    path: string,
+): string | undefined {
+    const match = /^\$\.genCases\[(\d+)\]\.utterance$/.exec(path);
+    if (!match) return undefined;
+    const index = Number(match[1]);
+    const genCase = candidate.genCases[index];
+    if (!genCase || genCase.role !== "negative") return undefined;
+    const dims = genCase.dimensions;
+    if (!dims || typeof dims !== "object") return undefined;
+    const kind = (dims as Record<string, unknown>).negativeKind;
+    return typeof kind === "string" ? kind : undefined;
+}
+
 export function checkTranslationBenchCandidateNegativeFairness(
     candidate: TranslationBenchGeneratedCandidate,
     _target: TranslationBenchTargetAction,
@@ -147,9 +175,27 @@ export function checkTranslationBenchCandidateNegativeFairness(
         return [bad("$.negativeAssessments", PATH_MSG)];
     }
 
-    return assessments
-        .filter((a) => !isFairEmptyGoldAssessment(a))
-        .map((a) => bad(a.path, a.reason));
+    const issues: TranslationBenchReviewIssue[] = [];
+    for (const a of assessments) {
+        if (!isFairEmptyGoldAssessment(a)) {
+            issues.push(bad(a.path, a.reason));
+            continue;
+        }
+        const dimKind = dimensionNegativeKind(candidate, a.path);
+        if (
+            dimKind !== undefined &&
+            dimKind !== "pure_refusal" &&
+            !FAIR_KINDS.has(dimKind as TranslationBenchNegativeKind)
+        ) {
+            issues.push(
+                bad(
+                    a.path,
+                    `dimensions.negativeKind=${dimKind} is not zero-action-safe empty gold; use pure_refusal only`,
+                ),
+            );
+        }
+    }
+    return issues;
 }
 
 export function applyTranslationBenchNegativeFairnessIssues(

@@ -203,6 +203,44 @@ describe("translation bench negative fairness LLM assessment parsing", () => {
         );
         expect(inconsistent.ok).toBe(false);
     });
+
+    it("rejects definition/status questions even when fairEmptyGold is true", () => {
+        const definition = checkTranslationBenchNegativeFairnessAssessment(
+            {
+                path: "$.n",
+                kind: "non_action_question",
+                fairEmptyGold: true,
+                reason: "definition only — but invites chat/help under full catalog",
+            },
+            "What does openWebPage mean?",
+            targetOpenWebPage,
+        );
+        expect(definition.ok).toBe(false);
+
+        const status = checkTranslationBenchNegativeFairnessAssessment(
+            {
+                path: "$.n",
+                kind: "non_action_question",
+                fairEmptyGold: true,
+                reason: "status question",
+            },
+            "Is Bluetooth currently enabled?",
+            targetOpenWebPage,
+        );
+        expect(status.ok).toBe(false);
+
+        const missing = checkTranslationBenchNegativeFairnessAssessment(
+            {
+                path: "$.n",
+                kind: "missing_info",
+                fairEmptyGold: true,
+                reason: "underspecified",
+            },
+            "I'm not sure which tab — please clarify.",
+            targetOpenWebPage,
+        );
+        expect(missing.ok).toBe(false);
+    });
 });
 
 describe("translation bench candidate negative fairness from LLM assessments", () => {
@@ -244,6 +282,80 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             ],
         );
         expect(issues).toEqual([]);
+    });
+
+    it("rejects definition question assessments as empty gold", () => {
+        const candidate = fairCandidate("What does openWebPage mean?");
+        candidate.genCases[1]!.dimensions = {
+            negativeKind: "non_action_question",
+        };
+        const issues = checkTranslationBenchCandidateNegativeFairness(
+            candidate,
+            targetOpenWebPage,
+            [
+                {
+                    path: "$.genCases[1].utterance",
+                    kind: "non_action_question",
+                    fairEmptyGold: true,
+                    reason: "definition only",
+                },
+            ],
+        );
+        expect(issues.length).toBeGreaterThan(0);
+        expect(issues[0]!.code).toBe("BAD_NEGATIVE");
+        expect(issues[0]!.path).toBe("$.genCases[1].utterance");
+    });
+
+    it("rejects soft solicit and refuse-then-alternate empties", () => {
+        const soft = checkTranslationBenchCandidateNegativeFairness(
+            fairCandidate("Can you open google.com for me?"),
+            targetOpenWebPage,
+            [
+                {
+                    path: "$.genCases[1].utterance",
+                    kind: "unfair_imperative",
+                    fairEmptyGold: false,
+                    reason: "soft solicit still requests openWebPage",
+                },
+            ],
+        );
+        expect(soft.some((i) => i.code === "BAD_NEGATIVE")).toBe(true);
+
+        const alternate = checkTranslationBenchCandidateNegativeFairness(
+            fairCandidate("Don't close all tabs; just close this one."),
+            targetOpenWebPage,
+            [
+                {
+                    path: "$.genCases[1].utterance",
+                    kind: "unfair_contrastive",
+                    fairEmptyGold: false,
+                    reason: "refuse-then-alternate still requests closeWebPage",
+                },
+            ],
+        );
+        expect(alternate.some((i) => i.code === "BAD_NEGATIVE")).toBe(true);
+    });
+
+    it("rejects pure_refusal assessment when dimensions.negativeKind is a Q&A kind", () => {
+        const candidate = fairCandidate("What does openWebPage mean?");
+        candidate.genCases[1]!.dimensions = {
+            negativeKind: "non_action_question",
+        };
+        const issues = checkTranslationBenchCandidateNegativeFairness(
+            candidate,
+            targetOpenWebPage,
+            [
+                {
+                    path: "$.genCases[1].utterance",
+                    kind: "pure_refusal",
+                    fairEmptyGold: true,
+                    reason: "LLM mislabeled a definition question as refusal",
+                },
+            ],
+        );
+        expect(issues.length).toBeGreaterThan(0);
+        expect(issues[0]!.code).toBe("BAD_NEGATIVE");
+        expect(issues[0]!.message).toMatch(/negativeKind|zero-action/i);
     });
 
     it("requires one assessment per negative", () => {
@@ -392,10 +504,10 @@ describe("translation bench candidate negative fairness from LLM assessments", (
                 {
                     id: "neg-b",
                     role: "negative" as const,
-                    utterance: "Is Bluetooth currently enabled?",
+                    utterance: "Do not open any websites.",
                     expectedActions: [],
                     order: "strict" as const,
-                    dimensions: { negativeKind: "non_action_question" },
+                    dimensions: { negativeKind: "pure_refusal" },
                 },
             ],
         };
@@ -411,7 +523,7 @@ describe("translation bench candidate negative fairness from LLM assessments", (
                 },
                 {
                     path: "$.genCases[1].utterance",
-                    kind: "non_action_question",
+                    kind: "pure_refusal",
                     fairEmptyGold: true,
                     reason: "duplicate path",
                 },
@@ -575,7 +687,7 @@ describe("semantic checker enforces LLM negativeAssessments", () => {
     it("rejects approve when negativeAssessments are missing", async () => {
         const catalog = browserCatalog();
         const loop = makeLoop(catalog);
-        const candidate = fairCandidate("Is Bluetooth currently enabled?");
+        const candidate = fairCandidate("Leave my browser alone.");
         const candidateHash = "d".repeat(64);
         const llm = {
             model: "mock",
@@ -604,5 +716,54 @@ describe("semantic checker enforces LLM negativeAssessments", () => {
             llm,
         });
         expect(result.passed).toBe(false);
+    });
+
+    it("rejects when mock LLM marks definition question fairEmptyGold", async () => {
+        const catalog = browserCatalog();
+        const loop = makeLoop(catalog);
+        const candidate = fairCandidate("What does openWebPage mean?");
+        candidate.genCases[1]!.dimensions = {
+            negativeKind: "non_action_question",
+        };
+        const candidateHash = "e".repeat(64);
+        const llm = {
+            model: "mock",
+            complete: async () =>
+                JSON.stringify({
+                    candidateHash,
+                    decision: "approve",
+                    scores: {
+                        anchorFidelity: 0.9,
+                        groundTruthCorrectness: 0.9,
+                        naturalness: 0.9,
+                        generalizationDiversity: 0.9,
+                        negativeQuality: 0.95,
+                        historyCoherence: 0.9,
+                    },
+                    issues: [],
+                    summary: "wrongly fair definition Q",
+                    negativeAssessments: [
+                        {
+                            path: "$.genCases[1].utterance",
+                            kind: "non_action_question",
+                            fairEmptyGold: true,
+                            reason: "definition only",
+                        },
+                    ],
+                }),
+        };
+
+        const result = await runTranslationBenchSemanticChecker({
+            pack,
+            loop,
+            candidate,
+            candidateHash,
+            llm,
+        });
+        expect(result.passed).toBe(false);
+        expect(result.decision.decision).toBe("reject");
+        expect(
+            result.decision.issues.some((i) => i.code === "BAD_NEGATIVE"),
+        ).toBe(true);
     });
 });

@@ -73,9 +73,10 @@ semantic_checker:
     source; the candidate should adapt its topic to the scheduled TypeAgent
     action rather than preserve every anchor entity.
 
-    Negative expectedActions are empty because the scorer requires ZERO actions.
-    Only approve negatives where that gold is fair (pure refusal of the target,
-    non-action status/definition/meta question, or missing-info clarification).
+    Negative expectedActions are empty because the scorer requires ZERO actions
+    across the FULL active schema set (chat, help, history, lookup, and every
+    other loaded tool — not merely "not the scheduled target").
+    Only approve negatives where that zero-action gold is fair.
 
     Disambiguation (groundTruthCorrectness / AMBIGUOUS_INTENT):
     - immutableContext.confusableSiblings lists nearby tools that collide with
@@ -96,29 +97,29 @@ semantic_checker:
     - Paths are the join key: cover every negative path exactly once (no
       duplicates, no unknown paths, no index-only pairing).
     - Judge natural language intent. Do NOT rely on verb lists or regexes.
-    - fairEmptyGold=true ONLY for pure_refusal, non_action_question, missing_info.
-    - non_action_question is fair ONLY for status/definition/meta questions that
-      do not solicit performing the target (e.g. "Is Bluetooth currently enabled?",
-      "What does openWebPage mean?"). How-to-perform-target and soft solicits are
-      unfair even when phrased as questions:
-        · "How do I add X to my calendar?" / "How can I open google.com?"
-        · "Can you open google.com?" / "Is there a way to close this tab?"
-        · "Would you mind taking a screenshot?"
-      Mark those unfair_imperative or unfair with fairEmptyGold=false.
-    - Reject (fairEmptyGold=false) when the utterance still requests any concrete
-      agent action a correct translator would fire, including:
+    - Zero-action test: fairEmptyGold=true ONLY if a careful translator should
+      fire NO tool at all under the full catalog. Target-only fairness is
+      insufficient.
+    - fairEmptyGold=true ONLY for kind=pure_refusal (hard don't/never/stop/
+      leave-alone/cancel with no alternate task and no question).
+    - ALWAYS fairEmptyGold=false for:
+        · definition/meta/status questions ("What does goBack mean?",
+          "Is Bluetooth currently enabled?", "Has the flow been deleted?") —
+          label kind non_action_question; they invite chat/help/history/lookup
+        · missing_info that invites list/lookup/clarify-via-tool
+        · how-to / soft solicits / capability questions
+          ("How do I add X?", "Can you open Y?", "Is there a way to close this?",
+          "Would you mind taking a screenshot?")
         · contrastive adjacent commands ("close only this tab" as neg for
           closeAllWebPages; "search Bing for MSFT" as neg for changeSearchProvider)
         · refuse-then-alternate multi-clause ("Don't close all; just close this")
         · partial constraints that still request an action ("open X but don't
           bookmark it")
-        · bare-? or polite requests that are still toolable ("Find MSFT on Bing?",
-          "Would you mind closing just this tab?")
-        · capability / how-to phrasings that solicit doing the target
-    - Approve fairEmptyGold=true for pure refusals / leave-alone
-      ("Don't take a screenshot of my banking page", "Leave my tabs alone"),
-      non-action status/definition/meta questions ("Is Bluetooth currently enabled?"),
-      and missing-info clarifications ("I'm not sure which tab — please clarify").
+        · bare-? or polite requests that are still toolable
+        · any utterance a correct translator would answer via chat/help/history
+    - Approve fairEmptyGold=true only for pure refusals / leave-alone
+      ("Don't take a screenshot of my banking page", "Leave my tabs alone",
+      "Do not open any websites right now.").
     - If any assessment is unfair, set decision=reject, negativeQuality low, and
       include a BAD_NEGATIVE issue for that path.
 
