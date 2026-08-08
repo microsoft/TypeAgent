@@ -45,6 +45,37 @@
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
   },
+  "fluidBuild": {
+    "tasks": {
+      "agc": {
+        "dependsOn": [
+          "@typeagent/action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/ipconfigSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/ipconfigSchema.ag.json",
+            "dist/ipconfigSchema.ag.map.json"
+          ]
+        }
+      },
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/ipconfigSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/ipconfigSchema.pas.json"
+          ]
+        }
+      }
+    }
+  },
   "typeagent": {
     "defaultAgentName": "ipconfig"
   }

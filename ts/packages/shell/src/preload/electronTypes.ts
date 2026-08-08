@@ -70,6 +70,7 @@ export interface ClientAPI {
     saveSettings: (settings: ShellUserSettings) => void;
     openImageFile: () => void;
     openFolder: (path: string) => void;
+    openConfigFile: (path: string) => void;
     openUrlInBrowserTab: (url: string) => void;
     openUrlExternal: (url: string) => void;
 

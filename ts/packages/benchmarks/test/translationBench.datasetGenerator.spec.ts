@@ -321,6 +321,30 @@ describe("translation bench generation schedule", () => {
             }),
         ).toThrow(/cover|coverage|action/i);
     });
+
+    it("treats complete coverage as eligible actions after exclusions", () => {
+        const catalog = [
+            catalogSchema("alpha", ["keep", "drop"]),
+            catalogSchema("beta", ["keep"]),
+        ];
+        const schedule = createTranslationBenchGenerationSchedule(catalog, {
+            caseCount: 2,
+            requireCompleteCoverage: true,
+            excludedActionIds: new Set(["alpha.drop"]),
+        });
+
+        expect(schedule.entries).toHaveLength(2);
+        expect(schedule.coverage).toMatchObject({
+            actionCount: 3,
+            scheduledActionCount: 2,
+            complete: true,
+        });
+        expect(
+            schedule.entries.map(
+                (entry) => `${entry.schemaName}.${entry.actionName}`,
+            ),
+        ).not.toContain("alpha.drop");
+    });
 });
 
 describe("generated translation bench candidate validation", () => {

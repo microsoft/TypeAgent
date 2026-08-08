@@ -1,7 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export { loadConfig, loadConfigSync, computeConfigDrift } from "./loader.js";
+export {
+    loadConfig,
+    loadConfigSync,
+    reloadConfigKeysSync,
+    tryReloadConfigKeysSync,
+    getConfigProblems,
+    computeConfigDrift,
+    resolveLocalConfigPath,
+    type ConfigProblem,
+} from "./loader.js";
 export { flatten, mergeFlat } from "./flatten.js";
 export {
     fetchKeyVaultConfig,
@@ -25,6 +34,34 @@ export {
     REDACTED,
 } from "./redact.js";
 export { runCli, type CliIO, type CliArgs } from "./cli.js";
+export {
+    CONFIG_LOCAL_FILE,
+    CONFIG_SAMPLE_FILE,
+    configKeyNames,
+    configLocalFileLink,
+    configPathForEnvVar,
+    configSetupHint,
+    configYamlSnippet,
+    type ConfigHintVar,
+} from "./hints.js";
+export {
+    fileLinkHref,
+    isAllowedConfigFilePath,
+    FILE_LINK_SCHEME,
+} from "./fileLink.js";
+export {
+    SIMPLE_CONFIG_MAPPINGS,
+    SIMPLE_CONFIG_MAPPING_LIST,
+    simpleConfigMappingForEnvVar,
+    simpleConfigMappingsForSection,
+    type SimpleConfigMapping,
+    type SimpleConfigValueKind,
+} from "./mappings.js";
+export {
+    ConfigSetupError,
+    configSetupError,
+    getErrorMarkdown,
+} from "./setupError.js";
 export { validateConfigTree, configTreeSchema } from "./schema.js";
 export {
     ConfigSource,

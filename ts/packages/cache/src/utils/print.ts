@@ -7,7 +7,7 @@ import {
 } from "@typeagent/common-utils";
 import chalk from "chalk";
 import { ProcessRequestActionResult } from "../cache/cache.js";
-import { ImportConstructionResult } from "../index.js";
+import type { ImportConstructionResult } from "../constructions/importConstructions.js";
 import { Transforms } from "../constructions/transforms.js";
 import { ProcessExplanationResult } from "../cache/explainWorkQueue.js";
 

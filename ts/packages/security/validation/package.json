@@ -19,7 +19,7 @@
   ],
   "scripts": {
     "build": "npm run tsc",
-    "clean": "rimraf dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "dev": "tsc && node dist/validationTests.js",
     "tsc": "tsc -b"
   },

@@ -17,6 +17,7 @@ import { getChatModelNames, openai as llmClient } from "@typeagent/aiclient";
 import {
     buildActionParametersGraderCatalog,
     diffActionParametersGrader,
+    listLlmAsAJudgeExcludedActions,
     loadActionParametersGraderCatalogFile,
     type ActionParametersGraderCatalog,
     type GeneratedActionCatalog,
@@ -31,11 +32,11 @@ const DEFAULT_CATALOG = "src/translationBench/catalog.generated.json";
 const DEFAULT_OUT =
     "src/translationBench/action-parameters-grader.generated.json";
 
-function parseCli(argv: string[]) {
+export function parseCli(argv: string[]) {
     const program = new Command()
         .name("genActionParametersGrader")
         .description(
-            "Build action-parameters-grader.generated.json (incremental by default)",
+            "Build action-parameters-grader.generated.json (llmAsAJudge derived from verify modes)",
         )
         .option(
             "--catalog <path>",
@@ -161,8 +162,10 @@ async function writeGraderArtifact(
     renameSync(tmpPath, outPath);
 }
 
-async function main(): Promise<void> {
-    const args = parseCli(process.argv.slice(2));
+export async function main(
+    argv: string[] = process.argv.slice(2),
+): Promise<void> {
+    const args = parseCli(argv);
     const catalogPath = path.resolve(args.catalogPath);
     const outPath = path.resolve(args.outPath);
     const force = args.force;
@@ -224,11 +227,13 @@ async function main(): Promise<void> {
     }
 
     const d = grader.lastDiff ?? preview;
+    const excluded = listLlmAsAJudgeExcludedActions(grader);
     process.stderr.write(
         `[genActionParametersGrader] wrote ${outPath}: ` +
             `${Object.keys(grader.byAction).length} actions ` +
             `(+${d.added.length} ~${d.updated.length} -${d.removed.length} =${d.unchanged.length}); ` +
             `regexFields=${grader.regexMatchCount} llmFields=${grader.llmFallbackCount}; ` +
+            `llmAsAJudgeActions=${excluded.length}; ` +
             `catalogVersion=${catalog.catalogVersion}\n`,
     );
 }
