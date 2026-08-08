@@ -13,7 +13,13 @@ import {
     initializeCommandHandlerContext,
 } from "../src/context/commandHandlerContext.js";
 import { getCommandInterface } from "@typeagent/agent-sdk/helpers/command";
-import { getCommandCompletion } from "../src/command/completion.js";
+import {
+    createProgrammingErrorReportingState,
+    getCommandCompletion,
+    reportProgrammingError,
+    resetProgrammingErrorReportingState,
+} from "../src/command/completion.js";
+import vm from "node:vm";
 
 // ---------------------------------------------------------------------------
 // Test agent with parameters for completion testing
@@ -739,6 +745,68 @@ describe("Command Completion - startIndex", () => {
             explainer: { enabled: false },
             cache: { enabled: false },
             appAgentProviders: [testCompletionAgentProviderMulti],
+        });
+    });
+
+    describe("completion programming error reporting", () => {
+        test.each(["TypeError", "ReferenceError"])(
+            "detects %s from another realm",
+            (errorName) => {
+                const error = vm.runInNewContext(
+                    `new ${errorName}("cross-realm failure")`,
+                );
+                const messages: string[] = [];
+
+                reportProgrammingError(
+                    error,
+                    createProgrammingErrorReportingState(),
+                    (message) => messages.push(message),
+                );
+
+                expect(messages).toHaveLength(1);
+                expect(messages[0]).toContain(
+                    `${errorName}: cross-realm failure`,
+                );
+            },
+        );
+
+        test("bounds injected dedupe state and evicts the oldest entry", () => {
+            const state = createProgrammingErrorReportingState(2);
+            const messages: string[] = [];
+            const write = (message: string) => messages.push(message);
+
+            reportProgrammingError(new TypeError("first"), state, write);
+            reportProgrammingError(new TypeError("second"), state, write);
+            reportProgrammingError(new TypeError("third"), state, write);
+            reportProgrammingError(new TypeError("first"), state, write);
+
+            expect(state.reported.size).toBe(2);
+            expect(messages).toHaveLength(4);
+        });
+
+        test("default dedupe state can be reset", () => {
+            const messages: string[] = [];
+            const write = (message: string) => messages.push(message);
+            const error = new ReferenceError("resettable");
+
+            resetProgrammingErrorReportingState();
+            reportProgrammingError(error, undefined, write);
+            reportProgrammingError(error, undefined, write);
+            resetProgrammingErrorReportingState();
+            reportProgrammingError(error, undefined, write);
+
+            expect(messages).toHaveLength(2);
+            resetProgrammingErrorReportingState();
+        });
+
+        test("does not match programming error name substrings", () => {
+            const messages: string[] = [];
+            reportProgrammingError(
+                { name: "NotATypeError", message: "no" },
+                createProgrammingErrorReportingState(),
+                (message) => messages.push(message),
+            );
+            expect(messages).toEqual([]);
         });
     });
     afterAll(async () => {

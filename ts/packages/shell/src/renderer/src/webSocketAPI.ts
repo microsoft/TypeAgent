@@ -56,6 +56,9 @@ export const webapi: ClientAPI = {
     openFolder: () => {
         // not supported on mobile
     },
+    openConfigFile: () => {
+        // not supported on mobile
+    },
     openUrlInBrowserTab: () => {
         // not supported on mobile
     },

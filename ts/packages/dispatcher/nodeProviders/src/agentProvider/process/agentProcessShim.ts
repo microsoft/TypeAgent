@@ -19,6 +19,76 @@ export type AgentProcess = {
     trace?: (namespaces: string) => void;
 };
 
+const GRACEFUL_EXIT_TIMEOUT_MS = 1_000;
+const TELEMETRY_EXIT_TIMEOUT_MS = 10_000;
+
+interface CloseableAgentProcess {
+    readonly connected: boolean;
+    readonly exitCode: number | null;
+    disconnect(): void;
+    kill(): boolean;
+    once(
+        event: "exit",
+        listener: (
+            exitCode: number | null,
+            signal: NodeJS.Signals | null,
+        ) => void,
+    ): unknown;
+}
+
+export async function closeAgentProcess(
+    agentProcess: CloseableAgentProcess,
+    requestExit: () => void,
+    gracefulTimeoutMs = GRACEFUL_EXIT_TIMEOUT_MS,
+    telemetryTimeoutMs = TELEMETRY_EXIT_TIMEOUT_MS,
+): Promise<void> {
+    if (agentProcess.exitCode !== null) {
+        return;
+    }
+    await new Promise<void>((resolve) => {
+        let gracefulTimer: NodeJS.Timeout | undefined;
+        let killTimer: NodeJS.Timeout | undefined;
+        agentProcess.once("exit", () => {
+            if (gracefulTimer !== undefined) {
+                clearTimeout(gracefulTimer);
+            }
+            if (killTimer !== undefined) {
+                clearTimeout(killTimer);
+            }
+            resolve();
+        });
+
+        if (!agentProcess.connected) {
+            agentProcess.kill();
+            return;
+        }
+
+        gracefulTimer = setTimeout(() => {
+            if (agentProcess.exitCode !== null) {
+                return;
+            }
+            if (agentProcess.connected) {
+                agentProcess.disconnect();
+                killTimer = setTimeout(() => {
+                    if (agentProcess.exitCode === null) {
+                        agentProcess.kill();
+                    }
+                }, telemetryTimeoutMs);
+                killTimer.unref();
+            } else {
+                agentProcess.kill();
+            }
+        }, gracefulTimeoutMs);
+        gracefulTimer.unref();
+
+        try {
+            requestExit();
+        } catch {
+            // IPC may close between the connected check and the send.
+        }
+    });
+}
+
 // When running inside Electron, process.execPath points to the Electron binary,
 // not system Node.js. Agent child processes must use system Node so that native
 // modules (e.g. better-sqlite3) compiled for the system Node ABI load correctly.
@@ -97,45 +167,8 @@ export async function createAgentProcess(
         },
     );
     return {
-        close: async () => {
-            if (agentProcess.exitCode !== null) {
-                return;
-            }
-            await new Promise<void>((resolve) => {
-                let timer: NodeJS.Timeout | undefined;
-                agentProcess.once("exit", () => {
-                    if (timer !== undefined) {
-                        clearTimeout(timer);
-                    }
-                    resolve();
-                });
-
-                // Ask the child to exit gracefully via the control channel.
-                // If it doesn't exit within 1s, fall back to disconnect/kill.
-                if (agentProcess.connected) {
-                    timer = setTimeout(() => {
-                        if (agentProcess.exitCode !== null) {
-                            return;
-                        }
-                        if (agentProcess.connected) {
-                            agentProcess.disconnect();
-                        } else {
-                            agentProcess.kill();
-                        }
-                    }, 1000);
-                    timer.unref();
-                    try {
-                        channel.send("exit");
-                    } catch {
-                        // IPC channel may have closed between the
-                        // connected check and the send; the exit
-                        // event will still fire.
-                    }
-                } else {
-                    agentProcess.kill();
-                }
-            });
-        },
+        close: () =>
+            closeAgentProcess(agentProcess, () => channel.send("exit")),
         trace: (namespaces: string) => {
             traceChannel.send(namespaces);
         },

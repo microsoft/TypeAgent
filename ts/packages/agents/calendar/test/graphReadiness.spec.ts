@@ -61,6 +61,23 @@ describe("probeGraphConfig", () => {
 });
 
 describe("evaluateGraphReadiness", () => {
+    test("malformed config cannot be masked by stale ready values", () => {
+        expect(
+            evaluateGraphReadiness("calendar", {
+                msGraphConfigured: true,
+                googleConfigured: false,
+                isAuthenticated: true,
+                providerName: "microsoft",
+                configProblem: "Expected a string at 'msGraph.clientId'",
+            }),
+        ).toEqual(
+            expect.objectContaining({
+                state: "setup-required",
+                message: expect.stringContaining("invalid"),
+            }),
+        );
+    });
+
     test("setup-required when no provider is configured", () => {
         const r = evaluateGraphReadiness("calendar", {
             msGraphConfigured: false,
@@ -70,8 +87,9 @@ describe("evaluateGraphReadiness", () => {
         });
         expect(r.state).toBe("setup-required");
         expect(r.message).toMatch(/no provider configured/i);
-        expect(r.details).toMatch(/MSGRAPH_APP_CLIENTID/);
-        expect(r.details).toMatch(/GOOGLE_CALENDAR_CLIENT_ID/);
+        expect(r.details).toMatch(/config\.local\.yaml/);
+        expect(r.details).toMatch(/msGraph:/);
+        expect(r.details).toMatch(/googleCalendar:/);
         expect(r.details).toMatch(/@config agent refresh calendar/);
     });
 

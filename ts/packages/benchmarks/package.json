@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/benchmarks",
   "version": "0.0.1",
-  "description": "TypeAgent translation benchmark (scaffold)",
+  "description": "TypeAgent translation bench: catalog, action-parameters grader, simple-action dataset synthesizer",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -11,23 +11,43 @@
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./translationBench": "./dist/translationBench/index.js",
+    "./internal": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/test"
+  ],
   "scripts": {
     "build": "tsc -b && node ./scripts/copyAssets.mjs",
     "clean": "node ./scripts/clean.mjs",
-    "gen-catalog": "pnpm run build && node dist/translationBench/scripts/genCatalog.js",
-    "prettier": "prettier --check package.json tsconfig.json src scripts --ignore-path ../../.prettierignore",
-    "prettier:fix": "prettier --write package.json tsconfig.json src scripts --ignore-path ../../.prettierignore",
-    "test": "pnpm run build",
-    "test:local": "pnpm run test",
+    "gen-action-parameters-grader": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genActionParametersGrader.js",
+    "gen-catalog": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genCatalog.js && node --max-old-space-size=4096 dist/translationBench/scripts/genActionParametersGrader.js",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "prettier": "prettier --check package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
+    "test": "npm run test:local",
+    "test:local": "pnpm run build && pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "default-agent-provider": "workspace:*"
+    "commander": "^12.1.0",
+    "default-agent-provider": "workspace:*",
+    "js-yaml": "^4.3.0",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@types/jest": "^29.5.7",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
+    "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "typescript": "~5.4.5"
   }

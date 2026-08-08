@@ -155,7 +155,7 @@ export function createCosmosDBLoggerSink(
     const endpoint = process.env["COSMOSDB_CONNECTION_STRING"] ?? "";
     if (endpoint === "") {
         throw new Error(
-            "COSMOSDB_CONNECTION_STRING environment variable not set",
+            "Cosmos DB is not configured. Set `storage.database.cosmosDbConnectionString` in `ts/config.local.yaml`.",
         );
     }
     return new CosmosDBLoggerSink(

@@ -990,7 +990,12 @@ export async function setupBuiltInCache(
             builtInConstructions,
         );
     } catch (e: any) {
-        console.warn(`WARNING: Unable to load built-in cache: ${e.message}`);
+        // A corrupt or stale built-in cache disables request completions
+        // entirely, so make the failure loud rather than a passing mention.
+        console.warn(
+            `WARNING: Unable to load built-in cache '${builtInConstructions}': ${e.message}\n` +
+                `WARNING: Request completions will be unavailable. Regenerate it with 'pnpm cli data regenerate -b ${session.explainerName} --constructions --updateHash'.`,
+        );
     }
 }
 
