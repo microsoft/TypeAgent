@@ -86,6 +86,23 @@ export type CompletionUsageStats = {
     thinking_tokens_estimated?: boolean;
 };
 
+export type CommandDisposition =
+    | {
+          status: "handled";
+          path: "action" | "reasoning" | "command";
+          schemas?: string[];
+      }
+    | {
+          status: "notHandled";
+          reason: "unknown" | "clarification" | "noActiveSchema";
+      }
+    | {
+          status: "failed";
+          path: "action" | "reasoning" | "command";
+          mayHaveSideEffects: boolean;
+          schemas?: string[];
+      };
+
 export type CommandResult = {
     // last error message
     lastError?: string;
@@ -95,6 +112,9 @@ export type CommandResult = {
 
     // Actions that were executed as part of the command.
     actions?: TypeAgentAction[];
+    // Explicit routing outcome for callers that need safe handled/fallthrough
+    // behavior without inferring it from actions or display output.
+    disposition?: CommandDisposition;
     metrics?: RequestMetrics;
     // Token usage for translating the user's request into actions (the LLM
     // "translation" step). Absent for @-commands and cached translations.
@@ -290,6 +310,16 @@ export type ProcessCommandOptions = {
      * and TypeAgent should act as a pure action executor.
      */
     noReasoning?: boolean;
+    /**
+     * Restrict translation and grammar matching to this subset of currently
+     * active schemas. The request returns notHandled when any requested schema
+     * is unavailable.
+     */
+    activeSchemas?: string[];
+    /**
+     * Add request-scoped instructions to the configured reasoning engine.
+     */
+    reasoningProfile?: "default" | "powershellFlowRecording";
     /**
      * User-environment context for translation prompts.
      * Provides information about which app/host the user is currently in

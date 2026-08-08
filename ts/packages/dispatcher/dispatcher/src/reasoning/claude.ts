@@ -71,6 +71,7 @@ import {
     findInstallableAgents,
     formatInstallableAgents,
 } from "./installableAgents.js";
+import { getReasoningProfileGuidance } from "./reasoningProfile.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 // Separate channel for MCP tool invocations (discover_actions / execute_action)
 // so call counts can be traced without enabling the full messages channel.
@@ -235,6 +236,12 @@ function buildPromptWithContext(
     );
     if (editorContext) {
         parts.push(editorContext);
+    }
+    const profileGuidance = getReasoningProfileGuidance(
+        context.sessionContext.agentContext.currentOptions,
+    );
+    if (profileGuidance) {
+        parts.push(profileGuidance);
     }
     if (fallbackContext) {
         const lines = ["[Fallback context — a prior action failed]"];
@@ -2118,35 +2125,40 @@ async function executeReasoningWithTracing(
 
         // Auto-generate recipe from successful trace for future reuse via flowInterpreter
         if (tracer.wasSuccessful()) {
-            try {
-                const recipeGen = new ReasoningRecipeGenerator();
-                const recipe = await recipeGen.generate(tracer.getTrace());
+            if (
+                systemContext.currentOptions?.reasoningProfile !==
+                "powershellFlowRecording"
+            ) {
+                try {
+                    const recipeGen = new ReasoningRecipeGenerator();
+                    const recipe = await recipeGen.generate(tracer.getTrace());
 
-                if (recipe) {
-                    const saved = await saveTaskFlowRecipeToInstanceStorage(
-                        recipe,
-                        systemContext,
-                    );
-                    if (saved) {
-                        debug(`TaskFlow recipe saved: ${recipe.name}`);
-                        context.actionIO.appendDisplay({
-                            type: "text",
-                            content: `\n✓ Task flow registered: ${recipe.name}`,
-                        });
-                        try {
-                            await systemContext.agents.reloadAgentSchema(
-                                "taskflow",
-                                systemContext,
-                            );
-                        } catch {
-                            debug(
-                                "Failed to reload taskflow schema after saving recipe",
-                            );
+                    if (recipe) {
+                        const saved = await saveTaskFlowRecipeToInstanceStorage(
+                            recipe,
+                            systemContext,
+                        );
+                        if (saved) {
+                            debug(`TaskFlow recipe saved: ${recipe.name}`);
+                            context.actionIO.appendDisplay({
+                                type: "text",
+                                content: `\n✓ Task flow registered: ${recipe.name}`,
+                            });
+                            try {
+                                await systemContext.agents.reloadAgentSchema(
+                                    "taskflow",
+                                    systemContext,
+                                );
+                            } catch {
+                                debug(
+                                    "Failed to reload taskflow schema after saving recipe",
+                                );
+                            }
                         }
                     }
+                } catch (error) {
+                    debug("Failed to generate recipe from trace:", error);
                 }
-            } catch (error) {
-                debug("Failed to generate recipe from trace:", error);
             }
 
             // Auto-generate script recipes from PowerShell scripts in trace
