@@ -1839,6 +1839,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../../utils/commonUtils
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../../config
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -2547,6 +2550,9 @@ importers:
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/config':
+        specifier: workspace:*
+        version: link:../../config
     devDependencies:
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
