@@ -65,10 +65,7 @@ const FIX =
 const PATH_MSG =
     "negativeAssessments paths must cover negative genCases 1:1 (exact path, no duplicates).";
 
-function bad(
-    path: string,
-    message: string,
-): TranslationBenchReviewIssue {
+function bad(path: string, message: string): TranslationBenchReviewIssue {
     return { code: "BAD_NEGATIVE", path, message, suggestedFix: FIX };
 }
 
