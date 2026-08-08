@@ -64,7 +64,7 @@ export function installAndRestart() {
         autoUpdater.quitAndInstall(false, true);
     } else {
         app.relaunch();
-        app.exit(0);
+        app.quit();
     }
 }
 

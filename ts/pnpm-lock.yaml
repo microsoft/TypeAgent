@@ -1751,6 +1751,9 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../../dispatcher/types
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../telemetry
       '@typeagent/typechat-utils':
         specifier: workspace:*
         version: link:../../utils/typechatUtils
@@ -5015,6 +5018,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../telemetry
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher
@@ -5869,6 +5875,9 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../telemetry
       '@typeagent/typechat-utils':
         specifier: workspace:*
         version: link:../utils/typechatUtils
