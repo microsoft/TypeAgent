@@ -1272,6 +1272,26 @@ export async function generateTranslationBenchBenchmark(
                 catalog,
             ),
         );
+    // Coverage/caseCount must describe the cases actually emitted, not the
+    // planned schedule; on the partial path fewer slots complete than planned.
+    const scheduledActionCount = new Set(
+        cases.map((evalCase) =>
+            JSON.stringify([
+                evalCase.targetAction.schemaName,
+                evalCase.targetAction.actionName,
+            ]),
+        ),
+    ).size;
+    const coverage: TranslationBenchGenerationCoverage = {
+        ...schedule.coverage,
+        scheduledActionCount,
+        complete:
+            scheduledActionCount ===
+            countEligibleTranslationBenchActions(
+                catalog,
+                getPackagedLlmJudgeExcludedActions(),
+            ),
+    };
     const usage = aggregateUsage(cases);
     const estimatedCosts = cases.flatMap(
         (evalCase) =>
@@ -1325,10 +1345,10 @@ export async function generateTranslationBenchBenchmark(
                         TRANSLATION_BENCH_GENERATION_CONTRACT_VERSION,
                     generatorModel: options.generator.model,
                     reviewerModel: options.reviewer.model,
-                    caseCount: options.caseCount,
+                    caseCount: cases.length,
                     genCaseCount: options.genCaseCount,
                     maxAttempts: options.maxAttempts,
-                    coverage: schedule.coverage,
+                    coverage,
                     runFingerprint: header.runFingerprint,
                 },
             },
@@ -1337,5 +1357,5 @@ export async function generateTranslationBenchBenchmark(
         cases,
     };
     validateTranslationBenchBenchmark(benchmark);
-    return { benchmark, coverage: schedule.coverage };
+    return { benchmark, coverage };
 }
