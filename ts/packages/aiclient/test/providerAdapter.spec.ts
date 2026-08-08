@@ -185,6 +185,26 @@ describe("ChatCompletionsWireApiProvider (default path is byte-identical)", () =
         );
     });
 
+    test("extractUsage tracks nested prompt_tokens_details.cached_tokens", () => {
+        expect(
+            adapter.extractUsage({
+                id: "x",
+                choices: [],
+                usage: {
+                    prompt_tokens: 100,
+                    completion_tokens: 20,
+                    total_tokens: 120,
+                    prompt_tokens_details: { cached_tokens: 40 },
+                },
+            }),
+        ).toEqual({
+            prompt_tokens: 100,
+            completion_tokens: 20,
+            total_tokens: 120,
+            cached_tokens: 40,
+        });
+    });
+
     test("streaming decoder assembles content deltas", () => {
         const decoder = adapter.createStreamDecoder!(makeRequest());
         const p1 = decoder.push(
@@ -314,6 +334,64 @@ describe("MessagesWireApiProvider", () => {
         });
     });
 
+    test("extractUsage normalizes Anthropic cache buckets to OpenAI-style totals", () => {
+        // Anthropic: exclusive buckets. OpenAI-style prompt_tokens = sum of all
+        // three; cached_tokens = cache_read only (subset, not additive).
+        expect(
+            adapter.extractUsage({
+                content: [],
+                usage: {
+                    input_tokens: 900,
+                    output_tokens: 4,
+                    cache_creation_input_tokens: 800,
+                    cache_read_input_tokens: 700,
+                },
+            }),
+        ).toEqual({
+            prompt_tokens: 2400,
+            completion_tokens: 4,
+            total_tokens: 2404,
+            cached_tokens: 700,
+        });
+    });
+
+    test("extractUsage cache-read-only hit folds into prompt_tokens", () => {
+        expect(
+            adapter.extractUsage({
+                content: [],
+                usage: {
+                    input_tokens: 50,
+                    output_tokens: 4,
+                    cache_creation_input_tokens: 0,
+                    cache_read_input_tokens: 100000,
+                },
+            }),
+        ).toEqual({
+            prompt_tokens: 100050,
+            completion_tokens: 4,
+            total_tokens: 100054,
+            cached_tokens: 100000,
+        });
+    });
+
+    test("extractUsage omits cached_tokens when cache_read_input_tokens is null", () => {
+        expect(
+            adapter.extractUsage({
+                content: [],
+                usage: {
+                    input_tokens: 10,
+                    output_tokens: 4,
+                    cache_creation_input_tokens: null,
+                    cache_read_input_tokens: null,
+                },
+            }),
+        ).toEqual({
+            prompt_tokens: 10,
+            completion_tokens: 4,
+            total_tokens: 14,
+        });
+    });
+
     test("streaming decoder emits text_delta content", () => {
         const decoder = adapter.createStreamDecoder!(makeRequest());
         const piece = decoder.push(
@@ -379,6 +457,23 @@ describe("ResponsesWireApiProvider", () => {
             prompt_tokens: 3,
             completion_tokens: 9,
             total_tokens: 12,
+        });
+    });
+
+    test("extractUsage tracks nested input_tokens_details.cached_tokens", () => {
+        expect(
+            adapter.extractUsage({
+                usage: {
+                    input_tokens: 2006,
+                    output_tokens: 300,
+                    input_tokens_details: { cached_tokens: 1920 },
+                },
+            }),
+        ).toEqual({
+            prompt_tokens: 2006,
+            completion_tokens: 300,
+            total_tokens: 2306,
+            cached_tokens: 1920,
         });
     });
 

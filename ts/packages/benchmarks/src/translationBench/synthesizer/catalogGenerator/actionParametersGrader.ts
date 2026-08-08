@@ -175,6 +175,9 @@ export interface FieldGraderDecision {
 export const LLM_JUDGE_PARAMETERS = [
     "browser.actionDiscovery.createWebFlowFromRecording.recordedSteps",
     "browser.executeAdHocScript.script",
+    "browser.lookupAndAnswer.lookupAndAnswerInternet.internetLookups",
+    "browser.lookupAndAnswer.lookupAndAnswerInternet.originalRequest",
+    "browser.lookupAndAnswer.lookupAndAnswerInternet.sites",
     "browser.webFlows.editWebFlow.script",
     "code.code-editor.createCodeBlock.body",
     "code.code-editor.createCodeBlock.codeSnippet",
@@ -196,11 +199,21 @@ const LLM_JUDGE_PARAMETER_SET = new Set<string>(LLM_JUDGE_PARAMETERS);
 /** Literal stored strings that must deep-equal (not soft / not llm judge). */
 const EXACT_PARAMETERS = new Set<string>(["github-cli.aliasSet.command"]);
 
+export const NONEMPTY_PARAMETERS = [
+    "system.conversation.indexConversation.name",
+    "system.conversation.newConversation.name",
+    "system.conversation.summarizeConversation.name",
+] as const;
+
+const NONEMPTY_PARAMETER_SET = new Set<string>(NONEMPTY_PARAMETERS);
+
 export const HEURISTIC_SOURCE_HASH: string = createHash("sha256")
     .update(
         JSON.stringify({
             rules: [...REGEX_RULE_IDS].sort(),
             llmJudge: [...LLM_JUDGE_PARAMETERS],
+            nonempty: [...NONEMPTY_PARAMETERS],
+            exact: [...EXACT_PARAMETERS].sort(),
         }),
     )
     .digest("hex")
@@ -1059,11 +1072,19 @@ export async function buildActionParametersGraderEntry(
                 actionId: id,
                 siblingFieldNames: Object.keys(paramSpec.fields),
             });
-            if (EXACT_PARAMETERS.has(`${id}.${name}`)) {
+            const fullName = `${id}.${name}`;
+            if (EXACT_PARAMETERS.has(fullName)) {
                 judged = {
                     create: "identifier",
                     verify: "exact",
                     rule: "string-identifier-exact",
+                    source: judged.source,
+                };
+            } else if (NONEMPTY_PARAMETER_SET.has(fullName)) {
+                judged = {
+                    create: "free_text",
+                    verify: "nonempty",
+                    rule: "string-free-text-nonempty",
                     source: judged.source,
                 };
             }
