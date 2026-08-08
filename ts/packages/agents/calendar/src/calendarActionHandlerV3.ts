@@ -42,7 +42,8 @@ import {
     evaluateGraphReadiness,
     getAvailableProviders,
     GoogleCalendarClient,
-    probeGraphConfig,
+    graphProviderSetupError,
+    probeCurrentGraphConfig,
 } from "@typeagent/graph-utils";
 import {
     getNWeeksDateRangeISO,
@@ -76,6 +77,13 @@ export class CalendarClientLoginCommandHandler
         const providerType = context.sessionContext.agentContext.providerType;
 
         if (provider === undefined) {
+            // No provider at all usually means nothing is configured yet, so
+            // point at the config keys instead of an opaque "not initialized".
+            // Thrown (not returned) so the dispatcher renders the markdown.
+            const config = probeCurrentGraphConfig();
+            if (!config.msGraphConfigured && !config.googleConfigured) {
+                throw graphProviderSetupError("calendar");
+            }
             throw new Error("Calendar provider not initialized");
         }
 
@@ -452,7 +460,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
     public async checkReadiness(
         context: SessionContext<CalendarActionContext>,
     ): Promise<ReadinessReport> {
-        const config = probeGraphConfig(process.env);
+        const config = probeCurrentGraphConfig();
         // Prefer the agentContext's provider when available (already set
         // up by updateAgentContext on enable). Fall back to a fresh
         // provider when the agent was disabled or env vars were set after
@@ -1287,11 +1295,12 @@ async function offerCalendarLogin(
     choiceManager: ChoiceManager,
 ): Promise<ActionResult> {
     const ctx = actionContext.sessionContext.agentContext;
-    const config = probeGraphConfig(process.env);
+    const config = probeCurrentGraphConfig();
     if (!config.msGraphConfigured && !config.googleConfigured) {
-        return createActionResultFromError(
-            "No calendar provider configured. Set MSGRAPH_APP_CLIENTID + MSGRAPH_APP_TENANTID or GOOGLE_CALENDAR_CLIENT_ID + GOOGLE_CALENDAR_CLIENT_SECRET in `ts/.env`, then run `@config agent refresh calendar`.",
-        );
+        // Thrown rather than returned: the dispatcher only attaches
+        // `errorDisplayContent` on the throw path, and without it the hint's
+        // markdown renders as literal text.
+        throw graphProviderSetupError("calendar");
     }
     if (!ctx.calendarProvider) {
         ctx.calendarProvider = createCalendarProviderFromConfig();
@@ -1303,7 +1312,7 @@ async function offerCalendarLogin(
     const provider = ctx.calendarProvider;
     if (!provider) {
         return createActionResultFromError(
-            "Calendar env vars are set but the provider could not be created. Check `ts/.env` and restart the agent server.",
+            "Calendar settings are present but the provider could not be created. Check the `msGraph` / `googleCalendar` section of `ts/config.local.yaml` and restart the agent server.",
         );
     }
     if (provider.isAuthenticated()) {

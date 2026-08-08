@@ -33,6 +33,67 @@ import { CommandCompletionResult } from "@typeagent/dispatcher-types";
 const debug = registerDebug("typeagent:command:completion");
 const debugError = registerDebug("typeagent:command:completion:error");
 
+export type ProgrammingErrorReportingState = {
+    readonly reported: Set<string>;
+    readonly capacity: number;
+};
+
+export function createProgrammingErrorReportingState(
+    capacity = 100,
+): ProgrammingErrorReportingState {
+    if (!Number.isInteger(capacity) || capacity < 1) {
+        throw new RangeError(
+            "Programming error reporting capacity must be positive",
+        );
+    }
+    return { reported: new Set(), capacity };
+}
+
+const programmingErrorReportingState = createProgrammingErrorReportingState();
+
+export function resetProgrammingErrorReportingState() {
+    programmingErrorReportingState.reported.clear();
+}
+
+function isProgrammingError(e: unknown): e is Error {
+    if (e instanceof TypeError || e instanceof ReferenceError) {
+        return true;
+    }
+    if (typeof e !== "object" || e === null) {
+        return false;
+    }
+    const name = (e as { name?: unknown }).name;
+    return name === "TypeError" || name === "ReferenceError";
+}
+
+export function reportProgrammingError(
+    e: unknown,
+    state: ProgrammingErrorReportingState = programmingErrorReportingState,
+    write: (message: string) => void = console.error,
+) {
+    if (!isProgrammingError(e)) {
+        return;
+    }
+    const error = e as { name: string; message?: unknown; stack?: unknown };
+    const message =
+        typeof error.message === "string"
+            ? error.message
+            : String(error.message);
+    const key = `${error.name}: ${message}`;
+    if (state.reported.has(key)) {
+        return;
+    }
+    state.reported.add(key);
+    if (state.reported.size > state.capacity) {
+        state.reported.delete(state.reported.values().next().value!);
+    }
+    write(
+        `Command completion failed with an internal error (suggestions will be missing): ${
+            typeof error.stack === "string" ? error.stack : key
+        }`,
+    );
+}
+
 // Detect whether the last parsed token is a recognized flag name
 // awaiting a value.  Pure: returns metadata only, no side effects.
 //
@@ -806,6 +867,7 @@ export async function getCommandCompletion(
         return completionResult;
     } catch (e: any) {
         debugError(`Command completion error: ${e}\n${e.stack}`);
+        reportProgrammingError(e);
         // On error, return a safe default — don't claim closedSet
         // since we don't know what went wrong.
         return {

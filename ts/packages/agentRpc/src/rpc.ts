@@ -125,6 +125,10 @@ export function createRpc<
                             type: "invokeError",
                             callId: message.callId,
                             error: error.message,
+                            errorMarkdown:
+                                typeof error?.markdown === "string"
+                                    ? error.markdown
+                                    : undefined,
                             stack: debugError.enabled ? error.stack : undefined,
                         });
                     },
@@ -145,7 +149,15 @@ export function createRpc<
             r.resolve(message.result);
         } else {
             debugError("Invoke error", message.stack);
-            r.reject(new Error(message.error));
+            const error: Error & { markdown?: string } = new Error(
+                message.error,
+            );
+            // Only `message` survives structured cloning, so re-attach the
+            // rich display the far side asked for.
+            if (message.errorMarkdown !== undefined) {
+                error.markdown = message.errorMarkdown;
+            }
+            r.reject(error);
         }
     };
     const bindChannel = (newChannel: RpcChannel) => {
@@ -268,6 +280,7 @@ type InvokeError = {
     type: "invokeError";
     callId: number;
     error: string;
+    errorMarkdown?: string; // Rich display for hosts that render markdown.
     stack?: string; // Optional stack trace for debugging.
 };
 

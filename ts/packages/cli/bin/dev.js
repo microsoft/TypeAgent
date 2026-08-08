@@ -4,17 +4,10 @@
 
 import { loadConfigSync } from "@typeagent/config";
 import { otel } from "@typeagent/telemetry";
+import { registerEarlyTelemetrySignalHandlers } from "../src/telemetry.ts";
 loadConfigSync();
 
-let signalShutdown;
-const shutdownOnSignal = () => {
-    signalShutdown ??= otel.shutdownTelemetry().finally(() => {
-        process.exit(0);
-    });
-};
-globalThis.__typeagentCliEarlySigintHandler = shutdownOnSignal;
-process.once("SIGINT", shutdownOnSignal);
-process.once("SIGTERM", shutdownOnSignal);
+registerEarlyTelemetrySignalHandlers();
 
 // eslint-disable-next-line node/shebang
 async function main() {

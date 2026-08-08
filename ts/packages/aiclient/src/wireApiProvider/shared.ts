@@ -61,9 +61,15 @@ export function verifyFilterResults(filterResult: FilterResult) {
 
 export type { Filter, FilterError, FilterResult };
 
+/**
+ * Build CompletionUsageStats under OpenAI-style accounting:
+ * `inputTokens` is the full prompt total; `cachedTokens` (when set) is a
+ * subset of that total, not an extra additive field.
+ */
 export function usageFromInputOutput(
     inputTokens: number | undefined,
     outputTokens: number | undefined,
+    cachedTokens?: number,
 ): CompletionUsageStats | undefined {
     if (inputTokens === undefined && outputTokens === undefined) {
         return undefined;
@@ -74,6 +80,7 @@ export function usageFromInputOutput(
         prompt_tokens: prompt,
         completion_tokens: completion,
         total_tokens: prompt + completion,
+        ...(cachedTokens !== undefined && { cached_tokens: cachedTokens }),
     };
 }
 

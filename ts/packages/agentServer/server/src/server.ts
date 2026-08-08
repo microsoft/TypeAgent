@@ -39,6 +39,8 @@ import { otel } from "@typeagent/telemetry";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
+const SHUTDOWN_WORKER_MESSAGE = "shutdown";
+const WORKER_SHUTDOWN_TIMEOUT_MS = 15_000;
 
 // A dead stdout/stderr pipe (e.g. the launching wrapper exited) must never
 // crash or busy-loop the server: swallow write errors so an EPIPE can't become
@@ -90,28 +92,42 @@ function runWorker(): Promise<number> {
             process.execPath,
             [...process.execArgv, ...process.argv.slice(1)],
             {
-                stdio: "inherit",
+                stdio: ["inherit", "inherit", "inherit", "ipc"],
                 windowsHide: true,
                 env: { ...process.env, TYPEAGENT_SUPERVISED: "1" },
             },
         );
         let terminating = false;
-        const forwardSignal = (signal: NodeJS.Signals) => {
+        let shutdownTimer: NodeJS.Timeout | undefined;
+        const requestWorkerShutdown = () => {
+            if (terminating) {
+                return;
+            }
             terminating = true;
-            try {
-                worker.kill(signal);
-            } catch {
+            shutdownTimer = setTimeout(() => {
+                worker.kill();
+            }, WORKER_SHUTDOWN_TIMEOUT_MS);
+            shutdownTimer.unref();
+
+            if (worker.connected) {
+                // The worker may already be handling the same terminal signal.
+                // Leave the hard kill to the deadline instead of racing cleanup.
+                worker.send(SHUTDOWN_WORKER_MESSAGE, () => {});
+            } else {
                 worker.kill();
             }
         };
-        const onSigint = () => forwardSignal("SIGINT");
-        const onSigterm = () => forwardSignal("SIGTERM");
+        const onSigint = () => requestWorkerShutdown();
+        const onSigterm = () => requestWorkerShutdown();
         process.once("SIGINT", onSigint);
         process.once("SIGTERM", onSigterm);
 
         const cleanup = () => {
             process.removeListener("SIGINT", onSigint);
             process.removeListener("SIGTERM", onSigterm);
+            if (shutdownTimer !== undefined) {
+                clearTimeout(shutdownTimer);
+            }
         };
         worker.once("error", (error) => {
             cleanup();
@@ -123,7 +139,7 @@ function runWorker(): Promise<number> {
         });
         worker.once("close", (exitCode) => {
             cleanup();
-            resolve(terminating ? 1 : (exitCode ?? 1));
+            resolve(exitCode ?? 1);
         });
     });
 }
@@ -152,6 +168,11 @@ process.once("SIGINT", () => {
 });
 process.once("SIGTERM", () => {
     void exitWorker(0);
+});
+process.once("message", (message) => {
+    if (message === SHUTDOWN_WORKER_MESSAGE) {
+        void exitWorker(0);
+    }
 });
 
 // Load config from YAML layers + Key Vault (replacing legacy dotenv).
@@ -369,7 +390,9 @@ async function main() {
 
     // Shared shutdown logic — used by RPC handler, idle timer, and clientIO intercept.
     // The wss variable is assigned after createWebSocketChannelServer resolves below.
-    let wss: Awaited<ReturnType<typeof createWebSocketChannelServer>>;
+    let wss:
+        | Awaited<ReturnType<typeof createWebSocketChannelServer>>
+        | undefined;
 
     // Stop listening, close conversations (which releases the instance-dir
     // lock), and drop the PID file. Shared by shutdown and restart so a
@@ -377,7 +400,7 @@ async function main() {
     let teardownPromise: Promise<void> | undefined;
     function teardownServer(): Promise<void> {
         teardownPromise ??= (async () => {
-            wss.close();
+            wss?.close();
             await conversationManager.close();
             removeServerPid(port);
         })();

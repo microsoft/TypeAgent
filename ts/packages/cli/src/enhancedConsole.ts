@@ -68,7 +68,7 @@ import {
 } from "./debugInterceptor.js";
 import { stopAgentServer } from "@typeagent/agent-server-client";
 import { randomUUID } from "crypto";
-import { exitCli } from "./telemetry.js";
+import { exitCli, removeEarlyTelemetrySigintHandler } from "./telemetry.js";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
@@ -2406,16 +2406,7 @@ function initializeEnhancedConsole(
     _rl?: readline.promises.Interface,
     dispatcherRef?: { current?: Dispatcher },
 ) {
-    const cliGlobal = globalThis as typeof globalThis & {
-        __typeagentCliEarlySigintHandler?: () => void;
-    };
-    if (cliGlobal.__typeagentCliEarlySigintHandler !== undefined) {
-        process.removeListener(
-            "SIGINT",
-            cliGlobal.__typeagentCliEarlySigintHandler,
-        );
-        delete cliGlobal.__typeagentCliEarlySigintHandler;
-    }
+    removeEarlyTelemetrySigintHandler();
     process.on("SIGINT", () => {
         if (isProcessing && dispatcherRef?.current) {
             const now = Date.now();
