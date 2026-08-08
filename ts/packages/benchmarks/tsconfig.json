@@ -1,9 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "composite": true,
-    "rootDir": "src",
-    "outDir": "dist"
+    "composite": true
   },
-  "include": ["src/**/*.ts"]
+  "include": [],
+  "references": [{ "path": "./src" }, { "path": "./test" }],
+  "ts-node": {
+    "esm": true
+  }
 }

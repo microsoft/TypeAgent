@@ -329,12 +329,12 @@ export function createTelemetryCoordinator(): TelemetryCoordinator {
             }
             const lifecycleShutdown =
                 lifecycle?.shutdown() ?? Promise.resolve();
-            shutdownPromise ??= withTimeout(
-                Promise.all([
+            shutdownPromise ??= waitForInitializationAndLifecycle(
+                withTimeout(
                     initPromise.catch(() => undefined),
-                    lifecycleShutdown,
-                ]).then(() => undefined),
-                shutdownTimeoutMs,
+                    shutdownTimeoutMs,
+                ),
+                lifecycleShutdown,
             );
             return shutdownPromise;
         },
@@ -491,6 +491,28 @@ async function withTimeout(
         if (timeout !== undefined) {
             clearTimeout(timeout);
         }
+    }
+}
+
+async function waitForInitializationAndLifecycle(
+    initialization: Promise<void>,
+    lifecycleShutdown: Promise<void>,
+): Promise<void> {
+    const results = await Promise.allSettled([
+        initialization,
+        lifecycleShutdown,
+    ]);
+    const failures = results.flatMap((result) =>
+        result.status === "rejected" ? [result.reason] : [],
+    );
+    if (failures.length === 1) {
+        throw failures[0];
+    }
+    if (failures.length > 1) {
+        throw new AggregateError(
+            failures,
+            "Telemetry initialization wait and lifecycle shutdown failed.",
+        );
     }
 }
 

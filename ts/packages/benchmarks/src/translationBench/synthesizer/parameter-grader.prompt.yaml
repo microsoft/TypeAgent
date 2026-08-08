@@ -1,0 +1,138 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Parameter grader: regex → classifier → verifier; no random default on miss.
+
+name: translation-bench-parameter-grader
+version: 1
+role: parameter_policy_eval
+
+# Stage 1 — deterministic (implemented in code; listed here for operators)
+regex_checker:
+  description: |-
+    Confident structural + well-known field-name rules.
+    Fail-open to LLM only when no rule matches — never a random default.
+  checks:
+    - type_any_opaque_ignore
+    - type_boolean_number_exact
+    - type_array_inherit_element_policy_loose
+    - type_object_record_exact
+    - string_enum_exact_or_unit
+    - string_unit_or_mode_ignore
+    - string_free_text_nonempty
+    - string_date_exact
+    - string_time_nonempty
+    - string_identifier_exact
+
+# Stage 2 — LLM policy classifier (only when regex_checker misses)
+policy_classifier:
+  # Ground truth for the classifier completion call — not caller-overridable.
+  model_configuration:
+    temperature: 0.0
+  create_policies:
+    - enum_literal
+    - typed_literal
+    - free_text
+    - identifier
+    - temporal
+    - unit_or_mode
+    - collection
+    - record
+    - opaque
+  verify_modes:
+    - exact
+    - exists
+    - nonempty
+    - ignore
+  template: |-
+    You are a parameter-policy classifier for TypeAgent translation-bench.
+    Regex rules did NOT match this field. You must invent create + verify
+    policies. Do NOT copy a generic default; justify with a specific rule id.
+
+    Return ONLY strict JSON (markdown fences optional) with exactly:
+      create, verify, rule
+
+    create must be one of: {{create_policies}}
+    verify must be one of: {{verify_modes}}
+    rule must be a short snake_case reason id you invent (e.g. free_text_place_name).
+    Do not use rule values "default", "unknown", or "fallback".
+
+    Guidelines:
+    - Free-form natural language → free_text + nonempty
+    - Stable ids/names/paths/urls → identifier + exact
+    - Dates → temporal + exact; times/when → temporal + nonempty
+    - Units/modes/kinds (often optional defaults) → unit_or_mode + ignore
+    - Enums → enum_literal + exact (optional unit/mode enums may ignore)
+    - Booleans/numbers → typed_literal + exact
+    - Arrays → keep the ELEMENT policy and loop items (loose container verify;
+      do not require whole-list exact). Objects → record + exact
+    - Unknown/any structure → opaque + ignore
+
+    Action: {{schema_name}}.{{action_name}}
+    {{action_description_block}}
+
+    Field name: {{field_name}}
+    Optional: {{optional}}
+    Structural type (JSON):
+    {{field_type_json}}
+
+    Full action parameters summary:
+    {{parameters_summary}}
+
+# Stage 3 — independent policy verifier (LLM), last gate for classifier output
+policy_verifier:
+  # Ground truth for the verifier completion call — not caller-overridable.
+  model_configuration:
+    temperature: 0.0
+  approve_score_threshold: 0.8
+  issue_codes:
+    - TYPE_MISMATCH
+    - CREATE_VERIFY_INCOHERENT
+    - WEAK_RULE
+    - OVERSTRICT_VERIFY
+    - UNDERSTRICT_VERIFY
+    - BAD_OPTIONAL_HANDLING
+    - OTHER
+  template: |-
+    You are an independent parameter-policy verifier for TypeAgent translation-bench.
+    You do NOT invent a new policy from scratch unless rejecting.
+    You only judge the candidate policy from the classifier.
+
+    Return ONLY strict JSON (markdown fences optional) with exactly:
+      decision, scores, issues, summary
+
+    decision is "approve" or "reject".
+
+    Scores are 0..1 for:
+      typeConsistency, createVerifyCoherence, scoreModeSoundness, ruleSpecificity
+
+    Approve ONLY when every score is at least {{approve_score_threshold}} and
+    issues is empty. Otherwise reject with actionable issues
+    (code, path, message, suggestedFix).
+
+    Issue codes (use only these): {{issue_codes}}
+
+    create must be coherent with the structural type and field name.
+    verify must be a runner soft-score mode that matches how noisy the value is:
+      free text → nonempty/exists; ids/enums/bools/numbers → exact;
+      optional units/modes → ignore is often correct.
+
+    Action: {{schema_name}}.{{action_name}}
+    Field name: {{field_name}}
+    Optional: {{optional}}
+    Structural type (JSON):
+    {{field_type_json}}
+
+    Candidate policy (JSON):
+    {{candidate_policy_json}}
+
+# Combined gate (documented for operators; enforced in code)
+acceptance:
+  prefer_regex: true
+  require_verifier_approve_for_llm: true
+  max_classifier_attempts: 3
+  notes: |-
+    Pipeline order mirrors quality-verifier stages:
+      regex_checker → (miss) policy_classifier → policy_verifier → accept|retry
+    Regex hits never call the LLM. Verifier reject feeds issues back into
+    the classifier for the next attempt. No random default when regex misses.

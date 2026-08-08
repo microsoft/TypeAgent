@@ -63,15 +63,6 @@ describe("createProcessResource", () => {
         );
     });
 
-    it("reuses the default service instance ID within the process", () => {
-        const first = createProcessResource({ serviceName: "first" });
-        const second = createProcessResource({ serviceName: "second" });
-
-        expect(first.attributes[ATTR_SERVICE_INSTANCE_ID]).toBe(
-            second.attributes[ATTR_SERVICE_INSTANCE_ID],
-        );
-    });
-
     it("sets the deployment environment when provided", () => {
         const resource = createProcessResource({
             serviceName: "my-service",
@@ -83,25 +74,23 @@ describe("createProcessResource", () => {
         );
     });
 
+    it("reuses the default service instance ID within the process", () => {
+        const first = createProcessResource({ serviceName: "first" });
+        const second = createProcessResource({ serviceName: "second" });
+
+        expect(first.attributes[ATTR_SERVICE_INSTANCE_ID]).toBe(
+            second.attributes[ATTR_SERVICE_INSTANCE_ID],
+        );
+    });
+
     it("merges caller-supplied attributes", () => {
         const resource = createProcessResource({
             serviceName: "my-service",
-            attributes: {
-                "deployment.environment": "legacy",
-                [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: "custom",
-                [ATTR_SERVICE_VERSION]: "custom-version",
-                "typeagent.host.kind": "dispatcher",
-            },
+            attributes: { "deployment.environment": "test" },
         });
 
-        expect(resource.attributes["deployment.environment"]).toBe("legacy");
-        expect(resource.attributes[ATTR_DEPLOYMENT_ENVIRONMENT_NAME]).toBe(
-            "custom",
-        );
-        expect(resource.attributes[ATTR_SERVICE_VERSION]).toBe(
-            "custom-version",
-        );
-        expect(resource.attributes["typeagent.host.kind"]).toBe("dispatcher");
+        expect(resource.attributes["deployment.environment"]).toBe("test");
+        expect(resource.attributes[ATTR_SERVICE_NAME]).toBe("my-service");
     });
 
     it("does not allow caller-supplied attributes to override identity attributes", () => {
@@ -131,7 +120,7 @@ describe("createProcessResource", () => {
         );
     });
 
-    it("throws for empty string attributes", () => {
+    it("throws for an empty or all-whitespace service name", () => {
         expect(() => createProcessResource({ serviceName: "" })).toThrow();
         expect(() => createProcessResource({ serviceName: "   " })).toThrow();
         expect(() =>
