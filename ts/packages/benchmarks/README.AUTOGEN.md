@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=428657ed52192f1f0a0407aea60f28a3f002f3133b16ce9345b0e5e687ec7cc8 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7f7e158592ba88a68bbf0957cce86942c6091a3925b946d21c9c7b13b3cb5fd2 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -52,10 +52,10 @@ _None._
 - [./src/core/types.ts](./src/core/types.ts)
 - [./src/translationBench/action-parameters-grader.generated.json](./src/translationBench/action-parameters-grader.generated.json)
 - [./src/translationBench/catalog.generated.json](./src/translationBench/catalog.generated.json)
-- _…and 28 more under `./src/`._
+- _…and 29 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `438d9d684f9bbc810118dd5994250e3079ecb2e9` on `2026-08-08T00:39:54.248Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `2f1ae13a34a138343a5b5113783950a8f1746724` on `2026-08-08T02:25:27.234Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
