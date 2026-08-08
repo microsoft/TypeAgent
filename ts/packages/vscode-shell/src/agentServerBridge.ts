@@ -3,6 +3,7 @@
 
 import * as vscode from "vscode";
 import * as os from "os";
+import * as path from "node:path";
 import {
     connectAgentServer,
     type AgentServerConnection,
@@ -24,6 +25,45 @@ import {
     type Backoff,
 } from "@typeagent/websocket-utils/backoff";
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
+
+function isAllowedConfigPath(candidate: string): boolean {
+    if (
+        candidate.length === 0 ||
+        candidate.includes("\0") ||
+        !path.isAbsolute(candidate) ||
+        candidate.startsWith("\\\\") ||
+        candidate.startsWith("//") ||
+        candidate.split(/[\\/]/).some((segment) => segment === "..")
+    ) {
+        return false;
+    }
+    const normalize = (value: string) => {
+        const resolved = path.resolve(value);
+        return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+    };
+    const allowed = new Set<string>();
+    const add = (value: string | undefined) => {
+        if (value !== undefined) {
+            allowed.add(normalize(value));
+        }
+    };
+    add(process.env.TYPEAGENT_CONFIG_LOCAL);
+    if (process.env.TYPEAGENT_CONFIG_DIR !== undefined) {
+        add(path.join(process.env.TYPEAGENT_CONFIG_DIR, "config.local.yaml"));
+    }
+    add(
+        path.join(
+            process.env.TYPEAGENT_USER_DATA_DIR ??
+                path.join(os.homedir(), ".typeagent"),
+            "config.local.yaml",
+        ),
+    );
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+        add(path.join(folder.uri.fsPath, "config.local.yaml"));
+        add(path.join(folder.uri.fsPath, "ts", "config.local.yaml"));
+    }
+    return allowed.has(normalize(candidate));
+}
 
 import {
     wrapLegacy,
@@ -1490,6 +1530,15 @@ export class AgentServerBridge {
                 // the extension host so VS Code applies its trust prompt.
                 if (msg.href) {
                     void vscode.env.openExternal(vscode.Uri.parse(msg.href));
+                }
+                break;
+            case "openFile":
+                // `typeagent-file:` link — show it in an editor tab rather
+                // than handing it to the OS; the user is already in VS Code.
+                if (msg.path && isAllowedConfigPath(msg.path)) {
+                    void vscode.window.showTextDocument(
+                        vscode.Uri.file(msg.path),
+                    );
                 }
                 break;
             case "openMessageWindow":

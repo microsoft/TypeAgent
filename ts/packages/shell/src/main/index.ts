@@ -30,6 +30,10 @@ import {
 } from "./instance.js";
 import { AGENT_SERVER_DEFAULT_PORT } from "@typeagent/agent-server-client";
 import { otel } from "@typeagent/telemetry";
+import {
+    isAllowedConfigFilePath,
+    resolveLocalConfigPath,
+} from "@typeagent/config";
 
 import {
     debugShell,
@@ -312,6 +316,17 @@ async function initialize() {
         const shellWindow = getShellWindowForChatViewIpcEvent(event);
         if (!shellWindow) return;
         shell.openPath(path);
+    });
+
+    ipcMain.on("open-config-file", async (event, candidate: string) => {
+        const shellWindow = getShellWindowForChatViewIpcEvent(event);
+        if (!shellWindow) return;
+        const expected = resolveLocalConfigPath();
+        if (!isAllowedConfigFilePath(candidate, expected)) {
+            debugShellError("Rejected non-config local-file link");
+            return;
+        }
+        await shell.openPath(candidate);
     });
 
     ipcMain.on("open-url-in-browser-tab", async (event, url: string) => {

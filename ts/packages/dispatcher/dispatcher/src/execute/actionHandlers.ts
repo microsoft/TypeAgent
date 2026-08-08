@@ -17,6 +17,7 @@ import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionResult,
+    ActionResultError,
     ActionContext,
     ParsedCommandParams,
     ParameterDefinitions,
@@ -53,6 +54,10 @@ import {
     toPendingActions,
 } from "./pendingActions.js";
 import { getActionContext } from "./actionContext.js";
+import {
+    AgentNotReadyError,
+    getErrorDisplayContent,
+} from "./agentNotReadyError.js";
 import {
     addActionResultToMemory,
     addResultToMemory,
@@ -102,9 +107,16 @@ export async function checkAgentReady(
         return undefined;
     }
     const reason = report.message ?? "Agent is not ready.";
+    // `details` carries the actionable part (which file to edit, the YAML to
+    // paste). It's markdown, so it travels as rich display content rather
+    // than being folded into the plain-text Error message, which clients
+    // render without formatting (collapsing the snippet's indentation).
+    const details = report.details;
     if (report.state === "unsupported") {
-        throw new Error(
-            `Agent '${appAgentName}' is not supported in this environment: ${reason}`,
+        const message = `Agent '${appAgentName}' is not supported in this environment: ${reason}`;
+        throw new AgentNotReadyError(
+            message,
+            details ? `${message}\n\n${details}` : undefined,
         );
     }
     // setup-required
@@ -122,12 +134,24 @@ export async function checkAgentReady(
     // Different hint depending on whether the agent can be configured
     // from chat. Without a hook (manual config case), `@config agent
     // setup` would just bounce the user; point at `refresh` instead.
-    const hint = systemContext.agents.hasSetup(appAgentName)
-        ? `Run \`@config agent setup ${appAgentName}\` to configure it.`
-        : `After fixing the underlying issue, run \`@config agent refresh ${appAgentName}\` to re-check.`;
-    throw new Error(
-        `Agent '${appAgentName}' needs configuration before it can be used: ${reason} ${hint}`,
-    );
+    const hasSetup = systemContext.agents.hasSetup(appAgentName);
+    const command = hasSetup
+        ? `@config agent setup ${appAgentName}`
+        : `@config agent refresh ${appAgentName}`;
+    const hint = hasSetup
+        ? `Run \`${command}\` to configure it.`
+        : `After fixing the underlying issue, run \`${command}\` to re-check.`;
+    const headline = `Agent '${appAgentName}' needs configuration before it can be used: ${reason}`;
+    // Agents commonly close their own `details` by telling the user to run
+    // the very same command; appending the hint on top of that just says it
+    // twice. Only add it when the details didn't already.
+    const detailsDisplay =
+        details === undefined
+            ? undefined
+            : details.includes(command)
+              ? `${headline}\n\n${details}`
+              : `${headline}\n\n${details}\n\n${hint}`;
+    throw new AgentNotReadyError(`${headline} ${hint}`, detailsDisplay);
 }
 
 function getStreamingActionContext(
@@ -286,6 +310,12 @@ export async function executeAction(
         }
         const details = serializeError(e);
         result = createActionResultFromError(details.message, details);
+        // Readiness failures carry markdown setup instructions; show those
+        // instead of the flattened one-line message.
+        const errorDisplay = getErrorDisplayContent(e);
+        if (errorDisplay !== undefined) {
+            result = { ...result, errorDisplayContent: errorDisplay };
+        }
     }
     // If the agent ran to completion but a cancel arrived while it was executing,
     // discard the result and treat this as a cancellation.
@@ -354,6 +384,20 @@ function projectActionResultForDiagnostics(result: ActionResult): unknown {
     }
 }
 
+function displayActionResultError(
+    result: ActionResultError,
+    actionContext: ActionContext<unknown>,
+): void {
+    if (result.errorDisplayContent !== undefined) {
+        actionContext.actionIO.appendDisplay(
+            result.errorDisplayContent,
+            "block",
+        );
+    } else {
+        displayError(result.error, actionContext);
+    }
+}
+
 export function emitActionResult(
     result: ActionResult,
     actionContext: ActionContext<unknown>,
@@ -381,7 +425,7 @@ export function emitActionResult(
     }
     if (result.error !== undefined) {
         if (!("fallbackToReasoning" in result) || !result.fallbackToReasoning) {
-            displayError(result.error, actionContext);
+            displayActionResultError(result, actionContext);
         }
         return;
     }
@@ -912,7 +956,12 @@ export async function executeCommand(
                     "AbortError",
                 );
             }
-            displayError(`ERROR: ${e.message}`, actionContext);
+            const errorDisplay = getErrorDisplayContent(e);
+            if (errorDisplay !== undefined) {
+                actionContext.actionIO.appendDisplay(errorDisplay, "block");
+            } else {
+                displayError(`ERROR: ${e.message}`, actionContext);
+            }
             debugCommandExecError(e.stack);
         }
     } finally {

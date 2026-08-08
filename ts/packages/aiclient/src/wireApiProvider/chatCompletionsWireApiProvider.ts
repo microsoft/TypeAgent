@@ -38,10 +38,19 @@ type ChatCompletionChoice = {
     finish_reason?: string;
 };
 
+// OpenAI/Azure chat usage. prompt_tokens is the full input; cache hits are a
+// subset nested under prompt_tokens_details (OpenAI prompt-caching docs).
+type ProviderUsage = {
+    completion_tokens: number;
+    prompt_tokens: number;
+    total_tokens: number;
+    prompt_tokens_details?: { cached_tokens?: number };
+};
+
 type ChatCompletion = {
     id: string;
     choices: ChatCompletionChoice[];
-    usage: CompletionUsageStats;
+    usage?: ProviderUsage | null;
 };
 
 type ToolCallDelta = { index: number } & ToolCall;
@@ -55,8 +64,18 @@ type ChatCompletionDelta = {
 type ChatCompletionChunk = {
     id: string;
     choices: ChatCompletionDelta[];
-    usage?: CompletionUsageStats;
+    usage?: ProviderUsage | null;
 };
+
+function flattenUsage(usage: ProviderUsage): CompletionUsageStats {
+    const cached = usage.prompt_tokens_details?.cached_tokens;
+    return {
+        completion_tokens: usage.completion_tokens,
+        prompt_tokens: usage.prompt_tokens,
+        total_tokens: usage.total_tokens,
+        ...(cached !== undefined && { cached_tokens: cached }),
+    };
+}
 
 function verifyStreamContentSafety(data: ChatCompletionChunk): void {
     data.choices.map((c: ChatCompletionDelta) => {
@@ -213,7 +232,11 @@ export class ChatCompletionsWireApiProvider implements ProviderAdapter {
     }
 
     extractUsage(data: unknown): CompletionUsageStats | undefined {
-        return (data as ChatCompletion).usage;
+        const usage = (data as ChatCompletion).usage;
+        if (usage == null) {
+            return undefined;
+        }
+        return flattenUsage(usage);
     }
 
     createStreamDecoder(request: ModelRequest): StreamDecoder {
@@ -233,7 +256,7 @@ export class ChatCompletionsWireApiProvider implements ProviderAdapter {
                     );
                 }
                 if (data.usage) {
-                    piece.usage = data.usage;
+                    piece.usage = flattenUsage(data.usage);
                 }
                 return piece;
             },

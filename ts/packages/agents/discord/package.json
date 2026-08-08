@@ -32,7 +32,8 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
-    "@typeagent/aiclient": "workspace:*"
+    "@typeagent/aiclient": "workspace:*",
+    "@typeagent/config": "workspace:*"
   },
   "devDependencies": {
     "@typeagent/action-grammar-compiler": "workspace:*",

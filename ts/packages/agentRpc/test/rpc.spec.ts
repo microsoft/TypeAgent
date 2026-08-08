@@ -153,6 +153,48 @@ describe("createRpc default (non-rebindable)", () => {
             "rpc was not created as rebindable",
         );
     });
+
+    it("carries an error's markdown display across the channel", async () => {
+        const client = createFakeChannel();
+        const server = createFakeChannel();
+        connect(client, server);
+
+        const clientRpc = createRpc<EchoInvoke>("client", client);
+        createRpc<{}, {}, EchoInvoke>("server", server, {
+            echo: async () => {
+                const e: Error & { markdown?: string } = new Error("nope");
+                e.markdown = "**nope**";
+                throw e;
+            },
+        });
+
+        const e = await clientRpc.invoke("echo", 1).then(
+            () => undefined,
+            (e: any) => e,
+        );
+        expect(e.message).toBe("nope");
+        expect(e.markdown).toBe("**nope**");
+    });
+
+    it("leaves markdown undefined for a plain error", async () => {
+        const client = createFakeChannel();
+        const server = createFakeChannel();
+        connect(client, server);
+
+        const clientRpc = createRpc<EchoInvoke>("client", client);
+        createRpc<{}, {}, EchoInvoke>("server", server, {
+            echo: async () => {
+                throw new Error("plain");
+            },
+        });
+
+        const e = await clientRpc.invoke("echo", 1).then(
+            () => undefined,
+            (e: any) => e,
+        );
+        expect(e.message).toBe("plain");
+        expect(e.markdown).toBeUndefined();
+    });
 });
 
 describe("createRpc rebindable", () => {
