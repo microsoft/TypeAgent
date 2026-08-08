@@ -132,7 +132,7 @@ function generatedCandidate(target = targetAction(), genCaseCount = 20) {
                 role: positive ? ("positive" as const) : ("negative" as const),
                 utterance: positive
                     ? `Look up positive item ${index}`
-                    : `Please clarify negative item ${index}`,
+                    : `Don't run this action right now; leave everything alone (${index}).`,
                 expectedActions: positive
                     ? [expectedAction(target, `positive-${index}`)]
                     : [],

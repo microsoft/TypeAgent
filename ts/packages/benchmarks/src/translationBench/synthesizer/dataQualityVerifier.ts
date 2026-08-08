@@ -30,6 +30,7 @@ import {
     findTranslationBenchConfusableSiblings,
     summarizeTranslationBenchConfusableSiblings,
 } from "./utteranceDisambiguation.js";
+import { checkTranslationBenchCandidateNegativeFairness } from "./negativeFairness.js";
 
 export type TranslationBenchQualityStage =
     | "format_checker"
@@ -142,17 +143,32 @@ export function runTranslationBenchFormatChecker(
                 };
             }
         }
+        const catalog = catalogForLoop(loop);
         const disambiguationIssues =
             checkTranslationBenchCandidateDisambiguation(
                 candidate,
                 loop.targetAction,
-                catalogForLoop(loop),
+                catalog,
             );
         if (disambiguationIssues.length > 0) {
             return {
                 stage: "format_checker",
                 passed: false,
                 issues: disambiguationIssues,
+                candidate,
+            };
+        }
+        const negativeFairnessIssues =
+            checkTranslationBenchCandidateNegativeFairness(
+                candidate,
+                loop.targetAction,
+                catalog,
+            );
+        if (negativeFairnessIssues.length > 0) {
+            return {
+                stage: "format_checker",
+                passed: false,
+                issues: negativeFairnessIssues,
                 candidate,
             };
         }
@@ -205,6 +221,8 @@ export function buildTranslationBenchSemanticCheckerPrompt(
             ),
             disambiguationRule:
                 "Reject positives (AMBIGUOUS_INTENT) when a careful reader could equally choose a confusable sibling. Seed and every positive must uniquely identify the target action.",
+            negativeFairnessRule:
+                "Reject empty-gold negatives (BAD_NEGATIVE) that are concrete agent commands or contrastive adjacent intents. Fair negatives are pure refusals of the target, non-action status/howto questions, or missing-info clarifications — cases where emitting zero actions is the correct label under zero-action scoring.",
         },
         candidate,
         formatCheckerChecks: pack.formatChecker.checks,

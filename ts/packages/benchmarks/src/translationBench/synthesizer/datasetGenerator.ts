@@ -540,6 +540,8 @@ function formatSynthesizerPrompt(
             ),
             disambiguationRule:
                 "Every seed and positive utterance must uniquely identify the target action. If confusableSiblings is non-empty, include target-only cues and never use phrasing that fits a sibling equally well.",
+            negativeFairnessRule:
+                "Empty-gold negatives must be fair under zero-action scoring: pure refusal of the target, non-action status/howto question, or missing-info clarification. Never use contrastive adjacent commands or partial constraints that still request an agent action.",
         }),
         prior_feedback_json: JSON.stringify(feedback),
         previous_rejected_block: previousRejectedBlock,

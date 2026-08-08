@@ -66,13 +66,24 @@ template: |-
   - Double-meaning positives are rejected by the format checker as
     AMBIGUOUS_INTENT before semantic review.
 
-  Diversify negatives across missing information, ambiguity, negation,
-  non-action questions, and contrastive adjacent intents that this target rule
-  must not capture. expectedActions remains [] because these cases score
-  target-rule abstention.
+  Negatives (hard fairness requirement — empty expectedActions):
+  - Scorer treats expectedActions: [] as "translator must emit ZERO actions".
+    Only write negatives where that label is fair.
+  - ALLOWED negative kinds (set dimensions.negativeKind to one of these):
+      pure_refusal — explicit don't/never/stop of the target (no alternate command)
+      non_action_question — status/howto/definition question that should not call a tool
+      missing_info — underspecified ask that needs clarification, not an action
+  - FORBIDDEN as empty-gold negatives (format checker rejects BAD_NEGATIVE):
+      contrastive adjacent commands ("close only this tab" as neg for closeAll,
+      "search Bing for MSFT" as neg for changeSearchProvider, "click the link…"
+      as neg for openWebPage)
+      partial constraints that still request an action ("open X but don't bookmark")
+      any imperative that a correct translator would map to another tool
+  - Double-meaning / unfair contrastive negatives inflated false-positive rates
+    in prior 1k evals; do not regenerate that failure mode.
 
   Use dimensions to label each case's scenario, linguistic form, and positive
-  variation or negative boundary reason.
+  variation or negativeKind / negative boundary reason.
 
   Each genCase must contain exactly id, role, utterance, expectedActions, order,
   dimensions, and optional history.

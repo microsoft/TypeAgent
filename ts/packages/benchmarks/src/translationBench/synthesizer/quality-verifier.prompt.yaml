@@ -31,6 +31,7 @@ format_checker:
     - history_shape_when_present
     - active_schema_membership
     - utterance_action_disambiguation
+    - negative_empty_gold_fairness
 
 # Stage 2 — semantic / quality judge (LLM)
 semantic_checker:
@@ -70,9 +71,9 @@ semantic_checker:
     source; the candidate should adapt its topic to the scheduled TypeAgent
     action rather than preserve every anchor entity.
 
-    Negative expectedActions are empty because they test whether this target
-    rule abstains; contrastive adjacent intents are valid negatives when they
-    must not match the target action.
+    Negative expectedActions are empty because the scorer requires ZERO actions.
+    Only approve negatives where that gold is fair (pure refusal of the target,
+    non-action status/howto question, or missing-info clarification).
 
     Disambiguation (groundTruthCorrectness / AMBIGUOUS_INTENT):
     - immutableContext.confusableSiblings lists nearby tools that collide with
@@ -81,8 +82,17 @@ semantic_checker:
       confusable sibling. Prefer target-only cues; reject double-meaning labels
       such as "Open the Apple stock quote in a new tab" for either
       openWebPage or followLinkByText without link/URL-specific wording.
-    - Negatives that intentionally use adjacent intents are fine when
-      expectedActions is empty.
+
+    Negative fairness (negativeQuality / BAD_NEGATIVE):
+    - Reject contrastive adjacent commands with empty gold (e.g. "close only
+      this tab" as a negative for closeAllWebPages, "search Bing for MSFT" as a
+      negative for changeSearchProvider). A correct translator would fire another
+      tool and be scored as a false positive — that is an unfair label.
+    - Reject partial constraints that still request an action ("open X but don't
+      bookmark it") when expectedActions is [].
+    - Approve pure refusals ("Don't take a screenshot of my banking page"),
+      non-action questions ("Is Bluetooth currently enabled?"), and missing-info
+      clarifications. Format checker also enforces this deterministically.
 
     Gold parameters (groundTruthCorrectness / INVALID_PARAMETERS):
     - Every expectedActions[].parameters key on seed/positives must be clearly
