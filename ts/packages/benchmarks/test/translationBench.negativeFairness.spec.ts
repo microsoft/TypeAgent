@@ -258,6 +258,27 @@ describe("translation bench candidate negative fairness from LLM assessments", (
         );
     });
 
+    it("pairs assessments to negatives by order when counts match", () => {
+        const candidate = fairCandidate(
+            "Don't close all tabs; just close this one.",
+        );
+        const issues = checkTranslationBenchCandidateNegativeFairness(
+            candidate,
+            targetOpenWebPage,
+            [
+                {
+                    path: "$.wrong.path",
+                    kind: "unfair_contrastive",
+                    fairEmptyGold: false,
+                    reason: "refuse-then-alternate still requests an action",
+                },
+            ],
+        );
+        expect(issues).toHaveLength(1);
+        expect(issues[0]!.code).toBe("BAD_NEGATIVE");
+        expect(issues[0]!.path).toBe("$.genCases[1].utterance");
+    });
+
     it("forces reject when applying unfair issues to an approve decision", () => {
         const decision = applyTranslationBenchNegativeFairnessIssues(
             {
@@ -429,7 +450,6 @@ describe("semantic checker enforces LLM negativeAssessments", () => {
                     },
                     issues: [],
                     summary: "forgot assessments",
-                    // missing negativeAssessments key entirely
                 }),
         };
 

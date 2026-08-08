@@ -9,6 +9,7 @@ import type {
     TranslationBenchReviewIssue,
     TranslationBenchReviewerDecision,
 } from "./generationCandidate.js";
+import { parseWithZod } from "./zodJson.js";
 
 export const TRANSLATION_BENCH_NEGATIVE_KINDS = [
     "pure_refusal",
@@ -29,7 +30,7 @@ const FAIR_KINDS = new Set<TranslationBenchNegativeKind>([
     "missing_info",
 ]);
 
-export const translationBenchNegativeAssessmentSchema = z
+const assessmentSchema = z
     .object({
         path: z.string().trim().min(1),
         kind: z.enum(TRANSLATION_BENCH_NEGATIVE_KINDS),
@@ -38,12 +39,10 @@ export const translationBenchNegativeAssessmentSchema = z
     })
     .strict();
 
-export const translationBenchNegativeAssessmentsSchema = z.array(
-    translationBenchNegativeAssessmentSchema,
-);
+const assessmentsSchema = z.array(assessmentSchema);
 
 export type TranslationBenchNegativeFairnessAssessment = z.infer<
-    typeof translationBenchNegativeAssessmentSchema
+    typeof assessmentSchema
 >;
 
 export interface TranslationBenchNegativeFairnessResult {
@@ -62,15 +61,7 @@ export const TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE =
     "forms, capability questions that still solicit an action, or any imperative " +
     "a correct translator would map to another tool.";
 
-export function isFairTranslationBenchNegativeKind(
-    kind: TranslationBenchNegativeKind,
-): boolean {
-    return FAIR_KINDS.has(kind);
-}
-
-export function translationBenchNegativeFairnessRewriteHint(
-    target: TranslationBenchTargetAction,
-): string {
+function rewriteHint(target: TranslationBenchTargetAction): string {
     const key = `${target.schemaName}.${target.actionName}`;
     return (
         `Rewrite as a pure refusal of ${key}, a non-action status/howto ` +
@@ -83,24 +74,15 @@ export function translationBenchNegativeAssessmentsJsonSchema(): Record<
     string,
     unknown
 > {
-    const { $schema: _schema, ...schema } = z.toJSONSchema(
-        translationBenchNegativeAssessmentsSchema,
-    );
-    void _schema;
+    const schema = z.toJSONSchema(assessmentsSchema) as Record<string, unknown>;
+    delete schema.$schema;
     return schema;
 }
 
 export function parseTranslationBenchNegativeFairnessAssessments(
     value: unknown,
 ): TranslationBenchNegativeFairnessAssessment[] {
-    const parsed = translationBenchNegativeAssessmentsSchema.safeParse(value);
-    if (!parsed.success) {
-        const detail = parsed.error.issues
-            .map((i) => `${i.path.join(".") || "$"}: ${i.message}`)
-            .join("; ");
-        throw new Error(`negativeAssessments invalid: ${detail}`);
-    }
-    return parsed.data;
+    return parseWithZod(assessmentsSchema, value, "negativeAssessments");
 }
 
 export function checkTranslationBenchNegativeFairnessAssessment(
@@ -108,7 +90,7 @@ export function checkTranslationBenchNegativeFairnessAssessment(
     utterance: string,
     target: TranslationBenchTargetAction,
 ): TranslationBenchNegativeFairnessResult {
-    const suggestedFix = translationBenchNegativeFairnessRewriteHint(target);
+    const suggestedFix = rewriteHint(target);
     const fairKind = FAIR_KINDS.has(assessment.kind);
     if (assessment.fairEmptyGold && fairKind) {
         return {
@@ -118,12 +100,14 @@ export function checkTranslationBenchNegativeFairnessAssessment(
             utterance,
         };
     }
+
     const targetKey = `${target.schemaName}.${target.actionName}`;
     const message =
         assessment.fairEmptyGold && !fairKind
             ? `fairEmptyGold=true with unfair kind ${assessment.kind} for ${targetKey}: ${assessment.reason}`
             : assessment.reason ||
               `Negative is not a fair empty-gold case for ${targetKey}.`;
+
     return {
         ok: false,
         kind: fairKind ? "unknown" : assessment.kind,
@@ -150,7 +134,7 @@ function negativeCases(candidate: TranslationBenchGeneratedCandidate): {
     );
 }
 
-function issue(
+function badNegative(
     path: string,
     message: string,
     suggestedFix: string,
@@ -164,23 +148,22 @@ export function checkTranslationBenchCandidateNegativeFairness(
     assessments: readonly TranslationBenchNegativeFairnessAssessment[],
 ): TranslationBenchReviewIssue[] {
     const negatives = negativeCases(candidate);
-    const fix = translationBenchNegativeFairnessRewriteHint(target);
+    const fix = rewriteHint(target);
 
     if (negatives.length === 0) {
-        return assessments.length === 0
-            ? []
-            : [
-                  issue(
-                      "$.negativeAssessments",
-                      "negativeAssessments is non-empty but candidate has no negatives",
-                      "Emit negativeAssessments: [].",
-                  ),
-              ];
+        if (assessments.length === 0) return [];
+        return [
+            badNegative(
+                "$.negativeAssessments",
+                "negativeAssessments is non-empty but candidate has no negatives",
+                "Emit negativeAssessments: [].",
+            ),
+        ];
     }
 
     if (assessments.length !== negatives.length) {
         return [
-            issue(
+            badNegative(
                 "$.negativeAssessments",
                 `Expected ${negatives.length} negativeAssessments, got ${assessments.length}`,
                 "Emit exactly one assessment per negative genCase.",
@@ -189,21 +172,28 @@ export function checkTranslationBenchCandidateNegativeFairness(
     }
 
     const issues: TranslationBenchReviewIssue[] = [];
-    for (const [i, neg] of negatives.entries()) {
+    for (let i = 0; i < negatives.length; i++) {
+        const neg = negatives[i]!;
         const result = checkTranslationBenchNegativeFairnessAssessment(
             assessments[i]!,
             neg.utterance,
             target,
         );
         if (!result.ok) {
-            issues.push(issue(neg.path, result.message!, result.suggestedFix ?? fix));
+            issues.push(
+                badNegative(
+                    neg.path,
+                    result.message ?? fix,
+                    result.suggestedFix ?? fix,
+                ),
+            );
         }
     }
     return issues;
 }
 
-function issueKey(i: TranslationBenchReviewIssue): string {
-    return `${i.code}\0${i.path}\0${i.message}`;
+function issueKey(issue: TranslationBenchReviewIssue): string {
+    return `${issue.code}\0${issue.path}\0${issue.message}`;
 }
 
 export function applyTranslationBenchNegativeFairnessIssues(
@@ -213,10 +203,9 @@ export function applyTranslationBenchNegativeFairnessIssues(
     if (fairnessIssues.length === 0) return decision;
 
     const seen = new Set(decision.issues.map(issueKey));
-    const issues = [
-        ...decision.issues,
-        ...fairnessIssues.filter((i) => !seen.has(issueKey(i))),
-    ];
+    const issues = decision.issues.concat(
+        fairnessIssues.filter((issue) => !seen.has(issueKey(issue))),
+    );
 
     return {
         ...decision,
