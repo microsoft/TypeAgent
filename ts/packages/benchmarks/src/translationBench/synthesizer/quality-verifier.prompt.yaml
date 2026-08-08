@@ -29,7 +29,7 @@ format_checker:
     - history_shape_when_present
     - active_schema_membership
     - utterance_action_disambiguation
-    - strip_omit_from_gold_parameters
+    - strip_empty_gold_placeholders
 
 # Stage 2 — semantic / quality judge (LLM)
 semantic_checker:
@@ -82,6 +82,18 @@ semantic_checker:
       openWebPage or followLinkByText without link/URL-specific wording.
     - Negatives that intentionally use adjacent intents are fine when
       expectedActions is empty.
+
+    Gold parameters (groundTruthCorrectness / INVALID_PARAMETERS):
+    - Every expectedActions[].parameters key on seed/positives must be clearly
+      supported by that case's utterance (or allowed history). Prefer omit.
+    - Reject optional default polarity flags the user did not ask for
+      (e.g. unstar:false on "star the repo", noDebug:false when debugging).
+    - Reject empty placeholders ("" / []) — format checker strips these, but
+      leftover empties still fail quality.
+    - Reject invented runtime context not in the utterance (full URLs the user
+      never said, editor cursor/context JSON, nonces, attestation types).
+    - Reject dual/redundant fields that restate each other (public:true with
+      private:false; filePath with an equivalent themeName) — keep one.
 
     Issue codes (use only these): {{issue_codes}}
 

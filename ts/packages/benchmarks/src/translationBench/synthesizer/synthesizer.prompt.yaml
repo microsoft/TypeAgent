@@ -85,13 +85,12 @@ template: |-
 
   Gold parameters (hard requirement for seed + every positive):
   - Only include parameters the utterance (or allowed history) clearly supports.
-  - NEVER mint schema defaults, polarity flags set to the no-op value, empty
-    strings, empty arrays, invented URLs/nonces/editor state, or dual fields
-    that restate another parameter (e.g. private:false with public:true).
-  - Prefer omit over false / "" / [] when the user did not request that field.
-  - When omitFromGoldParameters is listed for the target action, those keys
-    must be ABSENT from every expectedActions[].parameters object. The format
-    checker strips them deterministically if they still appear.
+  - Prefer omit over writing a value when the user did not ask for that field.
+  - NEVER mint: schema default polarity flags (e.g. unstar:false on "star"),
+    empty strings, empty arrays, invented URLs/nonces/cursor/editor context,
+    or dual fields that restate another parameter (public:true + private:false).
+  - Empty "" / [] / null placeholders are stripped by the format checker; do not
+    rely on that — omit those keys in the label you emit.
 
   Attempt: {{attempt}}
 

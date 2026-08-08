@@ -613,18 +613,19 @@ describe("translation bench generation quality loop", () => {
         );
     });
 
-    it("strips omit-from-gold defaults from labeled params and prompts omit list", async () => {
+    it("strips empty gold placeholders and prompts grounded-param rules", async () => {
         const parsed = parseToolsJsonSchema([
             {
-                name: "starRepo",
-                description: "Star a GitHub repository",
+                name: "authLogin",
+                description: "Log in to GitHub CLI",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        repo: { type: "string" },
-                        unstar: { type: "boolean" },
+                        hostname: { type: "string" },
+                        token: { type: "string" },
+                        web: { type: "boolean" },
                     },
-                    required: ["repo"],
+                    required: ["hostname"],
                     additionalProperties: false,
                 },
             },
@@ -652,29 +653,21 @@ describe("translation bench generation quality loop", () => {
                 parsedActionSchema: toJSONParsedActionSchema(parsed),
             },
         };
-        const target = targetAction("github-cli", "starRepo");
+        const target = targetAction("github-cli", "authLogin");
         const dirty = generatedCandidate(target, 2);
-        // Mint ungrounded default the format checker must strip.
-        dirty.seed.expectedActions = [
-            {
-                ...target,
-                parameters: { query: "seed", unstar: false, repo: "a/b" },
-            },
-        ];
-        // generatedCandidate uses {query} but schema wants repo — fix all positives
         for (const probe of [dirty.seed, ...dirty.genCases]) {
             if (probe.expectedActions.length === 0) continue;
             probe.expectedActions = [
                 {
                     ...target,
                     parameters: {
-                        repo: "microsoft/TypeScript",
-                        unstar: false,
+                        hostname: "github.acme.example",
+                        web: true,
+                        token: "",
                     },
                 },
             ];
         }
-        // seed utterance uniqueness with gen cases - generatedCandidate already unique
         let generatorPrompt = "";
         const result = await runTranslationBenchGenerationQualityLoop({
             targetAction: target,
@@ -702,18 +695,21 @@ describe("translation bench generation quality loop", () => {
                 },
             },
         });
-        expect(generatorPrompt).toContain("omitFromGoldParameters");
-        expect(generatorPrompt).toContain("unstar");
+        expect(generatorPrompt).toContain(
+            "Only include parameters clearly supported by the utterance",
+        );
         expect(result.candidate.seed.expectedActions[0]!.parameters).toEqual({
-            repo: "microsoft/TypeScript",
+            hostname: "github.acme.example",
+            web: true,
         });
         for (const probe of result.candidate.genCases) {
             if (probe.role !== "positive") continue;
             expect(probe.expectedActions[0]!.parameters).toEqual({
-                repo: "microsoft/TypeScript",
+                hostname: "github.acme.example",
+                web: true,
             });
             expect(probe.expectedActions[0]!.parameters).not.toHaveProperty(
-                "unstar",
+                "token",
             );
         }
     });

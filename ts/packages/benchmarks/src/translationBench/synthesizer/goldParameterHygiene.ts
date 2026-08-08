@@ -2,81 +2,32 @@
 // Licensed under the MIT License.
 
 /**
- * Gold-parameter hygiene for the translation-bench synthesizer harness.
+ * Deterministic gold-parameter hygiene for the translation-bench synthesizer.
  *
- * These keys must not appear in labeled expectedActions parameters: they are
- * optional defaults, empty placeholders, dual fields, or runtime context that
- * gold should omit rather than mint. This is dataset quality — not paramScore
- * verify=ignore.
+ * No per-action hardcodes. Gold should not store "unset" placeholders:
+ * empty strings, empty arrays, null. Prefer omit. Non-empty values (including
+ * boolean false / 0) are left alone — utterance grounding is the labeler's job.
  */
 
-export const OMIT_FROM_GOLD_PARAMETERS = [
-    "browser.openSearchResult.url",
-    "code.code-debug.startDebugging.noDebug",
-    "code.code-editor.launchCopilotChat.attachFiles",
-    "code.code-editor.launchCopilotChat.isPartialQuery",
-    "code.code-editor.saveAllFiles.onlyDirty",
-    "code.code-editor.saveCurrentFile.excludeUntitled",
-    "code.code-editor.saveCurrentFile.showErrorIfNoActiveEditor",
-    "code.code-workbench.openInIntegratedTerminal.reuseExistingTerminal",
-    "code.code-workbench.workbenchCreateFolderFromExplorer.resolutionHint",
-    "code.code-workbench.workbenchOpenFile.extensions",
-    "code.code-workbench.workbenchOpenFile.includeGenerated",
-    "code.code-workbench.workbenchOpenFile.matchStrategy",
-    "code.launchCopilotChat.attachFiles",
-    "code.launchCopilotChat.isPartialQuery",
-    "desktop.ApplyTheme.themeName",
-    "desktop.RestartService.elevate",
-    "desktop.desktop-input.MouseCursorSpeed.reduceSpeed",
-    "discord.createChannelInvite.never_expires",
-    "discord.createMessage.nonce",
-    "discord.createMessage.tts",
-    "discord.getCurrentUserGuilds.after",
-    "discord.getCurrentUserGuilds.before",
-    "discord.startThreadWithoutMessage.type",
-    "github-cli.attestationCreate.type",
-    "github-cli.authLogin.token",
-    "github-cli.repoCreate.private",
-    "github-cli.starRepo.unstar",
-    "markdown.updateDocument.context",
-    "markdown.updateDocument.cursorPosition",
-    "montage.addPhotos.search_filters",
-    "montage.removePhotos.files",
-    "montage.removePhotos.indices",
-    "player.findMusic.play",
-    "system.help.describeAgent.all",
-] as const;
-
-const OMIT_FROM_GOLD_PARAMETER_SET = new Set<string>(OMIT_FROM_GOLD_PARAMETERS);
-
-export function isOmittedFromGoldParameter(
-    schemaName: string,
-    actionName: string,
-    fieldName: string,
-): boolean {
-    return OMIT_FROM_GOLD_PARAMETER_SET.has(
-        `${schemaName}.${actionName}.${fieldName}`,
-    );
-}
-
-/** Field names to omit from gold for one action (empty when none). */
-export function omittedGoldParameterNames(
-    schemaName: string,
-    actionName: string,
-): string[] {
-    const prefix = `${schemaName}.${actionName}.`;
-    return OMIT_FROM_GOLD_PARAMETERS.filter((full) =>
-        full.startsWith(prefix),
-    ).map((full) => full.slice(prefix.length));
+export function isEmptyGoldPlaceholder(value: unknown): boolean {
+    if (value === null || value === undefined) {
+        return true;
+    }
+    if (typeof value === "string" && value.trim() === "") {
+        return true;
+    }
+    if (Array.isArray(value) && value.length === 0) {
+        return true;
+    }
+    return false;
 }
 
 /**
- * Drop OMIT_FROM_GOLD_PARAMETERS keys from gold parameters.
- * Returns a new object; omits `parameters` entirely when nothing remains.
+ * Drop empty placeholder values from gold parameters.
+ * Returns the same object reference when nothing changes; omits `parameters`
+ * entirely when nothing remains.
  */
-export function stripOmittedGoldParameters(
-    schemaName: string,
-    actionName: string,
+export function stripEmptyGoldPlaceholders(
     parameters: Record<string, unknown> | undefined,
 ): {
     parameters: Record<string, unknown> | undefined;
@@ -88,7 +39,7 @@ export function stripOmittedGoldParameters(
     const removed: string[] = [];
     const next: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(parameters)) {
-        if (isOmittedFromGoldParameter(schemaName, actionName, key)) {
+        if (isEmptyGoldPlaceholder(value)) {
             removed.push(key);
             continue;
         }

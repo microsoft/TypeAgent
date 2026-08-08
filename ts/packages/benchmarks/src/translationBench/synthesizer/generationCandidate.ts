@@ -22,7 +22,7 @@ import {
     normalizeTranslationBenchActionShapePolicy,
     type TranslationBenchActionShapePolicy,
 } from "./actionShape.js";
-import { stripOmittedGoldParameters } from "./goldParameterHygiene.js";
+import { stripEmptyGoldPlaceholders } from "./goldParameterHygiene.js";
 
 export interface TranslationBenchGeneratedCase {
     id: string;
@@ -281,19 +281,15 @@ export function parseTranslationBenchGeneratedCandidate(
             `Generated candidate requires ${expectedPerRole} positive and ${expectedPerRole} negative gen cases`,
         );
     }
-    // Gold hygiene: never keep ungrounded optional defaults on labeled actions.
-    return stripOmittedGoldParametersFromCandidate(structuredClone(parsed));
+    // Gold hygiene: drop empty "" / [] / null placeholders from labeled params.
+    return stripEmptyGoldPlaceholdersFromCandidate(structuredClone(parsed));
 }
 
-function stripOmittedGoldParametersFromActions(
+function stripEmptyGoldPlaceholdersFromActions(
     actions: TranslationBenchBenchmarkAction[],
 ): TranslationBenchBenchmarkAction[] {
     return actions.map((action) => {
-        const { parameters } = stripOmittedGoldParameters(
-            action.schemaName,
-            action.actionName,
-            action.parameters,
-        );
+        const { parameters } = stripEmptyGoldPlaceholders(action.parameters);
         if (parameters === action.parameters) {
             return action;
         }
@@ -306,14 +302,14 @@ function stripOmittedGoldParametersFromActions(
 }
 
 /** Deterministic gold cleanup shared by parse + format checker. */
-export function stripOmittedGoldParametersFromCandidate(
+export function stripEmptyGoldPlaceholdersFromCandidate(
     candidate: TranslationBenchGeneratedCandidate,
 ): TranslationBenchGeneratedCandidate {
     return {
         ...candidate,
         seed: {
             ...candidate.seed,
-            expectedActions: stripOmittedGoldParametersFromActions(
+            expectedActions: stripEmptyGoldPlaceholdersFromActions(
                 candidate.seed.expectedActions,
             ),
         },
@@ -323,7 +319,7 @@ export function stripOmittedGoldParametersFromCandidate(
             }
             return {
                 ...probe,
-                expectedActions: stripOmittedGoldParametersFromActions(
+                expectedActions: stripEmptyGoldPlaceholdersFromActions(
                     probe.expectedActions,
                 ),
             };

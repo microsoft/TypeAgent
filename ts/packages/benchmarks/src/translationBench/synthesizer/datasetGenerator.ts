@@ -54,7 +54,6 @@ import {
     runTranslationBenchDataQualityVerifier,
     runTranslationBenchFormatChecker,
 } from "./dataQualityVerifier.js";
-import { omittedGoldParameterNames } from "./goldParameterHygiene.js";
 import {
     loadTranslationBenchQualityVerifierPromptPack,
     loadTranslationBenchSynthesizerPromptPack,
@@ -501,18 +500,10 @@ function formatSynthesizerPrompt(
         (tool) => tool.function.name === options.targetAction.actionName,
     )!;
     const parameterField = targetParameterField(options);
-    const omitParams = omittedGoldParameterNames(
-        options.targetAction.schemaName,
-        options.targetAction.actionName,
-    );
-    const omitClause =
-        omitParams.length === 0
-            ? ""
-            : ` omitFromGoldParameters=${JSON.stringify(omitParams)} — these optional keys must be ABSENT from gold parameters (do not mint defaults, empty values, or dual fields).`;
     const actionContract =
         parameterField === undefined
             ? `Every expected action must use exactly {"schemaName":"${options.targetAction.schemaName}","actionName":"${options.targetAction.actionName}"}; omit parameters entirely for this parameterless action. Never use name/arguments or a qualified-name string.`
-            : `Every expected action must use exactly {"schemaName":"${options.targetAction.schemaName}","actionName":"${options.targetAction.actionName}","parameters":{...}} with schema-valid parameters${parameterField.optional ? " when parameters are present" : ""}. Never use name/arguments or a qualified-name string.${omitClause}`;
+            : `Every expected action must use exactly {"schemaName":"${options.targetAction.schemaName}","actionName":"${options.targetAction.actionName}","parameters":{...}} with schema-valid parameters${parameterField.optional ? " when parameters are present" : ""}. Never use name/arguments or a qualified-name string. Only include parameters clearly supported by the utterance (or allowed history); omit optional defaults, empty strings/arrays, dual fields, and invented runtime context.`;
     const positiveCount = options.genCaseCount / 2;
     const previousRejectedBlock =
         previousRejectedCandidate === undefined

@@ -4,35 +4,41 @@
 import { describe, expect, it } from "@jest/globals";
 
 import {
-    isOmittedFromGoldParameter,
-    omittedGoldParameterNames,
-    stripOmittedGoldParameters,
+    isEmptyGoldPlaceholder,
+    stripEmptyGoldPlaceholders,
 } from "../src/translationBench/synthesizer/goldParameterHygiene.js";
 
 describe("gold parameter hygiene", () => {
-    it("lists and strips omit-from-gold keys without touching other fields", () => {
-        expect(
-            isOmittedFromGoldParameter("github-cli", "starRepo", "unstar"),
-        ).toBe(true);
-        expect(omittedGoldParameterNames("github-cli", "starRepo")).toEqual([
-            "unstar",
-        ]);
-        const stripped = stripOmittedGoldParameters("github-cli", "starRepo", {
+    it("detects empty placeholders without treating false/0 as empty", () => {
+        expect(isEmptyGoldPlaceholder("")).toBe(true);
+        expect(isEmptyGoldPlaceholder("   ")).toBe(true);
+        expect(isEmptyGoldPlaceholder([])).toBe(true);
+        expect(isEmptyGoldPlaceholder(null)).toBe(true);
+        expect(isEmptyGoldPlaceholder(undefined)).toBe(true);
+        expect(isEmptyGoldPlaceholder(false)).toBe(false);
+        expect(isEmptyGoldPlaceholder(0)).toBe(false);
+        expect(isEmptyGoldPlaceholder("x")).toBe(false);
+        expect(isEmptyGoldPlaceholder(["a"])).toBe(false);
+    });
+
+    it("strips empty placeholders and keeps real values", () => {
+        const stripped = stripEmptyGoldPlaceholders({
+            repo: "microsoft/TypeScript",
+            token: "",
+            attachFiles: [],
+            unstar: false,
+            count: 0,
+        });
+        expect(stripped.removed.sort()).toEqual(["attachFiles", "token"]);
+        expect(stripped.parameters).toEqual({
             repo: "microsoft/TypeScript",
             unstar: false,
+            count: 0,
         });
-        expect(stripped.removed).toEqual(["unstar"]);
-        expect(stripped.parameters).toEqual({ repo: "microsoft/TypeScript" });
-        const onlyDefault = stripOmittedGoldParameters(
-            "github-cli",
-            "starRepo",
-            { unstar: false },
-        );
-        expect(onlyDefault.removed).toEqual(["unstar"]);
-        expect(onlyDefault.parameters).toBeUndefined();
-        const untouched = stripOmittedGoldParameters("list", "removeItems", {
-            listName: "groceries",
-        });
+        const onlyEmpty = stripEmptyGoldPlaceholders({ token: "", files: [] });
+        expect(onlyEmpty.removed.sort()).toEqual(["files", "token"]);
+        expect(onlyEmpty.parameters).toBeUndefined();
+        const untouched = stripEmptyGoldPlaceholders({ listName: "groceries" });
         expect(untouched.removed).toEqual([]);
         expect(untouched.parameters).toEqual({ listName: "groceries" });
     });
