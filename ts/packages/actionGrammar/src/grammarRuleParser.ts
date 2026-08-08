@@ -87,7 +87,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *
  *   <VariableSpecifier> ::= <VarName> (":" (<TypeName> | <RuleName>))?
  *
- *   <RuleRefExpr> ::= <RuleName>
+ *   <RuleRefExpr> ::= <RuleName> ( "?" | "*" | "+" )?
  *   <GroupExpr> ::= "(" <Rules> ( ")" | ")?" | ")*" | ")+" )
  *
  *   // ── Value (basic mode: enableValueExpressions=false) ──────────────────────────
@@ -232,6 +232,8 @@ export type CommentedName = {
 export type RuleRefExpr = {
     type: "ruleReference";
     refName: CommentedName;
+    optional?: boolean | undefined;
+    repeat?: boolean | undefined; // Kleene star/plus: zero-or-more / one-or-more
     pos?: number | undefined;
     leadingComments?: Comment[] | undefined;
 };
@@ -803,6 +805,20 @@ class GrammarRuleParser implements ValueExprParserContext {
                     refName: this.parseRuleName(),
                     pos,
                 };
+                // Bare quantifiers on rule refs: <Name>?, <Name>*, <Name>+
+                // (equivalent to (<Name>)?, (<Name>)*, (<Name>)+).
+                // Without this, "?" is parsed as a literal string part.
+                if (this.isAt("?")) {
+                    node.optional = true;
+                    this.skipWhitespace(1);
+                } else if (this.isAt("*")) {
+                    node.optional = true;
+                    node.repeat = true;
+                    this.skipWhitespace(1);
+                } else if (this.isAt("+")) {
+                    node.repeat = true;
+                    this.skipWhitespace(1);
+                }
                 attach(node);
                 expNodes.push(node);
                 continue;
