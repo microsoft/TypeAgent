@@ -18,6 +18,8 @@ format_checker:
   description: |-
     Structural validation against the target tool schema and generation contract.
     Fail-closed: any violation rejects the candidate without calling the LLM.
+    Before schema validation, empty gold placeholders ("" / [] / null / {}) are
+    stripped recursively; required fields missing after strip fail closed.
   checks:
     - required_json_shape
     - seed_and_gen_case_counts
@@ -29,7 +31,6 @@ format_checker:
     - history_shape_when_present
     - active_schema_membership
     - utterance_action_disambiguation
-    - strip_empty_gold_placeholders
 
 # Stage 2 — semantic / quality judge (LLM)
 semantic_checker:

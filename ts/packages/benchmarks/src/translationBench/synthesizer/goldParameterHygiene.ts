@@ -1,13 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * Deterministic gold-parameter hygiene for the translation-bench synthesizer.
- *
- * No per-action hardcodes. Gold should not store "unset" placeholders:
- * empty strings, empty arrays, null. Prefer omit. Non-empty values (including
- * boolean false / 0) are left alone — utterance grounding is the labeler's job.
- */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 export function isEmptyGoldPlaceholder(value: unknown): boolean {
     if (value === null || value === undefined) {
@@ -19,14 +15,68 @@ export function isEmptyGoldPlaceholder(value: unknown): boolean {
     if (Array.isArray(value) && value.length === 0) {
         return true;
     }
+    if (isPlainObject(value) && Object.keys(value).length === 0) {
+        return true;
+    }
     return false;
 }
 
-/**
- * Drop empty placeholder values from gold parameters.
- * Returns the same object reference when nothing changes; omits `parameters`
- * entirely when nothing remains.
- */
+function stripEmptyGoldValue(
+    value: unknown,
+    path: string,
+    removed: string[],
+): { kept: true; value: unknown } | { kept: false } {
+    if (isEmptyGoldPlaceholder(value)) {
+        removed.push(path);
+        return { kept: false };
+    }
+    if (Array.isArray(value)) {
+        const next: unknown[] = [];
+        let changed = false;
+        for (let i = 0; i < value.length; i += 1) {
+            const childPath = `${path}[${i}]`;
+            const child = stripEmptyGoldValue(value[i], childPath, removed);
+            if (!child.kept) {
+                changed = true;
+                continue;
+            }
+            if (child.value !== value[i]) {
+                changed = true;
+            }
+            next.push(child.value);
+        }
+        if (next.length === 0) {
+            removed.push(path);
+            return { kept: false };
+        }
+        return { kept: true, value: changed ? next : value };
+    }
+    if (isPlainObject(value)) {
+        const next: Record<string, unknown> = {};
+        let changed = false;
+        for (const [key, childValue] of Object.entries(value)) {
+            const childPath = path === "" ? key : `${path}.${key}`;
+            const child = stripEmptyGoldValue(childValue, childPath, removed);
+            if (!child.kept) {
+                changed = true;
+                continue;
+            }
+            if (child.value !== childValue) {
+                changed = true;
+            }
+            next[key] = child.value;
+        }
+        if (Object.keys(next).length === 0) {
+            if (path !== "") {
+                removed.push(path);
+            }
+            return { kept: false };
+        }
+        return { kept: true, value: changed ? next : value };
+    }
+    return { kept: true, value };
+}
+
 export function stripEmptyGoldPlaceholders(
     parameters: Record<string, unknown> | undefined,
 ): {
@@ -37,19 +87,15 @@ export function stripEmptyGoldPlaceholders(
         return { parameters: undefined, removed: [] };
     }
     const removed: string[] = [];
-    const next: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(parameters)) {
-        if (isEmptyGoldPlaceholder(value)) {
-            removed.push(key);
-            continue;
-        }
-        next[key] = value;
+    const stripped = stripEmptyGoldValue(parameters, "", removed);
+    if (!stripped.kept) {
+        return { parameters: undefined, removed };
     }
-    if (removed.length === 0) {
-        return { parameters, removed };
+    if (stripped.value === parameters) {
+        return { parameters, removed: [] };
     }
     return {
-        parameters: Object.keys(next).length > 0 ? next : undefined,
+        parameters: stripped.value as Record<string, unknown>,
         removed,
     };
 }

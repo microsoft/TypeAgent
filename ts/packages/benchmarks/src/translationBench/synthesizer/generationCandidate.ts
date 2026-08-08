@@ -198,6 +198,9 @@ export function parseTranslationBenchGeneratedCandidate(
             `Generated candidate requires exactly ${context.genCaseCount} gen cases`,
         );
     }
+    const candidate = stripEmptyGoldPlaceholdersFromCandidate(
+        structuredClone(parsed),
+    );
     const definition = fromJSONParsedActionSchema(
         structuredClone(context.schema.typeAgent!.parsedActionSchema),
     ).actionSchemas.get(context.targetAction.actionName);
@@ -236,9 +239,9 @@ export function parseTranslationBenchGeneratedCandidate(
         }
         validateHistory(probe.history, path);
     };
-    validatePositive(parsed.seed, "seed", "seed");
+    validatePositive(candidate.seed, "seed", "seed");
     const ids = new Set<string>();
-    const seedUtterance = normalizedUtterance(parsed.seed.utterance);
+    const seedUtterance = normalizedUtterance(candidate.seed.utterance);
     if (context.forbiddenUtterances?.has(seedUtterance)) {
         throw new Error(
             "seed duplicates an utterance from another generated row",
@@ -247,7 +250,7 @@ export function parseTranslationBenchGeneratedCandidate(
     const utterances = new Set([seedUtterance]);
     let positives = 0;
     let negatives = 0;
-    parsed.genCases.forEach((probe, index) => {
+    candidate.genCases.forEach((probe, index) => {
         const path = `genCases[${index}]`;
         if (ids.has(probe.id)) throw new Error(`${path} has a duplicate id`);
         ids.add(probe.id);
@@ -281,8 +284,7 @@ export function parseTranslationBenchGeneratedCandidate(
             `Generated candidate requires ${expectedPerRole} positive and ${expectedPerRole} negative gen cases`,
         );
     }
-    // Gold hygiene: drop empty "" / [] / null placeholders from labeled params.
-    return stripEmptyGoldPlaceholdersFromCandidate(structuredClone(parsed));
+    return candidate;
 }
 
 function stripEmptyGoldPlaceholdersFromActions(
@@ -301,7 +303,6 @@ function stripEmptyGoldPlaceholdersFromActions(
     });
 }
 
-/** Deterministic gold cleanup shared by parse + format checker. */
 export function stripEmptyGoldPlaceholdersFromCandidate(
     candidate: TranslationBenchGeneratedCandidate,
 ): TranslationBenchGeneratedCandidate {

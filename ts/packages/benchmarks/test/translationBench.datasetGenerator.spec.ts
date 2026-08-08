@@ -398,6 +398,23 @@ describe("generated translation bench candidate validation", () => {
         ).toThrow(/target|lookup|action/i);
     });
 
+    it("rejects after strip when a required parameter was only an empty placeholder", () => {
+        const emptyRequired = generatedCandidate();
+        for (const probe of [emptyRequired.seed, ...emptyRequired.genCases]) {
+            if (probe.expectedActions.length === 0) continue;
+            probe.expectedActions = [
+                {
+                    schemaName: "tools",
+                    actionName: "lookup",
+                    parameters: { query: "" },
+                },
+            ];
+        }
+        expect(() =>
+            parseTranslationBenchGeneratedCandidate(emptyRequired, context),
+        ).toThrow(/required|query|missing/i);
+    });
+
     it("canonicalizes generated payload hashes across checkpoint key sorting", () => {
         const schemas = [catalogSchema("tools", ["lookup"])] as const;
         const canonicalHash = computeTranslationBenchCanonicalPayloadHash as (

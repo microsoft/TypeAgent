@@ -1456,7 +1456,6 @@ describe("hardcoded nonempty for conversation topic titles", () => {
                     }),
                 },
                 {
-                    // identity name must stay exact (not in NONEMPTY list)
                     schemaName: "list",
                     actionName: "removeItems",
                     paramSpec: objectSpec({

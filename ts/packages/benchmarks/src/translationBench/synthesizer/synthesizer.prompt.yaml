@@ -89,8 +89,8 @@ template: |-
   - NEVER mint: schema default polarity flags (e.g. unstar:false on "star"),
     empty strings, empty arrays, invented URLs/nonces/cursor/editor context,
     or dual fields that restate another parameter (public:true + private:false).
-  - Empty "" / [] / null placeholders are stripped by the format checker; do not
-    rely on that — omit those keys in the label you emit.
+  - Empty "" / [] / null / {} placeholders are stripped before schema validation;
+    do not rely on that — omit those keys in the label you emit.
 
   Attempt: {{attempt}}
 

@@ -199,10 +199,6 @@ const LLM_JUDGE_PARAMETER_SET = new Set<string>(LLM_JUDGE_PARAMETERS);
 /** Literal stored strings that must deep-equal (not soft / not llm judge). */
 const EXACT_PARAMETERS = new Set<string>(["github-cli.aliasSet.command"]);
 
-/**
- * Conversation topic titles are freeform NL (paraphrase-OK), not resource ids.
- * Action-scoped so webflow/playlist `name` stays identifier/exact.
- */
 export const NONEMPTY_PARAMETERS = [
     "system.conversation.indexConversation.name",
     "system.conversation.newConversation.name",
@@ -1085,7 +1081,6 @@ export async function buildActionParametersGraderEntry(
                     source: judged.source,
                 };
             } else if (NONEMPTY_PARAMETER_SET.has(fullName)) {
-                // Topic titles: presence matters, exact wording does not.
                 judged = {
                     create: "free_text",
                     verify: "nonempty",
