@@ -75,11 +75,7 @@
                             "optional": false,
                             "spec": {
                               "kind": "string",
-                              "enum": [
-                                "string",
-                                "number",
-                                "boolean"
-                              ]
+                              "enum": ["string", "number", "boolean"]
                             }
                           },
                           "required": {
@@ -168,11 +164,7 @@
                           "optional": false,
                           "spec": {
                             "kind": "string",
-                            "enum": [
-                              "string",
-                              "number",
-                              "boolean"
-                            ]
+                            "enum": ["string", "number", "boolean"]
                           }
                         },
                         "required": {
@@ -1394,11 +1386,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "domain",
-                "pageType",
-                "source"
-              ]
+              "enum": ["domain", "pageType", "source"]
             }
           },
           "limit": {
@@ -1415,11 +1403,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "domain",
-              "pageType",
-              "source"
-            ]
+            "enum": ["domain", "pageType", "source"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -1675,11 +1659,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "new",
-                "current",
-                "existing"
-              ]
+              "enum": ["new", "current", "existing"]
             }
           }
         }
@@ -1701,11 +1681,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "new",
-              "current",
-              "existing"
-            ]
+            "enum": ["new", "current", "existing"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -1985,10 +1961,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "site",
-                "global"
-              ]
+              "enum": ["site", "global"]
             }
           },
           "domains": {
@@ -2019,10 +1992,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "site",
-              "global"
-            ]
+            "enum": ["site", "global"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -2194,11 +2164,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "site",
-                "global",
-                "all"
-              ]
+              "enum": ["site", "global", "all"]
             }
           }
         }
@@ -2209,11 +2175,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "site",
-              "global",
-              "all"
-            ]
+            "enum": ["site", "global", "all"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -2983,11 +2945,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "single",
-                "double",
-                "three"
-              ]
+              "enum": ["single", "double", "three"]
             }
           }
         }
@@ -2998,11 +2956,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "single",
-              "double",
-              "three"
-            ]
+            "enum": ["single", "double", "three"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -3265,11 +3219,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "into",
-                "out",
-                "over"
-              ]
+              "enum": ["into", "out", "over"]
             }
           }
         }
@@ -3280,11 +3230,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "into",
-              "out",
-              "over"
-            ]
+            "enum": ["into", "out", "over"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -5893,12 +5839,7 @@
                   "optional": false,
                   "spec": {
                     "kind": "string",
-                    "enum": [
-                      "first",
-                      "next",
-                      "cursor",
-                      "indexInFile"
-                    ]
+                    "enum": ["first", "next", "cursor", "indexInFile"]
                   }
                 },
                 "position": {
@@ -6355,12 +6296,7 @@
                 "optional": false,
                 "spec": {
                   "kind": "string",
-                  "enum": [
-                    "first",
-                    "next",
-                    "cursor",
-                    "indexInFile"
-                  ]
+                  "enum": ["first", "next", "cursor", "indexInFile"]
                 }
               },
               "position": {
@@ -7272,13 +7208,7 @@
                     "optional": false,
                     "spec": {
                       "kind": "string",
-                      "enum": [
-                        "prefix",
-                        "suffix",
-                        "file",
-                        "doc",
-                        "comment"
-                      ]
+                      "enum": ["prefix", "suffix", "file", "doc", "comment"]
                     }
                   },
                   "content": {
@@ -7776,13 +7706,7 @@
                   "optional": false,
                   "spec": {
                     "kind": "string",
-                    "enum": [
-                      "prefix",
-                      "suffix",
-                      "file",
-                      "doc",
-                      "comment"
-                    ]
+                    "enum": ["prefix", "suffix", "file", "doc", "comment"]
                   }
                 },
                 "content": {
@@ -7882,10 +7806,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "line",
-                "block"
-              ]
+              "enum": ["line", "block"]
             }
           },
           "position": {
@@ -8331,10 +8252,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "line",
-              "block"
-            ]
+            "enum": ["line", "block"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -8793,10 +8711,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "insert",
-                "delete"
-              ]
+              "enum": ["insert", "delete"]
             }
           },
           "count": {
@@ -9258,10 +9173,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "insert",
-              "delete"
-            ]
+            "enum": ["insert", "delete"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -9768,10 +9680,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "agent",
-                "ask"
-              ]
+              "enum": ["agent", "ask"]
             }
           },
           "isPartialQuery": {
@@ -9805,11 +9714,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "view",
-                "editor",
-                "window"
-              ]
+              "enum": ["view", "editor", "window"]
             }
           }
         }
@@ -9831,10 +9736,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "agent",
-              "ask"
-            ]
+            "enum": ["agent", "ask"]
           },
           "typeKind": "string-enum",
           "create": "unit_or_mode",
@@ -9899,11 +9801,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "view",
-              "editor",
-              "window"
-            ]
+            "enum": ["view", "editor", "window"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -11382,11 +11280,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "file",
-                "line",
-                "symbol"
-              ]
+              "enum": ["file", "line", "symbol"]
             }
           },
           "ref": {
@@ -11403,11 +11297,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "file",
-              "line",
-              "symbol"
-            ]
+            "enum": ["file", "line", "symbol"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -11499,11 +11389,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "low",
-                "medium",
-                "high"
-              ]
+              "enum": ["low", "medium", "high"]
             }
           },
           "reuseExistingTerminal": {
@@ -11542,11 +11428,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "low",
-              "medium",
-              "high"
-            ]
+            "enum": ["low", "medium", "high"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -11586,11 +11468,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "build",
-                "rebuild",
-                "clean"
-              ]
+              "enum": ["build", "rebuild", "clean"]
             }
           },
           "folderName": {
@@ -11613,11 +11491,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "build",
-              "rebuild",
-              "clean"
-            ]
+            "enum": ["build", "rebuild", "clean"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -11679,11 +11553,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "inferFromName",
-                "workspaceRoot",
-                "activeSelection"
-              ]
+              "enum": ["inferFromName", "workspaceRoot", "activeSelection"]
             }
           }
         }
@@ -11716,11 +11586,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "inferFromName",
-              "workspaceRoot",
-              "activeSelection"
-            ]
+            "enum": ["inferFromName", "workspaceRoot", "activeSelection"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -11754,10 +11620,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "exact",
-                "fuzzy"
-              ]
+              "enum": ["exact", "fuzzy"]
             }
           },
           "extensions": {
@@ -11794,10 +11657,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "exact",
-              "fuzzy"
-            ]
+            "enum": ["exact", "fuzzy"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -12082,33 +11942,21 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "copilot",
-                "claude",
-                "gpt",
-                "generic"
-              ]
+              "enum": ["copilot", "claude", "gpt", "generic"]
             }
           },
           "newSessionLocation": {
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "window",
-                "editor",
-                "view"
-              ]
+              "enum": ["window", "editor", "view"]
             }
           },
           "mode": {
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "agent",
-                "ask"
-              ]
+              "enum": ["agent", "ask"]
             }
           },
           "isPartialQuery": {
@@ -12151,12 +11999,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "copilot",
-              "claude",
-              "gpt",
-              "generic"
-            ]
+            "enum": ["copilot", "claude", "gpt", "generic"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -12168,11 +12011,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "window",
-              "editor",
-              "view"
-            ]
+            "enum": ["window", "editor", "view"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -12184,10 +12023,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "agent",
-              "ask"
-            ]
+            "enum": ["agent", "ask"]
           },
           "typeKind": "string-enum",
           "create": "unit_or_mode",
@@ -12261,11 +12097,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "last",
-                "folder",
-                "workspace"
-              ]
+              "enum": ["last", "folder", "workspace"]
             }
           },
           "path": {
@@ -12282,11 +12114,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "last",
-              "folder",
-              "workspace"
-            ]
+            "enum": ["last", "folder", "workspace"]
           },
           "typeKind": "string-enum",
           "create": "unit_or_mode",
@@ -12531,12 +12359,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "right",
-                "left",
-                "up",
-                "down"
-              ]
+              "enum": ["right", "left", "up", "down"]
             }
           },
           "editorPosition": {
@@ -12559,12 +12382,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "right",
-              "left",
-              "up",
-              "down"
-            ]
+            "enum": ["right", "left", "up", "down"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -12614,10 +12432,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "increase",
-                "decrease"
-              ]
+              "enum": ["increase", "decrease"]
             }
           }
         }
@@ -12628,10 +12443,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "increase",
-              "decrease"
-            ]
+            "enum": ["increase", "decrease"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -12657,10 +12469,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "up",
-                "down"
-              ]
+              "enum": ["up", "down"]
             }
           },
           "amount": {
@@ -12677,10 +12486,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "up",
-              "down"
-            ]
+            "enum": ["up", "down"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -13294,10 +13100,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "name",
-                "description"
-              ]
+              "enum": ["name", "description"]
             }
           },
           "elevate": {
@@ -13325,10 +13128,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "name",
-              "description"
-            ]
+            "enum": ["name", "description"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -13487,11 +13287,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "light",
-                "dark",
-                "toggle"
-              ]
+              "enum": ["light", "dark", "toggle"]
             }
           }
         }
@@ -13502,11 +13298,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "light",
-              "dark",
-              "toggle"
-            ]
+            "enum": ["light", "dark", "toggle"]
           },
           "typeKind": "string-enum",
           "create": "unit_or_mode",
@@ -13813,10 +13605,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "reduce",
-                "increase"
-              ]
+              "enum": ["reduce", "increase"]
             }
           }
         }
@@ -13827,10 +13616,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "reduce",
-              "increase"
-            ]
+            "enum": ["reduce", "increase"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -13856,10 +13642,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "portrait",
-                "landscape"
-              ]
+              "enum": ["portrait", "landscape"]
             }
           }
         }
@@ -13870,10 +13653,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "portrait",
-              "landscape"
-            ]
+            "enum": ["portrait", "landscape"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -14050,10 +13830,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "increase",
-                "decrease"
-              ]
+              "enum": ["increase", "decrease"]
             }
           }
         }
@@ -14064,10 +13841,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "increase",
-              "decrease"
-            ]
+            "enum": ["increase", "decrease"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -14357,10 +14131,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "left",
-                "right"
-              ]
+              "enum": ["left", "right"]
             }
           }
         }
@@ -14371,10 +14142,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "left",
-              "right"
-            ]
+            "enum": ["left", "right"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -14554,10 +14322,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "light",
-                "dark"
-              ]
+              "enum": ["light", "dark"]
             }
           }
         }
@@ -14568,10 +14333,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "light",
-              "dark"
-            ]
+            "enum": ["light", "dark"]
           },
           "typeKind": "string-enum",
           "create": "unit_or_mode",
@@ -14667,11 +14429,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "bestPerformance",
-                "balanced",
-                "bestPowerEfficiency"
-              ]
+              "enum": ["bestPerformance", "balanced", "bestPowerEfficiency"]
             }
           }
         }
@@ -14682,11 +14440,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "bestPerformance",
-              "balanced",
-              "bestPowerEfficiency"
-            ]
+            "enum": ["bestPerformance", "balanced", "bestPowerEfficiency"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -14712,10 +14466,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "allow",
-                "deny"
-              ]
+              "enum": ["allow", "deny"]
             }
           }
         }
@@ -14726,10 +14477,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "allow",
-              "deny"
-            ]
+            "enum": ["allow", "deny"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -14755,10 +14503,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "allow",
-                "deny"
-              ]
+              "enum": ["allow", "deny"]
             }
           }
         }
@@ -14769,10 +14514,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "allow",
-              "deny"
-            ]
+            "enum": ["allow", "deny"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -14798,10 +14540,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "allow",
-                "deny"
-              ]
+              "enum": ["allow", "deny"]
             }
           }
         }
@@ -14812,10 +14551,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "allow",
-              "deny"
-            ]
+            "enum": ["allow", "deny"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -15521,10 +15257,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "left",
-                "center"
-              ]
+              "enum": ["left", "center"]
             }
           }
         }
@@ -15535,10 +15268,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "left",
-              "center"
-            ]
+            "enum": ["left", "center"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -15564,10 +15294,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "show",
-                "hide"
-              ]
+              "enum": ["show", "hide"]
             }
           }
         }
@@ -15578,10 +15305,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "show",
-              "hide"
-            ]
+            "enum": ["show", "hide"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -19272,10 +18996,7 @@
                   "optional": false,
                   "spec": {
                     "kind": "string",
-                    "enum": [
-                      "conversation",
-                      "internet"
-                    ]
+                    "enum": ["conversation", "internet"]
                   }
                 },
                 "site": {
@@ -19303,10 +19024,7 @@
                 "optional": false,
                 "spec": {
                   "kind": "string",
-                  "enum": [
-                    "conversation",
-                    "internet"
-                  ]
+                  "enum": ["conversation", "internet"]
                 }
               },
               "site": {
@@ -24710,11 +24428,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "off",
-                "one",
-                "all"
-              ]
+              "enum": ["off", "one", "all"]
             }
           }
         }
@@ -24725,11 +24439,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "off",
-              "one",
-              "all"
-            ]
+            "enum": ["off", "one", "all"]
           },
           "typeKind": "string-enum",
           "create": "unit_or_mode",
@@ -25071,12 +24781,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "continue",
-                "diagram",
-                "augment",
-                "research"
-              ]
+              "enum": ["continue", "diagram", "augment", "research"]
             }
           }
         }
@@ -25153,12 +24858,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "continue",
-              "diagram",
-              "augment",
-              "research"
-            ]
+            "enum": ["continue", "diagram", "augment", "research"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -25774,11 +25474,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "selected",
-                "inverse",
-                "all"
-              ]
+              "enum": ["selected", "inverse", "all"]
             }
           },
           "files": {
@@ -25849,11 +25545,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "selected",
-              "inverse",
-              "all"
-            ]
+            "enum": ["selected", "inverse", "all"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -26028,10 +25720,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "grid",
-                "filmstrip"
-              ]
+              "enum": ["grid", "filmstrip"]
             }
           }
         }
@@ -26042,10 +25731,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "grid",
-              "filmstrip"
-            ]
+            "enum": ["grid", "filmstrip"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -26208,10 +25894,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "in-progress",
-                "complete"
-              ]
+              "enum": ["in-progress", "complete"]
             }
           }
         }
@@ -26222,10 +25905,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "in-progress",
-              "complete"
-            ]
+            "enum": ["in-progress", "complete"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -27540,10 +27220,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "passing",
-                "failing"
-              ]
+              "enum": ["passing", "failing"]
             }
           }
         }
@@ -27565,10 +27242,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "passing",
-              "failing"
-            ]
+            "enum": ["passing", "failing"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -27826,13 +27500,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "rest",
-                "graphql",
-                "websocket",
-                "ipc",
-                "sdk"
-              ]
+              "enum": ["rest", "graphql", "websocket", "ipc", "sdk"]
             }
           }
         }
@@ -27865,13 +27533,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "rest",
-              "graphql",
-              "websocket",
-              "ipc",
-              "sdk"
-            ]
+            "enum": ["rest", "graphql", "websocket", "ipc", "sdk"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -29280,12 +28942,7 @@
                     "optional": false,
                     "spec": {
                       "kind": "string",
-                      "enum": [
-                        "string",
-                        "number",
-                        "boolean",
-                        "path"
-                      ]
+                      "enum": ["string", "number", "boolean", "path"]
                     }
                   },
                   "required": {
@@ -29416,12 +29073,7 @@
                   "optional": false,
                   "spec": {
                     "kind": "string",
-                    "enum": [
-                      "string",
-                      "number",
-                      "boolean",
-                      "path"
-                    ]
+                    "enum": ["string", "number", "boolean", "path"]
                   }
                 },
                 "required": {
@@ -31082,10 +30734,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "all",
-                "unread"
-              ]
+              "enum": ["all", "unread"]
             }
           }
         }
@@ -31096,10 +30745,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "all",
-              "unread"
-            ]
+            "enum": ["all", "unread"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -31375,11 +31021,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "bubble",
-                "toast",
-                "inline"
-              ]
+              "enum": ["bubble", "toast", "inline"]
             }
           },
           "count": {
@@ -31418,11 +31060,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "bubble",
-              "toast",
-              "inline"
-            ]
+            "enum": ["bubble", "toast", "inline"]
           },
           "typeKind": "string-enum",
           "create": "unit_or_mode",
@@ -31474,11 +31112,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "bubble",
-                "toast",
-                "inline"
-              ]
+              "enum": ["bubble", "toast", "inline"]
             }
           }
         }
@@ -31511,11 +31145,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "bubble",
-              "toast",
-              "inline"
-            ]
+            "enum": ["bubble", "toast", "inline"]
           },
           "typeKind": "string-enum",
           "create": "unit_or_mode",
@@ -31936,11 +31566,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "4",
-                "8",
-                "12"
-              ]
+              "enum": ["4", "8", "12"]
             }
           }
         }
@@ -31993,11 +31619,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "4",
-              "8",
-              "12"
-            ]
+            "enum": ["4", "8", "12"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -32498,12 +32120,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "text",
-                "code",
-                "designer",
-                "debug"
-              ]
+              "enum": ["text", "code", "designer", "debug"]
             }
           }
         }
@@ -32525,12 +32142,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "text",
-              "code",
-              "designer",
-              "debug"
-            ]
+            "enum": ["text", "code", "designer", "debug"]
           },
           "typeKind": "string-enum",
           "create": "enum_literal",
@@ -32781,10 +32393,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "celsius",
-                "fahrenheit"
-              ]
+              "enum": ["celsius", "fahrenheit"]
             }
           }
         }
@@ -32806,10 +32415,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "celsius",
-              "fahrenheit"
-            ]
+            "enum": ["celsius", "fahrenheit"]
           },
           "typeKind": "string-enum",
           "create": "unit_or_mode",
@@ -32848,10 +32454,7 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": [
-                "celsius",
-                "fahrenheit"
-              ]
+              "enum": ["celsius", "fahrenheit"]
             }
           }
         }
@@ -32884,10 +32487,7 @@
           "optional": true,
           "type": {
             "kind": "string",
-            "enum": [
-              "celsius",
-              "fahrenheit"
-            ]
+            "enum": ["celsius", "fahrenheit"]
           },
           "typeKind": "string-enum",
           "create": "unit_or_mode",
@@ -33263,10 +32863,7 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": [
-                "compact",
-                "full"
-              ]
+              "enum": ["compact", "full"]
             }
           }
         }
@@ -33277,10 +32874,7 @@
           "optional": false,
           "type": {
             "kind": "string",
-            "enum": [
-              "compact",
-              "full"
-            ]
+            "enum": ["compact", "full"]
           },
           "typeKind": "string-enum",
           "create": "unit_or_mode",
