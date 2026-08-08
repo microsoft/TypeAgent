@@ -1254,16 +1254,24 @@ export async function generateTranslationBenchBenchmark(
             .slice(0, 5)
             .map((e) => `slot ${e.slot}: ${e.message}`)
             .join(" | ");
-        throw new Error(
-            `Translation bench generation failed on ${slotErrors.length}/${pending.length} slots. ${sample}`,
+        if (options.requireCompleteCoverage || casesBySlot.size === 0) {
+            throw new Error(
+                `Translation bench generation failed on ${slotErrors.length}/${pending.length} slots. ${sample}`,
+            );
+        }
+        // Partial draft is OK when complete coverage is not required (smoke / resume).
+        console.warn(
+            `[gen] continuing with ${casesBySlot.size}/${options.caseCount} cases; failed ${slotErrors.length}: ${sample}`,
         );
     }
-    const cases = schedule.entries.map((entry) =>
-        finalizeTranslationBenchGeneratedCaseLineage(
-            casesBySlot.get(entry.slot)!,
-            catalog,
-        ),
-    );
+    const cases = schedule.entries
+        .filter((entry) => casesBySlot.has(entry.slot))
+        .map((entry) =>
+            finalizeTranslationBenchGeneratedCaseLineage(
+                casesBySlot.get(entry.slot)!,
+                catalog,
+            ),
+        );
     const usage = aggregateUsage(cases);
     const estimatedCosts = cases.flatMap(
         (evalCase) =>

@@ -111,6 +111,9 @@ template: |-
   Gold parameters (hard requirement for seed + every positive):
   - Only include parameters the utterance (or allowed history) clearly supports.
   - Prefer omit over writing a value when the user did not ask for that field.
+  - Exception: if you include a nested object, every required property of that
+    object in the tool schema MUST be present (e.g. TermFilter.timeRange). Prefer
+    phrasing the utterance so those required fields are naturally supported.
   - NEVER mint: schema default polarity flags (e.g. unstar:false on "star"),
     empty strings, empty arrays, invented URLs/nonces/cursor/editor context,
     or dual fields that restate another parameter (public:true + private:false).
