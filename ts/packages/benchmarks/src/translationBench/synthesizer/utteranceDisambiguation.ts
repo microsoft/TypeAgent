@@ -457,7 +457,7 @@ export function checkTranslationBenchUtteranceDisambiguation(
 
 /**
  * Run disambiguation over seed + every positive genCase.
- * Negatives are handled separately by negativeFairness.ts (empty-gold fairness).
+ * Negatives are handled separately by negativeFairness.ts (LLM empty-gold fairness).
  */
 export function checkTranslationBenchCandidateDisambiguation(
     candidate: TranslationBenchGeneratedCandidate,

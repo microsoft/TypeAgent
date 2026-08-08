@@ -30,7 +30,13 @@ import {
     findTranslationBenchConfusableSiblings,
     summarizeTranslationBenchConfusableSiblings,
 } from "./utteranceDisambiguation.js";
-import { checkTranslationBenchCandidateNegativeFairness } from "./negativeFairness.js";
+import {
+    TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE,
+    applyTranslationBenchNegativeFairnessIssues,
+    checkTranslationBenchCandidateNegativeFairness,
+    parseTranslationBenchNegativeFairnessAssessments,
+    translationBenchNegativeAssessmentsJsonSchema,
+} from "./negativeFairness.js";
 
 export type TranslationBenchQualityStage =
     | "format_checker"
@@ -158,20 +164,8 @@ export function runTranslationBenchFormatChecker(
                 candidate,
             };
         }
-        const negativeFairnessIssues =
-            checkTranslationBenchCandidateNegativeFairness(
-                candidate,
-                loop.targetAction,
-                catalog,
-            );
-        if (negativeFairnessIssues.length > 0) {
-            return {
-                stage: "format_checker",
-                passed: false,
-                issues: negativeFairnessIssues,
-                candidate,
-            };
-        }
+        // Empty-gold negative fairness is LLM-judged in semantic_checker
+        // (negativeAssessments) — no verb-lexicon / ACTION_VP gate here.
         return {
             stage: "format_checker",
             passed: true,
@@ -221,8 +215,7 @@ export function buildTranslationBenchSemanticCheckerPrompt(
             ),
             disambiguationRule:
                 "Reject positives (AMBIGUOUS_INTENT) when a careful reader could equally choose a confusable sibling. Seed and every positive must uniquely identify the target action.",
-            negativeFairnessRule:
-                "Reject empty-gold negatives (BAD_NEGATIVE) that are concrete agent commands or contrastive adjacent intents. Fair negatives are pure refusals of the target, non-action status/howto questions, or missing-info clarifications — cases where emitting zero actions is the correct label under zero-action scoring.",
+            negativeFairnessRule: TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE,
         },
         candidate,
         formatCheckerChecks: pack.formatChecker.checks,
@@ -284,6 +277,8 @@ export function semanticCheckerJsonSchema(
                     },
                 },
                 summary: { type: "string", minLength: 1 },
+                negativeAssessments:
+                    translationBenchNegativeAssessmentsJsonSchema(),
             },
             required: [
                 "candidateHash",
@@ -291,6 +286,7 @@ export function semanticCheckerJsonSchema(
                 "scores",
                 "issues",
                 "summary",
+                "negativeAssessments",
             ],
             additionalProperties: false,
         },
@@ -352,15 +348,36 @@ export async function runTranslationBenchSemanticChecker(options: {
     );
     const text = typeof completion === "string" ? completion : completion.text;
     try {
+        const raw = parseTranslationBenchDatasetBuilderJson(
+            text,
+            "Translation-bench quality verifier (semantic)",
+        );
+        // negativeAssessments is required by the completion schema but is not
+        // part of TranslationBenchReviewerDecision — strip before Zod parse.
+        const rawRecord =
+            typeof raw === "object" && raw !== null && !Array.isArray(raw)
+                ? (raw as Record<string, unknown>)
+                : {};
+        const assessments = parseTranslationBenchNegativeFairnessAssessments(
+            rawRecord.negativeAssessments,
+        );
+        const { negativeAssessments: _ignored, ...decisionBody } = rawRecord;
+        void _ignored;
         const parsed = parseTranslationBenchReviewerDecision(
-            parseTranslationBenchDatasetBuilderJson(
-                text,
-                "Translation-bench quality verifier (semantic)",
-            ),
+            decisionBody,
             options.candidateHash,
         );
-        const decision = enforceApproveThreshold(
+        const fairnessIssues = checkTranslationBenchCandidateNegativeFairness(
+            options.candidate,
+            options.loop.targetAction,
+            assessments,
+        );
+        const withFairness = applyTranslationBenchNegativeFairnessIssues(
             parsed,
+            fairnessIssues,
+        );
+        const decision = enforceApproveThreshold(
+            withFairness,
             options.pack.semanticChecker.approveScoreThreshold,
         );
         return {

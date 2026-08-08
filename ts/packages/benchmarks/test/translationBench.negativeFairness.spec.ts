@@ -9,12 +9,18 @@ import {
 } from "@typeagent/action-schema";
 
 import type { TranslationBenchBenchmarkSchema } from "../src/translationBench/synthesizer/benchmark.js";
-import { runTranslationBenchFormatChecker } from "../src/translationBench/synthesizer/dataQualityVerifier.js";
+import {
+    runTranslationBenchFormatChecker,
+    runTranslationBenchSemanticChecker,
+} from "../src/translationBench/synthesizer/dataQualityVerifier.js";
 import type { TranslationBenchGenerationQualityLoopOptions } from "../src/translationBench/synthesizer/datasetGenerator.js";
 import {
+    applyTranslationBenchNegativeFairnessIssues,
     checkTranslationBenchCandidateNegativeFairness,
-    checkTranslationBenchNegativeFairness,
+    checkTranslationBenchNegativeFairnessAssessment,
+    parseTranslationBenchNegativeFairnessAssessments,
 } from "../src/translationBench/synthesizer/negativeFairness.js";
+import { loadTranslationBenchQualityVerifierPromptPack } from "../src/translationBench/synthesizer/synthesizerPrompts.js";
 
 const HASH = "c".repeat(64);
 
@@ -83,301 +89,358 @@ const targetOpenWebPage = {
     actionName: "openWebPage",
 };
 
-describe("translation bench negative fairness classifier", () => {
-    it("accepts pure refusals", () => {
-        const r = checkTranslationBenchNegativeFairness(
+function fairCandidate(negativeUtterance: string) {
+    return {
+        seed: {
+            utterance: "Go to the Apple stock quote website",
+            expectedActions: [
+                {
+                    schemaName: "browser",
+                    actionName: "openWebPage",
+                    parameters: { site: "apple.com" },
+                },
+            ],
+            order: "strict" as const,
+        },
+        genCases: [
+            {
+                id: "pos-1",
+                role: "positive" as const,
+                utterance: "Navigate to apple.com/investor in the browser",
+                expectedActions: [
+                    {
+                        schemaName: "browser",
+                        actionName: "openWebPage",
+                        parameters: { site: "apple.com/investor" },
+                    },
+                ],
+                order: "strict" as const,
+                dimensions: { variation: "paraphrase" },
+            },
+            {
+                id: "neg-1",
+                role: "negative" as const,
+                utterance: negativeUtterance,
+                expectedActions: [],
+                order: "strict" as const,
+                dimensions: { negativeKind: "pure_refusal" },
+            },
+        ],
+    };
+}
+
+function makeLoop(
+    catalog: TranslationBenchBenchmarkSchema[],
+): TranslationBenchGenerationQualityLoopOptions {
+    return {
+        targetAction: targetOpenWebPage,
+        schema: catalog[0]!,
+        catalogSchemas: catalog,
+        activeSchemas: ["browser"],
+        genCaseCount: 2,
+        maxAttempts: 5,
+        generator: { model: "g", complete: async () => "" },
+        reviewer: { model: "r", complete: async () => "" },
+        anchor: {
+            candidateId: "anchor-1",
+            utterance: "open a site",
+            sourceCalls: [],
+        },
+    } as unknown as TranslationBenchGenerationQualityLoopOptions;
+}
+
+describe("translation bench negative fairness LLM assessment parsing", () => {
+    it("parses structured assessments", () => {
+        const assessments = parseTranslationBenchNegativeFairnessAssessments([
+            {
+                path: "$.genCases[1].utterance",
+                kind: "pure_refusal",
+                fairEmptyGold: true,
+                reason: "explicit don't of the target",
+            },
+        ]);
+        expect(assessments).toHaveLength(1);
+        expect(assessments[0]!.kind).toBe("pure_refusal");
+    });
+
+    it("accepts consistent fair assessments", () => {
+        const r = checkTranslationBenchNegativeFairnessAssessment(
+            {
+                path: "$.genCases[0].utterance",
+                kind: "pure_refusal",
+                fairEmptyGold: true,
+                reason: "don't screenshot banking",
+            },
             "Don't take a screenshot of my online banking page.",
             { schemaName: "browser", actionName: "captureScreenshot" },
-            "$.genCases[0].utterance",
         );
         expect(r.ok).toBe(true);
         expect(r.kind).toBe("pure_refusal");
     });
 
-    it("accepts non-action status questions", () => {
-        const r = checkTranslationBenchNegativeFairness(
-            "Is Bluetooth currently enabled on this computer?",
-            { schemaName: "desktop", actionName: "BluetoothToggle" },
-            "$.genCases[0].utterance",
-        );
-        expect(r.ok).toBe(true);
-        expect(r.kind).toBe("non_action_question");
-    });
-
-    it("rejects contrastive imperatives with empty gold", () => {
-        const r = checkTranslationBenchNegativeFairness(
-            "Close only the current web page and leave my other tabs open.",
+    it("rejects unfair assessments and inconsistent fairEmptyGold flags", () => {
+        const unfair = checkTranslationBenchNegativeFairnessAssessment(
+            {
+                path: "$.n",
+                kind: "unfair_imperative",
+                fairEmptyGold: false,
+                reason: "still requests close this tab",
+            },
+            "Close only the current web page.",
             targetOpenWebPage,
-            "$.genCases[0].utterance",
         );
-        expect(r.ok).toBe(false);
-        expect(["unfair_imperative", "unfair_contrastive"]).toContain(r.kind);
-    });
+        expect(unfair.ok).toBe(false);
 
-    it("rejects adjacent search commands used as empty-gold negatives", () => {
-        const r = checkTranslationBenchNegativeFairness(
-            "Search Bing for Microsoft's current stock price.",
-            { schemaName: "browser", actionName: "changeSearchProvider" },
-            "$.genCases[0].utterance",
+        const inconsistent = checkTranslationBenchNegativeFairnessAssessment(
+            {
+                path: "$.n",
+                kind: "unfair_contrastive",
+                fairEmptyGold: true,
+                reason: "model lied",
+            },
+            "Search Bing for MSFT",
+            targetOpenWebPage,
         );
-        expect(r.ok).toBe(false);
-        expect(["unfair_imperative", "unfair_sibling_command"]).toContain(
-            r.kind,
-        );
-    });
-
-    it("rejects click-link imperatives as empty-gold negatives", () => {
-        const r = checkTranslationBenchNegativeFairness(
-            'Click the link titled "Museum Opening Hours."',
-            { schemaName: "browser", actionName: "openWebPage" },
-            "$.genCases[0].utterance",
-        );
-        expect(r.ok).toBe(false);
-    });
-
-    it("rejects partial constraints that still request an action", () => {
-        const r = checkTranslationBenchNegativeFairness(
-            "Open https://example.com in my browser, but don't bookmark it.",
-            { schemaName: "browser", actionName: "openWebPage" },
-            "$.genCases[0].utterance",
-        );
-        // "Open … but don't bookmark" — partial constraint / mixed command.
-        expect(r.ok).toBe(false);
+        expect(inconsistent.ok).toBe(false);
     });
 });
 
-describe("translation bench candidate negative fairness", () => {
-    it("flags unfair negatives on a candidate", () => {
+describe("translation bench candidate negative fairness from LLM assessments", () => {
+    it("flags unfair negatives from assessments", () => {
+        const candidate = fairCandidate(
+            'Click the link titled "Museum Opening Hours."',
+        );
         const issues = checkTranslationBenchCandidateNegativeFairness(
-            {
-                seed: {
-                    utterance: "Go to the Apple investor site.",
-                    expectedActions: [
-                        {
-                            schemaName: "browser",
-                            actionName: "openWebPage",
-                            parameters: { site: "apple.com" },
-                        },
-                    ],
-                    order: "strict",
-                },
-                genCases: [
-                    {
-                        id: "pos-1",
-                        role: "positive",
-                        utterance: "Open the apple.com website in this tab.",
-                        expectedActions: [
-                            {
-                                schemaName: "browser",
-                                actionName: "openWebPage",
-                                parameters: { site: "apple.com" },
-                            },
-                        ],
-                        order: "strict",
-                        dimensions: { kind: "paraphrase" },
-                    },
-                    {
-                        id: "neg-1",
-                        role: "negative",
-                        utterance:
-                            'Click the link titled "Museum Opening Hours."',
-                        expectedActions: [],
-                        order: "strict",
-                        dimensions: { kind: "contrastive" },
-                    },
-                ],
-            },
+            candidate,
             targetOpenWebPage,
-            browserCatalog(),
+            [
+                {
+                    path: "$.genCases[1].utterance",
+                    kind: "unfair_imperative",
+                    fairEmptyGold: false,
+                    reason:
+                        "Requests followLinkByText; empty gold would FP a correct translator",
+                },
+            ],
         );
         expect(issues.length).toBeGreaterThan(0);
         expect(issues[0]!.code).toBe("BAD_NEGATIVE");
         expect(issues[0]!.path).toContain("genCases[1]");
     });
 
-    it("format checker rejects unfair negatives before semantic review", () => {
-        const catalog = browserCatalog();
-        const schema = catalog[0]!;
-        const loop = {
-            targetAction: targetOpenWebPage,
-            schema,
-            catalogSchemas: catalog,
-            activeSchemas: ["browser"],
-            genCaseCount: 2,
-            maxAttempts: 5,
-            generator: { model: "g", complete: async () => "" },
-            reviewer: { model: "r", complete: async () => "" },
-            anchor: {
-                candidateId: "anchor-1",
-                utterance: "open a site",
-                sourceCalls: [],
-            },
-        } as unknown as TranslationBenchGenerationQualityLoopOptions;
-
-        const candidate = {
-            seed: {
-                utterance: "Go to the Apple stock quote website",
-                expectedActions: [
-                    {
-                        schemaName: "browser",
-                        actionName: "openWebPage",
-                        parameters: { site: "apple.com" },
-                    },
-                ],
-                order: "strict" as const,
-            },
-            genCases: [
+    it("accepts pure-refusal assessments", () => {
+        const candidate = fairCandidate(
+            "Don't open any websites right now — leave my browser alone.",
+        );
+        const issues = checkTranslationBenchCandidateNegativeFairness(
+            candidate,
+            targetOpenWebPage,
+            [
                 {
-                    id: "pos-1",
-                    role: "positive" as const,
-                    utterance: "Navigate to apple.com/investor in the browser",
-                    expectedActions: [
-                        {
-                            schemaName: "browser",
-                            actionName: "openWebPage",
-                            parameters: { site: "apple.com/investor" },
-                        },
-                    ],
-                    order: "strict" as const,
-                    dimensions: { variation: "paraphrase" },
-                },
-                {
-                    id: "neg-1",
-                    role: "negative" as const,
-                    utterance: 'Click the link titled "Museum Opening Hours."',
-                    expectedActions: [],
-                    order: "strict" as const,
-                    dimensions: { variation: "contrastive" },
+                    path: "$.genCases[1].utterance",
+                    kind: "pure_refusal",
+                    fairEmptyGold: true,
+                    reason: "leave-alone refusal of opening sites",
                 },
             ],
-        };
-
-        const result = runTranslationBenchFormatChecker(candidate, loop);
-        expect(result.passed).toBe(false);
-        expect(result.issues.some((i) => i.code === "BAD_NEGATIVE")).toBe(true);
+        );
+        expect(issues).toEqual([]);
     });
 
-    it("format checker accepts pure-refusal negatives", () => {
-        const catalog = browserCatalog();
-        const schema = catalog[0]!;
-        const loop = {
-            targetAction: targetOpenWebPage,
-            schema,
-            catalogSchemas: catalog,
-            activeSchemas: ["browser"],
-            genCaseCount: 2,
-            maxAttempts: 5,
-            generator: { model: "g", complete: async () => "" },
-            reviewer: { model: "r", complete: async () => "" },
-            anchor: {
-                candidateId: "anchor-2",
-                utterance: "open something",
-                sourceCalls: [],
-            },
-        } as unknown as TranslationBenchGenerationQualityLoopOptions;
+    it("requires one assessment per negative", () => {
+        const candidate = fairCandidate("Leave my tabs alone.");
+        const issues = checkTranslationBenchCandidateNegativeFairness(
+            candidate,
+            targetOpenWebPage,
+            [],
+        );
+        expect(issues.some((i) => i.path === "$.negativeAssessments")).toBe(
+            true,
+        );
+    });
 
-        const candidate = {
-            seed: {
-                utterance: "Go to the Apple stock quote website",
-                expectedActions: [
-                    {
-                        schemaName: "browser",
-                        actionName: "openWebPage",
-                        parameters: { site: "apple.com" },
-                    },
-                ],
-                order: "strict" as const,
+    it("forces reject when applying unfair issues to an approve decision", () => {
+        const decision = applyTranslationBenchNegativeFairnessIssues(
+            {
+                decision: "approve" as const,
+                issues: [] as {
+                    code: "BAD_NEGATIVE";
+                    path: string;
+                    message: string;
+                    suggestedFix: string;
+                }[],
+                summary: "ok",
+                scores: { negativeQuality: 0.95 },
             },
-            genCases: [
+            [
                 {
-                    id: "pos-1",
-                    role: "positive" as const,
-                    utterance: "Navigate to apple.com/investor in the browser",
-                    expectedActions: [
-                        {
-                            schemaName: "browser",
-                            actionName: "openWebPage",
-                            parameters: { site: "apple.com/investor" },
-                        },
-                    ],
-                    order: "strict" as const,
-                    dimensions: { variation: "paraphrase" },
-                },
-                {
-                    id: "neg-1",
-                    role: "negative" as const,
-                    utterance:
-                        "Don't open any websites right now — leave my browser alone.",
-                    expectedActions: [],
-                    order: "strict" as const,
-                    dimensions: { negativeKind: "pure_refusal" },
+                    code: "BAD_NEGATIVE",
+                    path: "$.genCases[1].utterance",
+                    message: "unfair",
+                    suggestedFix: "rewrite",
                 },
             ],
-        };
-
-        const result = runTranslationBenchFormatChecker(candidate, loop);
-        expect(result.passed).toBe(true);
-        expect(result.issues).toEqual([]);
+        );
+        expect(decision.decision).toBe("reject");
+        expect(decision.issues).toHaveLength(1);
+        expect(decision.scores.negativeQuality).toBeLessThanOrEqual(0.4);
     });
 });
 
-describe("translation bench negative fairness adversarial holes", () => {
-    const target = {
-        schemaName: "browser",
-        actionName: "closeAllWebPages",
-    };
+describe("format checker no longer regex-gates negatives", () => {
+    it("passes structural format even when negative is contrastive", () => {
+        const catalog = browserCatalog();
+        const loop = makeLoop(catalog);
+        const candidate = fairCandidate(
+            'Click the link titled "Museum Opening Hours."',
+        );
+        const result = runTranslationBenchFormatChecker(candidate, loop);
+        expect(result.passed).toBe(true);
+        expect(result.issues.some((i) => i.code === "BAD_NEGATIVE")).toBe(
+            false,
+        );
+    });
 
-    it("rejects refuse-then-alternate multi-clause negatives", () => {
-        for (const utt of [
+    it("still accepts pure-refusal negatives structurally", () => {
+        const catalog = browserCatalog();
+        const loop = makeLoop(catalog);
+        const candidate = fairCandidate(
+            "Don't open any websites right now — leave my browser alone.",
+        );
+        const result = runTranslationBenchFormatChecker(candidate, loop);
+        expect(result.passed).toBe(true);
+    });
+});
+
+describe("semantic checker enforces LLM negativeAssessments", () => {
+    const pack = loadTranslationBenchQualityVerifierPromptPack();
+
+    it("rejects when mock LLM marks negative unfair", async () => {
+        const catalog = browserCatalog();
+        const loop = makeLoop(catalog);
+        const candidate = fairCandidate(
             "Don't close all tabs; just close this one.",
-            "Never close everything — close only the current tab.",
-            "Do not screenshot; open banking instead.",
-            "Don't take a screenshot; open cnn.com instead.",
-        ]) {
-            const r = checkTranslationBenchNegativeFairness(utt, target, "$.n");
-            expect(r.ok).toBe(false);
-        }
+        );
+        const candidateHash = "a".repeat(64);
+        const llm = {
+            model: "mock",
+            complete: async () =>
+                JSON.stringify({
+                    candidateHash,
+                    decision: "approve",
+                    scores: {
+                        anchorFidelity: 0.9,
+                        groundTruthCorrectness: 0.9,
+                        naturalness: 0.9,
+                        generalizationDiversity: 0.9,
+                        negativeQuality: 0.9,
+                        historyCoherence: 0.9,
+                    },
+                    issues: [],
+                    summary: "looks fine",
+                    negativeAssessments: [
+                        {
+                            path: "$.genCases[1].utterance",
+                            kind: "unfair_contrastive",
+                            fairEmptyGold: false,
+                            reason:
+                                "refuse-then-alternate still requests closeWebPage",
+                        },
+                    ],
+                }),
+        };
+
+        const result = await runTranslationBenchSemanticChecker({
+            pack,
+            loop,
+            candidate,
+            candidateHash,
+            llm,
+        });
+        expect(result.passed).toBe(false);
+        expect(result.decision.decision).toBe("reject");
+        expect(
+            result.decision.issues.some((i) => i.code === "BAD_NEGATIVE"),
+        ).toBe(true);
     });
 
-    it("rejects bare-? contrastive commands", () => {
-        for (const utt of [
-            "Find MSFT on Bing?",
-            "Look up the weather?",
-            "Shut the other tabs?",
-            "Would you mind closing just this tab?",
-            "Maybe search Bing for MSFT stock?",
-        ]) {
-            const r = checkTranslationBenchNegativeFairness(utt, target, "$.n");
-            expect(r.ok).toBe(false);
-        }
-    });
-
-    it("accepts leave-alone pure refusals", () => {
-        const r = checkTranslationBenchNegativeFairness(
+    it("approves when mock LLM marks negative fair", async () => {
+        const catalog = browserCatalog();
+        const loop = makeLoop(catalog);
+        const candidate = fairCandidate(
             "Leave my browser tabs alone.",
-            target,
-            "$.n",
         );
-        expect(r.ok).toBe(true);
-        expect(r.kind).toBe("pure_refusal");
+        const candidateHash = "b".repeat(64);
+        const llm = {
+            model: "mock",
+            complete: async () =>
+                JSON.stringify({
+                    candidateHash,
+                    decision: "approve",
+                    scores: {
+                        anchorFidelity: 0.9,
+                        groundTruthCorrectness: 0.9,
+                        naturalness: 0.9,
+                        generalizationDiversity: 0.9,
+                        negativeQuality: 0.95,
+                        historyCoherence: 0.9,
+                    },
+                    issues: [],
+                    summary: "fair refusal negative",
+                    negativeAssessments: [
+                        {
+                            path: "$.genCases[1].utterance",
+                            kind: "pure_refusal",
+                            fairEmptyGold: true,
+                            reason: "leave-alone pure refusal",
+                        },
+                    ],
+                }),
+        };
+
+        const result = await runTranslationBenchSemanticChecker({
+            pack,
+            loop,
+            candidate,
+            candidateHash,
+            llm,
+        });
+        expect(result.passed).toBe(true);
+        expect(result.decision.decision).toBe("approve");
     });
 
-    it("accepts missing-info clarifications", () => {
-        const r = checkTranslationBenchNegativeFairness(
-            "I'm not sure which tab you mean — please clarify.",
-            target,
-            "$.n",
-        );
-        expect(r.ok).toBe(true);
-        expect(r.kind).toBe("missing_info");
-    });
+    it("rejects approve when negativeAssessments are missing", async () => {
+        const catalog = browserCatalog();
+        const loop = makeLoop(catalog);
+        const candidate = fairCandidate("Is Bluetooth currently enabled?");
+        const candidateHash = "d".repeat(64);
+        const llm = {
+            model: "mock",
+            complete: async () =>
+                JSON.stringify({
+                    candidateHash,
+                    decision: "approve",
+                    scores: {
+                        anchorFidelity: 0.9,
+                        groundTruthCorrectness: 0.9,
+                        naturalness: 0.9,
+                        generalizationDiversity: 0.9,
+                        negativeQuality: 0.9,
+                        historyCoherence: 0.9,
+                    },
+                    issues: [],
+                    summary: "forgot assessments",
+                    // missing negativeAssessments key entirely
+                }),
+        };
 
-    it("rejects capability questions that still solicit an action", () => {
-        const r = checkTranslationBenchNegativeFairness(
-            "Is there a way to open google.com right now?",
-            targetOpenWebPage,
-            "$.n",
-        );
-        expect(r.ok).toBe(false);
+        const result = await runTranslationBenchSemanticChecker({
+            pack,
+            loop,
+            candidate,
+            candidateHash,
+            llm,
+        });
+        expect(result.passed).toBe(false);
     });
 });

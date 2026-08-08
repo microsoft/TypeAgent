@@ -73,12 +73,13 @@ template: |-
       pure_refusal — explicit don't/never/stop of the target (no alternate command)
       non_action_question — status/howto/definition question that should not call a tool
       missing_info — underspecified ask that needs clarification, not an action
-  - FORBIDDEN as empty-gold negatives (format checker rejects BAD_NEGATIVE):
+  - FORBIDDEN as empty-gold negatives (semantic checker rejects BAD_NEGATIVE):
       contrastive adjacent commands ("close only this tab" as neg for closeAll,
       "search Bing for MSFT" as neg for changeSearchProvider, "click the link…"
       as neg for openWebPage)
+      refuse-then-alternate forms ("Don't close all; just close this one")
       partial constraints that still request an action ("open X but don't bookmark")
-      any imperative that a correct translator would map to another tool
+      any imperative / toolable request a correct translator would map to a tool
   - Double-meaning / unfair contrastive negatives inflated false-positive rates
     in prior 1k evals; do not regenerate that failure mode.
 
