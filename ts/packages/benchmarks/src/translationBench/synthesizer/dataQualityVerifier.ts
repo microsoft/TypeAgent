@@ -164,8 +164,6 @@ export function runTranslationBenchFormatChecker(
                 candidate,
             };
         }
-        // Empty-gold negative fairness is LLM-judged in semantic_checker
-        // (negativeAssessments) — no verb-lexicon / ACTION_VP gate here.
         return {
             stage: "format_checker",
             passed: true,
@@ -352,8 +350,6 @@ export async function runTranslationBenchSemanticChecker(options: {
             text,
             "Translation-bench quality verifier (semantic)",
         );
-        // negativeAssessments is required by the completion schema but is not
-        // part of TranslationBenchReviewerDecision — strip before Zod parse.
         const rawRecord =
             typeof raw === "object" && raw !== null && !Array.isArray(raw)
                 ? (raw as Record<string, unknown>)
@@ -361,8 +357,8 @@ export async function runTranslationBenchSemanticChecker(options: {
         const assessments = parseTranslationBenchNegativeFairnessAssessments(
             rawRecord.negativeAssessments,
         );
-        const { negativeAssessments: _ignored, ...decisionBody } = rawRecord;
-        void _ignored;
+        const decisionBody = { ...rawRecord };
+        delete decisionBody.negativeAssessments;
         const parsed = parseTranslationBenchReviewerDecision(
             decisionBody,
             options.candidateHash,

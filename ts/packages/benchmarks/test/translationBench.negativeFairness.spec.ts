@@ -261,15 +261,18 @@ describe("translation bench candidate negative fairness from LLM assessments", (
     it("forces reject when applying unfair issues to an approve decision", () => {
         const decision = applyTranslationBenchNegativeFairnessIssues(
             {
-                decision: "approve" as const,
-                issues: [] as {
-                    code: "BAD_NEGATIVE";
-                    path: string;
-                    message: string;
-                    suggestedFix: string;
-                }[],
+                candidateHash: "e".repeat(64),
+                decision: "approve",
+                issues: [],
                 summary: "ok",
-                scores: { negativeQuality: 0.95 },
+                scores: {
+                    anchorFidelity: 0.9,
+                    groundTruthCorrectness: 0.9,
+                    naturalness: 0.9,
+                    generalizationDiversity: 0.9,
+                    negativeQuality: 0.95,
+                    historyCoherence: 0.9,
+                },
             },
             [
                 {
