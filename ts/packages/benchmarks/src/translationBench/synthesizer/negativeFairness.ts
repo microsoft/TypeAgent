@@ -26,11 +26,13 @@ export type TranslationBenchNegativeKind =
     (typeof TRANSLATION_BENCH_NEGATIVE_KINDS)[number];
 
 /** Only pure_refusal is zero-action-safe under the full tool catalog. */
-const FAIR_KINDS = new Set<TranslationBenchNegativeKind>(["pure_refusal"]);
-
 export const TRANSLATION_BENCH_FAIR_EMPTY_GOLD_KINDS = [
     "pure_refusal",
 ] as const;
+
+const FAIR_KINDS = new Set<TranslationBenchNegativeKind>(
+    TRANSLATION_BENCH_FAIR_EMPTY_GOLD_KINDS,
+);
 
 export const TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE =
     "Empty-gold negatives must be zero-action-safe under the FULL loaded tool " +
