@@ -70,6 +70,7 @@ import {
     countEligibleTranslationBenchActions,
     getPackagedLlmJudgeExcludedActions,
 } from "./eligibleActions.js";
+import { TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE } from "./negativeFairness.js";
 
 export function getTranslationBenchLlmJudgeExcludedActions(): ReadonlySet<string> {
     return getPackagedLlmJudgeExcludedActions();
@@ -173,6 +174,8 @@ export interface TranslationBenchGeneratedBenchmarkOptions {
     genCaseCount: number;
     maxAttempts: number;
     requireCompleteCoverage: boolean;
+    /** Parallel schedule slots (default 1). Checkpoint commits stay serialized. */
+    concurrency?: number;
     generator: TranslationBenchGenerationLlm;
     reviewer: TranslationBenchGenerationLlm;
     checkpointPath?: string;
@@ -540,6 +543,9 @@ function formatSynthesizerPrompt(
             ),
             disambiguationRule:
                 "Every seed and positive utterance must uniquely identify the target action. If confusableSiblings is non-empty, include target-only cues and never use phrasing that fits a sibling equally well.",
+            negativeFairnessRule:
+                TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE +
+                " The semantic checker LLM judges this (no verb lexicon).",
         }),
         prior_feedback_json: JSON.stringify(feedback),
         previous_rejected_block: previousRejectedBlock,
@@ -1116,63 +1122,156 @@ export async function generateTranslationBenchBenchmark(
         }
     }
     options.onProgress?.(casesBySlot.size, options.caseCount);
-    for (const entry of schedule.entries) {
-        if (casesBySlot.has(entry.slot)) continue;
-        const schema = schemas.get(entry.schemaName)!;
-        const accepted = await runTranslationBenchGenerationQualityLoop({
-            targetAction: {
-                schemaName: entry.schemaName,
-                actionName: entry.actionName,
-            },
-            schema,
-            catalogSchemas: catalog,
-            anchor: anchors[entry.slot]!,
-            activeSchemas,
-            genCaseCount: options.genCaseCount,
-            maxAttempts: options.maxAttempts,
-            generator: options.generator,
-            reviewer: options.reviewer,
-            forbiddenUtterances: usedUtterances,
-        });
-        const evalCase = acceptedToCase(
-            entry,
-            anchors[entry.slot]!,
-            accepted,
-            catalog,
-            activeSchemas,
-            options.generator.model,
-            options.reviewer.model,
-        );
-        casesBySlot.set(entry.slot, evalCase);
-        for (const probe of [evalCase.seed, ...evalCase.generalizations]) {
-            usedUtterances.add(normalizedUtterance(probe.utterance));
-        }
-        if (options.checkpointPath !== undefined) {
-            const row: TranslationBenchCheckpointRow<TranslationBenchBenchmarkCaseRecord> =
-                {
-                    kind: "translation-bench-row",
-                    version: 1,
-                    ...checkpointIdentity(
-                        entry,
-                        options.generator.model,
-                        options.reviewer.model,
-                    ),
-                    value: evalCase,
-                };
-            appendTranslationBenchCheckpointRows(
-                options.checkpointPath,
-                header,
-                [row],
-            );
-        }
-        options.onProgress?.(casesBySlot.size, options.caseCount);
-    }
-    const cases = schedule.entries.map((entry) =>
-        finalizeTranslationBenchGeneratedCaseLineage(
-            casesBySlot.get(entry.slot)!,
-            catalog,
+    const pending = schedule.entries.filter(
+        (entry) => !casesBySlot.has(entry.slot),
+    );
+    const concurrency = Math.max(
+        1,
+        Math.min(
+            options.concurrency ?? 1,
+            pending.length || 1,
+            options.caseCount,
         ),
     );
+    // Serialize utterance registry + checkpoint JSONL writes across workers.
+    let commitChain: Promise<void> = Promise.resolve();
+    const runExclusive = async <T>(fn: () => T | Promise<T>): Promise<T> => {
+        const prev = commitChain;
+        let release!: () => void;
+        commitChain = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        await prev;
+        try {
+            return await fn();
+        } finally {
+            release();
+        }
+    };
+
+    const commitAccepted = async (
+        entry: TranslationBenchGenerationScheduleEntry,
+        accepted: TranslationBenchAcceptedGeneration,
+    ): Promise<"ok" | "collision"> =>
+        runExclusive(() => {
+            const utterances = [
+                accepted.candidate.seed.utterance,
+                ...accepted.candidate.genCases.map((g) => g.utterance),
+            ].map(normalizedUtterance);
+            if (utterances.some((u) => usedUtterances.has(u))) {
+                return "collision";
+            }
+            const evalCase = acceptedToCase(
+                entry,
+                anchors[entry.slot]!,
+                accepted,
+                catalog,
+                activeSchemas,
+                options.generator.model,
+                options.reviewer.model,
+            );
+            casesBySlot.set(entry.slot, evalCase);
+            for (const u of utterances) usedUtterances.add(u);
+            if (options.checkpointPath !== undefined) {
+                const row: TranslationBenchCheckpointRow<TranslationBenchBenchmarkCaseRecord> =
+                    {
+                        kind: "translation-bench-row",
+                        version: 1,
+                        ...checkpointIdentity(
+                            entry,
+                            options.generator.model,
+                            options.reviewer.model,
+                        ),
+                        value: evalCase,
+                    };
+                appendTranslationBenchCheckpointRows(
+                    options.checkpointPath,
+                    header,
+                    [row],
+                );
+            }
+            options.onProgress?.(casesBySlot.size, options.caseCount);
+            return "ok";
+        });
+
+    let nextPending = 0;
+    const slotErrors: { slot: number; message: string }[] = [];
+    const worker = async (): Promise<void> => {
+        while (true) {
+            const index = nextPending++;
+            if (index >= pending.length) return;
+            const entry = pending[index]!;
+            const schema = schemas.get(entry.schemaName)!;
+            const loopOptions = {
+                targetAction: {
+                    schemaName: entry.schemaName,
+                    actionName: entry.actionName,
+                },
+                schema,
+                catalogSchemas: catalog,
+                anchor: anchors[entry.slot]!,
+                activeSchemas,
+                genCaseCount: options.genCaseCount,
+                maxAttempts: options.maxAttempts,
+                generator: options.generator,
+                reviewer: options.reviewer,
+            };
+
+            try {
+                // Snapshot forbidden utterances so workers do not share a live Set
+                // during LLM rounds; commit re-checks under the exclusive lock.
+                let accepted = await runTranslationBenchGenerationQualityLoop({
+                    ...loopOptions,
+                    forbiddenUtterances: new Set(usedUtterances),
+                });
+                if ((await commitAccepted(entry, accepted)) === "ok") continue;
+
+                // Rare race: another worker claimed an overlapping utterance first.
+                accepted = await runTranslationBenchGenerationQualityLoop({
+                    ...loopOptions,
+                    forbiddenUtterances: usedUtterances,
+                });
+                if ((await commitAccepted(entry, accepted)) !== "ok") {
+                    throw new Error(
+                        `Translation bench parallel generation produced duplicate utterance on slot ${entry.slot}`,
+                    );
+                }
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : String(error);
+                slotErrors.push({ slot: entry.slot, message });
+                // Keep other workers progressing; fail the run after the pool drains.
+            }
+        }
+    };
+    await Promise.all(
+        Array.from({ length: Math.min(concurrency, pending.length || 1) }, () =>
+            worker(),
+        ),
+    );
+    if (slotErrors.length > 0) {
+        const sample = slotErrors
+            .slice(0, 5)
+            .map((e) => `slot ${e.slot}: ${e.message}`)
+            .join(" | ");
+        if (options.requireCompleteCoverage || casesBySlot.size === 0) {
+            throw new Error(
+                `Translation bench generation failed on ${slotErrors.length}/${pending.length} slots. ${sample}`,
+            );
+        }
+        // Partial draft is OK when complete coverage is not required (smoke / resume).
+        console.warn(
+            `[gen] continuing with ${casesBySlot.size}/${options.caseCount} cases; failed ${slotErrors.length}: ${sample}`,
+        );
+    }
+    const cases = schedule.entries
+        .filter((entry) => casesBySlot.has(entry.slot))
+        .map((entry) =>
+            finalizeTranslationBenchGeneratedCaseLineage(
+                casesBySlot.get(entry.slot)!,
+                catalog,
+            ),
+        );
     const usage = aggregateUsage(cases);
     const estimatedCosts = cases.flatMap(
         (evalCase) =>

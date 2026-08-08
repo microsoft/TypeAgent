@@ -66,13 +66,38 @@ template: |-
   - Double-meaning positives are rejected by the format checker as
     AMBIGUOUS_INTENT before semantic review.
 
-  Diversify negatives across missing information, ambiguity, negation,
-  non-action questions, and contrastive adjacent intents that this target rule
-  must not capture. expectedActions remains [] because these cases score
-  target-rule abstention.
+  Negatives (hard fairness requirement — empty expectedActions):
+  - Scorer treats expectedActions: [] as "translator must emit ZERO actions"
+    across the FULL active schema set (chat, help, history, lookup, and every
+    other loaded tool — not merely "not the target"). Only write negatives
+    where that zero-action gold is fair.
+  - ALLOWED empty-gold kind (set dimensions.negativeKind exactly):
+      pure_refusal — explicit don't/never/stop/leave-alone/cancel of the target
+        with NO alternate task, NO question, and NO request for explanation.
+        Prefer hard leave-alone: "Don't take a screenshot.", "Leave my tabs
+        alone.", "Do not open any websites right now."
+  - FORBIDDEN as empty-gold negatives (semantic checker rejects BAD_NEGATIVE):
+      non_action_question / definition / meta / status ("What does goBack mean?",
+        "Is Bluetooth enabled?", "Has the flow been deleted?") — these invite
+        chat/help/history/lookup fires under a full catalog
+      missing_info that still invites a tool ("Which list?" → listLists)
+      contrastive adjacent commands ("close only this tab" as neg for closeAll,
+        "search Bing for MSFT" as neg for changeSearchProvider, "click the link…"
+        as neg for openWebPage)
+      refuse-then-alternate forms ("Don't close all; just close this one")
+      partial constraints that still request an action ("open X but don't bookmark")
+      how-to-perform-target / soft solicits ("How do I add X?", "Can you open Y?",
+        "Is there a way to close this tab?", "Would you mind taking a screenshot?")
+      capability questions; trailing "what should I do instead?"
+      any imperative / toolable / answerable request a correct translator would
+        map to ANY loaded tool
+  - Every negative in this row MUST be pure_refusal. Do not mint definition or
+    status questions as empty gold (they are not zero-action-safe).
+  - Double-meaning / unfair contrastive / Q&A empties crushed neg pass in prior
+    1k evals; do not regenerate those failure modes.
 
   Use dimensions to label each case's scenario, linguistic form, and positive
-  variation or negative boundary reason.
+  variation or negativeKind / negative boundary reason.
 
   Each genCase must contain exactly id, role, utterance, expectedActions, order,
   dimensions, and optional history.
@@ -86,6 +111,9 @@ template: |-
   Gold parameters (hard requirement for seed + every positive):
   - Only include parameters the utterance (or allowed history) clearly supports.
   - Prefer omit over writing a value when the user did not ask for that field.
+  - Exception: if you include a nested object, every required property of that
+    object in the tool schema MUST be present (e.g. TermFilter.timeRange). Prefer
+    phrasing the utterance so those required fields are naturally supported.
   - NEVER mint: schema default polarity flags (e.g. unstar:false on "star"),
     empty strings, empty arrays, invented URLs/nonces/cursor/editor context,
     or dual fields that restate another parameter (public:true + private:false).

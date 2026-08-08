@@ -8,7 +8,6 @@ import {
     generateActionActionFunctionJsonSchemas,
     parseToolsJsonSchema,
     toJSONParsedActionSchema,
-    validateAction,
     type ParsedActionSchema,
     type ParsedActionSchemaJSON,
 } from "@typeagent/action-schema";
@@ -35,6 +34,7 @@ import {
     countEligibleTranslationBenchActions,
     getPackagedLlmJudgeExcludedActions,
 } from "./eligibleActions.js";
+import { validateTranslationBenchGoldAction } from "./actionValidation.js";
 
 export type TranslationBenchOrder = "strict" | "any";
 // Closed transform set: source import (1) vs generated/canonical (2).
@@ -2276,7 +2276,12 @@ function validateExpectedActions(
                 `${label} expects unknown existing TypeAgent action '${action.schemaName}.${action.actionName}'`,
             );
         }
-        validateAction(definition, action);
+        validateTranslationBenchGoldAction(definition, {
+            actionName: action.actionName,
+            ...(action.parameters !== undefined
+                ? { parameters: action.parameters }
+                : {}),
+        });
     }
 }
 
