@@ -261,9 +261,7 @@ export function isIgnoredGoldParameter(
     actionName: string,
     fieldName: string,
 ): boolean {
-    return IGNORE_PARAMETER_SET.has(
-        `${schemaName}.${actionName}.${fieldName}`,
-    );
+    return IGNORE_PARAMETER_SET.has(`${schemaName}.${actionName}.${fieldName}`);
 }
 
 /** Field names on IGNORE_PARAMETERS for one action (empty when none). */

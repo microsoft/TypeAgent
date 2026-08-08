@@ -1434,17 +1434,16 @@ describe("eligible action coverage counting", () => {
 
 describe("stripIgnoredGoldParameters", () => {
     it("removes ignore-listed keys and drops empty parameter objects", () => {
-        expect(
-            isIgnoredGoldParameter("github-cli", "starRepo", "unstar"),
-        ).toBe(true);
-        expect(
-            ignoredGoldParameterNames("github-cli", "starRepo"),
-        ).toEqual(["unstar"]);
-        const stripped = stripIgnoredGoldParameters(
-            "github-cli",
-            "starRepo",
-            { repo: "microsoft/TypeScript", unstar: false },
+        expect(isIgnoredGoldParameter("github-cli", "starRepo", "unstar")).toBe(
+            true,
         );
+        expect(ignoredGoldParameterNames("github-cli", "starRepo")).toEqual([
+            "unstar",
+        ]);
+        const stripped = stripIgnoredGoldParameters("github-cli", "starRepo", {
+            repo: "microsoft/TypeScript",
+            unstar: false,
+        });
         expect(stripped.removed).toEqual(["unstar"]);
         expect(stripped.parameters).toEqual({ repo: "microsoft/TypeScript" });
         const onlyDefault = stripIgnoredGoldParameters(
@@ -1454,11 +1453,9 @@ describe("stripIgnoredGoldParameters", () => {
         );
         expect(onlyDefault.removed).toEqual(["unstar"]);
         expect(onlyDefault.parameters).toBeUndefined();
-        const untouched = stripIgnoredGoldParameters(
-            "list",
-            "removeItems",
-            { listName: "groceries" },
-        );
+        const untouched = stripIgnoredGoldParameters("list", "removeItems", {
+            listName: "groceries",
+        });
         expect(untouched.removed).toEqual([]);
         expect(untouched.parameters).toEqual({ listName: "groceries" });
     });
