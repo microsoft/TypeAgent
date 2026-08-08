@@ -88,9 +88,10 @@ template: |-
   - NEVER mint schema defaults, polarity flags set to the no-op value, empty
     strings, empty arrays, invented URLs/nonces/editor state, or dual fields
     that restate another parameter (e.g. private:false with public:true).
-  - When omitUngroundedParameters is listed for the target action, those keys
-    must be ABSENT from every expectedActions[].parameters object. Prefer omit
-    over false / "" / [].
+  - Prefer omit over false / "" / [] when the user did not request that field.
+  - When omitFromGoldParameters is listed for the target action, those keys
+    must be ABSENT from every expectedActions[].parameters object. The format
+    checker strips them deterministically if they still appear.
 
   Attempt: {{attempt}}
 

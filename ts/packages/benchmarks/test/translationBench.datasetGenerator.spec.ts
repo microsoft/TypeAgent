@@ -613,7 +613,7 @@ describe("translation bench generation quality loop", () => {
         );
     });
 
-    it("strips ignore-listed defaults from gold and prompts omit list", async () => {
+    it("strips omit-from-gold defaults from labeled params and prompts omit list", async () => {
         const parsed = parseToolsJsonSchema([
             {
                 name: "starRepo",
@@ -702,7 +702,7 @@ describe("translation bench generation quality loop", () => {
                 },
             },
         });
-        expect(generatorPrompt).toContain("omitUngroundedParameters");
+        expect(generatorPrompt).toContain("omitFromGoldParameters");
         expect(generatorPrompt).toContain("unstar");
         expect(result.candidate.seed.expectedActions[0]!.parameters).toEqual({
             repo: "microsoft/TypeScript",

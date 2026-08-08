@@ -22,7 +22,7 @@ import {
     normalizeTranslationBenchActionShapePolicy,
     type TranslationBenchActionShapePolicy,
 } from "./actionShape.js";
-import { stripIgnoredGoldParameters } from "./catalogGenerator/actionParametersGrader.js";
+import { stripOmittedGoldParameters } from "./goldParameterHygiene.js";
 
 export interface TranslationBenchGeneratedCase {
     id: string;
@@ -282,14 +282,14 @@ export function parseTranslationBenchGeneratedCandidate(
         );
     }
     // Gold hygiene: never keep ungrounded optional defaults on labeled actions.
-    return stripIgnoredGoldParametersFromCandidate(structuredClone(parsed));
+    return stripOmittedGoldParametersFromCandidate(structuredClone(parsed));
 }
 
-function stripIgnoredGoldParametersFromActions(
+function stripOmittedGoldParametersFromActions(
     actions: TranslationBenchBenchmarkAction[],
 ): TranslationBenchBenchmarkAction[] {
     return actions.map((action) => {
-        const { parameters } = stripIgnoredGoldParameters(
+        const { parameters } = stripOmittedGoldParameters(
             action.schemaName,
             action.actionName,
             action.parameters,
@@ -306,14 +306,14 @@ function stripIgnoredGoldParametersFromActions(
 }
 
 /** Deterministic gold cleanup shared by parse + format checker. */
-export function stripIgnoredGoldParametersFromCandidate(
+export function stripOmittedGoldParametersFromCandidate(
     candidate: TranslationBenchGeneratedCandidate,
 ): TranslationBenchGeneratedCandidate {
     return {
         ...candidate,
         seed: {
             ...candidate.seed,
-            expectedActions: stripIgnoredGoldParametersFromActions(
+            expectedActions: stripOmittedGoldParametersFromActions(
                 candidate.seed.expectedActions,
             ),
         },
@@ -323,7 +323,7 @@ export function stripIgnoredGoldParametersFromCandidate(
             }
             return {
                 ...probe,
-                expectedActions: stripIgnoredGoldParametersFromActions(
+                expectedActions: stripOmittedGoldParametersFromActions(
                     probe.expectedActions,
                 ),
             };

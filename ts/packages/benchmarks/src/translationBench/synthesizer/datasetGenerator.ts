@@ -54,7 +54,7 @@ import {
     runTranslationBenchDataQualityVerifier,
     runTranslationBenchFormatChecker,
 } from "./dataQualityVerifier.js";
-import { ignoredGoldParameterNames } from "./catalogGenerator/actionParametersGrader.js";
+import { omittedGoldParameterNames } from "./goldParameterHygiene.js";
 import {
     loadTranslationBenchQualityVerifierPromptPack,
     loadTranslationBenchSynthesizerPromptPack,
@@ -501,14 +501,14 @@ function formatSynthesizerPrompt(
         (tool) => tool.function.name === options.targetAction.actionName,
     )!;
     const parameterField = targetParameterField(options);
-    const omitParams = ignoredGoldParameterNames(
+    const omitParams = omittedGoldParameterNames(
         options.targetAction.schemaName,
         options.targetAction.actionName,
     );
     const omitClause =
         omitParams.length === 0
             ? ""
-            : ` omitUngroundedParameters=${JSON.stringify(omitParams)} — these optional keys must be ABSENT from gold parameters (do not mint defaults, empty values, or dual fields).`;
+            : ` omitFromGoldParameters=${JSON.stringify(omitParams)} — these optional keys must be ABSENT from gold parameters (do not mint defaults, empty values, or dual fields).`;
     const actionContract =
         parameterField === undefined
             ? `Every expected action must use exactly {"schemaName":"${options.targetAction.schemaName}","actionName":"${options.targetAction.actionName}"}; omit parameters entirely for this parameterless action. Never use name/arguments or a qualified-name string.`

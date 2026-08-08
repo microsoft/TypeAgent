@@ -21,9 +21,6 @@ import {
     loadActionParametersGraderCatalogFile,
     mergeUnionParamSpecs,
     parameterRequiresLlmJudge,
-    ignoredGoldParameterNames,
-    isIgnoredGoldParameter,
-    stripIgnoredGoldParameters,
     REGEX_RULE_IDS,
     renderSchemaType,
     schemaTypeToParamSpec,
@@ -1429,116 +1426,6 @@ describe("eligible action coverage counting", () => {
         expect(countEligibleTranslationBenchActions(schemas, new Set())).toBe(
             3,
         );
-    });
-});
-
-describe("stripIgnoredGoldParameters", () => {
-    it("removes ignore-listed keys and drops empty parameter objects", () => {
-        expect(isIgnoredGoldParameter("github-cli", "starRepo", "unstar")).toBe(
-            true,
-        );
-        expect(ignoredGoldParameterNames("github-cli", "starRepo")).toEqual([
-            "unstar",
-        ]);
-        const stripped = stripIgnoredGoldParameters("github-cli", "starRepo", {
-            repo: "microsoft/TypeScript",
-            unstar: false,
-        });
-        expect(stripped.removed).toEqual(["unstar"]);
-        expect(stripped.parameters).toEqual({ repo: "microsoft/TypeScript" });
-        const onlyDefault = stripIgnoredGoldParameters(
-            "github-cli",
-            "starRepo",
-            { unstar: false },
-        );
-        expect(onlyDefault.removed).toEqual(["unstar"]);
-        expect(onlyDefault.parameters).toBeUndefined();
-        const untouched = stripIgnoredGoldParameters("list", "removeItems", {
-            listName: "groceries",
-        });
-        expect(untouched.removed).toEqual([]);
-        expect(untouched.parameters).toEqual({ listName: "groceries" });
-    });
-});
-
-describe("hardcoded ignore for ungrounded optionals", () => {
-    it("forces default-polarity and invented-context params to ignore", async () => {
-        const catalog = {
-            catalogVersion: "test",
-            generatedAt: "2026-01-01T00:00:00.000Z",
-            actions: [
-                {
-                    schemaName: "github-cli",
-                    actionName: "starRepo",
-                    paramSpec: objectSpec({
-                        owner: {
-                            optional: false,
-                            spec: { kind: "string" },
-                        },
-                        repo: {
-                            optional: false,
-                            spec: { kind: "string" },
-                        },
-                        unstar: {
-                            optional: true,
-                            spec: { kind: "boolean" },
-                        },
-                    }),
-                },
-                {
-                    schemaName: "browser",
-                    actionName: "openSearchResult",
-                    paramSpec: objectSpec({
-                        position: {
-                            optional: false,
-                            spec: { kind: "number" },
-                        },
-                        url: {
-                            optional: true,
-                            spec: { kind: "string" },
-                        },
-                    }),
-                },
-                {
-                    schemaName: "code",
-                    actionName: "launchCopilotChat",
-                    paramSpec: objectSpec({
-                        attachFiles: {
-                            optional: true,
-                            spec: {
-                                kind: "array",
-                                item: { kind: "string" },
-                            },
-                        },
-                        isPartialQuery: {
-                            optional: true,
-                            spec: { kind: "boolean" },
-                        },
-                    }),
-                },
-            ],
-        };
-        const grader = await buildActionParametersGraderCatalog(catalog);
-        expect(
-            grader.byAction["github-cli.starRepo"]!.parameterScore.fields
-                .unstar,
-        ).toBe("ignore");
-        expect(
-            grader.byAction["browser.openSearchResult"]!.parameterScore.fields
-                .url,
-        ).toBe("ignore");
-        expect(
-            grader.byAction["code.launchCopilotChat"]!.parameterScore.fields
-                .attachFiles,
-        ).toBe("ignore");
-        expect(
-            grader.byAction["code.launchCopilotChat"]!.parameterScore.fields
-                .isPartialQuery,
-        ).toBe("ignore");
-        // non-listed fields stay scored
-        expect(
-            grader.byAction["github-cli.starRepo"]!.parameterScore.fields.owner,
-        ).not.toBe("ignore");
     });
 });
 

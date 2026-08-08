@@ -200,50 +200,6 @@ const LLM_JUDGE_PARAMETER_SET = new Set<string>(LLM_JUDGE_PARAMETERS);
 const EXACT_PARAMETERS = new Set<string>(["github-cli.aliasSet.command"]);
 
 /**
- * Optional params that gold often mints as ungrounded defaults / empties /
- * dual fields / runtime context. Missing key must not fail paramScore —
- * only `ignore` (not nonempty) treats omit as pass.
- */
-export const IGNORE_PARAMETERS = [
-    "browser.openSearchResult.url",
-    "code.code-debug.startDebugging.noDebug",
-    "code.code-editor.launchCopilotChat.attachFiles",
-    "code.code-editor.launchCopilotChat.isPartialQuery",
-    "code.code-editor.saveAllFiles.onlyDirty",
-    "code.code-editor.saveCurrentFile.excludeUntitled",
-    "code.code-editor.saveCurrentFile.showErrorIfNoActiveEditor",
-    "code.code-workbench.openInIntegratedTerminal.reuseExistingTerminal",
-    "code.code-workbench.workbenchCreateFolderFromExplorer.resolutionHint",
-    "code.code-workbench.workbenchOpenFile.extensions",
-    "code.code-workbench.workbenchOpenFile.includeGenerated",
-    "code.code-workbench.workbenchOpenFile.matchStrategy",
-    "code.launchCopilotChat.attachFiles",
-    "code.launchCopilotChat.isPartialQuery",
-    "desktop.ApplyTheme.themeName",
-    "desktop.RestartService.elevate",
-    "desktop.desktop-input.MouseCursorSpeed.reduceSpeed",
-    "discord.createChannelInvite.never_expires",
-    "discord.createMessage.nonce",
-    "discord.createMessage.tts",
-    "discord.getCurrentUserGuilds.after",
-    "discord.getCurrentUserGuilds.before",
-    "discord.startThreadWithoutMessage.type",
-    "github-cli.attestationCreate.type",
-    "github-cli.authLogin.token",
-    "github-cli.repoCreate.private",
-    "github-cli.starRepo.unstar",
-    "markdown.updateDocument.context",
-    "markdown.updateDocument.cursorPosition",
-    "montage.addPhotos.search_filters",
-    "montage.removePhotos.files",
-    "montage.removePhotos.indices",
-    "player.findMusic.play",
-    "system.help.describeAgent.all",
-] as const;
-
-const IGNORE_PARAMETER_SET = new Set<string>(IGNORE_PARAMETERS);
-
-/**
  * Conversation topic titles are freeform NL (paraphrase-OK), not resource ids.
  * Action-scoped so webflow/playlist `name` stays identifier/exact.
  */
@@ -255,65 +211,11 @@ export const NONEMPTY_PARAMETERS = [
 
 const NONEMPTY_PARAMETER_SET = new Set<string>(NONEMPTY_PARAMETERS);
 
-/** True when action.parameter is on the ungrounded-optional ignore list. */
-export function isIgnoredGoldParameter(
-    schemaName: string,
-    actionName: string,
-    fieldName: string,
-): boolean {
-    return IGNORE_PARAMETER_SET.has(`${schemaName}.${actionName}.${fieldName}`);
-}
-
-/** Field names on IGNORE_PARAMETERS for one action (empty when none). */
-export function ignoredGoldParameterNames(
-    schemaName: string,
-    actionName: string,
-): string[] {
-    const prefix = `${schemaName}.${actionName}.`;
-    return IGNORE_PARAMETERS.filter((full) => full.startsWith(prefix)).map(
-        (full) => full.slice(prefix.length),
-    );
-}
-
-/**
- * Drop IGNORE_PARAMETERS keys from gold parameters.
- * Returns a new object; omits `parameters` entirely when nothing remains.
- */
-export function stripIgnoredGoldParameters(
-    schemaName: string,
-    actionName: string,
-    parameters: Record<string, unknown> | undefined,
-): {
-    parameters: Record<string, unknown> | undefined;
-    removed: string[];
-} {
-    if (parameters === undefined) {
-        return { parameters: undefined, removed: [] };
-    }
-    const removed: string[] = [];
-    const next: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(parameters)) {
-        if (isIgnoredGoldParameter(schemaName, actionName, key)) {
-            removed.push(key);
-            continue;
-        }
-        next[key] = value;
-    }
-    if (removed.length === 0) {
-        return { parameters, removed };
-    }
-    return {
-        parameters: Object.keys(next).length > 0 ? next : undefined,
-        removed,
-    };
-}
-
 export const HEURISTIC_SOURCE_HASH: string = createHash("sha256")
     .update(
         JSON.stringify({
             rules: [...REGEX_RULE_IDS].sort(),
             llmJudge: [...LLM_JUDGE_PARAMETERS],
-            ignore: [...IGNORE_PARAMETERS],
             nonempty: [...NONEMPTY_PARAMETERS],
             exact: [...EXACT_PARAMETERS].sort(),
         }),
@@ -1181,13 +1083,6 @@ export async function buildActionParametersGraderEntry(
                     verify: "exact",
                     rule: "string-identifier-exact",
                     source: judged.source,
-                };
-            } else if (IGNORE_PARAMETER_SET.has(fullName)) {
-                // Omit-OK optionals: keep create, drop from paramScore.
-                judged = {
-                    ...judged,
-                    verify: "ignore",
-                    rule: "hardcoded-ungrounded-ignore",
                 };
             } else if (NONEMPTY_PARAMETER_SET.has(fullName)) {
                 // Topic titles: presence matters, exact wording does not.
