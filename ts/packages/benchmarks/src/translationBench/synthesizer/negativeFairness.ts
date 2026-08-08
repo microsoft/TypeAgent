@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { TranslationBenchTargetAction } from "./benchmark.js";
 import type {
     TranslationBenchGeneratedCandidate,
+    TranslationBenchGeneratedCase,
     TranslationBenchReviewIssue,
     TranslationBenchReviewerDecision,
 } from "./generationCandidate.js";
@@ -24,12 +25,7 @@ export const TRANSLATION_BENCH_NEGATIVE_KINDS = [
 export type TranslationBenchNegativeKind =
     (typeof TRANSLATION_BENCH_NEGATIVE_KINDS)[number];
 
-/**
- * Empty gold means the headless scorer requires ZERO actions across the full
- * active catalog (chat/help/history/lookup included). Only hard-abstain forms
- * clear that bar. Definition/status/meta questions are label-kinds for audit
- * but must never be fairEmptyGold under zero-action scoring.
- */
+/** Only pure_refusal is zero-action-safe under the full tool catalog. */
 const FAIR_KINDS = new Set<TranslationBenchNegativeKind>(["pure_refusal"]);
 
 export const TRANSLATION_BENCH_FAIR_EMPTY_GOLD_KINDS = [
@@ -82,6 +78,18 @@ function bad(path: string, message: string): TranslationBenchReviewIssue {
     return { code: "BAD_NEGATIVE", path, message, suggestedFix: FIX };
 }
 
+function negativeByPath(
+    candidate: TranslationBenchGeneratedCandidate,
+): Map<string, TranslationBenchGeneratedCase> {
+    const byPath = new Map<string, TranslationBenchGeneratedCase>();
+    for (const [index, genCase] of candidate.genCases.entries()) {
+        if (genCase.role === "negative") {
+            byPath.set(`$.genCases[${index}].utterance`, genCase);
+        }
+    }
+    return byPath;
+}
+
 export function translationBenchNegativeAssessmentsJsonSchema(): Record<
     string,
     unknown
@@ -117,74 +125,40 @@ export function checkTranslationBenchNegativeFairnessAssessment(
     };
 }
 
-function negativePaths(
-    candidate: TranslationBenchGeneratedCandidate,
-): Set<string> {
-    const paths = new Set<string>();
-    for (const [index, genCase] of candidate.genCases.entries()) {
-        if (genCase.role === "negative") {
-            paths.add(`$.genCases[${index}].utterance`);
-        }
-    }
-    return paths;
-}
-
-function pathsCover(
-    expected: ReadonlySet<string>,
-    assessments: readonly TranslationBenchNegativeFairnessAssessment[],
-): boolean {
-    if (assessments.length !== expected.size) return false;
-    const seen = new Set<string>();
-    for (const a of assessments) {
-        if (!expected.has(a.path) || seen.has(a.path)) return false;
-        seen.add(a.path);
-    }
-    return seen.size === expected.size;
-}
-
-function dimensionNegativeKind(
-    candidate: TranslationBenchGeneratedCandidate,
-    path: string,
-): string | undefined {
-    const match = /^\$\.genCases\[(\d+)\]\.utterance$/.exec(path);
-    if (!match) return undefined;
-    const index = Number(match[1]);
-    const genCase = candidate.genCases[index];
-    if (!genCase || genCase.role !== "negative") return undefined;
-    const dims = genCase.dimensions;
-    if (!dims || typeof dims !== "object") return undefined;
-    const kind = (dims as Record<string, unknown>).negativeKind;
-    return typeof kind === "string" ? kind : undefined;
-}
-
 export function checkTranslationBenchCandidateNegativeFairness(
     candidate: TranslationBenchGeneratedCandidate,
     _target: TranslationBenchTargetAction,
     assessments: readonly TranslationBenchNegativeFairnessAssessment[],
 ): TranslationBenchReviewIssue[] {
     void _target;
-    const expected = negativePaths(candidate);
+    const negatives = negativeByPath(candidate);
 
-    if (expected.size === 0) {
+    if (negatives.size === 0) {
         return assessments.length === 0
             ? []
             : [bad("$.negativeAssessments", PATH_MSG)];
     }
-
-    if (!pathsCover(expected, assessments)) {
+    if (assessments.length !== negatives.size) {
         return [bad("$.negativeAssessments", PATH_MSG)];
     }
 
+    const seen = new Set<string>();
     const issues: TranslationBenchReviewIssue[] = [];
     for (const a of assessments) {
+        const genCase = negatives.get(a.path);
+        if (!genCase || seen.has(a.path)) {
+            return [bad("$.negativeAssessments", PATH_MSG)];
+        }
+        seen.add(a.path);
+
         if (!isFairEmptyGoldAssessment(a)) {
             issues.push(bad(a.path, a.reason));
             continue;
         }
-        const dimKind = dimensionNegativeKind(candidate, a.path);
+
+        const dimKind = genCase.dimensions.negativeKind;
         if (
-            dimKind !== undefined &&
-            dimKind !== "pure_refusal" &&
+            typeof dimKind === "string" &&
             !FAIR_KINDS.has(dimKind as TranslationBenchNegativeKind)
         ) {
             issues.push(
