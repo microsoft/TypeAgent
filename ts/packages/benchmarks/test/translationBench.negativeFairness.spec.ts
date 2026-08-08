@@ -218,8 +218,7 @@ describe("translation bench candidate negative fairness from LLM assessments", (
                     path: "$.genCases[1].utterance",
                     kind: "unfair_imperative",
                     fairEmptyGold: false,
-                    reason:
-                        "Requests followLinkByText; empty gold would FP a correct translator",
+                    reason: "Requests followLinkByText; empty gold would FP a correct translator",
                 },
             ],
         );
@@ -343,8 +342,7 @@ describe("semantic checker enforces LLM negativeAssessments", () => {
                             path: "$.genCases[1].utterance",
                             kind: "unfair_contrastive",
                             fairEmptyGold: false,
-                            reason:
-                                "refuse-then-alternate still requests closeWebPage",
+                            reason: "refuse-then-alternate still requests closeWebPage",
                         },
                     ],
                 }),
@@ -367,9 +365,7 @@ describe("semantic checker enforces LLM negativeAssessments", () => {
     it("approves when mock LLM marks negative fair", async () => {
         const catalog = browserCatalog();
         const loop = makeLoop(catalog);
-        const candidate = fairCandidate(
-            "Leave my browser tabs alone.",
-        );
+        const candidate = fairCandidate("Leave my browser tabs alone.");
         const candidateHash = "b".repeat(64);
         const llm = {
             model: "mock",

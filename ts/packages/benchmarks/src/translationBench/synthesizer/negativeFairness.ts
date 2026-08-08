@@ -304,7 +304,10 @@ export function checkTranslationBenchCandidateNegativeFairness(
     }
 
     const byPath = new Map(
-        assessments.map((a) => [a.path.replace(/^\$\./, "").replace(/^\$./, ""), a]),
+        assessments.map((a) => [
+            a.path.replace(/^\$\./, "").replace(/^\$./, ""),
+            a,
+        ]),
     );
     // Also index raw paths and genCases[i] forms.
     for (const a of assessments) {
