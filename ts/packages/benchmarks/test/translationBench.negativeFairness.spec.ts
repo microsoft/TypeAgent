@@ -258,7 +258,7 @@ describe("translation bench candidate negative fairness from LLM assessments", (
         );
     });
 
-    it("pairs assessments to negatives by order when counts match", () => {
+    it("rejects assessments whose path does not match a negative genCase", () => {
         const candidate = fairCandidate(
             "Don't close all tabs; just close this one.",
         );
@@ -276,7 +276,150 @@ describe("translation bench candidate negative fairness from LLM assessments", (
         );
         expect(issues).toHaveLength(1);
         expect(issues[0]!.code).toBe("BAD_NEGATIVE");
+        expect(issues[0]!.path).toBe("$.negativeAssessments");
+        expect(issues[0]!.message).toMatch(/path/i);
+    });
+
+    it("matches assessments by exact path, not array order", () => {
+        const candidate = {
+            seed: fairCandidate("Leave my browser alone.").seed,
+            genCases: [
+                fairCandidate("Leave my browser alone.").genCases[0]!,
+                {
+                    id: "neg-fair",
+                    role: "negative" as const,
+                    utterance: "Leave my browser alone.",
+                    expectedActions: [],
+                    order: "strict" as const,
+                    dimensions: { negativeKind: "pure_refusal" },
+                },
+                {
+                    id: "neg-unfair",
+                    role: "negative" as const,
+                    utterance: "Don't close all tabs; just close this one.",
+                    expectedActions: [],
+                    order: "strict" as const,
+                    dimensions: { negativeKind: "unfair_contrastive" },
+                },
+            ],
+        };
+        // Assessments deliberately reordered vs genCases; paths are the join key.
+        const issues = checkTranslationBenchCandidateNegativeFairness(
+            candidate,
+            targetOpenWebPage,
+            [
+                {
+                    path: "$.genCases[2].utterance",
+                    kind: "unfair_contrastive",
+                    fairEmptyGold: false,
+                    reason: "refuse-then-alternate still requests closeWebPage",
+                },
+                {
+                    path: "$.genCases[1].utterance",
+                    kind: "pure_refusal",
+                    fairEmptyGold: true,
+                    reason: "leave-alone pure refusal",
+                },
+            ],
+        );
+        expect(issues).toHaveLength(1);
+        expect(issues[0]!.code).toBe("BAD_NEGATIVE");
+        expect(issues[0]!.path).toBe("$.genCases[2].utterance");
+    });
+
+    it("does not bind reordered assessments by index when paths are correct", () => {
+        const candidate = {
+            seed: fairCandidate("Leave my browser alone.").seed,
+            genCases: [
+                fairCandidate("Leave my browser alone.").genCases[0]!,
+                {
+                    id: "neg-unfair",
+                    role: "negative" as const,
+                    utterance: "Don't close all tabs; just close this one.",
+                    expectedActions: [],
+                    order: "strict" as const,
+                    dimensions: { negativeKind: "unfair_contrastive" },
+                },
+                {
+                    id: "neg-fair",
+                    role: "negative" as const,
+                    utterance: "Leave my browser alone.",
+                    expectedActions: [],
+                    order: "strict" as const,
+                    dimensions: { negativeKind: "pure_refusal" },
+                },
+            ],
+        };
+        // Array order is [fair-for-path2, unfair-for-path1] — opposite of
+        // genCase negative order. Index pairing would mark path1 fair; path
+        // join must keep the unfair judgment on $.genCases[1].
+        const issues = checkTranslationBenchCandidateNegativeFairness(
+            candidate,
+            targetOpenWebPage,
+            [
+                {
+                    path: "$.genCases[2].utterance",
+                    kind: "pure_refusal",
+                    fairEmptyGold: true,
+                    reason: "leave-alone pure refusal",
+                },
+                {
+                    path: "$.genCases[1].utterance",
+                    kind: "unfair_contrastive",
+                    fairEmptyGold: false,
+                    reason: "refuse-then-alternate still requests closeWebPage",
+                },
+            ],
+        );
+        expect(issues).toHaveLength(1);
         expect(issues[0]!.path).toBe("$.genCases[1].utterance");
+        expect(issues[0]!.code).toBe("BAD_NEGATIVE");
+    });
+
+    it("rejects duplicate assessment paths", () => {
+        const candidate = {
+            seed: fairCandidate("Leave my browser alone.").seed,
+            genCases: [
+                fairCandidate("Leave my browser alone.").genCases[0]!,
+                {
+                    id: "neg-a",
+                    role: "negative" as const,
+                    utterance: "Leave my browser alone.",
+                    expectedActions: [],
+                    order: "strict" as const,
+                    dimensions: { negativeKind: "pure_refusal" },
+                },
+                {
+                    id: "neg-b",
+                    role: "negative" as const,
+                    utterance: "Is Bluetooth currently enabled?",
+                    expectedActions: [],
+                    order: "strict" as const,
+                    dimensions: { negativeKind: "non_action_question" },
+                },
+            ],
+        };
+        const issues = checkTranslationBenchCandidateNegativeFairness(
+            candidate,
+            targetOpenWebPage,
+            [
+                {
+                    path: "$.genCases[1].utterance",
+                    kind: "pure_refusal",
+                    fairEmptyGold: true,
+                    reason: "fair",
+                },
+                {
+                    path: "$.genCases[1].utterance",
+                    kind: "non_action_question",
+                    fairEmptyGold: true,
+                    reason: "duplicate path",
+                },
+            ],
+        );
+        expect(issues).toHaveLength(1);
+        expect(issues[0]!.path).toBe("$.negativeAssessments");
+        expect(issues[0]!.message).toMatch(/duplicate|missing|path/i);
     });
 
     it("forces reject when applying unfair issues to an approve decision", () => {

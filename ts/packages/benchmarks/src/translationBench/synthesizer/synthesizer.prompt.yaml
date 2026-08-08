@@ -71,7 +71,7 @@ template: |-
     Only write negatives where that label is fair.
   - ALLOWED negative kinds (set dimensions.negativeKind to one of these):
       pure_refusal — explicit don't/never/stop of the target (no alternate command)
-      non_action_question — status/howto/definition question that should not call a tool
+      non_action_question — status/definition/meta only (not how-to-perform-target)
       missing_info — underspecified ask that needs clarification, not an action
   - FORBIDDEN as empty-gold negatives (semantic checker rejects BAD_NEGATIVE):
       contrastive adjacent commands ("close only this tab" as neg for closeAll,
@@ -79,6 +79,9 @@ template: |-
       as neg for openWebPage)
       refuse-then-alternate forms ("Don't close all; just close this one")
       partial constraints that still request an action ("open X but don't bookmark")
+      how-to-perform-target / soft solicits ("How do I add X?", "Can you open Y?",
+      "Is there a way to close this tab?")
+      capability questions that still solicit the target action
       any imperative / toolable request a correct translator would map to a tool
   - Double-meaning / unfair contrastive negatives inflated false-positive rates
     in prior 1k evals; do not regenerate that failure mode.

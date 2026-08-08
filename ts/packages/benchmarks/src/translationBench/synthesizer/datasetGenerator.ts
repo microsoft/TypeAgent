@@ -70,6 +70,7 @@ import {
     countEligibleTranslationBenchActions,
     getPackagedLlmJudgeExcludedActions,
 } from "./eligibleActions.js";
+import { TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE } from "./negativeFairness.js";
 
 export function getTranslationBenchLlmJudgeExcludedActions(): ReadonlySet<string> {
     return getPackagedLlmJudgeExcludedActions();
@@ -541,7 +542,8 @@ function formatSynthesizerPrompt(
             disambiguationRule:
                 "Every seed and positive utterance must uniquely identify the target action. If confusableSiblings is non-empty, include target-only cues and never use phrasing that fits a sibling equally well.",
             negativeFairnessRule:
-                "Empty-gold negatives must be fair under zero-action scoring: pure refusal of the target, non-action status/howto question, or missing-info clarification. Never use contrastive adjacent commands, refuse-then-alternate forms, or partial constraints that still request an agent action. The semantic checker LLM judges this (no verb lexicon).",
+                TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE +
+                " The semantic checker LLM judges this (no verb lexicon).",
         }),
         prior_feedback_json: JSON.stringify(feedback),
         previous_rejected_block: previousRejectedBlock,

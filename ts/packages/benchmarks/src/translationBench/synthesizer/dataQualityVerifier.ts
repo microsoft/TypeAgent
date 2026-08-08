@@ -354,20 +354,41 @@ export async function runTranslationBenchSemanticChecker(options: {
             typeof raw === "object" && raw !== null && !Array.isArray(raw)
                 ? (raw as Record<string, unknown>)
                 : {};
-        const assessments = parseTranslationBenchNegativeFairnessAssessments(
-            rawRecord.negativeAssessments,
-        );
+        // Parse decision first (strip assessments) so structured reject
+        // issues/summary survive even when assessments are missing/invalid.
         const decisionBody = { ...rawRecord };
+        const rawAssessments = decisionBody.negativeAssessments;
         delete decisionBody.negativeAssessments;
         const parsed = parseTranslationBenchReviewerDecision(
             decisionBody,
             options.candidateHash,
         );
-        const fairnessIssues = checkTranslationBenchCandidateNegativeFairness(
-            options.candidate,
-            options.loop.targetAction,
-            assessments,
-        );
+
+        let fairnessIssues: TranslationBenchReviewIssue[];
+        try {
+            const assessments = parseTranslationBenchNegativeFairnessAssessments(
+                rawAssessments === undefined ? [] : rawAssessments,
+            );
+            fairnessIssues = checkTranslationBenchCandidateNegativeFairness(
+                options.candidate,
+                options.loop.targetAction,
+                assessments,
+            );
+        } catch (assessmentError) {
+            fairnessIssues = [
+                {
+                    code: "BAD_NEGATIVE",
+                    path: "$.negativeAssessments",
+                    message:
+                        assessmentError instanceof Error
+                            ? assessmentError.message
+                            : String(assessmentError),
+                    suggestedFix:
+                        "Emit one valid {path, kind, fairEmptyGold, reason} per negative genCase path.",
+                },
+            ];
+        }
+
         const withFairness = applyTranslationBenchNegativeFairnessIssues(
             parsed,
             fairnessIssues,

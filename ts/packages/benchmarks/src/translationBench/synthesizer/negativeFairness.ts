@@ -56,17 +56,17 @@ export interface TranslationBenchNegativeFairnessResult {
 
 export const TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE =
     "Empty-gold negatives must be fair under zero-action scoring: pure refusal " +
-    "of the target, non-action status/howto question, or missing-info " +
+    "of the target, non-action status/definition/meta question, or missing-info " +
     "clarification. Never use contrastive adjacent commands, refuse-then-alternate " +
-    "forms, capability questions that still solicit an action, or any imperative " +
-    "a correct translator would map to another tool.";
+    "forms, capability questions that still solicit an action, how-to-perform-target " +
+    "or soft solicits, or any imperative a correct translator would map to another tool.";
 
 function rewriteHint(target: TranslationBenchTargetAction): string {
     const key = `${target.schemaName}.${target.actionName}`;
     return (
-        `Rewrite as a pure refusal of ${key}, a non-action status/howto ` +
-        `question, or a missing-info clarification. No contrastive or ` +
-        `refuse-then-alternate empty gold.`
+        `Rewrite as a pure refusal of ${key}, a non-action status/definition/meta ` +
+        `question, or a missing-info clarification. No contrastive, how-to-perform-target, ` +
+        `or refuse-then-alternate empty gold.`
     );
 }
 
@@ -166,16 +166,71 @@ export function checkTranslationBenchCandidateNegativeFairness(
             badNegative(
                 "$.negativeAssessments",
                 `Expected ${negatives.length} negativeAssessments, got ${assessments.length}`,
-                "Emit exactly one assessment per negative genCase.",
+                "Emit exactly one assessment per negative genCase path.",
+            ),
+        ];
+    }
+
+    // Join key is assessment.path (exact match to $.genCases[i].utterance).
+    // Require a bijective covering set — no index pairing, no wrong paths.
+    const expectedByPath = new Map(
+        negatives.map((neg) => [neg.path, neg] as const),
+    );
+    const seenPaths = new Set<string>();
+    const pathIssues: TranslationBenchReviewIssue[] = [];
+
+    for (const assessment of assessments) {
+        if (!expectedByPath.has(assessment.path)) {
+            pathIssues.push(
+                badNegative(
+                    "$.negativeAssessments",
+                    `Unknown assessment path "${assessment.path}"; expected exactly the negative genCase paths`,
+                    "Set each assessment.path to the matching negative $.genCases[i].utterance.",
+                ),
+            );
+            continue;
+        }
+        if (seenPaths.has(assessment.path)) {
+            pathIssues.push(
+                badNegative(
+                    "$.negativeAssessments",
+                    `Duplicate assessment path "${assessment.path}"`,
+                    "Emit exactly one assessment per negative genCase path.",
+                ),
+            );
+            continue;
+        }
+        seenPaths.add(assessment.path);
+    }
+
+    for (const neg of negatives) {
+        if (!seenPaths.has(neg.path)) {
+            pathIssues.push(
+                badNegative(
+                    "$.negativeAssessments",
+                    `Missing assessment for negative path "${neg.path}"`,
+                    "Emit one assessment whose path equals each negative $.genCases[i].utterance.",
+                ),
+            );
+        }
+    }
+
+    if (pathIssues.length > 0) {
+        // Collapse to a single gate issue when the path set is wrong — fail closed.
+        return [
+            badNegative(
+                "$.negativeAssessments",
+                pathIssues.map((i) => i.message).join("; "),
+                "Emit a 1:1 covering set of negativeAssessments keyed by exact negative genCase path.",
             ),
         ];
     }
 
     const issues: TranslationBenchReviewIssue[] = [];
-    for (let i = 0; i < negatives.length; i++) {
-        const neg = negatives[i]!;
+    for (const assessment of assessments) {
+        const neg = expectedByPath.get(assessment.path)!;
         const result = checkTranslationBenchNegativeFairnessAssessment(
-            assessments[i]!,
+            assessment,
             neg.utterance,
             target,
         );
