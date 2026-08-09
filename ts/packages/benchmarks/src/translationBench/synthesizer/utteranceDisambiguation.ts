@@ -79,6 +79,137 @@ const KNOWN_CONFUSABLE_PAIRS: ReadonlyArray<
         { schemaName: "browser.actionDiscovery", actionName: "inferActions" },
         "flows vs inferred actions",
     ],
+    // Cross-schema collisions mined from the 1k eval: every model unanimously
+    // translated the seed utterance to the sibling instead of the scheduled
+    // target, i.e. the utterance was equally satisfiable by both actions. The
+    // same-schema token detector below cannot see these (different schema), so
+    // they are seeded here to force disambiguating phrasing at generation time.
+    [
+        { schemaName: "browser.external", actionName: "openTab" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "open a new tab at URL vs open web page",
+    ],
+    [
+        { schemaName: "browser.external", actionName: "switchToTabByPosition" },
+        { schemaName: "browser", actionName: "changeTab" },
+        "switch to nth tab vs change active tab by index",
+    ],
+    [
+        { schemaName: "browser.external", actionName: "switchToTabByText" },
+        { schemaName: "browser", actionName: "changeTab" },
+        "switch to tab by title text vs change active tab by description",
+    ],
+    [
+        { schemaName: "browser.external", actionName: "closeTab" },
+        { schemaName: "browser", actionName: "closeWebPage" },
+        "close tab vs close page",
+    ],
+    [
+        { schemaName: "browser.actionDiscovery", actionName: "getAllWebFlows" },
+        { schemaName: "browser.webFlows", actionName: "listWebFlows" },
+        "get all web flows vs list web flows",
+    ],
+    [
+        { schemaName: "browser.actionDiscovery", actionName: "createInferredFlows" },
+        { schemaName: "browser", actionName: "createInferredFlow" },
+        "create inferred flows vs create inferred flow",
+    ],
+    [
+        { schemaName: "code", actionName: "newMarkdownFile" },
+        { schemaName: "markdown", actionName: "createDocument" },
+        "new markdown file in editor vs create markdown document",
+    ],
+    [
+        { schemaName: "code", actionName: "newTextFile" },
+        { schemaName: "utility", actionName: "writeFile" },
+        "new text file in editor vs write file to disk",
+    ],
+    [
+        { schemaName: "code.code-debug", actionName: "startDebugging" },
+        { schemaName: "visualStudio", actionName: "debug" },
+        "start debugging in VS Code vs Visual Studio debug",
+    ],
+    [
+        { schemaName: "code.code-display", actionName: "openSettings" },
+        { schemaName: "code.code-general", actionName: "showUserSettings" },
+        "open settings vs show user settings",
+    ],
+    [
+        { schemaName: "visualStudio", actionName: "stepInto" },
+        { schemaName: "code.code-debug", actionName: "step" },
+        "Visual Studio step into vs code debug step",
+    ],
+    [
+        { schemaName: "visualStudio", actionName: "stepOut" },
+        { schemaName: "code.code-debug", actionName: "step" },
+        "Visual Studio step out vs code debug step",
+    ],
+    [
+        { schemaName: "visualStudio", actionName: "addBreakpoint" },
+        { schemaName: "code.code-debug", actionName: "setBreakpoint" },
+        "Visual Studio add breakpoint vs code set breakpoint",
+    ],
+    [
+        { schemaName: "visualStudio", actionName: "gotoLine" },
+        { schemaName: "code.code-editor", actionName: "moveCursorInFile" },
+        "go to line vs move cursor in file",
+    ],
+    [
+        { schemaName: "visualStudio", actionName: "openFile" },
+        { schemaName: "code.code-workbench", actionName: "workbenchOpenFile" },
+        "Visual Studio open file vs workbench open file",
+    ],
+    [
+        { schemaName: "desktop", actionName: "SetScreenResolution" },
+        {
+            schemaName: "desktop.desktop-display",
+            actionName: "DisplayResolutionAndAspectRatio",
+        },
+        "set screen resolution vs display resolution setting",
+    ],
+    [
+        { schemaName: "desktop", actionName: "SetThemeMode" },
+        {
+            schemaName: "desktop.desktop-personalization",
+            actionName: "SystemThemeMode",
+        },
+        "set theme mode vs system theme mode",
+    ],
+    [
+        { schemaName: "desktop", actionName: "SetTextSize" },
+        { schemaName: "desktop.desktop-display", actionName: "DisplayScaling" },
+        "set text size vs display scaling",
+    ],
+    [
+        { schemaName: "desktop", actionName: "AdjustScreenBrightness" },
+        { schemaName: "settings", actionName: "dimBrightNessAction" },
+        "adjust screen brightness vs dim brightness setting",
+    ],
+    [
+        { schemaName: "localPlayer", actionName: "playFromQueue" },
+        { schemaName: "player", actionName: "getQueue" },
+        "play from queue vs get queue",
+    ],
+    [
+        { schemaName: "localPlayer", actionName: "showQueue" },
+        { schemaName: "player", actionName: "getQueue" },
+        "show queue vs get queue",
+    ],
+    [
+        { schemaName: "github-cli", actionName: "browseIssue" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "browse issue vs open web page",
+    ],
+    [
+        { schemaName: "github-cli", actionName: "workflowView" },
+        { schemaName: "code.code-workbench", actionName: "workbenchOpenFile" },
+        "workflow view vs workbench open file",
+    ],
+    [
+        { schemaName: "onboarding.onboarding-packaging", actionName: "generateDemo" },
+        { schemaName: "video", actionName: "createVideoAction" },
+        "generate demo vs create video",
+    ],
 ];
 
 /**
@@ -238,6 +369,17 @@ function significantTokens(name: string): Set<string> {
     return out;
 }
 
+/** Significant tokens from a free-text description (undefined → empty set). */
+function significantTokensFromText(text: string | undefined): Set<string> {
+    if (text === undefined) return new Set();
+    const out = new Set<string>();
+    for (const token of splitCamel(text)) {
+        if (token.length < 3 || STOP_TOKENS.has(token)) continue;
+        out.add(token);
+    }
+    return out;
+}
+
 function jaccard(a: Set<string>, b: Set<string>): number {
     if (a.size === 0 || b.size === 0) return 0;
     let inter = 0;
@@ -312,6 +454,37 @@ export function findTranslationBenchConfusableSiblings(
                 `same-schema action-name overlap (${overlap.toFixed(2)})`,
             );
         }
+    }
+
+    // Cross-schema near-duplicates: a best-effort safety net for equivalent
+    // actions living in different schemas (e.g. code.newTextFile vs
+    // utility.writeFile). Curated pairs above carry the empirically-seen
+    // colliders; this catches unseen ones. It requires BOTH a strong
+    // action-name token overlap AND a real description overlap, so shared
+    // generic verbs alone ("list", "create", "get") do not flag unrelated
+    // actions across schemas.
+    const targetDescTokens = significantTokensFromText(
+        byKey.get(keyOf(target))?.description,
+    );
+    for (const action of all) {
+        if (action.schemaName === target.schemaName) continue;
+        if (sameAction(action, target)) continue;
+        const nameOverlap = jaccard(
+            targetTokens,
+            significantTokens(action.actionName),
+        );
+        if (nameOverlap < 0.5) continue;
+        const descOverlap = jaccard(
+            targetDescTokens,
+            significantTokensFromText(action.description),
+        );
+        if (descOverlap < 0.34) continue;
+        add(
+            action,
+            `cross-schema overlap (name ${nameOverlap.toFixed(
+                2,
+            )}, desc ${descOverlap.toFixed(2)})`,
+        );
     }
 
     return [...found.values()].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));

@@ -76,7 +76,67 @@ function browserCatalog(): TranslationBenchBenchmarkSchema[] {
     ];
 }
 
+function crossSchemaCatalog(): TranslationBenchBenchmarkSchema[] {
+    const mk = (
+        schemaName: string,
+        actions: ReadonlyArray<{ name: string; description: string }>,
+    ): TranslationBenchBenchmarkSchema =>
+        ({
+            schemaName,
+            description: `${schemaName} actions`,
+            tools: actions.map((a) => ({
+                type: "function" as const,
+                function: {
+                    name: a.name,
+                    description: a.description,
+                    parameters: {
+                        type: "object",
+                        properties: {},
+                        additionalProperties: false,
+                    },
+                },
+            })),
+            typeAgent: {
+                sourceHash: `${schemaName}-${HASH}`,
+                schemaType: "X",
+                parsedActionSchema: undefined,
+            },
+        }) as unknown as TranslationBenchBenchmarkSchema;
+    return [
+        mk("code", [
+            {
+                name: "newTextFile",
+                description: "Create a new text file in the editor",
+            },
+        ]),
+        mk("utility", [
+            {
+                name: "writeFile",
+                description: "Write a new text file to disk",
+            },
+            {
+                name: "readFile",
+                description: "Read the contents of a file",
+            },
+        ]),
+    ];
+}
+
 describe("translation bench confusable siblings", () => {
+    it("finds cross-schema equivalent (newTextFile ↔ writeFile)", () => {
+        const catalog = crossSchemaCatalog();
+        const siblings = findTranslationBenchConfusableSiblings(
+            { schemaName: "code", actionName: "newTextFile" },
+            catalog,
+        );
+        expect(siblings.map((s) => s.actionName)).toEqual(
+            expect.arrayContaining(["writeFile"]),
+        );
+        // readFile shares no strong name/description overlap → not flagged.
+        expect(siblings.map((s) => s.actionName)).not.toContain("readFile");
+    });
+
+
     it("finds curated openWebPage ↔ followLinkByText pair", () => {
         const catalog = browserCatalog();
         const siblings = findTranslationBenchConfusableSiblings(
