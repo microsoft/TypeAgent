@@ -70,6 +70,11 @@ import {
     countEligibleTranslationBenchActions,
     getPackagedLlmJudgeExcludedActions,
 } from "./eligibleActions.js";
+import {
+    getPackagedActionParametersGraderCatalog,
+    hasUsableParameterScoreSpecs,
+    parameterScoreSpecsForExpectedActions,
+} from "./catalogGenerator/actionParametersGrader.js";
 
 export function getTranslationBenchLlmJudgeExcludedActions(): ReadonlySet<string> {
     return getPackagedLlmJudgeExcludedActions();
@@ -245,8 +250,41 @@ export function createTranslationBenchGenerationSchedule(
 ): TranslationBenchGenerationSchedule {
     requirePositiveInteger(options.caseCount, "Translation bench case count");
     const census = getTranslationBenchCatalogCensus(catalog);
-    const excludedActionIds =
+    const baseExcludedActionIds =
         options.excludedActionIds ?? getPackagedLlmJudgeExcludedActions();
+    // D: exclude actions whose bare name is owned by more than one schema (e.g.
+    // `deleteWebFlow` in both browser.actionDiscovery and browser.webFlows). For
+    // such actions a correct translator has multiple valid routes, so the single
+    // gold route is ambiguous — those cases show up as all-models-pick-the-sibling
+    // "failures". Drop every sibling from targeting so gold is unambiguous.
+    // (Both siblings stay in the catalog; nothing is hand-edited.)
+    const ambiguousActionIds = new Set<string>();
+    {
+        const idsByActionName = new Map<string, string[]>();
+        for (const key of census.qualifiedActionKeys) {
+            const [schemaName, actionName] = JSON.parse(key) as [
+                string,
+                string,
+            ];
+            const id = `${schemaName}.${actionName}`;
+            if (baseExcludedActionIds.has(id)) continue;
+            const ids = idsByActionName.get(actionName) ?? [];
+            ids.push(id);
+            idsByActionName.set(actionName, ids);
+        }
+        for (const ids of idsByActionName.values()) {
+            if (ids.length > 1) {
+                for (const id of ids) ambiguousActionIds.add(id);
+            }
+        }
+    }
+    const excludedActionIds =
+        ambiguousActionIds.size === 0
+            ? baseExcludedActionIds
+            : new Set<string>([
+                  ...baseExcludedActionIds,
+                  ...ambiguousActionIds,
+              ]);
     const qualified = census.qualifiedActionKeys
         .map((key) => {
             const [schemaName, actionName] = JSON.parse(key) as [
@@ -735,6 +773,7 @@ export function finalizeTranslationBenchGeneratedCaseLineage(
     catalog: TranslationBenchBenchmarkSchema[],
 ): TranslationBenchBenchmarkCaseRecord {
     const finalized = structuredClone(evalCase);
+    const grader = getPackagedActionParametersGraderCatalog();
     for (const probe of [finalized.seed, ...finalized.generalizations]) {
         // Generated probes always use transform v2 + canonical payload hash.
         probe.lineage.transformVersion = 2 as const;
@@ -745,6 +784,18 @@ export function finalizeTranslationBenchGeneratedCaseLineage(
                 finalized.activeSchemas,
                 true,
             );
+        // Attach deterministic soft-match specs so the runner does not exact-
+        // match free-text params (e.g. originalRequest). Derived from the
+        // packaged grader; excluded from the canonical payload hash above.
+        const specs = parameterScoreSpecsForExpectedActions(
+            grader,
+            probe.expectedActions,
+        );
+        if (hasUsableParameterScoreSpecs(specs)) {
+            probe.parameterScore = specs;
+        } else {
+            delete probe.parameterScore;
+        }
     }
     return finalized;
 }
