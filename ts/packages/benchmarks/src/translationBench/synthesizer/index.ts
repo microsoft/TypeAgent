@@ -14,6 +14,6 @@ export * from "./dataQualityVerifier.js";
 export * from "./synthesizerPrompts.js";
 export * from "./utteranceDisambiguation.js";
 export * from "./negativeFairness.js";
-export * from "./catalogGenerator/index.js";
+export * from "../policy/index.js";
 export { seedQaJsonlAdapter } from "./adapters/seedQaJsonlAdapter.js";
 export * from "./goldParameterHygiene.js";

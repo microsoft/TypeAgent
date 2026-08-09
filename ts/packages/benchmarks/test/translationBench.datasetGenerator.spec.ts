@@ -293,7 +293,12 @@ describe("translation bench generation schedule", () => {
             catalogSchema("alpha", ["one", "two"]),
             catalogSchema("beta", ["three", "four"]),
         ];
-        const options = { caseCount: 6, requireCompleteCoverage: true };
+        const options = {
+            caseCount: 6,
+            requireCompleteCoverage: true,
+            allowMissingRemovedActions: true,
+            applyEligibleGoldAllowlist: false,
+        };
 
         const first = createTranslationBenchGenerationSchedule(
             catalog,
@@ -331,7 +336,12 @@ describe("translation bench generation schedule", () => {
             catalogSchema("beta", ["b1", "b2", "b3", "b4"]),
             catalogSchema("gamma", ["c1", "c2", "c3", "c4"]),
         ];
-        const options = { caseCount: 10, requireCompleteCoverage: false };
+        const options = {
+            caseCount: 10,
+            requireCompleteCoverage: false,
+            allowMissingRemovedActions: true,
+            applyEligibleGoldAllowlist: false,
+        };
 
         const schedule = createTranslationBenchGenerationSchedule(
             catalog,
@@ -365,6 +375,8 @@ describe("translation bench generation schedule", () => {
             createTranslationBenchGenerationSchedule(catalog, {
                 caseCount: 2,
                 requireCompleteCoverage: true,
+                allowMissingRemovedActions: true,
+            applyEligibleGoldAllowlist: false,
             }),
         ).toThrow(/cover|coverage|action/i);
     });
@@ -377,6 +389,8 @@ describe("translation bench generation schedule", () => {
         const schedule = createTranslationBenchGenerationSchedule(catalog, {
             caseCount: 2,
             requireCompleteCoverage: true,
+            allowMissingRemovedActions: true,
+            applyEligibleGoldAllowlist: false,
             excludedActionIds: new Set(["alpha.drop"]),
         });
 
@@ -401,6 +415,8 @@ describe("translation bench generation schedule", () => {
         const schedule = createTranslationBenchGenerationSchedule(catalog, {
             caseCount: 2,
             requireCompleteCoverage: true,
+            allowMissingRemovedActions: true,
+            applyEligibleGoldAllowlist: false,
         });
 
         const targeted = schedule.entries.map(
@@ -1168,6 +1184,8 @@ describe("generate translation bench benchmark (integration)", () => {
                 genCaseCount: 2,
                 maxAttempts: 5,
                 requireCompleteCoverage: true,
+                allowMissingRemovedActions: true,
+                applyEligibleGoldAllowlist: false,
                 concurrency: 2,
                 generator: {
                     model: "generator-model",
@@ -1215,6 +1233,8 @@ describe("generate translation bench benchmark (integration)", () => {
                 genCaseCount: 2,
                 maxAttempts: 5,
                 requireCompleteCoverage: false,
+                allowMissingRemovedActions: true,
+                applyEligibleGoldAllowlist: false,
                 concurrency: 2,
                 generator: {
                     model: "generator-model",

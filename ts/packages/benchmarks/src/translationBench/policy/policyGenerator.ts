@@ -7,26 +7,33 @@ import { createRequire } from "node:module";
 
 import { z } from "zod";
 
-import { parseLlmJsonWithZod } from "../llmJson.js";
+import { parseLlmJsonWithZod } from "../synthesizer/llmJson.js";
 import type {
     TranslationBenchParameterScoreSpec,
     TranslationBenchParamFieldMode,
-} from "../benchmark.js";
+} from "../synthesizer/benchmark.js";
 import {
     loadTranslationBenchParameterGraderPromptPack,
     renderTranslationBenchPromptTemplate,
     type TranslationBenchParameterGraderPromptPack,
-} from "../synthesizerPrompts.js";
+} from "../synthesizer/synthesizerPrompts.js";
 import {
     canonicalizeParamSpec,
     isParamSpec,
     paramSpecKind,
     type ParamSpec,
 } from "./paramTypes.js";
+import {
+    getPackagedActionEligibilityPolicy,
+    type LoadedActionEligibilityPolicy,
+    type TranslationBenchPolicyVerifyMode,
+} from "./loadPolicy.js";
 
-export const GRADER_RULES_VERSION = 5;
+export { fieldTreeIsLlmAsAJudge, listActionsWithLlmJudgeFields } from "./graderInspect.js";
 
-export const REGEX_RULE_IDS = [
+export const GRADER_RULES_VERSION = 7;
+
+export const HARDCODE_RULE_IDS = [
     "empty-name",
     "type-any",
     "type-boolean",
@@ -41,10 +48,10 @@ export const REGEX_RULE_IDS = [
     "string-unit-ignore",
     "string-collection-element-nonempty",
     "string-free-text-nonempty",
-    "string-open-soft-nonempty",
     "string-date-nonempty",
     "string-time-nonempty",
     "string-identifier-exact",
+    "string-original-request-ignore",
     "string-llm-as-a-judge",
 ] as const;
 
@@ -66,7 +73,7 @@ export type ActionParamCreatePolicy =
     | "record"
     | "opaque";
 
-export type ActionParamClassifySource = "regex" | "llm";
+export type ActionParamClassifySource = "hardcode" | "llm";
 
 export interface ActionParameterFieldGrader {
     optional: boolean;
@@ -74,10 +81,8 @@ export interface ActionParameterFieldGrader {
     typeKind: string;
     create: ActionParamCreatePolicy;
     verify: ActionParamVerifyMode;
-    /** Reason id: regex rule name, or LLM-authored snake_case id. */
     rule: string;
     source: ActionParamClassifySource;
-    /** Element policy when type is array (stored for creators; runner uses container mode). */
     item?: Omit<ActionParameterFieldGrader, "type" | "typeKind" | "optional">;
 }
 
@@ -106,20 +111,12 @@ export interface ActionParametersGraderCatalog {
     description: string;
     catalogVersion: string;
     generatedAt: string;
-    /**
-     * Policy/heuristic code fingerprint (not per-action). When this drifts,
-     * incremental build discards prior entries and reclassifies all actions.
-     * Per-action `sourceFingerprint` stays paramSpec-only so schema-stable
-     * actions do not churn fingerprints across policy PRs.
-     */
-    /** Present on newly written catalogs; missing → treat as rules drift. */
     rulesFingerprint?: string;
     modes: Record<ActionParamVerifyMode, string>;
     createPolicies: Record<ActionParamCreatePolicy, string>;
     byAction: Record<string, ActionParametersGraderEntry>;
-    /** Fields that required LLM because regex did not match. */
     llmFallbackCount: number;
-    regexMatchCount: number;
+    hardcodeMatchCount: number;
 
     lastDiff?: ActionParametersGraderDiff;
 }
@@ -142,7 +139,7 @@ export const ACTION_PARAM_VERIFY_MODE_DOCS: Record<
     string
 > = {
     exact: "Chosen value must deep-equal expected",
-    exists: "Key must be present; value ignored (hand-authored seeds; not emitted by regex gen)",
+    exists: "Key must be present; value ignored (hand-authored seeds; not emitted by hardcode gen)",
     nonempty: "Key must be present and non-empty string/array",
     ignore: "Field not scored",
     llmAsAJudge:
@@ -172,57 +169,37 @@ export interface FieldGraderDecision {
     item?: FieldGraderDecision;
 }
 
-/**
- * Hardcoded action.parameter pairs that always need llmAsAJudge offline.
- * Everything else is left to the LLM classifier (verify=llmAsAJudge) when --model.
- * Literal short commands (e.g. gh alias set) stay exact — not listed here.
- */
-export const LLM_JUDGE_PARAMETERS = [
-    "browser.actionDiscovery.createWebFlowFromRecording.recordedSteps",
-    "browser.executeAdHocScript.script",
-    "browser.lookupAndAnswer.lookupAndAnswerInternet.internetLookups",
-    "browser.lookupAndAnswer.lookupAndAnswerInternet.originalRequest",
-    "browser.lookupAndAnswer.lookupAndAnswerInternet.sites",
-    "browser.webFlows.editWebFlow.script",
-    "code.code-editor.createCodeBlock.body",
-    "code.code-editor.createCodeBlock.codeSnippet",
-    "code.code-editor.createCodeBlock.declaration",
-    "code.code-editor.createFunction.body",
-    "code.code-editor.createFunction.functionDeclaration",
-    "code.code-workbench.openInIntegratedTerminal.commandToExecute",
-    "markdown.streamingUpdateDocument.generatedContent",
-    "markdown.streamingUpdateDocument.validationResults",
-    "powershell.createPowerShellFlow.script",
-    "powershell.editPowerShellFlow.script",
-    "powershell.executePowerShellFlow.flowArgs",
-    "powershell.executePowerShellFlow.flowParametersJson",
-    "visualStudio.executeCommand.commandArgs",
-] as const;
 
-const LLM_JUDGE_PARAMETER_SET = new Set<string>(LLM_JUDGE_PARAMETERS);
+function activePolicy(
+    override?: LoadedActionEligibilityPolicy,
+): LoadedActionEligibilityPolicy {
+    return override ?? getPackagedActionEligibilityPolicy();
+}
 
-/** Literal stored strings that must deep-equal (not soft / not llm judge). */
-const EXACT_PARAMETERS = new Set<string>(["github-cli.aliasSet.command"]);
+/** Paths with verify=llmAsAJudge in the active policy (observational). */
+export function listLlmJudgeParameterPaths(
+    policy?: LoadedActionEligibilityPolicy,
+): string[] {
+    return [...activePolicy(policy).parameterOverrides.entries()]
+        .filter(([, o]) => o.verify === "llmAsAJudge")
+        .map(([path]) => path)
+        .sort();
+}
 
-export const NONEMPTY_PARAMETERS = [
-    "system.conversation.indexConversation.name",
-    "system.conversation.newConversation.name",
-    "system.conversation.summarizeConversation.name",
-] as const;
-
-const NONEMPTY_PARAMETER_SET = new Set<string>(NONEMPTY_PARAMETERS);
-
-export const HEURISTIC_SOURCE_HASH: string = createHash("sha256")
-    .update(
-        JSON.stringify({
-            rules: [...REGEX_RULE_IDS].sort(),
-            llmJudge: [...LLM_JUDGE_PARAMETERS],
-            nonempty: [...NONEMPTY_PARAMETERS],
-            exact: [...EXACT_PARAMETERS].sort(),
-        }),
-    )
-    .digest("hex")
-    .slice(0, 16);
+export function heuristicSourceHash(
+    policy?: LoadedActionEligibilityPolicy,
+): string {
+    const loaded = activePolicy(policy);
+    return createHash("sha256")
+        .update(
+            JSON.stringify({
+                rules: [...HARDCODE_RULE_IDS].sort(),
+                policyHash: loaded.contentHash,
+            }),
+        )
+        .digest("hex")
+        .slice(0, 16);
+}
 
 const LLM_JUDGE_SOFT_CREATE = new Set<ActionParamCreatePolicy>([
     "free_text",
@@ -244,6 +221,7 @@ function isLlmJudgeSoftCreate(
 export function parameterRequiresLlmJudge(
     fieldName: string,
     createOrContext?: ActionParamCreatePolicy | LlmJudgeFieldContext,
+    policy?: LoadedActionEligibilityPolicy,
 ): boolean {
     let ctx: LlmJudgeFieldContext;
     if (createOrContext === undefined) {
@@ -254,31 +232,44 @@ export function parameterRequiresLlmJudge(
         ctx = createOrContext;
     }
     const name = fieldName.trim();
-    const actionId = ctx.actionId?.trim();
-    if (!name || !actionId || !isLlmJudgeSoftCreate(ctx.create)) {
+    if (!name || !isLlmJudgeSoftCreate(ctx.create)) {
         return false;
     }
-    return LLM_JUDGE_PARAMETER_SET.has(`${actionId}.${name}`);
+    if (isLlmJudgePayloadName(name)) {
+        return true;
+    }
+    const actionId = ctx.actionId?.trim();
+    if (!actionId) {
+        return false;
+    }
+    const full = `${actionId}.${name}`;
+    const ov = activePolicy(policy).parameterOverrides.get(full);
+    return ov?.verify === "llmAsAJudge";
 }
 
 export function applyLlmAsAJudgeVerify(
     fieldName: string,
     decision: FieldGraderDecision,
     context?: Omit<LlmJudgeFieldContext, "create">,
+    policy?: LoadedActionEligibilityPolicy,
 ): FieldGraderDecision {
     let item = decision.item;
     if (item !== undefined) {
-        item = applyLlmAsAJudgeVerify(fieldName, item, context);
+        item = applyLlmAsAJudgeVerify(fieldName, item, context, policy);
     }
-    const needs = parameterRequiresLlmJudge(fieldName, {
-        create: decision.create,
-        ...(context?.actionId !== undefined
-            ? { actionId: context.actionId }
-            : {}),
-        ...(context?.siblingFieldNames !== undefined
-            ? { siblingFieldNames: context.siblingFieldNames }
-            : {}),
-    });
+    const needs = parameterRequiresLlmJudge(
+        fieldName,
+        {
+            create: decision.create,
+            ...(context?.actionId !== undefined
+                ? { actionId: context.actionId }
+                : {}),
+            ...(context?.siblingFieldNames !== undefined
+                ? { siblingFieldNames: context.siblingFieldNames }
+                : {}),
+        },
+        policy,
+    );
     const itemNeeds = item?.verify === "llmAsAJudge";
     if (!needs && !itemNeeds) {
         if (item === decision.item) {
@@ -342,7 +333,7 @@ const VERIFY_MODES = [
 
 const CREATE_SET = new Set<string>(CREATE_POLICIES);
 const VERIFY_SET = new Set<string>(VERIFY_MODES);
-const REGEX_RULE_SET = new Set<string>(REGEX_RULE_IDS);
+const HARDCODE_RULE_SET = new Set<string>(HARDCODE_RULE_IDS);
 
 /** Retired / invented rule ids that must never be reused. */
 const LEGACY_RULE_RE =
@@ -383,11 +374,6 @@ const parameterGraderLlmVerifierSchema = z
     })
     .passthrough();
 
-/**
- * Stable identity of an action's parameter schema only.
- * Does NOT include rules/heuristic versions — those live on
- * catalog.rulesFingerprint so policy PRs do not rewrite every entry.
- */
 export function actionParameterSourceFingerprint(
     paramSpec: ParamSpec,
     _parametersSummary?: string,
@@ -399,12 +385,14 @@ export function actionParameterSourceFingerprint(
 }
 
 /** Catalog-level policy code identity (rules version + heuristic bodies). */
-export function graderRulesFingerprint(): string {
+export function graderRulesFingerprint(
+    policy?: LoadedActionEligibilityPolicy,
+): string {
     return createHash("sha256")
         .update(
             JSON.stringify({
                 rulesVersion: GRADER_RULES_VERSION,
-                heuristicSourceHash: HEURISTIC_SOURCE_HASH,
+                heuristicSourceHash: heuristicSourceHash(policy),
             }),
         )
         .digest("hex")
@@ -415,10 +403,36 @@ export function actionId(schemaName: string, actionName: string): string {
     return `${schemaName}.${actionName}`;
 }
 
+/** Fail if a policy override path does not exist on the catalog. */
+export function assertParameterOverridesMatchCatalog(
+    catalog: GeneratedActionCatalog,
+    policy?: LoadedActionEligibilityPolicy,
+): void {
+    const loaded = activePolicy(policy);
+    const fieldPaths = new Set<string>();
+    for (const action of catalog.actions) {
+        const id = actionId(action.schemaName, action.actionName);
+        if (!isParamSpec(action.paramSpec) || action.paramSpec.kind !== "object") {
+            continue;
+        }
+        for (const name of Object.keys(action.paramSpec.fields)) {
+            fieldPaths.add(`${id}.${name}`);
+        }
+    }
+    const missing = [...loaded.parameterOverrides.keys()]
+        .filter((path) => !fieldPaths.has(path))
+        .sort();
+    if (missing.length > 0) {
+        throw new Error(
+            `action-eligibility parameterOverrides paths missing from catalog: ${missing.join(", ")}`,
+        );
+    }
+}
+
+
 function wrapArrayDecision(item: FieldGraderDecision): FieldGraderDecision {
     const looseVerify = loosenArrayVerifyMode(item);
     return {
-        // Top-level create mirrors the element (creator mints element values).
         create: item.create,
         verify: looseVerify,
         rule: `array-items:${stripReusedPrefix(item.rule)}`,
@@ -436,18 +450,17 @@ function isSoftVerify(mode: ActionParamVerifyMode): boolean {
 function classifyObjectFieldRegex(
     spec: Extract<ParamSpec, { kind: "object" }>,
 ): FieldGraderDecision {
-    // Soft-leaf-only objects use nonempty; mixed leaves stay exact.
     const fieldEntries = Object.entries(spec.fields);
     if (fieldEntries.length === 0) {
         return {
             create: "record",
             verify: "exact",
             rule: "type-object-exact",
-            source: "regex",
+            source: "hardcode",
         };
     }
     for (const [n, f] of fieldEntries) {
-        const leaf = tryClassifyActionParameterFieldRegex(
+        const leaf = tryClassifyActionParameterFieldHardcode(
             n,
             f.spec,
             f.optional,
@@ -457,7 +470,7 @@ function classifyObjectFieldRegex(
                 create: "record",
                 verify: "exact",
                 rule: "type-object-exact",
-                source: "regex",
+                source: "hardcode",
             };
         }
     }
@@ -465,7 +478,7 @@ function classifyObjectFieldRegex(
         create: "record",
         verify: "nonempty",
         rule: "type-object-soft-nonempty",
-        source: "regex",
+        source: "hardcode",
     };
 }
 
@@ -473,7 +486,7 @@ function classifyStringFieldRegex(
     name: string,
     spec: Extract<ParamSpec, { kind: "string" }>,
     optional: boolean,
-): FieldGraderDecision {
+): FieldGraderDecision | undefined {
     if (spec.enum !== undefined && spec.enum.length > 0) {
         if (isUnitOrModeName(name)) {
             return {
@@ -482,14 +495,14 @@ function classifyStringFieldRegex(
                 rule: optional
                     ? "string-enum-unit-optional-ignore"
                     : "string-enum-unit-required-exact",
-                source: "regex",
+                source: "hardcode",
             };
         }
         return {
             create: "enum_literal",
             verify: "exact",
             rule: "string-enum-exact",
-            source: "regex",
+            source: "hardcode",
         };
     }
 
@@ -498,37 +511,55 @@ function classifyStringFieldRegex(
             create: "unit_or_mode",
             verify: "ignore",
             rule: "string-unit-ignore",
-            source: "regex",
+            source: "hardcode",
         };
     }
-    // Identity token lists (not *Name) stay identifier/exact before free-text.
+    if (isOriginalRequestEchoName(name)) {
+        return {
+            create: "free_text",
+            verify: "ignore",
+            rule: "string-original-request-ignore",
+            source: "hardcode",
+        };
+    }
+    if (isLlmJudgePayloadName(name)) {
+        return {
+            create: "free_text",
+            verify: "llmAsAJudge",
+            rule: "string-llm-as-a-judge",
+            source: "hardcode",
+        };
+    }
     if (isIdentityListName(name)) {
         return {
             create: "identifier",
             verify: "exact",
             rule: "string-identifier-exact",
-            source: "regex",
+            source: "hardcode",
         };
     }
-    // Free-text before generic *Name identifier so trackName/location stay soft.
-    if (isFreeTextName(name) || isLooseCollectionElementName(name)) {
+    if (isLooseCollectionElementName(name)) {
         return {
             create: "free_text",
             verify: "nonempty",
-            rule: isLooseCollectionElementName(name)
-                ? "string-collection-element-nonempty"
-                : "string-free-text-nonempty",
-            source: "regex",
+            rule: "string-collection-element-nonempty",
+            source: "hardcode",
+        };
+    }
+    if (isFreeTextName(name)) {
+        return {
+            create: "free_text",
+            verify: "nonempty",
+            rule: "string-free-text-nonempty",
+            source: "hardcode",
         };
     }
     if (isDateName(name)) {
-        // NL relative dates dominate synthesis ("next Tuesday", "this week").
-        // Exact string match is unfair at eval; align with time → nonempty.
         return {
             create: "temporal",
             verify: "nonempty",
             rule: "string-date-nonempty",
-            source: "regex",
+            source: "hardcode",
         };
     }
     if (isTimeName(name)) {
@@ -536,7 +567,7 @@ function classifyStringFieldRegex(
             create: "temporal",
             verify: "nonempty",
             rule: "string-time-nonempty",
-            source: "regex",
+            source: "hardcode",
         };
     }
     if (isIdentifierName(name)) {
@@ -544,19 +575,13 @@ function classifyStringFieldRegex(
             create: "identifier",
             verify: "exact",
             rule: "string-identifier-exact",
-            source: "regex",
+            source: "hardcode",
         };
     }
-    // Unmatched open strings: soft free_text/nonempty (not a legacy default rule id).
-    return {
-        create: "free_text",
-        verify: "nonempty",
-        rule: "string-open-soft-nonempty",
-        source: "regex",
-    };
+    return undefined;
 }
 
-export function tryClassifyActionParameterFieldRegex(
+export function tryClassifyActionParameterFieldHardcode(
     fieldName: string,
     spec: ParamSpec,
     optional: boolean,
@@ -567,7 +592,7 @@ export function tryClassifyActionParameterFieldRegex(
             create: "opaque",
             verify: "ignore",
             rule: "empty-name",
-            source: "regex",
+            source: "hardcode",
         };
     }
 
@@ -577,7 +602,7 @@ export function tryClassifyActionParameterFieldRegex(
                 create: "opaque",
                 verify: "ignore",
                 rule: "type-any",
-                source: "regex",
+                source: "hardcode",
             };
 
         case "boolean":
@@ -586,12 +611,11 @@ export function tryClassifyActionParameterFieldRegex(
                 create: "typed_literal",
                 verify: "exact",
                 rule: `type-${spec.kind}`,
-                source: "regex",
+                source: "hardcode",
             };
 
         case "array": {
-            // Classify element; container mode depends on element strictness.
-            const item = tryClassifyActionParameterFieldRegex(
+            const item = tryClassifyActionParameterFieldHardcode(
                 name,
                 spec.item,
                 optional,
@@ -606,20 +630,19 @@ export function tryClassifyActionParameterFieldRegex(
             return classifyObjectFieldRegex(spec);
 
         case "union":
-            // Union: all-any → opaque/ignore; else record/exact.
             if (spec.arms.every((a) => a.kind === "any")) {
                 return {
                     create: "opaque",
                     verify: "ignore",
                     rule: "type-union-any",
-                    source: "regex",
+                    source: "hardcode",
                 };
             }
             return {
                 create: "record",
                 verify: "exact",
                 rule: "type-union-structural",
-                source: "regex",
+                source: "hardcode",
             };
 
         case "string":
@@ -636,14 +659,14 @@ function isLiveReusableRule(rule: string): boolean {
     if (!bare || LEGACY_RULE_RE.test(bare) || /default/i.test(bare)) {
         return false;
     }
-    // Live regex rule ids or llm:snake_case
+    // Live hardcode rule ids or llm:snake_case
     if (bare.startsWith("llm:")) {
         return /^llm:[a-z][a-z0-9_]*$/.test(bare);
     }
     if (bare.startsWith("array-items:")) {
         return isLiveReusableRule(bare.slice("array-items:".length));
     }
-    return REGEX_RULE_SET.has(bare) || bare.startsWith("array-items:");
+    return HARDCODE_RULE_SET.has(bare) || bare.startsWith("array-items:");
 }
 
 function enumSetsEqual(a: ParamSpec, b: ParamSpec): boolean {
@@ -671,7 +694,6 @@ export function tryReusePriorFieldGraderDecision(
     optional?: boolean,
 ): FieldGraderDecision | undefined {
     if (prior === undefined) return undefined;
-    // Regex priors must re-resolve after rules bumps / heuristic edits.
     if (prior.source !== "llm") return undefined;
     if (paramSpecKind(spec) !== prior.typeKind) return undefined;
     if (optional !== undefined && prior.optional !== optional) return undefined;
@@ -700,7 +722,6 @@ export function tryReusePriorFieldGraderDecision(
     };
     if (prior.item !== undefined) {
         if (!isLiveReusableRule(prior.item.rule)) return undefined;
-        // Nested item from an LLM prior must also be llm-sourced.
         if (prior.item.source !== "llm") return undefined;
         decision.item = {
             create: prior.item.create,
@@ -724,11 +745,9 @@ export async function classifyActionParameterFieldWithFallback(
         parametersSummary?: string;
         description?: string;
         llm?: ParameterGraderLlm;
-        /** Prior field entry for this action (incremental reuse). */
         priorField?: ActionParameterFieldGrader;
     },
 ): Promise<FieldGraderDecision> {
-    // Arrays: always classify the element first (regex → reuse → LLM), then wrap.
     if (spec.kind === "array") {
         const itemPrior =
             context.priorField?.item !== undefined
@@ -759,7 +778,6 @@ export async function classifyActionParameterFieldWithFallback(
                 ...(itemPrior !== undefined ? { priorField: itemPrior } : {}),
             },
         );
-        // If item path already produced an array wrapper (shouldn't), unwrap.
         const leaf =
             itemDecision.item !== undefined &&
             itemDecision.rule.startsWith("array-items:")
@@ -768,13 +786,13 @@ export async function classifyActionParameterFieldWithFallback(
         return wrapArrayDecision(leaf);
     }
 
-    const regex = tryClassifyActionParameterFieldRegex(
+    const hardcode = tryClassifyActionParameterFieldHardcode(
         fieldName,
         spec,
         optional,
     );
-    if (regex !== undefined) {
-        return regex;
+    if (hardcode !== undefined) {
+        return hardcode;
     }
     const reused = tryReusePriorFieldGraderDecision(
         context.priorField,
@@ -787,7 +805,7 @@ export async function classifyActionParameterFieldWithFallback(
     if (context.llm === undefined) {
         throw new Error(
             `Parameter '${context.schemaName}.${context.actionName}.${fieldName}' ` +
-                `has no regex rule; provide an LLM fallback (--model) instead of defaulting`,
+                `has no hardcode rule; provide an LLM fallback (--model) instead of defaulting`,
         );
     }
     return classifyActionParameterFieldWithLlm(fieldName, spec, optional, {
@@ -1036,6 +1054,68 @@ function fieldGraderFromDecision(
     return base;
 }
 
+function defaultCreateForOverride(
+    fieldName: string,
+    spec: ParamSpec,
+    optional: boolean,
+    verify: TranslationBenchPolicyVerifyMode,
+): FieldGraderDecision {
+    if (spec.kind === "array") {
+        const item = defaultCreateForOverride(
+            fieldName,
+            spec.item,
+            optional,
+            verify,
+        );
+        return wrapArrayDecision({ ...item, verify });
+    }
+
+    const hardcode = tryClassifyActionParameterFieldHardcode(fieldName, spec, optional);
+    if (hardcode !== undefined) {
+        let item = hardcode.item;
+        if (item !== undefined) {
+            item = { ...item, verify };
+        }
+        return {
+            create: hardcode.create,
+            verify,
+            rule: `policy-override:${hardcode.rule}`,
+            source: "hardcode",
+            ...(item !== undefined ? { item } : {}),
+        };
+    }
+    if (spec.kind === "string") {
+        return {
+            create: "free_text",
+            verify,
+            rule: "policy-override:structural",
+            source: "hardcode",
+        };
+    }
+    if (spec.kind === "boolean" || spec.kind === "number") {
+        return {
+            create: "typed_literal",
+            verify,
+            rule: "policy-override:structural",
+            source: "hardcode",
+        };
+    }
+    if (spec.kind === "object") {
+        return {
+            create: "record",
+            verify,
+            rule: "policy-override:structural",
+            source: "hardcode",
+        };
+    }
+    return {
+        create: "opaque",
+        verify,
+        rule: "policy-override:structural",
+        source: "hardcode",
+    };
+}
+
 export async function buildActionParametersGraderEntry(
     schemaName: string,
     actionName: string,
@@ -1044,54 +1124,48 @@ export async function buildActionParametersGraderEntry(
         parametersSummary?: string;
         description?: string;
         llm?: ParameterGraderLlm;
-        /** Prior grader entry for this action (field-level reuse). */
         previousEntry?: ActionParametersGraderEntry;
+        policy?: LoadedActionEligibilityPolicy;
     },
 ): Promise<ActionParametersGraderEntry> {
     const fields: Record<string, ActionParameterFieldGrader> = {};
     const scoreFields: Record<string, ActionParamVerifyMode> = {};
+    const policy = activePolicy(options?.policy);
 
     if (paramSpec.kind === "object") {
         for (const [name, field] of Object.entries(paramSpec.fields)) {
-            const decision = await classifyActionParameterFieldWithFallback(
-                name,
-                field.spec,
-                field.optional,
-                {
-                    schemaName,
-                    actionName,
-                    ...(options?.parametersSummary !== undefined
-                        ? { parametersSummary: options.parametersSummary }
-                        : {}),
-                    ...(options?.description !== undefined
-                        ? { description: options.description }
-                        : {}),
-                    ...(options?.llm !== undefined ? { llm: options.llm } : {}),
-                    ...(options?.previousEntry?.fields[name] !== undefined
-                        ? { priorField: options.previousEntry.fields[name] }
-                        : {}),
-                },
-            );
             const id = actionId(schemaName, actionName);
-            let judged = applyLlmAsAJudgeVerify(name, decision, {
-                actionId: id,
-                siblingFieldNames: Object.keys(paramSpec.fields),
-            });
             const fullName = `${id}.${name}`;
-            if (EXACT_PARAMETERS.has(fullName)) {
-                judged = {
-                    create: "identifier",
-                    verify: "exact",
-                    rule: "string-identifier-exact",
-                    source: judged.source,
-                };
-            } else if (NONEMPTY_PARAMETER_SET.has(fullName)) {
-                judged = {
-                    create: "free_text",
-                    verify: "nonempty",
-                    rule: "string-free-text-nonempty",
-                    source: judged.source,
-                };
+            const override = policy.parameterOverrides.get(fullName);
+
+            let judged: FieldGraderDecision;
+            if (override !== undefined) {
+                judged = defaultCreateForOverride(
+                    name,
+                    field.spec,
+                    field.optional,
+                    override.verify,
+                );
+            } else {
+                judged = await classifyActionParameterFieldWithFallback(
+                    name,
+                    field.spec,
+                    field.optional,
+                    {
+                        schemaName,
+                        actionName,
+                        ...(options?.parametersSummary !== undefined
+                            ? { parametersSummary: options.parametersSummary }
+                            : {}),
+                        ...(options?.description !== undefined
+                            ? { description: options.description }
+                            : {}),
+                        ...(options?.llm !== undefined ? { llm: options.llm } : {}),
+                        ...(options?.previousEntry?.fields[name] !== undefined
+                            ? { priorField: options.previousEntry.fields[name] }
+                            : {}),
+                    },
+                );
             }
             fields[name] = fieldGraderFromDecision(
                 field.optional,
@@ -1119,15 +1193,15 @@ function countFieldSources(
     fields: Record<string, ActionParameterFieldGrader>,
     actionLabel: string,
     pathPrefix = "",
-): { llm: number; regex: number } {
+): { llm: number; hardcode: number } {
     let llm = 0;
-    let regex = 0;
+    let hardcode = 0;
     for (const [name, field] of Object.entries(fields)) {
         const label = pathPrefix ? `${pathPrefix}.${name}` : name;
         if (field.source === "llm") {
             llm += 1;
-        } else if (field.source === "regex") {
-            regex += 1;
+        } else if (field.source === "hardcode") {
+            hardcode += 1;
         } else {
             throw new Error(`Field '${actionLabel}.${label}' missing source`);
         }
@@ -1137,11 +1211,10 @@ function countFieldSources(
             );
         }
         if (field.item !== undefined) {
-            // item is not a full field grader; check rule/source only.
             if (field.item.source === "llm") {
                 llm += 1;
-            } else if (field.item.source === "regex") {
-                regex += 1;
+            } else if (field.item.source === "hardcode") {
+                hardcode += 1;
             } else {
                 throw new Error(
                     `Field '${actionLabel}.${label}.item' missing source`,
@@ -1157,7 +1230,7 @@ function countFieldSources(
             }
         }
     }
-    return { llm, regex };
+    return { llm, hardcode };
 }
 
 export function emptyActionParametersGraderDiff(): ActionParametersGraderDiff {
@@ -1239,9 +1312,9 @@ function validateItemGrader(
             `Invalid item grader for ${actionIdLabel}.${fieldName}: legacy/default rule '${item.rule}'`,
         );
     }
-    if (item.source !== "regex" && item.source !== "llm") {
+    if (item.source !== "hardcode" && item.source !== "llm") {
         throw new Error(
-            `Invalid item grader for ${actionIdLabel}.${fieldName}: source must be regex|llm`,
+            `Invalid item grader for ${actionIdLabel}.${fieldName}: source must be hardcode|llm`,
         );
     }
     if (item.item !== undefined) {
@@ -1294,9 +1367,9 @@ function validateFieldGrader(
             `Invalid field grader for ${actionIdLabel}.${fieldName}: legacy/default rule '${field.rule}'`,
         );
     }
-    if (field.source !== "regex" && field.source !== "llm") {
+    if (field.source !== "hardcode" && field.source !== "llm") {
         throw new Error(
-            `Invalid field grader for ${actionIdLabel}.${fieldName}: source must be regex|llm`,
+            `Invalid field grader for ${actionIdLabel}.${fieldName}: source must be hardcode|llm`,
         );
     }
     if (field.item !== undefined) {
@@ -1421,7 +1494,7 @@ let cachedPackagedActionParametersGrader:
 export function getPackagedActionParametersGraderCatalog(): ActionParametersGraderCatalog {
     if (cachedPackagedActionParametersGrader === undefined) {
         const graderPath = requireFromHere.resolve(
-            "../../action-parameters-grader.generated.json",
+            "../action-parameters-grader.generated.json",
         );
         const catalog = loadActionParametersGraderCatalogFile(graderPath);
         if (catalog === undefined) {
@@ -1513,6 +1586,7 @@ async function rebuildGraderEntries(
     options?: {
         llm?: ParameterGraderLlm;
         onProgress?: (done: number, total: number) => void;
+        policy?: LoadedActionEligibilityPolicy;
     },
 ): Promise<Record<string, ActionParametersGraderEntry>> {
     const byAction: Record<string, ActionParametersGraderEntry> = {};
@@ -1540,6 +1614,9 @@ async function rebuildGraderEntries(
                 ...(previous?.byAction[id] !== undefined
                     ? { previousEntry: previous.byAction[id] }
                     : {}),
+                ...(options?.policy !== undefined
+                    ? { policy: options.policy }
+                    : {}),
             },
         );
         done += 1;
@@ -1550,18 +1627,18 @@ async function rebuildGraderEntries(
 
 function countCatalogFieldSources(
     byAction: Record<string, ActionParametersGraderEntry>,
-): { llm: number; regex: number } {
+): { llm: number; hardcode: number } {
     let llm = 0;
-    let regex = 0;
+    let hardcode = 0;
     for (const entry of Object.values(byAction)) {
         const counts = countFieldSources(
             entry.fields,
             `${entry.schemaName}.${entry.actionName}`,
         );
         llm += counts.llm;
-        regex += counts.regex;
+        hardcode += counts.hardcode;
     }
-    return { llm, regex };
+    return { llm, hardcode };
 }
 
 function attachLastDiff(
@@ -1570,9 +1647,7 @@ function attachLastDiff(
     previous: ActionParametersGraderCatalog | undefined,
     effectiveRebuild: string[],
 ): void {
-    // Refresh diff counts after integrity-driven rebuilds.
     const refreshed = diffActionParametersGrader(catalog, previous);
-    // Mark integrity rebuilds as updated if they were previously unchanged.
     for (const id of effectiveRebuild) {
         if (
             refreshed.unchanged.includes(id) ||
@@ -1596,16 +1671,19 @@ export async function buildActionParametersGraderCatalog(
     options?: {
         generatedAt?: string;
         llm?: ParameterGraderLlm;
-        /** Prior grader output for incremental merge. Omit or pass forceFull to rebuild all. */
         previous?: ActionParametersGraderCatalog;
         forceFull?: boolean;
         onProgress?: (done: number, total: number) => void;
-        /** When true, attach lastDiff on the returned object (default true for callers). */
         includeLastDiff?: boolean;
+        policy?: LoadedActionEligibilityPolicy;
+        assertOverridesMatchCatalog?: boolean;
     },
 ): Promise<ActionParametersGraderCatalog> {
-    const rulesFp = graderRulesFingerprint();
-    // Rules/heuristic code change → full reclassify; keep per-action
+    const policy = activePolicy(options?.policy);
+    if (options?.assertOverridesMatchCatalog !== false) {
+        assertParameterOverridesMatchCatalog(catalog, policy);
+    }
+    const rulesFp = graderRulesFingerprint(policy);
     // sourceFingerprint as paramSpec-only so schema-stable rows stay stable.
     const previous =
         options?.forceFull === true ||
@@ -1620,20 +1698,15 @@ export async function buildActionParametersGraderCatalog(
     for (const action of catalog.actions) {
         actionsById.set(actionId(action.schemaName, action.actionName), action);
     }
-
-    // Keep unchanged entries only after integrity checks vs live catalog.
     const byAction = keepUnchangedGraderEntries(
         previous,
         diff.unchanged,
         actionsById,
         rebuildIds,
     );
-
-    // Drop ids moved from unchanged to rebuild.
     for (const id of rebuildIds) {
         delete byAction[id];
     }
-    // Recompute added/updated labels for progress when integrity forced rebuild.
     const effectiveRebuild = [...rebuildIds].sort();
     Object.assign(
         byAction,
@@ -1642,6 +1715,7 @@ export async function buildActionParametersGraderCatalog(
             ...(options?.onProgress !== undefined
                 ? { onProgress: options.onProgress }
                 : {}),
+            policy,
         }),
     );
 
@@ -1653,7 +1727,7 @@ export async function buildActionParametersGraderCatalog(
             "sourceFingerprint is paramSpec-only (stable across policy edits). " +
             "rulesFingerprint is catalog-level; when it drifts, all actions reclassify. " +
             "Incremental: only added/updated actions are reclassified; unchanged fingerprints are kept. " +
-            "Regex first, LLM prior reuse (not regex priors), LLM+verifier fallback. " +
+            "Hardcode name sets first, LLM prior reuse, LLM+verifier fallback. " +
             "Open strings without a name heuristic use structural free_text/nonempty. " +
             "`create` guides the synthesizer; `verify` / `parameterScore` drive runner soft matching. `llmAsAJudge` marks code/script params that need semantic LLM scoring. " +
             "Object containers with only soft leaves use nonempty; mixed objects stay exact (no nested dotted paths yet).",
@@ -1664,7 +1738,7 @@ export async function buildActionParametersGraderCatalog(
         createPolicies: { ...ACTION_PARAM_CREATE_POLICY_DOCS },
         byAction,
         llmFallbackCount: counts.llm,
-        regexMatchCount: counts.regex,
+        hardcodeMatchCount: counts.hardcode,
     };
     if (options?.includeLastDiff !== false) {
         attachLastDiff(result, catalog, previous, effectiveRebuild);
@@ -1700,75 +1774,495 @@ export function loosenArrayVerifyMode(
     ) {
         return elementVerify;
     }
-    // exact element policy: only loosen free_text-style soft content
     if (create === "free_text" || create === "temporal") {
         return "nonempty";
     }
-    // number[] / boolean[] / enum[] / identifier[] / object[] → exact container
     return "exact";
 }
 
+function nameSet(names: readonly string[]): ReadonlySet<string> {
+    return new Set(names);
+}
+const UNIT_OR_MODE_NAMES = nameSet([
+    "editorPosition",
+    "effort",
+    "format",
+    "kind",
+    "mode",
+    "precision",
+    "scale",
+    "state",
+    "taskSelection",
+    "unit",
+    "units",
+    "verbosity",
+]);
+
+const ORIGINAL_REQUEST_ECHO_NAMES = nameSet([
+    "originalRequest",
+    "original_request",
+    "userUtterance",
+    "user_utterance",
+    "rawRequest",
+    "raw_request",
+]);
+
+const LLM_JUDGE_PAYLOAD_NAMES = nameSet([
+    "codeSnippet",
+    "commandArgs",
+    "commandToExecute",
+    "declaration",
+    "flowArgs",
+    "flowParametersJson",
+    "functionDeclaration",
+    "generatedContent",
+    "internetLookups",
+    "recordedSteps",
+    "script",
+    "validationResults",
+]);
+
+const FREE_TEXT_NAMES = nameSet([
+    "actionDescription",
+    "adapter",
+    "additionalMessage",
+    "after",
+    "allow",
+    "app",
+    "artifact",
+    "assignee",
+    "attemptedAction",
+    "avatar",
+    "avatar_url",
+    "banner",
+    "bcc",
+    "before",
+    "body",
+    "caption",
+    "cc",
+    "cityQuery",
+    "clarifyingQuestion",
+    "color",
+    "commit",
+    "condition",
+    "content",
+    "context",
+    "deny",
+    "description",
+    "docstring",
+    "domain",
+    "durationMinutes",
+    "editPrompt",
+    "emojiChar",
+    "endpoint",
+    "every",
+    "extensionQuery",
+    "feature",
+    "field",
+    "filterByUserQuery",
+    "folderRelativeTo",
+    "generatedText",
+    "goal",
+    "head",
+    "hint",
+    "hostname",
+    "icon",
+    "input",
+    "instructions",
+    "intent",
+    "key",
+    "label",
+    "language",
+    "leftWindow",
+    "location",
+    "mergeMethod",
+    "mergedMontageTitle",
+    "message",
+    "messageRef",
+    "metadata",
+    "method",
+    "model",
+    "newTitle",
+    "nick",
+    "nonce",
+    "notes",
+    "outputDir",
+    "params",
+    "participant",
+    "password",
+    "phrase",
+    "platform_username",
+    "progressStatus",
+    "prompt",
+    "query",
+    "question",
+    "reason",
+    "ref",
+    "reference",
+    "region",
+    "relativeTo",
+    "request",
+    "returnType",
+    "rightWindow",
+    "schedule",
+    "searchTerm",
+    "selection",
+    "severity",
+    "shell",
+    "site",
+    "sizeOverride",
+    "songs",
+    "sourceImage",
+    "specSource",
+    "ssid",
+    "startUrl",
+    "status",
+    "style",
+    "subject",
+    "suggestionItem",
+    "tabDescription",
+    "tag",
+    "task",
+    "text",
+    "title",
+    "to",
+    "token",
+    "topic",
+    "url",
+    "username",
+    "value",
+]);
+
+const LOOSE_COLLECTION_ELEMENT_NAMES = nameSet([
+    "access_tokens",
+    "args",
+    "artists",
+    "attachFiles",
+    "attachments",
+    "contextEntities",
+    "domains",
+    "entries",
+    "extensions",
+    "fileTypes",
+    "files",
+    "generatedTextEntities",
+    "ids",
+    "items",
+    "keywords",
+    "labels",
+    "nicks",
+    "options",
+    "phrasesPerAction",
+    "relatedFiles",
+    "screenshots",
+    "search_filters",
+    "sites",
+    "tags",
+    "titles",
+    "userRequestEntities",
+    "values",
+]);
+
+const IDENTITY_LIST_NAMES = nameSet([
+    "agentNames",
+    "allowedCmdlets",
+    "allowedModules",
+    "excludeActions",
+    "existingActionNames",
+    "forActions",
+    "includeActions",
+    "names",
+    "possibleActionNames",
+]);
+
+const DATE_NAMES = nameSet([
+    "date",
+    "day",
+    "days",
+    "dueDate",
+    "endDate",
+    "startDate",
+]);
+
+const TIME_NAMES = nameSet([
+    "dueTime",
+    "endHour",
+    "endTime",
+    "hour",
+    "minute",
+    "seconds",
+    "startHour",
+    "startTime",
+    "time",
+    "timestamp",
+    "when",
+]);
+
+const IDENTIFIER_NAMES = nameSet([
+    "accessSetting",
+    "access_token",
+    "actionName",
+    "agentName",
+    "aiCommand",
+    "alarmName",
+    "alignment",
+    "all",
+    "alwaysShow",
+    "amount",
+    "apiType",
+    "application_id",
+    "args",
+    "attachScreenshot",
+    "attemptLimit",
+    "author",
+    "autoAccept",
+    "autoReload",
+    "auto_archive_duration",
+    "base",
+    "branch",
+    "breakpointId",
+    "brightnessLevel",
+    "candidates",
+    "caseSensitive",
+    "channel_id",
+    "classID",
+    "columnCount",
+    "command",
+    "commandName",
+    "commandRiskLevel",
+    "commentStyle",
+    "configurationName",
+    "conversationLookupFilters",
+    "count",
+    "cursorPosition",
+    "days",
+    "desktopId",
+    "deviceName",
+    "direction",
+    "displayName",
+    "draft",
+    "duration",
+    "elevate",
+    "enable",
+    "enableAutoTimeSync",
+    "enableBadging",
+    "enableBluetooth",
+    "enableColor",
+    "enabled",
+    "endHour",
+    "endLine",
+    "exactMatch",
+    "excludeUntitled",
+    "explanationMode",
+    "file",
+    "fileName",
+    "filePath",
+    "filter",
+    "filterByCategory",
+    "filterByKnownQuery",
+    "filterEffect",
+    "flowName",
+    "focus",
+    "focusExistingIfOpen",
+    "folderName",
+    "folderPath",
+    "force",
+    "fragments",
+    "fromPhase",
+    "genContent",
+    "generatedTextEntities",
+    "goto",
+    "grammarPatterns",
+    "groupBy",
+    "guild_id",
+    "guild_scheduled_event_id",
+    "height",
+    "hideWhenNotUsing",
+    "hour",
+    "htmlOutput",
+    "id",
+    "ids",
+    "includeGenerated",
+    "indices",
+    "inferredActions",
+    "integrationName",
+    "invite_code",
+    "isAsync",
+    "isMuted",
+    "isPartial",
+    "isPartialQuery",
+    "length",
+    "level",
+    "limit",
+    "line",
+    "listName",
+    "logResult",
+    "lookup",
+    "matchBy",
+    "matchStrategy",
+    "maxDepth",
+    "maxSteps",
+    "maxTurns",
+    "max_age",
+    "max_uses",
+    "messageNumber",
+    "message_id",
+    "minSearchScore",
+    "minute",
+    "name",
+    "never_expires",
+    "newMaxVolumeLevel",
+    "newName",
+    "newSession",
+    "newSessionLocation",
+    "newVolumeLevel",
+    "newlineAfter",
+    "newlineBefore",
+    "nightLightScheduleDisabled",
+    "noDebug",
+    "nsfw",
+    "numImages",
+    "numResults",
+    "number",
+    "on",
+    "onlyDirty",
+    "openInEditor",
+    "openInNewTab",
+    "operation",
+    "orientation",
+    "outputPath",
+    "overwriteIfExists",
+    "overwrite_id",
+    "owner",
+    "parameterName",
+    "parseJson",
+    "path",
+    "pattern",
+    "phrasesPerAction",
+    "platform_name",
+    "play",
+    "playlistNumber",
+    "position",
+    "powerMode",
+    "primaryButton",
+    "private",
+    "promptUser",
+    "provider",
+    "public",
+    "quantity",
+    "recipient_id",
+    "reduceSpeed",
+    "refreshRate",
+    "register",
+    "registerAgent",
+    "repo",
+    "resolutionHint",
+    "reuseExistingTerminal",
+    "running",
+    "saveChanges",
+    "scope",
+    "scopeType",
+    "scriptParameters",
+    "scrollLines",
+    "seconds",
+    "select",
+    "selected",
+    "selectedIndices",
+    "service",
+    "showErrorIfNoActiveEditor",
+    "showToken",
+    "shuffle",
+    "size",
+    "sizeAdjustment",
+    "speed",
+    "speedLevel",
+    "startHour",
+    "startLine",
+    "startedAtMs",
+    "stepType",
+    "strategy",
+    "tab",
+    "tabIndex",
+    "target",
+    "targetVolume",
+    "target_users_file",
+    "template",
+    "temporary",
+    "theme",
+    "themeName",
+    "thresholdValue",
+    "timeout",
+    "traceId",
+    "trackCount",
+    "trackNumber",
+    "tts",
+    "type",
+    "unique",
+    "unstar",
+    "untitled",
+    "useRegex",
+    "userRequestEntities",
+    "user_id",
+    "viewKind",
+    "viewMode",
+    "visibility",
+    "volumeChangePercentage",
+    "waitForCompletion",
+    "web",
+    "webhook_channel_id",
+    "webhook_id",
+    "webhook_token",
+    "wholeWord",
+    "width",
+    "with_counts",
+]);
+
 function isUnitOrModeName(name: string): boolean {
-    return /^(units?|kind|mode|format|verbosity|effort|scale|precision|state)$/i.test(
-        name,
-    );
+    return UNIT_OR_MODE_NAMES.has(name);
 }
 
-function isFreeTextName(name: string): boolean {
-    return (
-        /^(message|description|text|query|note|comment|title|titles|utterance|content|prompt|summary|reason|rationale|location|participant|body|details|instruction|instructions|request|originalRequest|generatedText|site|sites|url|uri|href|webpage|webPage|page|searchTerm|script|goal|domain|domains|question|trackName|albumName|artist|genre|subject|caption|phrase|notes|task|label|value|to|cc|bcc|input|condition)$/i.test(
-            name,
-        ) ||
-        /(message|description|comment|note|title|content|summary|prompt|utterance|location|participant|reason|rationale|text|Site|Sites|Url|URL|Uri|Href|Page|Term|Script|Goal|Domain|Question|TrackName|AlbumName|Artist|Genre|Query|Subject|Caption|Phrase)$/i.test(
-            name,
-        )
-    );
-}
-
-function isLooseCollectionElementName(name: string): boolean {
-    return /^(items|values|entries|keywords|tags|labels|options|files|relatedFiles|attachFiles|screenshots|internetLookups|sites|domains|artists|extensions|titles|attachments|search_filters)$/i.test(
-        name,
-    );
-}
-
-/** Identity / allow-list token collections — exact verify, not free-text nonempty. */
-function isIdentityListName(name: string): boolean {
-    return /^(names|existingActionNames|possibleActionNames|agentNames|allowedCmdlets|allowedModules|includeActions|excludeActions|forActions)$/i.test(
-        name,
-    );
-}
-
-function isDateName(name: string): boolean {
-    return (
-        /^(date|day|startDate|endDate|dueDate)$/i.test(name) ||
-        /Date$/i.test(name)
-    );
-}
-
-function isTimeName(name: string): boolean {
-    return (
-        /^(time|when|timestamp|startTime|endTime|dueTime)$/i.test(name) ||
-        /(time|when|timestamp)$/i.test(name)
-    );
-}
-
-function isIdentifierName(name: string): boolean {
-    return (
-        /^(id|listName|schemaName|actionName|path|email|name|fileName|filePath|camera_id|entityId|sessionId|tabId|service|branch|base|repo|owner|author)$/i.test(
-            name,
-        ) ||
-        // Name/Names → identifier (actionName, existingActionNames, …)
-        /(Id|ID|Names?|Path|Email|Code|Token|File)$/.test(name) ||
-        /_(id|code|token|name|file|dir)$/i.test(name)
-    );
+/** User-utterance echo fields — ignore at score time. */
+export function isOriginalRequestEchoName(name: string): boolean {
+    return ORIGINAL_REQUEST_ECHO_NAMES.has(name.trim());
 }
 
 /**
- * Runner-ready parameterScore specs aligned 1:1 with expectedActions. Missing
- * grader entries yield `undefined` slots (runner falls back to exact-match).
- * `llmAsAJudge` is a generation/offline-scoring concept the deterministic
- * runner can't consume, so such params map to `ignore` (judged elsewhere).
+ * Freeform code/script/program payloads where many surface forms implement the
+ * same intent — verify with llmAsAJudge, not exact/nonempty string equality.
  */
+export function isLlmJudgePayloadName(name: string): boolean {
+    const n = name.trim();
+    if (!n || isOriginalRequestEchoName(n)) return false;
+    return LLM_JUDGE_PAYLOAD_NAMES.has(n);
+}
+
+function isFreeTextName(name: string): boolean {
+    if (isOriginalRequestEchoName(name) || isLlmJudgePayloadName(name)) {
+        return false;
+    }
+    return FREE_TEXT_NAMES.has(name);
+}
+
+function isLooseCollectionElementName(name: string): boolean {
+    return LOOSE_COLLECTION_ELEMENT_NAMES.has(name);
+}
+
+function isIdentityListName(name: string): boolean {
+    return IDENTITY_LIST_NAMES.has(name);
+}
+
+function isDateName(name: string): boolean {
+    return DATE_NAMES.has(name);
+}
+
+function isTimeName(name: string): boolean {
+    return TIME_NAMES.has(name);
+}
+
+function isIdentifierName(name: string): boolean {
+    return IDENTIFIER_NAMES.has(name);
+}
+
 function toRunnerParamFieldMode(
     mode: ActionParamVerifyMode,
 ): TranslationBenchParamFieldMode {
@@ -1780,6 +2274,7 @@ export function parameterScoreSpecsForExpectedActions(
     expectedActions: ReadonlyArray<{
         schemaName: string;
         actionName: string;
+        parameters?: Record<string, unknown>;
     }>,
 ): Array<TranslationBenchParameterScoreSpec | undefined> {
     return expectedActions.map((action) => {
@@ -1811,26 +2306,3 @@ export function hasUsableParameterScoreSpecs(
     return specs.some((spec) => spec !== undefined);
 }
 
-function fieldTreeIsLlmAsAJudge(
-    field: Pick<ActionParameterFieldGrader, "verify" | "item">,
-): boolean {
-    if (field.verify === "llmAsAJudge") return true;
-    if (field.item !== undefined && fieldTreeIsLlmAsAJudge(field.item)) {
-        return true;
-    }
-    return false;
-}
-
-/** Actions with any verify=llmAsAJudge field — derived from the main grader JSON. */
-export function listLlmAsAJudgeExcludedActions(
-    catalog: ActionParametersGraderCatalog,
-): string[] {
-    const out: string[] = [];
-    for (const id of Object.keys(catalog.byAction).sort()) {
-        const fields = catalog.byAction[id]!.fields;
-        if (Object.values(fields).some((f) => fieldTreeIsLlmAsAJudge(f))) {
-            out.push(id);
-        }
-    }
-    return out;
-}

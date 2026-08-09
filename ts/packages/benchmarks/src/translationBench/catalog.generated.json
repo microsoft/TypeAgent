@@ -1,5 +1,5 @@
 {
-  "catalogVersion": "2026-08-06",
+  "catalogVersion": "2026-08-09",
   "activeSchemas": [
     "browser",
     "browser.actionDiscovery",
@@ -156,7 +156,11 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["new", "current", "existing"]
+              "enum": [
+                "new",
+                "current",
+                "existing"
+              ]
             }
           }
         }
@@ -362,7 +366,11 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["domain", "pageType", "source"]
+              "enum": [
+                "domain",
+                "pageType",
+                "source"
+              ]
             }
           },
           "limit": {
@@ -738,7 +746,11 @@
                             "optional": false,
                             "spec": {
                               "kind": "string",
-                              "enum": ["string", "number", "boolean"]
+                              "enum": [
+                                "string",
+                                "number",
+                                "boolean"
+                              ]
                             }
                           },
                           "required": {
@@ -993,7 +1005,11 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["site", "global", "all"]
+              "enum": [
+                "site",
+                "global",
+                "all"
+              ]
             }
           }
         }
@@ -1032,7 +1048,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["site", "global"]
+              "enum": [
+                "site",
+                "global"
+              ]
             }
           },
           "domains": {
@@ -1436,7 +1455,12 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["right", "left", "up", "down"]
+              "enum": [
+                "right",
+                "left",
+                "up",
+                "down"
+              ]
             }
           },
           "editorPosition": {
@@ -1466,7 +1490,11 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["single", "double", "three"]
+              "enum": [
+                "single",
+                "double",
+                "three"
+              ]
             }
           }
         }
@@ -1659,21 +1687,33 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["copilot", "claude", "gpt", "generic"]
+              "enum": [
+                "copilot",
+                "claude",
+                "gpt",
+                "generic"
+              ]
             }
           },
           "newSessionLocation": {
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["window", "editor", "view"]
+              "enum": [
+                "window",
+                "editor",
+                "view"
+              ]
             }
           },
           "mode": {
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["agent", "ask"]
+              "enum": [
+                "agent",
+                "ask"
+              ]
             }
           },
           "isPartialQuery": {
@@ -1712,7 +1752,11 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["last", "folder", "workspace"]
+              "enum": [
+                "last",
+                "folder",
+                "workspace"
+              ]
             }
           },
           "path": {
@@ -1769,7 +1813,11 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["into", "out", "over"]
+              "enum": [
+                "into",
+                "out",
+                "over"
+              ]
             }
           }
         }
@@ -3051,7 +3099,12 @@
                   "optional": false,
                   "spec": {
                     "kind": "string",
-                    "enum": ["first", "next", "cursor", "indexInFile"]
+                    "enum": [
+                      "first",
+                      "next",
+                      "cursor",
+                      "indexInFile"
+                    ]
                   }
                 },
                 "position": {
@@ -3966,7 +4019,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["insert", "delete"]
+              "enum": [
+                "insert",
+                "delete"
+              ]
             }
           },
           "count": {
@@ -4447,7 +4503,10 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["line", "block"]
+              "enum": [
+                "line",
+                "block"
+              ]
             }
           },
           "position": {
@@ -5310,7 +5369,13 @@
                     "optional": false,
                     "spec": {
                       "kind": "string",
-                      "enum": ["prefix", "suffix", "file", "doc", "comment"]
+                      "enum": [
+                        "prefix",
+                        "suffix",
+                        "file",
+                        "doc",
+                        "comment"
+                      ]
                     }
                   },
                   "content": {
@@ -5367,7 +5432,10 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["agent", "ask"]
+              "enum": [
+                "agent",
+                "ask"
+              ]
             }
           },
           "isPartialQuery": {
@@ -5401,7 +5469,11 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["view", "editor", "window"]
+              "enum": [
+                "view",
+                "editor",
+                "window"
+              ]
             }
           }
         }
@@ -5716,7 +5788,11 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["file", "line", "symbol"]
+              "enum": [
+                "file",
+                "line",
+                "symbol"
+              ]
             }
           },
           "ref": {
@@ -5766,7 +5842,10 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["exact", "fuzzy"]
+              "enum": [
+                "exact",
+                "fuzzy"
+              ]
             }
           },
           "extensions": {
@@ -5838,7 +5917,11 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["inferFromName", "workspaceRoot", "activeSelection"]
+              "enum": [
+                "inferFromName",
+                "workspaceRoot",
+                "activeSelection"
+              ]
             }
           }
         }
@@ -5855,7 +5938,11 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["build", "rebuild", "clean"]
+              "enum": [
+                "build",
+                "rebuild",
+                "clean"
+              ]
             }
           },
           "folderName": {
@@ -5896,7 +5983,11 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["low", "medium", "high"]
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ]
             }
           },
           "reuseExistingTerminal": {
@@ -6043,7 +6134,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["up", "down"]
+              "enum": [
+                "up",
+                "down"
+              ]
             }
           },
           "amount": {
@@ -6114,7 +6208,11 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["light", "dark", "toggle"]
+              "enum": [
+                "light",
+                "dark",
+                "toggle"
+              ]
             }
           }
         }
@@ -6350,7 +6448,10 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["name", "description"]
+              "enum": [
+                "name",
+                "description"
+              ]
             }
           },
           "elevate": {
@@ -6454,7 +6555,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["increase", "decrease"]
+              "enum": [
+                "increase",
+                "decrease"
+              ]
             }
           }
         }
@@ -6495,7 +6599,10 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["reduce", "increase"]
+              "enum": [
+                "reduce",
+                "increase"
+              ]
             }
           }
         }
@@ -6530,7 +6637,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["portrait", "landscape"]
+              "enum": [
+                "portrait",
+                "landscape"
+              ]
             }
           }
         }
@@ -6625,7 +6735,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["left", "right"]
+              "enum": [
+                "left",
+                "right"
+              ]
             }
           }
         }
@@ -6660,7 +6773,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["increase", "decrease"]
+              "enum": [
+                "increase",
+                "decrease"
+              ]
             }
           }
         }
@@ -6819,7 +6935,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["light", "dark"]
+              "enum": [
+                "light",
+                "dark"
+              ]
             }
           }
         }
@@ -6854,7 +6973,11 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["bestPerformance", "balanced", "bestPowerEfficiency"]
+              "enum": [
+                "bestPerformance",
+                "balanced",
+                "bestPowerEfficiency"
+              ]
             }
           }
         }
@@ -6889,7 +7012,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["allow", "deny"]
+              "enum": [
+                "allow",
+                "deny"
+              ]
             }
           }
         }
@@ -6907,7 +7033,10 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["allow", "deny"]
+              "enum": [
+                "allow",
+                "deny"
+              ]
             }
           }
         }
@@ -6925,7 +7054,10 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["allow", "deny"]
+              "enum": [
+                "allow",
+                "deny"
+              ]
             }
           }
         }
@@ -7203,7 +7335,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["left", "center"]
+              "enum": [
+                "left",
+                "center"
+              ]
             }
           }
         }
@@ -7238,7 +7373,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["show", "hide"]
+              "enum": [
+                "show",
+                "hide"
+              ]
             }
           }
         }
@@ -8523,6 +8661,29 @@
       "description": "Refresh the channel cache from the Discord server."
     },
     {
+      "schemaName": "dispatcher",
+      "actionName": "unknown",
+      "parameters": "request: string, reason: string",
+      "paramSpec": {
+        "kind": "object",
+        "fields": {
+          "request": {
+            "optional": false,
+            "spec": {
+              "kind": "string"
+            }
+          },
+          "reason": {
+            "optional": false,
+            "spec": {
+              "kind": "string"
+            }
+          }
+        }
+      },
+      "description": "Use UnknownAction when all the available actions in the schema is not relevant to the user request"
+    },
+    {
       "schemaName": "dispatcher.activity",
       "actionName": "exitActivity",
       "parameters": "(none)",
@@ -8888,7 +9049,10 @@
                   "optional": false,
                   "spec": {
                     "kind": "string",
-                    "enum": ["conversation", "internet"]
+                    "enum": [
+                      "conversation",
+                      "internet"
+                    ]
                   }
                 },
                 "site": {
@@ -11228,7 +11392,11 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["off", "one", "all"]
+              "enum": [
+                "off",
+                "one",
+                "all"
+              ]
             }
           }
         }
@@ -11494,7 +11662,12 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["continue", "diagram", "augment", "research"]
+              "enum": [
+                "continue",
+                "diagram",
+                "augment",
+                "research"
+              ]
             }
           }
         }
@@ -11638,7 +11811,11 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["selected", "inverse", "all"]
+              "enum": [
+                "selected",
+                "inverse",
+                "all"
+              ]
             }
           },
           "files": {
@@ -11803,7 +11980,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["grid", "filmstrip"]
+              "enum": [
+                "grid",
+                "filmstrip"
+              ]
             }
           }
         }
@@ -11890,7 +12070,13 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["rest", "graphql", "websocket", "ipc", "sdk"]
+              "enum": [
+                "rest",
+                "graphql",
+                "websocket",
+                "ipc",
+                "sdk"
+              ]
             }
           }
         }
@@ -11954,7 +12140,10 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["in-progress", "complete"]
+              "enum": [
+                "in-progress",
+                "complete"
+              ]
             }
           }
         }
@@ -12533,7 +12722,10 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["passing", "failing"]
+              "enum": [
+                "passing",
+                "failing"
+              ]
             }
           }
         }
@@ -13344,7 +13536,12 @@
                     "optional": false,
                     "spec": {
                       "kind": "string",
-                      "enum": ["string", "number", "boolean", "path"]
+                      "enum": [
+                        "string",
+                        "number",
+                        "boolean",
+                        "path"
+                      ]
                     }
                   },
                   "required": {
@@ -14097,7 +14294,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["all", "unread"]
+              "enum": [
+                "all",
+                "unread"
+              ]
             }
           }
         }
@@ -14242,7 +14442,11 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["bubble", "toast", "inline"]
+              "enum": [
+                "bubble",
+                "toast",
+                "inline"
+              ]
             }
           }
         }
@@ -14272,7 +14476,11 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["bubble", "toast", "inline"]
+              "enum": [
+                "bubble",
+                "toast",
+                "inline"
+              ]
             }
           },
           "count": {
@@ -14494,7 +14702,11 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["4", "8", "12"]
+              "enum": [
+                "4",
+                "8",
+                "12"
+              ]
             }
           }
         }
@@ -14622,7 +14834,12 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["text", "code", "designer", "debug"]
+              "enum": [
+                "text",
+                "code",
+                "designer",
+                "debug"
+              ]
             }
           }
         }
@@ -14865,7 +15082,10 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["celsius", "fahrenheit"]
+              "enum": [
+                "celsius",
+                "fahrenheit"
+              ]
             }
           }
         }
@@ -14894,7 +15114,10 @@
             "optional": true,
             "spec": {
               "kind": "string",
-              "enum": ["celsius", "fahrenheit"]
+              "enum": [
+                "celsius",
+                "fahrenheit"
+              ]
             }
           }
         }
@@ -15107,7 +15330,10 @@
             "optional": false,
             "spec": {
               "kind": "string",
-              "enum": ["compact", "full"]
+              "enum": [
+                "compact",
+                "full"
+              ]
             }
           }
         }

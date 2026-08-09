@@ -66,23 +66,22 @@ import {
     summarizeTranslationBenchConfusableSiblings,
 } from "./utteranceDisambiguation.js";
 import {
-    clearPackagedLlmJudgeExcludedActionsCacheForTests,
+    clearPackagedActionEligibilityPolicyCacheForTests,
     countEligibleTranslationBenchActions,
-    getPackagedLlmJudgeExcludedActions,
+    getPackagedScheduleExcludedActionIds,
+    getPackagedActionEligibilityPolicy,
+    getPackagedEligibleGoldActionIds,
 } from "./eligibleActions.js";
 import {
     getPackagedActionParametersGraderCatalog,
+    graderRulesFingerprint,
     hasUsableParameterScoreSpecs,
     parameterScoreSpecsForExpectedActions,
-} from "./catalogGenerator/actionParametersGrader.js";
+} from "../policy/policyGenerator.js";
 import { TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE } from "./negativeFairness.js";
 
-export function getTranslationBenchLlmJudgeExcludedActions(): ReadonlySet<string> {
-    return getPackagedLlmJudgeExcludedActions();
-}
-
-export function clearTranslationBenchLlmJudgeExcludedActionsCacheForTests(): void {
-    clearPackagedLlmJudgeExcludedActionsCacheForTests();
+export function clearTranslationBenchActionEligibilityPolicyCacheForTests(): void {
+    clearPackagedActionEligibilityPolicyCacheForTests();
 }
 
 export {
@@ -164,6 +163,9 @@ export interface TranslationBenchGenerationCheckpointSettings {
     schedule: TranslationBenchGenerationScheduleEntry[];
     synthesizerPromptHash: string;
     qualityVerifierPromptHash: string;
+    actionEligibilityPolicyHash: string;
+    eligibleGoldActionsHash: string;
+    applyEligibleGoldAllowlist: boolean;
 }
 
 export type TranslationBenchSynthesizerLlm = TranslationBenchGenerationLlm;
@@ -179,7 +181,8 @@ export interface TranslationBenchGeneratedBenchmarkOptions {
     genCaseCount: number;
     maxAttempts: number;
     requireCompleteCoverage: boolean;
-    /** Parallel schedule slots (default 1). Checkpoint commits stay serialized. */
+    allowMissingRemovedActions?: boolean;
+    applyEligibleGoldAllowlist?: boolean;
     concurrency?: number;
     generator: TranslationBenchGenerationLlm;
     reviewer: TranslationBenchGenerationLlm;
@@ -243,51 +246,25 @@ function requirePositiveInteger(value: number, name: string): void {
     }
 }
 
-/**
- * Action ids whose bare name is owned by more than one schema (e.g.
- * `deleteWebFlow` in both browser.actionDiscovery and browser.webFlows). A
- * correct translator has multiple valid routes for these, so the single gold
- * route is ambiguous and shows up as all-models-pick-the-sibling "failures".
- * Every such sibling is dropped from targeting so gold stays unambiguous (both
- * stay in the catalog; nothing is hand-edited). Intentionally conservative:
- * excludes by bare name across the whole catalog, not just co-active schemas.
- */
-function ambiguousCrossSchemaActionIds(
-    census: { qualifiedActionKeys: string[] },
-    excluded: ReadonlySet<string>,
-): Set<string> {
-    const idsByActionName = new Map<string, string[]>();
-    for (const key of census.qualifiedActionKeys) {
-        const [schemaName, actionName] = JSON.parse(key) as [string, string];
-        const id = `${schemaName}.${actionName}`;
-        if (excluded.has(id)) continue;
-        const ids = idsByActionName.get(actionName) ?? [];
-        ids.push(id);
-        idsByActionName.set(actionName, ids);
-    }
-    const ambiguous = new Set<string>();
-    for (const ids of idsByActionName.values()) {
-        if (ids.length > 1) for (const id of ids) ambiguous.add(id);
-    }
-    return ambiguous;
-}
-
 export function createTranslationBenchGenerationSchedule(
     catalog: TranslationBenchBenchmarkSchema[],
     options: {
         caseCount: number;
         requireCompleteCoverage: boolean;
         excludedActionIds?: ReadonlySet<string>;
+        allowMissingRemovedActions?: boolean;
+        applyEligibleGoldAllowlist?: boolean;
     },
 ): TranslationBenchGenerationSchedule {
     requirePositiveInteger(options.caseCount, "Translation bench case count");
     const census = getTranslationBenchCatalogCensus(catalog);
-    const baseExcludedActionIds =
-        options.excludedActionIds ?? getPackagedLlmJudgeExcludedActions();
-    const excludedActionIds = new Set<string>([
-        ...baseExcludedActionIds,
-        ...ambiguousCrossSchemaActionIds(census, baseExcludedActionIds),
-    ]);
+    const excludedActionIds =
+        options.excludedActionIds ??
+        getPackagedScheduleExcludedActionIds(catalog, {
+            allowMissingExactIds: options.allowMissingRemovedActions === true,
+            applyEligibleGoldAllowlist:
+                options.applyEligibleGoldAllowlist !== false,
+        });
     const qualified = census.qualifiedActionKeys
         .map((key) => {
             const [schemaName, actionName] = JSON.parse(key) as [
@@ -308,7 +285,7 @@ export function createTranslationBenchGenerationSchedule(
     );
     if (eligibleActionCount === 0 || qualified.length === 0) {
         throw new Error(
-            "Translation bench generation schedule has no eligible actions after llmAsAJudge exclusions",
+            "Translation bench generation schedule has no eligible actions after policy removedActions exclusions",
         );
     }
     if (
@@ -1001,6 +978,14 @@ function checkpointHeader(
             semanticChecker: qualityPack.semanticChecker,
             acceptance: qualityPack.acceptance,
         }),
+        actionEligibilityPolicyHash:
+            getPackagedActionEligibilityPolicy().contentHash,
+        eligibleGoldActionsHash:
+            options.applyEligibleGoldAllowlist === false
+                ? "0".repeat(64)
+                : getPackagedEligibleGoldActionIds().contentHash,
+        applyEligibleGoldAllowlist:
+            options.applyEligibleGoldAllowlist !== false,
     };
     return {
         kind: "translation-bench-checkpoint",
@@ -1119,9 +1104,28 @@ export async function generateTranslationBenchBenchmark(
     const catalog = createTranslationBenchTypeAgentSchemaCatalog(
         options.provider,
     );
+    const liveRulesFp = graderRulesFingerprint();
+    const packagedGrader = getPackagedActionParametersGraderCatalog();
+    if (
+        packagedGrader.rulesFingerprint === undefined ||
+        packagedGrader.rulesFingerprint.length === 0
+    ) {
+        throw new Error(
+            "Packaged action-parameters grader missing rulesFingerprint; run pnpm gen-policy",
+        );
+    }
+    if (packagedGrader.rulesFingerprint !== liveRulesFp) {
+        throw new Error(
+            `Packaged action-parameters grader is stale vs action-eligibility policy ` +
+                `(grader rulesFingerprint=${packagedGrader.rulesFingerprint}, ` +
+                `live=${liveRulesFp}). Run pnpm gen-policy.`,
+        );
+    }
     const schedule = createTranslationBenchGenerationSchedule(catalog, {
         caseCount: options.caseCount,
         requireCompleteCoverage: options.requireCompleteCoverage,
+        allowMissingRemovedActions: options.allowMissingRemovedActions === true,
+        applyEligibleGoldAllowlist: options.applyEligibleGoldAllowlist !== false,
     });
     const seenAnchors = new Set<string>();
     const anchors = importTranslationBenchSourceCandidates(options.sourceText, {
@@ -1336,15 +1340,16 @@ export async function generateTranslationBenchBenchmark(
             ]),
         ),
     ).size;
+    const coverageExcluded = getPackagedScheduleExcludedActionIds(catalog, {
+        allowMissingExactIds: options.allowMissingRemovedActions === true,
+        applyEligibleGoldAllowlist: options.applyEligibleGoldAllowlist !== false,
+    });
     const coverage: TranslationBenchGenerationCoverage = {
         ...schedule.coverage,
         scheduledActionCount,
         complete:
             scheduledActionCount ===
-            countEligibleTranslationBenchActions(
-                catalog,
-                getPackagedLlmJudgeExcludedActions(),
-            ),
+            countEligibleTranslationBenchActions(catalog, coverageExcluded),
     };
     const usage = aggregateUsage(cases);
     const estimatedCosts = cases.flatMap(
@@ -1404,6 +1409,14 @@ export async function generateTranslationBenchBenchmark(
                     maxAttempts: options.maxAttempts,
                     coverage,
                     runFingerprint: header.runFingerprint,
+                    eligibleGoldActionsHash:
+                        options.applyEligibleGoldAllowlist === false
+                            ? "0".repeat(64)
+                            : getPackagedEligibleGoldActionIds().contentHash,
+                    applyEligibleGoldAllowlist:
+                        options.applyEligibleGoldAllowlist !== false,
+                    allowMissingRemovedActions:
+                        options.allowMissingRemovedActions === true,
                 },
             },
             approval: { status: "draft" },
