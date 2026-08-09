@@ -214,7 +214,9 @@ describe("schedule exclusions allowlist-on", () => {
                     ...(sample
                         .filter((id) => id.startsWith("dispatcher."))
                         .map((id) => ({
-                            function: { name: id.split(".").slice(1).join(".") },
+                            function: {
+                                name: id.split(".").slice(1).join("."),
+                            },
                         })) as { function: { name: string } }[]),
                 ],
             },
@@ -270,9 +272,7 @@ describe("schedule exclusions allowlist-on", () => {
             },
             {
                 schemaName: "code",
-                tools: [
-                    { function: { name: "code-editor.createCodeBlock" } },
-                ],
+                tools: [{ function: { name: "code-editor.createCodeBlock" } }],
             },
         ];
         const excluded = getPackagedScheduleExcludedActionIds(schemas, {
@@ -281,8 +281,6 @@ describe("schedule exclusions allowlist-on", () => {
         });
         expect(excluded.has("dispatcher.unknown")).toBe(true);
         // createCodeBlock is human-removed and/or llmJudge — either way excluded
-        expect(
-            excluded.has("code.code-editor.createCodeBlock"),
-        ).toBe(true);
+        expect(excluded.has("code.code-editor.createCodeBlock")).toBe(true);
     });
 });

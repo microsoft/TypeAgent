@@ -376,7 +376,7 @@ describe("translation bench generation schedule", () => {
                 caseCount: 2,
                 requireCompleteCoverage: true,
                 allowMissingRemovedActions: true,
-            applyEligibleGoldAllowlist: false,
+                applyEligibleGoldAllowlist: false,
             }),
         ).toThrow(/cover|coverage|action/i);
     });

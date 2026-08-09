@@ -368,7 +368,11 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
             },
         });
         expect(
-            tryClassifyActionParameterFieldHardcode("lookup", lookupMixed, false),
+            tryClassifyActionParameterFieldHardcode(
+                "lookup",
+                lookupMixed,
+                false,
+            ),
         ).toMatchObject({
             create: "record",
             verify: "exact",
@@ -1058,7 +1062,8 @@ describe("incremental grader catalog", () => {
             listName: { optional: false, spec: { kind: "string" } },
         });
 
-        const first = await buildActionParametersGraderCatalog({
+        const first = await buildActionParametersGraderCatalog(
+            {
                 catalogVersion: "2026-01-01",
                 actions: [
                     {
@@ -1074,7 +1079,12 @@ describe("incremental grader catalog", () => {
                         parameters: "listName",
                     },
                 ],
-            }, {  generatedAt: "2026-01-01T00:00:00.000Z", assertOverridesMatchCatalog: false });
+            },
+            {
+                generatedAt: "2026-01-01T00:00:00.000Z",
+                assertOverridesMatchCatalog: false,
+            },
+        );
 
         expect(first.lastDiff?.added).toEqual([
             "list.createList",
@@ -1096,7 +1106,8 @@ describe("incremental grader catalog", () => {
             when: { optional: false, spec: { kind: "string" } },
         });
 
-        const second = await buildActionParametersGraderCatalog({
+        const second = await buildActionParametersGraderCatalog(
+            {
                 catalogVersion: "2026-01-02",
                 actions: [
                     {
@@ -1112,9 +1123,13 @@ describe("incremental grader catalog", () => {
                         parameters: "message, when",
                     },
                 ],
-            }, { 
+            },
+            {
                 previous: first,
-                generatedAt: "2026-01-02T00:00:00.000Z", assertOverridesMatchCatalog: false });
+                generatedAt: "2026-01-02T00:00:00.000Z",
+                assertOverridesMatchCatalog: false,
+            },
+        );
 
         expect(second.lastDiff).toEqual({
             added: ["timer.setReminder"],
@@ -1125,7 +1140,8 @@ describe("incremental grader catalog", () => {
         expect(second.byAction["list.createList"]).toBeUndefined();
         expect(second.byAction["timer.setReminder"]).toBeDefined();
 
-        const third = await buildActionParametersGraderCatalog({
+        const third = await buildActionParametersGraderCatalog(
+            {
                 catalogVersion: "2026-01-03",
                 actions: [
                     {
@@ -1141,7 +1157,13 @@ describe("incremental grader catalog", () => {
                         parameters: "message, when",
                     },
                 ],
-            }, {  previous: second, generatedAt: "2026-01-03T00:00:00.000Z", assertOverridesMatchCatalog: false });
+            },
+            {
+                previous: second,
+                generatedAt: "2026-01-03T00:00:00.000Z",
+                assertOverridesMatchCatalog: false,
+            },
+        );
         expect(third.lastDiff?.added).toContain("list.createList");
         expect(third.lastDiff?.unchanged).toContain("timer.setReminder");
         expect(third.byAction["timer.setReminder"]).toBe(
@@ -1156,7 +1178,8 @@ describe("incremental grader catalog", () => {
         const listSpec = objectSpec({
             listName: { optional: false, spec: { kind: "string" } },
         });
-        const first = await buildActionParametersGraderCatalog({
+        const first = await buildActionParametersGraderCatalog(
+            {
                 catalogVersion: "2026-01-01",
                 actions: [
                     {
@@ -1165,7 +1188,12 @@ describe("incremental grader catalog", () => {
                         paramSpec: listSpec,
                     },
                 ],
-            }, {  generatedAt: "2026-01-01T00:00:00.000Z", assertOverridesMatchCatalog: false });
+            },
+            {
+                generatedAt: "2026-01-01T00:00:00.000Z",
+                assertOverridesMatchCatalog: false,
+            },
+        );
         // Poison a field as if legacy reuse had stuck.
         first.byAction["list.createList"]!.fields.listName = {
             optional: false,
@@ -1179,7 +1207,8 @@ describe("incremental grader catalog", () => {
         first.byAction["list.createList"]!.parameterScore.fields.listName =
             "nonempty";
 
-        const forced = await buildActionParametersGraderCatalog({
+        const forced = await buildActionParametersGraderCatalog(
+            {
                 catalogVersion: "2026-01-02",
                 actions: [
                     {
@@ -1188,10 +1217,14 @@ describe("incremental grader catalog", () => {
                         paramSpec: listSpec,
                     },
                 ],
-            }, { 
+            },
+            {
                 previous: first,
                 forceFull: true,
-                generatedAt: "2026-01-02T00:00:00.000Z", assertOverridesMatchCatalog: false });
+                generatedAt: "2026-01-02T00:00:00.000Z",
+                assertOverridesMatchCatalog: false,
+            },
+        );
         expect(forced.byAction["list.createList"]!.fields.listName?.rule).toBe(
             "string-identifier-exact",
         );
@@ -1213,7 +1246,8 @@ describe("incremental grader catalog", () => {
         const listSpec = objectSpec({
             listName: { optional: false, spec: { kind: "string" } },
         });
-        const first = await buildActionParametersGraderCatalog({
+        const first = await buildActionParametersGraderCatalog(
+            {
                 catalogVersion: "2026-01-01",
                 actions: [
                     {
@@ -1222,13 +1256,19 @@ describe("incremental grader catalog", () => {
                         paramSpec: listSpec,
                     },
                 ],
-            }, {  generatedAt: "2026-01-01T00:00:00.000Z", assertOverridesMatchCatalog: false });
+            },
+            {
+                generatedAt: "2026-01-01T00:00:00.000Z",
+                assertOverridesMatchCatalog: false,
+            },
+        );
         const fp = first.byAction["list.createList"]!.sourceFingerprint;
         expect(fp).toBe(actionParameterSourceFingerprint(listSpec));
         expect(first.rulesFingerprint).toMatch(/^[0-9a-f]{16}$/);
 
         // Same schema + matching rulesFingerprint → incremental keeps entry.
-        const second = await buildActionParametersGraderCatalog({
+        const second = await buildActionParametersGraderCatalog(
+            {
                 catalogVersion: "2026-01-02",
                 actions: [
                     {
@@ -1237,9 +1277,13 @@ describe("incremental grader catalog", () => {
                         paramSpec: listSpec,
                     },
                 ],
-            }, { 
+            },
+            {
                 previous: first,
-                generatedAt: "2026-01-02T00:00:00.000Z", assertOverridesMatchCatalog: false });
+                generatedAt: "2026-01-02T00:00:00.000Z",
+                assertOverridesMatchCatalog: false,
+            },
+        );
         expect(second.byAction["list.createList"]!.sourceFingerprint).toBe(fp);
         expect(second.lastDiff?.unchanged).toContain("list.createList");
 
@@ -1249,7 +1293,8 @@ describe("incremental grader catalog", () => {
             ...first,
             rulesFingerprint: "0000000000000000",
         };
-        const third = await buildActionParametersGraderCatalog({
+        const third = await buildActionParametersGraderCatalog(
+            {
                 catalogVersion: "2026-01-03",
                 actions: [
                     {
@@ -1258,9 +1303,13 @@ describe("incremental grader catalog", () => {
                         paramSpec: listSpec,
                     },
                 ],
-            }, { 
+            },
+            {
                 previous: staleRules,
-                generatedAt: "2026-01-03T00:00:00.000Z", assertOverridesMatchCatalog: false });
+                generatedAt: "2026-01-03T00:00:00.000Z",
+                assertOverridesMatchCatalog: false,
+            },
+        );
         expect(third.byAction["list.createList"]!.sourceFingerprint).toBe(fp);
         expect(third.rulesFingerprint).toBe(first.rulesFingerprint);
         expect(third.lastDiff?.added).toContain("list.createList");
@@ -1289,7 +1338,8 @@ describe("incremental grader catalog", () => {
     });
 
     it("builds recommendedByAction map on demand", async () => {
-        const catalog = await buildActionParametersGraderCatalog({
+        const catalog = await buildActionParametersGraderCatalog(
+            {
                 catalogVersion: "2026-01-01",
                 actions: [
                     {
@@ -1310,7 +1360,12 @@ describe("incremental grader catalog", () => {
                         }),
                     },
                 ],
-            }, {  generatedAt: "2026-01-01T00:00:00.000Z", assertOverridesMatchCatalog: false });
+            },
+            {
+                generatedAt: "2026-01-01T00:00:00.000Z",
+                assertOverridesMatchCatalog: false,
+            },
+        );
         expect(toRecommendedByActionVerifyMap(catalog)).toEqual({
             "weather.getCurrentConditions": {
                 location: "nonempty",
@@ -1323,7 +1378,8 @@ describe("incremental grader catalog", () => {
         const listSpec = objectSpec({
             listName: { optional: false, spec: { kind: "string" } },
         });
-        const first = await buildActionParametersGraderCatalog({
+        const first = await buildActionParametersGraderCatalog(
+            {
                 catalogVersion: "2026-01-01",
                 actions: [
                     {
@@ -1332,7 +1388,12 @@ describe("incremental grader catalog", () => {
                         paramSpec: listSpec,
                     },
                 ],
-            }, {  generatedAt: "2026-01-01T00:00:00.000Z", assertOverridesMatchCatalog: false });
+            },
+            {
+                generatedAt: "2026-01-01T00:00:00.000Z",
+                assertOverridesMatchCatalog: false,
+            },
+        );
         // Corrupt fingerprint string while keeping shape — looks "stable" to naive diffs.
         first.byAction["list.createList"]!.sourceFingerprint =
             "deadbeefdeadbeef";
@@ -1357,7 +1418,8 @@ describe("incremental grader catalog", () => {
         );
         expect(diff.updated).toContain("list.createList");
 
-        const rebuilt = await buildActionParametersGraderCatalog({
+        const rebuilt = await buildActionParametersGraderCatalog(
+            {
                 catalogVersion: "2026-01-02",
                 actions: [
                     {
@@ -1366,7 +1428,13 @@ describe("incremental grader catalog", () => {
                         paramSpec: listSpec,
                     },
                 ],
-            }, {  previous: first, generatedAt: "2026-01-02T00:00:00.000Z", assertOverridesMatchCatalog: false });
+            },
+            {
+                previous: first,
+                generatedAt: "2026-01-02T00:00:00.000Z",
+                assertOverridesMatchCatalog: false,
+            },
+        );
         expect(
             rebuilt.byAction["list.createList"]!.fields.listName?.verify,
         ).toBe("exact");
@@ -1513,7 +1581,9 @@ describe("hardcoded nonempty for conversation topic titles", () => {
                 },
             ],
         };
-        const grader = await buildActionParametersGraderCatalog(catalog, { assertOverridesMatchCatalog: false });
+        const grader = await buildActionParametersGraderCatalog(catalog, {
+            assertOverridesMatchCatalog: false,
+        });
         expect(
             grader.byAction["system.conversation.summarizeConversation"]!
                 .parameterScore.fields.name,
@@ -1560,7 +1630,9 @@ describe("hardcoded llmAsAJudge for internet lookup params", () => {
                 },
             ],
         };
-        const grader = await buildActionParametersGraderCatalog(catalog, { assertOverridesMatchCatalog: false });
+        const grader = await buildActionParametersGraderCatalog(catalog, {
+            assertOverridesMatchCatalog: false,
+        });
         const entry =
             grader.byAction["browser.lookupAndAnswer.lookupAndAnswerInternet"]!;
         expect(entry.parameterScore.fields).toEqual({
@@ -1670,7 +1742,10 @@ describe("llmAsAJudge verify mode", () => {
                 },
             ],
         };
-        const grader = await buildActionParametersGraderCatalog(catalog as any, {  forceFull: true, assertOverridesMatchCatalog: false });
+        const grader = await buildActionParametersGraderCatalog(
+            catalog as any,
+            { forceFull: true, assertOverridesMatchCatalog: false },
+        );
         expect(
             grader.byAction["browser.executeAdHocScript"]!.fields.script
                 ?.verify,

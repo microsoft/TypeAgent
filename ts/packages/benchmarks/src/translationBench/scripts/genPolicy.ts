@@ -219,9 +219,7 @@ export async function main(
         includeLastDiff: true,
         onProgress(done, total) {
             if (total === 0) return;
-            process.stderr.write(
-                `[genPolicy] classify ${done}/${total}\n`,
-            );
+            process.stderr.write(`[genPolicy] classify ${done}/${total}\n`);
         },
     });
 

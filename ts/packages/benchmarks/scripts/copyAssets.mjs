@@ -84,7 +84,6 @@ if (existsSync(yamlSrc)) {
     }
 }
 
-
 const policyFiles = [
     [
         "src/translationBench/policy/action-eligibility.json",

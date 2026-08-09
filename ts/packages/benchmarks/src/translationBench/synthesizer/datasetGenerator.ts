@@ -1125,7 +1125,8 @@ export async function generateTranslationBenchBenchmark(
         caseCount: options.caseCount,
         requireCompleteCoverage: options.requireCompleteCoverage,
         allowMissingRemovedActions: options.allowMissingRemovedActions === true,
-        applyEligibleGoldAllowlist: options.applyEligibleGoldAllowlist !== false,
+        applyEligibleGoldAllowlist:
+            options.applyEligibleGoldAllowlist !== false,
     });
     const seenAnchors = new Set<string>();
     const anchors = importTranslationBenchSourceCandidates(options.sourceText, {
@@ -1342,7 +1343,8 @@ export async function generateTranslationBenchBenchmark(
     ).size;
     const coverageExcluded = getPackagedScheduleExcludedActionIds(catalog, {
         allowMissingExactIds: options.allowMissingRemovedActions === true,
-        applyEligibleGoldAllowlist: options.applyEligibleGoldAllowlist !== false,
+        applyEligibleGoldAllowlist:
+            options.applyEligibleGoldAllowlist !== false,
     });
     const coverage: TranslationBenchGenerationCoverage = {
         ...schedule.coverage,

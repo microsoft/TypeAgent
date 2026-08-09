@@ -136,7 +136,6 @@ describe("translation bench confusable siblings", () => {
         expect(siblings.map((s) => s.actionName)).not.toContain("readFile");
     });
 
-
     it("finds curated openWebPage ↔ followLinkByText pair", () => {
         const catalog = browserCatalog();
         const siblings = findTranslationBenchConfusableSiblings(

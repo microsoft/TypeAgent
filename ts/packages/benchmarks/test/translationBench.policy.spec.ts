@@ -22,7 +22,13 @@ import {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Jest runs compiled specs from dist/test; assets live under package root.
-const packageRoot = path.resolve(here, here.endsWith(`${path.sep}dist${path.sep}test`) || here.endsWith("/dist/test") ? "../.." : "..");
+const packageRoot = path.resolve(
+    here,
+    here.endsWith(`${path.sep}dist${path.sep}test`) ||
+        here.endsWith("/dist/test")
+        ? "../.."
+        : "..",
+);
 const catalogPath = path.join(
     packageRoot,
     "src/translationBench/catalog.generated.json",
@@ -33,7 +39,9 @@ const onboardingSnapshotPath = path.join(
 );
 
 function loadCatalog(): GeneratedActionCatalog {
-    return JSON.parse(readFileSync(catalogPath, "utf8")) as GeneratedActionCatalog;
+    return JSON.parse(
+        readFileSync(catalogPath, "utf8"),
+    ) as GeneratedActionCatalog;
 }
 
 describe("translation-bench action eligibility policy", () => {
@@ -55,7 +63,11 @@ describe("translation-bench action eligibility policy", () => {
             parseActionEligibilityPolicy({
                 version: 1,
                 removedActions: [
-                    { type: "glob", pattern: "foo.*", reasons: ["internal_utility"] },
+                    {
+                        type: "glob",
+                        pattern: "foo.*",
+                        reasons: ["internal_utility"],
+                    },
                 ],
                 parameterOverrides: [],
             }),
@@ -122,9 +134,9 @@ describe("translation-bench action eligibility policy", () => {
         for (const id of originalRequestActions) {
             expect(removedActionIds.has(id)).toBe(true);
         }
-        expect(removedActionIds.has("system.help.answerTypeAgentQuestion")).toBe(
-            true,
-        );
+        expect(
+            removedActionIds.has("system.help.answerTypeAgentQuestion"),
+        ).toBe(true);
         expect(removedActionIds.has("utility.claudeTask")).toBe(true);
         // onboarding expanded
         expect(
@@ -134,7 +146,9 @@ describe("translation-bench action eligibility policy", () => {
 
     test("every parameter override path exists on the catalog", () => {
         const catalog = loadCatalog();
-        expect(() => assertParameterOverridesMatchCatalog(catalog)).not.toThrow();
+        expect(() =>
+            assertParameterOverridesMatchCatalog(catalog),
+        ).not.toThrow();
         const actions = catalog.actions.map((a) => ({
             schemaName: a.schemaName,
             actionName: a.actionName,
@@ -171,14 +185,17 @@ describe("translation-bench action eligibility policy", () => {
         // Tiny catalog slice: one originalRequest action + one normal action
         const slice: GeneratedActionCatalog = {
             catalogVersion: catalog.catalogVersion,
-            actions: catalog.actions.filter((a) =>
-                [
-                    "browser.searchImageAction",
-                    "browser.openWebPage",
-                ].includes(`${a.schemaName}.${a.actionName}`) ||
-                `${a.schemaName}.${a.actionName}` ===
-                    "browser.searchImageAction",
-            ).slice(0, 5),
+            actions: catalog.actions
+                .filter(
+                    (a) =>
+                        [
+                            "browser.searchImageAction",
+                            "browser.openWebPage",
+                        ].includes(`${a.schemaName}.${a.actionName}`) ||
+                        `${a.schemaName}.${a.actionName}` ===
+                            "browser.searchImageAction",
+                )
+                .slice(0, 5),
         };
         // Ensure searchImage is included
         const search = catalog.actions.find(

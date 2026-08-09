@@ -21,7 +21,9 @@ export function fieldTreeIsLlmAsAJudge(field: GraderFieldNode): boolean {
 }
 
 /** Actions that have any verify=llmAsAJudge field (including nested item). */
-export function listActionsWithLlmJudgeFields(catalog: GraderByAction): string[] {
+export function listActionsWithLlmJudgeFields(
+    catalog: GraderByAction,
+): string[] {
     const out: string[] = [];
     for (const id of Object.keys(catalog.byAction).sort()) {
         const fields = catalog.byAction[id]!.fields;

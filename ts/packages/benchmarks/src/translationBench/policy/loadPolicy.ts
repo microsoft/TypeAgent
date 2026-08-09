@@ -168,7 +168,9 @@ export function parseActionEligibilityPolicy(
     const seenRemoved = new Set<string>();
     for (const entry of policy.removedActions) {
         const key =
-            entry.type === "action" ? `action:${entry.id}` : `prefix:${entry.prefix}`;
+            entry.type === "action"
+                ? `action:${entry.id}`
+                : `prefix:${entry.prefix}`;
         if (seenRemoved.has(key)) {
             throw new Error(
                 `Duplicate removedActions entry '${key}' in ${sourcePath}`,
@@ -223,7 +225,10 @@ export function loadActionEligibilityPolicyFile(
 
 export function getPackagedActionEligibilityPolicy(): LoadedActionEligibilityPolicy {
     if (cachedPackaged === undefined) {
-        const candidate = path.join(TRANSLATION_BENCH_POLICY_DIR, POLICY_FILE_NAME);
+        const candidate = path.join(
+            TRANSLATION_BENCH_POLICY_DIR,
+            POLICY_FILE_NAME,
+        );
         if (existsSync(candidate)) {
             cachedPackaged = loadActionEligibilityPolicyFile(candidate);
         } else {
@@ -309,5 +314,3 @@ export function assertRemovedActionsMatchCatalog(
         allowMissingExactIds: false,
     });
 }
-
-

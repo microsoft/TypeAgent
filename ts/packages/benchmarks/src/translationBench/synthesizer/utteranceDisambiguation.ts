@@ -110,7 +110,10 @@ const KNOWN_CONFUSABLE_PAIRS: ReadonlyArray<
         "get all web flows vs list web flows",
     ],
     [
-        { schemaName: "browser.actionDiscovery", actionName: "createInferredFlows" },
+        {
+            schemaName: "browser.actionDiscovery",
+            actionName: "createInferredFlows",
+        },
         { schemaName: "browser", actionName: "createInferredFlow" },
         "create inferred flows vs create inferred flow",
     ],
@@ -206,7 +209,10 @@ const KNOWN_CONFUSABLE_PAIRS: ReadonlyArray<
         "workflow view vs workbench open file",
     ],
     [
-        { schemaName: "onboarding.onboarding-packaging", actionName: "generateDemo" },
+        {
+            schemaName: "onboarding.onboarding-packaging",
+            actionName: "generateDemo",
+        },
         { schemaName: "video", actionName: "createVideoAction" },
         "generate demo vs create video",
     ],

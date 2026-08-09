@@ -29,7 +29,8 @@ import type {
 
 const require = createRequire(import.meta.url);
 
-export const ELIGIBLE_GOLD_ACTIONS_FILE = "eligible-gold-actions.generated.json";
+export const ELIGIBLE_GOLD_ACTIONS_FILE =
+    "eligible-gold-actions.generated.json";
 
 const actionIdSchema = z
     .string()
@@ -172,7 +173,9 @@ export async function pickEligibleGoldActions(
         });
     }
     if (candidates.length === 0) {
-        throw new Error("action quality picker: no candidates after hard filters");
+        throw new Error(
+            "action quality picker: no candidates after hard filters",
+        );
     }
 
     const template = loadClassifierTemplate();
@@ -273,7 +276,6 @@ let cachedAllowlist:
 export function clearPackagedEligibleGoldActionsCacheForTests(): void {
     cachedAllowlist = undefined;
 }
-
 
 function resolvePackagedJsonPath(fileName: string): string {
     const dir = path.dirname(fileURLToPath(import.meta.url));
@@ -447,4 +449,3 @@ export function getPackagedEligibleGoldActionIds(): {
     };
     return cachedAllowlist;
 }
-

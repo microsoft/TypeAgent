@@ -5,11 +5,7 @@
   "description": "Human-owned TB policy: which actions may be gold targets, and per-field verify overrides for the parameter grader.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "version",
-    "removedActions",
-    "parameterOverrides"
-  ],
+  "required": ["version", "removedActions", "parameterOverrides"],
   "properties": {
     "version": {
       "type": "integer",
@@ -56,13 +52,7 @@
     },
     "verifyMode": {
       "type": "string",
-      "enum": [
-        "exact",
-        "exists",
-        "nonempty",
-        "ignore",
-        "llmAsAJudge"
-      ]
+      "enum": ["exact", "exists", "nonempty", "ignore", "llmAsAJudge"]
     },
     "actionId": {
       "type": "string",
@@ -77,11 +67,7 @@
     "removedActionExact": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "type",
-        "id",
-        "reasons"
-      ],
+      "required": ["type", "id", "reasons"],
       "properties": {
         "type": {
           "const": "action"
@@ -104,11 +90,7 @@
     "removedActionPrefix": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "type",
-        "prefix",
-        "reasons"
-      ],
+      "required": ["type", "prefix", "reasons"],
       "properties": {
         "type": {
           "const": "prefix"
@@ -133,11 +115,7 @@
     "parameterOverrideField": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "type",
-        "path",
-        "verify"
-      ],
+      "required": ["type", "path", "verify"],
       "properties": {
         "type": {
           "const": "field"

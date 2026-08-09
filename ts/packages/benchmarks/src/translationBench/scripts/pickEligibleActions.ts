@@ -20,8 +20,7 @@ import {
 const DEFAULT_CATALOG = "src/translationBench/catalog.generated.json";
 const DEFAULT_GRADER =
     "src/translationBench/action-parameters-grader.generated.json";
-const DEFAULT_OUT =
-    "src/translationBench/eligible-gold-actions.generated.json";
+const DEFAULT_OUT = "src/translationBench/eligible-gold-actions.generated.json";
 
 export function parseCli(argv: string[]) {
     const program = new Command()

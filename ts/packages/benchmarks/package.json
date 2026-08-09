@@ -25,14 +25,14 @@
     "clean": "node ./scripts/clean.mjs",
     "gen-action-parameters-grader": "pnpm run gen-policy",
     "gen-catalog": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genCatalog.js && node --max-old-space-size=4096 dist/translationBench/scripts/genPolicy.js && node --max-old-space-size=4096 dist/translationBench/scripts/pickEligibleActions.js --model ${TB_PICKER_MODEL:-azure/gpt-5.6-sol} && node ./scripts/copyAssets.mjs",
+    "gen-policy": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genPolicy.js && node ./scripts/copyAssets.mjs",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "pick-eligible-actions": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/pickEligibleActions.js --model ${TB_PICKER_MODEL:-azure/gpt-5.6-sol} && node ./scripts/copyAssets.mjs",
     "prettier": "prettier --check package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
     "test": "npm run test:local",
     "test:local": "pnpm run build && pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
-    "tsc": "tsc -b",
-    "gen-policy": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genPolicy.js && node ./scripts/copyAssets.mjs",
-    "pick-eligible-actions": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/pickEligibleActions.js --model ${TB_PICKER_MODEL:-azure/gpt-5.6-sol} && node ./scripts/copyAssets.mjs"
+    "tsc": "tsc -b"
   },
   "dependencies": {
     "@typeagent/action-schema": "workspace:*",

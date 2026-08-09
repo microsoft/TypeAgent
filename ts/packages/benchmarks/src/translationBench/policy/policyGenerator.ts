@@ -29,7 +29,10 @@ import {
     type TranslationBenchPolicyVerifyMode,
 } from "./loadPolicy.js";
 
-export { fieldTreeIsLlmAsAJudge, listActionsWithLlmJudgeFields } from "./graderInspect.js";
+export {
+    fieldTreeIsLlmAsAJudge,
+    listActionsWithLlmJudgeFields,
+} from "./graderInspect.js";
 
 export const GRADER_RULES_VERSION = 7;
 
@@ -168,7 +171,6 @@ export interface FieldGraderDecision {
 
     item?: FieldGraderDecision;
 }
-
 
 function activePolicy(
     override?: LoadedActionEligibilityPolicy,
@@ -412,7 +414,10 @@ export function assertParameterOverridesMatchCatalog(
     const fieldPaths = new Set<string>();
     for (const action of catalog.actions) {
         const id = actionId(action.schemaName, action.actionName);
-        if (!isParamSpec(action.paramSpec) || action.paramSpec.kind !== "object") {
+        if (
+            !isParamSpec(action.paramSpec) ||
+            action.paramSpec.kind !== "object"
+        ) {
             continue;
         }
         for (const name of Object.keys(action.paramSpec.fields)) {
@@ -428,7 +433,6 @@ export function assertParameterOverridesMatchCatalog(
         );
     }
 }
-
 
 function wrapArrayDecision(item: FieldGraderDecision): FieldGraderDecision {
     const looseVerify = loosenArrayVerifyMode(item);
@@ -1070,7 +1074,11 @@ function defaultCreateForOverride(
         return wrapArrayDecision({ ...item, verify });
     }
 
-    const hardcode = tryClassifyActionParameterFieldHardcode(fieldName, spec, optional);
+    const hardcode = tryClassifyActionParameterFieldHardcode(
+        fieldName,
+        spec,
+        optional,
+    );
     if (hardcode !== undefined) {
         let item = hardcode.item;
         if (item !== undefined) {
@@ -1160,7 +1168,9 @@ export async function buildActionParametersGraderEntry(
                         ...(options?.description !== undefined
                             ? { description: options.description }
                             : {}),
-                        ...(options?.llm !== undefined ? { llm: options.llm } : {}),
+                        ...(options?.llm !== undefined
+                            ? { llm: options.llm }
+                            : {}),
                         ...(options?.previousEntry?.fields[name] !== undefined
                             ? { priorField: options.previousEntry.fields[name] }
                             : {}),
@@ -2305,4 +2315,3 @@ export function hasUsableParameterScoreSpecs(
 ): boolean {
     return specs.some((spec) => spec !== undefined);
 }
-
