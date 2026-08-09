@@ -503,7 +503,7 @@ function formatSynthesizerPrompt(
     const actionContract =
         parameterField === undefined
             ? `Every expected action must use exactly {"schemaName":"${options.targetAction.schemaName}","actionName":"${options.targetAction.actionName}"}; omit parameters entirely for this parameterless action. Never use name/arguments or a qualified-name string.`
-            : `Every expected action must use exactly {"schemaName":"${options.targetAction.schemaName}","actionName":"${options.targetAction.actionName}","parameters":{...}} with schema-valid parameters${parameterField.optional ? " when parameters are present" : ""}. Never use name/arguments or a qualified-name string.`;
+            : `Every expected action must use exactly {"schemaName":"${options.targetAction.schemaName}","actionName":"${options.targetAction.actionName}","parameters":{...}} with schema-valid parameters${parameterField.optional ? " when parameters are present" : ""}. Never use name/arguments or a qualified-name string. Only include parameters clearly supported by the utterance (or allowed history); omit optional defaults, empty strings/arrays, dual fields, and invented runtime context.`;
     const positiveCount = options.genCaseCount / 2;
     const previousRejectedBlock =
         previousRejectedCandidate === undefined

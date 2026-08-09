@@ -83,6 +83,15 @@ template: |-
   - Vary difficulty from beginner to advanced phrasing
   - Match parameter types and ranges in the function description
 
+  Gold parameters (hard requirement for seed + every positive):
+  - Only include parameters the utterance (or allowed history) clearly supports.
+  - Prefer omit over writing a value when the user did not ask for that field.
+  - NEVER mint: schema default polarity flags (e.g. unstar:false on "star"),
+    empty strings, empty arrays, invented URLs/nonces/cursor/editor context,
+    or dual fields that restate another parameter (public:true + private:false).
+  - Empty "" / [] / null / {} placeholders are stripped before schema validation;
+    do not rely on that — omit those keys in the label you emit.
+
   Attempt: {{attempt}}
 
   Immutable context (YAML):
