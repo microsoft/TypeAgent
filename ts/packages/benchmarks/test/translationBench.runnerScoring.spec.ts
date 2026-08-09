@@ -44,7 +44,7 @@ describe("translationBench runner scoring fairness (E + C)", () => {
         expect(error).toBeUndefined();
         expect(chosenActions).toEqual([]);
         expect(rawChosenActions).toEqual([
-            { schemaName: "", actionName: "unknown" },
+            { schemaName: "dispatcher", actionName: "unknown" },
         ]);
         expect(score.passed).toBe(true);
         expect(score.exactPassed).toBe(true);

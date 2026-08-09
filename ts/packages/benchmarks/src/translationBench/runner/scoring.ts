@@ -595,8 +595,9 @@ export function scoreTranslationBenchTranslationOutcome(
 
     if (isUnknownActionSchemaMatchError(outcome.error)) {
         // Model abstained via `unknown`; dispatcher threw before filter ran.
+        // schemaName matches post-fix finalize (DispatcherName = "dispatcher").
         const rawChosenActions: TranslationBenchAction[] = [
-            { schemaName: "", actionName: "unknown" },
+            { schemaName: "dispatcher", actionName: "unknown" },
         ];
         return {
             rawChosenActions,
