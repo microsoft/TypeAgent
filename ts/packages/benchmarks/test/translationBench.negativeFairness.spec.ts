@@ -355,7 +355,29 @@ describe("translation bench candidate negative fairness from LLM assessments", (
         );
         expect(issues.length).toBeGreaterThan(0);
         expect(issues[0]!.code).toBe("BAD_NEGATIVE");
-        expect(issues[0]!.message).toMatch(/negativeKind|zero-action/i);
+        expect(issues[0]!.message).toMatch(
+            /negativeKind|zero-action|pure_refusal/i,
+        );
+    });
+
+    it("rejects a fair pure_refusal assessment when dimensions.negativeKind is missing", () => {
+        const candidate = fairCandidate("Leave my browser alone.");
+        delete candidate.genCases[1]!.dimensions.negativeKind;
+        const issues = checkTranslationBenchCandidateNegativeFairness(
+            candidate,
+            targetOpenWebPage,
+            [
+                {
+                    path: "$.genCases[1].utterance",
+                    kind: "pure_refusal",
+                    fairEmptyGold: true,
+                    reason: "leave-alone refusal but label omitted",
+                },
+            ],
+        );
+        expect(issues.length).toBeGreaterThan(0);
+        expect(issues[0]!.code).toBe("BAD_NEGATIVE");
+        expect(issues[0]!.message).toMatch(/pure_refusal/);
     });
 
     it("requires one assessment per negative", () => {

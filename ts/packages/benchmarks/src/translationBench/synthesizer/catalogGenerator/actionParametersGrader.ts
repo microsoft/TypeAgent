@@ -8,6 +8,10 @@ import { createRequire } from "node:module";
 import { z } from "zod";
 
 import { parseLlmJsonWithZod } from "../llmJson.js";
+import type {
+    TranslationBenchParameterScoreSpec,
+    TranslationBenchParamFieldMode,
+} from "../benchmark.js";
 import {
     loadTranslationBenchParameterGraderPromptPack,
     renderTranslationBenchPromptTemplate,
@@ -1760,19 +1764,14 @@ function isIdentifierName(name: string): boolean {
 }
 
 /**
- * Runner-ready parameterScore specs aligned 1:1 with expectedActions.
- * Missing grader entries yield `undefined` slots (runner falls back to exact).
+ * Runner-ready parameterScore specs aligned 1:1 with expectedActions. Missing
+ * grader entries yield `undefined` slots (runner falls back to exact-match).
+ * `llmAsAJudge` is a generation/offline-scoring concept the deterministic
+ * runner can't consume, so such params map to `ignore` (judged elsewhere).
  */
-/**
- * Field modes the deterministic runner can consume. `llmAsAJudge` is a
- * generation/offline-scoring concept; the runner treats such params as
- * `ignore` (they are semantically judged elsewhere, never exact-matched here).
- */
-export type RunnerParamFieldMode = "exact" | "exists" | "nonempty" | "ignore";
-
 function toRunnerParamFieldMode(
     mode: ActionParamVerifyMode,
-): RunnerParamFieldMode {
+): TranslationBenchParamFieldMode {
     return mode === "llmAsAJudge" ? "ignore" : mode;
 }
 
@@ -1782,45 +1781,32 @@ export function parameterScoreSpecsForExpectedActions(
         schemaName: string;
         actionName: string;
     }>,
-): Array<
-    | {
-          defaultMode: RunnerParamFieldMode;
-          fields: Record<string, RunnerParamFieldMode>;
-      }
-    | undefined
-> {
+): Array<TranslationBenchParameterScoreSpec | undefined> {
     return expectedActions.map((action) => {
         const entry =
             grader.byAction[actionId(action.schemaName, action.actionName)];
-        if (entry === undefined) {
+        if (
+            entry === undefined ||
+            Object.keys(entry.parameterScore.fields).length === 0
+        ) {
             return undefined;
-        }
-        const fields = entry.parameterScore.fields;
-        if (Object.keys(fields).length === 0) {
-            return undefined;
-        }
-        const mapped: Record<string, RunnerParamFieldMode> = {};
-        for (const [name, mode] of Object.entries(fields)) {
-            mapped[name] = toRunnerParamFieldMode(mode);
         }
         return {
             defaultMode: toRunnerParamFieldMode(
                 entry.parameterScore.defaultMode,
             ),
-            fields: mapped,
+            fields: Object.fromEntries(
+                Object.entries(entry.parameterScore.fields).map(
+                    ([name, mode]) => [name, toRunnerParamFieldMode(mode)],
+                ),
+            ),
         };
     });
 }
 
 /** True when at least one expected action has a non-empty parameterScore map. */
 export function hasUsableParameterScoreSpecs(
-    specs: ReadonlyArray<
-        | {
-              defaultMode: RunnerParamFieldMode;
-              fields: Record<string, RunnerParamFieldMode>;
-          }
-        | undefined
-    >,
+    specs: ReadonlyArray<TranslationBenchParameterScoreSpec | undefined>,
 ): boolean {
     return specs.some((spec) => spec !== undefined);
 }

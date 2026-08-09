@@ -243,6 +243,35 @@ function requirePositiveInteger(value: number, name: string): void {
     }
 }
 
+/**
+ * Action ids whose bare name is owned by more than one schema (e.g.
+ * `deleteWebFlow` in both browser.actionDiscovery and browser.webFlows). A
+ * correct translator has multiple valid routes for these, so the single gold
+ * route is ambiguous and shows up as all-models-pick-the-sibling "failures".
+ * Every such sibling is dropped from targeting so gold stays unambiguous (both
+ * stay in the catalog; nothing is hand-edited). Intentionally conservative:
+ * excludes by bare name across the whole catalog, not just co-active schemas.
+ */
+function ambiguousCrossSchemaActionIds(
+    census: { qualifiedActionKeys: string[] },
+    excluded: ReadonlySet<string>,
+): Set<string> {
+    const idsByActionName = new Map<string, string[]>();
+    for (const key of census.qualifiedActionKeys) {
+        const [schemaName, actionName] = JSON.parse(key) as [string, string];
+        const id = `${schemaName}.${actionName}`;
+        if (excluded.has(id)) continue;
+        const ids = idsByActionName.get(actionName) ?? [];
+        ids.push(id);
+        idsByActionName.set(actionName, ids);
+    }
+    const ambiguous = new Set<string>();
+    for (const ids of idsByActionName.values()) {
+        if (ids.length > 1) for (const id of ids) ambiguous.add(id);
+    }
+    return ambiguous;
+}
+
 export function createTranslationBenchGenerationSchedule(
     catalog: TranslationBenchBenchmarkSchema[],
     options: {
@@ -255,39 +284,10 @@ export function createTranslationBenchGenerationSchedule(
     const census = getTranslationBenchCatalogCensus(catalog);
     const baseExcludedActionIds =
         options.excludedActionIds ?? getPackagedLlmJudgeExcludedActions();
-    // D: exclude actions whose bare name is owned by more than one schema (e.g.
-    // `deleteWebFlow` in both browser.actionDiscovery and browser.webFlows). For
-    // such actions a correct translator has multiple valid routes, so the single
-    // gold route is ambiguous — those cases show up as all-models-pick-the-sibling
-    // "failures". Drop every sibling from targeting so gold is unambiguous.
-    // (Both siblings stay in the catalog; nothing is hand-edited.)
-    const ambiguousActionIds = new Set<string>();
-    {
-        const idsByActionName = new Map<string, string[]>();
-        for (const key of census.qualifiedActionKeys) {
-            const [schemaName, actionName] = JSON.parse(key) as [
-                string,
-                string,
-            ];
-            const id = `${schemaName}.${actionName}`;
-            if (baseExcludedActionIds.has(id)) continue;
-            const ids = idsByActionName.get(actionName) ?? [];
-            ids.push(id);
-            idsByActionName.set(actionName, ids);
-        }
-        for (const ids of idsByActionName.values()) {
-            if (ids.length > 1) {
-                for (const id of ids) ambiguousActionIds.add(id);
-            }
-        }
-    }
-    const excludedActionIds =
-        ambiguousActionIds.size === 0
-            ? baseExcludedActionIds
-            : new Set<string>([
-                  ...baseExcludedActionIds,
-                  ...ambiguousActionIds,
-              ]);
+    const excludedActionIds = new Set<string>([
+        ...baseExcludedActionIds,
+        ...ambiguousCrossSchemaActionIds(census, baseExcludedActionIds),
+    ]);
     const qualified = census.qualifiedActionKeys
         .map((key) => {
             const [schemaName, actionName] = JSON.parse(key) as [
@@ -1221,8 +1221,9 @@ export async function generateTranslationBenchBenchmark(
                 options.generator.model,
                 options.reviewer.model,
             );
-            casesBySlot.set(entry.slot, evalCase);
-            for (const u of utterances) usedUtterances.add(u);
+            // Persist the checkpoint row BEFORE mutating in-memory state so an
+            // I/O failure cannot leave an uncheckpointed case in casesBySlot
+            // (which the partial-coverage path would otherwise return).
             if (options.checkpointPath !== undefined) {
                 const row: TranslationBenchCheckpointRow<TranslationBenchBenchmarkCaseRecord> =
                     {
@@ -1241,6 +1242,8 @@ export async function generateTranslationBenchBenchmark(
                     [row],
                 );
             }
+            casesBySlot.set(entry.slot, evalCase);
+            for (const u of utterances) usedUtterances.add(u);
             options.onProgress?.(casesBySlot.size, options.caseCount);
             return "ok";
         });

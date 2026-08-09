@@ -159,14 +159,11 @@ export function checkTranslationBenchCandidateNegativeFairness(
         }
 
         const dimKind = genCase.dimensions.negativeKind;
-        if (
-            typeof dimKind === "string" &&
-            !FAIR_KINDS.has(dimKind as TranslationBenchNegativeKind)
-        ) {
+        if (dimKind !== a.kind) {
             issues.push(
                 bad(
                     a.path,
-                    `dimensions.negativeKind=${dimKind} is not zero-action-safe empty gold; use pure_refusal only`,
+                    `dimensions.negativeKind=${String(dimKind)} must equal the accepted empty-gold kind '${a.kind}' (pure_refusal only)`,
                 ),
             );
         }
