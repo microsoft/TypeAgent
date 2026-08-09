@@ -71,7 +71,10 @@ export interface TranslationBenchDiagnosticCounts {
     invalidJsonOrTranslationFailure: number;
 }
 
-function routeMatches(a: TranslationBenchAction, b: TranslationBenchAction): boolean {
+function routeMatches(
+    a: TranslationBenchAction,
+    b: TranslationBenchAction,
+): boolean {
     return a.schemaName === b.schemaName && a.actionName === b.actionName;
 }
 
@@ -527,7 +530,8 @@ export function isNonEvalTranslationBenchAction(action: {
  * refusal on empty-gold, not a translation failure.
  */
 export function isUnknownActionSchemaMatchError(error: unknown): boolean {
-    const message = error instanceof Error ? error.message : String(error ?? "");
+    const message =
+        error instanceof Error ? error.message : String(error ?? "");
     return /Unable to match schema name for action ['"]?unknown['"]?\b/i.test(
         message,
     );
@@ -612,13 +616,10 @@ export function scoreTranslationBenchTranslationOutcome(
         outcome.error instanceof Error
             ? outcome.error.message
             : String(outcome.error);
-    const score = scoreTranslationBench(
-        expectedActions,
-        [],
-        order,
-        0,
-        { ...scoreOptions, schemaValid: false },
-    );
+    const score = scoreTranslationBench(expectedActions, [], order, 0, {
+        ...scoreOptions,
+        schemaValid: false,
+    });
     score.passed = false;
     score.exactPassed = false;
     score.schemaValid = false;
