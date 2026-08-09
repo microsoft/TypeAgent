@@ -444,9 +444,7 @@ const probePayloadShape = {
     expectedActions: z.array(actionSchema),
     order: z.enum(["strict", "any"]),
     history: z.unknown().optional(),
-    parameterScore: z
-        .array(parameterScoreSpecSchema.optional())
-        .optional(),
+    parameterScore: z.array(parameterScoreSpecSchema.optional()).optional(),
 } as const;
 function validateHistory(
     probe: { history?: unknown },

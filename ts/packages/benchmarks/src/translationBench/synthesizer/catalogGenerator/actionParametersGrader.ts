@@ -1770,7 +1770,9 @@ function isIdentifierName(name: string): boolean {
  */
 export type RunnerParamFieldMode = "exact" | "exists" | "nonempty" | "ignore";
 
-function toRunnerParamFieldMode(mode: ActionParamVerifyMode): RunnerParamFieldMode {
+function toRunnerParamFieldMode(
+    mode: ActionParamVerifyMode,
+): RunnerParamFieldMode {
     return mode === "llmAsAJudge" ? "ignore" : mode;
 }
 
@@ -1802,7 +1804,9 @@ export function parameterScoreSpecsForExpectedActions(
             mapped[name] = toRunnerParamFieldMode(mode);
         }
         return {
-            defaultMode: toRunnerParamFieldMode(entry.parameterScore.defaultMode),
+            defaultMode: toRunnerParamFieldMode(
+                entry.parameterScore.defaultMode,
+            ),
             fields: mapped,
         };
     });
