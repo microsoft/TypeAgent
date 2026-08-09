@@ -3,6 +3,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 
 import { z } from "zod";
 
@@ -1402,6 +1403,37 @@ export function loadActionParametersGraderCatalogFile(
     return raw as unknown as ActionParametersGraderCatalog;
 }
 
+const requireFromHere = createRequire(import.meta.url);
+let cachedPackagedActionParametersGrader:
+    | ActionParametersGraderCatalog
+    | undefined;
+
+/**
+ * Packaged deterministic parameter grader, loaded from the generated JSON that
+ * ships with the benchmark. Cached; used to derive per-case `parameterScore`
+ * specs so the runner soft-matches params (e.g. free-text `nonempty`) instead
+ * of exact-matching everything.
+ */
+export function getPackagedActionParametersGraderCatalog(): ActionParametersGraderCatalog {
+    if (cachedPackagedActionParametersGrader === undefined) {
+        const graderPath = requireFromHere.resolve(
+            "../../action-parameters-grader.generated.json",
+        );
+        const catalog = loadActionParametersGraderCatalogFile(graderPath);
+        if (catalog === undefined) {
+            throw new Error(
+                `Missing packaged action-parameters grader at ${graderPath}`,
+            );
+        }
+        cachedPackagedActionParametersGrader = catalog;
+    }
+    return cachedPackagedActionParametersGrader;
+}
+
+export function clearPackagedActionParametersGraderCacheForTests(): void {
+    cachedPackagedActionParametersGrader = undefined;
+}
+
 function priorEntryStillValid(
     entry: ActionParametersGraderEntry,
     catalogRow: CatalogActionRow,
@@ -1731,6 +1763,17 @@ function isIdentifierName(name: string): boolean {
  * Runner-ready parameterScore specs aligned 1:1 with expectedActions.
  * Missing grader entries yield `undefined` slots (runner falls back to exact).
  */
+/**
+ * Field modes the deterministic runner can consume. `llmAsAJudge` is a
+ * generation/offline-scoring concept; the runner treats such params as
+ * `ignore` (they are semantically judged elsewhere, never exact-matched here).
+ */
+export type RunnerParamFieldMode = "exact" | "exists" | "nonempty" | "ignore";
+
+function toRunnerParamFieldMode(mode: ActionParamVerifyMode): RunnerParamFieldMode {
+    return mode === "llmAsAJudge" ? "ignore" : mode;
+}
+
 export function parameterScoreSpecsForExpectedActions(
     grader: ActionParametersGraderCatalog,
     expectedActions: ReadonlyArray<{
@@ -1739,8 +1782,8 @@ export function parameterScoreSpecsForExpectedActions(
     }>,
 ): Array<
     | {
-          defaultMode: ActionParamVerifyMode;
-          fields: Record<string, ActionParamVerifyMode>;
+          defaultMode: RunnerParamFieldMode;
+          fields: Record<string, RunnerParamFieldMode>;
       }
     | undefined
 > {
@@ -1754,9 +1797,13 @@ export function parameterScoreSpecsForExpectedActions(
         if (Object.keys(fields).length === 0) {
             return undefined;
         }
+        const mapped: Record<string, RunnerParamFieldMode> = {};
+        for (const [name, mode] of Object.entries(fields)) {
+            mapped[name] = toRunnerParamFieldMode(mode);
+        }
         return {
-            defaultMode: entry.parameterScore.defaultMode,
-            fields: { ...fields },
+            defaultMode: toRunnerParamFieldMode(entry.parameterScore.defaultMode),
+            fields: mapped,
         };
     });
 }
@@ -1765,8 +1812,8 @@ export function parameterScoreSpecsForExpectedActions(
 export function hasUsableParameterScoreSpecs(
     specs: ReadonlyArray<
         | {
-              defaultMode: ActionParamVerifyMode;
-              fields: Record<string, ActionParamVerifyMode>;
+              defaultMode: RunnerParamFieldMode;
+              fields: Record<string, RunnerParamFieldMode>;
           }
         | undefined
     >,
