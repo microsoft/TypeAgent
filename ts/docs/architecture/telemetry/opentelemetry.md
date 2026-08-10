@@ -383,6 +383,13 @@ assistant fallback, and retry. Retry numbers are sequential within the span, and
 event attributes use bounded reason/kind values rather than request or schema
 text.
 
+Each dispatcher action execution creates a `typeagent.action` span with the
+agent and action names known before the handler runs. Sequential actions are
+siblings under the request span; actions dispatched from a flow or another
+action become children of that active action. Setup failures and typed
+`ActionResult.error` returns use bounded events, while thrown handler errors use
+the same safe-default exception policy as request and translation spans.
+
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |
 | Span attributes | Stable facts such as agent, action, or model |
