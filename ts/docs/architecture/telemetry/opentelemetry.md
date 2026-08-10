@@ -340,7 +340,7 @@ import { otel } from "@typeagent/telemetry";
 
 const tracer = trace.getTracer("typeagent");
 
-return tracer.startActiveSpan("typeagent.translate", async (span) => {
+return tracer.startActiveSpan("typeagent.translation", async (span) => {
   try {
     span.setAttribute("typeagent.agent.name", agentName);
     return await translateRequest(request);
@@ -373,6 +373,15 @@ Original exception messages and stacks are omitted because they can contain user
 content. A host may explicitly opt into redacted details with
 `telemetry.captureSensitiveErrorDetails`, but this remains sensitive diagnostic
 capture even after known secrets are removed.
+
+The dispatcher creates one `typeagent.translation` child span for each
+translation operation. The normal request path includes grammar/cache lookup and
+model translation in the same span. Direct `translateRequest` callers also create
+a span, while re-entrant calls reuse an active translation span instead of
+creating duplicates. Events record each lookup, intentional cache bypass,
+assistant fallback, and retry. Retry numbers are sequential within the span, and
+event attributes use bounded reason/kind values rather than request or schema
+text.
 
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |
