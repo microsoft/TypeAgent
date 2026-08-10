@@ -542,7 +542,6 @@ export async function processCommand(
                     } finally {
                         context.activeRequests.delete(requestIdStr);
                         context.currentOptions = undefined;
-                        // eslint-disable-next-line no-unsafe-finally
                         return endProcessCommand(requestId, context);
                     }
                 });
