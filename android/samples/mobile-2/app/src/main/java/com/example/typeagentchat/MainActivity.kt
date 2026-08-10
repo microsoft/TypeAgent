@@ -17,6 +17,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,6 +37,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -68,50 +71,43 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.example.typeagentchat.ui.theme.TypeAgentChatTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
-    private val webSocketManager = WebSocketManager()
+    private val viewModel: ChatViewModel by viewModels()
     private val tunnelUrl = BuildConfig.TYPEAGENT_SERVER_URL.trim()
     private val tunnelToken = BuildConfig.TYPEAGENT_TUNNEL_TOKEN.trim().ifBlank { null }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        webSocketManager.setClientActionHandler(object : WebSocketManager.ClientActionHandler {
-            override fun onSetAlarm(action: SetAlarmAction) {
-                runOnUiThread { launchSetAlarmIntent(action) }
-            }
+        viewModel.connectIfNeeded(url = tunnelUrl, tunnelToken = tunnelToken)
 
-            override fun onSetTimer(action: SetTimerAction) {
-                runOnUiThread { launchSetTimerIntent(action) }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                viewModel.clientActions.collect { action ->
+                    when (action) {
+                        is ClientAction.Alarm -> launchSetAlarmIntent(action.action)
+                        is ClientAction.Timer -> launchSetTimerIntent(action.action)
+                        is ClientAction.SearchNearby -> launchSearchNearbyIntent(action.action)
+                    }
+                }
             }
-
-            override fun onSearchNearby(action: SearchNearbyAction) {
-                runOnUiThread { launchSearchNearbyIntent(action) }
-            }
-        })
-        webSocketManager.connect(
-            url = tunnelUrl,
-            tunnelToken = tunnelToken
-        )
+        }
 
         setContent {
             TypeAgentChatTheme {
                 ChatApp(
-                    webSocketManager = webSocketManager,
+                    viewModel = viewModel,
                     tunnelUrl = tunnelUrl,
                     tunnelToken = tunnelToken
                 )
             }
         }
-    }
-
-    override fun onDestroy() {
-        webSocketManager.setClientActionHandler(null)
-        webSocketManager.disconnect()
-        super.onDestroy()
     }
 
     private fun launchSetAlarmIntent(action: SetAlarmAction) {
@@ -249,34 +245,31 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun ChatApp(
-    webSocketManager: WebSocketManager,
+    viewModel: ChatViewModel,
     tunnelUrl: String,
     tunnelToken: String?
 ) {
-    val messages by webSocketManager.messages.collectAsState()
-    val connectionStatus by webSocketManager.connectionStatus.collectAsState()
-    val pendingYesNoPrompt by webSocketManager.pendingYesNoPrompt.collectAsState()
-    var inputText by remember { mutableStateOf("") }
+    val messages by viewModel.messages.collectAsState()
+    val connectionStatus by viewModel.connectionStatus.collectAsState()
+    val pendingYesNoPrompt by viewModel.pendingYesNoPrompt.collectAsState()
+    val inputText by viewModel.inputText.collectAsState()
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
-    val canSend = connectionStatus.state == ConnectionStatus.State.CONNECTED && inputText.isNotBlank()
+    val isConnected = connectionStatus.state == ConnectionStatus.State.CONNECTED
+    val canSend = isConnected && inputText.isNotBlank()
+
     val voiceInput = rememberVoiceInputController(
         onRecognizedText = { recognizedText ->
-            inputText = mergeSpeechInputText(
-                currentText = inputText,
-                recognizedText = recognizedText
-            )
+            if (viewModel.onRecognizedText(recognizedText)) {
+                focusManager.clearFocus()
+            }
         }
     )
 
     fun submitMessage() {
-        if (!canSend) {
-            return
+        if (viewModel.submitMessage()) {
+            focusManager.clearFocus()
         }
-        val message = inputText.trim()
-        webSocketManager.sendMessage(message)
-        inputText = ""
-        focusManager.clearFocus()
     }
 
     LaunchedEffect(messages.size) {
@@ -290,14 +283,18 @@ private fun ChatApp(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp),
+                .padding(16.dp)
+                .imePadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            ChatHeader()
+            ChatHeader(
+                canStartNewChat = messages.isNotEmpty(),
+                onNewChat = { viewModel.startNewChat() }
+            )
             ConnectionStatusIndicator(
                 status = connectionStatus,
                 onReconnect = {
-                    webSocketManager.connect(
+                    viewModel.reconnect(
                         url = tunnelUrl,
                         tunnelToken = tunnelToken
                     )
@@ -342,15 +339,15 @@ private fun ChatApp(
 
             ChatInputBar(
                 inputText = inputText,
-                onInputTextChange = { inputText = it },
-                isConnected = connectionStatus.state == ConnectionStatus.State.CONNECTED,
+                onInputTextChange = { viewModel.onInputTextChange(it) },
+                isConnected = isConnected,
                 canSend = canSend,
                 onSend = { submitMessage() },
                 isVoiceInputAvailable = voiceInput.isAvailable,
                 onVoiceInputClick = voiceInput.onStartRequested,
                 pendingYesNoPrompt = pendingYesNoPrompt,
-                onConfirmYes = { webSocketManager.respondToPendingYesNo(true) },
-                onConfirmNo = { webSocketManager.respondToPendingYesNo(false) }
+                onConfirmYes = { viewModel.respondToPendingYesNo(true) },
+                onConfirmNo = { viewModel.respondToPendingYesNo(false) }
             )
         }
     }
@@ -447,17 +444,6 @@ private fun rememberVoiceInputController(
                 }
             }
         )
-    }
-}
-
-private fun mergeSpeechInputText(
-    currentText: String,
-    recognizedText: String
-): String {
-    return if (currentText.isBlank()) {
-        recognizedText
-    } else {
-        "$currentText $recognizedText"
     }
 }
 
@@ -568,27 +554,74 @@ private fun ChatInputBar(
 }
 
 @Composable
-private fun ChatHeader() {
+private fun ChatHeader(
+    canStartNewChat: Boolean,
+    onNewChat: () -> Unit
+) {
+    var showConfirmation by remember { mutableStateOf(false) }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         tonalElevation = 3.dp
     ) {
-        Column(
+        Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "TypeAgent Chat",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "A simple local chat client for your TypeAgent server.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "TypeAgent Chat",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "A simple local chat client for your TypeAgent server.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            TextButton(
+                onClick = { showConfirmation = true },
+                enabled = canStartNewChat
+            ) {
+                Text("New chat")
+            }
         }
+    }
+
+    // Clearing deletes the only copy of the transcript, so it is confirmed
+    // rather than fired on a single stray tap.
+    if (showConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showConfirmation = false },
+            title = { Text("Start a new chat?") },
+            text = {
+                Text(
+                    "This deletes the messages on this device and cannot be undone. " +
+                        "The agent keeps its own memory of the conversation."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showConfirmation = false
+                        onNewChat()
+                    }
+                ) {
+                    Text("Start new chat")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

@@ -36,6 +36,14 @@ class WebSocketManager {
     private val _pendingYesNoPrompt = MutableStateFlow<PendingYesNoPrompt?>(null)
     val pendingYesNoPrompt: StateFlow<PendingYesNoPrompt?> = _pendingYesNoPrompt
 
+    /**
+     * The conversation the server handed back on the last successful join.
+     * Exposed so the transcript can be reconciled with the server session it
+     * belongs to after the app process is recreated.
+     */
+    private val _joinedConversationId = MutableStateFlow<String?>(null)
+    val joinedConversationId: StateFlow<String?> = _joinedConversationId
+
     private val _connectionStatus = MutableStateFlow(
         ConnectionStatus(
             text = "Disconnected",
@@ -47,6 +55,37 @@ class WebSocketManager {
     internal fun setClientActionHandler(handler: ClientActionHandler?) {
         synchronized(lock) {
             clientActionHandler = handler
+        }
+    }
+
+    /**
+     * Seeds the transcript with messages recovered from disk.
+     *
+     * Must be called before [connect]; it deliberately refuses once anything is
+     * already in the list so a late restore can never clobber live messages.
+     */
+    fun restoreMessages(restored: List<Message>) {
+        if (restored.isEmpty()) {
+            return
+        }
+        synchronized(lock) {
+            if (_messages.value.isNotEmpty()) {
+                Log.w(TAG, "Ignoring restore: transcript already has messages")
+                return
+            }
+            _messages.value = restored
+        }
+    }
+
+    /**
+     * Drops the local transcript. Used when the server reports a conversation
+     * the restored transcript does not belong to.
+     */
+    fun clearMessages() {
+        synchronized(lock) {
+            displayThreads.clear()
+            displayMessageIds.clear()
+            _messages.value = emptyList()
         }
     }
 
@@ -286,6 +325,7 @@ class WebSocketManager {
                     conversationId = joinedConversationId
                     connectionId = joinedConnectionId
                 }
+                _joinedConversationId.value = joinedConversationId
 
                 Log.d(
                     TAG,

@@ -7,19 +7,26 @@ data class Message(
     val segments: List<MessageSegment>,
     val isUser: Boolean,
     val requestId: String? = null,
-    val isFinal: Boolean = false
+    val isFinal: Boolean = false,
+    /**
+     * When the message was created, as epoch milliseconds. Persisted so stored
+     * transcripts can be aged out - see [ChatSessionSerializer.MAX_MESSAGE_AGE_MILLIS].
+     */
+    val timestampMillis: Long = System.currentTimeMillis()
 ) {
     constructor(
         text: String,
         format: MessageFormat = MessageFormat.TEXT,
         isUser: Boolean,
         requestId: String? = null,
-        isFinal: Boolean = false
+        isFinal: Boolean = false,
+        timestampMillis: Long = System.currentTimeMillis()
     ) : this(
         segments = listOf(MessageSegment(text = text, format = format)),
         isUser = isUser,
         requestId = requestId,
-        isFinal = isFinal
+        isFinal = isFinal,
+        timestampMillis = timestampMillis
     )
 
     val text: String
