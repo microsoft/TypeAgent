@@ -14,6 +14,7 @@ import {
     RuntimeConnection,
     defineTool,
     approveAll,
+    type CopilotSession,
     type SessionConfig,
 } from "@github/copilot-sdk";
 import registerDebug from "debug";
@@ -64,6 +65,10 @@ import {
     findInstallableAgents,
     formatInstallableAgents,
 } from "./installableAgents.js";
+import {
+    emitReasoningToolCall,
+    runInReasoningSpan,
+} from "../otel/reasoningSpan.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -87,6 +92,46 @@ function withAbortSignal<T>(
             },
         );
     });
+}
+
+async function sendAndWaitWithCancellation(
+    session: CopilotSession,
+    prompt: string,
+    signal: AbortSignal | undefined,
+): Promise<any> {
+    const waitPromise = session.sendAndWait(
+        { prompt },
+        resolveReasoningTimeoutMs(),
+    );
+    try {
+        return await withAbortSignal(waitPromise, signal);
+    } catch (error) {
+        try {
+            await session.abort();
+        } catch (abortError) {
+            debug("Failed to abort Copilot reasoning session:", abortError);
+            try {
+                await session.disconnect();
+            } catch (disconnectError) {
+                debug(
+                    "Failed to disconnect Copilot reasoning session:",
+                    disconnectError,
+                );
+            }
+            throw error;
+        }
+        try {
+            await waitPromise;
+        } catch (settledError) {
+            if (settledError !== error) {
+                debug(
+                    "Copilot wait settled after reasoning cancellation:",
+                    settledError,
+                );
+            }
+        }
+        throw error;
+    }
 }
 
 const FALLBACK_MODEL = "claude-opus-4.8";
@@ -1590,6 +1635,10 @@ async function executeReasoningWithoutPlanning(
             ),
         formatToolCallDisplay,
     );
+    // 1-based counter for reasoning.tool_loop.iteration events. Emitted
+    // per tool.execution_start below. Bounded by
+    // REASONING_TOOL_LOOP_ITERATION_CAP inside the wrapper.
+    let copilotToolLoopIteration = 0;
 
     const client = await getCopilotClient(context.sessionContext.agentContext);
     const config = getCopilotSessionConfig(context);
@@ -1740,6 +1789,11 @@ async function executeReasoningWithoutPlanning(
                 event.data?.parameters ||
                 {};
             debug(`Tool execution started: ${toolName}`);
+            // Emit one reasoning tool-loop iteration event per tool
+            // execution start. Only the enumerated counter reaches the
+            // span; tool name / arguments / results NEVER do.
+            copilotToolLoopIteration++;
+            emitReasoningToolCall(copilotToolLoopIteration);
             toolFolder.tool(toolName, parameters);
         },
     );
@@ -1806,8 +1860,9 @@ async function executeReasoningWithoutPlanning(
             throw new Error("Prompt is undefined or empty");
         }
 
-        const response: any = await withAbortSignal(
-            session.sendAndWait({ prompt }, resolveReasoningTimeoutMs()),
+        const response: any = await sendAndWaitWithCancellation(
+            session,
+            prompt,
             context.abortSignal,
         );
         debug("Received response from Copilot");
@@ -1933,6 +1988,10 @@ async function executeReasoningWithTracing(
                 ),
             formatToolCallDisplay,
         );
+        // 1-based counter for reasoning.tool_loop.iteration events in the
+        // tracing path. Bounded by REASONING_TOOL_LOOP_ITERATION_CAP in
+        // the wrapper.
+        let copilotToolLoopIteration = 0;
 
         const client = await getCopilotClient(
             context.sessionContext.agentContext,
@@ -2090,6 +2149,13 @@ async function executeReasoningWithTracing(
                     {};
                 debug(`Tool execution started: ${toolName}`);
 
+                // Emit one reasoning tool-loop iteration event per
+                // tool execution start. Only the enumerated counter
+                // reaches the span; tool name / arguments / results
+                // NEVER do.
+                copilotToolLoopIteration++;
+                emitReasoningToolCall(copilotToolLoopIteration);
+
                 // Record tool call for trace
                 tracer.recordToolCall(toolName, parameters);
 
@@ -2155,8 +2221,9 @@ async function executeReasoningWithTracing(
             const prompt = buildPromptWithContext(originalRequest, context);
             debug(`Sending prompt: ${prompt.substring(0, 100)}...`);
 
-            const response: any = await withAbortSignal(
-                session.sendAndWait({ prompt }, resolveReasoningTimeoutMs()),
+            const response: any = await sendAndWaitWithCancellation(
+                session,
+                prompt,
                 context.abortSignal,
             );
             debug("Received response from Copilot");
@@ -2447,11 +2514,12 @@ export async function executeReasoning(
 
     const planReuseEnabled = options?.planReuseEnabled ?? false;
 
-    if (!planReuseEnabled) {
-        // Standard reasoning without planning
-        return executeReasoningWithoutPlanning(request, context);
-    }
-
-    // Trace capture + auto recipe generation
-    return executeReasoningWithTracing(request, context);
+    return runInReasoningSpan(context, () => {
+        if (!planReuseEnabled) {
+            // Standard reasoning without planning
+            return executeReasoningWithoutPlanning(request, context);
+        }
+        // Trace capture + auto recipe generation
+        return executeReasoningWithTracing(request, context);
+    });
 }

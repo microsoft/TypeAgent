@@ -71,6 +71,10 @@ import {
     findInstallableAgents,
     formatInstallableAgents,
 } from "./installableAgents.js";
+import {
+    emitReasoningToolCall,
+    runInReasoningSpan,
+} from "../otel/reasoningSpan.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 // Separate channel for MCP tool invocations (discover_actions / execute_action)
 // so call counts can be traced without enabling the full messages channel.
@@ -1592,9 +1596,10 @@ async function executeReasoningWithoutPlanning(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
     fallbackContext?: ReasoningFallbackContext,
-    abortSignal?: AbortSignal,
+    abortController?: AbortController,
     requireToolUse: boolean = false,
 ): Promise<any> {
+    const abortSignal = abortController?.signal;
     // Display initial message
     context.actionIO.appendDisplay("Thinking...", "temporary");
     const displayMode = resolveReasoningDisplayMode(context);
@@ -1604,7 +1609,11 @@ async function executeReasoningWithoutPlanning(
             context,
             fallbackContext,
         ),
-        options: { ...getClaudeOptions(context), ...claudeExecutableOption() },
+        options: {
+            ...getClaudeOptions(context),
+            ...claudeExecutableOption(),
+            ...(abortController === undefined ? {} : { abortController }),
+        },
     });
 
     let finalResult: string | undefined = undefined;
@@ -1667,6 +1676,14 @@ async function executeReasoningWithoutPlanning(
                 } else if (content.type === "tool_use") {
                     toolUseCount++;
                     reasoningStepCount++;
+                    // Emit one tool-loop iteration event per tool_use so
+                    // the reasoning span records how many round-trips
+                    // the model took. Only the enumerated counter is
+                    // emitted; tool name / arguments / results NEVER
+                    // reach the span. Wrapper caps the value at
+                    // REASONING_TOOL_LOOP_ITERATION_CAP so a runaway
+                    // loop cannot blow event cardinality.
+                    emitReasoningToolCall(toolUseCount);
                     toolUseIdToName.set(content.id, content.name);
                     const executedAction = extractExecutedAction(
                         content.name,
@@ -1840,9 +1857,10 @@ async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
     fallbackContext?: ReasoningFallbackContext,
-    abortSignal?: AbortSignal,
+    abortController?: AbortController,
     requireToolUse: boolean = false,
 ): Promise<any> {
+    const abortSignal = abortController?.signal;
     const systemContext = context.sessionContext.agentContext;
     const storage = context.sessionContext.sessionStorage;
 
@@ -1853,7 +1871,7 @@ async function executeReasoningWithTracing(
             originalRequest,
             context,
             undefined,
-            abortSignal,
+            abortController,
             requireToolUse,
         );
     }
@@ -1885,6 +1903,7 @@ async function executeReasoningWithTracing(
             options: {
                 ...getClaudeOptions(context),
                 ...claudeExecutableOption(),
+                ...(abortController === undefined ? {} : { abortController }),
             },
         });
 
@@ -1954,6 +1973,12 @@ async function executeReasoningWithTracing(
                     } else if (content.type === "tool_use") {
                         toolUseCount++;
                         reasoningStepCount++;
+                        // Emit one tool-loop iteration event per tool_use
+                        // so the reasoning span records how many
+                        // round-trips the model took. Only the
+                        // enumerated counter is emitted; tool name /
+                        // arguments / results NEVER reach the span.
+                        emitReasoningToolCall(toolUseCount);
                         // Track tool_use_id → name for matching results
                         toolUseIdToName.set(content.id, content.name);
                         const executedAction = extractExecutedAction(
@@ -2674,7 +2699,7 @@ export interface ReasoningFallbackContext {
  */
 async function runWithReasoningTimeout<T>(
     context: ActionContext<CommandHandlerContext>,
-    fn: (signal: AbortSignal) => Promise<T>,
+    fn: (controller: AbortController) => Promise<T>,
 ): Promise<T> {
     const raw = process.env.TYPEAGENT_REASONING_TIMEOUT_MS;
     const parsed = raw !== undefined ? Number(raw) : NaN;
@@ -2707,7 +2732,7 @@ async function runWithReasoningTimeout<T>(
             : undefined;
 
     try {
-        return await fn(controller.signal);
+        return await fn(controller);
     } finally {
         if (timer !== undefined) clearTimeout(timer);
         externalSignal?.removeEventListener?.("abort", onExternalAbort);
@@ -2735,23 +2760,25 @@ export async function executeReasoning(
     const planReuseEnabled = options?.planReuseEnabled ?? false;
     const fallbackContext = options?.fallbackContext;
     const requireToolUse = options?.requireToolUse ?? false;
-    return runWithReasoningTimeout(context, (signal) => {
-        if (!planReuseEnabled) {
-            return executeReasoningWithoutPlanning(
+    return runInReasoningSpan(context, () =>
+        runWithReasoningTimeout(context, (controller) => {
+            if (!planReuseEnabled) {
+                return executeReasoningWithoutPlanning(
+                    request,
+                    context,
+                    fallbackContext,
+                    controller,
+                    requireToolUse,
+                );
+            }
+            // Trace capture + auto recipe generation
+            return executeReasoningWithTracing(
                 request,
                 context,
                 fallbackContext,
-                signal,
+                controller,
                 requireToolUse,
             );
-        }
-        // Trace capture + auto recipe generation
-        return executeReasoningWithTracing(
-            request,
-            context,
-            fallbackContext,
-            signal,
-            requireToolUse,
-        );
-    });
+        }),
+    );
 }

@@ -390,6 +390,12 @@ action become children of that active action. Setup failures and typed
 `ActionResult.error` returns use bounded events, while thrown handler errors use
 the same safe-default exception policy as request and translation spans.
 
+Claude and Copilot reasoning operations create `typeagent.reasoning` spans under
+the active request or action. Tool calls emit bounded ordinal events without
+tool names, arguments, or results. Timeout and external cancellation are
+propagated to the underlying SDK operation before the span ends, and reasoning
+exceptions follow the shared safe-default diagnostic policy.
+
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |
 | Span attributes | Stable facts such as agent, action, or model |
