@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Build a self-contained interactive HTML explorer for the 1k translation-bench dataset.
  * Usage: node update-dataset-viz.mjs [out.html]
@@ -10,31 +13,32 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RUN = __dirname;
 const artDir = process.env.TB_ART_DIR
-  ? path.resolve(process.env.TB_ART_DIR)
-  : path.join(RUN, "artifacts");
+    ? path.resolve(process.env.TB_ART_DIR)
+    : path.join(RUN, "artifacts");
 const checkpoint =
-  process.env.TB_CHECKPOINT_PATH ||
-  path.join(artDir, "generate-checkpoint.jsonl");
+    process.env.TB_CHECKPOINT_PATH ||
+    path.join(artDir, "generate-checkpoint.jsonl");
 const draft =
-  process.env.TB_DRAFT_PATH || path.join(artDir, "benchmark-draft-1000.jsonl");
+    process.env.TB_DRAFT_PATH ||
+    path.join(artDir, "benchmark-draft-1000.jsonl");
 const approved =
-  process.env.TB_APPROVED_PATH ||
-  path.join(artDir, "benchmark-approved-1000.jsonl");
+    process.env.TB_APPROVED_PATH ||
+    path.join(artDir, "benchmark-approved-1000.jsonl");
 const outHtml = process.argv[2] || path.join(RUN, "viz/dataset.html");
 
 function readJsonl(p) {
-  if (!fs.existsSync(p)) return [];
-  return fs
-    .readFileSync(p, "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((line, i) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        return { _parseError: true, line: i };
-      }
-    });
+    if (!fs.existsSync(p)) return [];
+    return fs
+        .readFileSync(p, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line, i) => {
+            try {
+                return JSON.parse(line);
+            } catch {
+                return { _parseError: true, line: i };
+            }
+        });
 }
 
 const cp = readJsonl(checkpoint);
@@ -42,39 +46,45 @@ const header = cp.find((r) => r.kind === "translation-bench-checkpoint");
 
 const cases = [];
 for (const r of cp) {
-  if (r.kind === "translation-bench-checkpoint") continue;
-  const v = r.value ?? r;
-  if (v && (v.seed || v.id)) cases.push(v);
+    if (r.kind === "translation-bench-checkpoint") continue;
+    const v = r.value ?? r;
+    if (v && (v.seed || v.id)) cases.push(v);
 }
 
 function loadBenchmarkCases(filePath) {
-  if (!fs.existsSync(filePath)) return { meta: null, cases: [] };
-  const d = readJsonl(filePath);
-  const meta = d.find((x) => x.recordType === "metadata" || x.kind === "metadata") ?? d[0];
-  const loaded = d.filter(
-    (x) =>
-      x &&
-      x.recordType !== "metadata" &&
-      x.kind !== "metadata" &&
-      (x.seed || x.targetAction || x.id),
-  );
-  return { meta, cases: loaded };
+    if (!fs.existsSync(filePath)) return { meta: null, cases: [] };
+    const d = readJsonl(filePath);
+    const meta =
+        d.find((x) => x.recordType === "metadata" || x.kind === "metadata") ??
+        d[0];
+    const loaded = d.filter(
+        (x) =>
+            x &&
+            x.recordType !== "metadata" &&
+            x.kind !== "metadata" &&
+            (x.seed || x.targetAction || x.id),
+    );
+    return { meta, cases: loaded };
 }
 
 const approvedPack = loadBenchmarkCases(approved);
 const draftPack = loadBenchmarkCases(draft);
 const draftMeta = approvedPack.meta ?? draftPack.meta;
-const draftCases = approvedPack.cases.length > 0 ? approvedPack.cases : draftPack.cases;
+const draftCases =
+    approvedPack.cases.length > 0 ? approvedPack.cases : draftPack.cases;
 const datasetSourceLabel =
-  approvedPack.cases.length > 0
-    ? "approved"
-    : draftPack.cases.length > 0
-      ? "draft"
-      : "checkpoint";
+    approvedPack.cases.length > 0
+        ? "approved"
+        : draftPack.cases.length > 0
+          ? "draft"
+          : "checkpoint";
 
 const source =
-  draftCases.length >= cases.length && draftCases.length > 0 ? draftCases : cases;
-const totalTarget = header?.settings?.caseCount ?? draftMeta?.metadata?.caseCount ?? 1000;
+    draftCases.length >= cases.length && draftCases.length > 0
+        ? draftCases
+        : cases;
+const totalTarget =
+    header?.settings?.caseCount ?? draftMeta?.metadata?.caseCount ?? 1000;
 
 const bySchema = {};
 const byAction = {};
@@ -85,156 +95,162 @@ let withParams = 0;
 let withoutParams = 0;
 
 for (const c of source) {
-  const seed = c.seed ?? c;
-  const ta = c.targetAction ?? seed.expectedActions?.[0] ?? {};
-  const schema = ta.schemaName ?? "unknown";
-  const action = ta.actionName ?? "unknown";
-  const key = `${schema}.${action}`;
-  bySchema[schema] = (bySchema[schema] || 0) + 1;
-  byAction[key] = (byAction[key] || 0) + 1;
+    const seed = c.seed ?? c;
+    const ta = c.targetAction ?? seed.expectedActions?.[0] ?? {};
+    const schema = ta.schemaName ?? "unknown";
+    const action = ta.actionName ?? "unknown";
+    const key = `${schema}.${action}`;
+    bySchema[schema] = (bySchema[schema] || 0) + 1;
+    byAction[key] = (byAction[key] || 0) + 1;
 
-  const expected = seed.expectedActions?.[0];
-  const params = expected?.parameters;
-  if (params && Object.keys(params).length > 0) withParams += 1;
-  else withoutParams += 1;
+    const expected = seed.expectedActions?.[0];
+    const params = expected?.parameters;
+    if (params && Object.keys(params).length > 0) withParams += 1;
+    else withoutParams += 1;
 
-  const gens = (c.generalizations ?? []).map((g) => {
-    const role = g.selection?.role ?? g.role ?? "?";
-    if (role === "positive") posCount += 1;
-    if (role === "negative") negCount += 1;
-    return {
-      role,
-      utterance: g.utterance ?? "",
-      expectedActions: (g.expectedActions ?? []).map((a) => ({
-        schemaName: a.schemaName,
-        actionName: a.actionName,
-        parameters: a.parameters ?? null,
-      })),
-    };
-  });
+    const gens = (c.generalizations ?? []).map((g) => {
+        const role = g.selection?.role ?? g.role ?? "?";
+        if (role === "positive") posCount += 1;
+        if (role === "negative") negCount += 1;
+        return {
+            role,
+            utterance: g.utterance ?? "",
+            expectedActions: (g.expectedActions ?? []).map((a) => ({
+                schemaName: a.schemaName,
+                actionName: a.actionName,
+                parameters: a.parameters ?? null,
+            })),
+        };
+    });
 
-  utterances.push({
-    id: c.id,
-    schema,
-    action,
-    key,
-    utterance: seed.utterance ?? "",
-    params: params ?? null,
-    gens,
-    dimensions: c.dimensions ?? seed.selection?.dimensions ?? {},
-    activeSchemas: c.activeSchemas ?? [],
-  });
+    utterances.push({
+        id: c.id,
+        schema,
+        action,
+        key,
+        utterance: seed.utterance ?? "",
+        params: params ?? null,
+        gens,
+        dimensions: c.dimensions ?? seed.selection?.dimensions ?? {},
+        activeSchemas: c.activeSchemas ?? [],
+    });
 }
 
 const schemaSorted = Object.entries(bySchema).sort((a, b) => b[1] - a[1]);
-const actionSorted = Object.entries(byAction).sort((a, b) => a[0].localeCompare(b[0]));
+const actionSorted = Object.entries(byAction).sort((a, b) =>
+    a[0].localeCompare(b[0]),
+);
 const uniqueActions = actionSorted.length;
 const progress = source.length;
 
 const schedule = header?.settings?.schedule ?? [];
 const scheduleActionSet = new Set(
-  schedule.map((e) => `${e.schemaName}.${e.actionName}`),
+    schedule.map((e) => `${e.schemaName}.${e.actionName}`),
 );
 const scheduleActionTarget =
-  scheduleActionSet.size > 0
-    ? scheduleActionSet.size
-    : (header?.settings?.actionCount ?? uniqueActions);
+    scheduleActionSet.size > 0
+        ? scheduleActionSet.size
+        : (header?.settings?.actionCount ?? uniqueActions);
 const doneActionSet = new Set(Object.keys(byAction));
-const missingScheduled = [...scheduleActionSet].filter((k) => !doneActionSet.has(k));
+const missingScheduled = [...scheduleActionSet].filter(
+    (k) => !doneActionSet.has(k),
+);
 const onTrack = missingScheduled.length === 0 && progress >= totalTarget;
 
 // Schema → action counts for heatmap
 const schemaActions = {};
 for (const [key, n] of actionSorted) {
-  const i = key.indexOf(".");
-  const schema = i === -1 ? key : key.slice(0, i);
-  const action = i === -1 ? key : key.slice(i + 1);
-  if (!schemaActions[schema]) schemaActions[schema] = [];
-  schemaActions[schema].push({ action, key, n });
+    const i = key.indexOf(".");
+    const schema = i === -1 ? key : key.slice(0, i);
+    const action = i === -1 ? key : key.slice(i + 1);
+    if (!schemaActions[schema]) schemaActions[schema] = [];
+    schemaActions[schema].push({ action, key, n });
 }
 for (const s of Object.keys(schemaActions)) {
-  schemaActions[s].sort((a, b) => a.action.localeCompare(b.action));
+    schemaActions[s].sort((a, b) => a.action.localeCompare(b.action));
 }
 
 const disambigReportPath = path.join(
-  RUN,
-  "artifacts/benchmark-draft-1000.disambig-report.json",
+    RUN,
+    "artifacts/benchmark-draft-1000.disambig-report.json",
 );
 let disambig = null;
 if (fs.existsSync(disambigReportPath)) {
-  try {
-    const raw = JSON.parse(fs.readFileSync(disambigReportPath, "utf8"));
-    disambig = raw.summary ?? raw;
-  } catch {
-    disambig = null;
-  }
+    try {
+        const raw = JSON.parse(fs.readFileSync(disambigReportPath, "utf8"));
+        disambig = raw.summary ?? raw;
+    } catch {
+        disambig = null;
+    }
 }
 
 // Confusable-action keys from the curated list (for explorer filters).
 const CONFUSABLE_ACTION_KEYS = [
-  "browser.followLinkByText",
-  "browser.followLinkByPosition",
-  "browser.openWebPage",
-  "browser.openSearchResult",
-  "browser.closeWebPage",
-  "browser.external.closeTab",
-  "browser.actionDiscovery.getAllWebFlows",
-  "browser.actionDiscovery.detectPageActions",
-  "browser.actionDiscovery.inferActions",
+    "browser.followLinkByText",
+    "browser.followLinkByPosition",
+    "browser.openWebPage",
+    "browser.openSearchResult",
+    "browser.closeWebPage",
+    "browser.external.closeTab",
+    "browser.actionDiscovery.getAllWebFlows",
+    "browser.actionDiscovery.detectPageActions",
+    "browser.actionDiscovery.inferActions",
 ];
 const confusableRows = utterances.filter((u) =>
-  CONFUSABLE_ACTION_KEYS.includes(u.key),
+    CONFUSABLE_ACTION_KEYS.includes(u.key),
 ).length;
 
 const data = {
-  datasetSourceLabel,
-  generatedAt: new Date().toISOString(),
-  progress,
-  totalTarget,
-  uniqueActions,
-  scheduleActionTarget,
-  actionsRemaining: Math.max(0, scheduleActionTarget - uniqueActions),
-  coverageComplete: uniqueActions >= scheduleActionTarget && progress >= totalTarget,
-  onTrack,
-  missingScheduledSample: missingScheduled.slice(0, 20),
-  schemaCount: schemaSorted.length,
-  schemaSorted,
-  actionSorted,
-  schemaActions,
-  samples: utterances,
-  sampleTotal: utterances.length,
-  genPos: posCount,
-  genNeg: negCount,
-  withParams,
-  withoutParams,
-  disambig,
-  confusableActionKeys: CONFUSABLE_ACTION_KEYS,
-  confusableRows,
-  header: header
-    ? {
-        generatorModel: header.settings?.generatorModel ?? "gpt-5.6-sol",
-        reviewerModel: header.settings?.reviewerModel ?? "gpt-5.6-sol",
-        genCaseCount: header.settings?.genCaseCount ?? 2,
-        requireCompleteCoverage: header.settings?.requireCompleteCoverage ?? true,
-        concurrency: header.settings?.concurrency,
-      }
-    : {
-        generatorModel: "gpt-5.6-sol",
-        reviewerModel: "gpt-5.6-sol",
-        genCaseCount: 2,
-        requireCompleteCoverage: true,
-      },
-  draftReady: draftCases.length > 0,
-  draftMeta: draftMeta
-    ? {
-        name: draftMeta.name ?? draftMeta.metadata?.name,
-        approval:
-          draftMeta.approval?.status ??
-          draftMeta.metadata?.approval?.status ??
-          "draft",
-        caseCount: draftCases.length,
-      }
-    : null,
+    datasetSourceLabel,
+    generatedAt: new Date().toISOString(),
+    progress,
+    totalTarget,
+    uniqueActions,
+    scheduleActionTarget,
+    actionsRemaining: Math.max(0, scheduleActionTarget - uniqueActions),
+    coverageComplete:
+        uniqueActions >= scheduleActionTarget && progress >= totalTarget,
+    onTrack,
+    missingScheduledSample: missingScheduled.slice(0, 20),
+    schemaCount: schemaSorted.length,
+    schemaSorted,
+    actionSorted,
+    schemaActions,
+    samples: utterances,
+    sampleTotal: utterances.length,
+    genPos: posCount,
+    genNeg: negCount,
+    withParams,
+    withoutParams,
+    disambig,
+    confusableActionKeys: CONFUSABLE_ACTION_KEYS,
+    confusableRows,
+    header: header
+        ? {
+              generatorModel: header.settings?.generatorModel ?? "gpt-5.6-sol",
+              reviewerModel: header.settings?.reviewerModel ?? "gpt-5.6-sol",
+              genCaseCount: header.settings?.genCaseCount ?? 2,
+              requireCompleteCoverage:
+                  header.settings?.requireCompleteCoverage ?? true,
+              concurrency: header.settings?.concurrency,
+          }
+        : {
+              generatorModel: "gpt-5.6-sol",
+              reviewerModel: "gpt-5.6-sol",
+              genCaseCount: 2,
+              requireCompleteCoverage: true,
+          },
+    draftReady: draftCases.length > 0,
+    draftMeta: draftMeta
+        ? {
+              name: draftMeta.name ?? draftMeta.metadata?.name,
+              approval:
+                  draftMeta.approval?.status ??
+                  draftMeta.metadata?.approval?.status ??
+                  "draft",
+              caseCount: draftCases.length,
+          }
+        : null,
 };
 
 const html = `<!DOCTYPE html>
@@ -775,20 +791,21 @@ render();
 
 fs.mkdirSync(path.dirname(outHtml), { recursive: true });
 fs.writeFileSync(outHtml, html);
-const gwDir = "/Users/dominicnguyen/Documents/mygithub.com/dom-files-gateway/.data/plans/translation-bench-1k-neg-fairness";
+const gwDir =
+    "/Users/dominicnguyen/Documents/mygithub.com/dom-files-gateway/.data/plans/translation-bench-1k-neg-fairness";
 try {
-  fs.mkdirSync(gwDir, { recursive: true });
-  fs.copyFileSync(outHtml, path.join(gwDir, "dataset.html"));
+    fs.mkdirSync(gwDir, { recursive: true });
+    fs.copyFileSync(outHtml, path.join(gwDir, "dataset.html"));
 } catch {}
 console.log(
-  "wrote",
-  outHtml,
-  "progress",
-  progress,
-  "/",
-  totalTarget,
-  "actions",
-  uniqueActions,
-  "bytes",
-  html.length,
+    "wrote",
+    outHtml,
+    "progress",
+    progress,
+    "/",
+    totalTarget,
+    "actions",
+    uniqueActions,
+    "bytes",
+    html.length,
 );

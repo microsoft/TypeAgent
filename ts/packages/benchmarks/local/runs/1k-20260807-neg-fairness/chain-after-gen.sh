@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 set -euo pipefail
 RUN_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$RUN_DIR"

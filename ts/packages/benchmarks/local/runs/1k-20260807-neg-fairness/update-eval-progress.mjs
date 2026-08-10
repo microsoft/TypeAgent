@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,60 +9,100 @@ const RUN = path.dirname(fileURLToPath(import.meta.url));
 const ckpt = path.join(RUN, "artifacts/eval-checkpoint-azure-gpt56.jsonl");
 const log = path.join(RUN, "logs/eval.log");
 const out = process.argv[2] || path.join(RUN, "viz/eval-progress.html");
-const gw = "/Users/dominicnguyen/Documents/mygithub.com/dom-files-gateway/.data/plans/translation-bench-1k-neg-fairness/eval-progress.html";
+const gw =
+    "/Users/dominicnguyen/Documents/mygithub.com/dom-files-gateway/.data/plans/translation-bench-1k-neg-fairness/eval-progress.html";
 
-const MODELS = ["azure/gpt-5.6-sol","azure/gpt-5.6-terra","azure/gpt-5.6-luna"];
+const MODELS = [
+    "azure/gpt-5.6-sol",
+    "azure/gpt-5.6-terra",
+    "azure/gpt-5.6-luna",
+];
 let header = null;
-const byModel = Object.fromEntries(MODELS.map(m => [m, {done:0,pass:0,fail:0,err:0,lat:[],last:null}]));
+const byModel = Object.fromEntries(
+    MODELS.map((m) => [
+        m,
+        { done: 0, pass: 0, fail: 0, err: 0, lat: [], last: null },
+    ]),
+);
 let totalRows = 0;
 if (fs.existsSync(ckpt)) {
-  const lines = fs.readFileSync(ckpt,"utf8").split("\n").filter(Boolean);
-  for (const line of lines) {
-    let o; try { o = JSON.parse(line); } catch { continue; }
-    if (o.kind === "translation-bench-checkpoint") { header = o; continue; }
-    const v = o.value || o;
-    const model = o.model || v.model;
-    if (!model || !byModel[model]) continue;
-    totalRows += 1;
-    const b = byModel[model];
-    b.done += 1;
-    const score = v.score || {};
-    if (score.passed) b.pass += 1; else b.fail += 1;
-    if (v.error || score.diagnostics?.invalidJsonOrTranslationFailure) b.err += 1;
-    if (typeof v.elapsedMs === "number") b.lat.push(v.elapsedMs);
-    b.last = { caseId: v.caseId || o.caseId, passed: !!score.passed, utterance: (v.utterance||"").slice(0,120) };
-  }
+    const lines = fs.readFileSync(ckpt, "utf8").split("\n").filter(Boolean);
+    for (const line of lines) {
+        let o;
+        try {
+            o = JSON.parse(line);
+        } catch {
+            continue;
+        }
+        if (o.kind === "translation-bench-checkpoint") {
+            header = o;
+            continue;
+        }
+        const v = o.value || o;
+        const model = o.model || v.model;
+        if (!model || !byModel[model]) continue;
+        totalRows += 1;
+        const b = byModel[model];
+        b.done += 1;
+        const score = v.score || {};
+        if (score.passed) b.pass += 1;
+        else b.fail += 1;
+        if (v.error || score.diagnostics?.invalidJsonOrTranslationFailure)
+            b.err += 1;
+        if (typeof v.elapsedMs === "number") b.lat.push(v.elapsedMs);
+        b.last = {
+            caseId: v.caseId || o.caseId,
+            passed: !!score.passed,
+            utterance: (v.utterance || "").slice(0, 120),
+        };
+    }
 }
 const suiteCaseCount = header?.settings?.suiteCaseCount || 0;
 const expected = suiteCaseCount * MODELS.length || 0;
-const logTail = fs.existsSync(log) ? fs.readFileSync(log,"utf8").trim().split("\n").slice(-12) : [];
+const logTail = fs.existsSync(log)
+    ? fs.readFileSync(log, "utf8").trim().split("\n").slice(-12)
+    : [];
 const pidAlive = (() => {
-  try {
-    const pid = Number(fs.readFileSync(path.join(RUN,"logs/eval.pid"),"utf8").trim());
-    process.kill(pid, 0);
-    return pid;
-  } catch { return null; }
+    try {
+        const pid = Number(
+            fs.readFileSync(path.join(RUN, "logs/eval.pid"), "utf8").trim(),
+        );
+        process.kill(pid, 0);
+        return pid;
+    } catch {
+        return null;
+    }
 })();
 
-function pct(a,b){ return b ? ((a/b)*100).toFixed(1) : "0.0"; }
-function med(arr){ if(!arr.length) return null; const s=[...arr].sort((a,b)=>a-b); return s[Math.floor(s.length/2)]; }
-function p95(arr){ if(!arr.length) return null; const s=[...arr].sort((a,b)=>a-b); return s[Math.min(s.length-1, Math.floor(s.length*0.95))]; }
+function pct(a, b) {
+    return b ? ((a / b) * 100).toFixed(1) : "0.0";
+}
+function med(arr) {
+    if (!arr.length) return null;
+    const s = [...arr].sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)];
+}
+function p95(arr) {
+    if (!arr.length) return null;
+    const s = [...arr].sort((a, b) => a - b);
+    return s[Math.min(s.length - 1, Math.floor(s.length * 0.95))];
+}
 
-const cards = MODELS.map(m => {
-  const b = byModel[m];
-  const target = suiteCaseCount || Math.max(b.done,1);
-  return {
-    model: m,
-    done: b.done,
-    target,
-    pass: b.pass,
-    fail: b.fail,
-    err: b.err,
-    passRate: b.done ? b.pass/b.done : 0,
-    medMs: med(b.lat),
-    p95Ms: p95(b.lat),
-    last: b.last,
-  };
+const cards = MODELS.map((m) => {
+    const b = byModel[m];
+    const target = suiteCaseCount || Math.max(b.done, 1);
+    return {
+        model: m,
+        done: b.done,
+        target,
+        pass: b.pass,
+        fail: b.fail,
+        err: b.err,
+        passRate: b.done ? b.pass / b.done : 0,
+        medMs: med(b.lat),
+        p95Ms: p95(b.lat),
+        last: b.last,
+    };
 });
 
 const html = `<!doctype html>
@@ -93,40 +136,56 @@ table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid var(--li
       <h1>1k neg-fairness · multi-model eval</h1>
       <div class="sub">azure/gpt-5.6-sol · terra · luna · concurrency 10 each · auto-refresh 15s</div>
     </div>
-    <div class="badge ${pidAlive?"run":(totalRows && expected && totalRows>=expected?"ok":"dead")}">
-      ${pidAlive?("RUNNING pid "+pidAlive):(totalRows && expected && totalRows>=expected?"COMPLETE":"IDLE / stopped")}
+    <div class="badge ${pidAlive ? "run" : totalRows && expected && totalRows >= expected ? "ok" : "dead"}">
+      ${pidAlive ? "RUNNING pid " + pidAlive : totalRows && expected && totalRows >= expected ? "COMPLETE" : "IDLE / stopped"}
     </div>
   </div>
 </header>
 <div class="wrap">
   <div class="grid">
-    <div class="card"><div class="label">Total rows done</div><div class="value">${totalRows.toLocaleString()}${expected?(" / "+expected.toLocaleString()):""}</div>
-      <div class="hint">${expected?pct(totalRows,expected)+"% of suite×models":"waiting for checkpoint header"}</div>
-      <div class="bar"><i style="width:${expected?Math.min(100,totalRows/expected*100):0}%"></i></div>
+    <div class="card"><div class="label">Total rows done</div><div class="value">${totalRows.toLocaleString()}${expected ? " / " + expected.toLocaleString() : ""}</div>
+      <div class="hint">${expected ? pct(totalRows, expected) + "% of suite×models" : "waiting for checkpoint header"}</div>
+      <div class="bar"><i style="width:${expected ? Math.min(100, (totalRows / expected) * 100) : 0}%"></i></div>
     </div>
-    <div class="card"><div class="label">Suite cases / model</div><div class="value">${(suiteCaseCount||0).toLocaleString()}</div>
+    <div class="card"><div class="label">Suite cases / model</div><div class="value">${(suiteCaseCount || 0).toLocaleString()}</div>
       <div class="hint">models=${MODELS.length} · peak in-flight=30</div></div>
     <div class="card"><div class="label">Updated</div><div class="value" style="font-size:18px;margin-top:10px">${new Date().toISOString()}</div>
       <div class="hint">source ${path.basename(ckpt)}</div></div>
   </div>
   <div class="grid">
-    ${cards.map(c => `<div class="card">
+    ${cards
+        .map(
+            (c) => `<div class="card">
       <div class="label">${c.model}</div>
-      <div class="value">${c.done.toLocaleString()}${suiteCaseCount?(" / "+suiteCaseCount.toLocaleString()):""}</div>
-      <div class="hint"><span class="pass">${c.pass} pass</span> · <span class="fail">${c.fail} fail</span> · passRate=${(c.passRate*100).toFixed(1)}%</div>
-      <div class="hint">med ${c.medMs!=null?Math.round(c.medMs)+"ms":"—"} · p95 ${c.p95Ms!=null?Math.round(c.p95Ms)+"ms":"—"} · err-ish ${c.err}</div>
-      <div class="bar"><i style="width:${suiteCaseCount?Math.min(100,c.done/suiteCaseCount*100):(c.done?100:0)}%"></i></div>
-      <div class="hint mono" style="margin-top:8px">${c.last?((c.last.passed?"✓ ":"✗ ")+c.last.caseId+" · "+(c.last.utterance||"")): "—"}</div>
-    </div>`).join("")}
+      <div class="value">${c.done.toLocaleString()}${suiteCaseCount ? " / " + suiteCaseCount.toLocaleString() : ""}</div>
+      <div class="hint"><span class="pass">${c.pass} pass</span> · <span class="fail">${c.fail} fail</span> · passRate=${(c.passRate * 100).toFixed(1)}%</div>
+      <div class="hint">med ${c.medMs != null ? Math.round(c.medMs) + "ms" : "—"} · p95 ${c.p95Ms != null ? Math.round(c.p95Ms) + "ms" : "—"} · err-ish ${c.err}</div>
+      <div class="bar"><i style="width:${suiteCaseCount ? Math.min(100, (c.done / suiteCaseCount) * 100) : c.done ? 100 : 0}%"></i></div>
+      <div class="hint mono" style="margin-top:8px">${c.last ? (c.last.passed ? "✓ " : "✗ ") + c.last.caseId + " · " + (c.last.utterance || "") : "—"}</div>
+    </div>`,
+        )
+        .join("")}
   </div>
   <div class="card" style="margin-top:12px">
     <div class="label">Log tail</div>
-    <pre>${logTail.map(l=>l.replace(/[&<>]/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c]))).join("\n") || "(no log yet)"}</pre>
+    <pre>${logTail.map((l) => l.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c])).join("\n") || "(no log yet)"}</pre>
   </div>
   <p class="hint" style="margin-top:14px">Dataset explorer: <span class="mono">viz/dataset.html</span> · final report written to <span class="mono">artifacts/eval-report.html</span> on completion.</p>
 </div>
 </body></html>`;
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, html);
-try { fs.mkdirSync(path.dirname(gw), { recursive: true }); fs.copyFileSync(out, gw); } catch {}
-console.log("wrote", out, "rows", totalRows, "expected", expected, "pid", pidAlive);
+try {
+    fs.mkdirSync(path.dirname(gw), { recursive: true });
+    fs.copyFileSync(out, gw);
+} catch {}
+console.log(
+    "wrote",
+    out,
+    "rows",
+    totalRows,
+    "expected",
+    expected,
+    "pid",
+    pidAlive,
+);
