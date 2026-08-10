@@ -2,8 +2,8 @@
   "version": 1,
   "description": "Create+verify policies per action parameter. sourceFingerprint is paramSpec-only (stable across policy edits). rulesFingerprint is catalog-level; when it drifts, all actions reclassify. Incremental: only added/updated actions are reclassified; unchanged fingerprints are kept. Hardcode name sets first, LLM prior reuse, LLM+verifier fallback. Open strings without a name heuristic use structural free_text/nonempty. `create` guides the synthesizer; `verify` / `parameterScore` drive runner soft matching. `llmAsAJudge` marks code/script params that need semantic LLM scoring. Object containers with only soft leaves use nonempty; mixed objects stay exact (no nested dotted paths yet).",
   "catalogVersion": "2026-08-09",
-  "generatedAt": "2026-08-09T19:41:57.377Z",
-  "rulesFingerprint": "e309b11648cafca1",
+  "generatedAt": "2026-08-10T00:09:38.349Z",
+  "rulesFingerprint": "7bb9c973d46999d9",
   "modes": {
     "exact": "Chosen value must deep-equal expected",
     "exists": "Key must be present; value ignored (hand-authored seeds; not emitted by hardcode gen)",
@@ -18789,7 +18789,7 @@
           "typeKind": "string",
           "create": "free_text",
           "verify": "ignore",
-          "rule": "policy-override:string-original-request-ignore",
+          "rule": "string-original-request-ignore",
           "source": "hardcode"
         },
         "question": {
