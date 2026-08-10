@@ -29,6 +29,13 @@ import {
     type Mode,
 } from "../shared/plugin-config.js";
 
+const modeDescriptions: Record<Mode, string> = {
+    direct: "Hook handles requests directly, bypassing the LLM. Fastest response.",
+    mcp: "Hook redirects to MCP tool. LLM calls TypeAgent with streaming display.",
+    dev: "TypeAgent handles registered PowerShell flows and recording directives; other requests fall through to Copilot.",
+    bypass: "TypeAgent is disabled. All requests bypass TypeAgent routing and fall through to other handlers.",
+};
+
 /**
  * Handle @typeagent slash commands. Returns a HookOutput if the command
  * was handled, or undefined if the prompt is not a slash command.
@@ -73,18 +80,9 @@ function handleSlashCommand(
         config.mode = newMode;
         writeConfig(config);
 
-        const description =
-            newMode === "direct"
-                ? "Hook handles requests directly, bypassing the LLM. Fastest response."
-                : newMode === "mcp"
-                  ? "Hook redirects to MCP tool. LLM calls TypeAgent with streaming display."
-                  : newMode === "dev"
-                    ? "TypeAgent handles registered PowerShell flows and recording directives; other requests fall through to Copilot."
-                    : "TypeAgent is disabled. All requests bypass TypeAgent routing and fall through to other handlers.";
-
         return {
             handled: true,
-            responseContent: `TypeAgent mode switched to **${newMode}**.  \n${description}`,
+            responseContent: `TypeAgent mode switched to **${newMode}**.  \n${modeDescriptions[newMode]}`,
             handledBy: "typeagent",
         };
     }
