@@ -4,6 +4,13 @@
 
 - `src/core/` — domain-agnostic infrastructure. `rateLimiter.ts` is a
   cross-process tokens-per-minute limiter backed by a shared SQLite ledger.
+  `tokenEstimate.ts` estimates a call's prompt-token cost via `gpt-tokenizer`
+  (`o200k_base`) plus a +5% headroom offset via `estimatePromptTokens`.
+  `o200k_base` is used as a **model-agnostic** approximation for every model the
+  benchmark drives (GPT and non-GPT); it is not a per-model tokenizer, just a
+  stable basis for the reservation. Callers pass the result as the `est`
+  (pre-flight reservation) argument to `rateLimiter.run()`, which then settles to
+  actual usage, so cross-tokenizer drift self-corrects.
 - `src/translationBench/` — translation-bench domain. `runConfig.ts` is the pure
   run-config loader/resolver (no env, no I/O beyond reading the config file).
 - Assets (`config.schema.json`, prompt packs) are copied to `dist/` by
