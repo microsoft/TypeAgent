@@ -14,9 +14,7 @@
     {
       "type": "action",
       "id": "browser.external.switchToTabByText",
-      "reasons": [
-        "not_user_disambiguable"
-      ]
+      "reasons": ["not_user_disambiguable"]
     },
     {
       "type": "action",
@@ -131,10 +129,7 @@
     {
       "type": "action",
       "id": "browser.actionDiscovery.registerPageDynamicAgent",
-      "reasons": [
-        "behavioral_alias",
-        "not_user_disambiguable"
-      ],
+      "reasons": ["behavioral_alias", "not_user_disambiguable"],
       "notes": "Prefer browser.actionDiscovery.detectPageActions with registerAgent:true (and optional agentName). Models consistently emit that form for 'register a page agent and find available actions'; registerPageDynamicAgent only carries agentName and drops the registerAgent flag."
     },
     {

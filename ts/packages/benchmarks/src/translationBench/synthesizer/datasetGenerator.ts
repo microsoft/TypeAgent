@@ -719,8 +719,7 @@ export async function runTranslationBenchGenerationQualityLoop(
         const reviewerRecord = completionRecord(
             {
                 text:
-                    ambiguity?.judge?.completionText ||
-                    semantic.completionText,
+                    ambiguity?.judge?.completionText || semantic.completionText,
             },
             options.reviewer.model,
             hashText(ambiguity?.judge?.prompt ?? semantic.prompt),
