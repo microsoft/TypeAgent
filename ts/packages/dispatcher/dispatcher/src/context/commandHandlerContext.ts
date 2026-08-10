@@ -407,7 +407,6 @@ export type CommandHandlerContext = {
     readonly traceId: string | undefined;
     readonly telemetryOptions: {
         readonly joinActiveTrace: boolean;
-        readonly captureSensitiveErrorDetails: boolean;
     };
     currentRequestId: RequestId | undefined;
     currentAbortSignal: AbortSignal | undefined;
@@ -600,11 +599,6 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
          * Default false: each request starts a new trace.
          */
         joinActiveTrace?: boolean;
-        /**
-         * Export redacted original exception messages and stacks. These can
-         * still contain user content, so this is disabled by default.
-         */
-        captureSensitiveErrorDetails?: boolean;
     };
 
     // Additional integration options
@@ -1311,8 +1305,6 @@ export async function initializeCommandHandlerContext(
             traceId,
             telemetryOptions: {
                 joinActiveTrace: options?.telemetry?.joinActiveTrace ?? false,
-                captureSensitiveErrorDetails:
-                    options?.telemetry?.captureSensitiveErrorDetails ?? false,
             },
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
             promptLogger,

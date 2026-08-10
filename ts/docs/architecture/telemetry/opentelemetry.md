@@ -335,8 +335,7 @@ Ordinary `debug(...)` and `logger.logEvent(...)` calls do not change. Add a span
 for an externally meaningful or independently timed operation:
 
 ```ts
-import { trace } from "@opentelemetry/api";
-import { otel } from "@typeagent/telemetry";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 
 const tracer = trace.getTracer("typeagent");
 
@@ -345,9 +344,13 @@ return tracer.startActiveSpan("typeagent.translate", async (span) => {
     span.setAttribute("typeagent.agent.name", agentName);
     return await translateRequest(request);
   } catch (error) {
-    otel.recordTypeAgentSpanException(span, error, {
-      safeName: "TranslationError",
-      safeMessage: "translation failed",
+    span.recordException({
+      name: "TranslationError",
+      message: "translation failed",
+    });
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: "translation failed",
     });
     throw error;
   } finally {
@@ -370,9 +373,7 @@ await createDispatcher(hostName, {
 ```
 
 Original exception messages and stacks are omitted because they can contain user
-content. A host may explicitly opt into redacted details with
-`telemetry.captureSensitiveErrorDetails`, but this remains sensitive diagnostic
-capture even after known secrets are removed.
+content. Record a stable classification and message at the catch site.
 
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |

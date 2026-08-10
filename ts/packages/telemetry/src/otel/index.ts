@@ -56,10 +56,8 @@ export {
 export {
     TYPEAGENT_SPAN_NAMES,
     TYPEAGENT_SPAN_ATTRIBUTES,
-    recordTypeAgentSpanException,
     setTypeAgentSpanAttributes,
     type TypeAgentSpanName,
     type TypeAgentSpanAttributeKey,
     type TypeAgentSpanAttributes,
-    type TypeAgentSpanExceptionOptions,
 } from "./traceContract.js";
