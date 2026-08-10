@@ -1,21 +1,3 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-//
-// Reproduce translation-bench NEGATIVE failures (BAD_NEGATIVE) across the
-// gpt-5.6 sol/terra/luna models, using the real TypeAgent translator.
-//
-// A negative utterance ("Do not X", "Don't X") must NOT produce the target
-// action. The dispatcher translator is expected to answer `unknown` (or fail
-// to produce the target action). Producing the target action = BAD_NEGATIVE.
-//
-// Only actions in eligible-gold-actions.generated.json are eligible, and each
-// case activates only its target schema (the dispatcher activates a small
-// schema set per request; sending all ~290 actions at once exceeds the
-// provider's tool-array limit).
-//
-// Usage:
-//   node reproNegatives.mjs --api-key <key> --models sol --limit 20 --concurrency 6
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,7 +11,6 @@ import {
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
 
-/** Run `tasks` with at most `limit` in flight, preserving result order. */
 async function mapConcurrent(tasks, limit) {
     const results = new Array(tasks.length);
     let next = 0;
@@ -85,7 +66,6 @@ const opts = new Command()
     .parse()
     .opts();
 
-// aiclient resolves credentials from the environment; feed it the CLI values.
 const KEY_VAR = "OPENAI_API_KEY";
 process.env.OPENAI_ENDPOINT = opts.endpoint;
 if (opts.apiKey) {
@@ -99,11 +79,8 @@ const models = opts.models;
 const limit = opts.limit;
 const only = opts.only;
 const repeat = opts.repeat;
-// Bounded parallelism, capped by the model's configured maxConcurrency so we
-// don't outrun provider rate limits.
 const concurrency = getChatModelMaxConcurrency(opts.concurrency, undefined, 4);
 
-// ---- eligible-gold allowlist (the only permitted schemas/actions) --------
 const allowlist = new Set(
     JSON.parse(
         readFileSync(
@@ -113,9 +90,6 @@ const allowlist = new Set(
     ).allowlist,
 );
 
-// ---- hardcoded negative utterances --------------------------------------
-// 20 fixed imperative-negation cases. `id` is the allowlisted action that must
-// NOT be produced; a negative expects no action (`expectedActions: []`).
 const NEGATIVE_CASES = [
     { id: "browser.goForward", utterance: "Do not navigate forward in the browser.", expectedActions: [] },
     { id: "browser.goBack", utterance: "Don't go back to the previous page.", expectedActions: [] },
@@ -145,26 +119,21 @@ for (const c of NEGATIVE_CASES) {
     }
 }
 
-/** Flatten a translated action (possibly a multiple-action wrapper) to ids. */
 function producedActionIds(data, schemaOf) {
     if (data === null || typeof data !== "object") return [];
     if (Array.isArray(data.actions)) {
         return data.actions.flatMap((a) => producedActionIds(a, schemaOf));
     }
-    // Multiple-action entries wrap the real action.
     if (data.action !== undefined) return producedActionIds(data.action, schemaOf);
 
     const actionName = data.actionName;
     if (typeof actionName !== "string") return [];
-    // `unknown` is the translator's no-actionable-intent answer -> a PASS.
     if (actionName === "unknown") return [];
     const schemaName = data.translatorName ?? schemaOf(actionName) ?? "";
     return [schemaName ? `${schemaName}.${actionName}` : actionName];
 }
 
 async function main() {
-
-
     const { provider } = await getAllActionConfigProvider(
         getDefaultAppAgentProviders(getInstanceDir()),
     );
@@ -180,21 +149,14 @@ async function main() {
     const summary = {};
     for (const m of models) summary[m] = { pass: 0, fail: 0, err: 0 };
 
-    // One unit of work per (case, model); run them through a bounded pool.
     const jobs = [];
     for (const c of cases) {
-        // Activate only the target action's schema for this request, matching
-        // how the dispatcher scopes translation per request.
         const schemaName = c.id.slice(0, c.id.lastIndexOf("."));
         const actionConfig = provider.tryGetActionConfig(schemaName);
         if (actionConfig === undefined) {
             console.log(`SKIP ${c.id}: schema '${schemaName}' not available`);
             continue;
         }
-        // Offer ONLY the eligible-gold allowlisted actions for this schema.
-        // Activating the whole schema would expose non-gold actions (e.g.
-        // browser.executeAdHocScript, excluded as llmAsAJudge), letting the
-        // model "pass" a negative by firing an ineligible action.
         const schemaFile = provider.getActionSchemaFileForConfig(actionConfig);
         const allDefs = schemaFile.parsedActionSchema.actionSchemas;
         const definitions = [];
@@ -229,17 +191,12 @@ async function main() {
                 );
                 const result = await translator.translate(c.utterance);
                 if (!result.success) {
-                    // Translator refusing to produce an action is the correct
-                    // behavior for a negative.
                     return { m, kind: "pass" };
                 }
                 const produced = producedActionIds(result.data, (a) =>
                     translator.getSchemaName(a),
                 );
                 const bad = produced.length !== c.expectedActions.length;
-                // Guard: anything produced must be allowlisted. If not, the
-                // offered action set leaked non-gold actions and the result is
-                // not trustworthy.
                 const offLimits = produced.filter((p) => !allowlist.has(p));
                 return { m, c, produced, offLimits, kind: bad ? "fail" : "pass" };
             } catch (e) {
@@ -249,7 +206,6 @@ async function main() {
         concurrency,
     );
 
-    // Report in deterministic case order, not completion order.
     for (const o of outcomes) {
         summary[o.m][o.kind]++;
         if (o.kind === "fail") {
