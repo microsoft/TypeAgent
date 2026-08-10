@@ -47,6 +47,17 @@ const eligibleGoldArtifactSchema = z
         generatedAt: z.string().trim().min(1),
         model: z.string().trim().min(1),
         allowlist: z.array(actionIdSchema).min(1),
+        decisions: z
+            .array(
+                z
+                    .object({
+                        id: actionIdSchema,
+                        include: z.boolean(),
+                        reason: z.string().trim().min(1),
+                    })
+                    .strict(),
+            )
+            .min(1),
     })
     .strict();
 
@@ -67,6 +78,7 @@ const classifierBatchSchema = z
                     .object({
                         id: actionIdSchema,
                         include: z.boolean(),
+                        reason: z.string().trim().min(1),
                     })
                     .strict(),
             )
@@ -184,6 +196,7 @@ export async function pickEligibleGoldActions(
         throw new Error("action quality picker batchSize must be 1..64");
     }
     const include: string[] = [];
+    const decisions: { id: string; include: boolean; reason: string }[] = [];
     for (let i = 0; i < candidates.length; i += batchSize) {
         const batch = candidates.slice(i, i + batchSize);
         const expected = new Set(batch.map((c) => c.id));
@@ -212,6 +225,11 @@ export async function pickEligibleGoldActions(
                 );
             }
             seen.add(d.id);
+            decisions.push({
+                id: d.id,
+                include: d.include,
+                reason: d.reason,
+            });
             if (d.include) include.push(d.id);
         }
         for (const id of expected) {
@@ -226,6 +244,7 @@ export async function pickEligibleGoldActions(
     if (allowlist.length === 0) {
         throw new Error("action quality picker produced an empty allowlist");
     }
+    decisions.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
     const graderRulesFingerprint = grader.rulesFingerprint;
     if (
@@ -245,6 +264,7 @@ export async function pickEligibleGoldActions(
         generatedAt: new Date().toISOString(),
         model: options.llm.model,
         allowlist,
+        decisions,
     };
 }
 
@@ -357,7 +377,8 @@ function assertAllowlistIntegrity(
                 `Run pnpm pick-eligible-actions --model <model>`,
         );
     }
-    for (const id of listActionsWithLlmJudgeFields(grader)) {
+    const llmJudgeIds = new Set(listActionsWithLlmJudgeFields(grader));
+    for (const id of llmJudgeIds) {
         if (unique.has(id)) {
             throw new Error(
                 `eligible gold allowlist contains llmAsAJudge action '${id}' at ${sourcePath}`,
@@ -392,6 +413,48 @@ function assertAllowlistIntegrity(
         if (human.has(id) || ambiguous.has(id)) {
             throw new Error(
                 `eligible gold allowlist contains hard-excluded '${id}' at ${sourcePath}`,
+            );
+        }
+    }
+
+    // Every catalog action decision must carry a non-empty explanation, and the
+    // allowlist must be exactly the set of include=true decisions. This makes
+    // each include/exclude auditable and keeps the two fields from drifting.
+    const decisionIds = new Set<string>();
+    const included = new Set<string>();
+    for (const d of artifact.decisions) {
+        if (decisionIds.has(d.id)) {
+            throw new Error(
+                `eligible gold decisions contain duplicate id '${d.id}' at ${sourcePath}`,
+            );
+        }
+        decisionIds.add(d.id);
+        if (d.include) {
+            included.add(d.id);
+        }
+    }
+    for (const id of unique) {
+        if (!included.has(id)) {
+            throw new Error(
+                `eligible gold allowlist id '${id}' lacks an include decision at ${sourcePath}`,
+            );
+        }
+    }
+    for (const id of included) {
+        if (!unique.has(id)) {
+            throw new Error(
+                `eligible gold include decision '${id}' missing from allowlist at ${sourcePath}`,
+            );
+        }
+    }
+    for (const a of catalog.actions) {
+        const id = catalogActionId(a);
+        if (human.has(id) || ambiguous.has(id) || llmJudgeIds.has(id)) {
+            continue;
+        }
+        if (!decisionIds.has(id)) {
+            throw new Error(
+                `eligible gold decisions missing catalog action '${id}' at ${sourcePath}`,
             );
         }
     }

@@ -13,7 +13,7 @@ policy_classifier:
     Decide which actions are worth scheduling as SINGLE-TOOL gold targets.
 
     Return ONLY strict JSON:
-      { "decisions": [ { "id": "schema.action", "include": true|false } ] }
+      { "decisions": [ { "id": "schema.action", "include": true|false, "reason": "<short explanation>" } ] }
 
     Rules (fail closed — when unsure, include=false):
     1. Single clear user utterance must uniquely select this tool under a full catalog.
@@ -24,6 +24,7 @@ policy_classifier:
     6. Exclude conversational meta-actions and open-ended status queries that lack structured control semantics.
     7. Include crisp UI/commands with closed parameter slots or explicit control semantics.
     8. Emit exactly one decision per candidate id. Do not invent ids.
+    9. Every decision MUST include a non-empty "reason" explaining the include/exclude call.
 
     CANDIDATES:
     {{candidates_json}}

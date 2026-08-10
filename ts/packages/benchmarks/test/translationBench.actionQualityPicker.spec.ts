@@ -71,7 +71,11 @@ function includeAllLlm(model = "test-model") {
             );
             const unique = [...new Set(ids)];
             return JSON.stringify({
-                decisions: unique.map((id) => ({ id, include: true })),
+                decisions: unique.map((id) => ({
+                    id,
+                    include: true,
+                    reason: "test include",
+                })),
             });
         },
     };
@@ -120,6 +124,7 @@ describe("action quality picker", () => {
                     decisions: unique.map((id) => ({
                         id,
                         include: keep.has(id),
+                        reason: keep.has(id) ? "keep" : "drop",
                     })),
                 });
             },
