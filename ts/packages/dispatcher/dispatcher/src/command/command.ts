@@ -11,6 +11,14 @@ import {
     getRequestId,
     requestIdToString,
 } from "../context/commandHandlerContext.js";
+import {
+    context as otelContext,
+    trace,
+    type Context,
+} from "@opentelemetry/api";
+import { otel } from "@typeagent/telemetry";
+import { wrapRootRequestSpan } from "../otel/rootRequestSpan.js";
+import { getSessionName } from "../context/session.js";
 
 import {
     CommandDescriptor,
@@ -356,6 +364,23 @@ export async function processCommandNoLock(
         if (e.name === "AbortError" || context.currentAbortSignal?.aborted) {
             throw new DOMException("The operation was aborted.", "AbortError");
         }
+        // Record the exception on the active `typeagent.request` span
+        // *before* processCommandNoLock swallows it. The design doc rule
+        // (opentelemetry.md, "Developer Usage") is explicit: "If code
+        // converts an exception to `ActionResult`, it must still record
+        // the exception and error status." The catch below converts the
+        // thrown error into a user-visible display message + logged event,
+        // not a re-throw; without this recordException/setStatus pair the
+        // root span would silently end with status UNSET on real failures.
+        const activeSpan = trace.getActiveSpan();
+        if (activeSpan !== undefined) {
+            otel.recordTypeAgentSpanException(activeSpan, e, {
+                safeName: "CommandError",
+                safeMessage: "command failed",
+                captureSensitiveDetails:
+                    context.telemetryOptions.captureSensitiveErrorDetails,
+            });
+        }
         context.clientIO.appendDisplay(
             makeClientIOMessage(
                 context,
@@ -442,6 +467,7 @@ export async function processCommand(
     requestId: RequestId,
     attachments?: string[],
     options?: ProcessCommandOptions,
+    parentContext?: Context,
 ): Promise<CommandResult | undefined> {
     // Create the AbortController *before* acquiring the lock so that a
     // cancelCommandByClientId() call that arrives while we are queued can
@@ -453,38 +479,101 @@ export async function processCommand(
             abortController,
         );
     }
-    try {
-        // Process one command at a time.
-        return await context.commandLock(async () => {
-            const requestIdStr = requestId.requestId;
-            context.activeRequests.set(requestIdStr, abortController);
-            context.currentOptions = options;
-            beginProcessCommand(
-                requestId,
-                context,
-                options,
-                abortController.signal,
-            );
-            context.clientIO.setUserRequest(requestId, originalInput);
+    // Compute the correlation attributes ONCE, before opening the root
+    // `typeagent.request` span. Values that only become known later
+    // (agent name, action name) are set on the active span by downstream
+    // steps in later phases; the root span carries only the values known
+    // at the outermost async boundary. Everything the wrapper receives is
+    // an identifier, not user text - see setTypeAgentSpanAttributes.
+    const sessionId = context.session.sessionDirPath
+        ? getSessionName(context.session.sessionDirPath)
+        : undefined;
+    const rootAttributes: {
+        -readonly [K in keyof otel.TypeAgentSpanAttributes]: otel.TypeAgentSpanAttributes[K];
+    } = {};
+    if (sessionId !== undefined) rootAttributes.sessionId = sessionId;
+    if (context.activationId !== undefined)
+        rootAttributes.activationId = context.activationId;
+    if (context.traceId !== undefined) rootAttributes.traceId = context.traceId;
+    // wrapRootRequestSpan opens `typeagent.request` and applies the
+    // correlation attributes; the callback body preserves the original
+    // command flow. startActiveSpan uses AsyncHooks context propagation
+    // so every downstream await (commandLock, processCommandNoLock,
+    // translation/reasoning/action) automatically nests under this span.
+    const rootParentContext =
+        parentContext ??
+        (context.telemetryOptions.joinActiveTrace
+            ? otelContext.active()
+            : undefined);
+    return await wrapRootRequestSpan(
+        rootAttributes,
+        async () => {
             try {
-                await processCommandNoLock(originalInput, context, attachments);
-            } catch (e: any) {
-                if (e.name === "AbortError") {
-                    ensureCommandResult(context).cancelled = true;
-                } else {
-                    throw e;
-                }
+                // Process one command at a time.
+                return await context.commandLock(async () => {
+                    const requestIdStr = requestId.requestId;
+                    context.activeRequests.set(requestIdStr, abortController);
+                    context.currentOptions = options;
+                    beginProcessCommand(
+                        requestId,
+                        context,
+                        options,
+                        abortController.signal,
+                    );
+                    context.clientIO.setUserRequest(requestId, originalInput);
+                    try {
+                        await processCommandNoLock(
+                            originalInput,
+                            context,
+                            attachments,
+                        );
+                    } catch (e: any) {
+                        if (e.name === "AbortError") {
+                            // Design rule: exceptions converted to ActionResult
+                            // must still be recorded on the active span. Do it
+                            // here (inside the wrapper's context) so the
+                            // exception event lands on `typeagent.request`.
+                            // The wrapper separately sets ERROR status with
+                            // message "cancelled" when it sees cancelled=true.
+                            const activeSpan = trace.getActiveSpan();
+                            if (activeSpan !== undefined) {
+                                otel.recordTypeAgentSpanException(
+                                    activeSpan,
+                                    e,
+                                    {
+                                        safeName: "AbortError",
+                                        safeMessage: "cancelled",
+                                        captureSensitiveDetails:
+                                            context.telemetryOptions
+                                                .captureSensitiveErrorDetails,
+                                    },
+                                );
+                            }
+                            ensureCommandResult(context).cancelled = true;
+                        } else {
+                            throw e;
+                        }
+                    } finally {
+                        context.activeRequests.delete(requestIdStr);
+                        context.currentOptions = undefined;
+                        // eslint-disable-next-line no-unsafe-finally
+                        return endProcessCommand(requestId, context);
+                    }
+                });
             } finally {
-                context.activeRequests.delete(requestIdStr);
-                context.currentOptions = undefined;
-                return endProcessCommand(requestId, context);
+                if (requestId.clientRequestId !== undefined) {
+                    context.activeRequestsByClientId.delete(
+                        requestId.clientRequestId,
+                    );
+                }
             }
-        });
-    } finally {
-        if (requestId.clientRequestId !== undefined) {
-            context.activeRequestsByClientId.delete(requestId.clientRequestId);
-        }
-    }
+        },
+        {
+            parentContext: rootParentContext,
+            captureSensitiveErrorDetails:
+                context.telemetryOptions.captureSensitiveErrorDetails,
+        },
+    );
 }
 
 export const enum unicodeChar {

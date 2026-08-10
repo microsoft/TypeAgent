@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Span } from "@opentelemetry/api";
+import { SpanStatusCode, type Span } from "@opentelemetry/api";
 import { redactText, type RedactionOptions } from "./redaction.js";
 
 /**
@@ -13,13 +13,9 @@ import { redactText, type RedactionOptions } from "./redaction.js";
  * `@opentelemetry/api` directly (see docs/architecture/telemetry/opentelemetry.md
  * for the design rationale that forbids a `TypeAgentSpan`).
  *
- * The one helper this module provides, {@link setTypeAgentSpanAttributes},
- * takes an OTel `Span` and applies only the allowlisted attribute keys
- * declared here. It exists to make privacy review tractable: any attribute
- * value that is not one of the allowlisted keys is dropped before it can
- * reach `Span.setAttribute`, and string values are passed through
- * `redactText` so a caller can never accidentally leak a known secret
- * format through a stable attribute.
+ * The helpers in this module make privacy review tractable. Span attributes
+ * are restricted to the allowlisted keys declared here, and exceptions use
+ * stable classifications instead of original messages and stacks by default.
  */
 
 /**
@@ -98,6 +94,19 @@ export interface TypeAgentSpanAttributes {
     readonly traceId?: string;
 }
 
+export interface TypeAgentSpanExceptionOptions {
+    /** Stable exception classification that does not contain user data. */
+    readonly safeName: string;
+    /** Stable status and exception message that does not contain user data. */
+    readonly safeMessage: string;
+    /**
+     * Include the original exception message and stack after secret redaction.
+     * This can still contain user content, so hosts must enable it explicitly.
+     */
+    readonly captureSensitiveDetails?: boolean | undefined;
+    readonly redactionOptions?: RedactionOptions | undefined;
+}
+
 const ATTRIBUTE_KEY_FOR_FIELD: {
     readonly [K in keyof TypeAgentSpanAttributes]-?: TypeAgentSpanAttributeKey;
 } = {
@@ -150,4 +159,63 @@ export function setTypeAgentSpanAttributes(
         }
         span.setAttribute(ATTRIBUTE_KEY_FOR_FIELD[field], redacted);
     }
+}
+
+/**
+ * Record an exception without exporting its original message or stack by
+ * default. Detailed capture is opt-in because secret redaction cannot remove
+ * arbitrary user content.
+ */
+export function recordTypeAgentSpanException(
+    span: Span,
+    error: unknown,
+    options: TypeAgentSpanExceptionOptions,
+): void {
+    const exception: {
+        name: string;
+        message: string;
+        stack?: string;
+    } = {
+        name: options.safeName,
+        message: options.safeMessage,
+    };
+
+    if (options.captureSensitiveDetails === true) {
+        const message = getErrorMessage(error);
+        if (message !== undefined) {
+            exception.message = redactText(message, options.redactionOptions);
+        }
+        const stack = getErrorStack(error);
+        if (stack !== undefined) {
+            exception.stack = redactText(stack, options.redactionOptions);
+        }
+    }
+
+    span.recordException(exception);
+    span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: options.safeMessage,
+    });
+}
+
+function getErrorMessage(error: unknown): string | undefined {
+    if (
+        error !== null &&
+        typeof error === "object" &&
+        typeof (error as { message?: unknown }).message === "string"
+    ) {
+        return (error as { message: string }).message;
+    }
+    return typeof error === "string" ? error : undefined;
+}
+
+function getErrorStack(error: unknown): string | undefined {
+    if (
+        error !== null &&
+        typeof error === "object" &&
+        typeof (error as { stack?: unknown }).stack === "string"
+    ) {
+        return (error as { stack: string }).stack;
+    }
+    return undefined;
 }

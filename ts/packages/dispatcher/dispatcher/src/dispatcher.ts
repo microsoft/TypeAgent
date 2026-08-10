@@ -34,6 +34,7 @@ import {
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
 import { randomUUID } from "node:crypto";
+import { context as otelContext } from "@opentelemetry/api";
 import { getAgentSchemas } from "./context/system/describe/agentSchemaInfo.js";
 
 async function getDynamicDisplay(
@@ -216,6 +217,9 @@ export function createDispatcherFromContext(
         if (attachments != null) input.attachments = attachments;
         if (options != null) input.options = options;
         if (requestId !== undefined) input.requestId = requestId;
+        if (context.telemetryOptions.joinActiveTrace) {
+            input.traceContext = otelContext.active();
+        }
         return input;
     };
 
