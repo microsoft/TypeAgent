@@ -26,7 +26,6 @@ import {
     type TranslationBenchQualityVerifierPromptPack,
 } from "./synthesizerPrompts.js";
 import {
-    checkTranslationBenchCandidateDisambiguation,
     findTranslationBenchConfusableSiblings,
     summarizeTranslationBenchConfusableSiblings,
 } from "./utteranceDisambiguation.js";
@@ -37,10 +36,16 @@ import {
     parseTranslationBenchNegativeFairnessAssessments,
     translationBenchNegativeAssessmentsJsonSchema,
 } from "./negativeFairness.js";
+import {
+    runTranslationBenchAmbiguityProbe,
+    type TranslationBenchAmbiguityCheckResult,
+    type TranslationBenchAmbiguityProbeTranslator,
+} from "./ambiguityProbe.js";
 
 export type TranslationBenchQualityStage =
     | "format_checker"
-    | "semantic_checker";
+    | "semantic_checker"
+    | "ambiguity_probe";
 
 export interface TranslationBenchFormatCheckResult {
     stage: "format_checker";
@@ -61,6 +66,7 @@ export interface TranslationBenchQualityVerifyResult {
     accepted: boolean;
     format: TranslationBenchFormatCheckResult;
     semantic?: TranslationBenchSemanticCheckResult;
+    ambiguity?: TranslationBenchAmbiguityCheckResult;
     feedback: TranslationBenchReviewIssue[];
 }
 
@@ -70,6 +76,10 @@ export interface TranslationBenchQualityVerifierOptions {
     candidateHash: string;
     candidate?: TranslationBenchGeneratedCandidate;
     semanticLlm: TranslationBenchGenerationLlm;
+    /** When set, stage 3 multi-model ambiguity probe runs after semantic approve. */
+    ambiguityProbe?: TranslationBenchAmbiguityProbeTranslator;
+    /** Judge model for stage 3 (defaults to semanticLlm). */
+    ambiguityJudgeLlm?: TranslationBenchGenerationLlm;
     promptsDir?: string;
     promptPack?: TranslationBenchQualityVerifierPromptPack;
 }
@@ -149,21 +159,6 @@ export function runTranslationBenchFormatChecker(
                 };
             }
         }
-        const catalog = catalogForLoop(loop);
-        const disambiguationIssues =
-            checkTranslationBenchCandidateDisambiguation(
-                candidate,
-                loop.targetAction,
-                catalog,
-            );
-        if (disambiguationIssues.length > 0) {
-            return {
-                stage: "format_checker",
-                passed: false,
-                issues: disambiguationIssues,
-                candidate,
-            };
-        }
         return {
             stage: "format_checker",
             passed: true,
@@ -212,7 +207,7 @@ export function buildTranslationBenchSemanticCheckerPrompt(
                 confusableSiblings,
             ),
             disambiguationRule:
-                "Reject positives (AMBIGUOUS_INTENT) when a careful reader could equally choose a confusable sibling. Seed and every positive must uniquely identify the target action.",
+                "Reject positives (AMBIGUOUS_INTENT) when a careful reader could equally choose a confusable sibling. Seed and every positive must uniquely identify the target action. Do not use regex or fixed phrase lists — judge natural meaning only.",
             negativeFairnessRule: TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE,
         },
         candidate,
@@ -453,10 +448,40 @@ export async function runTranslationBenchDataQualityVerifier(
         llm: options.semanticLlm,
     });
 
+    if (!semantic.passed) {
+        return {
+            accepted: false,
+            format,
+            semantic,
+            feedback: semantic.decision.issues,
+        };
+    }
+
+    if (options.ambiguityProbe === undefined) {
+        return {
+            accepted: true,
+            format,
+            semantic,
+            feedback: [],
+        };
+    }
+
+    const ambiguity = await runTranslationBenchAmbiguityProbe({
+        pack,
+        candidate: format.candidate,
+        candidateHash: options.candidateHash,
+        targetAction: options.loop.targetAction,
+        activeSchemas: options.loop.activeSchemas,
+        catalog: catalogForLoop(options.loop),
+        translator: options.ambiguityProbe,
+        judgeLlm: options.ambiguityJudgeLlm ?? options.semanticLlm,
+    });
+
     return {
-        accepted: semantic.passed,
+        accepted: ambiguity.passed,
         format,
         semantic,
-        feedback: semantic.passed ? [] : semantic.decision.issues,
+        ambiguity,
+        feedback: ambiguity.passed ? [] : ambiguity.issues,
     };
 }

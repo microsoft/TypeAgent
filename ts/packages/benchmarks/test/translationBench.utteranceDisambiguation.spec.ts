@@ -9,12 +9,9 @@ import {
 } from "@typeagent/action-schema";
 
 import type { TranslationBenchBenchmarkSchema } from "../src/translationBench/synthesizer/benchmark.js";
-import { runTranslationBenchFormatChecker } from "../src/translationBench/synthesizer/dataQualityVerifier.js";
-import type { TranslationBenchGenerationQualityLoopOptions } from "../src/translationBench/synthesizer/datasetGenerator.js";
 import {
-    checkTranslationBenchCandidateDisambiguation,
-    checkTranslationBenchUtteranceDisambiguation,
     findTranslationBenchConfusableSiblings,
+    summarizeTranslationBenchConfusableSiblings,
 } from "../src/translationBench/synthesizer/utteranceDisambiguation.js";
 
 const HASH = "b".repeat(64);
@@ -132,7 +129,6 @@ describe("translation bench confusable siblings", () => {
         expect(siblings.map((s) => s.actionName)).toEqual(
             expect.arrayContaining(["writeFile"]),
         );
-        // readFile shares no strong name/description overlap → not flagged.
         expect(siblings.map((s) => s.actionName)).not.toContain("readFile");
     });
 
@@ -161,249 +157,27 @@ describe("translation bench confusable siblings", () => {
             ]),
         );
     });
-});
 
-describe("translation bench utterance disambiguation", () => {
-    const catalog = browserCatalog();
-    const openWebPage = {
-        schemaName: "browser",
-        actionName: "openWebPage",
-    } as const;
-    const followLink = {
-        schemaName: "browser",
-        actionName: "followLinkByText",
-    } as const;
-    const openSiblings = findTranslationBenchConfusableSiblings(
-        openWebPage,
-        catalog,
-    );
-    const followSiblings = findTranslationBenchConfusableSiblings(
-        followLink,
-        catalog,
-    );
-
-    it("rejects double-meaning open phrase for openWebPage", () => {
-        const result = checkTranslationBenchUtteranceDisambiguation(
-            "Open the Apple stock quote in a new tab",
-            openWebPage,
-            openSiblings,
-            "$.seed.utterance",
-        );
-        expect(result.ok).toBe(false);
-        expect(result.message).toMatch(/disambiguat|confusable/i);
-    });
-
-    it("rejects the same phrase for followLinkByText", () => {
-        const result = checkTranslationBenchUtteranceDisambiguation(
-            "Open the Apple stock quote in a new tab",
-            followLink,
-            followSiblings,
-            "$.seed.utterance",
-        );
-        expect(result.ok).toBe(false);
-    });
-
-    it("accepts openWebPage with navigate cue", () => {
-        const result = checkTranslationBenchUtteranceDisambiguation(
-            "Go to the Apple stock quote website",
-            openWebPage,
-            openSiblings,
-            "$.seed.utterance",
-        );
-        expect(result.ok).toBe(true);
-        expect(result.targetCuesMatched.length).toBeGreaterThan(0);
-    });
-
-    it("accepts followLinkByText with link cue", () => {
-        const result = checkTranslationBenchUtteranceDisambiguation(
-            "Click the link titled Apple stock quote",
-            followLink,
-            followSiblings,
-            "$.seed.utterance",
-        );
-        expect(result.ok).toBe(true);
-        expect(result.targetCuesMatched.length).toBeGreaterThan(0);
-    });
-
-    it("skips negatives in candidate check", () => {
-        const issues = checkTranslationBenchCandidateDisambiguation(
-            {
-                seed: {
-                    utterance: "Go to apple.com",
-                    expectedActions: [
-                        {
-                            schemaName: "browser",
-                            actionName: "openWebPage",
-                            parameters: { site: "apple.com" },
-                        },
-                    ],
-                    order: "any",
-                },
-                genCases: [
-                    {
-                        id: "pos-0",
-                        role: "positive",
-                        utterance: "Visit the Apple homepage",
-                        expectedActions: [
-                            {
-                                schemaName: "browser",
-                                actionName: "openWebPage",
-                                parameters: { site: "apple.com" },
-                            },
-                        ],
-                        order: "any",
-                        dimensions: {},
-                    },
-                    {
-                        id: "neg-0",
-                        role: "negative",
-                        // Intentionally sibling-like; negatives are not checked.
-                        utterance: "Open the Apple stock quote in a new tab",
-                        expectedActions: [],
-                        order: "any",
-                        dimensions: {},
-                    },
-                ],
-            },
-            openWebPage,
-            catalog,
-        );
-        expect(issues).toEqual([]);
-    });
-});
-
-describe("format checker utterance disambiguation gate", () => {
-    it("hard-rejects ambiguous positives before semantic review", () => {
+    it("summarizes siblings without cue lists", () => {
         const catalog = browserCatalog();
-        const schema = catalog[0]!;
         const target = {
             schemaName: "browser",
             actionName: "openWebPage",
         } as const;
-        const loop = {
-            targetAction: target,
-            schema,
-            catalogSchemas: catalog,
-            anchor: {
-                candidateId: "a",
-                utterance: "open something",
-                sourceCalls: [],
-            },
-            activeSchemas: ["browser"],
-            genCaseCount: 2,
-            maxAttempts: 5,
-            generator: { model: "g", complete: async () => "" },
-            reviewer: { model: "r", complete: async () => "" },
-        } as unknown as TranslationBenchGenerationQualityLoopOptions;
-
-        const ambiguous = {
-            seed: {
-                utterance: "Open the Apple stock quote in a new tab",
-                expectedActions: [
-                    {
-                        schemaName: "browser",
-                        actionName: "openWebPage",
-                        parameters: { site: "apple.com" },
-                    },
-                ],
-                order: "any",
-            },
-            genCases: [
-                {
-                    id: "pos-0",
-                    role: "positive",
-                    utterance: "Go to the Apple investor relations site",
-                    expectedActions: [
-                        {
-                            schemaName: "browser",
-                            actionName: "openWebPage",
-                            parameters: { site: "apple.com" },
-                        },
-                    ],
-                    order: "any",
-                    dimensions: { variation: 0 },
-                },
-                {
-                    id: "neg-0",
-                    role: "negative",
-                    utterance: "What is Apple's market cap?",
-                    expectedActions: [],
-                    order: "any",
-                    dimensions: { boundary: "question" },
-                },
-            ],
-        };
-
-        const result = runTranslationBenchFormatChecker(ambiguous, loop);
-        expect(result.passed).toBe(false);
-        expect(result.issues.some((i) => i.code === "AMBIGUOUS_INTENT")).toBe(
-            true,
+        const summary = summarizeTranslationBenchConfusableSiblings(
+            target,
+            findTranslationBenchConfusableSiblings(target, catalog),
         );
-    });
-
-    it("accepts disambiguated openWebPage positives", () => {
-        const catalog = browserCatalog();
-        const schema = catalog[0]!;
-        const target = {
-            schemaName: "browser",
-            actionName: "openWebPage",
-        } as const;
-        const loop = {
-            targetAction: target,
-            schema,
-            catalogSchemas: catalog,
-            anchor: {
-                candidateId: "a",
-                utterance: "open something",
-                sourceCalls: [],
-            },
-            activeSchemas: ["browser"],
-            genCaseCount: 2,
-            maxAttempts: 5,
-            generator: { model: "g", complete: async () => "" },
-            reviewer: { model: "r", complete: async () => "" },
-        } as unknown as TranslationBenchGenerationQualityLoopOptions;
-
-        const clear = {
-            seed: {
-                utterance: "Go to the Apple stock quote website",
-                expectedActions: [
-                    {
-                        schemaName: "browser",
-                        actionName: "openWebPage",
-                        parameters: { site: "apple.com" },
-                    },
-                ],
-                order: "any",
-            },
-            genCases: [
-                {
-                    id: "pos-0",
-                    role: "positive",
-                    utterance: "Navigate to apple.com/investor",
-                    expectedActions: [
-                        {
-                            schemaName: "browser",
-                            actionName: "openWebPage",
-                            parameters: { site: "apple.com/investor" },
-                        },
-                    ],
-                    order: "any",
-                    dimensions: { variation: 0 },
-                },
-                {
-                    id: "neg-0",
-                    role: "negative",
-                    utterance: "What is Apple's market cap?",
-                    expectedActions: [],
-                    order: "any",
-                    dimensions: { boundary: "question" },
-                },
-            ],
-        };
-
-        const result = runTranslationBenchFormatChecker(clear, loop);
-        expect(result.passed).toBe(true);
-        expect(result.issues).toEqual([]);
+        expect(summary.length).toBeGreaterThan(0);
+        for (const row of summary) {
+            expect(row).toEqual(
+                expect.objectContaining({
+                    action: expect.any(String),
+                    reason: expect.any(String),
+                }),
+            );
+            expect(row).not.toHaveProperty("preferTargetCues");
+            expect(row).not.toHaveProperty("avoidCuesThatMeanSibling");
+        }
     });
 });

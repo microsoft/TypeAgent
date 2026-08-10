@@ -13,12 +13,14 @@
     },
     {
       "type": "action",
-      "id": "chat.generateResponse",
-      "reasons": ["original_request_echo", "conversational_meta_action"]
+      "id": "browser.external.switchToTabByText",
+      "reasons": [
+        "not_user_disambiguable"
+      ]
     },
     {
       "type": "action",
-      "id": "dispatcher.lookup.lookupAndAnswerConversation",
+      "id": "chat.generateResponse",
       "reasons": ["original_request_echo", "conversational_meta_action"]
     },
     {
@@ -125,6 +127,15 @@
       "type": "action",
       "id": "browser.actionDiscovery.createWebFlowFromRecording",
       "reasons": ["open_ended_code_or_script_body"]
+    },
+    {
+      "type": "action",
+      "id": "browser.actionDiscovery.registerPageDynamicAgent",
+      "reasons": [
+        "behavioral_alias",
+        "not_user_disambiguable"
+      ],
+      "notes": "Prefer browser.actionDiscovery.detectPageActions with registerAgent:true (and optional agentName). Models consistently emit that form for 'register a page agent and find available actions'; registerPageDynamicAgent only carries agentName and drops the registerAgent flag."
     },
     {
       "type": "action",
@@ -246,12 +257,6 @@
     {
       "type": "field",
       "path": "chat.generateResponse.originalRequest",
-      "verify": "ignore",
-      "reason": "echo_of_user_utterance"
-    },
-    {
-      "type": "field",
-      "path": "dispatcher.lookup.lookupAndAnswerConversation.originalRequest",
       "verify": "ignore",
       "reason": "echo_of_user_utterance"
     },

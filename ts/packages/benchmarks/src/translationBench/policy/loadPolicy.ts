@@ -278,6 +278,13 @@ export function expandRemovedActions(
     for (const entry of policy.removedActions) {
         if (entry.type === "action") {
             if (!catalogIds.has(entry.id)) {
+                // The dispatcher.clarify namespace is reserved and excluded
+                // from every translation-bench catalog by construction, so
+                // policy entries targeting it can never appear in the catalog.
+                // Treat them as excluded-by-design rather than missing.
+                if (entry.id.startsWith("dispatcher.clarify.")) {
+                    continue;
+                }
                 if (!allowMissing) {
                     throw new Error(
                         `removedActions id '${entry.id}' is not present in the catalog`,

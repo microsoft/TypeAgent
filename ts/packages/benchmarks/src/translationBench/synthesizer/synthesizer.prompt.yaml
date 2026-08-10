@@ -57,14 +57,10 @@ template: |-
   - Immutable context may list confusableSiblings — nearby TypeAgent tools a
     careful reader could confuse with the target.
   - When confusableSiblings is non-empty, every seed/positive utterance MUST
-    uniquely mean the target action. Prefer the listed preferTargetCues and
-    never rely on phrasing that also fits a sibling (avoidCuesThatMeanSibling).
-  - Example collision to avoid: "Open the Apple stock quote in a new tab" can
-    mean either browser.openWebPage or browser.followLinkByText. Prefer
-    "Go to the Apple stock quote website" (openWebPage) or "Click the link
-    titled Apple stock quote" (followLinkByText).
-  - Double-meaning positives are rejected by the format checker as
-    AMBIGUOUS_INTENT before semantic review.
+    uniquely mean the target action (natural language only; no fixed phrase
+    lists). Do not write phrasing that also fits a sibling.
+  - After quality checks, the row is run on multiple translators; split or
+    non-gold agreement rejects the row as AMBIGUOUS_INTENT.
 
   Negatives (hard fairness requirement — empty expectedActions):
   - Scorer treats expectedActions: [] as "translator must emit ZERO actions"

@@ -1,8 +1,8 @@
 {
   "version": 1,
   "catalogVersion": "2026-08-09",
-  "policyHash": "d1c784e87ff8a92ee66d5d79e3a74c02e9e8da47df9937cf89b8b27c469a1413",
-  "graderRulesFingerprint": "4dbb8db2f9413485",
+  "policyHash": "d69e613ef6130de4532122d30717ef17d14c7e4bed8d9a32af7467e8a3dfccf4",
+  "graderRulesFingerprint": "e309b11648cafca1",
   "generatedAt": "2026-08-09T13:27:20.514Z",
   "model": "azure/gpt-5.6-sol",
   "allowlist": [
@@ -16,7 +16,6 @@
     "browser.external.openFromBookmarks",
     "browser.external.openFromHistory",
     "browser.external.openTab",
-    "browser.external.switchToTabByText",
     "browser.followLinkByText",
     "browser.goBack",
     "browser.goForward",

@@ -65,6 +65,8 @@ export { getAllActionConfigProvider } from "./context/inlineAgentProvider.js";
 export type { ComposeSchemaOptions } from "./translation/actionSchemaJsonTranslator.js";
 export type { ActionConfig } from "./translation/actionConfig.js";
 export type { ActionConfigProvider } from "./translation/actionConfigProvider.js";
+export { createHistoryContext } from "./translation/interpretRequest.js";
+export { translateRequest } from "./translation/translateRequest.js";
 
 export {
     ChatHistoryInput,

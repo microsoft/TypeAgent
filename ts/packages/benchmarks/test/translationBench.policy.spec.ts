@@ -120,7 +120,6 @@ describe("translation-bench action eligibility policy", () => {
             "browser.lookupAndAnswer.lookupAndAnswerInternet",
             "browser.searchImageAction",
             "chat.generateResponse",
-            "dispatcher.lookup.lookupAndAnswerConversation",
             "dispatcher.reasoning.reasoningAction",
             "image.createImageAction",
             "image.editImageAction",

@@ -54,6 +54,7 @@ import {
     runTranslationBenchDataQualityVerifier,
     runTranslationBenchFormatChecker,
 } from "./dataQualityVerifier.js";
+import type { TranslationBenchAmbiguityProbeTranslator } from "./ambiguityProbe.js";
 import {
     loadTranslationBenchQualityVerifierPromptPack,
     loadTranslationBenchSynthesizerPromptPack,
@@ -143,6 +144,13 @@ export interface TranslationBenchGenerationQualityLoopOptions {
     maxAttempts: number;
     generator: TranslationBenchGenerationLlm;
     reviewer: TranslationBenchGenerationLlm;
+    /**
+     * Optional multi-model translator. When set, stage 3 of the quality
+     * verifier probes each positive utterance and rejects ambiguous gold.
+     */
+    ambiguityProbe?: TranslationBenchAmbiguityProbeTranslator;
+    /** Judge LLM for stage 3 (defaults to reviewer). */
+    ambiguityJudgeLlm?: TranslationBenchGenerationLlm;
     forbiddenUtterances?: ReadonlySet<string>;
     promptsDir?: string;
 }
@@ -186,6 +194,9 @@ export interface TranslationBenchGeneratedBenchmarkOptions {
     concurrency?: number;
     generator: TranslationBenchGenerationLlm;
     reviewer: TranslationBenchGenerationLlm;
+    /** Multi-model ambiguity probe. Recommended in production. */
+    ambiguityProbe?: TranslationBenchAmbiguityProbeTranslator;
+    ambiguityJudgeLlm?: TranslationBenchGenerationLlm;
     checkpointPath?: string;
     resume?: boolean;
     promptsDir?: string;
@@ -557,7 +568,7 @@ function formatSynthesizerPrompt(
                 confusableSiblings,
             ),
             disambiguationRule:
-                "Every seed and positive utterance must uniquely identify the target action. If confusableSiblings is non-empty, include target-only cues and never use phrasing that fits a sibling equally well.",
+                "Every seed and positive utterance must uniquely identify the target action. If confusableSiblings is non-empty, write phrasing that only fits the target — no fixed cue lists; natural language only.",
             negativeFairnessRule:
                 TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE +
                 " The semantic checker LLM judges this (no verb lexicon).",
@@ -658,13 +669,19 @@ export async function runTranslationBenchGenerationQualityLoop(
         const candidateHash =
             computeTranslationBenchCanonicalJsonHash(candidate);
 
-        // Stage 2 — full quality verifier ending in semantic checker (LLM).
+        // Stage 2–3 — semantic checker, then optional multi-model ambiguity probe.
         const verify = await runTranslationBenchDataQualityVerifier({
             synthesizerOutput: synthesizerJson,
             loop: options,
             candidateHash,
             candidate,
             semanticLlm: options.reviewer,
+            ...(options.ambiguityProbe !== undefined
+                ? { ambiguityProbe: options.ambiguityProbe }
+                : {}),
+            ...(options.ambiguityJudgeLlm !== undefined
+                ? { ambiguityJudgeLlm: options.ambiguityJudgeLlm }
+                : {}),
             ...(options.promptsDir !== undefined
                 ? { promptsDir: options.promptsDir }
                 : {}),
@@ -698,20 +715,38 @@ export async function runTranslationBenchGenerationQualityLoop(
         }
 
         const semantic = verify.semantic;
+        const ambiguity = verify.ambiguity;
         const reviewerRecord = completionRecord(
             {
-                text: semantic.completionText,
+                text:
+                    ambiguity?.judge?.completionText ||
+                    semantic.completionText,
             },
             options.reviewer.model,
-            hashText(semantic.prompt),
+            hashText(ambiguity?.judge?.prompt ?? semantic.prompt),
         );
+        // Surface ambiguity-probe rejection on the attempt record when stage 3 fails
+        // after semantic approve (so checkpoints show AMBIGUOUS_INTENT, not a false approve).
+        const finalDecision =
+            verify.accepted && semantic.decision.decision === "approve"
+                ? ("approve" as const)
+                : ("reject" as const);
+        const finalIssues =
+            ambiguity !== undefined && !ambiguity.passed
+                ? ambiguity.issues
+                : semantic.decision.issues;
+        const finalSummary =
+            ambiguity !== undefined && !ambiguity.passed
+                ? (ambiguity.judge?.decision.summary ??
+                  ambiguity.issues.map((i) => i.message).join("; "))
+                : semantic.decision.summary;
         record.reviewer = {
             ...reviewerRecord,
             candidateHash,
-            decision: semantic.decision.decision,
+            decision: finalDecision,
             scores: semantic.decision.scores,
-            issues: semantic.decision.issues,
-            summary: semantic.decision.summary,
+            issues: finalIssues,
+            summary: finalSummary,
         };
 
         if (verify.accepted && semantic.decision.decision === "approve") {
@@ -1274,6 +1309,12 @@ export async function generateTranslationBenchBenchmark(
                 maxAttempts: options.maxAttempts,
                 generator: options.generator,
                 reviewer: options.reviewer,
+                ...(options.ambiguityProbe !== undefined
+                    ? { ambiguityProbe: options.ambiguityProbe }
+                    : {}),
+                ...(options.ambiguityJudgeLlm !== undefined
+                    ? { ambiguityJudgeLlm: options.ambiguityJudgeLlm }
+                    : {}),
             };
 
             try {
