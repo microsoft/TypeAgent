@@ -11,6 +11,7 @@
  */
 
 import type { HookInput, HookOutput } from "./types.js";
+import { parseRecordingDirective } from "@typeagent/dispatcher-types";
 
 /**
  * Get session-level TypeAgent PowerShell guidance for Windows.
@@ -39,11 +40,9 @@ function getPowerShellSessionGuidance(): string | undefined {
  */
 function getSpecialPrefixGuidance(prompt: string): string | undefined {
     const normalizedPrompt = prompt.replace(/^@typeagent\s+/i, "");
-    const hasRecordingPrefix = /^(learn:|dev:\s*learn:|record:|dev:)/i.test(
-        normalizedPrompt,
-    );
-
-    if (!hasRecordingPrefix) return undefined;
+    if (parseRecordingDirective(normalizedPrompt) === undefined) {
+        return undefined;
+    }
 
     return [
         "",
