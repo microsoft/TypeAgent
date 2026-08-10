@@ -50,6 +50,10 @@ const files = [
         "dist/translationBench/eligible-gold-actions.generated.json",
     ],
     [
+        "src/translationBench/config.schema.json",
+        "dist/translationBench/config.schema.json",
+    ],
+    [
         "src/core/model-prices.generated.json",
         "dist/core/model-prices.generated.json",
     ],
