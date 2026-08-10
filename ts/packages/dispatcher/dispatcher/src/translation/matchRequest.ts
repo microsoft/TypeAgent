@@ -29,6 +29,7 @@ import {
 } from "./matchCollision.js";
 import { resolveContextSelector } from "./matchContextSelector.js";
 import { displayInfo } from "@typeagent/agent-sdk/helpers/display";
+import { parseRecordingDirective } from "@typeagent/dispatcher-types";
 
 const debugConstValidation = registerDebug("typeagent:const:validation");
 
@@ -216,9 +217,6 @@ export function getActivityNamespaceSuffix(
     return cacheSpec !== "shared" ? activityContext!.activityName : undefined;
 }
 
-// Prefixes that must always reach Claude reasoning — never matched by grammar.
-const REASONING_PREFIXES = ["learn:", "dev:", "remember how to ", "record "];
-
 /**
  * Resolve a grammar-collision decision for a set of validated cache matches, all
  * LLM-free: the registry-first tiers, then (on an unresolved topical collision)
@@ -311,8 +309,7 @@ export async function matchRequest(
     signal?: AbortSignal,
 ): Promise<TranslationResult | undefined> {
     // Bypass grammar cache for recording/reasoning-directed requests.
-    const lower = request.trimStart().toLowerCase();
-    if (REASONING_PREFIXES.some((p) => lower.startsWith(p))) {
+    if (parseRecordingDirective(request) !== undefined) {
         return undefined;
     }
 

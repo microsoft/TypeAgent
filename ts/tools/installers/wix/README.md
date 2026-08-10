@@ -231,11 +231,11 @@ msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=COPILOT
 msiexec /i TypeAgent-<version>-win32-x64.msi /quiet PROVIDER=OLLAMA EMBEDDING=LOCAL
 ```
 
-The UI is a custom scheme (`WixUI_TypeAgent`): WelcomeDlg → LicenseAgreementDlg →
-**ProviderDlg** → VerifyReadyDlg. For `OLLAMA`/`COPILOT`, a deferred, impersonated
-custom action runs `node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider
-[PROVIDER] --embedding [EMBEDDING] --ollama-host [OLLAMAHOST] --force` as the
-installing user, writing `config.local.yaml` to `~/.typeagent`. For `AISYSTEMS`
+The UI is a custom scheme (`WixUI_TypeAgent`): WelcomeDlg → **ProviderDlg** →
+VerifyReadyDlg. For `OLLAMA`/`COPILOT`, a deferred, impersonated custom action
+runs `node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider [PROVIDER]
+--embedding [EMBEDDING] --ollama-host [OLLAMAHOST] --force` as the installing
+user, writing `config.local.yaml` to `~/.typeagent`. For `AISYSTEMS`
 (the default), the MSI **attempts** provisioning during install via a deferred,
 impersonated (interactive) custom action `ProvisionAiSystemsConfig` that runs
 `node "[INSTALLFOLDER]typeagent-serve.mjs" provision` (browser/device sign-in as
