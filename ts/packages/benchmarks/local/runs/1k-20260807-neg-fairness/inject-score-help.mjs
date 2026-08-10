@@ -1,99 +1,109 @@
 #!/usr/bin/env node
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import fs from "node:fs";
 import path from "node:path";
 
 const htmlPath = process.argv[2];
 if (!htmlPath || !fs.existsSync(htmlPath)) {
-  console.error("usage: inject-score-help.mjs <eval-report.html>");
-  process.exit(1);
+    console.error("usage: inject-score-help.mjs <eval-report.html>");
+    process.exit(1);
 }
 
 let html = fs.readFileSync(htmlPath, "utf8");
 if (html.includes('class="tb-collapse score-help"')) {
-  console.log("score-help already present:", htmlPath);
-  process.exit(0);
+    console.log("score-help already present:", htmlPath);
+    process.exit(0);
 }
 
 function pct(n, d) {
-  if (!d) return "N/A";
-  return ((n / d) * 100).toFixed(1) + "%";
+    if (!d) return "N/A";
+    return ((n / d) * 100).toFixed(1) + "%";
 }
 function int(n) {
-  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return Math.round(n)
+        .toString()
+        .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 function mf(num, den) {
-  return `<span class="mf"><span class="num">${num}</span><span class="den">${den}</span></span>`;
+    return `<span class="mf"><span class="num">${num}</span><span class="den">${den}</span></span>`;
 }
 
 const rowsMatch = html.match(
-  /id="translation-bench-rows-json">([\s\S]*?)<\/script>/,
+    /id="translation-bench-rows-json">([\s\S]*?)<\/script>/,
 );
 if (!rowsMatch) {
-  console.error("missing translation-bench-rows-json");
-  process.exit(1);
+    console.error("missing translation-bench-rows-json");
+    process.exit(1);
 }
 const rows = JSON.parse(rowsMatch[1]);
 const total = rows.length;
 let pass = 0,
-  exact = 0,
-  schema = 0,
-  pos = 0,
-  neg = 0,
-  toolSum = 0,
-  toolN = 0,
-  paramSum = 0,
-  paramN = 0,
-  fnr = 0,
-  fpr = 0,
-  errors = 0,
-  lat = [],
-  prompt = 0,
-  cached = 0,
-  reasoning = 0,
-  completion = 0,
-  cost = 0;
+    exact = 0,
+    schema = 0,
+    pos = 0,
+    neg = 0,
+    toolSum = 0,
+    toolN = 0,
+    paramSum = 0,
+    paramN = 0,
+    fnr = 0,
+    fpr = 0,
+    errors = 0,
+    lat = [],
+    prompt = 0,
+    cached = 0,
+    reasoning = 0,
+    completion = 0,
+    cost = 0;
 let toolEx = null,
-  paramEx = null;
+    paramEx = null;
 
 for (const r of rows) {
-  const sc = r.score || {};
-  const isNeg =
-    sc.isNegative === true ||
-    (!(r.expectedActions || []).length && sc.isNegative !== false);
-  if (r.status === "ERROR" || r.error) errors += 1;
-  if (sc.passed) pass += 1;
-  if (sc.exactPassed) exact += 1;
-  if (sc.schemaValid) schema += 1;
-  if (isNeg) {
-    neg += 1;
-    if (sc.firedOnNegative || (sc.chosenCount ?? (r.chosenActions || []).length) > 0)
-      fpr += 1;
-  } else {
-    pos += 1;
-    const exp = (sc.expectedCount ?? (r.expectedActions || []).length) || 1;
-    const routed = sc.routed ?? 0;
-    const pm = sc.paramMatches ?? 0;
-    if (exp > 0) {
-      toolSum += routed / exp;
-      toolN += 1;
-      paramSum += pm / exp;
-      paramN += 1;
-      if (!toolEx) toolEx = { routed, exp };
-      if (!paramEx) paramEx = { pm, exp };
+    const sc = r.score || {};
+    const isNeg =
+        sc.isNegative === true ||
+        (!(r.expectedActions || []).length && sc.isNegative !== false);
+    if (r.status === "ERROR" || r.error) errors += 1;
+    if (sc.passed) pass += 1;
+    if (sc.exactPassed) exact += 1;
+    if (sc.schemaValid) schema += 1;
+    if (isNeg) {
+        neg += 1;
+        if (
+            sc.firedOnNegative ||
+            (sc.chosenCount ?? (r.chosenActions || []).length) > 0
+        )
+            fpr += 1;
+    } else {
+        pos += 1;
+        const exp = (sc.expectedCount ?? (r.expectedActions || []).length) || 1;
+        const routed = sc.routed ?? 0;
+        const pm = sc.paramMatches ?? 0;
+        if (exp > 0) {
+            toolSum += routed / exp;
+            toolN += 1;
+            paramSum += pm / exp;
+            paramN += 1;
+            if (!toolEx) toolEx = { routed, exp };
+            if (!paramEx) paramEx = { pm, exp };
+        }
+        if (routed < exp) fnr += 1;
     }
-    if (routed < exp) fnr += 1;
-  }
-  if (Number.isFinite(r.elapsedMs)) lat.push(r.elapsedMs);
-  const u = r.usage || {};
-  prompt += u.promptTokens || 0;
-  cached += u.cachedTokens || 0;
-  reasoning += u.reasoningTokens || 0;
-  completion += u.completionTokens || 0;
-  cost += u.estimatedCostUsd || r.estimatedCostUsd || 0;
+    if (Number.isFinite(r.elapsedMs)) lat.push(r.elapsedMs);
+    const u = r.usage || {};
+    prompt += u.promptTokens || 0;
+    cached += u.cachedTokens || 0;
+    reasoning += u.reasoningTokens || 0;
+    completion += u.completionTokens || 0;
+    cost += u.estimatedCostUsd || r.estimatedCostUsd || 0;
 }
 lat.sort((a, b) => a - b);
 const p50 = lat.length ? lat[Math.floor(lat.length * 0.5)] : 0;
-const p95 = lat.length ? lat[Math.min(lat.length - 1, Math.floor(lat.length * 0.95))] : 0;
+const p95 = lat.length
+    ? lat[Math.min(lat.length - 1, Math.floor(lat.length * 0.95))]
+    : 0;
 const toolAvg = toolN ? toolSum / toolN : 0;
 const paramAvg = paramN ? paramSum / paramN : 0;
 
@@ -200,46 +210,46 @@ html = html.replace("</style>", cssExtra + "\n</style>");
 // Insert score-help after first model summary table (after </table> following Model summary)
 const modelH2 = html.indexOf("<h2>Model summary</h2>");
 if (modelH2 < 0) {
-  console.error("Model summary heading not found");
-  process.exit(1);
+    console.error("Model summary heading not found");
+    process.exit(1);
 }
 const afterTable = html.indexOf("</table>", modelH2);
 if (afterTable < 0) {
-  console.error("model summary table end not found");
-  process.exit(1);
+    console.error("model summary table end not found");
+    process.exit(1);
 }
 const insertAt = afterTable + "</table>".length;
 html = html.slice(0, insertAt) + "\n" + scoreHelp + html.slice(insertAt);
 
 // modal + script before </body> or </main>
 if (html.includes("</main>")) {
-  html = html.replace("</main>", modal + "\n" + script + "\n</main>");
+    html = html.replace("</main>", modal + "\n" + script + "\n</main>");
 } else {
-  html = html.replace("</body>", modal + "\n" + script + "\n</body>");
+    html = html.replace("</body>", modal + "\n" + script + "\n</body>");
 }
 
 const out =
-  process.env.TB_SCORE_HELP_OUT ||
-  htmlPath.replace(/\.html$/, "") + "-with-score-help.html";
+    process.env.TB_SCORE_HELP_OUT ||
+    htmlPath.replace(/\.html$/, "") + "-with-score-help.html";
 // overwrite in place by default when TB_IN_PLACE=1
 const dest = process.env.TB_IN_PLACE === "1" ? htmlPath : out;
 fs.writeFileSync(dest, html);
 console.log(
-  JSON.stringify(
-    {
-      dest,
-      cells: total,
-      pass,
-      exact,
-      pos,
-      neg,
-      fnr,
-      fpr,
-      errors,
-      passRate: pct(pass, total),
-      exactRate: pct(exact, total),
-    },
-    null,
-    2,
-  ),
+    JSON.stringify(
+        {
+            dest,
+            cells: total,
+            pass,
+            exact,
+            pos,
+            neg,
+            fnr,
+            fpr,
+            errors,
+            passRate: pct(pass, total),
+            exactRate: pct(exact, total),
+        },
+        null,
+        2,
+    ),
 );

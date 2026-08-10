@@ -2,8 +2,8 @@
   "$schema": "./config.schema.json",
 
   "models": {
-    "azure/gpt-5.4":      { "tpmLimit": 0, "maxConcurrency": 200 },
-    "azure/gpt-4.1":      { "tpmLimit": 0, "maxConcurrency": 200 },
+    "azure/gpt-5.4": { "tpmLimit": 0, "maxConcurrency": 200 },
+    "azure/gpt-4.1": { "tpmLimit": 0, "maxConcurrency": 200 },
     "azure/gpt-5.4-nano": { "tpmLimit": 0, "maxConcurrency": 200 },
     "azure/gpt-4.1-mini": { "tpmLimit": 0, "maxConcurrency": 200 }
   },

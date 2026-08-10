@@ -13,9 +13,18 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "tpmLimit": { "type": "number", "description": "Azure deployment TPM quota." },
-          "maxConcurrency": { "type": "number", "description": "Per-process concurrency cap (safety)." },
-          "concurrency": { "type": "number", "description": "Explicit concurrency; overrides auto-derivation." }
+          "tpmLimit": {
+            "type": "number",
+            "description": "Azure deployment TPM quota."
+          },
+          "maxConcurrency": {
+            "type": "number",
+            "description": "Per-process concurrency cap (safety)."
+          },
+          "concurrency": {
+            "type": "number",
+            "description": "Explicit concurrency; overrides auto-derivation."
+          }
         }
       }
     },
@@ -49,7 +58,10 @@
         "generatorModel": { "type": "string" },
         "reviewerModel": { "type": "string" },
         "caseCount": { "type": "number", "description": "Rows to synthesize." },
-        "genCases": { "type": "number", "description": "Gen-cases per row (e.g. 2 = 1 pos + 1 neg)." },
+        "genCases": {
+          "type": "number",
+          "description": "Gen-cases per row (e.g. 2 = 1 pos + 1 neg)."
+        },
         "maxAttempts": { "type": "number" },
         "concurrency": { "type": "number" },
         "headroom": { "type": "number", "minimum": 0, "maximum": 1 }
@@ -60,10 +72,18 @@
       "additionalProperties": false,
       "properties": {
         "models": { "type": "array", "items": { "type": "string" } },
-        "modelConcurrency": { "type": "number", "description": "How many eval models run in parallel." },
-        "maxCases": { "type": ["number", "null"], "description": "null = all rows." },
+        "modelConcurrency": {
+          "type": "number",
+          "description": "How many eval models run in parallel."
+        },
+        "maxCases": {
+          "type": ["number", "null"],
+          "description": "null = all rows."
+        },
         "headroom": {
-          "type": "number", "minimum": 0, "maximum": 1,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
           "description": "Fraction of tpmLimit used for auto-derived concurrency."
         }
       }

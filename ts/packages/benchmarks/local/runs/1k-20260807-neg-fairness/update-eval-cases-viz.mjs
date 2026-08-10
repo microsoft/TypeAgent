@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Build self-contained interactive eval-case explorer for TB neg-fairness run.
  * Filters: model, pass/fail, role (pos/neg), schema/action, negative kind / unfair themes.
@@ -10,47 +13,47 @@ import { fileURLToPath } from "node:url";
 
 const RUN = path.dirname(fileURLToPath(import.meta.url));
 const art = process.env.TB_ART_DIR
-  ? path.resolve(process.env.TB_ART_DIR)
-  : path.join(RUN, "artifacts");
+    ? path.resolve(process.env.TB_ART_DIR)
+    : path.join(RUN, "artifacts");
 const outHtml = process.argv[2] || path.join(RUN, "viz/eval-cases.html");
 const gwDir =
-  "/Users/dominicnguyen/Documents/mygithub.com/dom-files-gateway/.data/plans/translation-bench-1k-neg-fairness";
+    "/Users/dominicnguyen/Documents/mygithub.com/dom-files-gateway/.data/plans/translation-bench-1k-neg-fairness";
 const gw = path.join(gwDir, "eval-cases.html");
 
 function readJson(p) {
-  if (!fs.existsSync(p)) return null;
-  return JSON.parse(fs.readFileSync(p, "utf8"));
+    if (!fs.existsSync(p)) return null;
+    return JSON.parse(fs.readFileSync(p, "utf8"));
 }
 
 function shortModel(m) {
-  return String(m || "")
-    .replace(/^azure\//, "")
-    .replace(/^gpt-5\.6-/, "g56-");
+    return String(m || "")
+        .replace(/^azure\//, "")
+        .replace(/^gpt-5\.6-/, "g56-");
 }
 
 function actionKey(a) {
-  if (!a) return "";
-  const s = a.schemaName || a.s || "";
-  const n = a.actionName || a.a || "";
-  return s && n ? `${s}.${n}` : s || n || "";
+    if (!a) return "";
+    const s = a.schemaName || a.s || "";
+    const n = a.actionName || a.a || "";
+    return s && n ? `${s}.${n}` : s || n || "";
 }
 
 function parseTargetFromCaseId(caseId) {
-  // generated-000000-browser-captureScreenshot
-  // generated-000012-browser.external-closeTab:translation-negative:...
-  const base = String(caseId || "").split(":")[0];
-  const m = base.match(/^generated-\d+-(.+)$/);
-  if (!m) return { schema: "", action: "", key: "" };
-  const rest = m[1];
-  // Prefer last hyphen split for action; schema may contain dots but not hyphens usually.
-  // Actions can be camelCase; schemas can be dotted (browser.external).
-  // Pattern in ids: schemaName with dots kept, actionName after final hyphen of the schema-action pair
-  // e.g. browser.external-closeTab  OR  browser-captureScreenshot OR dispatcher.lookup-lookupAndAnswerConversation
-  const hi = rest.lastIndexOf("-");
-  if (hi <= 0) return { schema: rest, action: "", key: rest };
-  const schema = rest.slice(0, hi);
-  const action = rest.slice(hi + 1);
-  return { schema, action, key: `${schema}.${action}` };
+    // generated-000000-browser-captureScreenshot
+    // generated-000012-browser.external-closeTab:translation-negative:...
+    const base = String(caseId || "").split(":")[0];
+    const m = base.match(/^generated-\d+-(.+)$/);
+    if (!m) return { schema: "", action: "", key: "" };
+    const rest = m[1];
+    // Prefer last hyphen split for action; schema may contain dots but not hyphens usually.
+    // Actions can be camelCase; schemas can be dotted (browser.external).
+    // Pattern in ids: schemaName with dots kept, actionName after final hyphen of the schema-action pair
+    // e.g. browser.external-closeTab  OR  browser-captureScreenshot OR dispatcher.lookup-lookupAndAnswerConversation
+    const hi = rest.lastIndexOf("-");
+    if (hi <= 0) return { schema: rest, action: "", key: rest };
+    const schema = rest.slice(0, hi);
+    const action = rest.slice(hi + 1);
+    return { schema, action, key: `${schema}.${action}` };
 }
 
 const results = readJson(path.join(art, "eval-results.json"));
@@ -58,22 +61,22 @@ const summary = readJson(path.join(art, "eval-report-summary.json"));
 const byModel = readJson(path.join(art, "eval-report-by-model.json")) || [];
 const scale = readJson(path.join(art, "scale-metrics.json")) || {};
 const fairness =
-  readJson(path.join(art, "fairness-audit-llm.json")) ||
-  readJson(path.join(art, "fairness-audit.json")) ||
-  {};
+    readJson(path.join(art, "fairness-audit-llm.json")) ||
+    readJson(path.join(art, "fairness-audit.json")) ||
+    {};
 const fairnessStored =
-  readJson(path.join(art, "fairness-audit-stored-final.json")) ||
-  readJson(path.join(art, "fairness-audit-stored.json")) ||
-  {};
+    readJson(path.join(art, "fairness-audit-stored-final.json")) ||
+    readJson(path.join(art, "fairness-audit-stored.json")) ||
+    {};
 
 const unfairByUtt = new Map();
 for (const ex of fairnessStored.unfair_examples || []) {
-  if (ex?.u) unfairByUtt.set(ex.u, ex);
+    if (ex?.u) unfairByUtt.set(ex.u, ex);
 }
 // also index all_negatives kind by utterance
 const kindByUtt = new Map();
 for (const n of fairnessStored.all_negatives || []) {
-  if (n?.u) kindByUtt.set(n.u, n.k);
+    if (n?.u) kindByUtt.set(n.u, n.k);
 }
 
 const rowsIn = results?.rows || results || [];
@@ -84,180 +87,191 @@ const actionSet = new Set();
 const modelSet = new Set();
 
 let pos = 0,
-  neg = 0,
-  pass = 0,
-  fail = 0,
-  negFired = 0,
-  unfairTagged = 0,
-  badNegativeTheme = 0;
+    neg = 0,
+    pass = 0,
+    fail = 0,
+    negFired = 0,
+    unfairTagged = 0,
+    badNegativeTheme = 0;
 
 for (const r of rowsIn) {
-  const sc = r.score || {};
-  const exp = r.expectedActions || [];
-  const ch = r.chosenActions || [];
-  const dims = r.dimensions || {};
-  const isNeg = !!sc.isNegative || exp.length === 0;
-  const role = isNeg ? "neg" : "pos";
-  const passed = !!sc.passed;
-  const utt = r.utterance || "";
-  const model = r.model || "";
-  modelSet.add(model);
+    const sc = r.score || {};
+    const exp = r.expectedActions || [];
+    const ch = r.chosenActions || [];
+    const dims = r.dimensions || {};
+    const isNeg = !!sc.isNegative || exp.length === 0;
+    const role = isNeg ? "neg" : "pos";
+    const passed = !!sc.passed;
+    const utt = r.utterance || "";
+    const model = r.model || "";
+    modelSet.add(model);
 
-  let schema = "";
-  let action = "";
-  let key = "";
-  if (exp[0]) {
-    schema = exp[0].schemaName || "";
-    action = exp[0].actionName || "";
-    key = actionKey(exp[0]);
-  } else if (ch[0] && !isNeg) {
-    schema = ch[0].schemaName || "";
-    action = ch[0].actionName || "";
-    key = actionKey(ch[0]);
-  } else {
-    const t = parseTargetFromCaseId(r.caseId);
-    schema = t.schema;
-    action = t.action;
-    key = t.key;
-  }
-  if (schema) schemaSet.add(schema);
-  if (key) actionSet.add(key);
+    let schema = "";
+    let action = "";
+    let key = "";
+    if (exp[0]) {
+        schema = exp[0].schemaName || "";
+        action = exp[0].actionName || "";
+        key = actionKey(exp[0]);
+    } else if (ch[0] && !isNeg) {
+        schema = ch[0].schemaName || "";
+        action = ch[0].actionName || "";
+        key = actionKey(ch[0]);
+    } else {
+        const t = parseTargetFromCaseId(r.caseId);
+        schema = t.schema;
+        action = t.action;
+        key = t.key;
+    }
+    if (schema) schemaSet.add(schema);
+    if (key) actionSet.add(key);
 
-  let nk =
-    dims.negativeKind ||
-    dims.kind ||
-    (isNeg ? kindByUtt.get(utt) : null) ||
-    (isNeg ? "—" : null);
+    let nk =
+        dims.negativeKind ||
+        dims.kind ||
+        (isNeg ? kindByUtt.get(utt) : null) ||
+        (isNeg ? "—" : null);
 
-  const unfairHit = unfairByUtt.get(utt);
-  const kindIsUnfair =
-    typeof nk === "string" &&
-    (nk.startsWith("unfair_") || nk === "unknown" || nk === "BAD_NEGATIVE");
-  const unfair = !!(isNeg && (unfairHit || kindIsUnfair));
-  // BAD_NEGATIVE theme: empty-gold negative where model fired an action (false positive under zero-action scoring)
-  const fired = !!sc.firedOnNegative || (isNeg && (sc.chosenCount > 0 || ch.length > 0));
-  const badNeg = !!(isNeg && fired);
-  // theme tags
-  const themes = [];
-  if (isNeg) {
-    if (nk && nk !== "—") themes.push(nk);
-    if (unfair) themes.push("unfair_label");
-    if (badNeg) themes.push("BAD_NEGATIVE_fired");
-    if (unfairHit?.reason) themes.push("audit_flag");
-  }
+    const unfairHit = unfairByUtt.get(utt);
+    const kindIsUnfair =
+        typeof nk === "string" &&
+        (nk.startsWith("unfair_") || nk === "unknown" || nk === "BAD_NEGATIVE");
+    const unfair = !!(isNeg && (unfairHit || kindIsUnfair));
+    // BAD_NEGATIVE theme: empty-gold negative where model fired an action (false positive under zero-action scoring)
+    const fired =
+        !!sc.firedOnNegative ||
+        (isNeg && (sc.chosenCount > 0 || ch.length > 0));
+    const badNeg = !!(isNeg && fired);
+    // theme tags
+    const themes = [];
+    if (isNeg) {
+        if (nk && nk !== "—") themes.push(nk);
+        if (unfair) themes.push("unfair_label");
+        if (badNeg) themes.push("BAD_NEGATIVE_fired");
+        if (unfairHit?.reason) themes.push("audit_flag");
+    }
 
-  if (role === "pos") pos += 1;
-  else neg += 1;
-  if (passed) pass += 1;
-  else fail += 1;
-  if (isNeg && fired) negFired += 1;
-  if (unfair) unfairTagged += 1;
-  if (badNeg) badNegativeTheme += 1;
-  if (isNeg && nk) kindDist[nk] = (kindDist[nk] || 0) + 1;
+    if (role === "pos") pos += 1;
+    else neg += 1;
+    if (passed) pass += 1;
+    else fail += 1;
+    if (isNeg && fired) negFired += 1;
+    if (unfair) unfairTagged += 1;
+    if (badNeg) badNegativeTheme += 1;
+    if (isNeg && nk) kindDist[nk] = (kindDist[nk] || 0) + 1;
 
-  const diag = sc.diagnostics || {};
-  const diagBits = [];
-  for (const [k, v] of Object.entries(diag)) {
-    if (v) diagBits.push(`${k}:${v}`);
-  }
+    const diag = sc.diagnostics || {};
+    const diagBits = [];
+    for (const [k, v] of Object.entries(diag)) {
+        if (v) diagBits.push(`${k}:${v}`);
+    }
 
-  cases.push({
-    id: r.caseId,
-    m: model,
-    ms: shortModel(model),
-    role,
-    pass: passed,
-    u: utt,
-    schema,
-    action,
-    key,
-    exp: exp.map((a) => ({
-      s: a.schemaName,
-      a: a.actionName,
-      p: a.parameters && Object.keys(a.parameters).length ? a.parameters : undefined,
-    })),
-    ch: ch.map((a) => ({
-      s: a.schemaName,
-      a: a.actionName,
-      p: a.parameters && Object.keys(a.parameters).length ? a.parameters : undefined,
-    })),
-    sc: {
-      passed,
-      exact: !!sc.exactPassed,
-      sv: !!sc.schemaValid,
-      expN: sc.expectedCount ?? exp.length,
-      chN: sc.chosenCount ?? ch.length,
-      routed: sc.routed ?? 0,
-      pm: sc.paramMatches ?? 0,
-      epm: sc.exactParamMatches ?? 0,
-      isNeg,
-      fired: !!fired,
-      diag: diagBits.length ? diagBits.join(", ") : "",
-    },
-    nk: isNeg ? nk : null,
-    unfair,
-    badNeg,
-    themes,
-    reason: unfairHit?.reason || dims.negativeBoundaryReason || null,
-    msElapsed: Math.round(r.elapsedMs || 0),
-    cost: r.usage?.estimatedCostUsd ?? null,
-  });
+    cases.push({
+        id: r.caseId,
+        m: model,
+        ms: shortModel(model),
+        role,
+        pass: passed,
+        u: utt,
+        schema,
+        action,
+        key,
+        exp: exp.map((a) => ({
+            s: a.schemaName,
+            a: a.actionName,
+            p:
+                a.parameters && Object.keys(a.parameters).length
+                    ? a.parameters
+                    : undefined,
+        })),
+        ch: ch.map((a) => ({
+            s: a.schemaName,
+            a: a.actionName,
+            p:
+                a.parameters && Object.keys(a.parameters).length
+                    ? a.parameters
+                    : undefined,
+        })),
+        sc: {
+            passed,
+            exact: !!sc.exactPassed,
+            sv: !!sc.schemaValid,
+            expN: sc.expectedCount ?? exp.length,
+            chN: sc.chosenCount ?? ch.length,
+            routed: sc.routed ?? 0,
+            pm: sc.paramMatches ?? 0,
+            epm: sc.exactParamMatches ?? 0,
+            isNeg,
+            fired: !!fired,
+            diag: diagBits.length ? diagBits.join(", ") : "",
+        },
+        nk: isNeg ? nk : null,
+        unfair,
+        badNeg,
+        themes,
+        reason: unfairHit?.reason || dims.negativeBoundaryReason || null,
+        msElapsed: Math.round(r.elapsedMs || 0),
+        cost: r.usage?.estimatedCostUsd ?? null,
+    });
 }
 
 const meta = {
-  title: "TB 1k neg-fairness · eval cases",
-  generatedAt: new Date().toISOString(),
-  run: path.basename(RUN),
-  total: cases.length,
-  pos,
-  neg,
-  pass,
-  fail,
-  passRate: cases.length ? pass / cases.length : 0,
-  negFired,
-  unfairTagged,
-  badNegativeTheme,
-  kindDist,
-  fairness: {
-    method: fairness.method || fairnessStored.method || null,
-    unfair_count: fairness.unfair_count ?? scale.unfair_neg_count ?? null,
-    unfair_negative_rate:
-      fairness.unfair_negative_rate ?? scale.unfair_neg_rate ?? null,
-    kind_distribution: fairness.kind_distribution || fairnessStored.kind_distribution || null,
-    ok: fairness.ok ?? scale.fairness_ok ?? null,
-    max_unfair_rate: fairness.max_unfair_rate ?? 0.02,
-    note: fairness.note || null,
-  },
-  scale,
-  models: [...modelSet].sort(),
-  schemas: [...schemaSet].sort(),
-  actions: [...actionSet].sort(),
-  byModel: byModel.map((b) => ({
-    key: b.key,
-    passRate: b.summary?.passRate,
-    toolScore: b.summary?.toolScore,
-    paramScore: b.summary?.paramScore,
-    falsePositiveRate: b.summary?.falsePositiveRate,
-    falseNegativeRate: b.summary?.falseNegativeRate,
-    negativeRows: b.summary?.negativeRows,
-    negativeRowsFired: b.summary?.negativeRowsFired,
-    negativeRowErrors: b.summary?.negativeRowErrors,
-    passedCases: b.summary?.passedCases,
-    totalCases: b.summary?.totalCases,
-  })),
-  suiteSummary: summary?.summary
-    ? {
-        totalCases: summary.summary.totalCases,
-        passedCases: summary.summary.passedCases,
-        passRate: summary.summary.passRate,
-        toolScore: summary.summary.toolScore,
-        paramScore: summary.summary.paramScore,
-        falsePositiveRate: summary.summary.falsePositiveRate,
-        falseNegativeRate: summary.summary.falseNegativeRate,
-        negativeRows: summary.summary.negativeRows,
-        negativeRowsFired: summary.summary.negativeRowsFired,
-      }
-    : null,
+    title: "TB 1k neg-fairness · eval cases",
+    generatedAt: new Date().toISOString(),
+    run: path.basename(RUN),
+    total: cases.length,
+    pos,
+    neg,
+    pass,
+    fail,
+    passRate: cases.length ? pass / cases.length : 0,
+    negFired,
+    unfairTagged,
+    badNegativeTheme,
+    kindDist,
+    fairness: {
+        method: fairness.method || fairnessStored.method || null,
+        unfair_count: fairness.unfair_count ?? scale.unfair_neg_count ?? null,
+        unfair_negative_rate:
+            fairness.unfair_negative_rate ?? scale.unfair_neg_rate ?? null,
+        kind_distribution:
+            fairness.kind_distribution ||
+            fairnessStored.kind_distribution ||
+            null,
+        ok: fairness.ok ?? scale.fairness_ok ?? null,
+        max_unfair_rate: fairness.max_unfair_rate ?? 0.02,
+        note: fairness.note || null,
+    },
+    scale,
+    models: [...modelSet].sort(),
+    schemas: [...schemaSet].sort(),
+    actions: [...actionSet].sort(),
+    byModel: byModel.map((b) => ({
+        key: b.key,
+        passRate: b.summary?.passRate,
+        toolScore: b.summary?.toolScore,
+        paramScore: b.summary?.paramScore,
+        falsePositiveRate: b.summary?.falsePositiveRate,
+        falseNegativeRate: b.summary?.falseNegativeRate,
+        negativeRows: b.summary?.negativeRows,
+        negativeRowsFired: b.summary?.negativeRowsFired,
+        negativeRowErrors: b.summary?.negativeRowErrors,
+        passedCases: b.summary?.passedCases,
+        totalCases: b.summary?.totalCases,
+    })),
+    suiteSummary: summary?.summary
+        ? {
+              totalCases: summary.summary.totalCases,
+              passedCases: summary.summary.passedCases,
+              passRate: summary.summary.passRate,
+              toolScore: summary.summary.toolScore,
+              paramScore: summary.summary.paramScore,
+              falsePositiveRate: summary.summary.falsePositiveRate,
+              falseNegativeRate: summary.summary.falseNegativeRate,
+              negativeRows: summary.summary.negativeRows,
+              negativeRowsFired: summary.summary.negativeRowsFired,
+          }
+        : null,
 };
 
 const data = { meta, cases };
@@ -398,7 +412,7 @@ button.chip.on{border-color:var(--accent);background:rgba(110,168,254,.12);color
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <div class="badge ${meta.fairness.ok ? "ok" : "bad"}" id="fairBadge">
-        fairness ${meta.fairness.ok ? "OK" : "FAIL"} · unfair ${(meta.fairness.unfair_negative_rate != null ? (meta.fairness.unfair_negative_rate * 100).toFixed(1) : "?")}%
+        fairness ${meta.fairness.ok ? "OK" : "FAIL"} · unfair ${meta.fairness.unfair_negative_rate != null ? (meta.fairness.unfair_negative_rate * 100).toFixed(1) : "?"}%
       </div>
       <div class="badge">pass ${(meta.passRate * 100).toFixed(1)}%</div>
       <div class="badge warn">neg fired ${meta.negFired.toLocaleString()}</div>
@@ -751,14 +765,14 @@ fs.writeFileSync(outHtml, html);
 console.log("wrote", outHtml, "bytes", html.length, "cases", cases.length);
 
 try {
-  fs.mkdirSync(gwDir, { recursive: true });
-  fs.copyFileSync(outHtml, gw);
-  // also copy sibling reports if present
-  for (const name of ["dataset.html", "eval-progress.html", "index.html"]) {
-    const src = path.join(RUN, "viz", name);
-    if (fs.existsSync(src)) fs.copyFileSync(src, path.join(gwDir, name));
-  }
-  console.log("copied gateway", gw);
+    fs.mkdirSync(gwDir, { recursive: true });
+    fs.copyFileSync(outHtml, gw);
+    // also copy sibling reports if present
+    for (const name of ["dataset.html", "eval-progress.html", "index.html"]) {
+        const src = path.join(RUN, "viz", name);
+        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(gwDir, name));
+    }
+    console.log("copied gateway", gw);
 } catch (e) {
-  console.warn("gateway copy failed", e.message);
+    console.warn("gateway copy failed", e.message);
 }
