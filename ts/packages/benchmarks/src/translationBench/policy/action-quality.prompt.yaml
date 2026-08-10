@@ -19,9 +19,11 @@ policy_classifier:
     1. Single clear user utterance must uniquely select this tool under a full catalog.
     2. Exclude multi-step / generate-then-execute / draft-then-post agents.
     3. Exclude freeform code, scripts, flow bodies, shell, LLM transforms.
-    4. Exclude originalRequest / echo / lookup-and-answer / catch-alls / meta / help.
-    5. Include only crisp UI/commands with closed parameter slots.
-    6. Emit exactly one decision per candidate id. Do not invent ids.
+    4. Exclude originalRequest / echo / lookup-and-answer / conversational Q&A / help.
+    5. INCLUDE standard single-turn media, audio & hardware controls (e.g. play, pause, next, previous, mute, set/change volume, add to playlist, set reminder).
+    6. Exclude conversational meta-actions and open-ended status queries that lack structured control semantics.
+    7. Include crisp UI/commands with closed parameter slots or explicit control semantics.
+    8. Emit exactly one decision per candidate id. Do not invent ids.
 
     CANDIDATES:
     {{candidates_json}}
