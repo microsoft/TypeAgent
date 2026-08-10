@@ -44,6 +44,7 @@ export {
     getFullSchemaText,
     getAppAgentName,
     loadAgentJsonTranslator,
+    createTypeAgentTranslatorForSelectedActions,
 } from "./translation/agentTranslators.js";
 export type {
     TypeAgentTranslator,
