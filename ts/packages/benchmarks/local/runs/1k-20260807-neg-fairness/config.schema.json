@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Translation-bench local run config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["models", "base", "batches"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "models": {
+      "type": "object",
+      "description": "Per-model Azure deployment quota + optional per-process concurrency cap.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tpmLimit": { "type": "number", "description": "Azure deployment TPM quota." },
+          "maxConcurrency": { "type": "number", "description": "Per-process concurrency cap (safety)." },
+          "concurrency": { "type": "number", "description": "Explicit concurrency; overrides auto-derivation." }
+        }
+      }
+    },
+    "base": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Defaults inherited by every batch.",
+      "properties": {
+        "synthesizer": { "$ref": "#/definitions/synthesizer" },
+        "eval": { "$ref": "#/definitions/eval" }
+      }
+    },
+    "batches": {
+      "type": "object",
+      "description": "Named run profiles selected with TB_BATCH=<name>.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "synthesizer": { "$ref": "#/definitions/synthesizer" },
+          "eval": { "$ref": "#/definitions/eval" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "synthesizer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "generatorModel": { "type": "string" },
+        "reviewerModel": { "type": "string" },
+        "caseCount": { "type": "number", "description": "Rows to synthesize." },
+        "genCases": { "type": "number", "description": "Gen-cases per row (e.g. 2 = 1 pos + 1 neg)." },
+        "maxAttempts": { "type": "number" },
+        "concurrency": { "type": "number" },
+        "headroom": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "eval": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "models": { "type": "array", "items": { "type": "string" } },
+        "modelConcurrency": { "type": "number", "description": "How many eval models run in parallel." },
+        "maxCases": { "type": ["number", "null"], "description": "null = all rows." },
+        "headroom": {
+          "type": "number", "minimum": 0, "maximum": 1,
+          "description": "Fraction of tpmLimit used for auto-derived concurrency."
+        }
+      }
+    }
+  }
+}

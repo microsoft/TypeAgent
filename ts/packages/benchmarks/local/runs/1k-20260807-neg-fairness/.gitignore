@@ -1,0 +1,3 @@
+# Local run config — machine-specific, holds deployment quota limits.
+config.local.json
+config.local.*.bak
