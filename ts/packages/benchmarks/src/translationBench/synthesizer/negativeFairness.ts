@@ -38,21 +38,57 @@ export const TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE =
     "Empty-gold negatives must be zero-action-safe under the FULL loaded tool " +
     "catalog (not merely “not the target”): a careful translator must emit no " +
     "actions at all — including chat.generateResponse, system.help.*, history, " +
-    "lookup, or any other tool. ALLOWED fair kind: pure_refusal only — explicit " +
-    "don't/never/stop/leave-alone/cancel of the target with no alternate task, " +
-    "no question, and no request for explanation. FORBIDDEN as empty gold: " +
-    "definition/meta/status/how-to questions (even non_action_question labels); " +
-    "missing_info that still invites lookup/list/clarify-via-tool; soft solicits; " +
-    "capability questions; contrastive adjacent commands; refuse-then-alternate; " +
-    "partial constraints that still request an action; any imperative a correct " +
-    "translator would map to any loaded tool.";
+    "lookup, or any other tool. ALLOWED fair kind: pure_refusal only — the " +
+    "utterance MUST OPEN with don't/do not/never/leave-alone/hands-off/do-nothing/" +
+    "refrain-from/avoid-doing of the target, with no alternate task, no question, " +
+    "and no request for explanation. Bare stop/cancel/sibling imperatives and " +
+    "“do X but don't Y” partial constraints are NOT fair empty gold. FORBIDDEN: " +
+    "definition/meta/status/how-to questions; missing_info that invites tools; " +
+    "soft solicits; capability questions; contrastive adjacent/sibling commands; " +
+    "refuse-then-alternate; any imperative a correct translator would map to any " +
+    "loaded tool.";
 
 const FIX =
-    "Rewrite as a hard-abstain empty-gold negative (pure_refusal / leave-alone " +
-    "only; no questions, no alternate task).";
+    "Rewrite as a hard-abstain empty-gold negative that OPENS with don't/do not/" +
+    "never/leave-alone (no questions, no alternate or sibling task).";
 
 const PATH_MSG =
     "negativeAssessments paths must cover negative genCases 1:1 (exact path, no duplicates).";
+
+/** ; | em-dash | en-dash | spaced hyphen — never bare `.` (schema.action / domains). */
+const CLAUSE_SEP = String.raw`(?:[;]|\u2014|\u2013|\s-\s)`;
+
+/**
+ * Clause separators for multi-part empties. Deliberately excludes `.` so
+ * schema.action tags, domains, and abbreviations do not false-split.
+ */
+const CLAUSE_SPLIT_RE = new RegExp(String.raw`\s*${CLAUSE_SEP}\s*`);
+
+/**
+ * Trailing clauses that still mean abstain (not a new tool request).
+ * Stripped before secondary-clause checks.
+ */
+const ABSTAIN_TRAIL_RE = new RegExp(
+    String.raw`${CLAUSE_SEP}\s*(?:I\b[\s\S]*|let\s+it\b[\s\S]*|leave\b[\s\S]*?\b(?:alone|unchanged|untouched)\b[\s\S]*|keep\b[\s\S]*|stay\b[\s\S]*|so\b[\s\S]*|because\b[\s\S]*|since\b[\s\S]*)$`,
+    "i",
+);
+
+const OPENS_REFUSE_RE = /^(?:please\s+)?(?:do\s+not|don'?t|never)\b/i;
+
+const OPENS_LEAVE_ALONE_RE = /^(?:please\s+)?leave\b[\s\S]{0,48}\balone\b/i;
+
+const OPENS_OTHER_ABSTAIN_RE =
+    /^(?:please\s+)?(?:hands\s+off|do\s+nothing|refrain\s+from)\b/i;
+
+const OPENS_AVOID_DOING_RE =
+    /^(?:please\s+)?avoid\s+(?:doing|opening|closing|taking|capturing|running|starting|sending|changing|switching|deleting|creating|enabling|disabling)\b/i;
+
+/** Interrogative openers — exclude "do not" / "don't" (handled as refuse). */
+const INTERROGATIVE_OPENER_RE =
+    /^(?:what|why|how|when|where|who|which|is|are|can|could|would|should|does|did|will|have|has|was|were|what's|how's|who's|do(?!\s+not)\b)/i;
+
+const SOFT_SOLICIT_RE =
+    /\b(?:can you|could you|would you(?: mind)?|are you able|do you (?:know|support|handle)|is it possible|is there a way)\b/i;
 
 const assessmentSchema = z
     .object({
@@ -74,6 +110,13 @@ export interface TranslationBenchNegativeFairnessResult {
     kind: TranslationBenchNegativeKind;
     path: string;
     utterance: string;
+    /** Present when the deterministic utterance shape gate fails. */
+    utteranceReason?: string;
+}
+
+export interface TranslationBenchEmptyGoldUtteranceAssessment {
+    fair: boolean;
+    reason: string;
 }
 
 function bad(path: string, message: string): TranslationBenchReviewIssue {
@@ -90,6 +133,92 @@ function negativeByPath(
         }
     }
     return byPath;
+}
+
+/**
+ * Deterministic empty-gold utterance shape gate.
+ *
+ * LLM negativeAssessments alone are insufficient: the 1k-20260807-disambig set
+ * labeled ~100% of empties as review-approved while ~99% were contrastive
+ * sibling commands, how-to/status questions, or refuse-then-alternate forms
+ * (eval FPR ~97%). Labels may only approve pure_refusal when the utterance
+ * itself opens as a hard abstain and carries no toolable follow-on.
+ *
+ * Conservative by design — prefer false reject (regen) over false approve.
+ */
+export function assessEmptyGoldUtterance(
+    utterance: string,
+): TranslationBenchEmptyGoldUtteranceAssessment {
+    const raw = String(utterance ?? "").trim();
+    if (!raw) {
+        return { fair: false, reason: "empty utterance" };
+    }
+    const t = raw.replace(/\s+/g, " ");
+
+    if (/[?]/.test(t)) {
+        return {
+            fair: false,
+            reason: "question mark (invites chat/help/lookup)",
+        };
+    }
+    // Check refuse openers before interrogative so "Do not …" is not
+    // misclassified as the bare auxiliary "Do …?".
+    const opensRefuse =
+        OPENS_REFUSE_RE.test(t) ||
+        OPENS_LEAVE_ALONE_RE.test(t) ||
+        OPENS_OTHER_ABSTAIN_RE.test(t) ||
+        OPENS_AVOID_DOING_RE.test(t);
+    if (!opensRefuse) {
+        if (INTERROGATIVE_OPENER_RE.test(t)) {
+            return { fair: false, reason: "interrogative opener" };
+        }
+        return {
+            fair: false,
+            reason: "does not open as pure refusal (need don't/do not/never/leave-alone)",
+        };
+    }
+    if (SOFT_SOLICIT_RE.test(t)) {
+        return { fair: false, reason: "soft solicit or capability phrasing" };
+    }
+    if (/\b(?:instead|rather\s+than)\b/i.test(t)) {
+        return { fair: false, reason: "contrastive instead/rather" };
+    }
+    if (/\bjust\b/i.test(t)) {
+        return {
+            fair: false,
+            reason: "just-alternate (refuse-then-alternate or partial task)",
+        };
+    }
+    if (/\b(?:tell|explain|describe|summarize)\b/i.test(t)) {
+        return {
+            fair: false,
+            reason: "requests explanation (chat/help under full catalog)",
+        };
+    }
+
+    // Strip a single allowed trailing abstain/reason clause, then reject any
+    // leftover secondary clause that is not itself abstain/reason.
+    const stripped = t.replace(ABSTAIN_TRAIL_RE, "").trim();
+    const parts = stripped
+        .split(CLAUSE_SPLIT_RE)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    for (let i = 1; i < parts.length; i++) {
+        const p = parts[i]!;
+        if (
+            /^(?:I\b|let\b|leave\b|keep\b|stay\b|so\b|because\b|since\b)/i.test(
+                p,
+            )
+        ) {
+            continue;
+        }
+        return {
+            fair: false,
+            reason: `secondary clause not abstain/reason: "${p.slice(0, 80)}"`,
+        };
+    }
+
+    return { fair: true, reason: "pure refusal / leave-alone" };
 }
 
 export function translationBenchNegativeAssessmentsJsonSchema(): Record<
@@ -119,11 +248,21 @@ export function checkTranslationBenchNegativeFairnessAssessment(
     _target: TranslationBenchTargetAction,
 ): TranslationBenchNegativeFairnessResult {
     void _target;
+    if (!isFairEmptyGoldAssessment(assessment)) {
+        return {
+            ok: false,
+            kind: assessment.kind,
+            path: assessment.path,
+            utterance,
+        };
+    }
+    const shape = assessEmptyGoldUtterance(utterance);
     return {
-        ok: isFairEmptyGoldAssessment(assessment),
+        ok: shape.fair,
         kind: assessment.kind,
         path: assessment.path,
         utterance,
+        ...(shape.fair ? {} : { utteranceReason: shape.reason }),
     };
 }
 
@@ -164,6 +303,17 @@ export function checkTranslationBenchCandidateNegativeFairness(
                 bad(
                     a.path,
                     `dimensions.negativeKind=${String(dimKind)} must equal the accepted empty-gold kind '${a.kind}' (pure_refusal only)`,
+                ),
+            );
+            continue;
+        }
+
+        const shape = assessEmptyGoldUtterance(genCase.utterance);
+        if (!shape.fair) {
+            issues.push(
+                bad(
+                    a.path,
+                    `empty-gold utterance failed pure-refusal shape gate: ${shape.reason}`,
                 ),
             );
         }

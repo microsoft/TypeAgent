@@ -68,29 +68,36 @@ template: |-
     other loaded tool — not merely "not the target"). Only write negatives
     where that zero-action gold is fair.
   - ALLOWED empty-gold kind (set dimensions.negativeKind exactly):
-      pure_refusal — explicit don't/never/stop/leave-alone/cancel of the target
-        with NO alternate task, NO question, and NO request for explanation.
-        Prefer hard leave-alone: "Don't take a screenshot.", "Leave my tabs
-        alone.", "Do not open any websites right now."
-  - FORBIDDEN as empty-gold negatives (semantic checker rejects BAD_NEGATIVE):
+      pure_refusal — utterance MUST OPEN with don't / do not / never /
+        leave … alone / hands off / do nothing / refrain from / avoid doing
+        the target, with NO alternate task, NO question, and NO request for
+        explanation. Allowed trailing abstain/reason only
+        ("; I haven't saved…", "; let it keep playing", "; leave it unchanged").
+        Templates: "Don't take a screenshot.", "Leave my tabs alone.",
+        "Do not open any websites right now.",
+        "Don't enable Game Mode; I need it off for this comparison."
+  - FORBIDDEN as empty-gold negatives (deterministic shape gate + semantic
+    checker reject BAD_NEGATIVE — prior 1k had ~99% unfair empties / ~97% FPR):
       non_action_question / definition / meta / status ("What does goBack mean?",
-        "Is Bluetooth enabled?", "Has the flow been deleted?") — these invite
-        chat/help/history/lookup fires under a full catalog
+        "Is Bluetooth enabled?", "Has the flow been deleted?") — invite
+        chat/help/history/lookup under a full catalog
       missing_info that still invites a tool ("Which list?" → listLists)
-      contrastive adjacent commands ("close only this tab" as neg for closeAll,
-        "search Bing for MSFT" as neg for changeSearchProvider, "click the link…"
-        as neg for openWebPage)
-      refuse-then-alternate forms ("Don't close all; just close this one")
-      partial constraints that still request an action ("open X but don't bookmark")
-      how-to-perform-target / soft solicits ("How do I add X?", "Can you open Y?",
-        "Is there a way to close this tab?", "Would you mind taking a screenshot?")
+      contrastive adjacent/sibling commands ("close only this tab" as neg for
+        closeAll, "search Bing for MSFT" as neg for changeSearchProvider,
+        "click the link…" as neg for openWebPage, "scroll up" as neg for
+        scrollDown) — these are OTHER actions, not zero-action gold
+      refuse-then-alternate ("Don't close all; just close this one",
+        "Don't open a site—just tell me whether…")
+      partial constraints ("Build the solution, but don't start debugging",
+        "open X but don't bookmark")
+      bare stop/cancel/sibling imperatives ("Stop reading the webpage",
+        "Cancel my appointment") — often map to stop*/cancel* tools
+      how-to / soft solicits ("How do I add X?", "Can you open Y?")
       capability questions; trailing "what should I do instead?"
       any imperative / toolable / answerable request a correct translator would
         map to ANY loaded tool
-  - Every negative in this row MUST be pure_refusal. Do not mint definition or
-    status questions as empty gold (they are not zero-action-safe).
-  - Double-meaning / unfair contrastive / Q&A empties crushed neg pass in prior
-    1k evals; do not regenerate those failure modes.
+  - Every negative in this row MUST be pure_refusal and pass the shape gate.
+    Do not mint definition, status, or sibling-command empties.
 
   Use dimensions to label each case's scenario, linguistic form, and positive
   variation or negativeKind / negative boundary reason.
