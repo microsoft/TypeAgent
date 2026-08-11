@@ -14,6 +14,7 @@ import {
     RuntimeConnection,
     defineTool,
     approveAll,
+    type AssistantMessageEvent,
     type CopilotSession,
     type SessionConfig,
 } from "@github/copilot-sdk";
@@ -99,7 +100,7 @@ export async function sendAndWaitWithCancellation(
     session: CopilotSession,
     prompt: string,
     signal: AbortSignal | undefined,
-): Promise<any> {
+): Promise<AssistantMessageEvent | undefined> {
     const timeoutMs = resolveReasoningTimeoutMs();
     const timeoutController = new AbortController();
     const timeout =
