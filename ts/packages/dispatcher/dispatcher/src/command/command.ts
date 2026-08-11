@@ -364,14 +364,6 @@ export async function processCommandNoLock(
         if (e.name === "AbortError" || context.currentAbortSignal?.aborted) {
             throw new DOMException("The operation was aborted.", "AbortError");
         }
-        // Record the exception on the active `typeagent.request` span
-        // *before* processCommandNoLock swallows it. The design doc rule
-        // (opentelemetry.md, "Developer Usage") is explicit: "If code
-        // converts an exception to `ActionResult`, it must still record
-        // the exception and error status." The catch below converts the
-        // thrown error into a user-visible display message + logged event,
-        // not a re-throw; without this recordException/setStatus pair the
-        // root span would silently end with status UNSET on real failures.
         const activeSpan = trace.getActiveSpan();
         if (activeSpan !== undefined) {
             otel.recordTypeAgentSpanException(activeSpan, e, {
@@ -529,12 +521,6 @@ export async function processCommand(
                         );
                     } catch (e: any) {
                         if (e.name === "AbortError") {
-                            // Design rule: exceptions converted to ActionResult
-                            // must still be recorded on the active span. Do it
-                            // here (inside the wrapper's context) so the
-                            // exception event lands on `typeagent.request`.
-                            // The wrapper separately sets ERROR status with
-                            // message "cancelled" when it sees cancelled=true.
                             const activeSpan = trace.getActiveSpan();
                             if (activeSpan !== undefined) {
                                 otel.recordTypeAgentSpanException(
@@ -556,7 +542,6 @@ export async function processCommand(
                     } finally {
                         context.activeRequests.delete(requestIdStr);
                         context.currentOptions = undefined;
-                        // eslint-disable-next-line no-unsafe-finally
                         return endProcessCommand(requestId, context);
                     }
                 });

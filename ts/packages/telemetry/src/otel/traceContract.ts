@@ -95,14 +95,8 @@ export interface TypeAgentSpanAttributes {
 }
 
 export interface TypeAgentSpanExceptionOptions {
-    /** Stable exception classification that does not contain user data. */
     readonly safeName: string;
-    /** Stable status and exception message that does not contain user data. */
     readonly safeMessage: string;
-    /**
-     * Include the original exception message and stack after secret redaction.
-     * This can still contain user content, so hosts must enable it explicitly.
-     */
     readonly captureSensitiveDetails?: boolean | undefined;
     readonly redactionOptions?: RedactionOptions | undefined;
 }
@@ -161,11 +155,6 @@ export function setTypeAgentSpanAttributes(
     }
 }
 
-/**
- * Record an exception without exporting its original message or stack by
- * default. Detailed capture is opt-in because secret redaction cannot remove
- * arbitrary user content.
- */
 export function recordTypeAgentSpanException(
     span: Span,
     error: unknown,

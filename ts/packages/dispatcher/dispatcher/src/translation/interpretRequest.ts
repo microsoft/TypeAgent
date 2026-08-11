@@ -263,9 +263,11 @@ export async function interpretRequest(
     request: string,
     attachments: CachedImageWithDetails[] | undefined,
     history: HistoryContext | undefined,
+    activeSchemaNames?: string[],
 ): Promise<InterpretResult> {
     const systemContext = context.sessionContext.agentContext;
-    const activeSchemaNames = systemContext.agents.getActiveSchemas();
+    const requestActiveSchemaNames =
+        activeSchemaNames ?? systemContext.agents.getActiveSchemas();
 
     // Developer-mode capture: start a fresh prompt buffer for this request.
     systemContext.devTrace.beginTranslation();
@@ -290,7 +292,7 @@ export async function interpretRequest(
                   attachments,
                   history,
                   0,
-                  activeSchemaNames,
+                  requestActiveSchemaNames,
                   usageCallback,
               )
             : await interpretRequestWithActiveSchemas(
@@ -299,7 +301,7 @@ export async function interpretRequest(
                   attachments,
                   history,
                   0,
-                  activeSchemaNames,
+                  requestActiveSchemaNames,
                   usageCallback,
               );
     });
@@ -320,7 +322,7 @@ export async function interpretRequest(
             history,
             actions: translateResult.requestAction.actions,
             replacedAction,
-            schemaNames: activeSchemaNames,
+            schemaNames: requestActiveSchemaNames,
             developerMode: systemContext.developerMode,
             config: translateResult.config,
             metrics: systemContext.metricsManager?.getMeasures(
@@ -340,7 +342,7 @@ export async function interpretRequest(
         developerMode: systemContext.developerMode === true,
         translationType: translateResult.type,
         elapsedMs: translateResult.elapsedMs,
-        schemaNames: [...activeSchemaNames],
+        schemaNames: [...requestActiveSchemaNames],
         config: translateResult.config,
         history,
         attachmentCount: attachments?.length ?? 0,

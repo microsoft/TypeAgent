@@ -64,6 +64,7 @@ import {
     findInstallableAgents,
     formatInstallableAgents,
 } from "./installableAgents.js";
+import { getReasoningProfileGuidance } from "./reasoningProfile.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -471,6 +472,12 @@ function buildPromptWithContext(
     );
     if (editorContext) {
         parts.push(editorContext);
+    }
+    const profileGuidance = getReasoningProfileGuidance(
+        context.sessionContext.agentContext.currentOptions,
+    );
+    if (profileGuidance) {
+        parts.push(profileGuidance);
     }
     if (parts.length === 0) {
         return originalRequest;
