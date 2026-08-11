@@ -433,6 +433,8 @@ Translation spans carry the same available correlation attributes as the root
 request span. Errors record a privacy-safe `TranslationError`, or `AbortError`
 for cancellation, and set a stable error status before rethrowing.
 
+### Action span
+
 Each dispatcher action execution creates a `typeagent.action` span after its
 action context is initialized and before readiness checks, flow processing, or
 the agent handler runs. It includes result emission and ends exactly once when
