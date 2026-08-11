@@ -4,6 +4,7 @@
 import {
     context,
     createContextKey,
+    SpanStatusCode,
     trace,
     type Context,
     type Span,
@@ -16,7 +17,7 @@ import { getSessionName } from "../context/session.js";
 
 export const REASONING_SPAN_EVENTS = Object.freeze({
     TOOL_CALL: "reasoning.tool_call",
-    CANCEL: "reasoning.cancel",
+    TOOL_CALL_OVERFLOW: "reasoning.tool_call.overflow",
 } as const);
 
 export const REASONING_TOOL_CALL_NUMBER_CAP = 100;
@@ -42,7 +43,7 @@ export function emitReasoningToolCall(toolCallNumber: number): void {
     if (
         state === undefined ||
         state.ended ||
-        !Number.isFinite(toolCallNumber) ||
+        !Number.isInteger(toolCallNumber) ||
         toolCallNumber < 1
     ) {
         return;
@@ -52,23 +53,17 @@ export function emitReasoningToolCall(toolCallNumber: number): void {
             return;
         }
         state.overflowEventEmitted = true;
+        state.span.addEvent(REASONING_SPAN_EVENTS.TOOL_CALL_OVERFLOW);
+        return;
     }
     state.span.addEvent(REASONING_SPAN_EVENTS.TOOL_CALL, {
-        tool_call_number:
-            toolCallNumber > REASONING_TOOL_CALL_NUMBER_CAP
-                ? "overflow"
-                : toolCallNumber,
+        tool_call_number: toolCallNumber,
     });
-}
-
-export interface ReasoningSpanOptions {
-    readonly captureSensitiveErrorDetails?: boolean | undefined;
 }
 
 export async function wrapReasoningSpan<T>(
     attributes: otel.TypeAgentSpanAttributes,
     body: (span: Span) => Promise<T>,
-    options: ReasoningSpanOptions = {},
 ): Promise<T> {
     const tracer: Tracer = trace.getTracer(
         otel.INSTRUMENTATION_SCOPE_NAME,
@@ -93,14 +88,12 @@ export async function wrapReasoningSpan<T>(
                     error !== null &&
                     typeof error === "object" &&
                     (error as { name?: unknown }).name === "AbortError";
-                if (isAbort) {
-                    span.addEvent(REASONING_SPAN_EVENTS.CANCEL);
-                }
-                otel.recordTypeAgentSpanException(span, error, {
-                    safeName: isAbort ? "AbortError" : "ReasoningError",
-                    safeMessage: isAbort ? "cancelled" : "reasoning failed",
-                    captureSensitiveDetails:
-                        options.captureSensitiveErrorDetails,
+                const name = isAbort ? "AbortError" : "ReasoningError";
+                const message = isAbort ? "cancelled" : "reasoning failed";
+                span.recordException({ name, message });
+                span.setStatus({
+                    code: SpanStatusCode.ERROR,
+                    message,
                 });
                 throw error;
             } finally {
@@ -114,6 +107,10 @@ export async function wrapReasoningSpan<T>(
 export function runInReasoningSpan<T>(
     context: ActionContext<CommandHandlerContext>,
     body: (span: Span) => Promise<T>,
+    modelAttributes?: Pick<
+        otel.TypeAgentSpanAttributes,
+        "genAiSystem" | "genAiRequestModel"
+    >,
 ): Promise<T> {
     const systemContext = context.sessionContext.agentContext;
     const sessionId = systemContext.session.sessionDirPath
@@ -121,7 +118,7 @@ export function runInReasoningSpan<T>(
         : undefined;
     const attributes: {
         -readonly [K in keyof otel.TypeAgentSpanAttributes]: otel.TypeAgentSpanAttributes[K];
-    } = {};
+    } = { ...modelAttributes };
     if (sessionId !== undefined) {
         attributes.sessionId = sessionId;
     }
@@ -132,8 +129,5 @@ export function runInReasoningSpan<T>(
         attributes.traceId = systemContext.traceId;
     }
 
-    return wrapReasoningSpan(attributes, body, {
-        captureSensitiveErrorDetails:
-            systemContext.telemetryOptions.captureSensitiveErrorDetails,
-    });
+    return wrapReasoningSpan(attributes, body);
 }

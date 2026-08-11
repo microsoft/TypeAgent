@@ -65,14 +65,15 @@ describe("wrapReasoningSpan", () => {
                     },
                     activationId: "activation-production",
                     traceId: "trace-production",
-                    telemetryOptions: {
-                        captureSensitiveErrorDetails: false,
-                    },
+                    telemetryOptions: {},
                 },
             },
         } as unknown as ActionContext<CommandHandlerContext>;
 
-        await runInReasoningSpan(context, async () => undefined);
+        await runInReasoningSpan(context, async () => undefined, {
+            genAiSystem: "github_copilot",
+            genAiRequestModel: "claude-opus-4.8",
+        });
 
         const span = getOnlySpan(manager, "typeagent.reasoning");
         expect(span.attributes["typeagent.session.id"]).toBe(
@@ -82,6 +83,8 @@ describe("wrapReasoningSpan", () => {
             "activation-production",
         );
         expect(span.attributes["typeagent.trace.id"]).toBe("trace-production");
+        expect(span.attributes["gen_ai.system"]).toBe("github_copilot");
+        expect(span.attributes["gen_ai.request.model"]).toBe("claude-opus-4.8");
     });
 
     it("creates a child of the active request span", async () => {
@@ -137,8 +140,8 @@ describe("wrapReasoningSpan", () => {
             attributes: { tool_call_number: 1 },
         });
         expect(events[1]).toMatchObject({
-            name: "reasoning.tool_call",
-            attributes: { tool_call_number: "overflow" },
+            name: "reasoning.tool_call.overflow",
+            attributes: {},
         });
     });
 
@@ -192,35 +195,7 @@ describe("wrapReasoningSpan", () => {
         expect(exception?.attributes?.["exception.stacktrace"]).toBeUndefined();
     });
 
-    it("captures redacted exception details only when explicitly enabled", async () => {
-        const error = new Error(
-            "reasoning failed with sk-secret12345678901234567890",
-        );
-
-        await expect(
-            wrapReasoningSpan(
-                ATTRIBUTES,
-                async () => {
-                    throw error;
-                },
-                { captureSensitiveErrorDetails: true },
-            ),
-        ).rejects.toBe(error);
-
-        const exception = getOnlySpan(
-            manager,
-            "typeagent.reasoning",
-        ).events.find((event) => event.name === "exception");
-        expect(exception?.attributes?.["exception.message"]).toContain(
-            "reasoning failed",
-        );
-        expect(exception?.attributes?.["exception.message"]).not.toContain(
-            "sk-secret",
-        );
-        expect(exception?.attributes?.["exception.stacktrace"]).toBeDefined();
-    });
-
-    it("records one cancellation event and a safe abort exception", async () => {
+    it("records cancellation with a safe abort exception", async () => {
         const error = new DOMException("private timeout detail", "AbortError");
 
         await expect(
@@ -234,9 +209,6 @@ describe("wrapReasoningSpan", () => {
             code: SpanStatusCode.ERROR,
             message: "cancelled",
         });
-        expect(
-            span.events.filter((event) => event.name === "reasoning.cancel"),
-        ).toHaveLength(1);
         const exception = span.events.find(
             (event) => event.name === "exception",
         );

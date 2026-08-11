@@ -4,7 +4,6 @@
 import { context, propagation, trace, TraceFlags } from "@opentelemetry/api";
 import { createSecretFilter } from "@typeagent/common-utils";
 import {
-    recordTypeAgentSpanException,
     setTypeAgentSpanAttributes,
     TYPEAGENT_SPAN_ATTRIBUTES,
     TYPEAGENT_SPAN_NAMES,
@@ -176,63 +175,6 @@ describe("setTypeAgentSpanAttributes", () => {
         const written = captured.attributes["typeagent.agent.name"];
         expect(typeof written).toBe("string");
         expect(String(written)).not.toContain(knownSecret);
-    });
-});
-
-describe("recordTypeAgentSpanException", () => {
-    let manager: InMemorySpanManager;
-
-    beforeEach(() => {
-        manager = createInMemorySpanManager();
-    });
-
-    afterEach(async () => {
-        await manager.shutdown();
-    });
-
-    it("records only the safe classification and message by default", () => {
-        const tracer = trace.getTracer("test");
-        const span = tracer.startSpan("t");
-        recordTypeAgentSpanException(
-            span,
-            new Error('Unknown command "email my password"'),
-            {
-                safeName: "CommandError",
-                safeMessage: "command failed",
-            },
-        );
-        span.end();
-
-        const [captured] = manager.findSpansByName("t");
-        const event = captured.events.find((item) => item.name === "exception");
-        expect(event?.attributes?.["exception.type"]).toBe("CommandError");
-        expect(event?.attributes?.["exception.message"]).toBe("command failed");
-        expect(event?.attributes?.["exception.stacktrace"]).toBeUndefined();
-        expect(captured.status.message).toBe("command failed");
-    });
-
-    it("captures redacted original details only when explicitly enabled", () => {
-        const secret = "sk-" + "a".repeat(48);
-        const error = new Error(`request failed for ${secret}`);
-        const tracer = trace.getTracer("test");
-        const span = tracer.startSpan("t");
-        recordTypeAgentSpanException(span, error, {
-            safeName: "CommandError",
-            safeMessage: "command failed",
-            captureSensitiveDetails: true,
-        });
-        span.end();
-
-        const [captured] = manager.findSpansByName("t");
-        const event = captured.events.find((item) => item.name === "exception");
-        expect(event?.attributes?.["exception.message"]).toContain(
-            "request failed",
-        );
-        expect(event?.attributes?.["exception.message"]).not.toContain(secret);
-        expect(event?.attributes?.["exception.stacktrace"]).not.toContain(
-            secret,
-        );
-        expect(captured.status.message).toBe("command failed");
     });
 });
 

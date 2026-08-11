@@ -9,6 +9,7 @@ import {
 } from "@typeagent/telemetry/testing/inMemorySpanManager";
 import { wrapRootRequestSpan } from "../src/otel/rootRequestSpan.js";
 import {
+    recordActionFlowException,
     recordActionHandlerException,
     recordActionResultError,
     recordActionSetupFailure,
@@ -142,12 +143,9 @@ describe("wrapActionSpan", () => {
         });
     });
 
-    it("records converted handler exceptions safely by default", async () => {
+    it("records converted handler exceptions safely", async () => {
         await wrapActionSpan(ATTRIBUTES, async (span) => {
-            recordActionHandlerException(
-                span,
-                new Error("private action parameters"),
-            );
+            recordActionHandlerException(span);
         });
 
         const span = getOnlySpan(manager, "typeagent.action");
@@ -167,7 +165,29 @@ describe("wrapActionSpan", () => {
         expect(exception?.attributes?.["exception.stacktrace"]).toBeUndefined();
     });
 
-    it("uses privacy-safe details when an action exception escapes", async () => {
+    it("records converted flow exceptions safely", async () => {
+        await wrapActionSpan(ATTRIBUTES, async (span) => {
+            recordActionFlowException(span);
+        });
+
+        const span = getOnlySpan(manager, "typeagent.action");
+        expect(span.status).toEqual({
+            code: SpanStatusCode.ERROR,
+            message: "action flow failed",
+        });
+        const exception = span.events.find(
+            (event) => event.name === "exception",
+        );
+        expect(exception?.attributes?.["exception.type"]).toBe(
+            "ActionFlowError",
+        );
+        expect(exception?.attributes?.["exception.message"]).toBe(
+            "action flow failed",
+        );
+        expect(exception?.attributes?.["exception.stacktrace"]).toBeUndefined();
+    });
+
+    it("records privacy-safe details when an action exception escapes", async () => {
         const error = new Error(
             "private action payload sk-secret12345678901234567890",
         );
@@ -191,33 +211,6 @@ describe("wrapActionSpan", () => {
             "action failed",
         );
         expect(exception?.attributes?.["exception.stacktrace"]).toBeUndefined();
-    });
-
-    it("captures redacted exception details only when explicitly enabled", async () => {
-        const error = new Error(
-            "action failed with sk-secret12345678901234567890",
-        );
-
-        await expect(
-            wrapActionSpan(
-                ATTRIBUTES,
-                async () => {
-                    throw error;
-                },
-                { captureSensitiveErrorDetails: true },
-            ),
-        ).rejects.toBe(error);
-
-        const exception = getOnlySpan(manager, "typeagent.action").events.find(
-            (event) => event.name === "exception",
-        );
-        expect(exception?.attributes?.["exception.message"]).toContain(
-            "action failed",
-        );
-        expect(exception?.attributes?.["exception.message"]).not.toContain(
-            "sk-secret",
-        );
-        expect(exception?.attributes?.["exception.stacktrace"]).toBeDefined();
     });
 
     it("classifies cancellation without exporting the abort message", async () => {

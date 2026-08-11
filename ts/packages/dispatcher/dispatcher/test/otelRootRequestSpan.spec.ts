@@ -134,28 +134,6 @@ describe("wrapRootRequestSpan", () => {
         ).toBeUndefined();
     });
 
-    it("records redacted original exception details only when explicitly enabled", async () => {
-        const err = new Error("boom with user content");
-        await expect(
-            wrapRootRequestSpan(
-                ATTRS,
-                async () => {
-                    throw err;
-                },
-                { captureSensitiveErrorDetails: true },
-            ),
-        ).rejects.toBe(err);
-        const span = findRequestSpan(manager);
-        expect(span.status.message).toBe("request failed");
-        const exceptionEvent = span.events.find((e) => e.name === "exception");
-        expect(exceptionEvent!.attributes?.["exception.message"]).toBe(
-            "boom with user content",
-        );
-        expect(
-            exceptionEvent!.attributes?.["exception.stacktrace"],
-        ).toBeDefined();
-    });
-
     it("maps a thrown AbortError to ERROR status message 'cancelled'", async () => {
         const abort = new DOMException(
             "The operation was aborted.",

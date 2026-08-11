@@ -335,8 +335,7 @@ Ordinary `debug(...)` and `logger.logEvent(...)` calls do not change. Add a span
 for an externally meaningful or independently timed operation:
 
 ```ts
-import { trace } from "@opentelemetry/api";
-import { otel } from "@typeagent/telemetry";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 
 const tracer = trace.getTracer("typeagent");
 
@@ -345,9 +344,13 @@ return tracer.startActiveSpan("typeagent.translation", async (span) => {
     span.setAttribute("typeagent.agent.name", agentName);
     return await translateRequest(request);
   } catch (error) {
-    otel.recordTypeAgentSpanException(span, error, {
-      safeName: "TranslationError",
-      safeMessage: "translation failed",
+    span.recordException({
+      name: "TranslationError",
+      message: "translation failed",
+    });
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: "translation failed",
     });
     throw error;
   } finally {
@@ -370,31 +373,117 @@ await createDispatcher(hostName, {
 ```
 
 Original exception messages and stacks are omitted because they can contain user
-content. A host may explicitly opt into redacted details with
-`telemetry.captureSensitiveErrorDetails`, but this remains sensitive diagnostic
-capture even after known secrets are removed.
+content. Record a stable classification and message at the catch site.
 
-The dispatcher creates one `typeagent.translation` child span for each
-translation operation. The normal request path includes grammar/cache lookup and
-model translation in the same span. Direct `translateRequest` callers also create
-a span, while re-entrant calls reuse an active translation span instead of
-creating duplicates. Events record each lookup, intentional cache bypass,
-assistant fallback, and retry. Retry numbers are sequential within the span, and
-event attributes use bounded reason/kind values rather than request or schema
-text.
+## Currently Captured Dispatcher Telemetry
 
-Each dispatcher action execution creates a `typeagent.action` span with the
-agent and action names known before the handler runs. Sequential actions are
-siblings under the request span; actions dispatched from a flow or another
-action become children of that active action. Setup failures and typed
-`ActionResult.error` returns use bounded events, while thrown handler errors use
-the same safe-default exception policy as request and translation spans.
+### Root dispatcher command span
 
-Claude and Copilot reasoning operations create `typeagent.reasoning` spans under
-the active request or action. Tool calls emit bounded ordinal events without
-tool names, arguments, or results. Timeout and external cancellation are
-propagated to the underlying SDK operation before the span ends, and reasoning
-exceptions follow the shared safe-default diagnostic policy.
+The dispatcher creates one `typeagent.request` span for each command processed
+by `processCommand`. It starts a new trace by default. An embedded host can opt
+in to parenting it under the context active when the request was submitted by
+setting `telemetry.joinActiveTrace`.
+
+The span covers command locking and command processing, including translation
+and action execution. Best-effort display logging and command-complete
+notification performed by the request queue after `processCommand` returns are
+outside the span.
+
+| Captured data     | Current behavior                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Attributes        | `typeagent.session.id`, `typeagent.activation.id`, and the preserved caller value in `typeagent.trace.id`, when available |
+| Success           | Span status remains unset                                                                                                 |
+| Cancellation      | Span status is `ERROR` with the stable message `cancelled`                                                                |
+| Thrown failure    | Records a privacy-safe `RequestError` exception and sets `ERROR` with `request failed`                                    |
+| Converted failure | Command processing records the exception and error status before converting it to a cancellation or user-visible result   |
+| Parent context    | New root by default; joins an explicitly selected active context only                                                     |
+
+### Translation span
+
+The dispatcher creates one `typeagent.translation` child span for each logical
+translation operation. The normal `interpretRequest` path includes
+grammar/construction-cache lookup and any subsequent model translation in the
+same span. Direct `translateRequest` callers also create a span. Re-entrant calls
+reuse the active translation span instead of creating nested duplicates.
+
+The span ends after the translation result is produced. Interactive
+confirmation, translation logging, developer-trace persistence, and
+conversation-signal updates happen afterward and are not included in its
+duration.
+
+Translation events currently captured are:
+
+| Event                          | Meaning                                                                                                        |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `translation.grammar.matched`  | A grammar match produced the translation result                                                                |
+| `translation.grammar.no_match` | The unified matcher produced no grammar result                                                                 |
+| `translation.cache.hit`        | A construction-cache match produced the translation result                                                     |
+| `translation.cache.miss`       | The unified matcher produced no construction result                                                            |
+| `translation.cache.bypassed`   | Matching was intentionally skipped; `bypass_reason` is a bounded value                                         |
+| `translation.fallback`         | An assistant-switch translation attempt was initiated                                                          |
+| `translation.retry`            | A same-operation retry was initiated; `retry_number` is sequential within the span and `retry_kind` is bounded |
+
+A unified matcher miss emits both `translation.grammar.no_match` and
+`translation.cache.miss`. Fallback and retry events describe initiated attempts,
+so the event remains present when the following translation fails. Activity
+context can perform several lookups in one span; their event order reflects the
+execution order.
+
+Translation spans carry the same available correlation attributes as the root
+request span. Errors record a privacy-safe `TranslationError`, or `AbortError`
+for cancellation, and set a stable error status before rethrowing.
+
+### Action span
+
+Each dispatcher action execution creates a `typeagent.action` span after its
+action context is initialized and before readiness checks, flow processing, or
+the agent handler runs. It includes result emission and ends exactly once when
+the action returns, throws, or is cancelled. The span is a child of the
+currently active span: `typeagent.request` in the normal flow, or another
+`typeagent.action` when a flow step dispatches a sub-action.
+
+Failure modes are recorded distinctly and use bounded, allowlisted values:
+
+- Pre-handler precondition failures (`handler_missing`, `agent_not_ready`)
+  fire `action.setup.failed` with the enumerated `failure_kind`. No handler
+  ran.
+- A handler-thrown exception that was converted to an `ActionResult` fires
+  the standard `exception` event with the privacy-safe pair
+  `ActionHandlerError` / `action handler failed`. The original message and
+  stack are never exported.
+- A flow-interpreter exception converted to an `ActionResult` uses the
+  privacy-safe pair `ActionFlowError` / `action flow failed`.
+- A handler that returned a typed `ActionResult.error` fires
+  `action.result.error` with `failure_kind: "result_error"`. The
+  `ActionResult.error` text itself is never stamped.
+- An exception that escapes the wrapper is recorded as `AbortError` /
+  `cancelled` for cancellation and `ActionError` / `action failed`
+  otherwise, matching the request and translation span conventions.
+
+Auto-setup replacement results (produced when `setupOnFirstUse` runs setup
+in place of the user's action) leave the span status unset regardless of
+the result's shape.
+
+### Reasoning span
+
+Each Claude or Copilot reasoning operation creates one
+`typeagent.reasoning` span under the active request or action. The span covers
+the complete SDK operation, including streamed responses, tool execution, and
+optional reasoning-trace persistence. It ends only after the operation returns,
+throws, or is cancelled. `gen_ai.system` identifies the reasoning engine and
+`gen_ai.request.model` identifies the configured model.
+
+Each tool execution emits `reasoning.tool_call` with a one-based
+numeric `tool_call_number`. Calls above 100 collapse into one
+`reasoning.tool_call.overflow` event, which bounds event volume for runaway
+loops without changing the attribute's type. Tool names, arguments, results,
+prompts, responses, and reasoning text are never recorded on the span.
+
+Timeout and external cancellation are propagated to the underlying SDK
+operation before the span ends. Cancellation records the privacy-safe
+`AbortError` / `cancelled` exception classification and sets error status.
+Other escaping exceptions use `ReasoningError` / `reasoning failed`. Original
+exception messages and stack traces are never exported.
 
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |

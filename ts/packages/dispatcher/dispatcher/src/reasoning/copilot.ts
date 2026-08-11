@@ -69,6 +69,7 @@ import {
     emitReasoningToolCall,
     runInReasoningSpan,
 } from "../otel/reasoningSpan.js";
+import { getReasoningProfileGuidance } from "./reasoningProfile.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -516,6 +517,12 @@ function buildPromptWithContext(
     );
     if (editorContext) {
         parts.push(editorContext);
+    }
+    const profileGuidance = getReasoningProfileGuidance(
+        context.sessionContext.agentContext.currentOptions,
+    );
+    if (profileGuidance) {
+        parts.push(profileGuidance);
     }
     if (parts.length === 0) {
         return originalRequest;
@@ -2514,12 +2521,19 @@ export async function executeReasoning(
 
     const planReuseEnabled = options?.planReuseEnabled ?? false;
 
-    return runInReasoningSpan(context, () => {
-        if (!planReuseEnabled) {
-            // Standard reasoning without planning
-            return executeReasoningWithoutPlanning(request, context);
-        }
-        // Trace capture + auto recipe generation
-        return executeReasoningWithTracing(request, context);
-    });
+    return runInReasoningSpan(
+        context,
+        () => {
+            if (!planReuseEnabled) {
+                // Standard reasoning without planning
+                return executeReasoningWithoutPlanning(request, context);
+            }
+            // Trace capture + auto recipe generation
+            return executeReasoningWithTracing(request, context);
+        },
+        {
+            genAiSystem: "github_copilot",
+            genAiRequestModel: resolveModel(context),
+        },
+    );
 }

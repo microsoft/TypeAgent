@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SpanStatusCode, type Span } from "@opentelemetry/api";
+import type { Span } from "@opentelemetry/api";
 import { redactText, type RedactionOptions } from "./redaction.js";
 
 /**
@@ -94,19 +94,6 @@ export interface TypeAgentSpanAttributes {
     readonly traceId?: string;
 }
 
-export interface TypeAgentSpanExceptionOptions {
-    /** Stable exception classification that does not contain user data. */
-    readonly safeName: string;
-    /** Stable status and exception message that does not contain user data. */
-    readonly safeMessage: string;
-    /**
-     * Include the original exception message and stack after secret redaction.
-     * This can still contain user content, so hosts must enable it explicitly.
-     */
-    readonly captureSensitiveDetails?: boolean | undefined;
-    readonly redactionOptions?: RedactionOptions | undefined;
-}
-
 const ATTRIBUTE_KEY_FOR_FIELD: {
     readonly [K in keyof TypeAgentSpanAttributes]-?: TypeAgentSpanAttributeKey;
 } = {
@@ -159,63 +146,4 @@ export function setTypeAgentSpanAttributes(
         }
         span.setAttribute(ATTRIBUTE_KEY_FOR_FIELD[field], redacted);
     }
-}
-
-/**
- * Record an exception without exporting its original message or stack by
- * default. Detailed capture is opt-in because secret redaction cannot remove
- * arbitrary user content.
- */
-export function recordTypeAgentSpanException(
-    span: Span,
-    error: unknown,
-    options: TypeAgentSpanExceptionOptions,
-): void {
-    const exception: {
-        name: string;
-        message: string;
-        stack?: string;
-    } = {
-        name: options.safeName,
-        message: options.safeMessage,
-    };
-
-    if (options.captureSensitiveDetails === true) {
-        const message = getErrorMessage(error);
-        if (message !== undefined) {
-            exception.message = redactText(message, options.redactionOptions);
-        }
-        const stack = getErrorStack(error);
-        if (stack !== undefined) {
-            exception.stack = redactText(stack, options.redactionOptions);
-        }
-    }
-
-    span.recordException(exception);
-    span.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: options.safeMessage,
-    });
-}
-
-function getErrorMessage(error: unknown): string | undefined {
-    if (
-        error !== null &&
-        typeof error === "object" &&
-        typeof (error as { message?: unknown }).message === "string"
-    ) {
-        return (error as { message: string }).message;
-    }
-    return typeof error === "string" ? error : undefined;
-}
-
-function getErrorStack(error: unknown): string | undefined {
-    if (
-        error !== null &&
-        typeof error === "object" &&
-        typeof (error as { stack?: unknown }).stack === "string"
-    ) {
-        return (error as { stack: string }).stack;
-    }
-    return undefined;
 }

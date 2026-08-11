@@ -331,10 +331,11 @@ PowerShell supports two creation paths:
      v  reloadAgentSchema() -> grammar + schema updated
 ```
 
-> **Note:** Automatic capture from reasoning traces (intercepting
-> PowerShell commands executed via Bash during reasoning) is not yet
-> implemented. Flows are currently created via explicit import,
-> `createPowerShellFlow`, or seed samples.
+> **Note:** Automatic capture from successful reasoning traces is implemented
+> on Windows when `execution.scriptReuse` is enabled. `ScriptRecipeGenerator`
+> detects PowerShell commands in the trace, generalizes them, saves active
+> flows, and reloads the PowerShell schema. Explicit import,
+> `createPowerShellFlow`, and seed samples remain available.
 
 ### Execution architecture
 
