@@ -738,6 +738,7 @@ export class RequestCommandHandler implements CommandHandler {
             const activeSchemaScope = resolveActiveSchemaScope(
                 systemContext.agents.getActiveSchemas(),
                 systemContext.currentOptions?.activeSchemas,
+                systemContext.currentOptions?.activeSchemaFamilies,
             );
             if (activeSchemaScope.unavailable.length > 0) {
                 setDisposition(systemContext, {
@@ -852,7 +853,9 @@ export class RequestCommandHandler implements CommandHandler {
             if (
                 needsReasoning &&
                 systemContext.noReasoning &&
-                systemContext.currentOptions?.activeSchemas !== undefined
+                (systemContext.currentOptions?.activeSchemas !== undefined ||
+                    systemContext.currentOptions?.activeSchemaFamilies !==
+                        undefined)
             ) {
                 const commandResult = ensureCommandResult(systemContext);
                 commandResult.actions = requestAction.actions.map(
