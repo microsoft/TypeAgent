@@ -393,6 +393,21 @@ export type CommandHandlerContext = {
     persistedGrammarStore?: PersistedGrammarStore; // Persistence layer for dynamic grammar rules
     currentScriptDir: string;
     logger?: Logger | undefined;
+    /**
+     * Dispatcher activation id (created once per context, not per request).
+     * Mirrors what the logger stamps on events and is the correlation value
+     * used for the `typeagent.activation.id` OTel span attribute.
+     */
+    readonly activationId: string;
+    /**
+     * Preserved caller-supplied pre-OTel trace id. OTel owns the canonical
+     * trace id; this value is carried on spans and logs as
+     * `typeagent.trace.id` so existing logs can still be joined.
+     */
+    readonly traceId: string | undefined;
+    readonly telemetryOptions: {
+        readonly joinActiveTrace: boolean;
+    };
     currentRequestId: RequestId | undefined;
     currentAbortSignal: AbortSignal | undefined;
     currentOptions?: ProcessCommandOptions | undefined;
@@ -534,6 +549,7 @@ async function getAgentCache(
  * - collectCommandResult: whether to collect command result in the return for `processCommand`. Default is false.
  * - dblogging: whether to enable database telemetry logging. Default is true; pass false to opt out.
  * - traceId: An optional trace ID to use for logging identification.
+ * - telemetry: OpenTelemetry request-span integration options.
  */
 export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     // Core options
@@ -577,6 +593,13 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     collectCommandResult?: boolean; // default to false
     dblogging?: boolean; // default to true
     traceId?: string; // optional additional for logging identification
+    telemetry?: {
+        /**
+         * Join the OTel context active when each request is submitted.
+         * Default false: each request starts a new trace.
+         */
+        joinActiveTrace?: boolean;
+    };
 
     // Additional integration options
     constructionProvider?: ConstructionProvider;
@@ -1184,14 +1207,16 @@ export async function initializeCommandHandlerContext(
         debug(`Session directory: ${sessionDirPath}`);
         const clientIO = options?.clientIO ?? nullClientIO;
         const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
+        const activationId = randomUUID();
+        const traceId = options?.traceId;
         const logger = new ChildLogger(loggerSink, DispatcherName, {
             hostName,
-            traceId: options?.traceId,
+            traceId,
             sessionId: () =>
                 context.session.sessionDirPath
                     ? getSessionName(context.session.sessionDirPath)
                     : undefined,
-            activationId: randomUUID(),
+            activationId,
         });
 
         const cacheDir = persistDir ? ensureCacheDir(persistDir) : undefined;
@@ -1276,6 +1301,11 @@ export async function initializeCommandHandlerContext(
             ),
             displayLog: await DisplayLog.load(persistDir),
             logger,
+            activationId,
+            traceId,
+            telemetryOptions: {
+                joinActiveTrace: options?.telemetry?.joinActiveTrace ?? false,
+            },
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
             promptLogger,
             devTrace,
@@ -1344,6 +1374,7 @@ export async function initializeCommandHandlerContext(
                     reqId,
                     qctx.attachments,
                     qctx.options,
+                    qctx.traceContext,
                 );
                 try {
                     context.displayLog.logCommandResult(
