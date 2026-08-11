@@ -241,21 +241,10 @@ for span filtering without duplicating them on every operation:
 
 These OpenTelemetry VCS semantic-convention attributes distinguish source
 revisions from `service.version`, which remains the version of the deployable
-service component. Production deployments provide the revisions through the
-standard `OTEL_RESOURCE_ATTRIBUTES` environment variable:
-
-```text
-OTEL_RESOURCE_ATTRIBUTES=vcs.ref.head.revision=<build-commit>,vcs.ref.base.revision=<mainline-commit>
-```
-
-`InitTelemetryOptions.sourceVersion` remains available for hosts that inject
-build metadata directly. The packaged-shell workflow also writes the checked-out
-and mainline revisions into the compiled telemetry package, so installed
-artifacts retain their build identity without Git or deployment-specific
-environment variables. Explicit options take precedence, followed by
-`OTEL_RESOURCE_ATTRIBUTES`, baked build metadata, and finally local Git.
-Deployments can therefore override artifact metadata when needed while local
-development still resolves revisions automatically.
+service component. Local development resolves the revisions from Git once
+during telemetry initialization. `InitTelemetryOptions.sourceVersion` remains
+available for tests or hosts that already have revision metadata. Packaged
+deployments without a Git checkout omit unavailable values.
 
 ## Configuration and Local Files
 
@@ -274,7 +263,6 @@ Standard `OTEL_*` variables override YAML. Relevant settings include:
 - `OTEL_EXPORTER_OTLP_ENDPOINT`
 - `OTEL_EXPORTER_OTLP_HEADERS`
 - `OTEL_SERVICE_NAME`
-- `OTEL_RESOURCE_ATTRIBUTES`
 - `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`
 - `TYPEAGENT_OTEL_LOG_FILE`
 - `TYPEAGENT_OTEL_DEBUG_BRIDGE`
