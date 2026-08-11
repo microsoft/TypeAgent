@@ -7,6 +7,7 @@ import type {
     PipelineTrace,
     EvaluationResult,
     Scorecard,
+    BenchmarkCommandOptions,
 } from "./types.mjs";
 import { TraceCollector } from "./traceCollector.mjs";
 import { evaluateGrammarMatch } from "./evaluators/grammarEvaluator.mjs";
@@ -14,6 +15,7 @@ import {
     evaluateExecution,
     evaluateFallback,
 } from "./evaluators/executionEvaluator.mjs";
+import { evaluateDisposition } from "./evaluators/dispositionEvaluator.mjs";
 import {
     buildScorecard,
     printScorecard,
@@ -42,7 +44,10 @@ export interface BenchmarkOptions {
 }
 
 export interface DispatcherAdapter {
-    processCommand(command: string): Promise<unknown>;
+    processCommand(
+        command: string,
+        options?: BenchmarkCommandOptions,
+    ): Promise<unknown>;
     getDisplayText(): string;
     close(): Promise<void>;
 }
@@ -62,6 +67,10 @@ export class BenchmarkRunner {
 
     private resolveFlowName(canonical: string): string {
         return this.flowNameMap[canonical] ?? canonical;
+    }
+
+    hasRequiredFailures(): boolean {
+        return this.results.some((result) => result.required && !result.passed);
     }
 
     async run(): Promise<Scorecard> {
@@ -138,6 +147,7 @@ export class BenchmarkRunner {
             "llm-translation.json",
             "fallback-chain.json",
             "end-to-end.json",
+            "dev-actions-routing.json",
         ];
 
         const allScenarios: BenchmarkScenario[] = [];
@@ -192,7 +202,10 @@ export class BenchmarkRunner {
 
             let displayText = "";
             try {
-                commandResult = await this.dispatcher.processCommand(text);
+                commandResult = await this.dispatcher.processCommand(
+                    text,
+                    utterance.options,
+                );
                 displayText = this.dispatcher.getDisplayText();
                 trace = this.traceCollector.buildTrace(text, scenarioStart);
                 trace.executionResult = {
@@ -277,6 +290,9 @@ export class BenchmarkRunner {
             evaluations.push(
                 ...evaluateFallback(resolvedUtterance, trace, commandResult),
             );
+            evaluations.push(
+                ...evaluateDisposition(resolvedUtterance, commandResult),
+            );
 
             const passed = evaluations.every((e) => e.passed);
 
@@ -285,6 +301,7 @@ export class BenchmarkRunner {
                 category: scenario.category,
                 description: scenario.description,
                 utterance: text,
+                required: scenario.required ?? false,
                 passed,
                 evaluations,
                 trace,

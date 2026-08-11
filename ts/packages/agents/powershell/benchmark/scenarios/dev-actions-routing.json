@@ -1,0 +1,82 @@
+[
+  {
+    "id": "dev-route-01",
+    "category": "dev-actions-routing",
+    "description": "PowerShell schema family includes the network namespace",
+    "required": true,
+    "setup": {
+      "requiredSchemas": ["powershell.powershell-network"]
+    },
+    "utterances": [
+      {
+        "text": "show me the processes using ports on my machine",
+        "options": {
+          "activeSchemaFamilies": ["powershell"],
+          "noReasoning": true
+        },
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "portListeners",
+          "matchedAgent": "powershell",
+          "disposition": {
+            "status": "handled",
+            "path": "action",
+            "schemas": ["powershell.powershell-network"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "dev-route-02",
+    "category": "dev-actions-routing",
+    "description": "PowerShell schema family includes the root flow schema",
+    "required": true,
+    "setup": {
+      "requiredFlows": ["listFiles"]
+    },
+    "utterances": [
+      {
+        "text": "list files",
+        "options": {
+          "activeSchemaFamilies": ["powershell"],
+          "noReasoning": true
+        },
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "matchedAgent": "powershell",
+          "disposition": {
+            "status": "handled",
+            "path": "action",
+            "schemas": ["powershell"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "dev-route-03",
+    "category": "dev-actions-routing",
+    "description": "Non-PowerShell development work remains unhandled",
+    "required": true,
+    "setup": {},
+    "utterances": [
+      {
+        "text": "add unit tests for the hook router",
+        "options": {
+          "activeSchemaFamilies": ["powershell"],
+          "noReasoning": true
+        },
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": null,
+          "disposition": {
+            "status": "notHandled",
+            "reason": "unknown"
+          }
+        }
+      }
+    ]
+  }
+]

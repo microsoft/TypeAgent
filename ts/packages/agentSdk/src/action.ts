@@ -35,6 +35,10 @@ export type SerializedError = {
 export type ActionResultError = {
     error: string;
     fallbackToReasoning?: boolean | undefined;
+    // Rich display to show in place of the plain `error` text (e.g. setup
+    // instructions with a config snippet, which need markdown to survive
+    // rendering). Optional — clients fall back to `error` when absent.
+    errorDisplayContent?: DisplayContent | undefined;
     // Structured snapshot of the underlying exception when this error came
     // from a thrown value (populated by the dispatcher's action executor).
     // Optional - `undefined` for errors created from a plain message.

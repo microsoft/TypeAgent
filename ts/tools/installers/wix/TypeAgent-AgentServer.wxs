@@ -593,7 +593,7 @@
 
   <!-- ═══════════════════════════════════════════════
        Custom UI scheme: WixUI_TypeAgent
-       WelcomeDlg → LicenseAgreementDlg → ProviderDlg → VerifyReadyDlg
+       WelcomeDlg → ProviderDlg → VerifyReadyDlg
        Adds a provider/embedding selection dialog bound to the public
        PROVIDER / EMBEDDING / OLLAMAHOST properties. Modeled on
        WixUI_InstallDir (minus the install-directory dialog, since this
@@ -712,13 +712,10 @@
 
       <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999">1</Publish>
 
-      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg">NOT Installed</Publish>
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="ProviderDlg">NOT Installed</Publish>
       <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg">Installed AND PATCH</Publish>
 
-      <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
-      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ProviderDlg">LicenseAccepted = "1"</Publish>
-
-      <Publish Dialog="ProviderDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+      <Publish Dialog="ProviderDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
       <Publish Dialog="ProviderDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
 
       <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="ProviderDlg" Order="1">NOT Installed</Publish>

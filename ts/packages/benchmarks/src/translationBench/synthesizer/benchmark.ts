@@ -31,6 +31,10 @@ import {
     TRANSLATION_BENCH_DEFAULT_ACTION_SHAPE,
     assertTranslationBenchExpectedActionArity,
 } from "./actionShape.js";
+import {
+    countEligibleTranslationBenchActions,
+    getPackagedLlmJudgeExcludedActions,
+} from "./eligibleActions.js";
 
 export type TranslationBenchOrder = "strict" | "any";
 // Closed transform set: source import (1) vs generated/canonical (2).
@@ -2168,10 +2172,16 @@ function validateGenerationCoverage(
                 ]),
             ),
         ).size;
+        // complete = every eligible (non-llmAsAJudge-excluded) action was scheduled.
+        // actionCount stays the full catalog size; exclusions only affect eligibility.
+        const eligibleActionCount = countEligibleTranslationBenchActions(
+            benchmark.metadata.schemas,
+            getPackagedLlmJudgeExcludedActions(),
+        );
         if (
             generation.coverage.scheduledActionCount !== scheduledActionCount ||
             generation.coverage.complete !==
-                (scheduledActionCount === generation.coverage.actionCount)
+                (scheduledActionCount === eligibleActionCount)
         ) {
             throw new Error("Generated benchmark coverage metadata drift");
         }

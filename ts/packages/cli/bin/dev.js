@@ -3,12 +3,28 @@
 // Licensed under the MIT License.
 
 import { loadConfigSync } from "@typeagent/config";
+import { otel } from "@typeagent/telemetry";
+import { registerEarlyTelemetrySignalHandlers } from "../src/telemetry.ts";
 loadConfigSync();
+
+registerEarlyTelemetrySignalHandlers();
 
 // eslint-disable-next-line node/shebang
 async function main() {
-    const { execute } = await import("@oclif/core");
-    await execute({ development: true, dir: import.meta.url });
+    const { flush, handle, run, settings } = await import("@oclif/core");
+    process.env.NODE_ENV = "development";
+    settings.debug = true;
+    try {
+        await otel.initTelemetry();
+        await run(process.argv.slice(2), import.meta.url);
+        await flush();
+        await otel.shutdownTelemetry();
+    } catch (error) {
+        await otel.shutdownTelemetry().catch((shutdownError) => {
+            console.error("Failed to shut down telemetry:", shutdownError);
+        });
+        await handle(error);
+    }
 }
 
 await main();

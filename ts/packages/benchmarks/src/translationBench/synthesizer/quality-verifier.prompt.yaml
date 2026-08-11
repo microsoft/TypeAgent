@@ -18,6 +18,8 @@ format_checker:
   description: |-
     Structural validation against the target tool schema and generation contract.
     Fail-closed: any violation rejects the candidate without calling the LLM.
+    Before schema validation, empty gold placeholders ("" / [] / null / {}) are
+    stripped recursively; required fields missing after strip fail closed.
   checks:
     - required_json_shape
     - seed_and_gen_case_counts
@@ -81,6 +83,18 @@ semantic_checker:
       openWebPage or followLinkByText without link/URL-specific wording.
     - Negatives that intentionally use adjacent intents are fine when
       expectedActions is empty.
+
+    Gold parameters (groundTruthCorrectness / INVALID_PARAMETERS):
+    - Every expectedActions[].parameters key on seed/positives must be clearly
+      supported by that case's utterance (or allowed history). Prefer omit.
+    - Reject optional default polarity flags the user did not ask for
+      (e.g. unstar:false on "star the repo", noDebug:false when debugging).
+    - Reject empty placeholders ("" / []) — format checker strips these, but
+      leftover empties still fail quality.
+    - Reject invented runtime context not in the utterance (full URLs the user
+      never said, editor cursor/context JSON, nonces, attestation types).
+    - Reject dual/redundant fields that restate each other (public:true with
+      private:false; filePath with an equivalent themeName) — keep one.
 
     Issue codes (use only these): {{issue_codes}}
 

@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 import {
     actionParameterSourceFingerprint,
+    applyLlmAsAJudgeVerify,
     buildActionParametersGraderCatalog,
     buildActionParametersGraderEntry,
     canonicalizeParamSpec,
@@ -19,6 +20,7 @@ import {
     isParamSpec,
     loadActionParametersGraderCatalogFile,
     mergeUnionParamSpecs,
+    parameterRequiresLlmJudge,
     REGEX_RULE_IDS,
     renderSchemaType,
     schemaTypeToParamSpec,
@@ -27,6 +29,7 @@ import {
     tryReusePriorFieldGraderDecision,
     type ParamSpec,
 } from "../src/translationBench/synthesizer/catalogGenerator/index.js";
+import { countEligibleTranslationBenchActions } from "../src/translationBench/synthesizer/eligibleActions.js";
 
 function objectSpec(
     fields: Record<string, { optional: boolean; spec: ParamSpec }>,
@@ -201,7 +204,11 @@ describe("tryClassifyActionParameterFieldRegex", () => {
                 { kind: "string" },
                 false,
             ),
-        ).toMatchObject({ create: "temporal", verify: "exact" });
+        ).toMatchObject({
+            create: "temporal",
+            verify: "nonempty",
+            rule: "string-date-nonempty",
+        });
         expect(
             tryClassifyActionParameterFieldRegex(
                 "time",
@@ -1189,6 +1196,74 @@ describe("incremental grader catalog", () => {
         );
     });
 
+    it("sourceFingerprint is paramSpec-only (stable across policy metadata)", async () => {
+        const listSpec = objectSpec({
+            listName: { optional: false, spec: { kind: "string" } },
+        });
+        const first = await buildActionParametersGraderCatalog(
+            {
+                catalogVersion: "2026-01-01",
+                actions: [
+                    {
+                        schemaName: "list",
+                        actionName: "createList",
+                        paramSpec: listSpec,
+                    },
+                ],
+            },
+            { generatedAt: "2026-01-01T00:00:00.000Z" },
+        );
+        const fp = first.byAction["list.createList"]!.sourceFingerprint;
+        expect(fp).toBe(actionParameterSourceFingerprint(listSpec));
+        expect(first.rulesFingerprint).toMatch(/^[0-9a-f]{16}$/);
+
+        // Same schema + matching rulesFingerprint → incremental keeps entry.
+        const second = await buildActionParametersGraderCatalog(
+            {
+                catalogVersion: "2026-01-02",
+                actions: [
+                    {
+                        schemaName: "list",
+                        actionName: "createList",
+                        paramSpec: listSpec,
+                    },
+                ],
+            },
+            {
+                previous: first,
+                generatedAt: "2026-01-02T00:00:00.000Z",
+            },
+        );
+        expect(second.byAction["list.createList"]!.sourceFingerprint).toBe(fp);
+        expect(second.lastDiff?.unchanged).toContain("list.createList");
+
+        // Rules drift (stale catalog rulesFingerprint) → full reclassify, but
+        // sourceFingerprint stays the same because paramSpec did not change.
+        const staleRules = {
+            ...first,
+            rulesFingerprint: "0000000000000000",
+        };
+        const third = await buildActionParametersGraderCatalog(
+            {
+                catalogVersion: "2026-01-03",
+                actions: [
+                    {
+                        schemaName: "list",
+                        actionName: "createList",
+                        paramSpec: listSpec,
+                    },
+                ],
+            },
+            {
+                previous: staleRules,
+                generatedAt: "2026-01-03T00:00:00.000Z",
+            },
+        );
+        expect(third.byAction["list.createList"]!.sourceFingerprint).toBe(fp);
+        expect(third.rulesFingerprint).toBe(first.rulesFingerprint);
+        expect(third.lastDiff?.added).toContain("list.createList");
+    });
+
     it("diff reports full add when no previous catalog", () => {
         const diff = diffActionParametersGrader(
             {
@@ -1310,17 +1385,259 @@ describe("incremental grader catalog", () => {
 
 describe("GRADER_RULES_VERSION contract", () => {
     it("exports a stable REGEX_RULE_IDS allowlist tied to version bumps", () => {
-        expect(GRADER_RULES_VERSION).toBeGreaterThanOrEqual(3);
+        expect(GRADER_RULES_VERSION).toBeGreaterThanOrEqual(5);
         expect(REGEX_RULE_IDS.length).toBeGreaterThan(5);
         expect(REGEX_RULE_IDS).toContain("string-open-soft-nonempty");
+        expect(REGEX_RULE_IDS).toContain("string-date-nonempty");
+        expect(REGEX_RULE_IDS).not.toContain("string-date-exact");
         expect(REGEX_RULE_IDS).toContain("type-object-soft-nonempty");
+        expect(REGEX_RULE_IDS).toContain("string-llm-as-a-judge");
         // Pin allowlist hash; bump GRADER_RULES_VERSION with id edits.
         const hash = createHash("sha256")
             .update(JSON.stringify([...REGEX_RULE_IDS].sort()))
             .digest("hex")
             .slice(0, 16);
         // Bump GRADER_RULES_VERSION with this hash when rules change.
-        expect(hash).toBe("d059bd043da09e1a");
+        expect(hash).toBe("f2c1d77d772926e9");
+    });
+});
+
+describe("eligible action coverage counting", () => {
+    it("subtracts excluded actions from the catalog total", () => {
+        const schemas = [
+            {
+                schemaName: "alpha",
+                tools: [
+                    { function: { name: "keep" } },
+                    { function: { name: "drop" } },
+                ],
+            },
+            {
+                schemaName: "beta",
+                tools: [{ function: { name: "keep" } }],
+            },
+        ];
+        expect(
+            countEligibleTranslationBenchActions(
+                schemas,
+                new Set(["alpha.drop"]),
+            ),
+        ).toBe(2);
+        expect(countEligibleTranslationBenchActions(schemas, new Set())).toBe(
+            3,
+        );
+    });
+});
+
+describe("hardcoded nonempty for conversation topic titles", () => {
+    it("soft-scores conversation name params without loosening identity names", async () => {
+        const catalog = {
+            catalogVersion: "test",
+            generatedAt: "2026-01-01T00:00:00.000Z",
+            actions: [
+                {
+                    schemaName: "system.conversation",
+                    actionName: "summarizeConversation",
+                    paramSpec: objectSpec({
+                        name: {
+                            optional: true,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+                {
+                    schemaName: "system.conversation",
+                    actionName: "indexConversation",
+                    paramSpec: objectSpec({
+                        name: {
+                            optional: true,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+                {
+                    schemaName: "list",
+                    actionName: "removeItems",
+                    paramSpec: objectSpec({
+                        listName: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+            ],
+        };
+        const grader = await buildActionParametersGraderCatalog(catalog);
+        expect(
+            grader.byAction["system.conversation.summarizeConversation"]!
+                .parameterScore.fields.name,
+        ).toBe("nonempty");
+        expect(
+            grader.byAction["system.conversation.indexConversation"]!
+                .parameterScore.fields.name,
+        ).toBe("nonempty");
+        expect(
+            grader.byAction["list.removeItems"]!.parameterScore.fields.listName,
+        ).toBe("exact");
+    });
+});
+
+describe("hardcoded llmAsAJudge for internet lookup params", () => {
+    it("forces lookupAndAnswerInternet freeform params to llmAsAJudge", async () => {
+        const catalog = {
+            catalogVersion: "test",
+            generatedAt: "2026-01-01T00:00:00.000Z",
+            actions: [
+                {
+                    schemaName: "browser.lookupAndAnswer",
+                    actionName: "lookupAndAnswerInternet",
+                    paramSpec: objectSpec({
+                        originalRequest: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                        internetLookups: {
+                            optional: false,
+                            spec: {
+                                kind: "array",
+                                item: { kind: "string" },
+                            },
+                        },
+                        sites: {
+                            optional: true,
+                            spec: {
+                                kind: "array",
+                                item: { kind: "string" },
+                            },
+                        },
+                    }),
+                },
+            ],
+        };
+        const grader = await buildActionParametersGraderCatalog(catalog);
+        const entry =
+            grader.byAction["browser.lookupAndAnswer.lookupAndAnswerInternet"]!;
+        expect(entry.parameterScore.fields).toEqual({
+            originalRequest: "llmAsAJudge",
+            internetLookups: "llmAsAJudge",
+            sites: "llmAsAJudge",
+        });
+        expect(entry.fields.internetLookups.verify).toBe("llmAsAJudge");
+        expect(entry.fields.originalRequest.verify).toBe("llmAsAJudge");
+        expect(entry.fields.sites.verify).toBe("llmAsAJudge");
+        expect(
+            parameterRequiresLlmJudge("originalRequest", {
+                create: "free_text",
+                actionId: "browser.lookupAndAnswer.lookupAndAnswerInternet",
+            }),
+        ).toBe(true);
+    });
+});
+
+describe("llmAsAJudge verify mode", () => {
+    it("uses hardcoded action.parameter pairs; LLM may still emit llmAsAJudge", () => {
+        expect(
+            parameterRequiresLlmJudge("script", {
+                create: "free_text",
+                actionId: "browser.executeAdHocScript",
+            }),
+        ).toBe(true);
+        expect(
+            parameterRequiresLlmJudge("command", {
+                create: "free_text",
+                actionId: "github-cli.aliasSet",
+            }),
+        ).toBe(false); // gh alias set stores a literal command → exact, not judge
+        expect(
+            parameterRequiresLlmJudge("description", {
+                create: "free_text",
+                actionId: "browser.executeAdHocScript",
+            }),
+        ).toBe(false);
+        expect(
+            parameterRequiresLlmJudge("script", {
+                create: "identifier",
+                actionId: "browser.executeAdHocScript",
+            }),
+        ).toBe(false);
+    });
+
+    it("upgrades hardcoded pairs to llmAsAJudge without changing create", () => {
+        const upgraded = applyLlmAsAJudgeVerify(
+            "script",
+            {
+                create: "free_text",
+                verify: "nonempty",
+                rule: "string-free-text-nonempty",
+                source: "regex",
+            },
+            { actionId: "browser.executeAdHocScript" },
+        );
+        expect(upgraded).toEqual({
+            create: "free_text",
+            verify: "llmAsAJudge",
+            rule: "string-llm-as-a-judge",
+            source: "regex",
+        });
+        const plain = applyLlmAsAJudgeVerify(
+            "title",
+            {
+                create: "free_text",
+                verify: "nonempty",
+                rule: "string-free-text-nonempty",
+                source: "regex",
+            },
+            { actionId: "browser.executeAdHocScript" },
+        );
+        expect(plain.verify).toBe("nonempty");
+    });
+
+    it("marks hardcoded pairs on build; other actions stay non-judge offline", async () => {
+        const catalog = {
+            catalogVersion: "test",
+            generatedAt: "2026-01-01T00:00:00.000Z",
+            actions: [
+                {
+                    schemaName: "browser",
+                    actionName: "executeAdHocScript",
+                    paramSpec: objectSpec({
+                        script: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                        timeout: {
+                            optional: true,
+                            spec: { kind: "number" },
+                        },
+                    }),
+                },
+                {
+                    schemaName: "list",
+                    actionName: "createList",
+                    paramSpec: objectSpec({
+                        listName: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+            ],
+        };
+        const grader = await buildActionParametersGraderCatalog(
+            catalog as any,
+            { forceFull: true },
+        );
+        expect(
+            grader.byAction["browser.executeAdHocScript"]!.fields.script
+                ?.verify,
+        ).toBe("llmAsAJudge");
+        expect(
+            grader.byAction["browser.executeAdHocScript"]!.parameterScore.fields
+                .script,
+        ).toBe("llmAsAJudge");
+        expect(
+            grader.byAction["list.createList"]!.fields.listName?.verify,
+        ).not.toBe("llmAsAJudge");
     });
 });
 

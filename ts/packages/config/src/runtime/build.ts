@@ -21,6 +21,7 @@
  */
 
 import type { FlatEnv } from "../types.js";
+import { SIMPLE_CONFIG_MAPPINGS as MAPPING } from "../mappings.js";
 import {
     isRegion,
     regionFromEnvSuffix,
@@ -614,16 +615,17 @@ function buildOpenAIVariant(flat: Map<string, string>, suffix: string) {
 }
 
 function buildSpeech(flat: Map<string, string>) {
-    const keyRaw = popString(flat, "SPEECH_SDK_KEY");
-    const region = popString(flat, "SPEECH_SDK_REGION");
-    const endpoint = popString(flat, "SPEECH_SDK_ENDPOINT");
+    const keyRaw = popString(flat, MAPPING.speechAuth.envVar);
+    const region = popString(flat, MAPPING.speechRegion.envVar);
+    const endpoint = popString(flat, MAPPING.speechEndpoint.envVar);
     if (!region) return undefined;
     if (!isRegion(region)) {
         // Unknown region — leave the keys in `extra` rather than
         // producing a malformed typed object.
-        if (keyRaw !== undefined) flat.set("SPEECH_SDK_KEY", keyRaw);
-        flat.set("SPEECH_SDK_REGION", region);
-        if (endpoint !== undefined) flat.set("SPEECH_SDK_ENDPOINT", endpoint);
+        if (keyRaw !== undefined) flat.set(MAPPING.speechAuth.envVar, keyRaw);
+        flat.set(MAPPING.speechRegion.envVar, region);
+        if (endpoint !== undefined)
+            flat.set(MAPPING.speechEndpoint.envVar, endpoint);
         return undefined;
     }
     return {
@@ -634,22 +636,24 @@ function buildSpeech(flat: Map<string, string>) {
 }
 
 function buildMaps(flat: Map<string, string>) {
-    const clientId = popString(flat, "AZURE_MAPS_CLIENTID");
-    const endpoint = popString(flat, "AZURE_MAPS_ENDPOINT");
+    const clientId = popString(flat, MAPPING.mapsClientId.envVar);
+    const endpoint = popString(flat, MAPPING.mapsEndpoint.envVar);
     if (!clientId || !endpoint) {
-        if (clientId !== undefined) flat.set("AZURE_MAPS_CLIENTID", clientId);
-        if (endpoint !== undefined) flat.set("AZURE_MAPS_ENDPOINT", endpoint);
+        if (clientId !== undefined)
+            flat.set(MAPPING.mapsClientId.envVar, clientId);
+        if (endpoint !== undefined)
+            flat.set(MAPPING.mapsEndpoint.envVar, endpoint);
         return undefined;
     }
     return { clientId, endpoint };
 }
 
 function buildMsGraph(flat: Map<string, string>) {
-    const clientId = popString(flat, "MSGRAPH_APP_CLIENTID");
-    const clientSecret = popString(flat, "MSGRAPH_APP_CLIENTSECRET");
-    const tenantId = popString(flat, "MSGRAPH_APP_TENANTID");
-    const username = popString(flat, "MSGRAPH_APP_USERNAME");
-    const password = popString(flat, "MSGRAPH_APP_PASSWD");
+    const clientId = popString(flat, MAPPING.msGraphClientId.envVar);
+    const clientSecret = popString(flat, MAPPING.msGraphClientSecret.envVar);
+    const tenantId = popString(flat, MAPPING.msGraphTenantId.envVar);
+    const username = popString(flat, MAPPING.msGraphUsername.envVar);
+    const password = popString(flat, MAPPING.msGraphPassword.envVar);
     if (!clientId && !clientSecret && !tenantId) return undefined;
     return {
         clientId: clientId ?? "",
@@ -661,16 +665,19 @@ function buildMsGraph(flat: Map<string, string>) {
 }
 
 function buildGoogleCalendar(flat: Map<string, string>) {
-    const clientId = popString(flat, "GOOGLE_CALENDAR_CLIENT_ID");
-    const clientSecret = popString(flat, "GOOGLE_CALENDAR_CLIENT_SECRET");
+    const clientId = popString(flat, MAPPING.googleCalendarClientId.envVar);
+    const clientSecret = popString(
+        flat,
+        MAPPING.googleCalendarClientSecret.envVar,
+    );
     if (!clientId || !clientSecret) return undefined;
     return { clientId, clientSecret };
 }
 
 function buildSpotify(flat: Map<string, string>) {
-    const clientId = popString(flat, "SPOTIFY_APP_CLI");
-    const clientSecret = popString(flat, "SPOTIFY_APP_CLISEC");
-    const portStr = popString(flat, "SPOTIFY_APP_PORT");
+    const clientId = popString(flat, MAPPING.spotifyClientId.envVar);
+    const clientSecret = popString(flat, MAPPING.spotifyClientSecret.envVar);
+    const portStr = popString(flat, MAPPING.spotifyPort.envVar);
     if (!clientId || !clientSecret) return undefined;
     const port = portStr ? parseInt(portStr, 10) : 9999;
     return {
@@ -681,9 +688,9 @@ function buildSpotify(flat: Map<string, string>) {
 }
 
 function buildWikipedia(flat: Map<string, string>) {
-    const clientId = popString(flat, "WIKIPEDIA_CLIENT_ID");
-    const clientSecret = popString(flat, "WIKIPEDIA_CLIENT_SECRET");
-    const endpoint = popString(flat, "WIKIPEDIA_ENDPOINT");
+    const clientId = popString(flat, MAPPING.wikipediaClientId.envVar);
+    const clientSecret = popString(flat, MAPPING.wikipediaClientSecret.envVar);
+    const endpoint = popString(flat, MAPPING.wikipediaEndpoint.envVar);
     if (!clientId && !clientSecret && !endpoint) return undefined;
     return {
         clientId: clientId ?? "",
@@ -693,20 +700,23 @@ function buildWikipedia(flat: Map<string, string>) {
 }
 
 function buildStorage(flat: Map<string, string>) {
-    const azureAccount = popString(flat, "AZURE_STORAGE_ACCOUNT");
-    const azureContainer = popString(flat, "AZURE_STORAGE_CONTAINER");
+    const azureAccount = popString(flat, MAPPING.azureStorageAccount.envVar);
+    const azureContainer = popString(
+        flat,
+        MAPPING.azureStorageContainer.envVar,
+    );
     const cosmosDbConnectionString = popString(
         flat,
-        "COSMOSDB_CONNECTION_STRING",
+        MAPPING.cosmosDbConnectionString.envVar,
     );
     const mongoDbConnectionString = popString(
         flat,
-        "MONGODB_CONNECTION_STRING",
+        MAPPING.mongoDbConnectionString.envVar,
     );
-    const awsBucket = popString(flat, "AWS_S3_BUCKET_NAME");
-    const awsRegion = popString(flat, "AWS_S3_REGION");
-    const awsAccessKey = popString(flat, "AWS_ACCESS_KEY_ID");
-    const awsSecret = popString(flat, "AWS_SECRET_ACCESS_KEY");
+    const awsBucket = popString(flat, MAPPING.awsStorageBucketName.envVar);
+    const awsRegion = popString(flat, MAPPING.awsStorageRegion.envVar);
+    const awsAccessKey = popString(flat, MAPPING.awsStorageAccessKeyId.envVar);
+    const awsSecret = popString(flat, MAPPING.awsStorageSecretAccessKey.envVar);
 
     const azure =
         azureAccount && azureContainer
@@ -749,7 +759,7 @@ function buildStorage(flat: Map<string, string>) {
 }
 
 function buildVault(flat: Map<string, string>) {
-    const shared = popString(flat, "TYPEAGENT_SHAREDVAULT");
+    const shared = popString(flat, MAPPING.sharedVault.envVar);
     if (!shared) return undefined;
     return { shared };
 }
