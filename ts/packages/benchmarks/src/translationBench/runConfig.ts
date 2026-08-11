@@ -151,6 +151,15 @@ export function resolveRunConfig(
 
     const models = file.models ?? {};
     const base = file.base ?? {};
+    if (
+        file.batches !== undefined &&
+        Object.keys(file.batches).length > 0 &&
+        !(batch in file.batches)
+    ) {
+        throw new Error(
+            `runConfig: unknown batch '${batch}'. Known batches: ${Object.keys(file.batches).sort().join(", ")}`,
+        );
+    }
     const selected = file.batches?.[batch];
 
     const synth = mergeSection(base.synthesizer, selected?.synthesizer);

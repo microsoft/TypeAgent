@@ -21,9 +21,10 @@ overrides are **commander flags**, prop-drilled into the library — do not read
 `process.env.TB_*`.
 
 ```bash
-# eval
+# eval (requires a pre-approved artifact; never auto-approves)
 node dist/translationBench/scripts/tbEval.js \
   --draft ./artifacts/benchmark-draft-1000.jsonl \
+  --approved ./artifacts/benchmark-approved-1000.jsonl \
   --config ./run-config.json \
   --batch eval
 
@@ -35,7 +36,9 @@ node dist/translationBench/scripts/tbGenerate.js \
   --batch synthesizer
 ```
 
-See `src/translationBench/config/run-config.example.json`.
+`tb-eval` refuses to mint `approval.status: "approved"` and fails when draft
+content drifts from the approved file. See
+`src/translationBench/config/run-config.example.json`.
 
 ## Credential env boundary
 

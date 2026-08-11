@@ -182,63 +182,87 @@ function createAmbiguityProbeTranslator(
         takeAction() {},
         appendDiagnosticData() {},
     };
+    // Serialize model swaps on the shared session — parallel probes must not
+    // clobber each other's translation.model or leave a residual config.
+    let modelGate: Promise<void> = Promise.resolve();
+    const withModel = async <T>(model: string, fn: () => Promise<T>): Promise<T> => {
+        const prior = modelGate;
+        let release!: () => void;
+        modelGate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        await prior;
+        const priorConfig = context.session.getConfig();
+        context.session.updateConfig({
+            translation: {
+                ...priorConfig.translation,
+                model,
+            },
+        });
+        try {
+            return await fn();
+        } finally {
+            context.session.updateConfig({
+                translation: priorConfig.translation,
+            });
+            release();
+        }
+    };
     return {
         models,
         async translate(request: TranslationBenchAmbiguityProbeRequest) {
-            const prior = context.session.getConfig();
-            context.session.updateConfig({
-                translation: {
-                    ...prior.translation,
-                    model: request.model,
-                },
+            return withModel(request.model, async () => {
+                const actionContext = {
+                    streamingContext: undefined,
+                    activityContext: undefined,
+                    actionIO: noopIO,
+                    sessionContext: {
+                        agentContext: context,
+                        sessionStorage: undefined,
+                        instanceStorage: undefined,
+                        notify() {},
+                        addAgentNameTag: false,
+                    },
+                    queuedToggleTransientAgent: async () => {},
+                };
+                try {
+                    const translated = await translateRequest(
+                        actionContext as never,
+                        request.utterance,
+                        undefined,
+                        undefined,
+                        undefined,
+                        [...request.activeSchemas],
+                    );
+                    return {
+                        model: request.model,
+                        actions: translated.requestAction.actions.map(
+                            (entry) => ({
+                                schemaName: entry.action.schemaName,
+                                actionName: entry.action.actionName,
+                                ...(entry.action.parameters !== undefined
+                                    ? {
+                                          parameters: entry.action
+                                              .parameters as Record<
+                                              string,
+                                              unknown
+                                          >,
+                                      }
+                                    : {}),
+                            }),
+                        ),
+                    };
+                } catch (error) {
+                    return {
+                        model: request.model,
+                        actions: [],
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    };
+                }
             });
-            const actionContext = {
-                streamingContext: undefined,
-                activityContext: undefined,
-                actionIO: noopIO,
-                sessionContext: {
-                    agentContext: context,
-                    sessionStorage: undefined,
-                    instanceStorage: undefined,
-                    notify() {},
-                    addAgentNameTag: false,
-                },
-                queuedToggleTransientAgent: async () => {},
-            };
-            try {
-                const translated = await translateRequest(
-                    actionContext as never,
-                    request.utterance,
-                    undefined,
-                    undefined,
-                    undefined,
-                    [...request.activeSchemas],
-                );
-                return {
-                    model: request.model,
-                    actions: translated.requestAction.actions.map((entry) => ({
-                        schemaName: entry.action.schemaName,
-                        actionName: entry.action.actionName,
-                        ...(entry.action.parameters !== undefined
-                            ? {
-                                  parameters: entry.action.parameters as Record<
-                                      string,
-                                      unknown
-                                  >,
-                              }
-                            : {}),
-                    })),
-                };
-            } catch (error) {
-                return {
-                    model: request.model,
-                    actions: [],
-                    error:
-                        error instanceof Error
-                            ? error.message
-                            : String(error),
-                };
-            }
         },
     };
 }

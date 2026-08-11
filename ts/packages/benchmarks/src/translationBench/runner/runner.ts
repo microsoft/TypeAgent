@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 
 import { createHash } from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
 
 import {
     fromJSONParsedActionSchema,
@@ -52,6 +50,7 @@ import { createHistoryContext } from "agent-dispatcher/internal";
 import { translateRequest } from "agent-dispatcher/internal";
 import type { RateLimiter } from "../../core/rateLimiter.js";
 import { estimatePromptTokens } from "../../core/tokenEstimate.js";
+import { DEFAULT_EST_TOKENS_PER_CALL } from "../runConfig.js";
 
 // TranslationBenchOrder / OpenAIFunctionTool are defined in benchmark/translationBenchBenchmark
 // and imported above for suite/seed contracts (not re-exported — avoids barrel clash).
@@ -1785,171 +1784,12 @@ export function resolveTranslationBenchModelConcurrency(
     >,
     caseCount: number,
 ): number {
-    const fromMap = options.concurrencyByModel?.[model];
+    // Explicit `concurrency` (CLI override) wins over per-model map.
     const requested =
-        fromMap !== undefined
-            ? fromMap
-            : (options.concurrency ?? 4);
+        options.concurrency !== undefined
+            ? options.concurrency
+            : (options.concurrencyByModel?.[model] ?? 4);
     return resolveTranslationBenchConcurrency(requested, caseCount);
-}
-
-export function validateTranslationBenchOutputPaths(
-    inputPath: string,
-    manifestPath: string,
-    outputPath: string,
-    htmlPath: string,
-) {
-    const keys = [inputPath, manifestPath, outputPath, htmlPath].map(
-        canonicalOutputPathKey,
-    );
-    if (new Set(keys).size !== keys.length) {
-        throw new Error(
-            "Translation bench input, manifest, JSON output, and HTML output paths must be distinct",
-        );
-    }
-}
-
-export interface TranslationBenchOutputReservation {
-    write(filePath: string, content: string): void;
-    commit(): void;
-    abort(): void;
-}
-
-export function reserveTranslationBenchOutputs(
-    outputPaths: string[],
-): TranslationBenchOutputReservation {
-    const entries = outputPaths
-        .map((filePath) => ({
-            filePath: path.resolve(filePath),
-            key: canonicalOutputPathKey(filePath),
-            descriptor: undefined as number | undefined,
-            device: undefined as number | undefined,
-            inode: undefined as number | undefined,
-        }))
-        .sort((left, right) => compareTranslationBenchKeys(left.key, right.key));
-    if (new Set(entries.map((entry) => entry.key)).size !== entries.length) {
-        throw new Error("Translation bench output paths must be distinct");
-    }
-    for (const entry of entries) {
-        if (fs.existsSync(entry.filePath)) {
-            throw new Error(
-                `Translation bench output '${entry.filePath}' is already reserved or exists; choose fresh output paths`,
-            );
-        }
-    }
-    try {
-        for (const entry of entries) {
-            fs.mkdirSync(path.dirname(entry.filePath), { recursive: true });
-            try {
-                entry.descriptor = fs.openSync(
-                    entry.filePath,
-                    fs.constants.O_CREAT |
-                        fs.constants.O_EXCL |
-                        fs.constants.O_WRONLY |
-                        (fs.constants.O_NOFOLLOW ?? 0),
-                    0o600,
-                );
-                const stat = fs.fstatSync(entry.descriptor);
-                entry.device = stat.dev;
-                entry.inode = stat.ino;
-            } catch (error) {
-                if (
-                    typeof error === "object" &&
-                    error !== null &&
-                    "code" in error &&
-                    error.code === "EEXIST"
-                ) {
-                    throw new Error(
-                        "One or more translation bench output paths are already reserved by another run or existing file",
-                    );
-                }
-                throw error;
-            }
-        }
-    } catch (error) {
-        abort();
-        throw error;
-    }
-
-    function pathMatchesReservation(entry: (typeof entries)[number]): boolean {
-        try {
-            const stat = fs.lstatSync(entry.filePath);
-            return (
-                stat.isFile() &&
-                stat.dev === entry.device &&
-                stat.ino === entry.inode
-            );
-        } catch {
-            return false;
-        }
-    }
-
-    function close(entry: (typeof entries)[number]) {
-        if (entry.descriptor !== undefined) {
-            fs.closeSync(entry.descriptor);
-            entry.descriptor = undefined;
-        }
-    }
-
-    function abort() {
-        for (const entry of entries) {
-            if (pathMatchesReservation(entry)) {
-                try {
-                    fs.unlinkSync(entry.filePath);
-                } catch {}
-            }
-            close(entry);
-        }
-    }
-
-    return {
-        write(filePath: string, content: string) {
-            const resolved = path.resolve(filePath);
-            const entry = entries.find((item) => item.filePath === resolved);
-            if (entry?.descriptor === undefined) {
-                throw new Error(
-                    `Translation bench output '${resolved}' is not reserved`,
-                );
-            }
-            fs.writeFileSync(entry.descriptor, content);
-            fs.fsyncSync(entry.descriptor);
-        },
-        commit() {
-            for (const entry of entries) {
-                if (!pathMatchesReservation(entry)) {
-                    throw new Error(
-                        `Translation bench output '${entry.filePath}' changed after reservation`,
-                    );
-                }
-                close(entry);
-            }
-        },
-        abort,
-    };
-}
-
-function canonicalOutputPathKey(filePath: string): string {
-    const resolved = path.resolve(filePath);
-    if (fs.existsSync(resolved)) {
-        const stat = fs.statSync(resolved);
-        return `inode:${stat.dev}:${stat.ino}`;
-    }
-
-    const missing: string[] = [path.basename(resolved)];
-    let ancestor = path.dirname(resolved);
-    while (!fs.existsSync(ancestor)) {
-        const parent = path.dirname(ancestor);
-        if (parent === ancestor) break;
-        missing.unshift(path.basename(ancestor));
-        ancestor = parent;
-    }
-    let canonical = path
-        .join(fs.realpathSync.native(ancestor), ...missing)
-        .normalize("NFC");
-    if (process.platform === "darwin" || process.platform === "win32") {
-        canonical = canonical.toLowerCase();
-    }
-    return `path:${canonical}`;
 }
 
 async function pmap<T, R>(
@@ -2022,14 +1862,23 @@ export function isUnknownActionSchemaMatchError(error: unknown): boolean {
     );
 }
 
-/** Drop internal abstentions + non-eval actions from the scored chosen list. */
+/**
+ * Drop internal abstentions from the scored chosen list.
+ *
+ * Non-eval actions (`chat.generateResponse`, …) are filtered only when gold
+ * expects tool actions — so a sidecar chat ack does not fail a positive.
+ * On empty-gold they are kept and count as fires, matching the generation
+ * fairness contract (zero-action under the full catalog, including chat).
+ */
 export function toScoredTranslationBenchActions(
     actions: readonly AppAction[],
+    options?: { filterNonEval?: boolean },
 ): {
     rawChosenActions: TranslationBenchAction[];
     chosenActions: TranslationBenchAction[];
     abstentionCount: number;
 } {
+    const filterNonEval = options?.filterNonEval !== false;
     const rawChosenActions = actions.map(toEvalAction);
     const withoutAbstention = actions.filter(
         (action) => !isInternalAbstention(action),
@@ -2037,7 +1886,10 @@ export function toScoredTranslationBenchActions(
     const abstentionCount = actions.length - withoutAbstention.length;
     const chosenActions = withoutAbstention
         .map(toEvalAction)
-        .filter((action) => !isNonEvalTranslationBenchAction(action));
+        .filter(
+            (action) =>
+                !filterNonEval || !isNonEvalTranslationBenchAction(action),
+        );
     return { rawChosenActions, chosenActions, abstentionCount };
 }
 
@@ -2063,8 +1915,12 @@ export function scoreTranslationBenchTranslationOutcome(
     };
 
     if (outcome.ok) {
+        // Empty-gold: keep chat/non-eval fires so pure_refusal metrics match
+        // the generation fairness rule. Positives: drop non-eval sidecars.
         const { rawChosenActions, chosenActions, abstentionCount } =
-            toScoredTranslationBenchActions(outcome.actions);
+            toScoredTranslationBenchActions(outcome.actions, {
+                filterNonEval: expectedActions.length > 0,
+            });
         return {
             rawChosenActions,
             chosenActions,
@@ -2388,6 +2244,7 @@ export function validateTranslationBenchScenarios(
 function createTranslationBenchContext(
     context: ActionContext<CommandHandlerContext>,
     config: DispatcherConfig,
+    historyInput?: ChatHistoryInput,
 ): ActionContext<CommandHandlerContext> {
     const live = context.sessionContext.agentContext;
     const session = new Proxy(live.session, {
@@ -2397,9 +2254,16 @@ function createTranslationBenchContext(
             return typeof value === "function" ? value.bind(target) : value;
         },
     }) as Session;
+    // Fresh per-call history + translator cache so concurrent cases cannot
+    // race on chatHistory / lastActionSchemaName / pendingTopicalRoute.
+    const chatHistory = createChatHistory(true);
+    if (historyInput !== undefined) {
+        chatHistory.import(historyInput);
+    }
     const isolated: CommandHandlerContext = {
         ...live,
         session,
+        chatHistory,
         activityContext: undefined,
         lastActionSchemaName: "",
         pendingTopicalRoute: undefined,
@@ -2539,7 +2403,7 @@ export async function runTranslationBench(
         evalCase: TranslationBenchCase,
         model: string,
         scenario: TranslationBenchScenario,
-        evalContext: ActionContext<CommandHandlerContext>,
+        config: DispatcherConfig,
     ): Promise<TranslationBenchRow> {
         const started = performance.now();
         const usage = createTranslationBenchUsageAccumulator();
@@ -2547,18 +2411,15 @@ export async function runTranslationBench(
             scenario.history.mode === "case" && evalCase.seed.history
                 ? evalCase.seed.history
                 : undefined;
+        // Per-case isolated context (fresh chatHistory + translatorCache).
+        const evalContext = createTranslationBenchContext(
+            context,
+            config,
+            effectiveHistory,
+        );
         const history =
             effectiveHistory !== undefined
-                ? (() => {
-                      const isolated = createChatHistory(true);
-                      isolated.import(effectiveHistory);
-                      // isolated history imported into a dedicated chat history;
-                      // createHistoryContext only accepts CommandHandlerContext.
-                      void isolated;
-                      return createHistoryContext(
-                          evalContext.sessionContext.agentContext,
-                      );
-                  })()
+                ? createHistoryContext(evalContext.sessionContext.agentContext)
                 : undefined;
         let rawChosenActions: TranslationBenchAction[] = [];
         let chosenActions: TranslationBenchAction[] = [];
@@ -2580,43 +2441,34 @@ export async function runTranslationBench(
                         : undefined,
                     provider,
                 );
+            // Full TB prompts dwarf the bare utterance; reserve a floor so the
+            // TPM ledger does not under-admit multi-schema translates.
             const estimate =
                 options.estimateTokens?.({
                     model,
                     utterance: evalCase.seed.utterance,
-                }) ?? estimatePromptTokens(evalCase.seed.utterance);
-            const translated =
-                options.rateLimiter === undefined
-                    ? await withTranslateRetry(
-                          invokeTranslate,
-                          options.translateRetry,
-                      )
-                    : await options.rateLimiter.run(
-                          model,
-                          estimate,
-                          async () => {
-                              const result = await withTranslateRetry(
-                                  invokeTranslate,
-                                  options.translateRetry,
-                              );
-                              const finished = usage.finish(
-                                  suite.pricing?.[model],
-                              );
-                              const actualTokens =
-                                  typeof finished.promptTokens === "number" &&
-                                  typeof finished.completionTokens === "number"
-                                      ? finished.promptTokens +
-                                        finished.completionTokens
-                                      : estimate;
-                              // usage.finish is idempotent-safe for final row;
-                              // re-accumulate is not needed — settle uses actual.
-                              return {
-                                  result,
-                                  actualTokens,
-                              };
-                          },
-                      );
-            elapsedMs = translated.elapsedMs;
+                }) ??
+                Math.max(
+                    estimatePromptTokens(evalCase.seed.utterance),
+                    DEFAULT_EST_TOKENS_PER_CALL,
+                );
+            // Reserve/settle per attempt so retries charge the ledger correctly.
+            const translated = await withTranslateRetry(async () => {
+                if (options.rateLimiter === undefined) {
+                    return invokeTranslate();
+                }
+                return options.rateLimiter.run(model, estimate, async () => {
+                    const result = await invokeTranslate();
+                    const finished = usage.finish(suite.pricing?.[model]);
+                    const actualTokens =
+                        typeof finished.promptTokens === "number" &&
+                        typeof finished.completionTokens === "number"
+                            ? finished.promptTokens + finished.completionTokens
+                            : estimate;
+                    return { result, actualTokens };
+                });
+            }, options.translateRetry);
+            elapsedMs = performance.now() - started;
             const raw = translated.requestAction.actions.map(
                 (entry) => entry.action,
             );
@@ -2702,7 +2554,6 @@ export async function runTranslationBench(
                 model,
                 scenario,
             );
-            const evalContext = createTranslationBenchContext(context, config);
             modelRows.push(
                 ...(await pmap(
                     pendingCases,
@@ -2712,7 +2563,7 @@ export async function runTranslationBench(
                             evalCase,
                             model,
                             scenario,
-                            evalContext,
+                            config,
                         );
                         await emitRowComplete(row);
                         return row;

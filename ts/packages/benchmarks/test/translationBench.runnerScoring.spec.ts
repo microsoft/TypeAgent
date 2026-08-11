@@ -152,12 +152,9 @@ describe("translationBench runner scoring fairness (E + C)", () => {
         expect(score.firedOnNegative).toBe(false);
     });
 
-    it("does not count chat.generateResponse / utility.claudeTask as fires", () => {
+    it("counts chat.generateResponse as a fire on empty-gold (fairness contract)", () => {
         expect(
             TRANSLATION_BENCH_NON_EVAL_ACTION_IDS.has("chat.generateResponse"),
-        ).toBe(true);
-        expect(
-            TRANSLATION_BENCH_NON_EVAL_ACTION_IDS.has("utility.claudeTask"),
         ).toBe(true);
         expect(
             isNonEvalTranslationBenchAction({
@@ -166,6 +163,8 @@ describe("translationBench runner scoring fairness (E + C)", () => {
             }),
         ).toBe(true);
 
+        // Empty-gold must be zero-action under the full catalog — chat acks
+        // are fires, matching generation pure_refusal fairness.
         const { chosenActions, score, error } =
             scoreTranslationBenchTranslationOutcome(
                 [],
@@ -182,10 +181,49 @@ describe("translationBench runner scoring fairness (E + C)", () => {
                 },
             );
         expect(error).toBeUndefined();
-        expect(chosenActions).toEqual([]);
+        expect(chosenActions).toEqual([
+            {
+                schemaName: "chat",
+                actionName: "generateResponse",
+                parameters: { text: "ok" },
+            },
+        ]);
+        expect(score.passed).toBe(false);
+        expect(score.firedOnNegative).toBe(true);
+        expect(score.chosenCount).toBe(1);
+    });
+
+    it("still filters chat.generateResponse as a non-eval sidecar on positives", () => {
+        const gold = [
+            {
+                schemaName: "browser",
+                actionName: "goBack",
+                parameters: {},
+            },
+        ];
+        const { chosenActions, score } = scoreTranslationBenchTranslationOutcome(
+            gold,
+            "any",
+            {
+                ok: true,
+                actions: [
+                    {
+                        schemaName: "browser",
+                        actionName: "goBack",
+                        parameters: {},
+                    } as AppAction,
+                    {
+                        schemaName: "chat",
+                        actionName: "generateResponse",
+                        parameters: { text: "ok" },
+                    } as AppAction,
+                ],
+            },
+        );
+        expect(chosenActions).toEqual([
+            { schemaName: "browser", actionName: "goBack", parameters: {} },
+        ]);
         expect(score.passed).toBe(true);
-        expect(score.firedOnNegative).toBe(false);
-        expect(score.chosenCount).toBe(0);
     });
 
     it("still counts real tool fires on empty gold as FAIL", () => {

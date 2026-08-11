@@ -8,7 +8,9 @@ import { DatabaseSync, type StatementSync } from "node:sqlite";
 
 const WINDOW_MS = 60_000;
 const MAX_SLEEP_MS = 1_000;
-const STALE_MS = 180_000;
+// Long enough for multi-minute TB translates + retries; pending claims older
+// than this are treated as abandoned (process crash) and purged.
+const STALE_MS = 30 * 60_000;
 const BUSY_TIMEOUT_MS = 15_000;
 const SQLITE_BUSY = 5;
 const OPEN_MAX_ATTEMPTS = 50;
@@ -95,9 +97,9 @@ function openDatabase(dbPath: string): DatabaseSync {
                 Date.now() +
                 OPEN_RETRY_MIN_MS +
                 Math.floor(Math.random() * OPEN_RETRY_JITTER_MS);
-            while (Date.now() < until) {
-                // no-op
-            }
+            // Yield the event loop instead of a tight spin-wait.
+            const sab = new SharedArrayBuffer(4);
+            Atomics.wait(new Int32Array(sab), 0, 0, Math.max(1, until - Date.now()));
         }
     }
     throw lastError;
@@ -285,8 +287,12 @@ export function createRateLimiter(
         } finally {
             try {
                 (ledger as Ledger).settle(id, model, actual);
-            } catch {
-                // no-op
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : String(error);
+                console.error(
+                    `[rate-limit] settle failed model=${model} id=${id} actual=${actual}: ${message}`,
+                );
             }
         }
     }
