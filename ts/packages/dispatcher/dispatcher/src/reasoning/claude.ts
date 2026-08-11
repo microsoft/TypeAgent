@@ -71,6 +71,10 @@ import {
     findInstallableAgents,
     formatInstallableAgents,
 } from "./installableAgents.js";
+import {
+    emitReasoningToolCall,
+    runInReasoningSpan,
+} from "../otel/reasoningSpan.js";
 import { getReasoningProfileGuidance } from "./reasoningProfile.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 // Separate channel for MCP tool invocations (discover_actions / execute_action)
@@ -1648,6 +1652,7 @@ function handleAssistantMessage(
         } else if (content.type === "tool_use") {
             state.toolUseCount++;
             state.reasoningStepCount++;
+            emitReasoningToolCall(state.toolUseCount);
             state.toolUseIdToName.set(content.id, content.name);
             const executedAction = extractExecutedAction(
                 content.name,
@@ -1861,9 +1866,10 @@ async function executeReasoningWithoutPlanning(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
     fallbackContext?: ReasoningFallbackContext,
-    abortSignal?: AbortSignal,
+    abortController?: AbortController,
     requireToolUse: boolean = false,
 ): Promise<any> {
+    const abortSignal = abortController?.signal;
     // Display initial message
     context.actionIO.appendDisplay("Thinking...", "temporary");
     const displayMode = resolveReasoningDisplayMode(context);
@@ -1873,7 +1879,11 @@ async function executeReasoningWithoutPlanning(
             context,
             fallbackContext,
         ),
-        options: { ...getClaudeOptions(context), ...claudeExecutableOption() },
+        options: {
+            ...getClaudeOptions(context),
+            ...claudeExecutableOption(),
+            ...(abortController === undefined ? {} : { abortController }),
+        },
     });
 
     const state = createReasoningStreamState();
@@ -1907,9 +1917,10 @@ async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
     fallbackContext?: ReasoningFallbackContext,
-    abortSignal?: AbortSignal,
+    abortController?: AbortController,
     requireToolUse: boolean = false,
 ): Promise<any> {
+    const abortSignal = abortController?.signal;
     const systemContext = context.sessionContext.agentContext;
     const storage = context.sessionContext.sessionStorage;
 
@@ -1920,7 +1931,7 @@ async function executeReasoningWithTracing(
             originalRequest,
             context,
             undefined,
-            abortSignal,
+            abortController,
             requireToolUse,
         );
     }
@@ -1952,6 +1963,7 @@ async function executeReasoningWithTracing(
             options: {
                 ...getClaudeOptions(context),
                 ...claudeExecutableOption(),
+                ...(abortController === undefined ? {} : { abortController }),
             },
         });
 
@@ -2517,7 +2529,8 @@ export interface ReasoningFallbackContext {
  */
 async function runWithReasoningTimeout<T>(
     context: ActionContext<CommandHandlerContext>,
-    fn: (signal: AbortSignal) => Promise<T>,
+    controller: AbortController,
+    fn: (controller: AbortController) => Promise<T>,
 ): Promise<T> {
     const raw = process.env.TYPEAGENT_REASONING_TIMEOUT_MS;
     const parsed = raw !== undefined ? Number(raw) : NaN;
@@ -2526,7 +2539,6 @@ async function runWithReasoningTimeout<T>(
             ? parsed
             : DEFAULT_REASONING_TIMEOUT_MS;
 
-    const controller = new AbortController();
     const externalSignal = context.abortSignal;
     const onExternalAbort = () => controller.abort(externalSignal?.reason);
 
@@ -2550,7 +2562,7 @@ async function runWithReasoningTimeout<T>(
             : undefined;
 
     try {
-        return await fn(controller.signal);
+        return await fn(controller);
     } finally {
         if (timer !== undefined) clearTimeout(timer);
         externalSignal?.removeEventListener?.("abort", onExternalAbort);
@@ -2578,23 +2590,33 @@ export async function executeReasoning(
     const planReuseEnabled = options?.planReuseEnabled ?? false;
     const fallbackContext = options?.fallbackContext;
     const requireToolUse = options?.requireToolUse ?? false;
-    return runWithReasoningTimeout(context, (signal) => {
-        if (!planReuseEnabled) {
-            return executeReasoningWithoutPlanning(
-                request,
-                context,
-                fallbackContext,
-                signal,
-                requireToolUse,
-            );
-        }
-        // Trace capture + auto recipe generation
-        return executeReasoningWithTracing(
-            request,
-            context,
-            fallbackContext,
-            signal,
-            requireToolUse,
-        );
-    });
+    const controller = new AbortController();
+    return runInReasoningSpan(
+        context,
+        () =>
+            runWithReasoningTimeout(context, controller, (controller) => {
+                if (!planReuseEnabled) {
+                    return executeReasoningWithoutPlanning(
+                        request,
+                        context,
+                        fallbackContext,
+                        controller,
+                        requireToolUse,
+                    );
+                }
+                // Trace capture + auto recipe generation
+                return executeReasoningWithTracing(
+                    request,
+                    context,
+                    fallbackContext,
+                    controller,
+                    requireToolUse,
+                );
+            }),
+        {
+            genAiSystem: "anthropic",
+            genAiRequestModel: model,
+        },
+        controller.signal,
+    );
 }

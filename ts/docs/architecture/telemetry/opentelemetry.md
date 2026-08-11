@@ -464,6 +464,27 @@ Auto-setup replacement results (produced when `setupOnFirstUse` runs setup
 in place of the user's action) leave the span status unset regardless of
 the result's shape.
 
+### Reasoning span
+
+Each Claude or Copilot reasoning operation creates one
+`typeagent.reasoning` span under the active request or action. The span covers
+the complete SDK operation, including streamed responses, tool execution, and
+optional reasoning-trace persistence. It ends only after the operation returns,
+throws, or is cancelled. `gen_ai.system` identifies the reasoning engine and
+`gen_ai.request.model` identifies the configured model.
+
+Each tool execution emits `reasoning.tool_call` with a one-based
+numeric `tool_call_number`. Calls above 100 collapse into one
+`reasoning.tool_call.overflow` event, which bounds event volume for runaway
+loops without changing the attribute's type. Tool names, arguments, results,
+prompts, responses, and reasoning text are never recorded on the span.
+
+Timeout and external cancellation are propagated to the underlying SDK
+operation before the span ends. Cancellation records the privacy-safe
+`AbortError` / `cancelled` exception classification and sets error status.
+Other escaping exceptions use `ReasoningError` / `reasoning failed`. Original
+exception messages and stack traces are never exported.
+
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |
 | Span attributes | Stable facts such as agent, action, or model |
