@@ -17,10 +17,11 @@ import {
     ATTR_PROCESS_RUNTIME_VERSION,
 } from "@opentelemetry/semantic-conventions/incubating";
 
+import { createProcessResource } from "../src/otel/resources.js";
 import {
-    createProcessResource,
-    TYPEAGENT_RESOURCE_ATTRIBUTES,
-} from "../src/otel/resources.js";
+    ATTR_VCS_REF_BASE_REVISION,
+    ATTR_VCS_REF_HEAD_REVISION,
+} from "@opentelemetry/semantic-conventions/incubating";
 
 describe("createProcessResource", () => {
     it("sets required service and process identity attributes", () => {
@@ -55,19 +56,19 @@ describe("createProcessResource", () => {
         expect(resource.attributes[ATTR_SERVICE_VERSION]).toBe("1.2.3");
     });
 
-    it("sets TypeAgent source versions when provided", () => {
+    it("sets VCS revisions when provided", () => {
         const resource = createProcessResource({
             serviceName: "my-service",
-            localVersion: " local-commit ",
-            officialVersion: " official-commit ",
+            headRevision: " local-commit ",
+            baseRevision: " official-commit ",
         });
 
-        expect(
-            resource.attributes[TYPEAGENT_RESOURCE_ATTRIBUTES.LOCAL_VERSION],
-        ).toBe("local-commit");
-        expect(
-            resource.attributes[TYPEAGENT_RESOURCE_ATTRIBUTES.OFFICIAL_VERSION],
-        ).toBe("official-commit");
+        expect(resource.attributes[ATTR_VCS_REF_HEAD_REVISION]).toBe(
+            "local-commit",
+        );
+        expect(resource.attributes[ATTR_VCS_REF_BASE_REVISION]).toBe(
+            "official-commit",
+        );
     });
 
     it("uses a caller-provided service instance ID", () => {
@@ -121,14 +122,13 @@ describe("createProcessResource", () => {
                 [ATTR_PROCESS_RUNTIME_NAME]: "spoofed-runtime",
                 [ATTR_PROCESS_RUNTIME_VERSION]: "0.0.0",
                 [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: "spoofed-environment",
-                [TYPEAGENT_RESOURCE_ATTRIBUTES.LOCAL_VERSION]: "spoofed-local",
-                [TYPEAGENT_RESOURCE_ATTRIBUTES.OFFICIAL_VERSION]:
-                    "spoofed-official",
+                [ATTR_VCS_REF_HEAD_REVISION]: "spoofed-local",
+                [ATTR_VCS_REF_BASE_REVISION]: "spoofed-official",
             },
             deploymentEnvironment: "production",
             serviceVersion: "1.2.3",
-            localVersion: "local-commit",
-            officialVersion: "official-commit",
+            headRevision: "local-commit",
+            baseRevision: "official-commit",
         });
 
         expect(resource.attributes[ATTR_SERVICE_NAME]).toBe("my-service");
@@ -141,12 +141,12 @@ describe("createProcessResource", () => {
         expect(resource.attributes[ATTR_DEPLOYMENT_ENVIRONMENT_NAME]).toBe(
             "production",
         );
-        expect(
-            resource.attributes[TYPEAGENT_RESOURCE_ATTRIBUTES.LOCAL_VERSION],
-        ).toBe("local-commit");
-        expect(
-            resource.attributes[TYPEAGENT_RESOURCE_ATTRIBUTES.OFFICIAL_VERSION],
-        ).toBe("official-commit");
+        expect(resource.attributes[ATTR_VCS_REF_HEAD_REVISION]).toBe(
+            "local-commit",
+        );
+        expect(resource.attributes[ATTR_VCS_REF_BASE_REVISION]).toBe(
+            "official-commit",
+        );
     });
 
     it("throws for an empty or all-whitespace service name", () => {
@@ -173,14 +173,14 @@ describe("createProcessResource", () => {
         expect(() =>
             createProcessResource({
                 serviceName: "service",
-                localVersion: " ",
+                headRevision: " ",
             }),
-        ).toThrow("localVersion");
+        ).toThrow("headRevision");
         expect(() =>
             createProcessResource({
                 serviceName: "service",
-                officialVersion: " ",
+                baseRevision: " ",
             }),
-        ).toThrow("officialVersion");
+        ).toThrow("baseRevision");
     });
 });

@@ -10,8 +10,8 @@ const MODULE_DIRECTORY = fileURLToPath(new URL(".", import.meta.url));
 const OFFICIAL_REF = "origin/main";
 
 export interface TypeAgentSourceVersion {
-    readonly local?: string;
-    readonly official?: string;
+    readonly headRevision?: string;
+    readonly baseRevision?: string;
 }
 
 export type GitVersionReader = (
@@ -33,14 +33,14 @@ export function getTypeAgentSourceVersion(): Promise<TypeAgentSourceVersion> {
 export async function resolveTypeAgentSourceVersion(
     readVersion: GitVersionReader,
 ): Promise<TypeAgentSourceVersion> {
-    const [local, official] = await Promise.all([
+    const [headRevision, baseRevision] = await Promise.all([
         readVersion(["rev-parse", "HEAD"]),
         readVersion(["merge-base", "HEAD", OFFICIAL_REF]),
     ]);
 
     return {
-        ...(local === undefined ? {} : { local }),
-        ...(official === undefined ? {} : { official }),
+        ...(headRevision === undefined ? {} : { headRevision }),
+        ...(baseRevision === undefined ? {} : { baseRevision }),
     };
 }
 

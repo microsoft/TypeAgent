@@ -231,16 +231,20 @@ Useful operation attributes include `typeagent.agent.name`,
 `typeagent.action.name`, `gen_ai.system`, and `gen_ai.request.model`.
 High-cardinality correlation belongs on spans and logs, never metrics.
 
-TypeAgent-owned processes also record source versions as resource attributes.
+TypeAgent-owned processes also record source revisions as resource attributes.
 Resources are attached to every exported span, so the values remain available
 for span filtering without duplicating them on every operation:
 
-- `typeagent.version.local` is the commit checked out at `HEAD`.
-- `typeagent.version.official` is the merge-base of `HEAD` and `origin/main`,
-  identifying the official commit the local work is based on.
+- `vcs.ref.head.revision` is the commit checked out at `HEAD`.
+- `vcs.ref.base.revision` is the merge-base of `HEAD` and `origin/main`,
+  identifying the standard revision the local work is based on.
 
-These values are resolved from local Git metadata once during telemetry
-initialization. Packaged deployments without a Git checkout omit them.
+These OpenTelemetry VCS semantic-convention attributes distinguish source
+revisions from `service.version`, which remains the version of the deployable
+service component. Production builds should provide the revisions as build
+metadata through `InitTelemetryOptions.sourceVersion`. Local development falls
+back to resolving them from Git once during telemetry initialization. Packaged
+deployments without injected metadata or a Git checkout omit them.
 
 ## Configuration and Local Files
 

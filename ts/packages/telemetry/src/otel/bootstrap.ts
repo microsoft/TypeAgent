@@ -258,12 +258,12 @@ export function createTelemetryCoordinator(): TelemetryCoordinator {
                     : {
                           deploymentEnvironment: options.deploymentEnvironment,
                       }),
-                ...(sourceVersion?.local === undefined
+                ...(sourceVersion?.headRevision === undefined
                     ? {}
-                    : { localVersion: sourceVersion.local }),
-                ...(sourceVersion?.official === undefined
+                    : { headRevision: sourceVersion.headRevision }),
+                ...(sourceVersion?.baseRevision === undefined
                     ? {}
-                    : { officialVersion: sourceVersion.official }),
+                    : { baseRevision: sourceVersion.baseRevision }),
                 ...(options.resourceAttributes === undefined
                     ? {}
                     : { attributes: options.resourceAttributes }),

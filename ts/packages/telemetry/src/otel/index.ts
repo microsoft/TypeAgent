@@ -37,7 +37,6 @@ export {
 
 export {
     createProcessResource,
-    TYPEAGENT_RESOURCE_ATTRIBUTES,
     type ProcessResourceOptions,
 } from "./resources.js";
 

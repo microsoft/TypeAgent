@@ -131,8 +131,8 @@ describe("telemetry bootstrap", () => {
             serviceInstanceId: "bootstrap-instance",
             deploymentEnvironment: "test",
             sourceVersion: {
-                local: "local-commit",
-                official: "official-commit",
+                headRevision: "local-commit",
+                baseRevision: "official-commit",
             },
             factories: {
                 createTraceProvider(_config, resource) {
@@ -161,10 +161,10 @@ describe("telemetry bootstrap", () => {
         expect(resources[0].attributes["deployment.environment.name"]).toBe(
             "test",
         );
-        expect(resources[0].attributes["typeagent.version.local"]).toBe(
+        expect(resources[0].attributes["vcs.ref.head.revision"]).toBe(
             "local-commit",
         );
-        expect(resources[0].attributes["typeagent.version.official"]).toBe(
+        expect(resources[0].attributes["vcs.ref.base.revision"]).toBe(
             "official-commit",
         );
         expect(resources[0].attributes["host.name"]).toBeDefined();

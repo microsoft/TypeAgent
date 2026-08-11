@@ -17,8 +17,8 @@ describe("resolveTypeAgentSourceVersion", () => {
         await expect(
             resolveTypeAgentSourceVersion(readVersion),
         ).resolves.toEqual({
-            local: "local-commit",
-            official: "official-commit",
+            headRevision: "local-commit",
+            baseRevision: "official-commit",
         });
         expect(calls).toEqual([
             ["rev-parse", "HEAD"],
@@ -33,7 +33,7 @@ describe("resolveTypeAgentSourceVersion", () => {
         await expect(
             resolveTypeAgentSourceVersion(readVersion),
         ).resolves.toEqual({
-            local: "local-commit",
+            headRevision: "local-commit",
         });
     });
 });
