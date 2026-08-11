@@ -3,6 +3,7 @@
 
 import { SpanStatusCode, trace } from "@opentelemetry/api";
 import type { ActionContext } from "@typeagent/agent-sdk";
+import { join } from "node:path";
 import {
     createInMemorySpanManager,
     type CapturedSpan,
@@ -60,8 +61,10 @@ describe("wrapReasoningSpan", () => {
             sessionContext: {
                 agentContext: {
                     session: {
-                        sessionDirPath:
-                            "C:\\sessions\\reasoning-correlation-test",
+                        sessionDirPath: join(
+                            "sessions",
+                            "reasoning-correlation-test",
+                        ),
                     },
                     activationId: "activation-production",
                     traceId: "trace-production",

@@ -75,17 +75,28 @@ class MainActivity : ComponentActivity() {
     private val webSocketManager = WebSocketManager()
     private val tunnelUrl = BuildConfig.TYPEAGENT_SERVER_URL.trim()
     private val tunnelToken = BuildConfig.TYPEAGENT_TUNNEL_TOKEN.trim().ifBlank { null }
+    private val agentSchemaContent by lazy {
+        assets.open(AndroidDeviceAgent.SCHEMA_ASSET)
+            .bufferedReader()
+            .use { it.readText() }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         webSocketManager.setClientActionHandler(object : WebSocketManager.ClientActionHandler {
-            override fun onSetAlarm(action: SetAlarmAction) {
-                runOnUiThread { launchSetAlarmIntent(action) }
+            override fun onSetAlarm(
+                action: SetAlarmAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                runOnUiThread { launchSetAlarmIntent(action, completion) }
             }
 
-            override fun onSetTimer(action: SetTimerAction) {
-                runOnUiThread { launchSetTimerIntent(action) }
+            override fun onSetTimer(
+                action: SetTimerAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                runOnUiThread { launchSetTimerIntent(action, completion) }
             }
 
             override fun onSearchNearby(action: SearchNearbyAction) {
@@ -94,7 +105,8 @@ class MainActivity : ComponentActivity() {
         })
         webSocketManager.connect(
             url = tunnelUrl,
-            tunnelToken = tunnelToken
+            tunnelToken = tunnelToken,
+            schemaContent = agentSchemaContent
         )
 
         setContent {
@@ -114,7 +126,10 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    private fun launchSetAlarmIntent(action: SetAlarmAction) {
+    private fun launchSetAlarmIntent(
+        action: SetAlarmAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
         val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
             putExtra(AlarmClock.EXTRA_HOUR, action.hour)
             putExtra(AlarmClock.EXTRA_MINUTES, action.minute)
@@ -127,10 +142,14 @@ class MainActivity : ComponentActivity() {
             intent = intent,
             actionName = "set-alarm",
             detail = "hour=${action.hour} minute=${action.minute}",
-            successMessage = "Alarm set for %02d:%02d".format(action.hour, action.minute),
+            successMessage = "Alarm request sent for %02d:%02d".format(
+                action.hour,
+                action.minute
+            ),
             missingAppMessage = "No alarm app is available on this device.",
             deniedMessage = "This app is not allowed to set alarms.",
-            backgroundMessage = "Could not set the alarm while the app was in the background."
+            backgroundMessage = "Could not set the alarm while the app was in the background.",
+            completion = completion
         )
     }
 
@@ -145,7 +164,10 @@ class MainActivity : ComponentActivity() {
      * the only in-app feedback, so it is not optional - and it must not claim
      * success when the launch was refused. See [launchExternalIntent].
      */
-    private fun launchSetTimerIntent(action: SetTimerAction) {
+    private fun launchSetTimerIntent(
+        action: SetTimerAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
         val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
             putExtra(AlarmClock.EXTRA_LENGTH, action.durationInSeconds)
             putExtra(AlarmClock.EXTRA_SKIP_UI, true)
@@ -157,10 +179,12 @@ class MainActivity : ComponentActivity() {
             intent = intent,
             actionName = "set-timer",
             detail = "durationInSeconds=${action.durationInSeconds}",
-            successMessage = "Timer set for ${formatTimerDuration(action.durationInSeconds)}",
+            successMessage =
+                "Timer request sent for ${formatTimerDuration(action.durationInSeconds)}",
             missingAppMessage = "No timer app is available on this device.",
             deniedMessage = "This app is not allowed to set timers.",
-            backgroundMessage = "Could not set the timer while the app was in the background."
+            backgroundMessage = "Could not set the timer while the app was in the background.",
+            completion = completion
         )
     }
 
@@ -208,7 +232,8 @@ class MainActivity : ComponentActivity() {
         successMessage: String,
         missingAppMessage: String,
         deniedMessage: String,
-        backgroundMessage: String
+        backgroundMessage: String,
+        completion: (AndroidDeviceExecutionResult) -> Unit = {}
     ) {
         val target = intent.resolveActivity(packageManager)
         Log.d(
@@ -218,6 +243,7 @@ class MainActivity : ComponentActivity() {
         if (target == null) {
             Log.e(TAG, "No app available to handle $actionName intent")
             Toast.makeText(this, missingAppMessage, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Failure(missingAppMessage))
             return
         }
         if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
@@ -227,18 +253,22 @@ class MainActivity : ComponentActivity() {
                     "background activity starts are refused without an exception"
             )
             Toast.makeText(this, backgroundMessage, Toast.LENGTH_LONG).show()
+            completion(AndroidDeviceExecutionResult.Failure(backgroundMessage))
             return
         }
         try {
             startActivity(intent)
             Log.d(TAG, "$actionName intent dispatched")
             Toast.makeText(this, successMessage, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Success(successMessage))
         } catch (_: ActivityNotFoundException) {
             Log.e(TAG, "No app available to handle $actionName intent")
             Toast.makeText(this, missingAppMessage, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Failure(missingAppMessage))
         } catch (error: SecurityException) {
             Log.e(TAG, "Missing permission for $actionName", error)
             Toast.makeText(this, deniedMessage, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Failure(deniedMessage))
         }
     }
 

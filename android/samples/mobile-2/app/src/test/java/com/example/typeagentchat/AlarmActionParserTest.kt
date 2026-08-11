@@ -21,11 +21,24 @@ class AlarmActionParserTest {
     }
 
     @Test
-    fun `rejects invalid set-alarm payload format`() {
+    fun `parses time-of-day set-alarm payload`() {
         val alarm = parseSetAlarmActionPayload(
             JSONObject()
                 .put("originalRequest", "Set alarm")
                 .put("time", "06:30")
+        )
+
+        requireNotNull(alarm)
+        assertEquals(6, alarm.hour)
+        assertEquals(30, alarm.minute)
+    }
+
+    @Test
+    fun `rejects invalid set-alarm payload format`() {
+        val alarm = parseSetAlarmActionPayload(
+            JSONObject()
+                .put("originalRequest", "Set alarm")
+                .put("time", "6:30 PM")
         )
 
         assertNull(alarm)
