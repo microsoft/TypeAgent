@@ -28,9 +28,10 @@ import {
 } from "agent-dispatcher/internal";
 
 import {
-    approveTranslationBenchBenchmark,
-    formatTranslationBenchBenchmarkJsonl,
+    assertTranslationBenchBenchmarkApproved,
+    computeTranslationBenchBenchmarkApprovalHash,
     parseTranslationBenchBenchmarkJsonl,
+    parseTranslationBenchBenchmarkForEvaluation,
 } from "../synthesizer/benchmark.js";
 import { translationBenchBenchmarkToSuite } from "../synthesizer/benchmarkAdapter.js";
 import {
@@ -142,7 +143,6 @@ async function main(): Promise<void> {
         )
         .option("--rate-limiter-db <file>", "shared TPM sqlite path")
         .option("--no-rate-limit", "disable TPM limiter")
-        .option("--reapprove", "force rewrite of the approved artifact")
         .parse();
 
     const opts = program.opts<{
@@ -162,7 +162,6 @@ async function main(): Promise<void> {
         instanceDir: string;
         rateLimiterDb?: string;
         rateLimit?: boolean;
-        reapprove?: boolean;
     }>();
 
     loadDotEnvFiles([
@@ -205,30 +204,38 @@ async function main(): Promise<void> {
         );
     }
 
-    if (opts.reapprove === true || !fs.existsSync(approvedPath)) {
-        const draft = parseTranslationBenchBenchmarkJsonl(
-            fs.readFileSync(draftPath, "utf8"),
-            draftPath,
+    // Eval never mints approval. Operators approve drafts out-of-band; the
+    // approved artifact is the sole eval input (draft is used for drift check).
+    if (!fs.existsSync(approvedPath)) {
+        throw new Error(
+            `Approved benchmark not found: ${approvedPath}. ` +
+                `Approve the draft first (do not auto-approve from tb-eval).`,
         );
-        const approved = approveTranslationBenchBenchmark(draft, {
-            reviewedBy: "tb-eval",
-            reviewedAt: new Date().toISOString(),
-        });
-        ensureParentDir(approvedPath);
-        fs.writeFileSync(
-            approvedPath,
-            formatTranslationBenchBenchmarkJsonl(approved),
-            "utf8",
-        );
-        console.log(`approved → ${approvedPath}`);
-    } else {
-        console.log(`using existing approved → ${approvedPath}`);
     }
-
-    const benchmark = parseTranslationBenchBenchmarkJsonl(
+    const draft = parseTranslationBenchBenchmarkJsonl(
+        fs.readFileSync(draftPath, "utf8"),
+        draftPath,
+    );
+    const benchmark = parseTranslationBenchBenchmarkForEvaluation(
         fs.readFileSync(approvedPath, "utf8"),
         approvedPath,
     );
+    assertTranslationBenchBenchmarkApproved(benchmark);
+    // Content identity ignores approval stamps so draft vs approved compare
+    // cases/metadata only (see benchmarkApprovalPayload draft branch).
+    const contentIdentity = (bench: typeof draft): string => {
+        const clone = structuredClone(bench);
+        clone.metadata.approval = { status: "draft" };
+        return computeTranslationBenchBenchmarkApprovalHash(clone);
+    };
+    if (contentIdentity(draft) !== contentIdentity(benchmark)) {
+        throw new Error(
+            `Draft ${draftPath} does not match approved ${approvedPath} ` +
+                `(case/metadata drift). Re-approve the draft before eval.`,
+        );
+    }
+    console.log(`using approved → ${approvedPath}`);
+
     let { suite, sourceManifest } = translationBenchBenchmarkToSuite(benchmark);
     const maxCases = opts.maxCases ?? resolved.maxCases;
     if (maxCases !== undefined) {
@@ -245,6 +252,11 @@ async function main(): Promise<void> {
         scenarios: scenarios.map((s) => s.id),
         suiteCaseCount: suite.cases.length,
         sourceManifest,
+        // Content identity — gold/utterance edits must invalidate resume.
+        benchmarkHash:
+            benchmark.metadata.approval.status === "approved"
+                ? benchmark.metadata.approval.benchmarkHash
+                : contentIdentity(benchmark),
     };
     const checkpointHeader: TranslationBenchCheckpointHeader = {
         kind: "translation-bench-checkpoint",

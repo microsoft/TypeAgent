@@ -347,8 +347,8 @@ function toHistory(
     input: ChatHistoryInput | undefined,
 ): HistoryContext | undefined {
     if (input === undefined) return undefined;
-    const history = createChatHistory(true);
-    history.import(input);
+    const chatHistory = createChatHistory(true);
+    chatHistory.import(input);
     const config = structuredClone(context.session.getConfig());
     config.translation.history = { enabled: true, limit: 20 };
     config.translation.promptConfig.additionalInstructions = false;
@@ -361,10 +361,13 @@ function toHistory(
             return typeof value === "function" ? value.bind(target) : value;
         },
     });
-    void history;
-    return createHistoryContext(
-        { ...context, session, activityContext: undefined },
-    );
+    // createHistoryContext reads context.chatHistory — must be the imported one.
+    return createHistoryContext({
+        ...context,
+        session,
+        chatHistory,
+        activityContext: undefined,
+    });
 }
 
 function toEvalAction(action: {
