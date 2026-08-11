@@ -2529,6 +2529,7 @@ export interface ReasoningFallbackContext {
  */
 async function runWithReasoningTimeout<T>(
     context: ActionContext<CommandHandlerContext>,
+    controller: AbortController,
     fn: (controller: AbortController) => Promise<T>,
 ): Promise<T> {
     const raw = process.env.TYPEAGENT_REASONING_TIMEOUT_MS;
@@ -2538,7 +2539,6 @@ async function runWithReasoningTimeout<T>(
             ? parsed
             : DEFAULT_REASONING_TIMEOUT_MS;
 
-    const controller = new AbortController();
     const externalSignal = context.abortSignal;
     const onExternalAbort = () => controller.abort(externalSignal?.reason);
 
@@ -2590,10 +2590,11 @@ export async function executeReasoning(
     const planReuseEnabled = options?.planReuseEnabled ?? false;
     const fallbackContext = options?.fallbackContext;
     const requireToolUse = options?.requireToolUse ?? false;
+    const controller = new AbortController();
     return runInReasoningSpan(
         context,
         () =>
-            runWithReasoningTimeout(context, (controller) => {
+            runWithReasoningTimeout(context, controller, (controller) => {
                 if (!planReuseEnabled) {
                     return executeReasoningWithoutPlanning(
                         request,
@@ -2616,5 +2617,6 @@ export async function executeReasoning(
             genAiSystem: "anthropic",
             genAiRequestModel: model,
         },
+        controller.signal,
     );
 }
