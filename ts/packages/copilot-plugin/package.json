@@ -17,10 +17,13 @@
     "bundle": "node scripts/bundle.mjs",
     "clean": "rimraf --glob dist dist-exe *.tsbuildinfo *.done.build.log",
     "install:global": "node scripts/install-plugin.mjs",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "register": "node scripts/install-plugin.mjs",
+    "test": "npm run test:local",
     "test:direct": "node -e \"console.log(JSON.stringify({sessionId:'test',timestamp:1234,cwd:'.',prompt:'list the playlists'}))\" | cross-env TYPEAGENT_MODE=direct node dist/hooks/hook-router.js",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "test:mcp-redirect": "node -e \"console.log(JSON.stringify({sessionId:'test',timestamp:1234,cwd:'.',prompt:'list the playlists'}))\" | cross-env TYPEAGENT_MODE=mcp node dist/hooks/hook-router.js",
     "tsc": "tsc -b",
     "uninstall:global": "copilot plugin uninstall typeagent && copilot plugin marketplace remove typeagent-local",
@@ -35,9 +38,12 @@
     "zod": "^3.25.0"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@types/html-to-text": "^9.0.4",
+    "@types/jest": "^29.5.7",
     "@types/node": "^20.10.0",
     "esbuild": "^0.28.1",
+    "jest": "^29.7.0",
     "postject": "1.0.0-alpha.6",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"

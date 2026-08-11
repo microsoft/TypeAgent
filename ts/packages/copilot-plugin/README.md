@@ -263,9 +263,10 @@ The hook injects a directive into the prompt context, instructing the LLM to cal
 
 ### Dev Mode
 
-The hook asks TypeAgent to handle only registered PowerShell flows. Ordinary
-requests are translated against the `powershell` schema with reasoning
-disabled. A miss falls through to Copilot without running TypeAgent reasoning.
+The hook asks TypeAgent to handle PowerShell actions first. Ordinary requests
+are translated against the active `powershell` schema family, including static
+`powershell.*` namespaces and registered dynamic flows, with reasoning disabled.
+A miss falls through to Copilot without running TypeAgent reasoning.
 
 Recording directives such as `learn:`, `record`, and `dev: learn:` are sent to
 the configured TypeAgent reasoning engine with a PowerShell flow recording

@@ -317,6 +317,12 @@ export type ProcessCommandOptions = {
      */
     activeSchemas?: string[];
     /**
+     * Restrict translation and grammar matching to active schemas in these
+     * families. A family includes its root schema and dot-qualified children,
+     * such as "powershell" and "powershell.powershell-network".
+     */
+    activeSchemaFamilies?: string[];
+    /**
      * Add request-scoped instructions to the configured reasoning engine.
      */
     reasoningProfile?: "default" | "powershellFlowRecording";
