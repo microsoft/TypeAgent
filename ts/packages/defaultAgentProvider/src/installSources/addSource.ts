@@ -12,6 +12,7 @@ import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 import {
     CatalogSourceConfig,
     FeedSourceConfig,
+    McpConfigSourceConfig,
     PathSourceConfig,
 } from "./config.js";
 import { DefaultInstallSourceRegistry } from "./registry.js";
@@ -180,9 +181,59 @@ class PathAddCommandHandler implements CommandHandler {
     }
 }
 
+class McpConfigAddCommandHandler implements CommandHandler {
+    public readonly description =
+        "Add an MCP config file (.mcp.json / .vscode/mcp.json) discovery source";
+    public readonly parameters = {
+        args: {
+            name: { description: "Unique source name", type: "string" },
+        },
+        flags: {
+            file: {
+                description: "Path to the MCP config JSON file",
+                char: "f",
+                type: "string",
+            },
+        },
+    } as const;
+    constructor(private readonly registry: DefaultInstallSourceRegistry) {}
+    public async run(
+        context: ActionContext<unknown>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const { name } = params.args;
+        const file = params.flags.file;
+        if (file === undefined) {
+            throw new Error(
+                "--file <path> is required for an mcp-config source",
+            );
+        }
+        const normalizedFile = normalizeAbsolutePath(file);
+        try {
+            JSON.parse(fs.readFileSync(normalizedFile, "utf8"));
+        } catch (e) {
+            const err = e as NodeJS.ErrnoException;
+            if (err.code === "ENOENT" || err.code === "EACCES") {
+                throw new Error(
+                    `MCP config file '${normalizedFile}' is not accessible: ${err.message}`,
+                );
+            }
+            throw new Error(
+                `MCP config '${normalizedFile}' is not valid JSON: ${err.message}`,
+            );
+        }
+        const config: McpConfigSourceConfig = {
+            kind: "mcp-config",
+            name,
+            file: normalizedFile,
+        };
+        this.registry.add(config);
+        displayResult(`Added mcp-config source '${name}'.`, context);
+    }
+}
+
 /**
  * Build the host's `@package source add` subcommand table
- * (`feed`/`catalog`/`path`), bound to the given registry. The dispatcher core
  * merges this into the `@package source` table via
  * `InstalledAgentSourceApi.sourceCommands()`.
  */
@@ -195,6 +246,7 @@ export function getAddSourceCommandHandlers(
             feed: new FeedAddCommandHandler(registry),
             catalog: new CatalogAddCommandHandler(registry),
             path: new PathAddCommandHandler(registry),
+            "mcp-config": new McpConfigAddCommandHandler(registry),
         },
     };
 }

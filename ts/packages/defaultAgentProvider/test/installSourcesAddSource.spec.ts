@@ -36,7 +36,7 @@ function fakeContext(): any {
 
 // Run a handler and return the single config it added.
 async function run(
-    kind: "feed" | "catalog" | "path",
+    kind: "feed" | "catalog" | "path" | "mcp-config",
     args: any,
     flags: any = {},
 ) {
@@ -49,7 +49,7 @@ async function run(
 
 // Run a handler expecting it to throw.
 function runExpectThrow(
-    kind: "feed" | "catalog" | "path",
+    kind: "feed" | "catalog" | "path" | "mcp-config",
     args: any,
     flags: any = {},
 ) {
@@ -60,12 +60,13 @@ function runExpectThrow(
 }
 
 describe("getAddSourceCommandHandlers", () => {
-    it("exposes feed, catalog, and path subcommands", () => {
+    it("exposes feed, catalog, path, and mcp-config subcommands", () => {
         const { registry } = makeRegistry();
         const handlers = getAddSourceCommandHandlers(registry);
         expect(Object.keys(handlers.commands).sort()).toEqual([
             "catalog",
             "feed",
+            "mcp-config",
             "path",
         ]);
     });
@@ -290,6 +291,52 @@ describe("getAddSourceCommandHandlers", () => {
                 name: "c",
                 catalog: path.resolve(file),
             });
+        });
+    });
+
+    describe("mcp-config", () => {
+        it("requires a file path", async () => {
+            await expect(
+                runExpectThrow(
+                    "mcp-config",
+                    { name: "m" },
+                    { file: undefined },
+                ),
+            ).rejects.toThrow(/--file/);
+        });
+
+        it("builds a well-formed mcp-config source", async () => {
+            const file = path.join(
+                fs.mkdtempSync(path.join(os.tmpdir(), "ta-mcp-add-")),
+                "mcp.json",
+            );
+            fs.writeFileSync(file, JSON.stringify({ mcpServers: {} }));
+            expect(await run("mcp-config", { name: "m" }, { file })).toEqual({
+                kind: "mcp-config",
+                name: "m",
+                file: path.resolve(file),
+            });
+        });
+
+        it("rejects a missing file", async () => {
+            const missing = path.join(
+                os.tmpdir(),
+                "ta-no-such-mcp-config-xyz.json",
+            );
+            await expect(
+                runExpectThrow("mcp-config", { name: "m" }, { file: missing }),
+            ).rejects.toThrow(/not accessible/);
+        });
+
+        it("rejects an invalid JSON file", async () => {
+            const file = path.join(
+                fs.mkdtempSync(path.join(os.tmpdir(), "ta-mcp-add-")),
+                "mcp.json",
+            );
+            fs.writeFileSync(file, "{ not valid json");
+            await expect(
+                runExpectThrow("mcp-config", { name: "m" }, { file }),
+            ).rejects.toThrow(/not valid JSON/);
         });
     });
 });

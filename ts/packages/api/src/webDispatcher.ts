@@ -17,6 +17,7 @@ import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import {
     getDefaultAppAgentProviders,
     getDefaultAppAgentSource,
+    getMcpAppAgentSource,
     getDefaultConstructionProvider,
     getIndexingServiceRegistry,
 } from "default-agent-provider";
@@ -55,6 +56,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
             getDefaultAppAgentSource(instanceDir, {
                 excludePathSources: true,
             }),
+            getMcpAppAgentSource(instanceDir),
         ],
         persistSession: true,
         persistDir: instanceDir,

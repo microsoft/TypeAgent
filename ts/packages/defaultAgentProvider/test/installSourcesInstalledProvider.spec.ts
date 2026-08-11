@@ -517,6 +517,70 @@ describe("getDefaultAppAgentSource", () => {
         ]);
     });
 
+    it("listAvailableAgents --type filters agent vs mcp rows", async () => {
+        const instanceDir = tmpDir("ta-installer-");
+        fs.writeFileSync(
+            path.join(instanceDir, "config.json"),
+            JSON.stringify({
+                installSources: {
+                    sources: [
+                        { kind: "feed", name: "agents" },
+                        { kind: "mcp-config", name: "servers" },
+                    ],
+                },
+            }),
+        );
+        const built = createDefaultInstalledAgentSource(
+            instanceDir,
+            undefined,
+            (config): InstallSource => ({
+                name: config.name,
+                kind: config.kind,
+                find: async () => undefined,
+                describe: () => "(test)",
+                materialize: async () => {
+                    throw new Error("not used");
+                },
+                listAgents: async () =>
+                    config.name === "agents"
+                        ? [
+                              {
+                                  source: "agents",
+                                  ref: "foo",
+                                  packageName: "foo",
+                              },
+                          ]
+                        : [
+                              {
+                                  source: "servers",
+                                  ref: "srv",
+                                  defaultAgentName: "srv",
+                                  extensionKind: "mcp",
+                              },
+                          ],
+            }),
+        );
+
+        // Default (no filter) returns both source groups.
+        const all = await built.testApi.listAvailableAgents();
+        expect(all.map((g) => g.source).sort()).toEqual(["agents", "servers"]);
+
+        // --type agent keeps the native-agent source (no extensionKind = agent)
+        // and drops the mcp source.
+        const agentsOnly = await built.testApi.listAvailableAgents({
+            type: "agent",
+        });
+        expect(agentsOnly.map((g) => g.source)).toEqual(["agents"]);
+
+        // --type mcp keeps only the mcp source and carries extensionKind
+        // through to the row.
+        const mcpOnly = await built.testApi.listAvailableAgents({
+            type: "mcp",
+        });
+        expect(mcpOnly.map((g) => g.source)).toEqual(["servers"]);
+        expect(mcpOnly[0].agents[0].extensionKind).toBe("mcp");
+    });
+
     it("connect() vends the @package agent plus a per-agent provider per install", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
