@@ -29,6 +29,7 @@ import {
     fatal,
 } from "./instance.js";
 import { AGENT_SERVER_DEFAULT_PORT } from "@typeagent/agent-server-client";
+import { otel } from "@typeagent/telemetry";
 import {
     isAllowedConfigFilePath,
     resolveLocalConfigPath,
@@ -207,6 +208,7 @@ async function initialize() {
 
     const appPath = app.getAppPath();
     await initializeKeys(appPath);
+    await otel.initTelemetry();
     // Standalone hosts the agent-server in-process, so warm up the aiclient
     // runtime config locally. The connect-only shell delegates all model work
     // to the remote server and never imports aiclient here.
@@ -367,8 +369,6 @@ async function initialize() {
     initializeExternalStorageIpcHandlers(instanceDir);
     initializePDFViewerIpcHandlers();
 
-    initializeQuit();
-
     app.on("activate", function () {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
@@ -411,6 +411,13 @@ async function initialize() {
     });
 }
 
+initializeQuit();
+process.once("SIGINT", () => {
+    app.quit();
+});
+process.once("SIGTERM", () => {
+    app.quit();
+});
 app.whenReady().then(initialize).catch(fatal);
 
 // Defense-in-depth: log unhandled promise rejections instead of crashing.
@@ -459,7 +466,17 @@ function initializeQuit() {
 
         debugShellCleanup("Closing instance");
 
-        await closeInstance(true);
+        try {
+            await closeInstance(true);
+        } catch (error) {
+            debugShellError("Failed to close shell instance", error);
+        }
+
+        try {
+            await otel.shutdownTelemetry();
+        } catch (error) {
+            debugShellError("Failed to shut down telemetry", error);
+        }
 
         debugShellCleanup("Quitting");
         canQuit = true;

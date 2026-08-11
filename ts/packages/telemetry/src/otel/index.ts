@@ -52,3 +52,12 @@ export {
     INSTRUMENTATION_SCOPE,
     type InstrumentationScope,
 } from "./instrumentation.js";
+
+export {
+    TYPEAGENT_SPAN_NAMES,
+    TYPEAGENT_SPAN_ATTRIBUTES,
+    setTypeAgentSpanAttributes,
+    type TypeAgentSpanName,
+    type TypeAgentSpanAttributeKey,
+    type TypeAgentSpanAttributes,
+} from "./traceContract.js";

@@ -58,6 +58,9 @@ describe("listSchema.agr named-list grammar", () => {
             "clear the list",
             "empty the list",
             "delete everything from the list",
+            "clear everything from the list",
+            "delete the list",
+            "remove my list",
             // Determinerless form unmatched on purpose — avoids reopening
             // "to $(listName) list" → listName="the".
             "add milk to grocery list",
@@ -138,6 +141,34 @@ describe("listSchema.agr named-list grammar", () => {
             expect(actions("create my list")[0]).toMatchObject({
                 actionName: "createList",
                 parameters: { listName: "my" },
+            });
+            expect(actions("create a list named grocery")[0]).toMatchObject({
+                actionName: "createList",
+                parameters: { listName: "grocery" },
+            });
+        });
+
+        it("deletes named lists", () => {
+            expect(actions("delete the grocery list")[0]).toMatchObject({
+                actionName: "deleteList",
+                parameters: { listName: "grocery" },
+            });
+            expect(actions("remove my shopping list")[0]).toMatchObject({
+                actionName: "deleteList",
+                parameters: { listName: "shopping" },
+            });
+            expect(actions("get rid of list named packing")[0]).toMatchObject({
+                actionName: "deleteList",
+                parameters: { listName: "packing" },
+            });
+        });
+
+        it("lists available lists", () => {
+            expect(actions("is there a list available")[0]).toMatchObject({
+                actionName: "listLists",
+            });
+            expect(actions("do I have any lists")[0]).toMatchObject({
+                actionName: "listLists",
             });
         });
     });
