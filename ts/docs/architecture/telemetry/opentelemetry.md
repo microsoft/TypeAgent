@@ -344,8 +344,14 @@ return tracer.startActiveSpan("typeagent.translate", async (span) => {
     span.setAttribute("typeagent.agent.name", agentName);
     return await translateRequest(request);
   } catch (error) {
-    span.recordException(error instanceof Error ? error : String(error));
-    span.setStatus({ code: SpanStatusCode.ERROR });
+    span.recordException({
+      name: "TranslationError",
+      message: "translation failed",
+    });
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: "translation failed",
+    });
     throw error;
   } finally {
     span.end();
@@ -356,6 +362,18 @@ return tracer.startActiveSpan("typeagent.translate", async (span) => {
 `startActiveSpan()` makes nested async work a child automatically. Logs emitted
 inside the callback receive its trace and span IDs. If code converts an exception
 to `ActionResult`, it must still record the exception and error status.
+
+Dispatcher request spans start a new trace by default. Embedded hosts can join
+the OTel context active when each request is submitted with a one-time option:
+
+```ts
+await createDispatcher(hostName, {
+  telemetry: { joinActiveTrace: true },
+});
+```
+
+Original exception messages and stacks are omitted because they can contain user
+content. Record a stable classification and message at the catch site.
 
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |
