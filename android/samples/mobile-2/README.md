@@ -8,6 +8,8 @@ An Android Jetpack Compose chat client that connects to a TypeAgent agent-server
 - OkHttp WebSocket usage on Android
 - TypeAgent agent-server RPC protocol:
   - `joinConversation` / `submitCommand`
+  - `registerClientAgent` with an inline action schema
+  - Client-hosted `executeAction` callbacks
   - Inbound `appendDisplay`, `setDisplay`, `setDisplayInfo`, and command completion events
   - Inbound `takeAction` client actions
 - Incremental assistant response streaming into a single bubble per `requestId`, honouring
@@ -16,11 +18,15 @@ An Android Jetpack Compose chat client that connects to a TypeAgent agent-server
 - DevTunnel authentication via `X-Tunnel-Authorization` header
 - Build-time configuration via environment variables and `BuildConfig`
 
-## Device actions
+## Client-hosted Android agent
 
-The app implements the `takeAction` client actions emitted by the `androidMobile`
-agent. Unknown actions are logged and ignored, so the app stays compatible with
-servers that emit actions this sample does not support.
+After joining a conversation, the app registers `androidDevice` as a
+client-hosted agent. Its alarm and timer schema is packaged in the APK and sent
+inline to TypeAgent. TypeAgent translates or directly invokes the typed action,
+then calls `executeAction` on the app over the existing WebSocket connection.
+
+The app also retains its existing `takeAction` handlers for compatibility with
+the static `androidMobile` agent.
 
 | Client action | Android intent | Notes |
 |---|---|---|
@@ -35,8 +41,16 @@ Both require the `com.android.alarm.permission.SET_ALARM` permission (declared i
 the manifest, install-time only) and matching `<queries>` entries so
 `resolveActivity` works under Android 11+ package visibility rules.
 
-> `set-timer` requires the server-side `androidMobile` `setTimer` action. Install
-> the agent with `@package install androidMobile` in the TypeAgent CLI/shell.
+The registered client agent does not require installing the server-side
+`androidMobile` package. Use `@action` for a deterministic registration test:
+
+```text
+@action --parameters {"originalRequest":"timer","durationInSeconds":30} androidDevice setTimer
+```
+
+```text
+@action --parameters {"originalRequest":"alarm","time":"12:00"} androidDevice setAlarm
+```
 
 ## Prerequisites
 
@@ -83,4 +97,3 @@ The app connects automatically on launch. Tap **Retry** in the status bar if the
 
 [devtunnel]: https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/
 [devtunnel-cli]: https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/get-started
-

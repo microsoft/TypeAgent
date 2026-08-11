@@ -11,6 +11,7 @@ import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class WebSocketManager {
@@ -28,6 +29,8 @@ class WebSocketManager {
     private var webSocket: WebSocket? = null
     private var conversationId: String? = null
     private var connectionId: String? = null
+    private var agentSchemaContent: String? = null
+    private var isClientAgentRegistered = false
     private var pendingUserInteraction: PendingUserInteraction? = null
     private var clientActionHandler: ClientActionHandler? = null
 
@@ -52,11 +55,25 @@ class WebSocketManager {
 
     fun connect(
         url: String,
-        tunnelToken: String? = null
+        tunnelToken: String? = null,
+        schemaContent: String? = null
     ) {
         val targetUrl = url.trim()
         if (targetUrl.isBlank()) {
             val errorMessage = "Missing TYPEAGENT_SERVER_URL. Set it before building the app."
+            Log.e(TAG, errorMessage)
+            _connectionStatus.value = ConnectionStatus(
+                text = errorMessage,
+                state = ConnectionStatus.State.ERROR
+            )
+            return
+        }
+        val resolvedSchemaContent = schemaContent
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: synchronized(lock) { agentSchemaContent }
+        if (resolvedSchemaContent.isNullOrBlank()) {
+            val errorMessage = "The Android alarm and timer schema is unavailable."
             Log.e(TAG, errorMessage)
             _connectionStatus.value = ConnectionStatus(
                 text = errorMessage,
@@ -70,6 +87,8 @@ class WebSocketManager {
             pendingUserInteraction = null
             conversationId = null
             connectionId = null
+            agentSchemaContent = resolvedSchemaContent
+            isClientAgentRegistered = false
             displayThreads.clear()
             displayMessageIds.clear()
         }
@@ -112,6 +131,7 @@ class WebSocketManager {
                     pendingUserInteraction = null
                     conversationId = null
                     connectionId = null
+                    isClientAgentRegistered = false
                     finalizeOpenDisplayThreads()
                 }
                 _pendingYesNoPrompt.value = null
@@ -132,6 +152,7 @@ class WebSocketManager {
                 failPendingInvokes(errorMessage)
                 synchronized(lock) {
                     pendingUserInteraction = null
+                    isClientAgentRegistered = false
                     finalizeOpenDisplayThreads()
                 }
                 _pendingYesNoPrompt.value = null
@@ -213,6 +234,7 @@ class WebSocketManager {
         webSocket = null
         synchronized(lock) {
             pendingUserInteraction = null
+            isClientAgentRegistered = false
             finalizeOpenDisplayThreads()
         }
         _pendingYesNoPrompt.value = null
@@ -291,15 +313,64 @@ class WebSocketManager {
                     TAG,
                     "TypeAgent conversation joined: connectionId=$joinedConnectionId conversationId=$joinedConversationId"
                 )
-                _connectionStatus.value = ConnectionStatus(
-                    text = "Connected",
-                    state = ConnectionStatus.State.CONNECTED
-                )
+                registerClientAgent(joinedConversationId)
             },
             onError = { error ->
                 Log.e(TAG, "joinConversation error: $error")
                 _connectionStatus.value = ConnectionStatus(
                     text = "Error: $error",
+                    state = ConnectionStatus.State.ERROR
+                )
+            }
+        )
+    }
+
+    private fun registerClientAgent(joinedConversationId: String) {
+        val schemaContent = synchronized(lock) { agentSchemaContent }
+        if (schemaContent.isNullOrBlank()) {
+            val errorMessage = "The Android alarm and timer schema is unavailable."
+            Log.e(TAG, errorMessage)
+            _connectionStatus.value = ConnectionStatus(
+                text = errorMessage,
+                state = ConnectionStatus.State.ERROR
+            )
+            return
+        }
+
+        _connectionStatus.value = ConnectionStatus(
+            text = "Registering Android actions...",
+            state = ConnectionStatus.State.CONNECTING
+        )
+        sendInvoke(
+            channelName = AGENT_SERVER_CHANNEL,
+            methodName = "registerClientAgent",
+            args = listOf(
+                AndroidDeviceAgent.createRegistrationParams(
+                    conversationId = joinedConversationId,
+                    schemaContent = schemaContent
+                )
+            ),
+            onResult = {
+                synchronized(lock) {
+                    isClientAgentRegistered = true
+                }
+                Log.d(
+                    TAG,
+                    "Registered client agent ${AndroidDeviceAgent.NAME} " +
+                        "for conversation $joinedConversationId"
+                )
+                _connectionStatus.value = ConnectionStatus(
+                    text = "Connected - Android actions registered",
+                    state = ConnectionStatus.State.CONNECTED
+                )
+            },
+            onError = { error ->
+                synchronized(lock) {
+                    isClientAgentRegistered = false
+                }
+                Log.e(TAG, "registerClientAgent error: $error")
+                _connectionStatus.value = ConnectionStatus(
+                    text = "Agent registration failed: $error",
                     state = ConnectionStatus.State.ERROR
                 )
             }
@@ -386,6 +457,16 @@ class WebSocketManager {
             TAG,
             "RPC invoke channel=$channelName method=$methodName callId=$callId argCount=${args.length()}"
         )
+        if (channelName == AndroidDeviceAgent.CHANNEL_NAME) {
+            handleAndroidDeviceInvoke(
+                channelName = channelName,
+                methodName = methodName,
+                callId = callId,
+                args = args
+            )
+            return
+        }
+
         val result = when (methodName) {
             "getUserContext" -> JSONObject.NULL
             "question" -> handleQuestionInvoke(args)
@@ -396,6 +477,93 @@ class WebSocketManager {
             sendRpcResult(channelName, callId, result)
         } else {
             sendRpcError(channelName, callId, "Unsupported client RPC method: $methodName")
+        }
+    }
+
+    private fun handleAndroidDeviceInvoke(
+        channelName: String,
+        methodName: String,
+        callId: Int,
+        args: JSONArray
+    ) {
+        if (callId < 0) {
+            Log.e(TAG, "Android agent invocation is missing callId.")
+            return
+        }
+        if (methodName != "executeAction") {
+            sendRpcError(
+                channelName,
+                callId,
+                "Unsupported Android agent RPC method: $methodName"
+            )
+            return
+        }
+        if (!synchronized(lock) { isClientAgentRegistered }) {
+            sendRpcError(channelName, callId, "Android client agent is not registered.")
+            return
+        }
+
+        when (val parsed = AndroidDeviceAgent.parseExecuteAction(args)) {
+            is AndroidDeviceActionParseResult.ProtocolError -> {
+                sendRpcError(channelName, callId, parsed.message)
+            }
+
+            is AndroidDeviceActionParseResult.ActionError -> {
+                sendRpcResult(
+                    channelName,
+                    callId,
+                    AndroidDeviceAgent.createErrorResult(parsed.message)
+                )
+            }
+
+            is AndroidDeviceActionParseResult.Success -> {
+                executeAndroidDeviceAction(
+                    channelName = channelName,
+                    callId = callId,
+                    action = parsed.action
+                )
+            }
+        }
+    }
+
+    private fun executeAndroidDeviceAction(
+        channelName: String,
+        callId: Int,
+        action: AndroidDeviceAction
+    ) {
+        val handler = synchronized(lock) { clientActionHandler }
+        if (handler == null) {
+            sendRpcResult(
+                channelName,
+                callId,
+                AndroidDeviceAgent.createErrorResult(
+                    "The Android activity is not ready to execute actions."
+                )
+            )
+            return
+        }
+
+        val completed = AtomicBoolean(false)
+        val generation = connectionGeneration.get()
+        val completion: (AndroidDeviceExecutionResult) -> Unit = { result ->
+            if (!completed.compareAndSet(false, true)) {
+                Log.w(TAG, "Ignoring duplicate completion for agent callId=$callId")
+            } else if (connectionGeneration.get() != generation) {
+                Log.w(TAG, "Ignoring completion for stale agent callId=$callId")
+            } else {
+                val actionResult = when (result) {
+                    is AndroidDeviceExecutionResult.Success ->
+                        AndroidDeviceAgent.createSuccessResult(result.message)
+                    is AndroidDeviceExecutionResult.Failure ->
+                        AndroidDeviceAgent.createErrorResult(result.message)
+                }
+                sendRpcResult(channelName, callId, actionResult)
+            }
+        }
+
+        when (action) {
+            is AndroidDeviceAction.Alarm -> handler.onSetAlarm(action.action, completion)
+            is AndroidDeviceAction.Timer -> handler.onSetTimer(action.action, completion)
         }
     }
 
@@ -576,7 +744,7 @@ class WebSocketManager {
             TAG,
             "Dispatching set-alarm to client handler hour=${alarm.hour} minute=${alarm.minute}"
         )
-        handler.onSetAlarm(alarm)
+        handler.onSetAlarm(alarm) {}
     }
 
     private fun handleSetTimerAction(actionData: Any?) {
@@ -596,7 +764,7 @@ class WebSocketManager {
             TAG,
             "Dispatching set-timer to client handler durationInSeconds=${timer.durationInSeconds}"
         )
-        handler.onSetTimer(timer)
+        handler.onSetTimer(timer) {}
     }
 
     private fun handleSearchNearbyAction(actionData: Any?) {
@@ -1296,8 +1464,16 @@ class WebSocketManager {
     }
 
     internal interface ClientActionHandler {
-        fun onSetAlarm(action: SetAlarmAction)
-        fun onSetTimer(action: SetTimerAction)
+        fun onSetAlarm(
+            action: SetAlarmAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onSetTimer(
+            action: SetTimerAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
         fun onSearchNearby(action: SearchNearbyAction)
     }
 }
