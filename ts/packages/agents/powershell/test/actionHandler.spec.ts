@@ -13,6 +13,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { instantiate } from "../src/actionHandler.mjs";
 
+const itOnWindows = process.platform === "win32" ? it : it.skip;
+
 class MemoryStorage implements Storage {
     private readonly files = new Map<string, string>();
 
@@ -148,20 +150,23 @@ describe("createAndExecutePowerShellFlow", () => {
             });
         });
 
-        it("executes portListeners without requiring a dynamic flow", async () => {
-            const { agent, context } = await createAgentHarness();
+        itOnWindows(
+            "executes portListeners without requiring a dynamic flow",
+            async () => {
+                const { agent, context } = await createAgentHarness();
 
-            const result = await agent.executeAction?.(
-                {
-                    schemaName: "powershell.powershell-network",
-                    actionName: "portListeners",
-                    parameters: {},
-                },
-                context,
-            );
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell.powershell-network",
+                        actionName: "portListeners",
+                        parameters: {},
+                    },
+                    context,
+                );
 
-            expect(result).not.toHaveProperty("error");
-        });
+                expect(result).not.toHaveProperty("error");
+            },
+        );
     });
 
     afterAll(() => {
@@ -172,7 +177,7 @@ describe("createAndExecutePowerShellFlow", () => {
         }
     });
 
-    it("removes the pending draft when execution fails", async () => {
+    itOnWindows("removes the pending draft when execution fails", async () => {
         const { agent, storage, context } = await createAgentHarness();
 
         const result = await agent.executeAction?.(
@@ -198,81 +203,87 @@ describe("createAndExecutePowerShellFlow", () => {
         );
     });
 
-    it("executes once and promotes only after successful execution", async () => {
-        const directory = await mkdtemp(
-            join(tmpdir(), "typeagent-powershell-flow-"),
-        );
-        const outputPath = join(directory, "executions.txt");
-        try {
-            const { agent, storage, context } = await createAgentHarness();
+    itOnWindows(
+        "executes once and promotes only after successful execution",
+        async () => {
+            const directory = await mkdtemp(
+                join(tmpdir(), "typeagent-powershell-flow-"),
+            );
+            const outputPath = join(directory, "executions.txt");
+            try {
+                const { agent, storage, context } = await createAgentHarness();
+
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell",
+                        actionName: "createAndExecutePowerShellFlow",
+                        parameters: {
+                            actionName: "successfulDraft",
+                            description: "Record one execution",
+                            script: "param([string]$Path)\nAdd-Content -LiteralPath $Path -Value 'run'",
+                            scriptParameters: [
+                                {
+                                    name: "Path",
+                                    type: "path",
+                                    required: true,
+                                    description: "Output file",
+                                },
+                            ],
+                            allowedCmdlets: ["Add-Content"],
+                            executionParametersJson: JSON.stringify({
+                                Path: outputPath,
+                            }),
+                        },
+                    },
+                    context,
+                );
+
+                expect(result).not.toHaveProperty("error");
+                expect(await storage.list("pending")).toEqual([]);
+                expect(
+                    await storage.exists("flows/successfulDraft.flow.json"),
+                ).toBe(true);
+                expect(
+                    (await readFile(outputPath, "utf8")).trim().split(/\r?\n/),
+                ).toEqual(["run"]);
+            } finally {
+                await rm(directory, { recursive: true, force: true });
+            }
+        },
+    );
+
+    itOnWindows(
+        "removes the promoted flow when schema reload fails",
+        async () => {
+            const reloadAgentSchema = jest.fn(async () => {
+                throw new Error("reload failed");
+            });
+            const { agent, storage, context } =
+                await createAgentHarness(reloadAgentSchema);
 
             const result = await agent.executeAction?.(
                 {
                     schemaName: "powershell",
                     actionName: "createAndExecutePowerShellFlow",
                     parameters: {
-                        actionName: "successfulDraft",
-                        description: "Record one execution",
-                        script: "param([string]$Path)\nAdd-Content -LiteralPath $Path -Value 'run'",
-                        scriptParameters: [
-                            {
-                                name: "Path",
-                                type: "path",
-                                required: true,
-                                description: "Output file",
-                            },
-                        ],
-                        allowedCmdlets: ["Add-Content"],
-                        executionParametersJson: JSON.stringify({
-                            Path: outputPath,
-                        }),
+                        actionName: "reloadFailure",
+                        description: "A flow that cannot be activated",
+                        script: "Write-Output 'executed'",
+                        allowedCmdlets: ["Write-Output"],
+                        executionParametersJson: "{}",
                     },
                 },
                 context,
             );
 
-            expect(result).not.toHaveProperty("error");
+            expect(reloadAgentSchema).toHaveBeenCalledTimes(1);
+            expect(result).toMatchObject({
+                error: expect.stringContaining("could not be activated"),
+            });
             expect(await storage.list("pending")).toEqual([]);
-            expect(
-                await storage.exists("flows/successfulDraft.flow.json"),
-            ).toBe(true);
-            expect(
-                (await readFile(outputPath, "utf8")).trim().split(/\r?\n/),
-            ).toEqual(["run"]);
-        } finally {
-            await rm(directory, { recursive: true, force: true });
-        }
-    });
-
-    it("removes the promoted flow when schema reload fails", async () => {
-        const reloadAgentSchema = jest.fn(async () => {
-            throw new Error("reload failed");
-        });
-        const { agent, storage, context } =
-            await createAgentHarness(reloadAgentSchema);
-
-        const result = await agent.executeAction?.(
-            {
-                schemaName: "powershell",
-                actionName: "createAndExecutePowerShellFlow",
-                parameters: {
-                    actionName: "reloadFailure",
-                    description: "A flow that cannot be activated",
-                    script: "Write-Output 'executed'",
-                    allowedCmdlets: ["Write-Output"],
-                    executionParametersJson: "{}",
-                },
-            },
-            context,
-        );
-
-        expect(reloadAgentSchema).toHaveBeenCalledTimes(1);
-        expect(result).toMatchObject({
-            error: expect.stringContaining("could not be activated"),
-        });
-        expect(await storage.list("pending")).toEqual([]);
-        expect(await storage.exists("flows/reloadFailure.flow.json")).toBe(
-            false,
-        );
-    });
+            expect(await storage.exists("flows/reloadFailure.flow.json")).toBe(
+                false,
+            );
+        },
+    );
 });
