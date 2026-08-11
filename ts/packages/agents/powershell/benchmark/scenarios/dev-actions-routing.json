@@ -16,7 +16,7 @@
         },
         "expected": {
           "routedTo": "llm-translation",
-          "matchedFlow": "checkPorts",
+          "matchedFlow": "portListeners",
           "matchedAgent": "powershell",
           "disposition": {
             "status": "handled",
