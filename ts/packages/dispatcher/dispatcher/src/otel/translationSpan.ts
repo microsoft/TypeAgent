@@ -4,6 +4,7 @@
 import {
     context,
     createContextKey,
+    SpanStatusCode,
     trace,
     type Context,
     type Span,
@@ -110,10 +111,6 @@ export function emitTranslationRetry(kind: TranslationRetryKind): void {
     });
 }
 
-export interface TranslationSpanOptions {
-    readonly captureSensitiveErrorDetails?: boolean | undefined;
-}
-
 /**
  * Run a translation operation in one active `typeagent.translation` span.
  * Re-entrant calls reuse the current translation span so the outer
@@ -123,7 +120,6 @@ export interface TranslationSpanOptions {
 export async function wrapTranslationSpan<T>(
     attributes: otel.TypeAgentSpanAttributes,
     body: (span: Span) => Promise<T>,
-    options: TranslationSpanOptions = {},
 ): Promise<T> {
     const activeState = getTranslationState();
     if (activeState !== undefined && !activeState.ended) {
@@ -165,11 +161,12 @@ export async function wrapTranslationSpan<T>(
                     error !== null &&
                     typeof error === "object" &&
                     (error as { name?: unknown }).name === "AbortError";
-                otel.recordTypeAgentSpanException(span, error, {
-                    safeName: isAbort ? "AbortError" : "TranslationError",
-                    safeMessage: isAbort ? "cancelled" : "translation failed",
-                    captureSensitiveDetails:
-                        options.captureSensitiveErrorDetails,
+                const name = isAbort ? "AbortError" : "TranslationError";
+                const message = isAbort ? "cancelled" : "translation failed";
+                span.recordException({ name, message });
+                span.setStatus({
+                    code: SpanStatusCode.ERROR,
+                    message,
                 });
                 throw error;
             } finally {
@@ -201,8 +198,5 @@ export function runInTranslationSpan<T>(
         attributes.traceId = systemContext.traceId;
     }
 
-    return wrapTranslationSpan(attributes, body, {
-        captureSensitiveErrorDetails:
-            systemContext.telemetryOptions.captureSensitiveErrorDetails,
-    });
+    return wrapTranslationSpan(attributes, body);
 }

@@ -7,6 +7,11 @@
  * encouraging use of TypeAgent's PowerShell agent for reusability.
  */
 
+import {
+    getMode,
+    isPowerShellGuidanceEnabled,
+} from "../shared/plugin-config.js";
+
 interface PreToolInput {
     sessionId: string;
     timestamp: number;
@@ -84,6 +89,12 @@ async function main(): Promise<void> {
     }
 
     let output: PreToolOutput = {};
+
+    const mode = getMode();
+    if (mode === "dev" || mode === "bypass" || !isPowerShellGuidanceEnabled()) {
+        console.log(JSON.stringify(output));
+        return;
+    }
 
     // Only intercept the powershell tool
     if (input.toolName === "powershell") {

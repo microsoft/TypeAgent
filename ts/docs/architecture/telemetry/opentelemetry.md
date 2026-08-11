@@ -335,8 +335,7 @@ Ordinary `debug(...)` and `logger.logEvent(...)` calls do not change. Add a span
 for an externally meaningful or independently timed operation:
 
 ```ts
-import { trace } from "@opentelemetry/api";
-import { otel } from "@typeagent/telemetry";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 
 const tracer = trace.getTracer("typeagent");
 
@@ -345,9 +344,13 @@ return tracer.startActiveSpan("typeagent.translation", async (span) => {
     span.setAttribute("typeagent.agent.name", agentName);
     return await translateRequest(request);
   } catch (error) {
-    otel.recordTypeAgentSpanException(span, error, {
-      safeName: "TranslationError",
-      safeMessage: "translation failed",
+    span.recordException({
+      name: "TranslationError",
+      message: "translation failed",
+    });
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: "translation failed",
     });
     throw error;
   } finally {
@@ -370,18 +373,65 @@ await createDispatcher(hostName, {
 ```
 
 Original exception messages and stacks are omitted because they can contain user
-content. A host may explicitly opt into redacted details with
-`telemetry.captureSensitiveErrorDetails`, but this remains sensitive diagnostic
-capture even after known secrets are removed.
+content. Record a stable classification and message at the catch site.
 
-The dispatcher creates one `typeagent.translation` child span for each
-translation operation. The normal request path includes grammar/cache lookup and
-model translation in the same span. Direct `translateRequest` callers also create
-a span, while re-entrant calls reuse an active translation span instead of
-creating duplicates. Events record each lookup, intentional cache bypass,
-assistant fallback, and retry. Retry numbers are sequential within the span, and
-event attributes use bounded reason/kind values rather than request or schema
-text.
+## Currently Captured Dispatcher Telemetry
+
+### Root dispatcher command span
+
+The dispatcher creates one `typeagent.request` span for each command processed
+by `processCommand`. It starts a new trace by default. An embedded host can opt
+in to parenting it under the context active when the request was submitted by
+setting `telemetry.joinActiveTrace`.
+
+The span covers command locking and command processing, including translation
+and action execution. Best-effort display logging and command-complete
+notification performed by the request queue after `processCommand` returns are
+outside the span.
+
+| Captured data     | Current behavior                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Attributes        | `typeagent.session.id`, `typeagent.activation.id`, and the preserved caller value in `typeagent.trace.id`, when available |
+| Success           | Span status remains unset                                                                                                 |
+| Cancellation      | Span status is `ERROR` with the stable message `cancelled`                                                                |
+| Thrown failure    | Records a privacy-safe `RequestError` exception and sets `ERROR` with `request failed`                                    |
+| Converted failure | Command processing records the exception and error status before converting it to a cancellation or user-visible result   |
+| Parent context    | New root by default; joins an explicitly selected active context only                                                     |
+
+### Translation span
+
+The dispatcher creates one `typeagent.translation` child span for each logical
+translation operation. The normal `interpretRequest` path includes
+grammar/construction-cache lookup and any subsequent model translation in the
+same span. Direct `translateRequest` callers also create a span. Re-entrant calls
+reuse the active translation span instead of creating nested duplicates.
+
+The span ends after the translation result is produced. Interactive
+confirmation, translation logging, developer-trace persistence, and
+conversation-signal updates happen afterward and are not included in its
+duration.
+
+Translation events currently captured are:
+
+| Event                          | Meaning                                                                                                        |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `translation.grammar.matched`  | A grammar match produced the translation result                                                                |
+| `translation.grammar.no_match` | The unified matcher produced no grammar result                                                                 |
+| `translation.cache.hit`        | A construction-cache match produced the translation result                                                     |
+| `translation.cache.miss`       | The unified matcher produced no construction result                                                            |
+| `translation.cache.bypassed`   | Matching was intentionally skipped; `bypass_reason` is a bounded value                                         |
+| `translation.fallback`         | An assistant-switch translation attempt was initiated                                                          |
+| `translation.retry`            | A same-operation retry was initiated; `retry_number` is sequential within the span and `retry_kind` is bounded |
+
+A unified matcher miss emits both `translation.grammar.no_match` and
+`translation.cache.miss`. Fallback and retry events describe initiated attempts,
+so the event remains present when the following translation fails. Activity
+context can perform several lookups in one span; their event order reflects the
+execution order.
+
+Translation spans carry the same available correlation attributes as the root
+request span. Errors record a privacy-safe `TranslationError`, or `AbortError`
+for cancellation, and set a stable error status before rethrowing.
 
 Each dispatcher action execution creates a `typeagent.action` span with the
 agent and action names known before the handler runs. Sequential actions are

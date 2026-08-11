@@ -193,34 +193,6 @@ describe("wrapTranslationSpan", () => {
         expect(exception?.attributes?.["exception.stacktrace"]).toBeUndefined();
     });
 
-    it("captures redacted exception details only when explicitly enabled", async () => {
-        const error = new Error(
-            "translator failed with sk-secret12345678901234567890",
-        );
-
-        await expect(
-            wrapTranslationSpan(
-                ATTRIBUTES,
-                async () => {
-                    throw error;
-                },
-                { captureSensitiveErrorDetails: true },
-            ),
-        ).rejects.toBe(error);
-
-        const exception = getOnlySpan(
-            manager,
-            "typeagent.translation",
-        ).events.find((event) => event.name === "exception");
-        expect(exception?.attributes?.["exception.message"]).toContain(
-            "translator failed",
-        );
-        expect(exception?.attributes?.["exception.message"]).not.toContain(
-            "sk-secret",
-        );
-        expect(exception?.attributes?.["exception.stacktrace"]).toBeDefined();
-    });
-
     it("classifies cancellation without exporting the abort message", async () => {
         const error = new DOMException(
             "private cancellation details",
