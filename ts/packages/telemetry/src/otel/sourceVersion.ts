@@ -9,6 +9,7 @@ import {
     ATTR_VCS_REF_BASE_REVISION,
     ATTR_VCS_REF_HEAD_REVISION,
 } from "@opentelemetry/semantic-conventions/incubating";
+import { BUILD_SOURCE_VERSION } from "./generated/sourceVersionBuild.js";
 
 const execFileAsync = promisify(execFile);
 const MODULE_DIRECTORY = fileURLToPath(new URL(".", import.meta.url));
@@ -35,6 +36,7 @@ export function getTypeAgentSourceVersion(): Promise<TypeAgentSourceVersion> {
     cachedSourceVersion ??= resolveTypeAgentSourceVersion(
         readGit,
         readTypeAgentSourceVersionFromEnvironment(),
+        BUILD_SOURCE_VERSION,
     );
     return cachedSourceVersion;
 }
@@ -42,10 +44,14 @@ export function getTypeAgentSourceVersion(): Promise<TypeAgentSourceVersion> {
 export async function resolveTypeAgentSourceVersion(
     readVersion: GitVersionReader,
     configuredVersion: TypeAgentSourceVersion = {},
+    buildVersion: TypeAgentSourceVersion = {},
 ): Promise<TypeAgentSourceVersion> {
     const [headRevision, baseRevision] = await Promise.all([
-        configuredVersion.headRevision ?? readVersion(["rev-parse", "HEAD"]),
+        configuredVersion.headRevision ??
+            buildVersion.headRevision ??
+            readVersion(["rev-parse", "HEAD"]),
         configuredVersion.baseRevision ??
+            buildVersion.baseRevision ??
             readVersion(["merge-base", "HEAD", OFFICIAL_REF]),
     ]);
 

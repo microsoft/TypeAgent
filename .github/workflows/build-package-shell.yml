@@ -42,6 +42,13 @@ jobs:
         run: |
           git config --global core.autocrlf false
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Set source revisions
+        shell: bash
+        run: |
+          echo "TYPEAGENT_BUILD_HEAD_REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "TYPEAGENT_BUILD_BASE_REVISION=$(git merge-base HEAD origin/main)" >> "$GITHUB_ENV"
       - uses: dorny/paths-filter@v3
         id: filter
         continue-on-error: true
@@ -92,11 +99,11 @@ jobs:
         working-directory: ts
         shell: bash
         run: pnpm run shell:package
-      
+
       # - uses: actions/upload-artifact@v5
       #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
       #   name: Upload build artifact
       #   with:
-      #     name: typeagent-shell-${{ matrix.os }}-${{ github.run_number }} 
+      #     name: typeagent-shell-${{ matrix.os }}-${{ github.run_number }}
       #     path: ts/packages/shell/dist/**                             # files/dirs to include
       #     retention-days: 7

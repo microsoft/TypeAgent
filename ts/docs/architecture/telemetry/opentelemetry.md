@@ -249,10 +249,13 @@ OTEL_RESOURCE_ATTRIBUTES=vcs.ref.head.revision=<build-commit>,vcs.ref.base.revis
 ```
 
 `InitTelemetryOptions.sourceVersion` remains available for hosts that inject
-build metadata directly. Explicit options take precedence, followed by
-`OTEL_RESOURCE_ATTRIBUTES`; local development fills any missing revision from
-Git once during telemetry initialization. Packaged deployments without
-injected metadata or a Git checkout omit the unavailable values.
+build metadata directly. The packaged-shell workflow also writes the checked-out
+and mainline revisions into the compiled telemetry package, so installed
+artifacts retain their build identity without Git or deployment-specific
+environment variables. Explicit options take precedence, followed by
+`OTEL_RESOURCE_ATTRIBUTES`, baked build metadata, and finally local Git.
+Deployments can therefore override artifact metadata when needed while local
+development still resolves revisions automatically.
 
 ## Configuration and Local Files
 

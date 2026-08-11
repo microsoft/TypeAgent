@@ -61,6 +61,49 @@ describe("resolveTypeAgentSourceVersion", () => {
         expect(calls).toEqual([["merge-base", "HEAD", "origin/main"]]);
     });
 
+    it("uses baked build revisions before runtime Git", async () => {
+        const readVersion: GitVersionReader = async () => {
+            throw new Error("Git should not be called");
+        };
+
+        await expect(
+            resolveTypeAgentSourceVersion(
+                readVersion,
+                {},
+                {
+                    headRevision: "build-head",
+                    baseRevision: "build-base",
+                },
+            ),
+        ).resolves.toEqual({
+            headRevision: "build-head",
+            baseRevision: "build-base",
+        });
+    });
+
+    it("allows runtime OTel attributes to override baked revisions", async () => {
+        const readVersion: GitVersionReader = async () => {
+            throw new Error("Git should not be called");
+        };
+
+        await expect(
+            resolveTypeAgentSourceVersion(
+                readVersion,
+                {
+                    headRevision: "runtime-head",
+                    baseRevision: "runtime-base",
+                },
+                {
+                    headRevision: "build-head",
+                    baseRevision: "build-base",
+                },
+            ),
+        ).resolves.toEqual({
+            headRevision: "runtime-head",
+            baseRevision: "runtime-base",
+        });
+    });
+
     it("omits source versions that are unavailable", async () => {
         const readVersion: GitVersionReader = async (args) =>
             args[0] === "rev-parse" ? "local-commit" : undefined;
