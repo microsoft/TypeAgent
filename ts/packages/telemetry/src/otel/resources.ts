@@ -24,6 +24,11 @@ import {
 
 const PROCESS_INSTANCE_ID = randomUUID();
 
+export const TYPEAGENT_RESOURCE_ATTRIBUTES = Object.freeze({
+    LOCAL_VERSION: "typeagent.version.local",
+    OFFICIAL_VERSION: "typeagent.version.official",
+} as const);
+
 /**
  * Constructs the process-level OTel {@link Resource} TypeAgent-owned hosts
  * attach to their providers. This module only builds resource attributes; it
@@ -36,6 +41,10 @@ export interface ProcessResourceOptions {
     readonly serviceName: string;
     /** `service.version`, when known. */
     readonly serviceVersion?: string;
+    /** Commit checked out in the running local build. */
+    readonly localVersion?: string;
+    /** Official commit the local build is based on. */
+    readonly officialVersion?: string;
     /** Unique identity for this running process. Defaults to a UUID. */
     readonly serviceInstanceId?: string;
     /** `deployment.environment.name`, when known. */
@@ -74,6 +83,14 @@ export function createProcessResource(
         options.deploymentEnvironment,
         "deploymentEnvironment",
     );
+    const localVersion = normalizeOptional(
+        options.localVersion,
+        "localVersion",
+    );
+    const officialVersion = normalizeOptional(
+        options.officialVersion,
+        "officialVersion",
+    );
 
     const identity: Record<string, AttributeValue> = {
         [ATTR_SERVICE_NAME]: serviceName,
@@ -90,6 +107,13 @@ export function createProcessResource(
     if (deploymentEnvironment !== undefined) {
         identity[ATTR_DEPLOYMENT_ENVIRONMENT_NAME] = deploymentEnvironment;
     }
+    if (localVersion !== undefined) {
+        identity[TYPEAGENT_RESOURCE_ATTRIBUTES.LOCAL_VERSION] = localVersion;
+    }
+    if (officialVersion !== undefined) {
+        identity[TYPEAGENT_RESOURCE_ATTRIBUTES.OFFICIAL_VERSION] =
+            officialVersion;
+    }
 
     const attributes = { ...options.attributes };
     for (const key of [
@@ -102,6 +126,8 @@ export function createProcessResource(
         ATTR_PROCESS_PID,
         ATTR_PROCESS_RUNTIME_NAME,
         ATTR_PROCESS_RUNTIME_VERSION,
+        TYPEAGENT_RESOURCE_ATTRIBUTES.LOCAL_VERSION,
+        TYPEAGENT_RESOURCE_ATTRIBUTES.OFFICIAL_VERSION,
     ]) {
         delete attributes[key];
     }

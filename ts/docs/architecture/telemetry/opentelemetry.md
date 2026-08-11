@@ -231,6 +231,17 @@ Useful operation attributes include `typeagent.agent.name`,
 `typeagent.action.name`, `gen_ai.system`, and `gen_ai.request.model`.
 High-cardinality correlation belongs on spans and logs, never metrics.
 
+TypeAgent-owned processes also record source versions as resource attributes.
+Resources are attached to every exported span, so the values remain available
+for span filtering without duplicating them on every operation:
+
+- `typeagent.version.local` is the commit checked out at `HEAD`.
+- `typeagent.version.official` is the merge-base of `HEAD` and `origin/main`,
+  identifying the official commit the local work is based on.
+
+These values are resolved from local Git metadata once during telemetry
+initialization. Packaged deployments without a Git checkout omit them.
+
 ## Configuration and Local Files
 
 TypeAgent-owned processes support:

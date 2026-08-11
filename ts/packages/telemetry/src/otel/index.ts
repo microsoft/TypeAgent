@@ -37,8 +37,16 @@ export {
 
 export {
     createProcessResource,
+    TYPEAGENT_RESOURCE_ATTRIBUTES,
     type ProcessResourceOptions,
 } from "./resources.js";
+
+export {
+    getTypeAgentSourceVersion,
+    resolveTypeAgentSourceVersion,
+    type GitVersionReader,
+    type TypeAgentSourceVersion,
+} from "./sourceVersion.js";
 
 export {
     redactText,

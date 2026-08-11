@@ -130,6 +130,10 @@ describe("telemetry bootstrap", () => {
             serviceVersion: "1.2.3",
             serviceInstanceId: "bootstrap-instance",
             deploymentEnvironment: "test",
+            sourceVersion: {
+                local: "local-commit",
+                official: "official-commit",
+            },
             factories: {
                 createTraceProvider(_config, resource) {
                     resources.push(resource);
@@ -156,6 +160,12 @@ describe("telemetry bootstrap", () => {
         );
         expect(resources[0].attributes["deployment.environment.name"]).toBe(
             "test",
+        );
+        expect(resources[0].attributes["typeagent.version.local"]).toBe(
+            "local-commit",
+        );
+        expect(resources[0].attributes["typeagent.version.official"]).toBe(
+            "official-commit",
         );
         expect(resources[0].attributes["host.name"]).toBeDefined();
         expect(resources[0].attributes["process.pid"]).toBe(process.pid);

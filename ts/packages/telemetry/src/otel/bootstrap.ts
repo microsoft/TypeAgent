@@ -58,6 +58,10 @@ import {
     type TelemetryLifecycleOptions,
 } from "./lifecycle.js";
 import { createProcessResource } from "./resources.js";
+import {
+    getTypeAgentSourceVersion,
+    type TypeAgentSourceVersion,
+} from "./sourceVersion.js";
 
 export type TelemetrySignal = "traces" | "metrics" | "logs";
 
@@ -117,6 +121,8 @@ export interface InitTelemetryOptions {
     readonly serviceVersion?: string;
     readonly serviceInstanceId?: string;
     readonly deploymentEnvironment?: string;
+    /** Source versions to attach to the process resource. Auto-detected when omitted. */
+    readonly sourceVersion?: TypeAgentSourceVersion;
     readonly resourceAttributes?: Readonly<Record<string, AttributeValue>>;
     /** Provider factories for tests or host-specific pipelines. */
     readonly factories?: Partial<TelemetryProviderFactories>;
@@ -229,6 +235,10 @@ export function createTelemetryCoordinator(): TelemetryCoordinator {
         }
 
         lifecycle = createTelemetryLifecycle(options.lifecycle);
+        const sourceVersion =
+            options.resource === undefined
+                ? (options.sourceVersion ?? (await getTypeAgentSourceVersion()))
+                : undefined;
         const resource =
             options.resource ??
             createProcessResource({
@@ -248,6 +258,12 @@ export function createTelemetryCoordinator(): TelemetryCoordinator {
                     : {
                           deploymentEnvironment: options.deploymentEnvironment,
                       }),
+                ...(sourceVersion?.local === undefined
+                    ? {}
+                    : { localVersion: sourceVersion.local }),
+                ...(sourceVersion?.official === undefined
+                    ? {}
+                    : { officialVersion: sourceVersion.official }),
                 ...(options.resourceAttributes === undefined
                     ? {}
                     : { attributes: options.resourceAttributes }),
