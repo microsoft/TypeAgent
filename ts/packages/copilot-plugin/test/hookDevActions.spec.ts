@@ -52,7 +52,8 @@ describe("Copilot dev actions hook", () => {
     it("uses the PowerShell schema family for ordinary prompts", () => {
         expect(getDevActionCommandOptions("show running processes")).toEqual({
             activeSchemaFamilies: ["powershell"],
-            noReasoning: true,
+            noReasoning: false,
+            reasoningProfile: "powershellCapabilityFallback",
         });
     });
 
@@ -76,7 +77,8 @@ describe("Copilot dev actions hook", () => {
         const options = submitCommand.mock.calls[0][2] as ProcessCommandOptions;
         expect(options).toEqual({
             activeSchemaFamilies: ["powershell"],
-            noReasoning: true,
+            noReasoning: false,
+            reasoningProfile: "powershellCapabilityFallback",
         });
         expect(close).toHaveBeenCalledTimes(1);
     });

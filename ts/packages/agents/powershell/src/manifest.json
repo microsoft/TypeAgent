@@ -9,5 +9,17 @@
     "schemaFile": "../dist/powershellSchema.pas.json",
     "grammarFile": "../dist/powershellSchema.ag.json",
     "schemaType": "PowerShellActions"
+  },
+  "subActionManifests": {
+    "powershell-network": {
+      "defaultEnabled": true,
+      "schema": {
+        "description": "PowerShell actions for network connectivity, listening ports, adapters, IP configuration, and DNS lookup.",
+        "originalSchemaFile": "./namespaces/network/networkActionsSchema.mts",
+        "schemaFile": "../dist/networkSchema.pas.json",
+        "grammarFile": "../dist/networkSchema.ag.json",
+        "schemaType": "PowerShellNetworkActions"
+      }
+    }
   }
 }

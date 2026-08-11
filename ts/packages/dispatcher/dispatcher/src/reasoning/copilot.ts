@@ -7,7 +7,10 @@ import {
     TypeAgentAction,
     DisplayAppendMode,
 } from "@typeagent/agent-sdk";
-import { CommandHandlerContext } from "../context/commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    ensureCommandResult,
+} from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import {
     CopilotClient,
@@ -875,6 +878,17 @@ function getCopilotSessionConfig(
                         context,
                         actionIndex++,
                     );
+                    if (actionResult.error === undefined) {
+                        const commandResult =
+                            ensureCommandResult(systemContext);
+                        commandResult.actions = [
+                            ...(commandResult.actions ?? []),
+                            {
+                                schemaName,
+                                ...actionJson,
+                            } as TypeAgentAction,
+                        ];
+                    }
                     systemContext.clientIO = savedClientIO;
 
                     // Surface the action's history text (its full, model-facing

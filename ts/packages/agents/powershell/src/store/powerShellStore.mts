@@ -107,6 +107,9 @@ export class PowerShellStore {
         this.ensureInitialized();
 
         const { actionName } = recipe;
+        if (this.hasFlow(actionName)) {
+            throw new Error(`Flow already exists: ${actionName}`);
+        }
         const flowPath = `flows/${actionName}.flow.json`;
         const scriptPath = `scripts/${actionName}.ps1`;
 
@@ -189,6 +192,39 @@ export class PowerShellStore {
         this.index.lastModified = entry.updated;
         await this.saveIndex();
         debug(`Flow script updated: ${actionName}`);
+    }
+
+    async addGrammarPatterns(
+        actionName: string,
+        patterns: GrammarPattern[],
+    ): Promise<number> {
+        this.ensureInitialized();
+        const entry = this.index.flows[actionName];
+        if (!entry) throw new Error(`Flow not found: ${actionName}`);
+
+        const json = await this.storage.read(entry.flowPath, "utf8");
+        const flow = JSON.parse(json) as PowerShellFlowDefinition;
+        const existing = new Set(
+            flow.grammarPatterns.map((pattern) => pattern.pattern),
+        );
+        const additions = patterns.filter(
+            (pattern) => !existing.has(pattern.pattern),
+        );
+        if (additions.length === 0) {
+            return 0;
+        }
+
+        flow.grammarPatterns.push(...additions);
+        await this.storage.write(entry.flowPath, JSON.stringify(flow, null, 2));
+        entry.grammarRuleText = generateGrammarRuleText(
+            actionName,
+            flow.grammarPatterns,
+        );
+        entry.updated = new Date().toISOString();
+        this.index.lastModified = entry.updated;
+        await this.saveIndex();
+        await this.writeDynamicGrammarFile();
+        return additions.length;
     }
 
     async getFlow(
@@ -296,12 +332,20 @@ export class PowerShellStore {
         this.ensureInitialized();
         const recipe = await this.getPending(filename);
         if (!recipe) return null;
+        if (this.hasFlow(recipe.actionName)) return null;
 
         const actionName = await this.saveFlow(recipe, "reasoning");
+        await this.deletePending(filename);
+        return actionName;
+    }
+
+    async deletePending(filename: string): Promise<void> {
+        this.ensureInitialized();
         try {
             await this.storage.delete(`pending/${filename}`);
-        } catch {}
-        return actionName;
+        } catch {
+            debug(`Could not delete pending recipe: ${filename}`);
+        }
     }
 
     // ── Usage tracking ─────────────────────────────────────────────────
@@ -416,6 +460,59 @@ export class PowerShellStore {
             "    };",
             "};",
             "",
+            "// Create, execute once, and promote a reusable PowerShell flow",
+            "export type CreateAndExecutePowerShellFlow = {",
+            '    actionName: "createAndExecutePowerShellFlow";',
+            "    parameters: {",
+            "        actionName: string;",
+            "        description: string;",
+            "        displayName: string;",
+            "        script: string;",
+            "        scriptParameters: {",
+            "            name: string;",
+            '            type: "string" | "number" | "boolean" | "path";',
+            "            required: boolean;",
+            "            description: string;",
+            "            default?: string;",
+            "        }[];",
+            "        grammarPatterns: {",
+            "            pattern: string;",
+            "            isAlias: boolean;",
+            "        }[];",
+            "        allowedCmdlets: string[];",
+            "        allowedModules?: string[];",
+            "        executionParametersJson?: string;",
+            "        networkAccess?: boolean;",
+            "    };",
+            "};",
+            "",
+            "// Add validated phrases to an existing flow",
+            "export type AddPowerShellFlowPatterns = {",
+            '    actionName: "addPowerShellFlowPatterns";',
+            "    parameters: {",
+            `        flowName: ${flowNameType};`,
+            "        grammarPatterns: {",
+            "            pattern: string;",
+            "            isAlias: boolean;",
+            "        }[];",
+            "    };",
+            "};",
+            "",
+            "// Report the machine-readable result of PowerShell capability reasoning",
+            "export type ReportPowerShellCapabilityOutcome = {",
+            '    actionName: "reportPowerShellCapabilityOutcome";',
+            "    parameters: {",
+            '        status: "handledExisting" | "created" | "notSuitable" | "failed";',
+            "        schema?: string;",
+            "        actionName?: string;",
+            "        flowName?: string;",
+            "        reasonCode?: string;",
+            '        phase?: "classify" | "discover" | "validate" | "execute" | "persist";',
+            "        mayHaveSideEffects?: boolean;",
+            "        reason?: string;",
+            "    };",
+            "};",
+            "",
             "// Edit an existing PowerShell flow's script body",
             "export type EditPowerShellFlow = {",
             '    actionName: "editPowerShellFlow";',
@@ -444,6 +541,9 @@ export class PowerShellStore {
             ...typeNames,
             "TestPowerShellFlow",
             "CreatePowerShellFlow",
+            "CreateAndExecutePowerShellFlow",
+            "AddPowerShellFlowPatterns",
+            "ReportPowerShellCapabilityOutcome",
             "EditPowerShellFlow",
             "ImportPowerShellFlow",
         ];
