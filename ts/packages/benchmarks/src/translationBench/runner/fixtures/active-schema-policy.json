@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "targetActiveSchemas": 10,
+  "strategy": "frozen-per-case-seeded-sample",
+  "rules": [
+    "Catalog size >= targetActiveSchemas (core + distractors).",
+    "Each case always includes every schema required by seed.expectedActions.",
+    "Remaining slots filled by deterministic shuffle seeded with 'active10:' + case.id.",
+    "Active list stored in case JSON in catalog order (not shuffle order) for stable diffs.",
+    "Do NOT resample at eval runtime — scores must be reproducible.",
+    "Do NOT use empty activeSchemas (invalid) or full-catalog-only (too easy / less routing stress)."
+  ],
+  "revision": "2026-08-05-simple-multi-v2-active10"
+}
