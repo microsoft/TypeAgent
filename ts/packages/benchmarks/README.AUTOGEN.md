@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=04ffc6fa34cfbe0d06383b4e35423fc5a203f9c3bd8b8f07c91c20b2cef9903c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7f7e158592ba88a68bbf0957cce86942c6091a3925b946d21c9c7b13b3cb5fd2 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -56,6 +56,6 @@ _None._
 
 ---
 
-_Auto-generated against commit `54efea2e226011740764eddb4beee99edc562313` on `2026-08-08T00:27:51.771Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `2f1ae13a34a138343a5b5113783950a8f1746724` on `2026-08-08T02:25:27.234Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

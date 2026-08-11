@@ -13,13 +13,9 @@ import { redactText, type RedactionOptions } from "./redaction.js";
  * `@opentelemetry/api` directly (see docs/architecture/telemetry/opentelemetry.md
  * for the design rationale that forbids a `TypeAgentSpan`).
  *
- * The one helper this module provides, {@link setTypeAgentSpanAttributes},
- * takes an OTel `Span` and applies only the allowlisted attribute keys
- * declared here. It exists to make privacy review tractable: any attribute
- * value that is not one of the allowlisted keys is dropped before it can
- * reach `Span.setAttribute`, and string values are passed through
- * `redactText` so a caller can never accidentally leak a known secret
- * format through a stable attribute.
+ * The helpers in this module make privacy review tractable. Span attributes
+ * are restricted to the allowlisted keys declared here, and exceptions use
+ * stable classifications instead of original messages and stacks by default.
  */
 
 /**

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { randomUUID } from "node:crypto";
+import type { Context } from "@opentelemetry/api";
 import type {
     CancelResult,
     CommandResult,
@@ -58,6 +59,8 @@ export interface QueueExecutionContext {
     clientRequestId?: unknown;
     attachments?: string[];
     options?: ProcessCommandOptions;
+    /** Internal OTel context captured when the request was submitted. */
+    traceContext?: Context;
 }
 export type InnerProcessCommand = (
     ctx: QueueExecutionContext,
@@ -72,6 +75,8 @@ export interface QueueSubmitInput {
     clientRequestId?: unknown;
     /** Optional caller-supplied id. Defaults to a fresh UUID when omitted. */
     requestId?: string;
+    /** Internal OTel context captured when the request was submitted. */
+    traceContext?: Context;
 }
 
 /**
@@ -79,6 +84,7 @@ export interface QueueSubmitInput {
  * loop resolves on terminal state.
  */
 interface InternalEntry extends QueuedRequest {
+    traceContext?: Context;
     completion: Promise<CommandResult | undefined>;
     resolveCompletion: (result: CommandResult | undefined) => void;
     rejectCompletion: (err: unknown) => void;
@@ -484,6 +490,9 @@ export class RequestQueue {
         if (input.options != null) {
             entry.options = input.options;
         }
+        if (input.traceContext !== undefined) {
+            entry.traceContext = input.traceContext;
+        }
         return entry;
     }
 
@@ -503,6 +512,7 @@ export class RequestQueue {
             blockedOnDepth: _bod,
             cancelReason: _cr,
             blockedOn: _bo,
+            traceContext: _tc,
             ...pub
         } = entry;
         const out: QueuedRequest = { ...pub };
@@ -588,6 +598,8 @@ export class RequestQueue {
                         ctx.attachments = entry.attachments;
                     if (entry.options !== undefined)
                         ctx.options = entry.options;
+                    if (entry.traceContext !== undefined)
+                        ctx.traceContext = entry.traceContext;
                     result = await this.innerProcessCommand(ctx);
                     if (result?.cancelled) {
                         entry.state = "cancelled";
