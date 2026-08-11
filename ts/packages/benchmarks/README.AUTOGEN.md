@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=cbb08d105e065a348cfad045d68bc404b2435019d21c9b41ec672844f81a1f21 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d90f01503aa167c441eaf2d3c2a5086314545f404a3eea19a573fdcc3c423963 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -34,7 +34,7 @@ Workspace:
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 
-External: `commander`, `js-yaml`, `zod`
+External: `commander`, `gpt-tokenizer`, `js-yaml`, `zod`
 
 ### Used by
 
@@ -50,12 +50,12 @@ _None._
 - [./src/core/paths.ts](./src/core/paths.ts)
 - [./src/core/prices.ts](./src/core/prices.ts)
 - [./src/core/rateLimiter.ts](./src/core/rateLimiter.ts)
+- [./src/core/tokenEstimate.ts](./src/core/tokenEstimate.ts)
 - [./src/core/types.ts](./src/core/types.ts)
-- [./src/translationBench/action-parameters-grader.generated.json](./src/translationBench/action-parameters-grader.generated.json)
-- _…and 43 more under `./src/`._
+- _…and 44 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `a19d7f766e89097f7eb7f6e32f04ef826e351f6f` on `2026-08-10T06:54:35.217Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `cb113126e39f7f4c5ebb1ec3603a78ecf5241572` on `2026-08-11T01:06:02.321Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
