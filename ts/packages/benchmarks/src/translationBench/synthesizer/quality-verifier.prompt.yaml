@@ -79,12 +79,15 @@ semantic_checker:
         reason (short justification).
     - Paths are the join key: cover every negative path exactly once (no
       duplicates, no unknown paths, no index-only pairing).
-    - Judge natural language intent. Do NOT rely on verb lists or regexes.
+    - Judge natural language intent. A deterministic shape gate ALSO rejects
+      empties that do not OPEN with don't/do not/never/leave-alone (even if
+      you mark fairEmptyGold=true) — do not fight it with mislabels.
     - Zero-action test: fairEmptyGold=true ONLY if a careful translator should
       fire NO tool at all under the full catalog. Target-only fairness is
-      insufficient.
-    - fairEmptyGold=true ONLY for kind=pure_refusal (hard don't/never/stop/
-      leave-alone/cancel with no alternate task and no question).
+      insufficient. Sibling/contrastive commands are OTHER actions, not empty gold.
+    - fairEmptyGold=true ONLY for kind=pure_refusal that OPENS with hard
+      don't/do not/never/leave-alone (no alternate task, no question, no
+      explanation request). Bare stop/cancel/sibling imperatives are false.
     - ALWAYS fairEmptyGold=false for:
         · definition/meta/status questions ("What does goBack mean?",
           "Is Bluetooth currently enabled?", "Has the flow been deleted?") —
@@ -93,16 +96,20 @@ semantic_checker:
         · how-to / soft solicits / capability questions
           ("How do I add X?", "Can you open Y?", "Is there a way to close this?",
           "Would you mind taking a screenshot?")
-        · contrastive adjacent commands ("close only this tab" as neg for
-          closeAllWebPages; "search Bing for MSFT" as neg for changeSearchProvider)
-        · refuse-then-alternate multi-clause ("Don't close all; just close this")
-        · partial constraints that still request an action ("open X but don't
-          bookmark it")
+        · contrastive adjacent/sibling commands ("close only this tab" as neg for
+          closeAllWebPages; "search Bing for MSFT" as neg for changeSearchProvider;
+          "scroll up" as neg for scrollDown; "click the link" as neg for openWebPage)
+        · refuse-then-alternate multi-clause ("Don't close all; just close this",
+          "Don't open a site—just tell me whether…")
+        · partial constraints that still request an action ("Build the solution
+          but don't start debugging", "open X but don't bookmark it")
+        · bare stop/cancel toolables ("Stop reading the webpage")
         · bare-? or polite requests that are still toolable
         · any utterance a correct translator would answer via chat/help/history
     - Approve fairEmptyGold=true only for pure refusals / leave-alone
       ("Don't take a screenshot of my banking page", "Leave my tabs alone",
-      "Do not open any websites right now.").
+      "Do not open any websites right now.",
+      "Don't enable Game Mode; I need it off for this comparison.").
     - If any assessment is unfair, set decision=reject, negativeQuality low, and
       include a BAD_NEGATIVE issue for that path.
 
