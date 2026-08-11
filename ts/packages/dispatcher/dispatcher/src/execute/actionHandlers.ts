@@ -54,6 +54,7 @@ import {
     toPendingActions,
 } from "./pendingActions.js";
 import {
+    recordActionFlowException,
     recordActionHandlerException,
     recordActionResultError,
     recordActionSetupFailure,
@@ -245,11 +246,7 @@ export async function executeAction(
         actionIndex,
     );
 
-    // Assemble the per-action span attributes. `agentName` here is the
-    // app-agent name (e.g. `player`), matching the design doc's
-    // `typeagent.agent.name` allowlist. Only stable low-cardinality
-    // identifiers are stamped; action parameters, ActionResult payload,
-    // and user text are NEVER stamped.
+    // Action parameters, result payloads, and user text are never stamped.
     const actionSpanAttributes: {
         -readonly [K in keyof otel.TypeAgentSpanAttributes]: otel.TypeAgentSpanAttributes[K];
     } = {
@@ -267,192 +264,151 @@ export async function executeAction(
         actionSpanAttributes.traceId = systemContext.traceId;
     }
 
-    // wrapActionSpan opens `typeagent.action` as a child of whatever span
-    // is currently active on the OTel Context (`typeagent.request` in
-    // the normal request-driven flow; `typeagent.action` when the
-    // caller is a flow step running inside another action; `undefined`
-    // when the host has not registered a tracer provider). The span
-    // ends exactly once via the wrapper's finally block regardless of
-    // whether the body returns normally, throws, or is cancelled.
-    return wrapActionSpan(
-        actionSpanAttributes,
-        async (actionSpan) => {
-            let result: ActionResult;
-            let setupFailureRecorded = false;
-            // Track whether the catch clause converted a thrown exception
-            // into an `ActionResult` with `error` set. Without this flag
-            // the downstream `if (result.error !== undefined)` branch would
-            // fire `action.result.error` on top of the handler-exception
-            // record and the two failure modes (thrown vs typed-return
-            // ActionResult error) would be indistinguishable in the
-            // exported spans.
-            let handlerThrew = false;
-            try {
-                // Check if this action has a registered flow program
-                const flowDef = systemContext.agents.getFlow(
-                    schemaName,
-                    action.actionName,
+    return wrapActionSpan(actionSpanAttributes, async (actionSpan) => {
+        let result: ActionResult;
+        let setupFailureRecorded = false;
+        let handlerInvoked = false;
+        let setupReplacementResult = false;
+        let convertedExceptionRecorded = false;
+        const flowDef = systemContext.agents.getFlow(
+            schemaName,
+            action.actionName,
+        );
+        try {
+            if (flowDef !== undefined) {
+                const flowParams = (action.parameters ?? {}) as Record<
+                    string,
+                    unknown
+                >;
+                // Pass the outer context (ActionContext<CommandHandlerContext>) so the
+                // flow interpreter can access the full agent registry.
+                result = await processFlow(
+                    flowDef,
+                    flowParams,
+                    context,
+                    actionIndex,
                 );
-                if (flowDef !== undefined) {
-                    const flowParams = (action.parameters ?? {}) as Record<
-                        string,
-                        unknown
-                    >;
-                    // Pass the outer context (ActionContext<CommandHandlerContext>) so the
-                    // flow interpreter can access the full agent registry.
-                    result = await processFlow(
-                        flowDef,
-                        flowParams,
-                        context,
-                        actionIndex,
+            } else {
+                if (appAgent.executeAction === undefined) {
+                    recordActionSetupFailure(actionSpan, "handler_missing");
+                    setupFailureRecorded = true;
+                    throw new Error(
+                        `Agent '${appAgentName}' does not support executeAction.`,
                     );
-                } else {
-                    if (appAgent.executeAction === undefined) {
-                        // Precondition failure: the agent registration
-                        // doesn't provide an action handler at all.
-                        recordActionSetupFailure(actionSpan, "handler_missing");
-                        setupFailureRecorded = true;
-                        throw new Error(
-                            `Agent '${appAgentName}' does not support executeAction.`,
-                        );
-                    }
-                    // Pre-flight readiness check — runs as late as possible, right
-                    // before we invoke the agent. Agents that don't implement
-                    // checkReadiness are reported as `ready` and never block here.
-                    // When `setupOnFirstUse` is enabled and setup runs, its
-                    // ActionResult replaces the user's original action — the
-                    // caller is expected to re-run after setup completes.
-                    let setupResult: ActionResult | undefined;
-                    try {
-                        setupResult = await checkAgentReady(
-                            appAgentName,
-                            systemContext,
-                            actionContext,
-                        );
-                    } catch (setupError) {
-                        if (
-                            (setupError as { name?: unknown })?.name ===
-                                "AbortError" ||
-                            systemContext.currentAbortSignal?.aborted
-                        ) {
-                            throw setupError;
-                        }
-                        // checkAgentReady throws for the `unsupported` and
-                        // for `setup-required` when auto-setup is off. Both
-                        // are readiness/precondition failures BEFORE the
-                        // handler is invoked. Only the enumerated kind is
-                        // recorded; the message text is not.
-                        recordActionSetupFailure(actionSpan, "agent_not_ready");
-                        setupFailureRecorded = true;
+                }
+                // Pre-flight readiness check — runs as late as possible, right
+                // before we invoke the agent. Agents that don't implement
+                // checkReadiness are reported as `ready` and never block here.
+                // When `setupOnFirstUse` is enabled and setup runs, its
+                // ActionResult replaces the user's original action — the
+                // caller is expected to re-run after setup completes.
+                let setupResult: ActionResult | undefined;
+                try {
+                    setupResult = await checkAgentReady(
+                        appAgentName,
+                        systemContext,
+                        actionContext,
+                    );
+                } catch (setupError) {
+                    if (
+                        (setupError as { name?: unknown })?.name ===
+                            "AbortError" ||
+                        systemContext.currentAbortSignal?.aborted
+                    ) {
                         throw setupError;
                     }
-                    if (setupResult !== undefined) {
-                        // Auto-setup ran and produced a replacement result
-                        // (yes/no card etc). This is not a failure - the
-                        // dispatcher intentionally replaced the user's
-                        // action with the setup UX and expects the user to
-                        // re-run. Leave span status UNSET.
-                        result = setupResult;
+                    recordActionSetupFailure(actionSpan, "agent_not_ready");
+                    setupFailureRecorded = true;
+                    throw setupError;
+                }
+                if (setupResult !== undefined) {
+                    result = setupResult;
+                    setupReplacementResult = true;
+                } else {
+                    const displayCountBefore = systemContext.displayCount;
+                    handlerInvoked = true;
+                    const handlerResult = await appAgent.executeAction(
+                        action,
+                        actionContext,
+                    );
+                    if (handlerResult !== undefined) {
+                        result = handlerResult;
                     } else {
-                        const displayCountBefore = systemContext.displayCount;
-                        const handlerResult = await appAgent.executeAction(
-                            action,
-                            actionContext,
-                        );
-                        if (handlerResult !== undefined) {
-                            result = handlerResult;
-                        } else {
-                            // The agent returned no ActionResult. Synthesize a
-                            // completion using the same history/memory text as before.
-                            // If the action already emitted visible output - either
-                            // directly via actionIO or through a command it delegated
-                            // to with processCommandNoLock - suppress the redundant
-                            // "completed" bubble by returning a no-display result;
-                            // otherwise show it so silent actions still acknowledge.
-                            const completedText = `Action ${getFullActionName(
-                                executableAction,
-                            )} completed.`;
-                            result =
-                                systemContext.displayCount !==
-                                displayCountBefore
-                                    ? createActionResultNoDisplay(completedText)
-                                    : createActionResult(completedText);
-                        }
+                        // The agent returned no ActionResult. Synthesize a
+                        // completion using the same history/memory text as before.
+                        // If the action already emitted visible output - either
+                        // directly via actionIO or through a command it delegated
+                        // to with processCommandNoLock - suppress the redundant
+                        // "completed" bubble by returning a no-display result;
+                        // otherwise show it so silent actions still acknowledge.
+                        const completedText = `Action ${getFullActionName(
+                            executableAction,
+                        )} completed.`;
+                        result =
+                            systemContext.displayCount !== displayCountBefore
+                                ? createActionResultNoDisplay(completedText)
+                                : createActionResult(completedText);
                     }
                 }
-            } catch (e: any) {
-                if (
-                    e.name === "AbortError" ||
-                    systemContext.currentAbortSignal?.aborted
-                ) {
-                    // Cancellation is surfaced via a thrown DOMException -
-                    // the wrapActionSpan wrapper will recordException with
-                    // status message "cancelled" and rethrow. Do NOT
-                    // recordException here; the wrapper handles it once at
-                    // its own catch boundary.
-                    throw new DOMException(
-                        "The operation was aborted.",
-                        "AbortError",
-                    );
-                }
-                if (!setupFailureRecorded) {
-                    recordActionHandlerException(
-                        actionSpan,
-                        e,
-                        systemContext.telemetryOptions
-                            .captureSensitiveErrorDetails,
-                    );
-                }
-                handlerThrew = true;
-                const details = serializeError(e);
-                result = createActionResultFromError(details.message, details);
-                const errorDisplay = getErrorDisplayContent(e);
-                if (errorDisplay !== undefined) {
-                    result = { ...result, errorDisplayContent: errorDisplay };
-                }
             }
-            // If the agent ran to completion but a cancel arrived while it was executing,
-            // discard the result and treat this as a cancellation.
-            systemContext.currentAbortSignal?.throwIfAborted();
-            actionContext.profiler?.stop();
-            actionContext.profiler = undefined;
-
-            if (debugActions.enabled) {
-                debugActions(actionResultToString(result));
-            }
-
-            // Handler ran to completion but returned an ActionResult with an
-            // error field. Distinct from a thrown exception (which the catch
-            // above already recorded via `recordActionHandlerException`) and
-            // distinct from a setup failure (which stamped its own event).
-            // Only the enumerated failure kind is
-            // emitted; the ActionResult.error text is NEVER stamped.
+        } catch (e: any) {
             if (
-                !handlerThrew &&
-                !setupFailureRecorded &&
-                result.error !== undefined
+                e.name === "AbortError" ||
+                systemContext.currentAbortSignal?.aborted
             ) {
-                recordActionResultError(actionSpan);
+                // Cancellation is surfaced via a thrown DOMException; the
+                // wrapActionSpan wrapper records the AbortError/cancelled
+                // pair once at its own catch boundary.
+                throw new DOMException(
+                    "The operation was aborted.",
+                    "AbortError",
+                );
             }
-            // Display the action result.
-            emitActionResult(
-                result,
-                actionContext,
-                systemContext,
-                requestId,
-                appAgentName,
-                actionIndex,
-                schemaName,
-            );
+            if (handlerInvoked && !setupFailureRecorded) {
+                recordActionHandlerException(actionSpan);
+                convertedExceptionRecorded = true;
+            } else if (flowDef !== undefined) {
+                recordActionFlowException(actionSpan);
+                convertedExceptionRecorded = true;
+            }
+            const details = serializeError(e);
+            result = createActionResultFromError(details.message, details);
+            const errorDisplay = getErrorDisplayContent(e);
+            if (errorDisplay !== undefined) {
+                result = { ...result, errorDisplayContent: errorDisplay };
+            }
+        }
+        // If the agent ran to completion but a cancel arrived while it was executing,
+        // discard the result and treat this as a cancellation.
+        systemContext.currentAbortSignal?.throwIfAborted();
+        actionContext.profiler?.stop();
+        actionContext.profiler = undefined;
 
-            closeActionContext();
-            return result;
-        },
-        {
-            captureSensitiveErrorDetails:
-                systemContext.telemetryOptions.captureSensitiveErrorDetails,
-        },
-    );
+        if (debugActions.enabled) {
+            debugActions(actionResultToString(result));
+        }
+
+        if (
+            !convertedExceptionRecorded &&
+            !setupFailureRecorded &&
+            !setupReplacementResult &&
+            result.error !== undefined
+        ) {
+            recordActionResultError(actionSpan);
+        }
+        emitActionResult(
+            result,
+            actionContext,
+            systemContext,
+            requestId,
+            appAgentName,
+            actionIndex,
+            schemaName,
+        );
+
+        closeActionContext();
+        return result;
+    });
 }
 
 // Post-execution processing for an ActionResult: error / displayContent /

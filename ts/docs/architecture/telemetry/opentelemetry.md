@@ -433,12 +433,34 @@ Translation spans carry the same available correlation attributes as the root
 request span. Errors record a privacy-safe `TranslationError`, or `AbortError`
 for cancellation, and set a stable error status before rethrowing.
 
-Each dispatcher action execution creates a `typeagent.action` span with the
-agent and action names known before the handler runs. Sequential actions are
-siblings under the request span; actions dispatched from a flow or another
-action become children of that active action. Setup failures and typed
-`ActionResult.error` returns use bounded events, while thrown handler errors use
-the same safe-default exception policy as request and translation spans.
+Each dispatcher action execution creates a `typeagent.action` span after its
+action context is initialized and before readiness checks, flow processing, or
+the agent handler runs. It includes result emission and ends exactly once when
+the action returns, throws, or is cancelled. The span is a child of the
+currently active span: `typeagent.request` in the normal flow, or another
+`typeagent.action` when a flow step dispatches a sub-action.
+
+Failure modes are recorded distinctly and use bounded, allowlisted values:
+
+- Pre-handler precondition failures (`handler_missing`, `agent_not_ready`)
+  fire `action.setup.failed` with the enumerated `failure_kind`. No handler
+  ran.
+- A handler-thrown exception that was converted to an `ActionResult` fires
+  the standard `exception` event with the privacy-safe pair
+  `ActionHandlerError` / `action handler failed`. The original message and
+  stack are never exported.
+- A flow-interpreter exception converted to an `ActionResult` uses the
+  privacy-safe pair `ActionFlowError` / `action flow failed`.
+- A handler that returned a typed `ActionResult.error` fires
+  `action.result.error` with `failure_kind: "result_error"`. The
+  `ActionResult.error` text itself is never stamped.
+- An exception that escapes the wrapper is recorded as `AbortError` /
+  `cancelled` for cancellation and `ActionError` / `action failed`
+  otherwise, matching the request and translation span conventions.
+
+Auto-setup replacement results (produced when `setupOnFirstUse` runs setup
+in place of the user's action) leave the span status unset regardless of
+the result's shape.
 
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |

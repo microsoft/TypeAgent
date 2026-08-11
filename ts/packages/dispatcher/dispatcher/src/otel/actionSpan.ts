@@ -20,9 +20,7 @@ export function recordActionSetupFailure(
     span: Span,
     kind: ActionSetupFailureKind,
 ): void {
-    span.addEvent(ACTION_SPAN_EVENTS.SETUP_FAILED, {
-        failure_kind: kind,
-    });
+    span.addEvent(ACTION_SPAN_EVENTS.SETUP_FAILED, { failure_kind: kind });
     span.setStatus({ code: SpanStatusCode.ERROR, message: kind });
 }
 
@@ -30,32 +28,44 @@ export function recordActionResultError(span: Span): void {
     span.addEvent(ACTION_SPAN_EVENTS.RESULT_ERROR, {
         failure_kind: "result_error",
     });
+    span.setStatus({ code: SpanStatusCode.ERROR, message: "result_error" });
+}
+
+export function recordActionHandlerException(span: Span): void {
+    span.recordException({
+        name: "ActionHandlerError",
+        message: "action handler failed",
+    });
     span.setStatus({
         code: SpanStatusCode.ERROR,
-        message: "result_error",
+        message: "action handler failed",
     });
 }
 
-export function recordActionHandlerException(
-    span: Span,
-    error: unknown,
-    captureSensitiveErrorDetails = false,
-): void {
-    otel.recordTypeAgentSpanException(span, error, {
-        safeName: "ActionHandlerError",
-        safeMessage: "action handler failed",
-        captureSensitiveDetails: captureSensitiveErrorDetails,
+export function recordActionFlowException(span: Span): void {
+    span.recordException({
+        name: "ActionFlowError",
+        message: "action flow failed",
+    });
+    span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: "action flow failed",
     });
 }
 
-export interface ActionSpanOptions {
-    readonly captureSensitiveErrorDetails?: boolean | undefined;
-}
-
+/**
+ * Run an action-execution body inside a `typeagent.action` span. The span
+ * becomes a child of whatever span is active on the current OTel context
+ * (typically `typeagent.request`, or another `typeagent.action` when a
+ * flow step dispatches a sub-action). It is ended exactly once regardless
+ * of whether the body returns normally, throws, or is cancelled.
+ *
+ * Exceptions that escape the body are recorded with stable, privacy-safe
+ * classifications matching the request/translation span conventions.
+ */
 export async function wrapActionSpan<T>(
     attributes: otel.TypeAgentSpanAttributes,
     body: (span: Span) => Promise<T>,
-    options: ActionSpanOptions = {},
 ): Promise<T> {
     const tracer: Tracer = trace.getTracer(
         otel.INSTRUMENTATION_SCOPE_NAME,
@@ -72,12 +82,10 @@ export async function wrapActionSpan<T>(
                     error !== null &&
                     typeof error === "object" &&
                     (error as { name?: unknown }).name === "AbortError";
-                otel.recordTypeAgentSpanException(span, error, {
-                    safeName: isAbort ? "AbortError" : "ActionError",
-                    safeMessage: isAbort ? "cancelled" : "action failed",
-                    captureSensitiveDetails:
-                        options.captureSensitiveErrorDetails,
-                });
+                const name = isAbort ? "AbortError" : "ActionError";
+                const message = isAbort ? "cancelled" : "action failed";
+                span.recordException({ name, message });
+                span.setStatus({ code: SpanStatusCode.ERROR, message });
                 throw error;
             } finally {
                 span.end();
