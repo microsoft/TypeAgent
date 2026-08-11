@@ -39,7 +39,8 @@ export function getDevActionCommandOptions(
     }
     return {
         activeSchemaFamilies: ["powershell"],
-        noReasoning: true,
+        noReasoning: false,
+        reasoningProfile: "powershellCapabilityFallback",
     };
 }
 

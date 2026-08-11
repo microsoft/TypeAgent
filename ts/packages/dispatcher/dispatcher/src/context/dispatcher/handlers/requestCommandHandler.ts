@@ -60,6 +60,10 @@ import {
     type CommandDisposition,
 } from "@typeagent/dispatcher-types";
 import { resolveActiveSchemaScope } from "../../../translation/activeSchemaScope.js";
+import {
+    getPowerShellCapabilityDisposition,
+    getPowerShellCapabilityOutcome,
+} from "../../../reasoning/powershellCapabilityOutcome.js";
 
 type ReasoningFallbackContext = {
     failedSchema: string;
@@ -78,6 +82,37 @@ function getActionSchemas(
     actions: { action: { schemaName: string } }[],
 ): string[] {
     return [...new Set(actions.map(({ action }) => action.schemaName))];
+}
+
+function applyPowerShellCapabilityOutcome(
+    context: CommandHandlerContext,
+): boolean {
+    if (
+        context.currentOptions?.reasoningProfile !==
+        "powershellCapabilityFallback"
+    ) {
+        return false;
+    }
+
+    const commandResult = ensureCommandResult(context);
+    const outcome = getPowerShellCapabilityOutcome(commandResult.actions);
+    if (!outcome) {
+        commandResult.lastError =
+            "PowerShell capability reasoning did not report a typed outcome.";
+        setDisposition(context, {
+            status: "failed",
+            path: "reasoning",
+            mayHaveSideEffects: false,
+        });
+        return true;
+    }
+
+    commandResult.capabilityOutcome = outcome;
+    if (outcome.status === "failed") {
+        commandResult.lastError = outcome.reason;
+    }
+    setDisposition(context, getPowerShellCapabilityDisposition(outcome));
+    return true;
 }
 
 async function runConfiguredReasoning(
@@ -872,10 +907,12 @@ export class RequestCommandHandler implements CommandHandler {
                 try {
                     await runConfiguredReasoning(request, context);
                     reasoningHandled = true;
-                    setDisposition(systemContext, {
-                        status: "handled",
-                        path: "reasoning",
-                    });
+                    if (!applyPowerShellCapabilityOutcome(systemContext)) {
+                        setDisposition(systemContext, {
+                            status: "handled",
+                            path: "reasoning",
+                        });
+                    }
                 } catch (e: any) {
                     debugRequest(
                         `Reasoning fallback failed, using default handler: ${e.message}`,
