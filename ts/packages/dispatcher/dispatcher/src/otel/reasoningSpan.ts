@@ -64,6 +64,10 @@ export function emitReasoningToolCall(toolCallNumber: number): void {
 export async function wrapReasoningSpan<T>(
     attributes: otel.TypeAgentSpanAttributes,
     body: (span: Span) => Promise<T>,
+    isCancellation: (error: unknown) => boolean = (error) =>
+        error !== null &&
+        typeof error === "object" &&
+        (error as { name?: unknown }).name === "AbortError",
 ): Promise<T> {
     const tracer: Tracer = trace.getTracer(
         otel.INSTRUMENTATION_SCOPE_NAME,
@@ -84,10 +88,7 @@ export async function wrapReasoningSpan<T>(
             try {
                 return await context.with(spanContext, () => body(span));
             } catch (error) {
-                const isAbort =
-                    error !== null &&
-                    typeof error === "object" &&
-                    (error as { name?: unknown }).name === "AbortError";
+                const isAbort = isCancellation(error);
                 const name = isAbort ? "AbortError" : "ReasoningError";
                 const message = isAbort ? "cancelled" : "reasoning failed";
                 span.recordException({ name, message });
@@ -111,6 +112,7 @@ export function runInReasoningSpan<T>(
         otel.TypeAgentSpanAttributes,
         "genAiSystem" | "genAiRequestModel"
     >,
+    cancellationSignal?: AbortSignal,
 ): Promise<T> {
     const systemContext = context.sessionContext.agentContext;
     const sessionId = systemContext.session.sessionDirPath
@@ -129,5 +131,14 @@ export function runInReasoningSpan<T>(
         attributes.traceId = systemContext.traceId;
     }
 
-    return wrapReasoningSpan(attributes, body);
+    return wrapReasoningSpan(
+        attributes,
+        body,
+        (error) =>
+            cancellationSignal?.aborted === true ||
+            context.abortSignal?.aborted === true ||
+            (error !== null &&
+                typeof error === "object" &&
+                (error as { name?: unknown }).name === "AbortError"),
+    );
 }

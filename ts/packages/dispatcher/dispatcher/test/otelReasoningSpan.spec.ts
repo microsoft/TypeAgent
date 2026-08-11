@@ -215,6 +215,42 @@ describe("wrapReasoningSpan", () => {
         expect(exception?.attributes?.["exception.type"]).toBe("AbortError");
         expect(exception?.attributes?.["exception.message"]).toBe("cancelled");
     });
+
+    it("uses an aborted reasoning signal to classify timeout errors", async () => {
+        const controller = new AbortController();
+        const error = new Error("private timeout detail");
+        controller.abort(error);
+        const context = {
+            sessionContext: {
+                agentContext: {
+                    session: {},
+                    telemetryOptions: {},
+                },
+            },
+        } as unknown as ActionContext<CommandHandlerContext>;
+
+        await expect(
+            runInReasoningSpan(
+                context,
+                async () => {
+                    throw error;
+                },
+                undefined,
+                controller.signal,
+            ),
+        ).rejects.toBe(error);
+
+        const span = getOnlySpan(manager, "typeagent.reasoning");
+        expect(span.status).toEqual({
+            code: SpanStatusCode.ERROR,
+            message: "cancelled",
+        });
+        const exception = span.events.find(
+            (event) => event.name === "exception",
+        );
+        expect(exception?.attributes?.["exception.type"]).toBe("AbortError");
+        expect(exception?.attributes?.["exception.message"]).toBe("cancelled");
+    });
 });
 
 describe("emitReasoningToolCall", () => {

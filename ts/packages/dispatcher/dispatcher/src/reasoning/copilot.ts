@@ -95,17 +95,29 @@ function withAbortSignal<T>(
     });
 }
 
-async function sendAndWaitWithCancellation(
+export async function sendAndWaitWithCancellation(
     session: CopilotSession,
     prompt: string,
     signal: AbortSignal | undefined,
 ): Promise<any> {
-    const waitPromise = session.sendAndWait(
-        { prompt },
-        resolveReasoningTimeoutMs(),
-    );
+    const timeoutMs = resolveReasoningTimeoutMs();
+    const timeoutController = new AbortController();
+    const timeout =
+        timeoutMs < MAX_SETTIMEOUT_MS
+            ? setTimeout(
+                  () =>
+                      timeoutController.abort(
+                          new DOMException("Reasoning timed out", "AbortError"),
+                      ),
+                  timeoutMs,
+              )
+            : undefined;
+    const waitPromise = session.sendAndWait({ prompt }, MAX_SETTIMEOUT_MS);
     try {
-        return await withAbortSignal(waitPromise, signal);
+        return await withAbortSignal(
+            withAbortSignal(waitPromise, signal),
+            timeoutController.signal,
+        );
     } catch (error) {
         try {
             await session.abort();
@@ -132,6 +144,10 @@ async function sendAndWaitWithCancellation(
             }
         }
         throw error;
+    } finally {
+        if (timeout !== undefined) {
+            clearTimeout(timeout);
+        }
     }
 }
 
