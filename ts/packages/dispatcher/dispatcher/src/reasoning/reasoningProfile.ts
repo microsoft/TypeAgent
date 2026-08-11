@@ -34,6 +34,7 @@ function getPowerShellCapabilityFallbackGuidance(): string {
         "Decide whether the user's request can be safely completed as a reusable PowerShell flow.",
         "Use discover_actions for the powershell schema and listPowerShellFlows before creating anything.",
         "Prefer an existing executable action or flow. If an existing flow covers the task but misses this phrasing, add validated patterns with addPowerShellFlowPatterns, then execute the existing flow once.",
+        "If an existing flow fails with errorCode powershell.scriptFailure, repair that same flow with repairAndExecutePowerShellFlow at most once. Do not repair policyDenied, cancelled, or partialSideEffects failures.",
         "If no equivalent exists, use createAndExecutePowerShellFlow. It executes the draft once and promotes it only after success. Do not execute the promoted flow again.",
         "Do not use shell, Bash, TaskFlow, or WebFlow as substitutes.",
         "You MUST finish by calling reportPowerShellCapabilityOutcome exactly once.",
