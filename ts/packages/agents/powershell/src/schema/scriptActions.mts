@@ -153,6 +153,23 @@ export type EditPowerShellFlow = {
     };
 };
 
+// Repair an existing flow and retry the requested operation once
+export type RepairAndExecutePowerShellFlow = {
+    actionName: "repairAndExecutePowerShellFlow";
+    parameters: {
+        // Existing flow to repair
+        flowName: string;
+        // Replacement script body
+        script: string;
+        // Updated cmdlet whitelist
+        allowedCmdlets: string[];
+        // Updated module whitelist
+        allowedModules?: string[];
+        // JSON string of named parameters for the retry
+        executionParametersJson?: string;
+    };
+};
+
 // Import an existing PowerShell script file as a new PowerShell flow
 export type ImportPowerShellFlow = {
     actionName: "importPowerShellFlow";
@@ -174,4 +191,5 @@ export type PowerShellActions =
     | AddPowerShellFlowPatterns
     | ReportPowerShellCapabilityOutcome
     | EditPowerShellFlow
+    | RepairAndExecutePowerShellFlow
     | ImportPowerShellFlow;

@@ -44,6 +44,7 @@ export interface ScriptExecutionRequest {
         networkAccess: boolean;
     };
     workingDirectory?: string;
+    abortSignal?: AbortSignal | undefined;
 }
 
 export interface ScriptExecutionResult {
@@ -53,11 +54,13 @@ export interface ScriptExecutionResult {
     exitCode: number;
     duration: number;
     truncated: boolean;
+    cancelled: boolean;
 }
 
 export async function executeScript(
     request: ScriptExecutionRequest,
 ): Promise<ScriptExecutionResult> {
+    request.abortSignal?.throwIfAborted();
     const scriptHostPath = join(packageRoot, "scripts", "scriptHost.ps1");
 
     const args = [
@@ -95,6 +98,7 @@ export async function executeScript(
         let stderr = "";
         let truncated = false;
         let resolved = false;
+        let cancelled = false;
 
         const child = spawn("powershell", args, {
             cwd: request.workingDirectory,
@@ -118,6 +122,7 @@ export async function executeScript(
             if (!resolved) {
                 resolved = true;
                 child.kill("SIGTERM");
+                request.abortSignal?.removeEventListener("abort", onAbort);
                 resolve({
                     success: false,
                     stdout,
@@ -125,21 +130,37 @@ export async function executeScript(
                     exitCode: -1,
                     duration: Date.now() - startTime,
                     truncated,
+                    cancelled: false,
                 });
             }
         }, request.sandbox.maxExecutionTime * 1000);
+
+        const onAbort = () => {
+            if (resolved) {
+                return;
+            }
+            cancelled = true;
+            child.kill("SIGTERM");
+        };
+        request.abortSignal?.addEventListener("abort", onAbort, {
+            once: true,
+        });
 
         child.on("close", (code) => {
             if (!resolved) {
                 resolved = true;
                 clearTimeout(timeout);
+                request.abortSignal?.removeEventListener("abort", onAbort);
                 resolve({
-                    success: code === 0,
+                    success: !cancelled && code === 0,
                     stdout,
-                    stderr,
+                    stderr: cancelled
+                        ? "PowerShell execution was cancelled."
+                        : stderr,
                     exitCode: code ?? -1,
                     duration: Date.now() - startTime,
                     truncated,
+                    cancelled,
                 });
             }
         });
@@ -148,6 +169,7 @@ export async function executeScript(
             if (!resolved) {
                 resolved = true;
                 clearTimeout(timeout);
+                request.abortSignal?.removeEventListener("abort", onAbort);
                 resolve({
                     success: false,
                     stdout,
@@ -155,6 +177,7 @@ export async function executeScript(
                     exitCode: -1,
                     duration: Date.now() - startTime,
                     truncated,
+                    cancelled: false,
                 });
             }
         });

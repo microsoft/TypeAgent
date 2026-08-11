@@ -141,5 +141,6 @@ describe("PowerShellStore capability lifecycle", () => {
         expect(schema).toContain("createAndExecutePowerShellFlow");
         expect(schema).toContain("addPowerShellFlowPatterns");
         expect(schema).toContain("reportPowerShellCapabilityOutcome");
+        expect(schema).toContain("repairAndExecutePowerShellFlow");
     });
 });

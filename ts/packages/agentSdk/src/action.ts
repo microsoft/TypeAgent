@@ -35,6 +35,13 @@ export type SerializedError = {
 export type ActionResultError = {
     error: string;
     fallbackToReasoning?: boolean | undefined;
+    // Stable machine-readable code for callers that need policy or retry
+    // decisions without parsing the display message.
+    errorCode?: string | undefined;
+    // Whether the caller may safely retry after changing the action.
+    retryable?: boolean | undefined;
+    // True when the failed action may already have changed external state.
+    mayHaveSideEffects?: boolean | undefined;
     // Rich display to show in place of the plain `error` text (e.g. setup
     // instructions with a config snippet, which need markdown to survive
     // rendering). Optional — clients fall back to `error` when absent.

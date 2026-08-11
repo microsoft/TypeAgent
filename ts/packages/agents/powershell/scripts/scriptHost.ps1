@@ -50,7 +50,8 @@ try {
     $expandedAllowedPaths = @()
     foreach ($ap in $AllowedPaths) {
         try {
-            $expandedAllowedPaths += $ExecutionContext.InvokeCommand.ExpandString($ap)
+            $expandedPath = $ExecutionContext.InvokeCommand.ExpandString($ap)
+            $expandedAllowedPaths += [System.IO.Path]::GetFullPath($expandedPath).TrimEnd('\', '/')
         } catch {
             $expandedAllowedPaths += $ap
         }
@@ -77,11 +78,21 @@ try {
                 try { $isValidPath = Test-Path $val -IsValid } catch { }
                 if ($isValidPath) {
                     $resolvedPath = $null
-                    try { $resolvedPath = (Resolve-Path $val -ErrorAction SilentlyContinue).Path } catch {}
+                    try {
+                        $resolvedPath = (Resolve-Path $val -ErrorAction SilentlyContinue).Path
+                        if (-not $resolvedPath) {
+                            $resolvedPath = [System.IO.Path]::GetFullPath($val)
+                        }
+                        $resolvedPath = $resolvedPath.TrimEnd('\', '/')
+                    } catch {}
                     if ($resolvedPath) {
                         $pathAllowed = $false
                         foreach ($ap in $expandedAllowedPaths) {
-                            if ($resolvedPath -like "$ap*") {
+                            if (
+                                $resolvedPath.Equals($ap, [System.StringComparison]::OrdinalIgnoreCase) -or
+                                $resolvedPath.StartsWith("$ap\", [System.StringComparison]::OrdinalIgnoreCase) -or
+                                $resolvedPath.StartsWith("$ap/", [System.StringComparison]::OrdinalIgnoreCase)
+                            ) {
                                 $pathAllowed = $true
                                 break
                             }

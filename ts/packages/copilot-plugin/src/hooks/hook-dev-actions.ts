@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { Dispatcher } from "@typeagent/agent-server-client";
+import { randomUUID } from "node:crypto";
 import type {
     CommandResult,
     ProcessCommandOptions,
@@ -21,18 +22,26 @@ import type { HookInput, HookOutput } from "./types.js";
 export type DevActionDependencies = {
     connectToTypeAgent: typeof connectToTypeAgent;
     emitProgress: typeof emitProgress;
+    platform?: NodeJS.Platform;
 };
 
 const defaultDependencies: DevActionDependencies = {
     connectToTypeAgent,
     emitProgress,
+    platform: process.platform,
 };
+
+const unsupportedPlatformMessage =
+    "TypeAgent PowerShell recording is supported only on Windows. Run the request on a Windows host with the PowerShell agent enabled.";
+const unavailablePowerShellMessage =
+    "TypeAgent could not record this PowerShell flow because the PowerShell schema is unavailable. Enable the PowerShell agent and retry.";
 
 export function getDevActionCommandOptions(
     prompt: string,
 ): ProcessCommandOptions {
     if (parseRecordingDirective(prompt) !== undefined) {
         return {
+            activeSchemaFamilies: ["powershell"],
             noReasoning: false,
             reasoningProfile: "powershellFlowRecording",
         };
@@ -64,7 +73,20 @@ function toHandledOutput(
 export async function handleDevActions(
     input: HookInput,
     dependencies: DevActionDependencies = defaultDependencies,
+    abortSignal?: AbortSignal,
 ): Promise<HookOutput> {
+    const isRecordingDirective =
+        parseRecordingDirective(input.prompt) !== undefined;
+    if ((dependencies.platform ?? process.platform) !== "win32") {
+        return isRecordingDirective
+            ? {
+                  handled: true,
+                  responseContent: unsupportedPlatformMessage,
+                  handledBy: "typeagent",
+              }
+            : {};
+    }
+
     dependencies.emitProgress("Checking TypeAgent development actions...", {
         temporary: true,
     });
@@ -107,19 +129,49 @@ export async function handleDevActions(
     });
 
     let dispatcher: Dispatcher | null = null;
-    let submitted = false;
+    let submissionStarted = false;
+    let requestId: string | undefined;
+    const clientRequestId = `copilot-dev-${input.sessionId}-${randomUUID()}`;
+    let earlyCancellation: Promise<void> | undefined;
+    const cancelAcceptedRequest = () => {
+        if (!dispatcher) {
+            return;
+        }
+        if (requestId) {
+            earlyCancellation = dispatcher
+                .cancelCommand(requestId)
+                .then(() => undefined);
+        } else {
+            dispatcher.cancelCommandByClientId(clientRequestId);
+            earlyCancellation = Promise.resolve();
+        }
+        void earlyCancellation.catch((error) => {
+            console.error("TypeAgent dev mode cancellation error:", error);
+        });
+    };
+    abortSignal?.addEventListener("abort", cancelAcceptedRequest, {
+        once: true,
+    });
+
     try {
+        abortSignal?.throwIfAborted();
         dispatcher = await dependencies.connectToTypeAgent(clientIO);
+        abortSignal?.throwIfAborted();
+        submissionStarted = true;
         const submitResult = await dispatcher.submitCommand(
             input.prompt,
             undefined,
             getDevActionCommandOptions(input.prompt),
+            clientRequestId,
         );
         if (!submitResult.ok) {
             return {};
         }
 
-        submitted = true;
+        requestId = submitResult.entry.requestId;
+        if (abortSignal?.aborted) {
+            await dispatcher.cancelCommand(requestId);
+        }
         const result = await submitResult.entry.completion;
         if (!result) {
             return {
@@ -142,14 +194,31 @@ export async function handleDevActions(
         }
 
         if (result.disposition.status === "notHandled") {
+            if (
+                isRecordingDirective &&
+                result.disposition.reason === "noActiveSchema"
+            ) {
+                return {
+                    handled: true,
+                    responseContent: unavailablePowerShellMessage,
+                    handledBy: "typeagent",
+                };
+            }
             return {};
         }
 
         return toHandledOutput(result, responseCollector.messages);
     } catch (error) {
         console.error("TypeAgent dev mode error:", error);
-        if (!submitted) {
+        if (!submissionStarted) {
             return {};
+        }
+        if (abortSignal?.aborted) {
+            return {
+                handled: true,
+                responseContent: "TypeAgent request was cancelled.",
+                handledBy: "typeagent",
+            };
         }
         return {
             handled: true,
@@ -159,6 +228,8 @@ export async function handleDevActions(
             handledBy: "typeagent",
         };
     } finally {
+        abortSignal?.removeEventListener("abort", cancelAcceptedRequest);
+        await earlyCancellation?.catch(() => {});
         if (dispatcher) {
             await dispatcher.close();
         }
