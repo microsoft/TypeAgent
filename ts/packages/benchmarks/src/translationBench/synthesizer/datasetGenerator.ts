@@ -568,7 +568,7 @@ function formatSynthesizerPrompt(
                 confusableSiblings,
             ),
             disambiguationRule:
-                "Every seed and positive utterance must uniquely identify the target action. If confusableSiblings is non-empty, write phrasing that only fits the target — no fixed cue lists; natural language only.",
+                "Every seed and positive utterance must uniquely identify the target action. If confusableSiblings is non-empty, write phrasing that only fits the target and include target-only cues; a deterministic format gate rejects double-meaning phrasing.",
             negativeFairnessRule:
                 TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE +
                 " The semantic checker LLM judges this (no verb lexicon).",

@@ -26,6 +26,7 @@ import {
     type TranslationBenchQualityVerifierPromptPack,
 } from "./synthesizerPrompts.js";
 import {
+    checkTranslationBenchCandidateDisambiguation,
     findTranslationBenchConfusableSiblings,
     summarizeTranslationBenchConfusableSiblings,
 } from "./utteranceDisambiguation.js";
@@ -159,6 +160,20 @@ export function runTranslationBenchFormatChecker(
                 };
             }
         }
+        const disambiguationIssues =
+            checkTranslationBenchCandidateDisambiguation(
+                candidate,
+                loop.targetAction,
+                catalogForLoop(loop),
+            );
+        if (disambiguationIssues.length > 0) {
+            return {
+                stage: "format_checker",
+                passed: false,
+                issues: disambiguationIssues,
+                candidate,
+            };
+        }
         return {
             stage: "format_checker",
             passed: true,
@@ -207,7 +222,7 @@ export function buildTranslationBenchSemanticCheckerPrompt(
                 confusableSiblings,
             ),
             disambiguationRule:
-                "Reject positives (AMBIGUOUS_INTENT) when a careful reader could equally choose a confusable sibling. Seed and every positive must uniquely identify the target action. Do not use regex or fixed phrase lists — judge natural meaning only.",
+                "Reject positives (AMBIGUOUS_INTENT) when a careful reader could equally choose a confusable sibling. Seed and every positive must uniquely identify the target action. Prefer target-only cues when confusableSiblings is non-empty; a deterministic format gate also rejects double-meaning phrasing.",
             negativeFairnessRule: TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE,
         },
         candidate,
