@@ -24,7 +24,6 @@ export interface RootRequestSpanResultProbe {
 
 export interface RootRequestSpanOptions {
     readonly parentContext?: Context | undefined;
-    readonly captureSensitiveErrorDetails?: boolean | undefined;
 }
 
 export async function wrapRootRequestSpan<
@@ -61,11 +60,12 @@ export async function wrapRootRequestSpan<
                     e !== null &&
                     typeof e === "object" &&
                     (e as { name?: unknown }).name === "AbortError";
-                otel.recordTypeAgentSpanException(span, e, {
-                    safeName: isAbort ? "AbortError" : "RequestError",
-                    safeMessage: isAbort ? "cancelled" : "request failed",
-                    captureSensitiveDetails:
-                        options?.captureSensitiveErrorDetails,
+                const name = isAbort ? "AbortError" : "RequestError";
+                const message = isAbort ? "cancelled" : "request failed";
+                span.recordException({ name, message });
+                span.setStatus({
+                    code: SpanStatusCode.ERROR,
+                    message,
                 });
                 throw e;
             } finally {

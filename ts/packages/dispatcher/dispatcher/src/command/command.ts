@@ -13,6 +13,7 @@ import {
 } from "../context/commandHandlerContext.js";
 import {
     context as otelContext,
+    SpanStatusCode,
     trace,
     type Context,
 } from "@opentelemetry/api";
@@ -366,11 +367,13 @@ export async function processCommandNoLock(
         }
         const activeSpan = trace.getActiveSpan();
         if (activeSpan !== undefined) {
-            otel.recordTypeAgentSpanException(activeSpan, e, {
-                safeName: "CommandError",
-                safeMessage: "command failed",
-                captureSensitiveDetails:
-                    context.telemetryOptions.captureSensitiveErrorDetails,
+            activeSpan.recordException({
+                name: "CommandError",
+                message: "command failed",
+            });
+            activeSpan.setStatus({
+                code: SpanStatusCode.ERROR,
+                message: "command failed",
             });
         }
         context.clientIO.appendDisplay(
@@ -523,17 +526,14 @@ export async function processCommand(
                         if (e.name === "AbortError") {
                             const activeSpan = trace.getActiveSpan();
                             if (activeSpan !== undefined) {
-                                otel.recordTypeAgentSpanException(
-                                    activeSpan,
-                                    e,
-                                    {
-                                        safeName: "AbortError",
-                                        safeMessage: "cancelled",
-                                        captureSensitiveDetails:
-                                            context.telemetryOptions
-                                                .captureSensitiveErrorDetails,
-                                    },
-                                );
+                                activeSpan.recordException({
+                                    name: "AbortError",
+                                    message: "cancelled",
+                                });
+                                activeSpan.setStatus({
+                                    code: SpanStatusCode.ERROR,
+                                    message: "cancelled",
+                                });
                             }
                             ensureCommandResult(context).cancelled = true;
                         } else {
@@ -555,8 +555,6 @@ export async function processCommand(
         },
         {
             parentContext: rootParentContext,
-            captureSensitiveErrorDetails:
-                context.telemetryOptions.captureSensitiveErrorDetails,
         },
     );
 }

@@ -44,7 +44,6 @@ function createContext(
         traceId: "trace-xyz",
         telemetryOptions: {
             joinActiveTrace: false,
-            captureSensitiveErrorDetails: false,
         },
         session: {
             sessionDirPath: undefined,

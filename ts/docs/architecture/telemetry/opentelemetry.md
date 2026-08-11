@@ -433,11 +433,6 @@ Translation spans carry the same available correlation attributes as the root
 request span. Errors record a privacy-safe `TranslationError`, or `AbortError`
 for cancellation, and set a stable error status before rethrowing.
 
-Original exception messages and stacks are captured only when the host
-explicitly enables `telemetry.captureSensitiveErrorDetails`. Known secret
-formats are redacted, but redaction cannot guarantee removal of arbitrary user
-content, so detailed capture remains disabled by default.
-
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |
 | Span attributes | Stable facts such as agent, action, or model |
