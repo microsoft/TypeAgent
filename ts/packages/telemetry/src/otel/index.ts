@@ -42,6 +42,7 @@ export {
 
 export {
     getTypeAgentSourceVersion,
+    readTypeAgentSourceVersionFromEnvironment,
     resolveTypeAgentSourceVersion,
     type GitVersionReader,
     type TypeAgentSourceVersion,

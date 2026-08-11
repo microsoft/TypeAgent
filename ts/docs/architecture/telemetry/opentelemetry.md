@@ -241,10 +241,18 @@ for span filtering without duplicating them on every operation:
 
 These OpenTelemetry VCS semantic-convention attributes distinguish source
 revisions from `service.version`, which remains the version of the deployable
-service component. Production builds should provide the revisions as build
-metadata through `InitTelemetryOptions.sourceVersion`. Local development falls
-back to resolving them from Git once during telemetry initialization. Packaged
-deployments without injected metadata or a Git checkout omit them.
+service component. Production deployments provide the revisions through the
+standard `OTEL_RESOURCE_ATTRIBUTES` environment variable:
+
+```text
+OTEL_RESOURCE_ATTRIBUTES=vcs.ref.head.revision=<build-commit>,vcs.ref.base.revision=<mainline-commit>
+```
+
+`InitTelemetryOptions.sourceVersion` remains available for hosts that inject
+build metadata directly. Explicit options take precedence, followed by
+`OTEL_RESOURCE_ATTRIBUTES`; local development fills any missing revision from
+Git once during telemetry initialization. Packaged deployments without
+injected metadata or a Git checkout omit the unavailable values.
 
 ## Configuration and Local Files
 
