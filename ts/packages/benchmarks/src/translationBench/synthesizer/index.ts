@@ -18,3 +18,4 @@ export * from "./negativeFairness.js";
 export * from "../policy/index.js";
 export { seedQaJsonlAdapter } from "./adapters/seedQaJsonlAdapter.js";
 export * from "./goldParameterHygiene.js";
+export * from "./benchmarkAdapter.js";

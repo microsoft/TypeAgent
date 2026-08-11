@@ -15,6 +15,15 @@ import {
 } from "../policy/actionQualityPicker.js";
 import { listActionsWithLlmJudgeFields } from "../policy/graderInspect.js";
 
+/**
+ * Benign non-tool actions excluded from TB gold targeting and from scored
+ * fires on empty-gold negatives. Single source of truth — runner imports this.
+ */
+export const HARDCODED_NON_EVAL_ACTION_IDS: ReadonlySet<string> = new Set([
+    "chat.generateResponse",
+    "utility.claudeTask",
+]);
+
 export {
     clearPackagedActionEligibilityPolicyCacheForTests,
     getPackagedActionEligibilityPolicy,
