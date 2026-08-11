@@ -11,8 +11,10 @@ import {
     Entity,
 } from "@typeagent/agent-sdk";
 import {
+    ChoiceManager,
     createActionResultFromTextDisplay,
     createStructuredResult,
+    createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ListAction, ListActivity } from "./listSchema.js";
 
@@ -22,11 +24,20 @@ export function instantiate(): AppAgent {
         updateAgentContext: updateListContext,
         executeAction: executeListAction,
         validateWildcardMatch: listValidateWildcardMatch,
+        handleChoice: (choiceId, response, context) =>
+            (
+                context as ActionContext<ListActionContext>
+            ).sessionContext.agentContext.choiceManager.handleChoice(
+                choiceId,
+                response,
+                context,
+            ),
     };
 }
 
 type ListActionContext = {
     store: MemoryListCollection | undefined;
+    choiceManager: ChoiceManager;
 };
 
 async function executeListAction(
@@ -118,7 +129,7 @@ async function listValidateWildcardMatch(
 }
 
 async function initializeListContext() {
-    return { store: undefined };
+    return { store: undefined, choiceManager: new ChoiceManager() };
 }
 
 interface List {
@@ -183,6 +194,10 @@ class MemoryListCollection {
 
     getList(name: string): MemoryList | undefined {
         return this.lists.get(name);
+    }
+
+    deleteList(name: string): boolean {
+        return this.lists.delete(name);
     }
 
     getListNames(): string[] {
@@ -451,6 +466,34 @@ async function handleListAction(
                 displayText,
             );
             result.entities = getEntities(listName);
+            break;
+        }
+        case "deleteList": {
+            const listName = action.parameters.listName;
+            getList(listContext, listName);
+            result = createYesNoChoiceResult(
+                listContext.choiceManager,
+                `Delete list '${listName}'? This cannot be undone.`,
+                async (confirmed, liveActionContext) => {
+                    if (!confirmed) {
+                        return createActionResultFromTextDisplay(
+                            `Kept list: ${listName}`,
+                            `Kept list: ${listName}`,
+                        );
+                    }
+                    const liveListContext = (
+                        liveActionContext as ActionContext<ListActionContext>
+                    ).sessionContext.agentContext;
+                    const liveStore = getStore(liveListContext);
+                    getList(liveListContext, listName);
+                    liveStore.deleteList(listName);
+                    await liveStore.save();
+                    return createActionResultFromTextDisplay(
+                        `Deleted list: ${listName}`,
+                        `Deleted list: ${listName}`,
+                    );
+                },
+            );
             break;
         }
         case "startEditList": {

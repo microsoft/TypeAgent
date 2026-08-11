@@ -74,6 +74,11 @@ import { DispatcherConfig } from "../context/session.js";
 import { openai as ai, CompleteUsageStatsCallback } from "@typeagent/aiclient";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { getHistoryContext } from "./interpretRequest.js";
+import {
+    emitTranslationFallback,
+    emitTranslationRetry,
+    runInTranslationSpan,
+} from "../otel/translationSpan.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugSemanticSearch = registerDebug("typeagent:translate:semantic");
@@ -729,6 +734,11 @@ async function translateRequestWithSchema(
                     translator: selectedActionTranslator,
                 };
             }
+            // The optimize path produced an action that requires the full
+            // schema; retry with the full translator. This is the "same
+            // attempt, wider translator" tier of the translation retry
+            // vocabulary, distinct from an assistant-switch fallback.
+            emitTranslationRetry("selected_actions_full");
         }
     }
     const translator = getTranslatorForSchema(
@@ -975,6 +985,16 @@ async function finalizeAction(
             );
         }
 
+        // Emit fallback vs retry BEFORE running the next translation so
+        // that if it throws the event is already on the span. No user
+        // text, schema name, or request content is included on the event
+        // - only the enumerated tier.
+        if (nextSchemaName === currentSchemaName) {
+            emitTranslationRetry("same_schema");
+        } else {
+            emitTranslationFallback();
+        }
+
         const result = await translateRequestWithSchema(
             nextSchemaName,
             activeSchemas,
@@ -1209,6 +1229,32 @@ export type TranslationResult = {
 
 // null means cancelled because of replacement parse error.
 export async function translateRequest(
+    context: ActionContext<CommandHandlerContext>,
+    request: string,
+    history?: HistoryContext,
+    attachments?: CachedImageWithDetails[],
+    streamingActionIndex?: number,
+    activeSchemas?: string[],
+    usageCallback: (usage: ai.CompletionUsageStats) => void = () => {},
+    userContext?: UserContext,
+    actionConfigProvider?: ActionConfigProvider,
+): Promise<TranslationResult> {
+    return runInTranslationSpan(context, async () =>
+        translateRequestCore(
+            context,
+            request,
+            history,
+            attachments,
+            streamingActionIndex,
+            activeSchemas,
+            usageCallback,
+            userContext,
+            actionConfigProvider,
+        ),
+    );
+}
+
+async function translateRequestCore(
     context: ActionContext<CommandHandlerContext>,
     request: string,
     history?: HistoryContext,

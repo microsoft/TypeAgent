@@ -11,6 +11,15 @@ import {
     getRequestId,
     requestIdToString,
 } from "../context/commandHandlerContext.js";
+import {
+    context as otelContext,
+    SpanStatusCode,
+    trace,
+    type Context,
+} from "@opentelemetry/api";
+import { otel } from "@typeagent/telemetry";
+import { wrapRootRequestSpan } from "../otel/rootRequestSpan.js";
+import { getSessionName } from "../context/session.js";
 
 import {
     CommandDescriptor,
@@ -356,6 +365,17 @@ export async function processCommandNoLock(
         if (e.name === "AbortError" || context.currentAbortSignal?.aborted) {
             throw new DOMException("The operation was aborted.", "AbortError");
         }
+        const activeSpan = trace.getActiveSpan();
+        if (activeSpan !== undefined) {
+            activeSpan.recordException({
+                name: "CommandError",
+                message: "command failed",
+            });
+            activeSpan.setStatus({
+                code: SpanStatusCode.ERROR,
+                message: "command failed",
+            });
+        }
         context.clientIO.appendDisplay(
             makeClientIOMessage(
                 context,
@@ -442,6 +462,7 @@ export async function processCommand(
     requestId: RequestId,
     attachments?: string[],
     options?: ProcessCommandOptions,
+    parentContext?: Context,
 ): Promise<CommandResult | undefined> {
     // Create the AbortController *before* acquiring the lock so that a
     // cancelCommandByClientId() call that arrives while we are queued can
@@ -453,38 +474,89 @@ export async function processCommand(
             abortController,
         );
     }
-    try {
-        // Process one command at a time.
-        return await context.commandLock(async () => {
-            const requestIdStr = requestId.requestId;
-            context.activeRequests.set(requestIdStr, abortController);
-            context.currentOptions = options;
-            beginProcessCommand(
-                requestId,
-                context,
-                options,
-                abortController.signal,
-            );
-            context.clientIO.setUserRequest(requestId, originalInput);
+    // Compute the correlation attributes ONCE, before opening the root
+    // `typeagent.request` span. Values that only become known later
+    // (agent name, action name) are set on the active span by downstream
+    // steps in later phases; the root span carries only the values known
+    // at the outermost async boundary. Everything the wrapper receives is
+    // an identifier, not user text - see setTypeAgentSpanAttributes.
+    const sessionId = context.session.sessionDirPath
+        ? getSessionName(context.session.sessionDirPath)
+        : undefined;
+    const rootAttributes: {
+        -readonly [K in keyof otel.TypeAgentSpanAttributes]: otel.TypeAgentSpanAttributes[K];
+    } = {};
+    if (sessionId !== undefined) rootAttributes.sessionId = sessionId;
+    if (context.activationId !== undefined)
+        rootAttributes.activationId = context.activationId;
+    if (context.traceId !== undefined) rootAttributes.traceId = context.traceId;
+    // wrapRootRequestSpan opens `typeagent.request` and applies the
+    // correlation attributes; the callback body preserves the original
+    // command flow. startActiveSpan uses AsyncHooks context propagation
+    // so every downstream await (commandLock, processCommandNoLock,
+    // translation/reasoning/action) automatically nests under this span.
+    const rootParentContext =
+        parentContext ??
+        (context.telemetryOptions.joinActiveTrace
+            ? otelContext.active()
+            : undefined);
+    return await wrapRootRequestSpan(
+        rootAttributes,
+        async () => {
             try {
-                await processCommandNoLock(originalInput, context, attachments);
-            } catch (e: any) {
-                if (e.name === "AbortError") {
-                    ensureCommandResult(context).cancelled = true;
-                } else {
-                    throw e;
-                }
+                // Process one command at a time.
+                return await context.commandLock(async () => {
+                    const requestIdStr = requestId.requestId;
+                    context.activeRequests.set(requestIdStr, abortController);
+                    context.currentOptions = options;
+                    beginProcessCommand(
+                        requestId,
+                        context,
+                        options,
+                        abortController.signal,
+                    );
+                    context.clientIO.setUserRequest(requestId, originalInput);
+                    try {
+                        await processCommandNoLock(
+                            originalInput,
+                            context,
+                            attachments,
+                        );
+                    } catch (e: any) {
+                        if (e.name === "AbortError") {
+                            const activeSpan = trace.getActiveSpan();
+                            if (activeSpan !== undefined) {
+                                activeSpan.recordException({
+                                    name: "AbortError",
+                                    message: "cancelled",
+                                });
+                                activeSpan.setStatus({
+                                    code: SpanStatusCode.ERROR,
+                                    message: "cancelled",
+                                });
+                            }
+                            ensureCommandResult(context).cancelled = true;
+                        } else {
+                            throw e;
+                        }
+                    } finally {
+                        context.activeRequests.delete(requestIdStr);
+                        context.currentOptions = undefined;
+                        return endProcessCommand(requestId, context);
+                    }
+                });
             } finally {
-                context.activeRequests.delete(requestIdStr);
-                context.currentOptions = undefined;
-                return endProcessCommand(requestId, context);
+                if (requestId.clientRequestId !== undefined) {
+                    context.activeRequestsByClientId.delete(
+                        requestId.clientRequestId,
+                    );
+                }
             }
-        });
-    } finally {
-        if (requestId.clientRequestId !== undefined) {
-            context.activeRequestsByClientId.delete(requestId.clientRequestId);
-        }
-    }
+        },
+        {
+            parentContext: rootParentContext,
+        },
+    );
 }
 
 export const enum unicodeChar {
