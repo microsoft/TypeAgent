@@ -48,8 +48,26 @@ export interface TestUtterance {
         disposition?: {
             status: "handled" | "notHandled" | "failed";
             path?: "action" | "reasoning" | "command";
-            reason?: "unknown" | "clarification" | "noActiveSchema";
+            reason?:
+                | "unknown"
+                | "clarification"
+                | "noActiveSchema"
+                | "notPowerShellCapable";
             schemas?: string[];
+            mayHaveSideEffects?: boolean;
+        };
+        capabilityOutcome?: {
+            status: "handledExisting" | "created" | "notSuitable" | "failed";
+            schema?: string;
+            actionName?: string;
+            flowName?: string;
+            reasonCode?: string;
+            phase?:
+                | "classify"
+                | "discover"
+                | "validate"
+                | "execute"
+                | "persist";
             mayHaveSideEffects?: boolean;
         };
         llmJudge?: { question: string; context?: string };
@@ -60,7 +78,10 @@ export interface BenchmarkCommandOptions {
     noReasoning?: boolean;
     activeSchemas?: string[];
     activeSchemaFamilies?: string[];
-    reasoningProfile?: "default" | "powershellFlowRecording";
+    reasoningProfile?:
+        | "default"
+        | "powershellFlowRecording"
+        | "powershellCapabilityFallback";
 }
 
 export interface PipelineTrace {
@@ -92,6 +113,7 @@ export interface EvaluationResult {
         | "execution"
         | "fallback"
         | "disposition"
+        | "capability-outcome"
         | "llm-judge";
     expected: unknown;
     actual: unknown;

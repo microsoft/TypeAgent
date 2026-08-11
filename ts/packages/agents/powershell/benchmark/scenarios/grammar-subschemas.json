@@ -969,6 +969,14 @@
           "matchedFlow": "portListeners",
           "extractedParams": {}
         }
+      },
+      {
+        "text": "show me the processes using ports on my machine",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "portListeners",
+          "extractedParams": {}
+        }
       }
     ]
   },

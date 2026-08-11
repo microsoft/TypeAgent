@@ -16,6 +16,7 @@ import {
     evaluateFallback,
 } from "./evaluators/executionEvaluator.mjs";
 import { evaluateDisposition } from "./evaluators/dispositionEvaluator.mjs";
+import { evaluateCapabilityOutcome } from "./evaluators/capabilityOutcomeEvaluator.mjs";
 import {
     buildScorecard,
     printScorecard,
@@ -292,6 +293,9 @@ export class BenchmarkRunner {
             );
             evaluations.push(
                 ...evaluateDisposition(resolvedUtterance, commandResult),
+            );
+            evaluations.push(
+                ...evaluateCapabilityOutcome(resolvedUtterance, commandResult),
             );
 
             const passed = evaluations.every((e) => e.passed);
