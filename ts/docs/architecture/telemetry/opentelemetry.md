@@ -211,10 +211,22 @@ oversized correlation value is omitted. The sink does not retain a prefix:
 partial truncation could expose part of a secret that the complete value would
 have matched. Redaction runs only after this bound and the result must also fit.
 
-Producers sanitize prompts, responses, user content, and PII at the source;
-the sink applies known-secret and secret-format filtering as defense in depth,
-covering the promoted correlation attributes and every string reachable in the
-snapshotted body.
+The dispatcher places an allowlisted projection in front of `OtelLoggerSink`.
+Only bounded correlation identifiers, agent/schema/action names, state and
+reason fields, durations and counts, booleans, and command/schema-name arrays
+reach OTel. Prompt and response text, history, action parameters, errors and
+stacks, feedback comments and context, and all unknown fields are excluded.
+Other producers that attach `OtelLoggerSink` remain responsible for an
+equivalent source-specific projection. The sink applies known-secret and
+secret-format filtering as defense in depth, covering the promoted correlation
+attributes and every string reachable in the projected body.
+
+The local JSONL exporter restricts each file, and any leaf directory it creates,
+to the current user before writing log content. It enforces `0700`/`0600` modes
+on POSIX and replaces inherited Windows ACLs with current-user-only access. It
+does not change an existing parent directory's permissions. If the file or a
+new directory cannot be secured, the export fails closed and reports a
+content-free diagnostic.
 
 Emit failures are isolated: the sink drops the OTel record and never re-enters
 the `MultiSinkLogger` fan-out. A rate-limited diagnostic writes directly to
@@ -226,8 +238,9 @@ their original output:
 - Preserve `DEBUG`, `@trace`, stderr, colors, timestamps, and CLI interception.
 - Call the exact prior `debug.log` implementation, and restore it on shutdown
   only while the bridge still owns it.
-- Derive the namespace from the debug instance; render the OTel body separately
-  without ANSI codes.
+- Derive the namespace from the debug instance; capture arguments before
+  `debug` adds timestamps, namespace prefixes, colors, and elapsed time, then
+  render the OTel body separately without ANSI codes.
 - Cover each known distinct `debug` module instance. One hook is not assumed to
   cover the process.
 - Install idempotently, avoid wrapping an instance twice, and use reentrancy and

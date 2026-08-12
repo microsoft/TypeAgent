@@ -384,6 +384,43 @@ describe("RequestQueue", () => {
         expect(names).toContain("requestQueue:complete");
     });
 
+    it("logs failed requests with error severity", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { broadcaster } = makeRecorder();
+        const logged: Array<{
+            name: string;
+            severity: string | undefined;
+        }> = [];
+        const queue = new RequestQueue(
+            (ctx) =>
+                dispatcher.processCommand(
+                    ctx.text,
+                    ctx.clientRequestId,
+                    ctx.attachments,
+                    ctx.options,
+                    ctx.requestId,
+                ),
+            broadcaster,
+            {
+                logEvent: (name, _data, severity) =>
+                    logged.push({ name, severity }),
+            },
+        );
+
+        const entry = queue.submit({
+            text: "x",
+            originatorConnectionId: "c1",
+        });
+        await flush();
+        dispatcher.calls[0].reject(new Error("failed"));
+        await expect(entry.completion).rejects.toThrow("failed");
+
+        expect(logged).toContainEqual({
+            name: "requestQueue:complete",
+            severity: "error",
+        });
+    });
+
     it("drainAndStop resolves after queue drains", async () => {
         const dispatcher = new ControllableDispatcher();
         const { queue } = makeQueue(dispatcher);

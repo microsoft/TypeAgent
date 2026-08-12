@@ -13,7 +13,8 @@ import {
 import { redactText, type RedactionOptions } from "./redaction.js";
 
 export interface DebugModule {
-    log: (this: { namespace?: string }, ...args: unknown[]) => unknown;
+    log: DebugFunction;
+    formatArgs?: DebugFunction;
 }
 
 export interface DebugBridgeOptions extends RedactionOptions {
@@ -26,11 +27,17 @@ export interface DebugBridge {
 }
 
 interface InstalledBridge {
-    readonly priorLog: DebugModule["log"];
-    readonly wrappedLog: DebugModule["log"];
+    readonly hook: "formatArgs" | "log";
+    readonly prior: DebugFunction;
+    readonly wrapped: DebugFunction;
     readonly options: EffectiveDebugBridgeOptions;
     refCount: number;
 }
+
+type DebugFunction = (
+    this: { namespace?: string },
+    ...args: unknown[]
+) => unknown;
 
 interface EffectiveDebugBridgeOptions extends RedactionOptions {
     readonly includedNamespacePrefixes: readonly string[];
@@ -83,74 +90,41 @@ export function installDebugBridge(
             continue;
         }
 
-        const priorLog = debugModule.log;
-        const wrappedLog: DebugModule["log"] = function (
-            this: { namespace?: string },
-            ...args: unknown[]
-        ): unknown {
-            const result = priorLog.apply(this, args);
-            const namespace = this?.namespace;
-            if (
-                emitting ||
-                namespace === undefined ||
-                !effectiveOptions.includedNamespacePrefixes.some((prefix) =>
-                    namespace.startsWith(prefix),
-                ) ||
-                effectiveOptions.excludedNamespacePrefixes.some((prefix) =>
-                    namespace.startsWith(prefix),
-                )
-            ) {
-                return result;
-            }
-            const activeContext = otelContext.active();
-            if (isTracingSuppressed(activeContext)) {
-                return result;
-            }
-            try {
-                emitting = true;
-                const logger = logs.getLogger(
-                    INSTRUMENTATION_SCOPE_NAME,
-                    INSTRUMENTATION_SCOPE_VERSION,
-                );
-                if (
-                    logger.enabled({
-                        context: activeContext,
-                        severityNumber: SeverityNumber.DEBUG,
-                    })
-                ) {
-                    const rendered = format(...args).replace(ANSI_ESCAPE, "");
-                    const redacted =
-                        rendered.length <= MAX_BODY_LENGTH
-                            ? redactText(rendered, effectiveOptions)
-                            : undefined;
-                    const body =
-                        redacted !== undefined &&
-                        redacted.length <= MAX_BODY_LENGTH
-                            ? redacted
-                            : "[typeagent debug output truncated]";
-                    logger.emit({
-                        context: activeContext,
-                        severityNumber: SeverityNumber.DEBUG,
-                        severityText: "DEBUG",
-                        eventName: "debug",
-                        body,
-                        attributes: {
-                            "debug.namespace": namespace,
-                        },
-                    });
-                }
-            } catch {
-                // The original debug output already ran. Bridge failures lose
-                // only the OTel copy and never recurse through diagnostics.
-            } finally {
-                emitting = false;
-            }
-            return result;
-        };
-        debugModule.log = wrappedLog;
+        const hook =
+            debugModule.formatArgs === undefined ? "log" : "formatArgs";
+        const prior = debugModule[hook]!;
+        const wrapped: DebugFunction =
+            hook === "formatArgs"
+                ? function (
+                      this: { namespace?: string },
+                      ...callArgs: unknown[]
+                  ): unknown {
+                      const args = callArgs[0];
+                      if (!Array.isArray(args)) {
+                          return prior.apply(this, callArgs);
+                      }
+                      const rawArgs = [...args];
+                      const result = prior.apply(this, callArgs);
+                      emitDebugRecord(
+                          this?.namespace,
+                          rawArgs,
+                          effectiveOptions,
+                      );
+                      return result;
+                  }
+                : function (
+                      this: { namespace?: string },
+                      ...args: unknown[]
+                  ): unknown {
+                      const result = prior.apply(this, args);
+                      emitDebugRecord(this?.namespace, args, effectiveOptions);
+                      return result;
+                  };
+        debugModule[hook] = wrapped;
         installedBridges.set(debugModule, {
-            priorLog,
-            wrappedLog,
+            hook,
+            prior,
+            wrapped,
             options: effectiveOptions,
             refCount: 1,
         });
@@ -173,13 +147,74 @@ export function installDebugBridge(
                 if (state.refCount > 0) {
                     continue;
                 }
-                if (debugModule.log === state.wrappedLog) {
-                    debugModule.log = state.priorLog;
+                if (debugModule[state.hook] === state.wrapped) {
+                    debugModule[state.hook] = state.prior;
                 }
                 installedBridges.delete(debugModule);
             }
         },
     };
+}
+
+function emitDebugRecord(
+    namespace: string | undefined,
+    args: unknown[],
+    options: EffectiveDebugBridgeOptions,
+): void {
+    if (
+        emitting ||
+        namespace === undefined ||
+        !options.includedNamespacePrefixes.some((prefix) =>
+            namespace.startsWith(prefix),
+        ) ||
+        options.excludedNamespacePrefixes.some((prefix) =>
+            namespace.startsWith(prefix),
+        )
+    ) {
+        return;
+    }
+    const activeContext = otelContext.active();
+    if (isTracingSuppressed(activeContext)) {
+        return;
+    }
+    try {
+        emitting = true;
+        const logger = logs.getLogger(
+            INSTRUMENTATION_SCOPE_NAME,
+            INSTRUMENTATION_SCOPE_VERSION,
+        );
+        if (
+            logger.enabled({
+                context: activeContext,
+                severityNumber: SeverityNumber.DEBUG,
+            })
+        ) {
+            const rendered = format(...args).replace(ANSI_ESCAPE, "");
+            const redacted =
+                rendered.length <= MAX_BODY_LENGTH
+                    ? redactText(rendered, options)
+                    : undefined;
+            const body =
+                redacted !== undefined && redacted.length <= MAX_BODY_LENGTH
+                    ? redacted
+                    : "[typeagent debug output truncated]";
+            logger.emit({
+                context: activeContext,
+                severityNumber: SeverityNumber.DEBUG,
+                severityText: "DEBUG",
+                eventName: "debug",
+                body,
+                attributes: {
+                    "debug.namespace": namespace,
+                },
+            });
+        }
+    } catch {
+        // Bridge failures lose only the OTel copy and never recurse through
+        // diagnostics or affect the original debug output.
+    } finally {
+        emitting = false;
+    }
 }
 
 function hasEquivalentOptions(

@@ -284,13 +284,17 @@ async function canTranslateWithoutContext(
             newActions,
         });
     } catch (e: any) {
-        logger?.logEvent("contextlessTranslation", {
-            requestAction,
-            actions: oldActions,
-            history: requestAction.history,
-            newActions,
-            error: e.message,
-        });
+        logger?.logEvent(
+            "contextlessTranslation",
+            {
+                requestAction,
+                actions: oldActions,
+                history: requestAction.history,
+                newActions,
+                error: e.message,
+            },
+            "error",
+        );
         throw e;
     }
 }
@@ -824,11 +828,15 @@ export class RequestCommandHandler implements CommandHandler {
                         DispatcherName,
                     );
                 }
-                systemContext?.logger?.logEvent("request:exception", {
-                    request,
-                    message: e.message,
-                    stack: e.stack,
-                });
+                systemContext?.logger?.logEvent(
+                    "request:exception",
+                    {
+                        request,
+                        message: e.message,
+                        stack: e.stack,
+                    },
+                    "error",
+                );
                 throw e;
             }
 

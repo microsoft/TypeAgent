@@ -3,6 +3,7 @@
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { execFile } from "node:child_process";
 import { ExportResultCode, type ExportResult } from "@opentelemetry/core";
 import type {
     LogRecordExporter,
@@ -26,6 +27,7 @@ export class JsonlLogExporter implements LogRecordExporter {
     private readonly maxPendingRecords: number;
     private readonly diagnostic: (message: string, error?: unknown) => void;
     private tail: Promise<void> = Promise.resolve();
+    private destination: Promise<fs.FileHandle> | undefined;
     private pendingRecords = 0;
     private droppedRecords = 0;
     private stopped = false;
@@ -104,8 +106,8 @@ export class JsonlLogExporter implements LogRecordExporter {
 
         this.pendingRecords += accepted.length;
         const operation = this.tail.then(async () => {
-            await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-            await fs.appendFile(this.filePath, content, "utf8");
+            const file = await (this.destination ??= this.openDestination());
+            await file.appendFile(content, "utf8");
         });
         this.tail = operation.catch(() => undefined);
         void operation
@@ -141,7 +143,12 @@ export class JsonlLogExporter implements LogRecordExporter {
         try {
             await this.tail;
         } finally {
-            activePaths.delete(this.filePath);
+            try {
+                const file = await this.destination?.catch(() => undefined);
+                await file?.close();
+            } finally {
+                activePaths.delete(this.filePath);
+            }
         }
     }
 
@@ -165,6 +172,113 @@ export class JsonlLogExporter implements LogRecordExporter {
             // Diagnostics must never affect exporter ownership or requests.
         }
     }
+
+    private async openDestination(): Promise<fs.FileHandle> {
+        const directory = path.dirname(this.filePath);
+        const createdDirectory =
+            (await fs.mkdir(directory, {
+                recursive: true,
+                mode: 0o700,
+            })) !== undefined;
+        const file = await fs.open(this.filePath, "a", 0o600);
+        try {
+            if (process.platform === "win32") {
+                await setPrivateWindowsAcl(
+                    directory,
+                    this.filePath,
+                    createdDirectory,
+                );
+            } else {
+                await Promise.all([
+                    ...(createdDirectory ? [fs.chmod(directory, 0o700)] : []),
+                    file.chmod(0o600),
+                ]);
+            }
+            return file;
+        } catch (error) {
+            await file.close();
+            throw error;
+        }
+    }
+}
+
+const WINDOWS_ACL_SCRIPT = `
+$ErrorActionPreference = "Stop"
+$identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+
+if ($env:TYPEAGENT_SECURE_LOG_DIRECTORY -eq "true") {
+    $directoryAcl = [System.Security.AccessControl.DirectorySecurity]::new()
+    $directoryAcl.SetOwner($identity)
+    $directoryAcl.SetAccessRuleProtection($true, $false)
+    $directoryRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+        $identity,
+        [System.Security.AccessControl.FileSystemRights]::FullControl,
+        [System.Security.AccessControl.InheritanceFlags]"ContainerInherit, ObjectInherit",
+        [System.Security.AccessControl.PropagationFlags]::None,
+        [System.Security.AccessControl.AccessControlType]::Allow
+    )
+    $directoryAcl.AddAccessRule($directoryRule)
+    [System.IO.Directory]::SetAccessControl(
+        $env:TYPEAGENT_LOG_DIRECTORY,
+        $directoryAcl
+    )
+}
+
+$fileAcl = [System.Security.AccessControl.FileSecurity]::new()
+$fileAcl.SetOwner($identity)
+$fileAcl.SetAccessRuleProtection($true, $false)
+$fileRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+    $identity,
+    [System.Security.AccessControl.FileSystemRights]::FullControl,
+    [System.Security.AccessControl.AccessControlType]::Allow
+)
+$fileAcl.AddAccessRule($fileRule)
+[System.IO.File]::SetAccessControl($env:TYPEAGENT_LOG_FILE, $fileAcl)
+`;
+
+function setPrivateWindowsAcl(
+    directory: string,
+    filePath: string,
+    secureDirectory: boolean,
+): Promise<void> {
+    const executable = path.join(
+        process.env.SystemRoot ?? "C:\\Windows",
+        "System32",
+        "WindowsPowerShell",
+        "v1.0",
+        "powershell.exe",
+    );
+    const encodedCommand = Buffer.from(WINDOWS_ACL_SCRIPT, "utf16le").toString(
+        "base64",
+    );
+    return new Promise((resolve, reject) => {
+        execFile(
+            executable,
+            [
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-EncodedCommand",
+                encodedCommand,
+            ],
+            {
+                windowsHide: true,
+                env: {
+                    ...process.env,
+                    TYPEAGENT_LOG_DIRECTORY: directory,
+                    TYPEAGENT_LOG_FILE: filePath,
+                    TYPEAGENT_SECURE_LOG_DIRECTORY: String(secureDirectory),
+                },
+            },
+            (error) => {
+                if (error === null) {
+                    resolve();
+                } else {
+                    reject(error);
+                }
+            },
+        );
+    });
 }
 
 export function resolveJsonlLogPath(

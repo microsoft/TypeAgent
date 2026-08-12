@@ -877,6 +877,29 @@ describe("OtelLoggerSink", () => {
             });
         });
 
+        it("stops reading a wide object after reaching the size bound", () => {
+            logFixture = installLogFixture();
+            const sink = createOtelLoggerSink();
+            const payload: Record<string, unknown> = {};
+            let getterReads = 0;
+            for (let i = 0; i < 100_000; i++) {
+                Object.defineProperty(payload, `field-${i}`, {
+                    enumerable: true,
+                    get() {
+                        getterReads++;
+                        return "value";
+                    },
+                });
+            }
+
+            sink.logEvent(baseEvent({ event: payload }));
+
+            const body = logFixture.exporter.getFinishedLogRecords()[0]!
+                .body as Record<string, unknown>;
+            expect(body.__typeagent_otel_truncated).toBe("size");
+            expect(getterReads).toBeLessThan(10_000);
+        });
+
         it("replaces a single oversized value instead of retaining it whole", () => {
             logFixture = installLogFixture();
             const sink = createOtelLoggerSink();

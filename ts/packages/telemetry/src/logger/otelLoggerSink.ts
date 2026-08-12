@@ -512,7 +512,10 @@ function cloneBounded(
             return clone;
         }
         let first = true;
-        for (const [key, item] of Object.entries(source)) {
+        for (const key in source) {
+            if (!Object.prototype.hasOwnProperty.call(source, key)) {
+                continue;
+            }
             if (state.sizeTruncated) {
                 setOwnValue(clone, TRUNCATION_MARKER_KEY, "size");
                 break;
@@ -524,7 +527,11 @@ function cloneBounded(
                 break;
             }
             first = false;
-            setOwnValue(clone, key, cloneBounded(item, depth + 1, state));
+            setOwnValue(
+                clone,
+                key,
+                cloneBounded(source[key], depth + 1, state),
+            );
             if (state.sizeTruncated) {
                 break;
             }

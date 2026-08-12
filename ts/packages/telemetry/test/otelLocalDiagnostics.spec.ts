@@ -4,6 +4,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { execFileSync } from "node:child_process";
 import { context, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
@@ -106,6 +107,38 @@ describe("JsonlLogExporter", () => {
             .split("\n")
             .map((line) => JSON.parse(line) as { body: string });
         expect(lines.map((line) => line.body)).toEqual(["first", "second"]);
+    });
+
+    it("creates private directories and files", async () => {
+        const dir = makeTempDir();
+        tempDirs.push(dir);
+        const exporter = new JsonlLogExporter({
+            filePath: path.join(dir, "private", "logs-{pid}.jsonl"),
+            serviceName: "test",
+            pid: 1006,
+            diagnostic: () => undefined,
+        });
+
+        await exportRecords(exporter, [createRecord("private")]);
+        await exporter.shutdown();
+
+        if (process.platform === "win32") {
+            const directoryAcl = execFileSync(
+                "icacls.exe",
+                [path.dirname(exporter.filePath)],
+                { encoding: "utf8" },
+            );
+            const fileAcl = execFileSync("icacls.exe", [exporter.filePath], {
+                encoding: "utf8",
+            });
+            expect(directoryAcl).not.toContain("(I)");
+            expect(fileAcl).not.toContain("(I)");
+        } else {
+            expect(
+                fs.statSync(path.dirname(exporter.filePath)).mode & 0o777,
+            ).toBe(0o700);
+            expect(fs.statSync(exporter.filePath).mode & 0o777).toBe(0o600);
+        }
     });
 
     it("bounds pending records and accounts for drops", async () => {

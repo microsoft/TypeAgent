@@ -13,7 +13,6 @@ import {
     MultiSinkLogger,
     createDebugLoggerSink,
     createDatabaseLoggerSink,
-    createOtelLoggerSink,
     CosmosContainerClientFactory,
     CosmosPartitionKeyBuilderFactory,
     PromptLogger,
@@ -52,6 +51,7 @@ import {
     ensureDirectory,
     lockInstanceDir,
 } from "../utils/fsUtils.js";
+import { createDispatcherOtelLoggerSink } from "../otel/structuredLogSink.js";
 import {
     ActionContext,
     AppAgentEvent,
@@ -774,7 +774,7 @@ function getLoggerSink(
             ? [debugLoggerSink]
             : [debugLoggerSink, dbLoggerSink];
     if (structuredLogs) {
-        sinks.push(createOtelLoggerSink());
+        sinks.push(createDispatcherOtelLoggerSink());
     }
     return new MultiSinkLogger(sinks);
 }
@@ -1432,8 +1432,8 @@ export async function initializeCommandHandlerContext(
             },
             context.logger
                 ? {
-                      logEvent: (name, data) =>
-                          context.logger?.logEvent(name, data as any),
+                      logEvent: (name, data, severity) =>
+                          context.logger?.logEvent(name, data as any, severity),
                   }
                 : undefined,
         );
