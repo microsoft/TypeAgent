@@ -72,8 +72,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withStateAtLeast
 import com.example.typeagentchat.ui.theme.TypeAgentChatTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class MainActivity : ComponentActivity() {
 
@@ -101,16 +104,24 @@ class MainActivity : ComponentActivity() {
         // backgrounded - launchExternalIntent does the foreground check itself
         // and reports the refusal. Gating collection on RESUMED would instead
         // leave the action queued, and the server's call hanging, until the
-        // user happened to come back. The channel still buffers across the
-        // Activity gap during a configuration change.
+        // user happened to come back.
         lifecycleScope.launch {
             viewModel.clientActions.collect { action ->
-                when (action) {
-                    is ClientAction.Alarm ->
-                        launchSetAlarmIntent(action.action, action.completion)
-                    is ClientAction.Timer ->
-                        launchSetTimerIntent(action.action, action.completion)
-                    is ClientAction.SearchNearby -> launchSearchNearbyIntent(action.action)
+                try {
+                    awaitResumedOrGiveUp()
+                    when (action) {
+                        is ClientAction.Alarm ->
+                            launchSetAlarmIntent(action.action, action.completion)
+                        is ClientAction.Timer ->
+                            launchSetTimerIntent(action.action, action.completion)
+                        is ClientAction.SearchNearby -> launchSearchNearbyIntent(action.action)
+                    }
+                } catch (cancellation: CancellationException) {
+                    // The action was already taken off the channel, so no other
+                    // Activity will ever see it. Answer the waiting RPC before
+                    // unwinding rather than leaving the agent blocked.
+                    action.failWith(ACTIVITY_GONE_MESSAGE)
+                    throw cancellation
                 }
             }
         }
@@ -130,6 +141,41 @@ class MainActivity : ComponentActivity() {
     // No onDestroy teardown: the socket is owned by ChatViewModel and released
     // in its onCleared. Disconnecting here would tear the connection down on
     // every rotation, theme or locale change.
+
+    /**
+     * Waits a short while for the Activity to reach RESUMED, giving up quietly
+     * if it does not.
+     *
+     * `lifecycleScope` dispatches with `Dispatchers.Main.immediate`, so the
+     * collector above starts running inline inside `onCreate` and an action
+     * buffered across a configuration change is picked up while the new
+     * Activity is still CREATED. Dispatching it right then would hit
+     * [launchExternalIntent]'s foreground guard and refuse a perfectly valid
+     * action, blaming a backgrounded app that is in fact mid-recreation.
+     * onResume follows within a frame or two, so a brief wait lets it through.
+     *
+     * The wait is bounded so a genuinely backgrounded app still fails fast and
+     * releases the agent's `executeAction` call instead of holding it until the
+     * user returns.
+     */
+    private suspend fun awaitResumedOrGiveUp() {
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            return
+        }
+        withTimeoutOrNull(RESUME_GRACE_MILLIS) {
+            lifecycle.withStateAtLeast(Lifecycle.State.RESUMED) { }
+        }
+    }
+
+    private fun ClientAction.failWith(message: String) {
+        val result = AndroidDeviceExecutionResult.Failure(message)
+        when (this) {
+            is ClientAction.Alarm -> completion(result)
+            is ClientAction.Timer -> completion(result)
+            // Nothing is waiting on this one, it is fire and forget.
+            is ClientAction.SearchNearby -> Unit
+        }
+    }
 
     private fun launchSetAlarmIntent(
         action: SetAlarmAction,
@@ -279,6 +325,17 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         private const val TAG = "MainActivity"
+
+        /**
+         * How long a client action waits for the Activity to resume before it
+         * is treated as arriving while the app is backgrounded. Long enough to
+         * cover an Activity recreation, short enough that the agent is not left
+         * waiting on a user who has switched away.
+         */
+        private const val RESUME_GRACE_MILLIS = 2_000L
+
+        private const val ACTIVITY_GONE_MESSAGE =
+            "The Android app closed the chat screen before the action could run."
     }
 }
 

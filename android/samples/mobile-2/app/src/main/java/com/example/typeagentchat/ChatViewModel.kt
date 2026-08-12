@@ -83,7 +83,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      *
      * The consumer collects for the Activity's whole lifetime, not just while
      * it is resumed, so a queued action is never left waiting on the user
-     * returning to the app. Foreground-only enforcement lives in
+     * returning to the app. It does wait briefly for a recreated Activity to
+     * reach RESUMED before dispatching. Foreground-only enforcement lives in
      * `MainActivity.launchExternalIntent`, which reports the refusal.
      */
     private val clientActionEvents = Channel<ClientAction>(Channel.UNLIMITED)
@@ -223,7 +224,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Queues a client action for whichever Activity is currently resumed.
+     * Queues a client action for the chat Activity.
      *
      * The channel is unbounded, so the only way the send fails is if it has
      * already been closed in [onCleared]. When that happens the agent is still
