@@ -240,20 +240,28 @@ describe("Copilot dev actions hook", () => {
             | ((result: CommandResult | undefined) => void)
             | undefined;
         let resolveSubmit:
-            | ((
-                  result: Awaited<ReturnType<Dispatcher["submitCommand"]>>,
-              ) => void)
+            | ((result: {
+                  ok: true;
+                  entry: {
+                      requestId: string;
+                      completion: Promise<CommandResult | undefined>;
+                  };
+              }) => void)
             | undefined;
         const completion = new Promise<CommandResult | undefined>((resolve) => {
             resolveCompletion = resolve;
         });
         const submitCommand = jest.fn(
             () =>
-                new Promise<Awaited<ReturnType<Dispatcher["submitCommand"]>>>(
-                    (resolve) => {
-                        resolveSubmit = resolve;
-                    },
-                ),
+                new Promise<{
+                    ok: true;
+                    entry: {
+                        requestId: string;
+                        completion: Promise<CommandResult | undefined>;
+                    };
+                }>((resolve) => {
+                    resolveSubmit = resolve;
+                }),
         );
         const cancelCommand = jest.fn(async () => {
             resolveCompletion?.({ cancelled: true });

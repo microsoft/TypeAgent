@@ -149,7 +149,7 @@ export async function handleDevActions(
                 earlyCancellation = Promise.reject(error);
             }
         }
-        void earlyCancellation.catch((error) => {
+        void earlyCancellation?.catch((error) => {
             console.error("TypeAgent dev mode cancellation error:", error);
         });
     };
