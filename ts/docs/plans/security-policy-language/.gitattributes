@@ -1,0 +1,2 @@
+*.docx -text diff=astextplain
+*.pptx -text
