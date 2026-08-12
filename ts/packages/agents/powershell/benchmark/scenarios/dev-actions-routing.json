@@ -12,10 +12,11 @@
         "text": "show me the processes using ports on my machine",
         "options": {
           "activeSchemaFamilies": ["powershell"],
-          "noReasoning": true
+          "noReasoning": false,
+          "reasoningProfile": "powershellCapabilityFallback"
         },
         "expected": {
-          "routedTo": "llm-translation",
+          "routedTo": "grammar",
           "matchedFlow": "portListeners",
           "matchedAgent": "powershell",
           "disposition": {
@@ -40,7 +41,8 @@
         "text": "list files",
         "options": {
           "activeSchemaFamilies": ["powershell"],
-          "noReasoning": true
+          "noReasoning": false,
+          "reasoningProfile": "powershellCapabilityFallback"
         },
         "expected": {
           "routedTo": "grammar",
@@ -58,6 +60,35 @@
   {
     "id": "dev-route-03",
     "category": "dev-actions-routing",
+    "description": "Unmodeled PowerShell capabilities use reasoning",
+    "required": true,
+    "setup": {},
+    "utterances": [
+      {
+        "text": "show me the five environment variables with the longest values on my machine",
+        "options": {
+          "activeSchemaFamilies": ["powershell"],
+          "noReasoning": false,
+          "reasoningProfile": "powershellCapabilityFallback"
+        },
+        "expected": {
+          "routedTo": "reasoning",
+          "matchedAgent": "powershell",
+          "disposition": {
+            "status": "handled",
+            "path": "reasoning",
+            "schemas": ["powershell"]
+          },
+          "capabilityOutcome": {
+            "status": "created"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "dev-route-04",
+    "category": "dev-actions-routing",
     "description": "Non-PowerShell development work remains unhandled",
     "required": true,
     "setup": {},
@@ -66,14 +97,17 @@
         "text": "add unit tests for the hook router",
         "options": {
           "activeSchemaFamilies": ["powershell"],
-          "noReasoning": true
+          "noReasoning": false,
+          "reasoningProfile": "powershellCapabilityFallback"
         },
         "expected": {
-          "routedTo": "llm-translation",
-          "matchedFlow": null,
+          "routedTo": "reasoning",
           "disposition": {
             "status": "notHandled",
-            "reason": "unknown"
+            "reason": "notPowerShellCapable"
+          },
+          "capabilityOutcome": {
+            "status": "notSuitable"
           }
         }
       }
