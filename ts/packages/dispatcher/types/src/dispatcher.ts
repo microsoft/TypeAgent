@@ -94,13 +94,39 @@ export type CommandDisposition =
       }
     | {
           status: "notHandled";
-          reason: "unknown" | "clarification" | "noActiveSchema";
+          reason:
+              | "unknown"
+              | "clarification"
+              | "noActiveSchema"
+              | "notPowerShellCapable";
       }
     | {
           status: "failed";
           path: "action" | "reasoning" | "command";
           mayHaveSideEffects: boolean;
           schemas?: string[];
+      };
+
+export type PowerShellCapabilityOutcome =
+    | {
+          status: "handledExisting";
+          schema: string;
+          actionName: string;
+          flowName?: string;
+      }
+    | {
+          status: "created";
+          flowName: string;
+      }
+    | {
+          status: "notSuitable";
+          reasonCode: string;
+      }
+    | {
+          status: "failed";
+          phase: "classify" | "discover" | "validate" | "execute" | "persist";
+          mayHaveSideEffects: boolean;
+          reason: string;
       };
 
 export type CommandResult = {
@@ -115,6 +141,8 @@ export type CommandResult = {
     // Explicit routing outcome for callers that need safe handled/fallthrough
     // behavior without inferring it from actions or display output.
     disposition?: CommandDisposition;
+    // Machine-readable completion reported by PowerShell capability reasoning.
+    capabilityOutcome?: PowerShellCapabilityOutcome;
     metrics?: RequestMetrics;
     // Token usage for translating the user's request into actions (the LLM
     // "translation" step). Absent for @-commands and cached translations.
@@ -317,9 +345,18 @@ export type ProcessCommandOptions = {
      */
     activeSchemas?: string[];
     /**
+     * Restrict translation and grammar matching to active schemas in these
+     * families. A family includes its root schema and dot-qualified children,
+     * such as "powershell" and "powershell.powershell-network".
+     */
+    activeSchemaFamilies?: string[];
+    /**
      * Add request-scoped instructions to the configured reasoning engine.
      */
-    reasoningProfile?: "default" | "powershellFlowRecording";
+    reasoningProfile?:
+        | "default"
+        | "powershellFlowRecording"
+        | "powershellCapabilityFallback";
     /**
      * User-environment context for translation prompts.
      * Provides information about which app/host the user is currently in

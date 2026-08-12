@@ -20,6 +20,8 @@ import {
     ATTR_PROCESS_PID,
     ATTR_PROCESS_RUNTIME_NAME,
     ATTR_PROCESS_RUNTIME_VERSION,
+    ATTR_VCS_REF_BASE_REVISION,
+    ATTR_VCS_REF_HEAD_REVISION,
 } from "@opentelemetry/semantic-conventions/incubating";
 
 const PROCESS_INSTANCE_ID = randomUUID();
@@ -36,6 +38,10 @@ export interface ProcessResourceOptions {
     readonly serviceName: string;
     /** `service.version`, when known. */
     readonly serviceVersion?: string;
+    /** VCS revision checked out in the running build. */
+    readonly headRevision?: string;
+    /** VCS revision the running build is based on. */
+    readonly baseRevision?: string;
     /** Unique identity for this running process. Defaults to a UUID. */
     readonly serviceInstanceId?: string;
     /** `deployment.environment.name`, when known. */
@@ -74,6 +80,14 @@ export function createProcessResource(
         options.deploymentEnvironment,
         "deploymentEnvironment",
     );
+    const headRevision = normalizeOptional(
+        options.headRevision,
+        "headRevision",
+    );
+    const baseRevision = normalizeOptional(
+        options.baseRevision,
+        "baseRevision",
+    );
 
     const identity: Record<string, AttributeValue> = {
         [ATTR_SERVICE_NAME]: serviceName,
@@ -90,6 +104,12 @@ export function createProcessResource(
     if (deploymentEnvironment !== undefined) {
         identity[ATTR_DEPLOYMENT_ENVIRONMENT_NAME] = deploymentEnvironment;
     }
+    if (headRevision !== undefined) {
+        identity[ATTR_VCS_REF_HEAD_REVISION] = headRevision;
+    }
+    if (baseRevision !== undefined) {
+        identity[ATTR_VCS_REF_BASE_REVISION] = baseRevision;
+    }
 
     const attributes = { ...options.attributes };
     for (const key of [
@@ -102,6 +122,8 @@ export function createProcessResource(
         ATTR_PROCESS_PID,
         ATTR_PROCESS_RUNTIME_NAME,
         ATTR_PROCESS_RUNTIME_VERSION,
+        ATTR_VCS_REF_HEAD_REVISION,
+        ATTR_VCS_REF_BASE_REVISION,
     ]) {
         delete attributes[key];
     }

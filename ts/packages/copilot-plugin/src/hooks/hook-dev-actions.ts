@@ -18,7 +18,19 @@ import {
 import { emitProgress } from "../shared/hook-progress.js";
 import type { HookInput, HookOutput } from "./types.js";
 
-function getCommandOptions(prompt: string): ProcessCommandOptions {
+export type DevActionDependencies = {
+    connectToTypeAgent: typeof connectToTypeAgent;
+    emitProgress: typeof emitProgress;
+};
+
+const defaultDependencies: DevActionDependencies = {
+    connectToTypeAgent,
+    emitProgress,
+};
+
+export function getDevActionCommandOptions(
+    prompt: string,
+): ProcessCommandOptions {
     if (parseRecordingDirective(prompt) !== undefined) {
         return {
             noReasoning: false,
@@ -26,8 +38,9 @@ function getCommandOptions(prompt: string): ProcessCommandOptions {
         };
     }
     return {
-        activeSchemas: ["powershell"],
-        noReasoning: true,
+        activeSchemaFamilies: ["powershell"],
+        noReasoning: false,
+        reasoningProfile: "powershellCapabilityFallback",
     };
 }
 
@@ -48,8 +61,11 @@ function toHandledOutput(
     };
 }
 
-export async function handleDevActions(input: HookInput): Promise<HookOutput> {
-    emitProgress("Checking TypeAgent development actions...", {
+export async function handleDevActions(
+    input: HookInput,
+    dependencies: DevActionDependencies = defaultDependencies,
+): Promise<HookOutput> {
+    dependencies.emitProgress("Checking TypeAgent development actions...", {
         temporary: true,
     });
 
@@ -62,7 +78,7 @@ export async function handleDevActions(input: HookInput): Promise<HookOutput> {
             if (mode === "temporary") {
                 const text = extractMessageText(message)?.trim();
                 if (text) {
-                    emitProgress(text, { temporary: true });
+                    dependencies.emitProgress(text, { temporary: true });
                 }
                 return;
             }
@@ -73,7 +89,7 @@ export async function handleDevActions(input: HookInput): Promise<HookOutput> {
                 const text = extractMessageText(message)?.trim();
                 if (kind === "status" || kind === "info") {
                     if (text) {
-                        emitProgress(text, {
+                        dependencies.emitProgress(text, {
                             temporary: kind === "status",
                         });
                     }
@@ -81,7 +97,7 @@ export async function handleDevActions(input: HookInput): Promise<HookOutput> {
                 }
                 if (kind === "warning" || kind === "error") {
                     if (text) {
-                        emitProgress(text);
+                        dependencies.emitProgress(text);
                     }
                 }
             }
@@ -93,11 +109,11 @@ export async function handleDevActions(input: HookInput): Promise<HookOutput> {
     let dispatcher: Dispatcher | null = null;
     let submitted = false;
     try {
-        dispatcher = await connectToTypeAgent(clientIO);
+        dispatcher = await dependencies.connectToTypeAgent(clientIO);
         const submitResult = await dispatcher.submitCommand(
             input.prompt,
             undefined,
-            getCommandOptions(input.prompt),
+            getDevActionCommandOptions(input.prompt),
         );
         if (!submitResult.ok) {
             return {};
