@@ -79,6 +79,36 @@ const KNOWN_CONFUSABLE_PAIRS: ReadonlyArray<
         { schemaName: "browser.actionDiscovery", actionName: "inferActions" },
         "flows vs inferred actions",
     ],
+    [
+        {
+            schemaName: "browser.actionDiscovery",
+            actionName: "registerPageDynamicAgent",
+        },
+        {
+            schemaName: "browser.actionDiscovery",
+            actionName: "detectPageActions",
+        },
+        "register page agent vs detect page actions (registerAgent:true)",
+    ],
+    [
+        {
+            schemaName: "browser.actionDiscovery",
+            actionName: "getWebFlowsForDomain",
+        },
+        {
+            schemaName: "browser.actionDiscovery",
+            actionName: "detectPageActions",
+        },
+        "domain web-flows lookup vs inspect/detect page actions",
+    ],
+    [
+        {
+            schemaName: "browser.actionDiscovery",
+            actionName: "getWebFlowsForDomain",
+        },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "list flows for domain hostname vs navigate to that hostname",
+    ],
 ];
 
 /**
@@ -163,11 +193,27 @@ const ACTION_DISAMBIGUATION_CUES: Readonly<Record<string, readonly string[]>> =
             "close tab",
         ],
         "browser.actionDiscovery.getAllWebFlows": [
-            "web flow",
-            "web flows",
+            // Avoid bare "web flow(s)" — those also fit getWebFlowsForDomain.
+            "all web flows",
+            "every web flow",
             "flows on this page",
-            "available flows",
-            "list flows",
+            "available flows across",
+            "list all flows",
+            "every saved flow",
+            "all saved web flows",
+        ],
+        "browser.actionDiscovery.getWebFlowsForDomain": [
+            "web flows for",
+            "web flow for",
+            "flows for the domain",
+            "flows for domain",
+            "flows for this domain",
+            "list web flows for",
+            "get web flows for",
+            "web flows on the domain",
+            "domain web flows",
+            "web flows registered for",
+            "saved web flows for",
         ],
         "browser.actionDiscovery.detectPageActions": [
             "detect",
@@ -181,6 +227,15 @@ const ACTION_DISAMBIGUATION_CUES: Readonly<Record<string, readonly string[]>> =
             "inspect",
             "lets me do",
             "what this page",
+            "detect and register",
+            "scan and register",
+            "register agent and find",
+        ],
+        "browser.actionDiscovery.registerPageDynamicAgent": [
+            "register page dynamic agent",
+            "register site schema only",
+            "dynamic agent without scanning",
+            "just register the page agent",
         ],
         "browser.actionDiscovery.inferActions": [
             "infer actions",
