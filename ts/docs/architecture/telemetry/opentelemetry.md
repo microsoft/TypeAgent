@@ -3,7 +3,7 @@
 
 # OpenTelemetry in TypeAgent
 
-**Status:** Settled design; implementation pending
+**Status:** Settled design; implementation is landing in phases
 
 **Area:** `@typeagent/telemetry`, `aiclient`, dispatcher, RPC, and TypeAgent-owned Node hosts
 
@@ -106,6 +106,11 @@ Logs require explicit composition:
 - Install the debug bridge to copy enabled TypeAgent debug output.
 - Installing an OTel SDK alone does neither.
 
+The logger severity contract and `OtelLoggerSink` in this PR are library
+foundation only. They do not attach the sink to a runtime logger or configure a
+provider. A later host-wiring PR performs that composition in TypeAgent-owned
+Node hosts.
+
 The sink emits through the host's global Logs API and does not create a provider.
 Embeddable libraries never install a process-wide debug hook. A partner may
 install the adapter at its composition root and identify each `debug` module
@@ -158,6 +163,50 @@ export.
 OTel body. It adds `eventName` and allowlisted scalar correlation attributes,
 but excludes nested or unbounded attributes. Existing debug and database sinks
 remain attached.
+
+The Structured Logger `Logger.logEvent(eventName, entry, severity?)` contract
+carries an optional severity of `info`, `warning`, or `error`. `OtelLoggerSink`
+maps these onto the standard OTel severity buckets (`INFO`, `WARN`, `ERROR`);
+`undefined` defaults to `INFO`. The sink never infers severity from the event
+name or the event payload - the caller is the only signal.
+
+Before emit, the sink snapshots `LogEvent.event` with three bounds so a
+misbehaving producer cannot hang or overflow the telemetry path:
+
+- **Depth** is a deterministic hard cap (currently 32). Nodes at depths 0
+  through 31 are preserved; a node at depth 32 is replaced with a truncation
+  marker.
+- **Cycles** are broken by a WeakSet-tracked visited path. A repeat visit within
+  the same recursion becomes a `cycle` truncation marker.
+- **Allocation size** has an approximate cap (currently 60 KiB, measured in
+  UTF-16 code units as the walker descends). When the next value would exceed
+  the cap, that value and subsequent subtrees are replaced with a `size`
+  truncation marker.
+- **Serialized size** has a hard cap (currently 64 KiB of UTF-8 JSON after
+  redaction). If the final body exceeds the cap or cannot be serialized, the
+  complete body is replaced with a root-level `size` marker.
+
+A truncated subtree is
+`{"__typeagent_otel_truncated": "depth" | "cycle" | "size" | "unsupported"}`.
+The `unsupported` marker replaces values outside the Structured Logger's
+JSON-compatible contract. The sink always prefers a bounded/truncated body over
+dropping the whole record.
+
+The OTel event name and each promoted correlation value are limited to 256
+Unicode code points. An oversized event name becomes a fixed marker, and an
+oversized correlation value is omitted. The sink does not retain a prefix:
+partial truncation could expose part of a secret that the complete value would
+have matched. Redaction runs only after this bound and the result must also fit.
+
+Producers sanitize prompts, responses, user content, and PII at the source;
+the sink applies known-secret and secret-format filtering as defense in depth,
+covering the promoted correlation attributes and every string reachable in the
+snapshotted body.
+
+Emit failures are isolated: the sink drops the OTel record and never re-enters
+the `MultiSinkLogger` fan-out. Drop and error accounting is deliberately silent
+in this PR; a follow-up PR wires a non-recursive diagnostics channel that
+reports these events without looping back through the sink.
 
 The debug bridge tees enabled `typeagent:*` calls into OTel without changing
 their original output:
@@ -308,8 +357,13 @@ additive. A JSONL-only configuration creates only the logs provider.
 
 - Do not capture prompts, responses, user content, or known secrets by default.
 - Gate sensitive development capture behind an explicit setting.
+- Sanitize data at the producer before creating a TypeAgent log record. The
+  producer decides whether content is appropriate to record; sink-level secret
+  filtering cannot make arbitrary prompts, responses, user content, or PII
+  safe to export.
 - Apply `filterSecrets`, `filterSecretsFromObject`, and registered
-  `SecretFilter` values before creating TypeAgent log records.
+  `SecretFilter` values at the OTel sink as defense in depth for recognizable
+  and registered secrets.
 - Filter non-allowlisted TypeAgent span attributes before `setAttribute()`.
 - Never put user content or secrets in metric attributes.
 
