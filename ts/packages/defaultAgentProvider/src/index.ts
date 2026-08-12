@@ -7,6 +7,7 @@ export {
     getDefaultDispatcherOptions,
     getIndexingServiceRegistry,
 } from "./defaultAgentProviders.js";
+export { getMcpAppAgentSource } from "./mcpDefaultAgentProvider.js";
 export { getDefaultConstructionProvider } from "./defaultConstructionProvider.js";
 export {
     createOnboardingOnlyDispatcher,

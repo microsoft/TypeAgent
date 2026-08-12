@@ -16,6 +16,7 @@ import {
 import {
     getDefaultAppAgentProviders,
     getDefaultAppAgentSource,
+    getMcpAppAgentSource,
     getIndexingServiceRegistry,
     getDefaultConstructionProvider,
 } from "default-agent-provider";
@@ -333,6 +334,7 @@ async function main() {
                 ),
                 appAgentSources: [
                     getDefaultAppAgentSource(instanceDir, { configName }),
+                    getMcpAppAgentSource(instanceDir),
                 ],
                 persistSession: true,
                 storageProvider: getFsStorageProvider(),
