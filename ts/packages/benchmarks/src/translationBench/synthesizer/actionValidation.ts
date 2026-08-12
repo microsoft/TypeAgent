@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    resolveTypeReference,
     validateAction,
     type ActionSchemaTypeDefinition,
 } from "@typeagent/action-schema";
@@ -25,9 +26,9 @@ export function translationBenchActionValidationPayload(
     for (const [name, field] of Object.entries(definition.type.fields)) {
         if (name === "actionName" || name === "parameters") continue;
         if (field.optional) continue;
-        const fieldType = field.type;
+        const fieldType = resolveTypeReference(field.type);
         if (
-            fieldType.type === "string-union" &&
+            fieldType?.type === "string-union" &&
             fieldType.typeEnum.length === 1
         ) {
             payload[name] = fieldType.typeEnum[0];
