@@ -16,3 +16,4 @@ export * from "./utteranceDisambiguation.js";
 export * from "./catalogGenerator/index.js";
 export { seedQaJsonlAdapter } from "./adapters/seedQaJsonlAdapter.js";
 export * from "./goldParameterHygiene.js";
+export * from "./actionValidation.js";
