@@ -58,6 +58,10 @@ import {
     type TelemetryLifecycleOptions,
 } from "./lifecycle.js";
 import { createProcessResource } from "./resources.js";
+import {
+    getTypeAgentSourceVersion,
+    type TypeAgentSourceVersion,
+} from "./sourceVersion.js";
 
 export type TelemetrySignal = "traces" | "metrics" | "logs";
 
@@ -117,6 +121,8 @@ export interface InitTelemetryOptions {
     readonly serviceVersion?: string;
     readonly serviceInstanceId?: string;
     readonly deploymentEnvironment?: string;
+    /** Source versions to attach to the process resource. Auto-detected when omitted. */
+    readonly sourceVersion?: TypeAgentSourceVersion;
     readonly resourceAttributes?: Readonly<Record<string, AttributeValue>>;
     /** Provider factories for tests or host-specific pipelines. */
     readonly factories?: Partial<TelemetryProviderFactories>;
@@ -230,28 +236,7 @@ export function createTelemetryCoordinator(): TelemetryCoordinator {
 
         lifecycle = createTelemetryLifecycle(options.lifecycle);
         const resource =
-            options.resource ??
-            createProcessResource({
-                serviceName:
-                    options.serviceName ??
-                    (options.configOptions?.env ?? process.env)
-                        .OTEL_SERVICE_NAME ??
-                    "typeagent",
-                ...(options.serviceVersion === undefined
-                    ? {}
-                    : { serviceVersion: options.serviceVersion }),
-                ...(options.serviceInstanceId === undefined
-                    ? {}
-                    : { serviceInstanceId: options.serviceInstanceId }),
-                ...(options.deploymentEnvironment === undefined
-                    ? {}
-                    : {
-                          deploymentEnvironment: options.deploymentEnvironment,
-                      }),
-                ...(options.resourceAttributes === undefined
-                    ? {}
-                    : { attributes: options.resourceAttributes }),
-            });
+            options.resource ?? (await createDefaultTelemetryResource(options));
         const factories = {
             ...DEFAULT_FACTORIES,
             ...options.factories,
@@ -339,6 +324,37 @@ export function createTelemetryCoordinator(): TelemetryCoordinator {
             return shutdownPromise;
         },
     };
+}
+
+async function createDefaultTelemetryResource(
+    options: InitTelemetryOptions,
+): Promise<Resource> {
+    const sourceVersion =
+        options.sourceVersion ?? (await getTypeAgentSourceVersion());
+    return createProcessResource({
+        serviceName:
+            options.serviceName ??
+            (options.configOptions?.env ?? process.env).OTEL_SERVICE_NAME ??
+            "typeagent",
+        ...(options.serviceVersion === undefined
+            ? {}
+            : { serviceVersion: options.serviceVersion }),
+        ...(options.serviceInstanceId === undefined
+            ? {}
+            : { serviceInstanceId: options.serviceInstanceId }),
+        ...(options.deploymentEnvironment === undefined
+            ? {}
+            : { deploymentEnvironment: options.deploymentEnvironment }),
+        ...(sourceVersion.headRevision === undefined
+            ? {}
+            : { headRevision: sourceVersion.headRevision }),
+        ...(sourceVersion.baseRevision === undefined
+            ? {}
+            : { baseRevision: sourceVersion.baseRevision }),
+        ...(options.resourceAttributes === undefined
+            ? {}
+            : { attributes: options.resourceAttributes }),
+    });
 }
 
 const processTelemetry = createTelemetryCoordinator();
