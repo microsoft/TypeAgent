@@ -114,10 +114,11 @@ jobs:
     pool:
       vmImage: ubuntu-latest
     steps:
-      # Full history so merge-base / parent diffs resolve on both PR merge
-      # commits and merge-queue branches.
+      # PR merge commits only need HEAD and HEAD^1 for the diff below.
+      # CI / merge-queue builds fetch origin main in the script and treat a
+      # missing merge-base as "run the tests", so a shallow clone is safe.
       - checkout: self
-        fetchDepth: 0
+        fetchDepth: 2
       - bash: |
           set -uo pipefail
           # Default to running the tests; only skip when we can positively

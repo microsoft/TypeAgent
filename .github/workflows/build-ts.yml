@@ -44,8 +44,11 @@ jobs:
           git config --global core.autocrlf false
       - uses: actions/checkout@v5
         with:
-          # Full history so the changed-files lint can diff against the base.
-          fetch-depth: 0
+          # Full history only on the PR ratchet cell (ubuntu/22), which diffs
+          # against the merge-base.  Other PR cells are shallow.  push /
+          # merge_group keep a full clone so `npm run lint -- --ratchet` can
+          # still resolve origin/main.
+          fetch-depth: ${{ github.event_name == 'pull_request' && !(matrix.os == 'ubuntu-latest' && matrix.version == 22) && 1 || 0 }}
       - uses: dorny/paths-filter@v3
         id: filter
         continue-on-error: true
@@ -54,36 +57,50 @@ jobs:
             ts:
               - "ts/**"
               - ".github/workflows/build-ts.yml"
+      # Required check names stay on every matrix cell.  This step only
+      # decides whether the cell does expensive work.  PRs skip Node 24
+      # install/build/test (still runs on push/merge_group/main) and run
+      # the ratchets once on ubuntu/22.  See ts/tools/scripts/prCiScope.mjs.
+      - name: Decide job scope
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TS_FILTER: ${{ steps.filter.outputs.ts }}
+          MATRIX_OS: ${{ matrix.os }}
+          MATRIX_VERSION: ${{ matrix.version }}
+        run: node ts/tools/scripts/prCiScope.mjs
       - uses: pnpm/action-setup@v4
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.full == 'true' || steps.scope.outputs.lint == 'true' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
       - uses: actions/setup-node@v5
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.full == 'true' || steps.scope.outputs.lint == 'true' }}
         with:
           node-version: ${{ matrix.version }}
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
       - name: Install dependencies
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.full == 'true' || steps.scope.outputs.lint == 'true' }}
         working-directory: ts
         run: |
           pnpm install --frozen-lockfile --strict-peer-dependencies
       - name: Build
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.full == 'true' }}
         working-directory: ts
         run: |
           npm run build
+      - name: Fetch PR base
+        if: ${{ steps.scope.outputs.fetch == 'true' }}
+        run: git fetch --no-tags origin "${{ github.base_ref }}"
       # On pull requests only changed files are checked (fast); the
       # format-pr workflow auto-fixes them.  Other events check the whole repo.
       - name: Lint
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.lint == 'true' }}
         working-directory: ts
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch --no-tags origin "${{ github.base_ref }}"
             node tools/scripts/prettier-changed.mjs --base "origin/${{ github.base_ref }}"
           else
             npm run lint
@@ -96,11 +113,10 @@ jobs:
       # // code-complexity-allow markers.  Tune the thresholds down as hotspots
       # get refactored.
       - name: Complexity ratchet
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.ratchet == 'true' }}
         working-directory: ts
         shell: bash
         run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
           npm run code-complexity -- --ratchet --base "origin/${{ github.base_ref }}" \
             --cyclomatic 25 --cognitive 30 \
             --new-file-cyclomatic 25 --new-file-cognitive 30
@@ -109,45 +125,42 @@ jobs:
       # base branch.  Syntactic rules only, so it is fast; the count can only
       # trend down.  Run `npm run code-lint` locally to see the full report.
       - name: Lint ratchet
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.ratchet == 'true' }}
         working-directory: ts
         shell: bash
         run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
           npm run code-lint -- --ratchet --base "origin/${{ github.base_ref }}"
       # Circular-dependency ratchet (PRs only): fail if the change introduces a
       # runtime import cycle not already present at the base.  Builds the cycle
       # set for HEAD and for the merge base (via a throwaway git worktree), so
       # this step is heavier than the others (madge runs twice).
       - name: Circular dependency ratchet
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.ratchet == 'true' }}
         working-directory: ts
         shell: bash
         run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
           npm run code-circular -- --ratchet --base "origin/${{ github.base_ref }}" --exceptions-file tools/scripts/code/circular-baseline-exception.json
       # Test-debt gate (PRs only): zero tolerance for focused tests
       # (.only/fit/fdescribe) and no newly skipped tests (.skip/xit/xdescribe)
       # in changed files.  A small, fixable problem -> a hard gate, not a ratchet.
       - name: Test debt gate
-        if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.ratchet == 'true' }}
         working-directory: ts
         shell: bash
         run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
           npm run code-debt -- --gate --base "origin/${{ github.base_ref }}"
       - name: Restore better-sqlite3 for Node.js
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.full == 'true' }}
         working-directory: ts
         run: |
           pnpm run postinstall:better-sqlite3-node-restore
       - name: Test
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        if: ${{ steps.scope.outputs.full == 'true' }}
         working-directory: ts
         run: |
           npm run test:local
       - name: UI tests (requires display)
-        if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false') && runner.os == 'Linux' }}
+        if: ${{ steps.scope.outputs.full == 'true' && runner.os == 'Linux' }}
         working-directory: ts
         run: |
           Xvfb :99 -screen 0 1600x1200x24 &

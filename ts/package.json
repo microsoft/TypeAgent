@@ -82,6 +82,7 @@
     "test:keys": "npx tsx tools/scripts/testServiceKeys.ts",
     "test:live": "pnpm -r ---no-bail  -no-sort --stream --workspace-concurrency=1 run test:live",
     "test:local": "pnpm -r --no-bail --no-sort --stream --workspace-concurrency=3 run test:local",
+    "test:pr-ci-scope": "node --test tools/scripts/test/prCiScope.spec.mjs",
     "test:ui": "pnpm -r --no-bail --no-sort --stream --if-present run test:ui"
   },
   "devDependencies": {
