@@ -414,6 +414,12 @@ class WebSocketManager {
                         requestedConversationId = null
                         staleConversationHandler
                     }
+                    // Drop the dead id before handing control to the client.
+                    // It is still the "last joined" one, so a debounced save or
+                    // a teardown flush landing while the fallback join is in
+                    // flight would write the deleted conversation back to disk,
+                    // and a reconnect in that window would try to resume it.
+                    _lastJoinedConversationId.value = null
                     onStale?.invoke()
                     joinConversation(null)
                     return@sendInvoke

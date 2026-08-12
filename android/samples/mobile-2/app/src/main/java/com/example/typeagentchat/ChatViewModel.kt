@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -154,6 +155,49 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         observeConversationForPersistence()
+        observeConversationIdForPersistence()
+    }
+
+    /**
+     * The conversation the transcript currently belongs to.
+     *
+     * Prefers the live join over the restored value, and is null only while no
+     * join has landed yet - including the gap between a missing conversation
+     * being detected and the fallback join completing, where the old id is
+     * deliberately no longer trusted.
+     */
+    private fun currentConversationId(): String? =
+        webSocketManager.lastJoinedConversationId.value ?: savedConversationId
+
+    /**
+     * Persists the conversation id as soon as a join lands.
+     *
+     * [observeConversationForPersistence] only writes when the message list
+     * changes, so a conversation that is joined but not yet spoken in never
+     * reaches disk. That matters most right after the not-found fallback: the
+     * stale handler has just wiped the stored record, and without this the new
+     * id would sit only in memory until the user happened to send something.
+     */
+    private fun observeConversationIdForPersistence() {
+        viewModelScope.launch {
+            restored.await()
+            webSocketManager.lastJoinedConversationId
+                .filterNotNull()
+                .collect { conversationId ->
+                    if (conversationId == savedConversationId) {
+                        return@collect
+                    }
+                    savedConversationId = conversationId
+                    withContext(Dispatchers.IO) {
+                        conversationStore.save(
+                            PersistedConversation(
+                                conversationId = conversationId,
+                                messages = webSocketManager.messages.value
+                            )
+                        )
+                    }
+                }
+        }
     }
 
     /**
@@ -174,8 +218,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             restored.await()
             webSocketManager.messages.drop(1).collectLatest { messages ->
                 delay(SAVE_DEBOUNCE_MS)
-                val conversationId =
-                    webSocketManager.lastJoinedConversationId.value ?: savedConversationId
+                val conversationId = currentConversationId()
                 withContext(Dispatchers.IO) {
                     conversationStore.save(
                         PersistedConversation(
@@ -288,11 +331,25 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * conversation. Starting a genuinely new server-side conversation would
      * need `createConversation` / `leaveConversation`, which this client does
      * not yet drive.
+     *
+     * An empty record is written rather than the whole entry removed, because
+     * removing it would drop the conversation id too. The debounced writer
+     * would put it back a moment later, but a force-stop in that window would
+     * leave nothing to resume and the next launch would silently land in the
+     * default conversation - breaking the promise above.
      */
     fun clearChatHistory() {
         webSocketManager.clearMessages()
+        val conversationId = currentConversationId()
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { conversationStore.clear() }
+            withContext(Dispatchers.IO) {
+                conversationStore.save(
+                    PersistedConversation(
+                        conversationId = conversationId,
+                        messages = emptyList()
+                    )
+                )
+            }
         }
     }
 
@@ -334,8 +391,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         conversationStore.save(
             PersistedConversation(
-                conversationId = webSocketManager.lastJoinedConversationId.value
-                    ?: savedConversationId,
+                conversationId = currentConversationId(),
                 messages = webSocketManager.messages.value
             )
         )
