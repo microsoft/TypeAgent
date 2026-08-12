@@ -50,35 +50,24 @@ jobs:
             ts:
               - "ts/**"
               - ".github/workflows/build-package-shell.yml"
-      # Required check names stay on every OS cell.  PRs keep ubuntu as a
-      # packaging smoke; macos/windows package on push/merge_group/main.
-      # See ts/tools/scripts/prCiScope.mjs.
-      - name: Decide job scope
-        id: scope
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          TS_FILTER: ${{ steps.filter.outputs.ts }}
-          MATRIX_OS: ${{ matrix.os }}
-          MATRIX_VERSION: ${{ matrix.version }}
-        run: node ts/tools/scripts/prCiScope.mjs
       - uses: pnpm/action-setup@v4
-        if: ${{ steps.scope.outputs.package == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
       - uses: actions/setup-node@v5
-        if: ${{ steps.scope.outputs.package == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         with:
           node-version: ${{ matrix.version }}
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
       - name: Install dependencies
-        if: ${{ steps.scope.outputs.package == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
           pnpm install --frozen-lockfile --strict-peer-dependencies
       - name: Build
-        if: ${{ steps.scope.outputs.package == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
           pnpm run build:shell
@@ -89,7 +78,7 @@ jobs:
       # blocked builds. This is a bug in electron-builder, it's not smart enough to retry acquiring the archive.
       # Disabling for now.
       # - name: Electron Builder Cache
-      #   if: ${{ steps.scope.outputs.package == 'true' }}
+      #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
       #   uses: actions/cache@v4
       #   with:
       #     key: electron | ${{ runner.os }} | ${{ runner.arch }} | ${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -99,7 +88,7 @@ jobs:
       #     restore-keys: |
       #       electron | ${{ runner.os }} | ${{ runner.arch }}
       - name: Package - shell
-        if: ${{ steps.scope.outputs.package == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         shell: bash
         run: pnpm run shell:package

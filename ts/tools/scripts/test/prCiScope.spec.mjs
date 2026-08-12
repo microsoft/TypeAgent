@@ -70,7 +70,7 @@ test("PR Node 22 ubuntu does full work plus the single ratchet/fetch", () => {
     assert.equal(shouldRunShellPackage(ctx), true);
 });
 
-test("PR Node 24 cells skip install/build/test but still exist as jobs", () => {
+test("PR Node 24 cells still build and test; ratchets stay on ubuntu/22", () => {
     for (const os of BUILD_TS_OS) {
         const ctx = {
             eventName: "pull_request",
@@ -78,37 +78,23 @@ test("PR Node 24 cells skip install/build/test but still exist as jobs", () => {
             os,
             version: 24,
         };
-        assert.equal(shouldRunBuildTsFull(ctx), false);
+        assert.equal(shouldRunBuildTsFull(ctx), true);
         assert.equal(shouldRunBuildTsRatchet(ctx), false);
         assert.equal(shouldFetchPrBase(ctx), false);
     }
 });
 
-test("PR macos/windows shell packaging is skipped; ubuntu still packages", () => {
-    assert.equal(
-        shouldRunShellPackage({
-            eventName: "pull_request",
-            tsFilter: "true",
-            os: "windows-latest",
-        }),
-        false,
-    );
-    assert.equal(
-        shouldRunShellPackage({
-            eventName: "pull_request",
-            tsFilter: "true",
-            os: "macos-latest",
-        }),
-        false,
-    );
-    assert.equal(
-        shouldRunShellPackage({
-            eventName: "pull_request",
-            tsFilter: "true",
-            os: "ubuntu-latest",
-        }),
-        true,
-    );
+test("PR still packages the shell on every OS", () => {
+    for (const os of BUILD_PACKAGE_SHELL_OS) {
+        assert.equal(
+            shouldRunShellPackage({
+                eventName: "pull_request",
+                tsFilter: "true",
+                os,
+            }),
+            true,
+        );
+    }
 });
 
 test("merge_group and push keep full matrix work", () => {
@@ -138,7 +124,7 @@ test("unset path-filter output still allows work (matches != 'false')", () => {
     );
 });
 
-test("CLI writes GITHUB_OUTPUT for a skipped PR Windows Node 24 cell", () => {
+test("CLI writes GITHUB_OUTPUT for a PR Windows Node 24 cell (full, no ratchet)", () => {
     const { stdout, written } = runCli({
         EVENT_NAME: "pull_request",
         TS_FILTER: "true",
@@ -155,8 +141,9 @@ test("CLI writes GITHUB_OUTPUT for a skipped PR Windows Node 24 cell", () => {
     );
     assert.equal(written, expected);
     assert.equal(stdout, expected);
-    assert.match(written, /^full=false$/m);
-    assert.match(written, /^package=false$/m);
+    assert.match(written, /^full=true$/m);
+    assert.match(written, /^ratchet=false$/m);
+    assert.match(written, /^package=true$/m);
 });
 
 test("CLI writes GITHUB_OUTPUT for a full merge_group cell", () => {
@@ -177,10 +164,12 @@ test("shipped workflows call prCiScope and keep required matrix names", () => {
     const buildShell = fs.readFileSync(buildPackageShellYml, "utf8");
 
     assert.match(buildTs, /prCiScope\.mjs/);
-    assert.match(buildShell, /prCiScope\.mjs/);
     assert.match(buildTs, /steps\.scope\.outputs\.full/);
     assert.match(buildTs, /steps\.scope\.outputs\.ratchet/);
-    assert.match(buildShell, /steps\.scope\.outputs\.package/);
+    assert.match(
+        buildShell,
+        /github\.event_name != 'pull_request' \|\| steps\.filter\.outputs\.ts != 'false'/,
+    );
 
     assert.deepEqual(extractYamlList(buildTs, "os"), BUILD_TS_OS);
     assert.deepEqual(
@@ -206,8 +195,18 @@ test("shipped workflows call prCiScope and keep required matrix names", () => {
             }),
         ),
     ).filter(Boolean).length;
-    assert.equal(prFull, 3);
-    assert.ok(prFull < BUILD_TS_OS.length * BUILD_TS_VERSIONS.length);
+    assert.equal(prFull, BUILD_TS_OS.length * BUILD_TS_VERSIONS.length);
+    const prRatchet = BUILD_TS_OS.flatMap((os) =>
+        BUILD_TS_VERSIONS.map((version) =>
+            shouldRunBuildTsRatchet({
+                eventName: "pull_request",
+                tsFilter: "true",
+                os,
+                version,
+            }),
+        ),
+    ).filter(Boolean).length;
+    assert.equal(prRatchet, 1);
 });
 
 test("ADO detect job uses a shallow PR checkout", () => {

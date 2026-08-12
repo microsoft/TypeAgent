@@ -57,10 +57,9 @@ jobs:
             ts:
               - "ts/**"
               - ".github/workflows/build-ts.yml"
-      # Required check names stay on every matrix cell.  This step only
-      # decides whether the cell does expensive work.  PRs skip Node 24
-      # install/build/test (still runs on push/merge_group/main) and run
-      # the ratchets once on ubuntu/22.  See ts/tools/scripts/prCiScope.mjs.
+      # Merge-gate work (install/build/test) still runs on every OS × Node
+      # cell.  Scope only collapses redundant PR ratchets + the base fetch
+      # onto ubuntu/22.  See ts/tools/scripts/prCiScope.mjs.
       - name: Decide job scope
         id: scope
         env:

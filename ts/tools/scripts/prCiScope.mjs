@@ -1,13 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Shared PR-vs-main job-scope decisions used by build-ts.yml and
-// build-package-shell.yml.  Required status-check *names* stay the same
-// (every matrix cell still reports); this only decides whether the cell
-// does the expensive install/build/test/package work.
+// Shared PR job-scope decisions used by build-ts.yml.
 //
-// Coverage that is skipped on pull_request still runs on push / merge_group
-// / workflow_dispatch (and on main).
+// Merge-gate work (install / build / test:local / UI tests / shell package)
+// still runs on every matrix cell that ran it before.  This only strips
+// *redundant* PR work: the same ratchet on all 6 cells, and five identical
+// `git fetch`es of the base.
 //
 // Usage in Actions:
 //   EVENT_NAME, TS_FILTER, MATRIX_OS, MATRIX_VERSION -> GITHUB_OUTPUT
@@ -34,17 +33,13 @@ function nodeVersion(version) {
 
 /**
  * Full install + build + test:local (+ UI tests on Linux).
- * PRs skip Node 24 — that cell still reports, and Node 24 is covered on
- * push / merge_group / main.
+ * Same as main today: every OS × Node cell, unless a PR touches no ts paths.
  */
-export function shouldRunBuildTsFull({ eventName, tsFilter, version }) {
+export function shouldRunBuildTsFull({ eventName, tsFilter }) {
     if (!isPullRequest(eventName)) {
         return true;
     }
-    if (!pathFilterAllows(tsFilter)) {
-        return false;
-    }
-    return nodeVersion(version) === 22;
+    return pathFilterAllows(tsFilter);
 }
 
 /**
@@ -77,17 +72,14 @@ export function shouldFetchPrBase(ctx) {
 }
 
 /**
- * Electron shell packaging.  PRs keep the ubuntu cell as a smoke; macos
- * and windows package on push / merge_group / main.
+ * Electron shell packaging.  Every OS cell still packages when ts changed;
+ * same as main today.
  */
-export function shouldRunShellPackage({ eventName, tsFilter, os }) {
+export function shouldRunShellPackage({ eventName, tsFilter }) {
     if (!isPullRequest(eventName)) {
         return true;
     }
-    if (!pathFilterAllows(tsFilter)) {
-        return false;
-    }
-    return os === "ubuntu-latest";
+    return pathFilterAllows(tsFilter);
 }
 
 export function resolveScope(ctx) {
