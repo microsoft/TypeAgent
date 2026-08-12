@@ -12,6 +12,7 @@ import {
     DispatcherOptions,
 } from "agent-dispatcher";
 import {
+    ExtensionKind,
     InstallSourceConfig,
     InstalledAgentRecord,
     SourceStatus,
@@ -1323,6 +1324,7 @@ export function createDefaultInstalledAgentSource(
         },
         async listAvailableAgents(opts?: {
             sourceName?: string;
+            type?: ExtensionKind;
         }): Promise<AgentSourceGroup<AvailableAgentInfo>[]> {
             // Source groups for `@package available` and filtered completion in
             // `@package install`.
@@ -1339,25 +1341,39 @@ export function createDefaultInstalledAgentSource(
                     continue;
                 }
                 try {
-                    const sourceAgents = (await src.listAgents()).map(
-                        ({
-                            ref,
-                            defaultAgentName,
-                            packageName,
-                            description,
-                        }) => ({
-                            ref,
-                            ...(defaultAgentName !== undefined
-                                ? { defaultAgentName }
-                                : {}),
-                            ...(packageName !== undefined
-                                ? { packageName }
-                                : {}),
-                            ...(description !== undefined
-                                ? { description }
-                                : {}),
-                        }),
-                    );
+                    const sourceAgents = (await src.listAgents())
+                        // A row with no extensionKind is a native agent (the
+                        // historical default); the `--type` filter compares
+                        // against that default so agent-only sources still match
+                        // `--type agent`.
+                        .filter(
+                            (row) =>
+                                opts?.type === undefined ||
+                                (row.extensionKind ?? "agent") === opts.type,
+                        )
+                        .map(
+                            ({
+                                ref,
+                                defaultAgentName,
+                                packageName,
+                                description,
+                                extensionKind,
+                            }) => ({
+                                ref,
+                                ...(defaultAgentName !== undefined
+                                    ? { defaultAgentName }
+                                    : {}),
+                                ...(packageName !== undefined
+                                    ? { packageName }
+                                    : {}),
+                                ...(description !== undefined
+                                    ? { description }
+                                    : {}),
+                                ...(extensionKind !== undefined
+                                    ? { extensionKind }
+                                    : {}),
+                            }),
+                        );
                     if (sourceAgents.length > 0) {
                         groups.push({
                             source: info.name,
@@ -1535,7 +1551,11 @@ export function createDefaultInstalledAgentSource(
         // groups into installable summaries the reasoning engine can offer. Never
         // installs; the concrete install path stays behind the `@package` agent.
         async listAvailableAgents(): Promise<InstallableAgentSummary[]> {
-            const groups = await source.listAvailableAgents();
+            // Only native agents are installable through the `@package install`
+            // path today; MCP servers surfaced by an `mcp-config` source route
+            // through the separate MCP store, so exclude them from reasoning's
+            // install suggestions to avoid offering a command that cannot run.
+            const groups = await source.listAvailableAgents({ type: "agent" });
             const summaries: InstallableAgentSummary[] = [];
             for (const group of groups) {
                 for (const agent of group.agents) {

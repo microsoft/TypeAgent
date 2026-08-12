@@ -34,7 +34,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.4.0",
-    "ws": "^8.21.1"
+    "ws": "^8.21.2"
   },
   "devDependencies": {
     "@typeagent/action-grammar-compiler": "workspace:*",
