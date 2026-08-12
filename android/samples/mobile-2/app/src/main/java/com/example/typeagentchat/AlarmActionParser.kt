@@ -8,7 +8,8 @@ internal data class SetAlarmAction(
     val minute: Int
 )
 
-private val alarmTimeRegex = Regex("""^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})(?::\d{2})?$""")
+private val alarmTimeRegex =
+    Regex("""^(?:\d{4}-\d{2}-\d{2}T)?(\d{2}):(\d{2})(?::\d{2})?$""")
 
 internal fun parseSetAlarmActionPayload(data: Any?): SetAlarmAction? {
     val payload = data as? JSONObject ?: return null

@@ -231,6 +231,24 @@ Useful operation attributes include `typeagent.agent.name`,
 `typeagent.action.name`, `gen_ai.system`, and `gen_ai.request.model`.
 High-cardinality correlation belongs on spans and logs, never metrics.
 
+TypeAgent-owned processes also record source revisions as resource attributes.
+Resources are attached to every exported span, so the values remain available
+for span filtering without duplicating them on every operation:
+
+- `vcs.ref.head.revision` is the commit checked out at `HEAD`.
+- `vcs.ref.base.revision` is the merge-base of `HEAD` and `origin/main`,
+  identifying the standard revision the local work is based on.
+
+These OpenTelemetry VCS semantic-convention attributes distinguish source
+revisions from `service.version`, which remains the version of the deployable
+service component. The revision attributes primarily support local debugging:
+they identify the exact checkout that produced telemetry and the standard
+`origin/main` revision on which the local work is based. Local development
+resolves the revisions from Git once during telemetry initialization.
+`InitTelemetryOptions.sourceVersion` remains available for tests or hosts that
+already have revision metadata. Packaged deployments without a Git checkout
+omit unavailable values.
+
 ## Configuration and Local Files
 
 TypeAgent-owned processes support:
@@ -248,7 +266,6 @@ Standard `OTEL_*` variables override YAML. Relevant settings include:
 - `OTEL_EXPORTER_OTLP_ENDPOINT`
 - `OTEL_EXPORTER_OTLP_HEADERS`
 - `OTEL_SERVICE_NAME`
-- `OTEL_RESOURCE_ATTRIBUTES`
 - `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`
 - `TYPEAGENT_OTEL_LOG_FILE`
 - `TYPEAGENT_OTEL_DEBUG_BRIDGE`
@@ -334,28 +351,184 @@ a guarded path that cannot recurse into the failing exporter.
 Ordinary `debug(...)` and `logger.logEvent(...)` calls do not change. Add a span
 for an externally meaningful or independently timed operation:
 
+### Adding a new span
+
+Use the global OTel API directly with TypeAgent's shared instrumentation scope,
+span-name contract, and allowlisted attribute helper. A manual span has this
+structure:
+
+1. Acquire a tracer with the shared instrumentation scope.
+2. Start an active span so nested asynchronous work inherits its context.
+3. Set only allowlisted attributes.
+4. Record a stable, privacy-safe error classification and status.
+5. End the span in `finally`.
+
 ```ts
 import { SpanStatusCode, trace } from "@opentelemetry/api";
+import { otel } from "@typeagent/telemetry";
 
-const tracer = trace.getTracer("typeagent");
+const tracer = trace.getTracer(
+  otel.INSTRUMENTATION_SCOPE_NAME,
+  otel.INSTRUMENTATION_SCOPE_VERSION,
+);
 
-return tracer.startActiveSpan("typeagent.translate", async (span) => {
-  try {
-    span.setAttribute("typeagent.agent.name", agentName);
-    return await translateRequest(request);
-  } catch (error) {
-    span.recordException(error instanceof Error ? error : String(error));
-    span.setStatus({ code: SpanStatusCode.ERROR });
-    throw error;
-  } finally {
-    span.end();
-  }
-});
+return tracer.startActiveSpan(
+  otel.TYPEAGENT_SPAN_NAMES.TRANSLATION,
+  async (span) => {
+    otel.setTypeAgentSpanAttributes(span, { agentName });
+
+    try {
+      return await translateRequest(request);
+    } catch (error) {
+      span.recordException({
+        name: "TranslationError",
+        message: "translation failed",
+      });
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: "translation failed",
+      });
+      throw error;
+    } finally {
+      span.end();
+    }
+  },
+);
 ```
 
 `startActiveSpan()` makes nested async work a child automatically. Logs emitted
 inside the callback receive its trace and span IDs. If code converts an exception
 to `ActionResult`, it must still record the exception and error status.
+
+Before introducing a new stable `typeagent.*` span name or attribute, add it to
+`packages/telemetry/src/otel/traceContract.ts` and use the exported constant or
+helper at the call site. Do not put prompts, responses, user content, exception
+messages, or stacks on spans.
+
+For a complete implementation example, see
+[PR #2842](https://github.com/microsoft/TypeAgent/pull/2842).
+
+Dispatcher request spans start a new trace by default. Embedded hosts can join
+the OTel context active when each request is submitted with a one-time option:
+
+```ts
+await createDispatcher(hostName, {
+  telemetry: { joinActiveTrace: true },
+});
+```
+
+Original exception messages and stacks are omitted because they can contain user
+content. Record a stable classification and message at the catch site.
+
+## Currently Captured Dispatcher Telemetry
+
+### Root dispatcher command span
+
+The dispatcher creates one `typeagent.request` span for each command processed
+by `processCommand`. It starts a new trace by default. An embedded host can opt
+in to parenting it under the context active when the request was submitted by
+setting `telemetry.joinActiveTrace`.
+
+The span covers command locking and command processing, including translation
+and action execution. Best-effort display logging and command-complete
+notification performed by the request queue after `processCommand` returns are
+outside the span.
+
+| Captured data     | Current behavior                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Attributes        | `typeagent.session.id`, `typeagent.activation.id`, and the preserved caller value in `typeagent.trace.id`, when available |
+| Success           | Span status remains unset                                                                                                 |
+| Cancellation      | Span status is `ERROR` with the stable message `cancelled`                                                                |
+| Thrown failure    | Records a privacy-safe `RequestError` exception and sets `ERROR` with `request failed`                                    |
+| Converted failure | Command processing records the exception and error status before converting it to a cancellation or user-visible result   |
+| Parent context    | New root by default; joins an explicitly selected active context only                                                     |
+
+### Translation span
+
+The dispatcher creates one `typeagent.translation` child span for each logical
+translation operation. The normal `interpretRequest` path includes
+grammar/construction-cache lookup and any subsequent model translation in the
+same span. Direct `translateRequest` callers also create a span. Re-entrant calls
+reuse the active translation span instead of creating nested duplicates.
+
+The span ends after the translation result is produced. Interactive
+confirmation, translation logging, developer-trace persistence, and
+conversation-signal updates happen afterward and are not included in its
+duration.
+
+Translation events currently captured are:
+
+| Event                          | Meaning                                                                                                        |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `translation.grammar.matched`  | A grammar match produced the translation result                                                                |
+| `translation.grammar.no_match` | The unified matcher produced no grammar result                                                                 |
+| `translation.cache.hit`        | A construction-cache match produced the translation result                                                     |
+| `translation.cache.miss`       | The unified matcher produced no construction result                                                            |
+| `translation.cache.bypassed`   | Matching was intentionally skipped; `bypass_reason` is a bounded value                                         |
+| `translation.fallback`         | An assistant-switch translation attempt was initiated                                                          |
+| `translation.retry`            | A same-operation retry was initiated; `retry_number` is sequential within the span and `retry_kind` is bounded |
+
+A unified matcher miss emits both `translation.grammar.no_match` and
+`translation.cache.miss`. Fallback and retry events describe initiated attempts,
+so the event remains present when the following translation fails. Activity
+context can perform several lookups in one span; their event order reflects the
+execution order.
+
+Translation spans carry the same available correlation attributes as the root
+request span. Errors record a privacy-safe `TranslationError`, or `AbortError`
+for cancellation, and set a stable error status before rethrowing.
+
+### Action span
+
+Each dispatcher action execution creates a `typeagent.action` span after its
+action context is initialized and before readiness checks, flow processing, or
+the agent handler runs. It includes result emission and ends exactly once when
+the action returns, throws, or is cancelled. The span is a child of the
+currently active span: `typeagent.request` in the normal flow, or another
+`typeagent.action` when a flow step dispatches a sub-action.
+
+Failure modes are recorded distinctly and use bounded, allowlisted values:
+
+- Pre-handler precondition failures (`handler_missing`, `agent_not_ready`)
+  fire `action.setup.failed` with the enumerated `failure_kind`. No handler
+  ran.
+- A handler-thrown exception that was converted to an `ActionResult` fires
+  the standard `exception` event with the privacy-safe pair
+  `ActionHandlerError` / `action handler failed`. The original message and
+  stack are never exported.
+- A flow-interpreter exception converted to an `ActionResult` uses the
+  privacy-safe pair `ActionFlowError` / `action flow failed`.
+- A handler that returned a typed `ActionResult.error` fires
+  `action.result.error` with `failure_kind: "result_error"`. The
+  `ActionResult.error` text itself is never stamped.
+- An exception that escapes the wrapper is recorded as `AbortError` /
+  `cancelled` for cancellation and `ActionError` / `action failed`
+  otherwise, matching the request and translation span conventions.
+
+Auto-setup replacement results (produced when `setupOnFirstUse` runs setup
+in place of the user's action) leave the span status unset regardless of
+the result's shape.
+
+### Reasoning span
+
+Each Claude or Copilot reasoning operation creates one
+`typeagent.reasoning` span under the active request or action. The span covers
+the complete SDK operation, including streamed responses, tool execution, and
+optional reasoning-trace persistence. It ends only after the operation returns,
+throws, or is cancelled. `gen_ai.system` identifies the reasoning engine and
+`gen_ai.request.model` identifies the configured model.
+
+Each tool execution emits `reasoning.tool_call` with a one-based
+numeric `tool_call_number`. Calls above 100 collapse into one
+`reasoning.tool_call.overflow` event, which bounds event volume for runaway
+loops without changing the attribute's type. Tool names, arguments, results,
+prompts, responses, and reasoning text are never recorded on the span.
+
+Timeout and external cancellation are propagated to the underlying SDK
+operation before the span ends. Cancellation records the privacy-safe
+`AbortError` / `cancelled` exception classification and sets error status.
+Other escaping exceptions use `ReasoningError` / `reasoning failed`. Original
+exception messages and stack traces are never exported.
 
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |
@@ -421,6 +594,15 @@ Use the repository build and test flow:
 ```text
 pnpm run build
 pnpm --filter @typeagent/telemetry test
+pnpm --filter agent-dispatcher run jest-esm --testPathPattern="otel.*spec.js"
+```
+
+The dispatcher suite includes deterministic one-process trace coverage with an
+in-memory provider. Run the separate OTLP/protobuf receiver smoke path explicitly:
+
+```powershell
+$env:TYPEAGENT_OTEL_OTLP_SMOKE = "1"
+pnpm --filter agent-dispatcher run jest-esm --runInBand --testPathPattern="otelOtlpSmoke.spec.js"
 ```
 
 ## References

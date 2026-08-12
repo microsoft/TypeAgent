@@ -72,7 +72,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.example.typeagentchat.ui.theme.TypeAgentChatTheme
 import kotlinx.coroutines.launch
 
@@ -81,20 +80,37 @@ class MainActivity : ComponentActivity() {
     private val viewModel: ChatViewModel by viewModels()
     private val tunnelUrl = BuildConfig.TYPEAGENT_SERVER_URL.trim()
     private val tunnelToken = BuildConfig.TYPEAGENT_TUNNEL_TOKEN.trim().ifBlank { null }
+    private val agentSchemaContent by lazy {
+        assets.open(AndroidDeviceAgent.SCHEMA_ASSET)
+            .bufferedReader()
+            .use { it.readText() }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        viewModel.connectIfNeeded(url = tunnelUrl, tunnelToken = tunnelToken)
+        viewModel.connectIfNeeded(
+            url = tunnelUrl,
+            tunnelToken = tunnelToken,
+            schemaContent = agentSchemaContent
+        )
 
+        // Collected for the Activity's whole lifetime rather than only while
+        // RESUMED. An agent-driven action has an `executeAction` RPC waiting on
+        // its completion, so it must be answered promptly even when the app is
+        // backgrounded - launchExternalIntent does the foreground check itself
+        // and reports the refusal. Gating collection on RESUMED would instead
+        // leave the action queued, and the server's call hanging, until the
+        // user happened to come back. The channel still buffers across the
+        // Activity gap during a configuration change.
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                viewModel.clientActions.collect { action ->
-                    when (action) {
-                        is ClientAction.Alarm -> launchSetAlarmIntent(action.action)
-                        is ClientAction.Timer -> launchSetTimerIntent(action.action)
-                        is ClientAction.SearchNearby -> launchSearchNearbyIntent(action.action)
-                    }
+            viewModel.clientActions.collect { action ->
+                when (action) {
+                    is ClientAction.Alarm ->
+                        launchSetAlarmIntent(action.action, action.completion)
+                    is ClientAction.Timer ->
+                        launchSetTimerIntent(action.action, action.completion)
+                    is ClientAction.SearchNearby -> launchSearchNearbyIntent(action.action)
                 }
             }
         }
@@ -104,13 +120,21 @@ class MainActivity : ComponentActivity() {
                 ChatApp(
                     viewModel = viewModel,
                     tunnelUrl = tunnelUrl,
-                    tunnelToken = tunnelToken
+                    tunnelToken = tunnelToken,
+                    schemaContent = agentSchemaContent
                 )
             }
         }
     }
 
-    private fun launchSetAlarmIntent(action: SetAlarmAction) {
+    // No onDestroy teardown: the socket is owned by ChatViewModel and released
+    // in its onCleared. Disconnecting here would tear the connection down on
+    // every rotation, theme or locale change.
+
+    private fun launchSetAlarmIntent(
+        action: SetAlarmAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
         val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
             putExtra(AlarmClock.EXTRA_HOUR, action.hour)
             putExtra(AlarmClock.EXTRA_MINUTES, action.minute)
@@ -123,10 +147,14 @@ class MainActivity : ComponentActivity() {
             intent = intent,
             actionName = "set-alarm",
             detail = "hour=${action.hour} minute=${action.minute}",
-            successMessage = "Alarm set for %02d:%02d".format(action.hour, action.minute),
+            successMessage = "Alarm request sent for %02d:%02d".format(
+                action.hour,
+                action.minute
+            ),
             missingAppMessage = "No alarm app is available on this device.",
             deniedMessage = "This app is not allowed to set alarms.",
-            backgroundMessage = "Could not set the alarm while the app was in the background."
+            backgroundMessage = "Could not set the alarm while the app was in the background.",
+            completion = completion
         )
     }
 
@@ -141,7 +169,10 @@ class MainActivity : ComponentActivity() {
      * the only in-app feedback, so it is not optional - and it must not claim
      * success when the launch was refused. See [launchExternalIntent].
      */
-    private fun launchSetTimerIntent(action: SetTimerAction) {
+    private fun launchSetTimerIntent(
+        action: SetTimerAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
         val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
             putExtra(AlarmClock.EXTRA_LENGTH, action.durationInSeconds)
             putExtra(AlarmClock.EXTRA_SKIP_UI, true)
@@ -153,10 +184,12 @@ class MainActivity : ComponentActivity() {
             intent = intent,
             actionName = "set-timer",
             detail = "durationInSeconds=${action.durationInSeconds}",
-            successMessage = "Timer set for ${formatTimerDuration(action.durationInSeconds)}",
+            successMessage =
+                "Timer request sent for ${formatTimerDuration(action.durationInSeconds)}",
             missingAppMessage = "No timer app is available on this device.",
             deniedMessage = "This app is not allowed to set timers.",
-            backgroundMessage = "Could not set the timer while the app was in the background."
+            backgroundMessage = "Could not set the timer while the app was in the background.",
+            completion = completion
         )
     }
 
@@ -204,7 +237,8 @@ class MainActivity : ComponentActivity() {
         successMessage: String,
         missingAppMessage: String,
         deniedMessage: String,
-        backgroundMessage: String
+        backgroundMessage: String,
+        completion: (AndroidDeviceExecutionResult) -> Unit = {}
     ) {
         val target = intent.resolveActivity(packageManager)
         Log.d(
@@ -214,6 +248,7 @@ class MainActivity : ComponentActivity() {
         if (target == null) {
             Log.e(TAG, "No app available to handle $actionName intent")
             Toast.makeText(this, missingAppMessage, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Failure(missingAppMessage))
             return
         }
         if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
@@ -223,18 +258,22 @@ class MainActivity : ComponentActivity() {
                     "background activity starts are refused without an exception"
             )
             Toast.makeText(this, backgroundMessage, Toast.LENGTH_LONG).show()
+            completion(AndroidDeviceExecutionResult.Failure(backgroundMessage))
             return
         }
         try {
             startActivity(intent)
             Log.d(TAG, "$actionName intent dispatched")
             Toast.makeText(this, successMessage, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Success(successMessage))
         } catch (_: ActivityNotFoundException) {
             Log.e(TAG, "No app available to handle $actionName intent")
             Toast.makeText(this, missingAppMessage, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Failure(missingAppMessage))
         } catch (error: SecurityException) {
             Log.e(TAG, "Missing permission for $actionName", error)
             Toast.makeText(this, deniedMessage, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Failure(deniedMessage))
         }
     }
 
@@ -247,7 +286,8 @@ class MainActivity : ComponentActivity() {
 private fun ChatApp(
     viewModel: ChatViewModel,
     tunnelUrl: String,
-    tunnelToken: String?
+    tunnelToken: String?,
+    schemaContent: String
 ) {
     val messages by viewModel.messages.collectAsState()
     val connectionStatus by viewModel.connectionStatus.collectAsState()
@@ -296,7 +336,8 @@ private fun ChatApp(
                 onReconnect = {
                     viewModel.reconnect(
                         url = tunnelUrl,
-                        tunnelToken = tunnelToken
+                        tunnelToken = tunnelToken,
+                        schemaContent = schemaContent
                     )
                 }
             )

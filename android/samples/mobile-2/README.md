@@ -8,33 +8,45 @@ An Android Jetpack Compose chat client that connects to a TypeAgent agent-server
 - OkHttp WebSocket usage on Android
 - TypeAgent agent-server RPC protocol:
   - `joinConversation` / `submitCommand`
+  - `registerClientAgent` with an inline action schema
+  - Client-hosted `executeAction` callbacks
   - Inbound `appendDisplay`, `setDisplay`, `setDisplayInfo`, and command completion events
   - Inbound `takeAction` client actions
 - Incremental assistant response streaming into a single bubble per `requestId`, honouring
   the SDK's `DisplayAppendMode` (`inline`, `block`, `temporary`, `step`) and
   `DisplayMessageKind` styling the same way the Electron shell does
-- Chat history that survives both configuration changes and process death (see
-  [Session persistence](#session-persistence))
+- Chat history that survives both configuration changes and process death, and
+  resumes the same server-side conversation (see
+  [Conversation persistence](#conversation-persistence))
 - DevTunnel authentication via `X-Tunnel-Authorization` header
 - Build-time configuration via environment variables and `BuildConfig`
 
-## Session persistence
+## Conversation persistence
 
-The chat session is owned by a `ViewModel`, so rotation, theme, font-scale and
-locale changes no longer tear down the socket and the transcript.
+The chat conversation is owned by a `ViewModel`, so rotation, theme, font-scale
+and locale changes no longer tear down the socket and the transcript.
 
 A `ViewModel` dies with its process though, which Android does routinely once the
 app is backgrounded. The transcript is therefore mirrored to `SharedPreferences`
-by `ChatSessionStore` and restored on the next start, capped at the most recent
-`ChatSessionSerializer.MAX_PERSISTED_MESSAGES` messages. The server cannot fill
-this gap: `agent-server` exposes no history RPC, so the client has to own its own
-transcript.
+by `ConversationStore` and restored on the next start, capped at the most recent
+`ConversationSerializer.MAX_PERSISTED_MESSAGES` messages. The server cannot fill
+this gap for this client: it reads no display history, so the client has to own
+its own transcript.
 
-The joined `conversationId` is stored alongside the messages. `joinConversation`
-normally returns the same conversation every time, so a restored transcript still
-matches what the agent remembers; if the server does hand back a different
-conversation the stale transcript is dropped rather than shown as history the
-agent has no memory of.
+The joined `conversationId` is stored alongside the messages and passed back into
+`joinConversation` as a connect option on the next launch, so the client resumes
+the exact conversation the transcript belongs to rather than landing on the
+server's default one. If the server no longer has that conversation it answers
+`Conversation not found`; the join then falls back to the default conversation
+once and the orphaned transcript is dropped from both screen and disk. Every
+other join failure - transport, tunnel auth - still surfaces as a connection
+error, so an outage cannot silently move the user into a different conversation.
+
+> **Terminology.** This is a *conversation* (user-facing identity and chat
+> history), not a dispatcher *session* (configuration, caches, agent state).
+> The `SharedPreferences` file is still named `typeagent_chat_session.xml`
+> because that name is pinned in the backup rules and already exists on devices;
+> renaming it would orphan stored transcripts.
 
 ### What is stored, and for how long
 
@@ -53,7 +65,7 @@ Retention runs on both save and load. Because a load only *filters* what it
 reads, a read that drops anything immediately rewrites the file, so expired
 messages are erased rather than merely hidden. Expiry is applied to what is
 stored, not to what is already on screen: messages already visible stay for the
-rest of the session rather than disappearing mid-conversation.
+rest of the conversation rather than disappearing mid-chat.
 
 Saving is debounced (`ChatViewModel.SAVE_DEBOUNCE_MS`). `SharedPreferences`
 rewrites its entire file on every commit and the message list re-emits on every
@@ -65,15 +77,20 @@ The transcript is excluded from Android's Auto Backup (`backup_rules.xml` and
 cloud account. A direct device-to-device transfer does carry it, since that
 copies straight to the new phone without a cloud round trip.
 
-**New chat** in the header clears the transcript from both the screen and disk
-after a confirmation. It is a client-side reset: the agent keeps its own
-server-side memory of the conversation.
+**Clear chat** in the header removes the transcript from both the screen and disk
+after a confirmation. It is a client-side reset only, matching `@clear` on the
+other TypeAgent canvases: the conversation itself is untouched, so the agent
+keeps its memory and the next launch resumes the same conversation.
 
-## Device actions
+## Client-hosted Android agent
 
-The app implements the `takeAction` client actions emitted by the `androidMobile`
-agent. Unknown actions are logged and ignored, so the app stays compatible with
-servers that emit actions this sample does not support.
+After joining a conversation, the app registers `androidDevice` as a
+client-hosted agent. Its alarm and timer schema is packaged in the APK and sent
+inline to TypeAgent. TypeAgent translates or directly invokes the typed action,
+then calls `executeAction` on the app over the existing WebSocket connection.
+
+The app also retains its existing `takeAction` handlers for compatibility with
+the static `androidMobile` agent.
 
 | Client action | Android intent | Notes |
 |---|---|---|
@@ -88,8 +105,16 @@ Both require the `com.android.alarm.permission.SET_ALARM` permission (declared i
 the manifest, install-time only) and matching `<queries>` entries so
 `resolveActivity` works under Android 11+ package visibility rules.
 
-> `set-timer` requires the server-side `androidMobile` `setTimer` action. Install
-> the agent with `@package install androidMobile` in the TypeAgent CLI/shell.
+The registered client agent does not require installing the server-side
+`androidMobile` package. Use `@action` for a deterministic registration test:
+
+```text
+@action --parameters {"originalRequest":"timer","durationInSeconds":30} androidDevice setTimer
+```
+
+```text
+@action --parameters {"originalRequest":"alarm","time":"12:00"} androidDevice setAlarm
+```
 
 ## Prerequisites
 
@@ -136,4 +161,3 @@ The app connects automatically on launch. Tap **Retry** in the status bar if the
 
 [devtunnel]: https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/
 [devtunnel-cli]: https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/get-started
-

@@ -24,10 +24,23 @@ import kotlinx.coroutines.withContext
  * These are delivered as events rather than state: the ViewModel outlives the
  * Activity across configuration changes, so it must not hold a reference to the
  * Activity that will ultimately handle them.
+ *
+ * [ClientAction.Alarm] and [ClientAction.Timer] carry the `executeAction`
+ * completion, because the server is holding an RPC open waiting for the result.
+ * `SearchNearby` arrives over the legacy fire-and-forget `takeAction` path and
+ * has nothing to report back to.
  */
 internal sealed interface ClientAction {
-    data class Alarm(val action: SetAlarmAction) : ClientAction
-    data class Timer(val action: SetTimerAction) : ClientAction
+    data class Alarm(
+        val action: SetAlarmAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class Timer(
+        val action: SetTimerAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
     data class SearchNearby(val action: SearchNearbyAction) : ClientAction
 }
 
@@ -63,9 +76,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val inputText: StateFlow<String> = _inputText
 
     /**
-     * Buffered so an action that arrives while the Activity is being recreated
-     * is replayed once it resumes instead of being dropped by the RESUMED guard
-     * in `MainActivity.launchExternalIntent`.
+     * Buffered so an action that arrives during the gap between the old
+     * Activity being destroyed and the new one being created - a rotation,
+     * theme or locale change - is delivered to the new Activity instead of
+     * being dropped on the floor.
+     *
+     * The consumer collects for the Activity's whole lifetime, not just while
+     * it is resumed, so a queued action is never left waiting on the user
+     * returning to the app. Foreground-only enforcement lives in
+     * `MainActivity.launchExternalIntent`, which reports the refusal.
      */
     private val clientActionEvents = Channel<ClientAction>(Channel.UNLIMITED)
     internal val clientActions: Flow<ClientAction> = clientActionEvents.receiveAsFlow()
@@ -89,16 +108,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         webSocketManager.setClientActionHandler(object : WebSocketManager.ClientActionHandler {
-            override fun onSetAlarm(action: SetAlarmAction) {
-                clientActionEvents.trySend(ClientAction.Alarm(action))
+            override fun onSetAlarm(
+                action: SetAlarmAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.Alarm(action, completion), completion)
             }
 
-            override fun onSetTimer(action: SetTimerAction) {
-                clientActionEvents.trySend(ClientAction.Timer(action))
+            override fun onSetTimer(
+                action: SetTimerAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.Timer(action, completion), completion)
             }
 
             override fun onSearchNearby(action: SearchNearbyAction) {
-                clientActionEvents.trySend(ClientAction.SearchNearby(action))
+                dispatchClientAction(ClientAction.SearchNearby(action))
             }
         })
 
@@ -167,7 +192,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * conversation. The saved conversation id is passed through so the server
      * rejoins it directly.
      */
-    fun connectIfNeeded(url: String, tunnelToken: String?) {
+    fun connectIfNeeded(url: String, tunnelToken: String?, schemaContent: String) {
         if (hasConnected) {
             return
         }
@@ -177,20 +202,44 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             webSocketManager.connect(
                 url = url,
                 tunnelToken = tunnelToken,
+                schemaContent = schemaContent,
                 resumeConversationId = savedConversationId
             )
         }
     }
 
-    fun reconnect(url: String, tunnelToken: String?) {
+    fun reconnect(url: String, tunnelToken: String?, schemaContent: String) {
         hasConnected = true
         viewModelScope.launch {
             restored.await()
             webSocketManager.connect(
                 url = url,
                 tunnelToken = tunnelToken,
+                schemaContent = schemaContent,
                 resumeConversationId = webSocketManager.lastJoinedConversationId.value
                     ?: savedConversationId
+            )
+        }
+    }
+
+    /**
+     * Queues a client action for whichever Activity is currently resumed.
+     *
+     * The channel is unbounded, so the only way the send fails is if it has
+     * already been closed in [onCleared]. When that happens the agent is still
+     * holding an `executeAction` RPC open, so the completion is failed here
+     * rather than left hanging until the connection drops.
+     */
+    private fun dispatchClientAction(
+        action: ClientAction,
+        completion: ((AndroidDeviceExecutionResult) -> Unit)? = null
+    ) {
+        if (clientActionEvents.trySend(action).isFailure) {
+            Log.w(TAG, "Dropping client action: the chat screen is gone")
+            completion?.invoke(
+                AndroidDeviceExecutionResult.Failure(
+                    "The Android app is no longer able to run this action."
+                )
             )
         }
     }
