@@ -247,6 +247,31 @@ describe("debug bridge", () => {
         expect(second.log).toBe(secondPrior);
     });
 
+    it("can include host-owned legacy debug namespace prefixes", () => {
+        const exporter = new InMemoryLogRecordExporter();
+        provider = new LoggerProvider({
+            processors: [new SimpleLogRecordProcessor({ exporter })],
+        });
+        logs.setGlobalLoggerProvider(provider);
+        const output: Array<{
+            namespace: string | undefined;
+            args: unknown[];
+        }> = [];
+        const debugModule = createDebugModule(output);
+        const bridge = installDebugBridge([debugModule], {
+            includedNamespacePrefixes: ["typeagent:", "agent-server:"],
+        });
+
+        debugModule.log.call({ namespace: "agent-server:startup" }, "ready");
+        debugModule.log.call({ namespace: "other:startup" }, "ignored");
+
+        expect(exporter.getFinishedLogRecords()).toHaveLength(1);
+        expect(
+            exporter.getFinishedLogRecords()[0].attributes["debug.namespace"],
+        ).toBe("agent-server:startup");
+        bridge.shutdown();
+    });
+
     it("does not overwrite a later owner during restoration", () => {
         const debugModule = createDebugModule([]);
         const bridge = installDebugBridge([debugModule]);

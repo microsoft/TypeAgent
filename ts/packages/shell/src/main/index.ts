@@ -30,6 +30,7 @@ import {
 } from "./instance.js";
 import { AGENT_SERVER_DEFAULT_PORT } from "@typeagent/agent-server-client";
 import { otel } from "@typeagent/telemetry";
+import registerDebug from "debug";
 import {
     isAllowedConfigFilePath,
     resolveLocalConfigPath,
@@ -208,7 +209,12 @@ async function initialize() {
 
     const appPath = app.getAppPath();
     await initializeKeys(appPath);
-    await otel.initTelemetry();
+    await otel.initTelemetry({
+        debugModules: [registerDebug],
+        debugBridge: {
+            includedNamespacePrefixes: ["typeagent:", "agent-server:"],
+        },
+    });
     // Standalone hosts the agent-server in-process, so warm up the aiclient
     // runtime config locally. The connect-only shell delegates all model work
     // to the remote server and never imports aiclient here.

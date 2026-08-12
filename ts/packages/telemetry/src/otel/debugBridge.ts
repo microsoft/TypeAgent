@@ -17,6 +17,7 @@ export interface DebugModule {
 }
 
 export interface DebugBridgeOptions extends RedactionOptions {
+    readonly includedNamespacePrefixes?: readonly string[];
     readonly excludedNamespacePrefixes?: readonly string[];
 }
 
@@ -54,6 +55,7 @@ export function installDebugBridge(
         }
 
         const priorLog = debugModule.log;
+        const inclusions = options.includedNamespacePrefixes ?? ["typeagent:"];
         const exclusions =
             options.excludedNamespacePrefixes ?? DEFAULT_EXCLUSIONS;
         const wrappedLog: DebugModule["log"] = function (
@@ -65,7 +67,7 @@ export function installDebugBridge(
             if (
                 emitting ||
                 namespace === undefined ||
-                !namespace.startsWith("typeagent:") ||
+                !inclusions.some((prefix) => namespace.startsWith(prefix)) ||
                 exclusions.some((prefix) => namespace.startsWith(prefix))
             ) {
                 return result;

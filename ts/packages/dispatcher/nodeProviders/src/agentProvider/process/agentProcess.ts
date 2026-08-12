@@ -37,7 +37,6 @@ if (!isIPCProcess(process)) {
 }
 const ipcProcess = process;
 
-const telemetryInit = otel.initTelemetry();
 let exitPromise: Promise<void> | undefined;
 
 function exitAgentProcess(exitCode: number, message: string): Promise<void> {
@@ -74,10 +73,32 @@ process.on("SIGINT", () => {
 });
 
 async function startAgentProcess(): Promise<void> {
+    async function getAgentDebug(): Promise<typeof registerDebug | undefined> {
+        try {
+            // get the "debug" package from the module.
+            const require = createRequire(modulePath);
+            const debugPath = require.resolve("debug");
+            const agentDebug = (await import(debugPath)).default;
+            if (agentDebug === registerDebug) {
+                return undefined;
+            }
+            debug(`'${agentName}': Agent debug trace loaded. ${debugPath}`);
+            return agentDebug;
+        } catch {
+            return undefined;
+        }
+    }
+
+    const agentDebug = await getAgentDebug();
+    const debugModules =
+        agentDebug === undefined
+            ? [registerDebug]
+            : [registerDebug, agentDebug];
+    await otel.initTelemetry({ debugModules });
+
     //=================================================================
     // Load the module.
     //=================================================================
-    await telemetryInit;
     const module = await import(modulePath);
     if (typeof module.instantiate !== "function") {
         throw new Error(
@@ -115,23 +136,6 @@ async function startAgentProcess(): Promise<void> {
     //=================================================================
     // Set up debug trace coordination
     //=================================================================
-    async function getAgentDebug(): Promise<typeof registerDebug | undefined> {
-        try {
-            // get the "debug" package from the module.
-            const require = createRequire(modulePath);
-            const debugPath = require.resolve("debug");
-            const agentDebug = (await import(debugPath)).default;
-            if (agentDebug === registerDebug) {
-                return undefined;
-            }
-            debug(`'${agentName}': Agent debug trace loaded. ${debugPath}`);
-            return agentDebug;
-        } catch {
-            return undefined;
-        }
-    }
-
-    const agentDebug = await getAgentDebug();
     const traceChannel = channelProvider.createChannel<string>("trace");
     traceChannel.on("message", (message) => {
         registerDebug.enable(message);

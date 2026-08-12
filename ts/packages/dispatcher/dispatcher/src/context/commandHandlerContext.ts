@@ -13,6 +13,7 @@ import {
     MultiSinkLogger,
     createDebugLoggerSink,
     createDatabaseLoggerSink,
+    createOtelLoggerSink,
     CosmosContainerClientFactory,
     CosmosPartitionKeyBuilderFactory,
     PromptLogger,
@@ -729,6 +730,7 @@ function getCosmosFactories(): PromptLoggerOptions {
 
 function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
     const debugLoggerSink = createDebugLoggerSink();
+    const otelLoggerSink = createOtelLoggerSink();
     let dbLoggerSink: LoggerSink | undefined;
 
     try {
@@ -761,8 +763,8 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
 
     return new MultiSinkLogger(
         dbLoggerSink === undefined
-            ? [debugLoggerSink]
-            : [debugLoggerSink, dbLoggerSink],
+            ? [debugLoggerSink, otelLoggerSink]
+            : [debugLoggerSink, dbLoggerSink, otelLoggerSink],
     );
 }
 
