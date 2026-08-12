@@ -21,8 +21,6 @@ import {
 
 const itOnWindows = process.platform === "win32" ? it : it.skip;
 
-const itOnWindows = process.platform === "win32" ? it : it.skip;
-
 class MemoryStorage implements Storage {
     private readonly files = new Map<string, string>();
 

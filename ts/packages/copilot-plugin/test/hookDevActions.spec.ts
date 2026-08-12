@@ -232,6 +232,72 @@ describe("Copilot dev actions hook", () => {
         expect(cancelCommand).toHaveBeenCalledWith("request-1");
     });
 
+    it("keeps abort cancellation best-effort when client-id cancellation throws", async () => {
+        const consoleError = jest
+            .spyOn(console, "error")
+            .mockImplementation(() => {});
+        let resolveCompletion:
+            | ((result: CommandResult | undefined) => void)
+            | undefined;
+        let resolveSubmit:
+            | ((
+                  result: Awaited<ReturnType<Dispatcher["submitCommand"]>>,
+              ) => void)
+            | undefined;
+        const completion = new Promise<CommandResult | undefined>((resolve) => {
+            resolveCompletion = resolve;
+        });
+        const submitCommand = jest.fn(
+            () =>
+                new Promise<Awaited<ReturnType<Dispatcher["submitCommand"]>>>(
+                    (resolve) => {
+                        resolveSubmit = resolve;
+                    },
+                ),
+        );
+        const cancelCommand = jest.fn(async () => {
+            resolveCompletion?.({ cancelled: true });
+            return { kind: "running", requestId: "request-1" };
+        });
+        const cancelCommandByClientId = jest.fn(() => {
+            throw new Error("disconnected");
+        });
+        const dispatcher = {
+            submitCommand,
+            cancelCommand,
+            cancelCommandByClientId,
+            close: jest.fn(async () => {}),
+        } as unknown as Dispatcher;
+        const dependencies: DevActionDependencies = {
+            connectToTypeAgent: jest.fn(async () => dispatcher),
+            emitProgress: jest.fn(),
+            platform: "win32",
+        };
+        const controller = new AbortController();
+
+        const handled = handleDevActions(
+            input,
+            dependencies,
+            controller.signal,
+        );
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(submitCommand).toHaveBeenCalled();
+        expect(() => controller.abort()).not.toThrow();
+        resolveSubmit?.({
+            ok: true,
+            entry: { requestId: "request-1", completion },
+        });
+
+        await expect(handled).resolves.toEqual({
+            handled: true,
+            responseContent: "TypeAgent request was cancelled.",
+            handledBy: "typeagent",
+        });
+        expect(cancelCommandByClientId).toHaveBeenCalled();
+        expect(cancelCommand).toHaveBeenCalledWith("request-1");
+        consoleError.mockRestore();
+    });
+
     it("defaults unattended interactions to denial", async () => {
         const clientIO = createClientIO({});
 

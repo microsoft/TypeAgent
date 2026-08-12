@@ -62,6 +62,7 @@ export function createClientIO(callbacks: DisplayCallbacks): ClientIO {
             _message: string,
             choices: string[],
             defaultId?: number,
+            _source?: string,
         ): Promise<number> {
             return defaultId ?? Math.max(choices.length - 1, 0);
         },
