@@ -440,9 +440,6 @@ class WebSocketManager {
             TAG,
             "RPC call channel=$channelName method=$methodName argCount=${args.length()}"
         )
-        if (methodName == "takeAction") {
-            Log.d(TAG, "RPC call raw takeAction args=$args")
-        }
         when {
             channelName.startsWith(CLIENT_IO_CHANNEL_PREFIX) -> handleClientIoCall(methodName, args)
             else -> Log.d(TAG, "Unhandled RPC call channel=$channelName method=$methodName")
@@ -564,6 +561,8 @@ class WebSocketManager {
         when (action) {
             is AndroidDeviceAction.Alarm -> handler.onSetAlarm(action.action, completion)
             is AndroidDeviceAction.Timer -> handler.onSetTimer(action.action, completion)
+            is AndroidDeviceAction.SearchNearby ->
+                handler.onSearchNearby(action.action, completion)
         }
     }
 
@@ -691,10 +690,6 @@ class WebSocketManager {
                 }
             }
 
-            "takeAction" -> {
-                handleTakeActionCall(args)
-            }
-
             else -> {
                 val requestId = extractRequestId(args.opt(0))
                 logInboundEvent(
@@ -704,101 +699,6 @@ class WebSocketManager {
                 )
             }
         }
-    }
-
-    private fun handleTakeActionCall(args: JSONArray) {
-        val requestId = extractRequestId(args.opt(0))
-        val actionName = args.optString(1).orEmpty()
-        val actionData = args.optNullable(2)
-        logInboundEvent(
-            type = "take-action:$actionName",
-            requestId = requestId,
-            content = stringifyDisplayValue(actionData)
-        )
-        Log.d(
-            TAG,
-            "takeAction received action=$actionName requestId=${requestId.orEmpty()} data=${stringifyDisplayValue(actionData)}"
-        )
-        when (actionName) {
-            "set-alarm" -> handleSetAlarmAction(actionData)
-            "set-timer" -> handleSetTimerAction(actionData)
-            "search-nearby" -> handleSearchNearbyAction(actionData)
-            else -> Log.d(TAG, "takeAction ignored: unsupported action=$actionName")
-        }
-    }
-
-    private fun handleSetAlarmAction(actionData: Any?) {
-        val alarm = parseSetAlarmActionPayload(actionData)
-        if (alarm == null) {
-            Log.e(
-                TAG,
-                "Invalid set-alarm payload: ${stringifyDisplayValue(actionData)}"
-            )
-            return
-        }
-        val handler = requireClientActionHandler(
-            "set-alarm",
-            "hour=${alarm.hour} minute=${alarm.minute}"
-        ) ?: return
-        Log.d(
-            TAG,
-            "Dispatching set-alarm to client handler hour=${alarm.hour} minute=${alarm.minute}"
-        )
-        handler.onSetAlarm(alarm) {}
-    }
-
-    private fun handleSetTimerAction(actionData: Any?) {
-        val timer = parseSetTimerActionPayload(actionData)
-        if (timer == null) {
-            Log.e(
-                TAG,
-                "Invalid set-timer payload: ${stringifyDisplayValue(actionData)}"
-            )
-            return
-        }
-        val handler = requireClientActionHandler(
-            "set-timer",
-            "durationInSeconds=${timer.durationInSeconds}"
-        ) ?: return
-        Log.d(
-            TAG,
-            "Dispatching set-timer to client handler durationInSeconds=${timer.durationInSeconds}"
-        )
-        handler.onSetTimer(timer) {}
-    }
-
-    private fun handleSearchNearbyAction(actionData: Any?) {
-        val search = parseSearchNearbyActionPayload(actionData)
-        if (search == null) {
-            Log.e(
-                TAG,
-                "Invalid search-nearby payload: ${stringifyDisplayValue(actionData)}"
-            )
-            return
-        }
-        val handler = requireClientActionHandler(
-            "search-nearby",
-            "searchTerm=${search.searchTerm}"
-        ) ?: return
-        Log.d(
-            TAG,
-            "Dispatching search-nearby to client handler searchTerm=${search.searchTerm}"
-        )
-        handler.onSearchNearby(search)
-    }
-
-    private fun requireClientActionHandler(
-        actionName: String,
-        detail: String
-    ): ClientActionHandler? {
-        val handler = synchronized(lock) { clientActionHandler }
-        if (handler == null) {
-            Log.e(
-                TAG,
-                "$actionName parsed ($detail) but no client action handler is registered"
-            )
-        }
-        return handler
     }
 
     private fun handleDisplayLogEvent(event: JSONObject) {
@@ -1474,7 +1374,10 @@ class WebSocketManager {
             completion: (AndroidDeviceExecutionResult) -> Unit
         )
 
-        fun onSearchNearby(action: SearchNearbyAction)
+        fun onSearchNearby(
+            action: SearchNearbyAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
     }
 }
 
