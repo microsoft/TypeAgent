@@ -142,7 +142,11 @@ export async function handleDevActions(
                 .cancelCommand(requestId)
                 .then(() => undefined);
         } else {
-            dispatcher.cancelCommandByClientId(clientRequestId);
+            try {
+                dispatcher.cancelCommandByClientId(clientRequestId);
+            } catch (error) {
+                console.error("TypeAgent dev mode cancellation error:", error);
+            }
             earlyCancellation = Promise.resolve();
         }
         void earlyCancellation.catch((error) => {
