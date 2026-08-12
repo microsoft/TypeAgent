@@ -82,6 +82,8 @@ export interface TelemetryConfig {
     readonly traces?: TraceConfig;
     readonly metrics?: MetricConfig;
     readonly logs?: LogConfig;
+    /** Copy enabled TypeAgent debug output into the OTel logs pipeline. */
+    readonly debugBridge?: boolean;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -178,6 +180,10 @@ export function resolveTelemetryConfig(
         yaml.TELEMETRY_TRACESSAMPLERARG,
         "telemetry.tracesSamplerArg",
     );
+    const yamlDebugBridge = parseBoolean(
+        yaml.TELEMETRY_DEBUGBRIDGE,
+        "telemetry.debugBridge",
+    );
 
     // ---- Env values.
     const envGlobalEndpoint = requireNonEmpty(
@@ -196,6 +202,10 @@ export function resolveTelemetryConfig(
     const envLogFile = requireNonEmpty(
         env.TYPEAGENT_OTEL_LOG_FILE,
         "TYPEAGENT_OTEL_LOG_FILE",
+    );
+    const envDebugBridge = parseBoolean(
+        env.TYPEAGENT_OTEL_DEBUG_BRIDGE,
+        "TYPEAGENT_OTEL_DEBUG_BRIDGE",
     );
 
     const signalEndpoints: Record<Signal, string | undefined> = {
@@ -290,6 +300,7 @@ export function resolveTelemetryConfig(
         traces?: TraceConfig;
         metrics?: MetricConfig;
         logs?: LogConfig;
+        debugBridge?: boolean;
     } = {};
 
     if (tracesOtlp !== undefined) {
@@ -318,6 +329,10 @@ export function resolveTelemetryConfig(
             logs.logFile = logFile;
         }
         result.logs = logs;
+    }
+    const debugBridge = envDebugBridge ?? yamlDebugBridge;
+    if (debugBridge !== undefined) {
+        result.debugBridge = debugBridge;
     }
 
     return result;
@@ -374,6 +389,29 @@ function requireNonEmpty(
         throw new Error(`${name} must not be blank.`);
     }
     return value;
+}
+
+function parseBoolean(
+    value: string | undefined,
+    name: string,
+): boolean | undefined {
+    if (value === undefined || value === "") {
+        return undefined;
+    }
+    switch (value.trim().toLowerCase()) {
+        case "true":
+        case "on":
+        case "1":
+            return true;
+        case "false":
+        case "off":
+        case "0":
+            return false;
+        default:
+            throw new Error(
+                `${name}="${value}" is invalid; expected true/false, on/off, or 1/0.`,
+            );
+    }
 }
 
 /**

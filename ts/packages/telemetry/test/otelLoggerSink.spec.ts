@@ -141,7 +141,9 @@ describe("OtelLoggerSink", () => {
 
     it("maps a Structured Logger event to a complete OTel log record", () => {
         logFixture = installLogFixture();
-        const sink = createOtelLoggerSink();
+        const sink = createOtelLoggerSink({
+            diagnostic: () => undefined,
+        });
 
         sink.logEvent(
             baseEvent({

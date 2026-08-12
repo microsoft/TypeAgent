@@ -38,7 +38,9 @@ import {
  * content, PII, and other data that is not appropriate to record. See
  * `docs/architecture/telemetry/opentelemetry.md` for the privacy contract.
  */
-export type OtelLoggerSinkOptions = RedactionOptions;
+export interface OtelLoggerSinkOptions extends RedactionOptions {
+    readonly diagnostic?: (message: string) => void;
+}
 
 /**
  * Top-level string fields on `LogEvent.event` that are promoted to
@@ -168,9 +170,9 @@ function mapSeverity(severity: LogEventSeverity | undefined): {
  * - Never throw from `logEvent`. Failures (missing provider, misbehaving
  *   redaction, broken logger implementation, etc.) drop the OTel record
  *   only. No debug or Structured Logger calls happen in the catch, so
- *   the sink cannot recurse through a sibling sink. A follow-up PR wires
- *   a non-recursive diagnostics path that reports drops and errors; this
- *   PR keeps the surface silent to preserve the isolation guarantee.
+ *   the sink cannot recurse through a sibling sink. Failures produce a
+ *   rate-limited, content-free diagnostic through an injected callback or
+ *   direct stderr output.
  * - Never mutate the caller's `LogEvent.event`; the emitted body is a
  *   detached snapshot produced by {@link boundedSnapshot} so a sibling
  *   sink still sees the original. The snapshot bounds depth
@@ -210,6 +212,7 @@ function mapSeverity(severity: LogEventSeverity | undefined): {
  */
 export class OtelLoggerSink implements LoggerSink {
     private readonly options: OtelLoggerSinkOptions | undefined;
+    private lastDiagnosticAt = 0;
 
     constructor(options?: OtelLoggerSinkOptions) {
         this.options = options;
@@ -276,12 +279,12 @@ export class OtelLoggerSink implements LoggerSink {
             };
 
             logger.emit(record);
-        } catch {
+        } catch (error) {
             // Failure isolation: never let a telemetry-side error escape
             // into the caller. Intentionally no debug/logger call - that
             // would recurse through the sibling sinks that share the same
-            // `MultiSinkLogger`. PR2 introduces a non-recursive
-            // diagnostics channel that reports these drops and errors.
+            // `MultiSinkLogger`.
+            this.reportFailure(error);
         }
     }
 
@@ -293,6 +296,25 @@ export class OtelLoggerSink implements LoggerSink {
             );
         } catch {
             return undefined;
+        }
+    }
+
+    private reportFailure(error: unknown): void {
+        const now = Date.now();
+        if (now - this.lastDiagnosticAt < 60_000) {
+            return;
+        }
+        this.lastDiagnosticAt = now;
+        const errorName = error instanceof Error ? error.name : "Error";
+        const message = `OpenTelemetry structured log dropped (${errorName}).`;
+        try {
+            if (this.options?.diagnostic !== undefined) {
+                this.options.diagnostic(message);
+            } else {
+                process.stderr.write(`[typeagent:telemetry] ${message}\n`);
+            }
+        } catch {
+            // Diagnostics remain isolated from the request and logger fan-out.
         }
     }
 }

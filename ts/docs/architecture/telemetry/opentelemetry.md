@@ -204,9 +204,8 @@ covering the promoted correlation attributes and every string reachable in the
 snapshotted body.
 
 Emit failures are isolated: the sink drops the OTel record and never re-enters
-the `MultiSinkLogger` fan-out. Drop and error accounting is deliberately silent
-in this PR; a follow-up PR wires a non-recursive diagnostics channel that
-reports these events without looping back through the sink.
+the `MultiSinkLogger` fan-out. A rate-limited diagnostic writes directly to
+stderr (or an injected non-recursive callback) without including event content.
 
 The debug bridge tees enabled `typeagent:*` calls into OTel without changing
 their original output:

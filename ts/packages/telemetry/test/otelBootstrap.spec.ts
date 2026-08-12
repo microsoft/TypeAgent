@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { context, metrics, propagation, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import {
@@ -464,15 +467,33 @@ describe("telemetry bootstrap", () => {
         expect(resource?.attributes["service.name"]).toBe("typeagent");
     });
 
-    it("rejects the unsupported default JSONL writer path", async () => {
+    it("supports the default JSONL-only log provider", async () => {
         const coordinator = createCoordinator();
+        const dir = fs.mkdtempSync(
+            path.join(os.tmpdir(), "typeagent-otel-bootstrap-"),
+        );
+        try {
+            await coordinator.init({
+                config: {
+                    logs: {
+                        logFile: path.join(dir, "telemetry-{pid}.jsonl"),
+                    },
+                },
+                serviceName: "bootstrap-test",
+            });
+            const logger = logs.getLogger("bootstrap-test");
+            logger.emit({ body: "jsonl works" });
+            await coordinator.shutdown();
 
-        await expect(
-            coordinator.init({
-                config: { logs: { logFile: "telemetry.jsonl" } },
-                resource: resourceFromAttributes({}),
-            }),
-        ).rejects.toThrow(/JSONL output is not implemented/);
+            const files = fs.readdirSync(dir);
+            expect(files).toHaveLength(1);
+            const line = fs
+                .readFileSync(path.join(dir, files[0]!), "utf8")
+                .trim();
+            expect(JSON.parse(line).body).toBe("jsonl works");
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     it("refuses trace and log providers installed by other owners", async () => {
