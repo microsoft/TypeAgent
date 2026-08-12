@@ -137,16 +137,6 @@ export async function sendAndWaitWithCancellation(
             }
             throw error;
         }
-        try {
-            await waitPromise;
-        } catch (settledError) {
-            if (settledError !== error) {
-                debug(
-                    "Copilot wait settled after reasoning cancellation:",
-                    settledError,
-                );
-            }
-        }
         throw error;
     } finally {
         if (timeout !== undefined) {
