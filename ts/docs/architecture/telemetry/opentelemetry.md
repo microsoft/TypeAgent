@@ -549,6 +549,15 @@ Use the repository build and test flow:
 ```text
 pnpm run build
 pnpm --filter @typeagent/telemetry test
+pnpm --filter agent-dispatcher run jest-esm --testPathPattern="otel.*spec.js"
+```
+
+The dispatcher suite includes deterministic one-process trace coverage with an
+in-memory provider. Run the separate OTLP/protobuf receiver smoke path explicitly:
+
+```powershell
+$env:TYPEAGENT_OTEL_OTLP_SMOKE = "1"
+pnpm --filter agent-dispatcher run jest-esm --runInBand --testPathPattern="otelOtlpSmoke.spec.js"
 ```
 
 ## References
