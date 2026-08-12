@@ -600,6 +600,11 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
          * Default false: each request starts a new trace.
          */
         joinActiveTrace?: boolean;
+        /**
+         * Export structured dispatcher events through the global OTel logs
+         * provider. Default false because event payloads may contain user data.
+         */
+        structuredLogs?: boolean;
     };
 
     // Additional integration options
@@ -728,9 +733,12 @@ function getCosmosFactories(): PromptLoggerOptions {
     return result;
 }
 
-function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
+function getLoggerSink(
+    isDbEnabled: () => boolean,
+    clientIO: ClientIO,
+    structuredLogs: boolean,
+) {
     const debugLoggerSink = createDebugLoggerSink();
-    const otelLoggerSink = createOtelLoggerSink();
     let dbLoggerSink: LoggerSink | undefined;
 
     try {
@@ -761,11 +769,14 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
         );
     }
 
-    return new MultiSinkLogger(
+    const sinks =
         dbLoggerSink === undefined
-            ? [debugLoggerSink, otelLoggerSink]
-            : [debugLoggerSink, dbLoggerSink, otelLoggerSink],
-    );
+            ? [debugLoggerSink]
+            : [debugLoggerSink, dbLoggerSink];
+    if (structuredLogs) {
+        sinks.push(createOtelLoggerSink());
+    }
+    return new MultiSinkLogger(sinks);
 }
 
 async function lockEmbeddingCacheDir(context: CommandHandlerContext) {
@@ -1208,7 +1219,11 @@ export async function initializeCommandHandlerContext(
         const sessionDirPath = session.getSessionDirPath();
         debug(`Session directory: ${sessionDirPath}`);
         const clientIO = options?.clientIO ?? nullClientIO;
-        const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
+        const loggerSink = getLoggerSink(
+            () => context.dblogging,
+            clientIO,
+            options?.telemetry?.structuredLogs === true,
+        );
         const activationId = randomUUID();
         const traceId = options?.traceId;
         const logger = new ChildLogger(loggerSink, DispatcherName, {

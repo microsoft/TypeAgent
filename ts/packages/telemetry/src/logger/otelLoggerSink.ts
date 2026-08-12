@@ -207,8 +207,8 @@ function mapSeverity(severity: LogEventSeverity | undefined): {
  * *and* global provider replacement (e.g. `logs.disable()` followed by
  * `setGlobalLoggerProvider(...)`) transparent to a sink created earlier.
  *
- * This class is the library foundation only. A later host-wiring PR
- * composes it into TypeAgent-owned runtimes and configures providers.
+ * The sink does not own or configure a provider. TypeAgent-owned composition
+ * roots attach it to runtime loggers and configure providers separately.
  */
 export class OtelLoggerSink implements LoggerSink {
     private readonly options: OtelLoggerSinkOptions | undefined;

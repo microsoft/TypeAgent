@@ -62,6 +62,9 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         metrics: true,
         dblogging: true,
         traceId: getTraceId(),
+        telemetry: {
+            structuredLogs: true,
+        },
         clientIO: clientIO,
         constructionProvider: getDefaultConstructionProvider(),
         indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),

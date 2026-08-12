@@ -28,7 +28,13 @@ export interface DebugBridge {
 interface InstalledBridge {
     readonly priorLog: DebugModule["log"];
     readonly wrappedLog: DebugModule["log"];
+    readonly options: EffectiveDebugBridgeOptions;
     refCount: number;
+}
+
+interface EffectiveDebugBridgeOptions extends RedactionOptions {
+    readonly includedNamespacePrefixes: readonly string[];
+    readonly excludedNamespacePrefixes: readonly string[];
 }
 
 const installedBridges = new WeakMap<DebugModule, InstalledBridge>();
@@ -45,8 +51,31 @@ export function installDebugBridge(
     debugModules: readonly DebugModule[],
     options: DebugBridgeOptions = {},
 ): DebugBridge {
+    const effectiveOptions: EffectiveDebugBridgeOptions = {
+        includedNamespacePrefixes: options.includedNamespacePrefixes ?? [
+            "typeagent:",
+        ],
+        excludedNamespacePrefixes:
+            options.excludedNamespacePrefixes ?? DEFAULT_EXCLUSIONS,
+        ...(options.secretFilter === undefined
+            ? {}
+            : { secretFilter: options.secretFilter }),
+    };
+    const uniqueModules = [...new Set(debugModules)];
+    for (const debugModule of uniqueModules) {
+        const existing = installedBridges.get(debugModule);
+        if (
+            existing !== undefined &&
+            !hasEquivalentOptions(existing.options, effectiveOptions)
+        ) {
+            throw new Error(
+                "Cannot install a debug bridge with different options on an already bridged debug module.",
+            );
+        }
+    }
+
     const installed: DebugModule[] = [];
-    for (const debugModule of new Set(debugModules)) {
+    for (const debugModule of uniqueModules) {
         const existing = installedBridges.get(debugModule);
         if (existing !== undefined) {
             existing.refCount++;
@@ -55,9 +84,6 @@ export function installDebugBridge(
         }
 
         const priorLog = debugModule.log;
-        const inclusions = options.includedNamespacePrefixes ?? ["typeagent:"];
-        const exclusions =
-            options.excludedNamespacePrefixes ?? DEFAULT_EXCLUSIONS;
         const wrappedLog: DebugModule["log"] = function (
             this: { namespace?: string },
             ...args: unknown[]
@@ -67,8 +93,12 @@ export function installDebugBridge(
             if (
                 emitting ||
                 namespace === undefined ||
-                !inclusions.some((prefix) => namespace.startsWith(prefix)) ||
-                exclusions.some((prefix) => namespace.startsWith(prefix))
+                !effectiveOptions.includedNamespacePrefixes.some((prefix) =>
+                    namespace.startsWith(prefix),
+                ) ||
+                effectiveOptions.excludedNamespacePrefixes.some((prefix) =>
+                    namespace.startsWith(prefix),
+                )
             ) {
                 return result;
             }
@@ -91,7 +121,7 @@ export function installDebugBridge(
                     const rendered = format(...args).replace(ANSI_ESCAPE, "");
                     const redacted =
                         rendered.length <= MAX_BODY_LENGTH
-                            ? redactText(rendered, options)
+                            ? redactText(rendered, effectiveOptions)
                             : undefined;
                     const body =
                         redacted !== undefined &&
@@ -121,6 +151,7 @@ export function installDebugBridge(
         installedBridges.set(debugModule, {
             priorLog,
             wrappedLog,
+            options: effectiveOptions,
             refCount: 1,
         });
         installed.push(debugModule);
@@ -149,4 +180,31 @@ export function installDebugBridge(
             }
         },
     };
+}
+
+function hasEquivalentOptions(
+    left: EffectiveDebugBridgeOptions,
+    right: EffectiveDebugBridgeOptions,
+): boolean {
+    return (
+        left.secretFilter === right.secretFilter &&
+        arraysEqual(
+            left.includedNamespacePrefixes,
+            right.includedNamespacePrefixes,
+        ) &&
+        arraysEqual(
+            left.excludedNamespacePrefixes,
+            right.excludedNamespacePrefixes,
+        )
+    );
+}
+
+function arraysEqual(
+    left: readonly string[],
+    right: readonly string[],
+): boolean {
+    return (
+        left.length === right.length &&
+        left.every((value, index) => value === right[index])
+    );
 }

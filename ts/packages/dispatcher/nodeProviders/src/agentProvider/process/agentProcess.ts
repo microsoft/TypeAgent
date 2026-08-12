@@ -9,8 +9,8 @@ import {
     createAgentRpcServer,
 } from "@typeagent/agent-rpc/server";
 import { createChannelProvider } from "@typeagent/agent-rpc/channel";
-import { createRequire } from "node:module";
 import { otel } from "@typeagent/telemetry";
+import { loadAgentDebug } from "./agentDebug.js";
 
 //=================================================================
 // Get arguments from command line
@@ -73,23 +73,13 @@ process.on("SIGINT", () => {
 });
 
 async function startAgentProcess(): Promise<void> {
-    async function getAgentDebug(): Promise<typeof registerDebug | undefined> {
-        try {
-            // get the "debug" package from the module.
-            const require = createRequire(modulePath);
-            const debugPath = require.resolve("debug");
-            const agentDebug = (await import(debugPath)).default;
-            if (agentDebug === registerDebug) {
-                return undefined;
-            }
-            debug(`'${agentName}': Agent debug trace loaded. ${debugPath}`);
-            return agentDebug;
-        } catch {
-            return undefined;
-        }
+    const loadedAgentDebug = loadAgentDebug(modulePath, registerDebug);
+    const agentDebug = loadedAgentDebug?.debug;
+    if (loadedAgentDebug !== undefined) {
+        debug(
+            `'${agentName}': Agent debug trace loaded. ${loadedAgentDebug.path}`,
+        );
     }
-
-    const agentDebug = await getAgentDebug();
     const debugModules =
         agentDebug === undefined
             ? [registerDebug]

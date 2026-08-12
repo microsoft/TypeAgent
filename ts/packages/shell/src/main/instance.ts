@@ -631,6 +631,9 @@ async function initializeDispatcher(
                     metrics: true,
                     dblogging: true,
                     traceId: getTraceId(),
+                    telemetry: {
+                        structuredLogs: true,
+                    },
                     indexingServiceRegistry,
                     constructionProvider: getDefaultConstructionProvider(),
                     allowSharedLocalView: ["browser"],

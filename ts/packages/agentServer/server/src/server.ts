@@ -345,6 +345,9 @@ async function main() {
                 dblogging: true,
                 developerMode,
                 traceId,
+                telemetry: {
+                    structuredLogs: true,
+                },
                 indexingServiceRegistry: await getIndexingServiceRegistry(
                     instanceDir,
                     configName,
