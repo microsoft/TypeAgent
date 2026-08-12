@@ -141,6 +141,59 @@ export function loadRunConfigFile(filePath: string): RunConfigFile {
     }
 }
 
+function selectedBatch(
+    batches: Record<string, BatchConfig> | undefined,
+    batch: string,
+): BatchConfig | undefined {
+    if (batches !== undefined && Object.keys(batches).length > 0) {
+        if (!(batch in batches)) {
+            throw new Error(
+                `runConfig: unknown batch '${batch}'. Known batches: ${Object.keys(batches).sort().join(", ")}`,
+            );
+        }
+    }
+    return batches?.[batch];
+}
+
+function tpmLimitsFromModels(
+    models: Record<string, ModelConfig>,
+): Record<string, number> {
+    const tpmLimits: Record<string, number> = {};
+    for (const [id, model] of Object.entries(models)) {
+        if (isPositive(model.tpmLimit)) {
+            tpmLimits[id] = model.tpmLimit;
+        }
+    }
+    return tpmLimits;
+}
+
+function evalConcurrencyByModel(
+    evalModels: string[],
+    models: Record<string, ModelConfig>,
+    headroom: number,
+    tokPerMinPerSlot: number,
+): Record<string, number> {
+    const concurrencyByModel: Record<string, number> = {};
+    for (const id of evalModels) {
+        concurrencyByModel[id] = concurrencyFor(
+            models[id],
+            headroom,
+            tokPerMinPerSlot,
+            DEFAULT_EVAL_CONCURRENCY,
+        );
+    }
+    return concurrencyByModel;
+}
+
+function optionalMaxCases(
+    maxCases: number | null | undefined,
+): number | undefined {
+    if (maxCases === null || maxCases === undefined) {
+        return undefined;
+    }
+    return maxCases;
+}
+
 export function resolveRunConfig(
     file: RunConfigFile,
     options: ResolveOptions = {},
@@ -151,16 +204,7 @@ export function resolveRunConfig(
 
     const models = file.models ?? {};
     const base = file.base ?? {};
-    if (
-        file.batches !== undefined &&
-        Object.keys(file.batches).length > 0 &&
-        !(batch in file.batches)
-    ) {
-        throw new Error(
-            `runConfig: unknown batch '${batch}'. Known batches: ${Object.keys(file.batches).sort().join(", ")}`,
-        );
-    }
-    const selected = file.batches?.[batch];
+    const selected = selectedBatch(file.batches, batch);
 
     const synth = mergeSection(base.synthesizer, selected?.synthesizer);
     const evalCfg = mergeSection(base.eval, selected?.eval);
@@ -173,31 +217,7 @@ export function resolveRunConfig(
 
     const generatorModel = synth.generatorModel ?? DEFAULT_GENERATOR_MODEL;
     const reviewerModel = synth.reviewerModel ?? generatorModel;
-
-    const genConcurrency = concurrencyFor(
-        models[generatorModel],
-        headroom,
-        tokPerMinPerSlot,
-        synth.concurrency ?? DEFAULT_GEN_CONCURRENCY,
-    );
-
     const evalModels = evalCfg.models ?? [];
-    const concurrencyByModel: Record<string, number> = {};
-    for (const id of evalModels) {
-        concurrencyByModel[id] = concurrencyFor(
-            models[id],
-            headroom,
-            tokPerMinPerSlot,
-            DEFAULT_EVAL_CONCURRENCY,
-        );
-    }
-
-    const tpmLimits: Record<string, number> = {};
-    for (const [id, model] of Object.entries(models)) {
-        if (isPositive(model.tpmLimit)) {
-            tpmLimits[id] = model.tpmLimit;
-        }
-    }
 
     return {
         batch,
@@ -207,17 +227,24 @@ export function resolveRunConfig(
         caseCount: synth.caseCount ?? DEFAULT_CASE_COUNT,
         genCases: synth.genCases ?? DEFAULT_GEN_CASES,
         maxAttempts: synth.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
-        genConcurrency,
+        genConcurrency: concurrencyFor(
+            models[generatorModel],
+            headroom,
+            tokPerMinPerSlot,
+            synth.concurrency ?? DEFAULT_GEN_CONCURRENCY,
+        ),
         evalModels,
-        concurrencyByModel,
+        concurrencyByModel: evalConcurrencyByModel(
+            evalModels,
+            models,
+            headroom,
+            tokPerMinPerSlot,
+        ),
         modelConcurrency: Math.max(
             1,
             evalCfg.modelConcurrency ?? evalModels.length,
         ),
-        maxCases:
-            evalCfg.maxCases === null || evalCfg.maxCases === undefined
-                ? undefined
-                : evalCfg.maxCases,
-        tpmLimits,
+        maxCases: optionalMaxCases(evalCfg.maxCases),
+        tpmLimits: tpmLimitsFromModels(models),
     };
 }
