@@ -667,6 +667,26 @@ describe("createAndExecutePowerShellFlow", () => {
     });
 
     itOnWindows(
+        "accepts a short path alias for an allowed long path",
+        async () => {
+            const result = await executeScript({
+                script: "param([string]$Path)\nGet-Item -LiteralPath $Path",
+                parameters: { Path: "C:\\PROGRA~1" },
+                sandbox: {
+                    allowedCmdlets: ["Get-Item"],
+                    allowedPaths: ["C:\\Program Files"],
+                    allowedModules: [],
+                    maxExecutionTime: 10,
+                    networkAccess: false,
+                },
+            });
+
+            expect(result.success).toBe(true);
+            expect(result.stderr).toBe("");
+        },
+    );
+
+    itOnWindows(
         "blocks writes to non-existent paths outside the sandbox",
         async () => {
             const directory = await mkdtemp(

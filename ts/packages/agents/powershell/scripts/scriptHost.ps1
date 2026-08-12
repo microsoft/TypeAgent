@@ -27,6 +27,44 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Remove-TrailingDirectorySeparator {
+    param([string]$Path)
+
+    $root = [System.IO.Path]::GetPathRoot($Path)
+    if ($Path.Equals($root, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $root
+    }
+    return $Path.TrimEnd('\', '/')
+}
+
+function Get-CanonicalFileSystemPath {
+    param([string]$Path)
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    if (Test-Path -LiteralPath $fullPath) {
+        $item = Get-Item -LiteralPath $fullPath -Force
+        return Remove-TrailingDirectorySeparator $item.FullName
+    }
+
+    $missingSegments = [System.Collections.Generic.List[string]]::new()
+    $existingPath = $fullPath
+    while (-not (Test-Path -LiteralPath $existingPath)) {
+        $leaf = Split-Path -Leaf $existingPath
+        $parent = Split-Path -Parent $existingPath
+        if (-not $leaf -or -not $parent -or $parent -eq $existingPath) {
+            throw "Unable to resolve path '$Path'."
+        }
+        $missingSegments.Insert(0, $leaf)
+        $existingPath = $parent
+    }
+
+    $canonicalPath = (Get-Item -LiteralPath $existingPath -Force).FullName
+    foreach ($segment in $missingSegments) {
+        $canonicalPath = Join-Path $canonicalPath $segment
+    }
+    return Remove-TrailingDirectorySeparator ([System.IO.Path]::GetFullPath($canonicalPath))
+}
+
 try {
     $allowedCmdlets = $AllowedCmdletsJson | ConvertFrom-Json
     $params = $ParametersJson | ConvertFrom-Json
@@ -51,9 +89,10 @@ try {
     foreach ($ap in $AllowedPaths) {
         try {
             $expandedPath = $ExecutionContext.InvokeCommand.ExpandString($ap)
-            $expandedAllowedPaths += [System.IO.Path]::GetFullPath($expandedPath).TrimEnd('\', '/')
+            $expandedAllowedPaths += Get-CanonicalFileSystemPath $expandedPath
         } catch {
-            $expandedAllowedPaths += $ap
+            Write-Error "Invalid allowed path '$ap': $_"
+            exit 1
         }
     }
 
@@ -74,35 +113,27 @@ try {
                     continue
                 }
 
-                $isValidPath = $false
-                try { $isValidPath = Test-Path $val -IsValid } catch { }
-                if ($isValidPath) {
-                    $resolvedPath = $null
-                    try {
-                        $resolvedPath = (Resolve-Path $val -ErrorAction SilentlyContinue).Path
-                        if (-not $resolvedPath) {
-                            $resolvedPath = [System.IO.Path]::GetFullPath($val)
-                        }
-                        $resolvedPath = $resolvedPath.TrimEnd('\', '/')
-                    } catch {}
-                    if ($resolvedPath) {
-                        $pathAllowed = $false
-                        foreach ($ap in $expandedAllowedPaths) {
-                            if (
-                                $resolvedPath.Equals($ap, [System.StringComparison]::OrdinalIgnoreCase) -or
-                                $resolvedPath.StartsWith("$ap\", [System.StringComparison]::OrdinalIgnoreCase) -or
-                                $resolvedPath.StartsWith("$ap/", [System.StringComparison]::OrdinalIgnoreCase)
-                            ) {
-                                $pathAllowed = $true
-                                break
-                            }
-                        }
-                        # ENFORCEMENT: Block execution if path not allowed
-                        if (-not $pathAllowed) {
-                            Write-Error "Path access denied: '$resolvedPath' is not in allowedPaths. Allowed paths: $($expandedAllowedPaths -join ', ')"
-                            exit 1
-                        }
+                try {
+                    $resolvedPath = Get-CanonicalFileSystemPath $val
+                } catch {
+                    Write-Error "Invalid path parameter '$($prop.Name)': $_"
+                    exit 1
+                }
+                $pathAllowed = $false
+                foreach ($ap in $expandedAllowedPaths) {
+                    if (
+                        $resolvedPath.Equals($ap, [System.StringComparison]::OrdinalIgnoreCase) -or
+                        $resolvedPath.StartsWith("$ap\", [System.StringComparison]::OrdinalIgnoreCase) -or
+                        $resolvedPath.StartsWith("$ap/", [System.StringComparison]::OrdinalIgnoreCase)
+                    ) {
+                        $pathAllowed = $true
+                        break
                     }
+                }
+                # ENFORCEMENT: Block execution if path not allowed
+                if (-not $pathAllowed) {
+                    Write-Error "Path access denied: '$resolvedPath' is not in allowedPaths. Allowed paths: $($expandedAllowedPaths -join ', ')"
+                    exit 1
                 }
             }
         }
