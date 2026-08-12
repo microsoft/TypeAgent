@@ -106,10 +106,18 @@ Logs require explicit composition:
 - Install the debug bridge to copy enabled TypeAgent debug output.
 - Installing an OTel SDK alone does neither.
 
-The logger severity contract and `OtelLoggerSink` in this PR are library
-foundation only. They do not attach the sink to a runtime logger or configure a
-provider. A later host-wiring PR performs that composition in TypeAgent-owned
-Node hosts.
+TypeAgent-owned Node composition roots attach `OtelLoggerSink` alongside the
+existing debug and database sinks when `telemetry.structuredLogs` is enabled.
+The setting defaults to false so embedded dispatcher consumers do not export
+event payloads merely because another component installed a global OTel logs
+provider. The environment override is
+`TYPEAGENT_OTEL_STRUCTURED_LOGS=true`. Hosts also pass each process's `debug`
+module instance to `initTelemetry()` so the optional bridge can preserve
+existing output while copying eligible records into OTel.
+
+The dispatcher prompt logger is intentionally not connected to
+`OtelLoggerSink`, and its debug namespace remains excluded from the bridge.
+Prompt capture requires a separate explicit privacy-reviewed design.
 
 The sink emits through the host's global Logs API and does not create a provider.
 Embeddable libraries never install a process-wide debug hook. A partner may
@@ -120,6 +128,11 @@ TypeAgent-owned Node hosts call `initTelemetry()` once and
 `shutdownTelemetry()` on exit. Each process installs at most one global provider
 per enabled signal and exports directly. Libraries, agents, requests, and
 sessions do not create providers.
+
+The bridge includes `typeagent:*` namespaces by default. TypeAgent-owned hosts
+may explicitly include a stable legacy prefix that they own. Agent server hosts
+include `agent-server:*` this way rather than renaming existing namespaces and
+breaking current `DEBUG` configurations.
 
 Global provider registration is first-writer-wins. TypeAgent bootstrap runs
 before instrumentation and reports an unexpected existing provider as a

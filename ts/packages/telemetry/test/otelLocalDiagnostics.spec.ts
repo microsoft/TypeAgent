@@ -16,6 +16,7 @@ import {
     type ReadableLogRecord,
 } from "@opentelemetry/sdk-logs";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
+import registerDebug from "debug";
 
 import { createOtelLoggerSink } from "../src/logger/otelLoggerSink.js";
 import { installDebugBridge } from "../src/otel/debugBridge.js";
@@ -247,6 +248,68 @@ describe("debug bridge", () => {
         expect(second.log).toBe(secondPrior);
     });
 
+    it("can include host-owned legacy debug namespace prefixes", () => {
+        const exporter = new InMemoryLogRecordExporter();
+        provider = new LoggerProvider({
+            processors: [new SimpleLogRecordProcessor({ exporter })],
+        });
+        logs.setGlobalLoggerProvider(provider);
+        const output: Array<{
+            namespace: string | undefined;
+            args: unknown[];
+        }> = [];
+        const debugModule = createDebugModule(output);
+        const bridge = installDebugBridge([debugModule], {
+            includedNamespacePrefixes: ["typeagent:", "agent-server:"],
+        });
+
+        debugModule.log.call({ namespace: "agent-server:startup" }, "ready");
+        debugModule.log.call({ namespace: "other:startup" }, "ignored");
+        debugModule.log.call(
+            { namespace: "typeagent:telemetry:promptLogger" },
+            "prompt",
+        );
+
+        expect(exporter.getFinishedLogRecords()).toHaveLength(1);
+        expect(
+            exporter.getFinishedLogRecords()[0].attributes["debug.namespace"],
+        ).toBe("agent-server:startup");
+        bridge.shutdown();
+    });
+
+    it("captures real debug instances created before and after installation", () => {
+        const exporter = new InMemoryLogRecordExporter();
+        provider = new LoggerProvider({
+            processors: [new SimpleLogRecordProcessor({ exporter })],
+        });
+        logs.setGlobalLoggerProvider(provider);
+        const priorNamespaces = registerDebug.disable();
+        const priorLog = registerDebug.log;
+        registerDebug.log = () => undefined;
+        const before = registerDebug("typeagent:test:before");
+        const bridge = installDebugBridge([registerDebug]);
+
+        try {
+            registerDebug.enable("typeagent:test:*");
+            const after = registerDebug("typeagent:test:after");
+            before("created before installation");
+            after("created after installation");
+
+            const records = exporter.getFinishedLogRecords();
+            expect(records.map((record) => record.body)).toEqual([
+                "created before installation",
+                "created after installation",
+            ]);
+            expect(
+                records.map((record) => record.attributes["debug.namespace"]),
+            ).toEqual(["typeagent:test:before", "typeagent:test:after"]);
+        } finally {
+            bridge.shutdown();
+            registerDebug.log = priorLog;
+            registerDebug.enable(priorNamespaces);
+        }
+    });
+
     it("does not overwrite a later owner during restoration", () => {
         const debugModule = createDebugModule([]);
         const bridge = installDebugBridge([debugModule]);
@@ -269,6 +332,21 @@ describe("debug bridge", () => {
         expect(debugModule.log).toBe(wrapped);
         second.shutdown();
         expect(debugModule.log).toBe(prior);
+    });
+
+    it("rejects conflicting options on an already bridged module", () => {
+        const debugModule = createDebugModule([]);
+        const first = installDebugBridge([debugModule]);
+        const wrapped = debugModule.log;
+
+        expect(() =>
+            installDebugBridge([debugModule], {
+                includedNamespacePrefixes: ["agent-server:"],
+            }),
+        ).toThrow(/different options/);
+        expect(debugModule.log).toBe(wrapped);
+
+        first.shutdown();
     });
 
     it("suppresses reentrant debug output from the OTel logger path", () => {

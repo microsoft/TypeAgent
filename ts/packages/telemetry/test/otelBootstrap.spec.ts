@@ -117,6 +117,24 @@ describe("telemetry bootstrap", () => {
         expect(configReads).toBe(1);
     });
 
+    it("installs and restores the configured debug bridge", async () => {
+        const coordinator = createCoordinator();
+        const priorLog = () => undefined;
+        const debugModule = { log: priorLog };
+
+        await coordinator.init({
+            config: { debugBridge: true },
+            debugModules: [debugModule],
+            debugBridge: {
+                includedNamespacePrefixes: ["typeagent:", "agent-server:"],
+            },
+        });
+
+        expect(debugModule.log).not.toBe(priorLog);
+        await coordinator.shutdown();
+        expect(debugModule.log).toBe(priorLog);
+    });
+
     it("creates only requested signals and shares one resource", async () => {
         const coordinator = createCoordinator();
         const resources: Resource[] = [];

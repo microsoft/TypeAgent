@@ -631,6 +631,9 @@ async function initializeDispatcher(
                     metrics: true,
                     dblogging: true,
                     traceId: getTraceId(),
+                    telemetry: {
+                        structuredLogs,
+                    },
                     indexingServiceRegistry,
                     constructionProvider: getDefaultConstructionProvider(),
                     allowSharedLocalView: ["browser"],
@@ -871,6 +874,7 @@ export function initializeInstance(
     hidden?: boolean,
     idleTimeout?: number,
     _resume?: boolean, // reserved: shell conversation resume not yet implemented
+    structuredLogs: boolean = false,
 ) {
     if (instance !== undefined) {
         throw new Error("Instance already initialized");
