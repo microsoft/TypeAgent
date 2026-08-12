@@ -10,7 +10,7 @@ data class Message(
     val isFinal: Boolean = false,
     /**
      * When the message was created, as epoch milliseconds. Persisted so stored
-     * transcripts can be aged out - see [ChatSessionSerializer.MAX_MESSAGE_AGE_MILLIS].
+     * transcripts can be aged out - see [ConversationSerializer.MAX_MESSAGE_AGE_MILLIS].
      */
     val timestampMillis: Long = System.currentTimeMillis()
 ) {

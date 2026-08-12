@@ -9,29 +9,32 @@ import org.json.JSONObject
 /**
  * The chat transcript plus the server conversation it belongs to.
  *
- * [conversationId] is stored so a restored transcript can be checked against the
- * conversation the server actually hands back on the next join. If the server
- * has moved on to a different conversation the old transcript is no longer a
- * record of anything the agent remembers.
+ * [conversationId] is the conversation the transcript was recorded against. It
+ * is passed back to `joinConversation` on the next connect so the client
+ * resumes the same conversation rather than landing on the default one.
+ *
+ * Note this is a *conversation*, not a dispatcher *session*: AgentServer
+ * reserves "session" for dispatcher runtime state (configuration, caches, agent
+ * state), while a conversation is the user-facing identity and chat history.
  */
-data class PersistedChatSession(
+data class PersistedConversation(
     val conversationId: String?,
     val messages: List<Message>
 ) {
     companion object {
-        val EMPTY = PersistedChatSession(conversationId = null, messages = emptyList())
+        val EMPTY = PersistedConversation(conversationId = null, messages = emptyList())
     }
 }
 
 /**
- * A decoded session plus the number of stored messages that retention discarded
- * (aged out, or trimmed by the message cap).
+ * A decoded conversation plus the number of stored messages that retention
+ * discarded (aged out, or trimmed by the message cap).
  *
  * A non-zero count means the file on disk still contains messages the app will
  * no longer show, so the caller should rewrite it to actually delete them.
  */
-data class DecodedChatSession(
-    val session: PersistedChatSession,
+data class DecodedConversation(
+    val conversation: PersistedConversation,
     val droppedCount: Int
 )
 
@@ -42,35 +45,35 @@ data class DecodedChatSession(
  * A `ViewModel` only survives configuration changes, so without this the whole
  * conversation disappeared the first time Android reclaimed the backgrounded
  * app process. The TypeAgent server cannot fill the gap: it exposes no history
- * API (`getChatHistory`, `getMessages` and friends all answer "No invoke
- * handler"), so the client has to own its own transcript.
+ * API to this client (`getChatHistory`, `getMessages` and friends all answer
+ * "No invoke handler"), so the client has to own its own transcript.
  *
  * `SharedPreferences` is used rather than Room/DataStore to avoid adding
  * dependencies for what is a single small blob. Reads and writes are blocking,
  * so callers must keep them off the main thread.
  */
-class ChatSessionStore(context: Context) {
+class ConversationStore(context: Context) {
 
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    fun load(): PersistedChatSession {
-        val raw = prefs.getString(KEY_SESSION, null) ?: return PersistedChatSession.EMPTY
+    fun load(): PersistedConversation {
+        val raw = prefs.getString(KEY_CONVERSATION, null) ?: return PersistedConversation.EMPTY
         return try {
-            val decoded = ChatSessionSerializer.decodeDetailed(raw)
+            val decoded = ConversationSerializer.decodeDetailed(raw)
             if (decoded.droppedCount > 0) {
                 // Retention filters on read, but the expired messages are still
                 // sitting in the file until something else triggers a save.
                 // Purge them now so "deleted" means deleted rather than hidden.
                 Log.d(TAG, "Purging ${decoded.droppedCount} stale messages from disk")
-                save(decoded.session)
+                save(decoded.conversation)
             }
-            decoded.session
+            decoded.conversation
         } catch (error: Exception) {
             // A partially written or stale-format blob must not brick startup.
-            Log.e(TAG, "Discarding unreadable persisted chat session", error)
+            Log.e(TAG, "Discarding unreadable persisted conversation", error)
             clear()
-            PersistedChatSession.EMPTY
+            PersistedConversation.EMPTY
         }
     }
 
@@ -80,41 +83,44 @@ class ChatSessionStore(context: Context) {
      * actually landed before the process is free to go away - `apply()` only
      * queues it.
      */
-    fun save(session: PersistedChatSession) {
+    fun save(conversation: PersistedConversation) {
         try {
             prefs.edit()
-                .putString(KEY_SESSION, ChatSessionSerializer.encode(session))
+                .putString(KEY_CONVERSATION, ConversationSerializer.encode(conversation))
                 .commit()
         } catch (error: Exception) {
-            Log.e(TAG, "Failed to persist chat session", error)
+            Log.e(TAG, "Failed to persist conversation", error)
         }
     }
 
     fun clear() {
-        prefs.edit().remove(KEY_SESSION).commit()
+        prefs.edit().remove(KEY_CONVERSATION).commit()
     }
 
     private companion object {
-        private const val TAG = "ChatSessionStore"
+        private const val TAG = "ConversationStore"
 
         /**
          * Backing file is `shared_prefs/$PREFS_NAME.xml`. That exact name is
          * excluded from backups in `res/xml/backup_rules.xml` and
          * `res/xml/data_extraction_rules.xml`, so renaming it here without
          * updating both silently starts uploading transcripts to the cloud.
+         * It also names the file already on users' devices, so a rename would
+         * orphan every stored transcript - hence the "session" wording here
+         * outliving the class rename.
          */
         private const val PREFS_NAME = "typeagent_chat_session"
-        private const val KEY_SESSION = "session"
+        private const val KEY_CONVERSATION = "session"
     }
 }
 
 /**
- * JSON encoding for [PersistedChatSession].
+ * JSON encoding for [PersistedConversation].
  *
  * Kept free of Android framework types so the round-trip is covered by plain
  * JVM unit tests.
  */
-object ChatSessionSerializer {
+object ConversationSerializer {
 
     /**
      * Caps how much transcript is written back to disk. `SharedPreferences`
@@ -134,15 +140,15 @@ object ChatSessionSerializer {
     private const val VERSION = 1
 
     fun encode(
-        session: PersistedChatSession,
+        conversation: PersistedConversation,
         now: Long = System.currentTimeMillis()
     ): String {
-        val messages = retain(session.messages, now)
+        val messages = retain(conversation.messages, now)
         val array = JSONArray()
         messages.forEach { array.put(encodeMessage(it)) }
         return JSONObject()
             .put("version", VERSION)
-            .putOpt("conversationId", session.conversationId)
+            .putOpt("conversationId", conversation.conversationId)
             .put("messages", array)
             .toString()
     }
@@ -150,7 +156,7 @@ object ChatSessionSerializer {
     fun decode(
         raw: String,
         now: Long = System.currentTimeMillis()
-    ): PersistedChatSession = decodeDetailed(raw, now).session
+    ): PersistedConversation = decodeDetailed(raw, now).conversation
 
     /**
      * Same as [decode], but also reports how many stored messages the retention
@@ -161,10 +167,10 @@ object ChatSessionSerializer {
     fun decodeDetailed(
         raw: String,
         now: Long = System.currentTimeMillis()
-    ): DecodedChatSession {
+    ): DecodedConversation {
         val root = JSONObject(raw)
         if (root.optInt("version") != VERSION) {
-            return DecodedChatSession(PersistedChatSession.EMPTY, droppedCount = 0)
+            return DecodedConversation(PersistedConversation.EMPTY, droppedCount = 0)
         }
         val conversationId = root.optString("conversationId").takeIf { it.isNotBlank() }
         val array = root.optJSONArray("messages") ?: JSONArray()
@@ -174,8 +180,8 @@ object ChatSessionSerializer {
             decodeMessage(item, now)?.let { messages += it }
         }
         val retained = retain(messages, now)
-        return DecodedChatSession(
-            session = PersistedChatSession(
+        return DecodedConversation(
+            conversation = PersistedConversation(
                 conversationId = conversationId,
                 messages = retained
             ),

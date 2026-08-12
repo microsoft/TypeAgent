@@ -5,16 +5,16 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class ChatSessionSerializerTest {
+class ConversationSerializerTest {
 
-    private fun session(
+    private fun conversation(
         conversationId: String? = "conversation-1",
         messages: List<Message>
-    ) = PersistedChatSession(conversationId = conversationId, messages = messages)
+    ) = PersistedConversation(conversationId = conversationId, messages = messages)
 
     @Test
     fun `round trip preserves the transcript`() {
-        val original = session(
+        val original = conversation(
             messages = listOf(
                 Message(text = "what is on my list", isUser = true),
                 Message(
@@ -29,7 +29,7 @@ class ChatSessionSerializerTest {
             )
         )
 
-        val decoded = ChatSessionSerializer.decode(ChatSessionSerializer.encode(original))
+        val decoded = ConversationSerializer.decode(ConversationSerializer.encode(original))
 
         assertEquals("conversation-1", decoded.conversationId)
         assertEquals(2, decoded.messages.size)
@@ -46,13 +46,13 @@ class ChatSessionSerializerTest {
 
     @Test
     fun `restored messages are always sealed`() {
-        val original = session(
+        val original = conversation(
             messages = listOf(
                 Message(text = "streaming...", isUser = false, isFinal = false)
             )
         )
 
-        val decoded = ChatSessionSerializer.decode(ChatSessionSerializer.encode(original))
+        val decoded = ConversationSerializer.decode(ConversationSerializer.encode(original))
 
         // An unsealed restored bubble would render "Responding..." forever and
         // could be retro-targeted by WebSocketManager.finalizeAssistantMessage.
@@ -61,27 +61,30 @@ class ChatSessionSerializerTest {
 
     @Test
     fun `only the most recent messages are persisted`() {
-        val messages = (1..ChatSessionSerializer.MAX_PERSISTED_MESSAGES + 25).map {
+        val messages = (1..ConversationSerializer.MAX_PERSISTED_MESSAGES + 25).map {
             Message(text = "message $it", isUser = true)
         }
 
-        val decoded = ChatSessionSerializer.decode(
-            ChatSessionSerializer.encode(session(messages = messages))
+        val decoded = ConversationSerializer.decode(
+            ConversationSerializer.encode(conversation(messages = messages))
         )
 
-        assertEquals(ChatSessionSerializer.MAX_PERSISTED_MESSAGES, decoded.messages.size)
+        assertEquals(ConversationSerializer.MAX_PERSISTED_MESSAGES, decoded.messages.size)
         assertEquals("message 26", decoded.messages.first().text)
         assertEquals(
-            "message ${ChatSessionSerializer.MAX_PERSISTED_MESSAGES + 25}",
+            "message ${ConversationSerializer.MAX_PERSISTED_MESSAGES + 25}",
             decoded.messages.last().text
         )
     }
 
     @Test
     fun `a missing conversation id round trips as null`() {
-        val decoded = ChatSessionSerializer.decode(
-            ChatSessionSerializer.encode(
-                session(conversationId = null, messages = listOf(Message(text = "hi", isUser = true)))
+        val decoded = ConversationSerializer.decode(
+            ConversationSerializer.encode(
+                conversation(
+                    conversationId = null,
+                    messages = listOf(Message(text = "hi", isUser = true))
+                )
             )
         )
 
@@ -91,7 +94,7 @@ class ChatSessionSerializerTest {
 
     @Test
     fun `an unknown payload version is ignored`() {
-        val decoded = ChatSessionSerializer.decode(
+        val decoded = ConversationSerializer.decode(
             """{"version":99,"conversationId":"c","messages":[{"id":"a","segments":[]}]}"""
         )
 
@@ -101,7 +104,7 @@ class ChatSessionSerializerTest {
 
     @Test
     fun `messages without usable segments are dropped`() {
-        val decoded = ChatSessionSerializer.decode(
+        val decoded = ConversationSerializer.decode(
             """{"version":1,"messages":[{"id":"a","isUser":true},{"id":"b","segments":[]}]}"""
         )
 
@@ -109,9 +112,9 @@ class ChatSessionSerializerTest {
     }
 
     @Test
-    fun `an empty session encodes and decodes cleanly`() {
-        val decoded = ChatSessionSerializer.decode(
-            ChatSessionSerializer.encode(PersistedChatSession.EMPTY)
+    fun `an empty conversation encodes and decodes cleanly`() {
+        val decoded = ConversationSerializer.decode(
+            ConversationSerializer.encode(PersistedConversation.EMPTY)
         )
 
         assertNull(decoded.conversationId)
@@ -129,8 +132,8 @@ class ChatSessionSerializerTest {
             Message(text = "now", isUser = true, timestampMillis = now)
         )
 
-        val decoded = ChatSessionSerializer.decode(
-            ChatSessionSerializer.encode(session(messages = messages), now = now),
+        val decoded = ConversationSerializer.decode(
+            ConversationSerializer.encode(conversation(messages = messages), now = now),
             now = now
         )
 
@@ -141,14 +144,16 @@ class ChatSessionSerializerTest {
     fun `messages expire while the app is not running`() {
         val written = 1_800_000_000_000L
         val day = 24L * 60 * 60 * 1000
-        val raw = ChatSessionSerializer.encode(
-            session(messages = listOf(Message(text = "hi", isUser = true, timestampMillis = written))),
+        val raw = ConversationSerializer.encode(
+            conversation(
+                messages = listOf(Message(text = "hi", isUser = true, timestampMillis = written))
+            ),
             now = written
         )
 
         // Same payload, read back long after it was written.
-        val fresh = ChatSessionSerializer.decode(raw, now = written + 5 * day)
-        val stale = ChatSessionSerializer.decode(raw, now = written + 45 * day)
+        val fresh = ConversationSerializer.decode(raw, now = written + 5 * day)
+        val stale = ConversationSerializer.decode(raw, now = written + 45 * day)
 
         assertEquals(1, fresh.messages.size)
         assertTrue(stale.messages.isEmpty())
@@ -157,9 +162,11 @@ class ChatSessionSerializerTest {
     @Test
     fun `timestamps survive a round trip`() {
         val stamp = 1_700_000_000_000L
-        val decoded = ChatSessionSerializer.decode(
-            ChatSessionSerializer.encode(
-                session(messages = listOf(Message(text = "hi", isUser = true, timestampMillis = stamp))),
+        val decoded = ConversationSerializer.decode(
+            ConversationSerializer.encode(
+                conversation(
+                    messages = listOf(Message(text = "hi", isUser = true, timestampMillis = stamp))
+                ),
                 now = stamp
             ),
             now = stamp
@@ -178,7 +185,7 @@ class ChatSessionSerializerTest {
             ]}
         """.trimIndent()
 
-        val decoded = ChatSessionSerializer.decode(legacy, now = now)
+        val decoded = ConversationSerializer.decode(legacy, now = now)
 
         assertEquals("legacy", decoded.messages.single().text)
         assertEquals(now, decoded.messages.single().timestampMillis)
@@ -191,8 +198,8 @@ class ChatSessionSerializerTest {
         // Message stamped in the future relative to `now`.
         val messages = listOf(Message(text = "future", isUser = true, timestampMillis = now + 10 * day))
 
-        val decoded = ChatSessionSerializer.decode(
-            ChatSessionSerializer.encode(session(messages = messages), now = now),
+        val decoded = ConversationSerializer.decode(
+            ConversationSerializer.encode(conversation(messages = messages), now = now),
             now = now
         )
 
@@ -203,8 +210,8 @@ class ChatSessionSerializerTest {
     fun `a read that drops expired messages asks for the file to be rewritten`() {
         val written = 1_800_000_000_000L
         val day = 24L * 60 * 60 * 1000
-        val raw = ChatSessionSerializer.encode(
-            session(
+        val raw = ConversationSerializer.encode(
+            conversation(
                 messages = listOf(
                     Message(text = "old", isUser = true, timestampMillis = written),
                     Message(text = "new", isUser = true, timestampMillis = written + 40 * day)
@@ -213,22 +220,24 @@ class ChatSessionSerializerTest {
             now = written
         )
 
-        val decoded = ChatSessionSerializer.decodeDetailed(raw, now = written + 45 * day)
+        val decoded = ConversationSerializer.decodeDetailed(raw, now = written + 45 * day)
 
         // Without this signal the expired message stays in the file: filtering
         // on read only hides it from the UI.
         assertEquals(1, decoded.droppedCount)
-        assertEquals(listOf("new"), decoded.session.messages.map { it.text })
+        assertEquals(listOf("new"), decoded.conversation.messages.map { it.text })
     }
 
     @Test
     fun `a read with nothing to drop does not ask for a rewrite`() {
         val now = 1_800_000_000_000L
-        val raw = ChatSessionSerializer.encode(
-            session(messages = listOf(Message(text = "hi", isUser = true, timestampMillis = now))),
+        val raw = ConversationSerializer.encode(
+            conversation(
+                messages = listOf(Message(text = "hi", isUser = true, timestampMillis = now))
+            ),
             now = now
         )
 
-        assertEquals(0, ChatSessionSerializer.decodeDetailed(raw, now = now).droppedCount)
+        assertEquals(0, ConversationSerializer.decodeDetailed(raw, now = now).droppedCount)
     }
 }

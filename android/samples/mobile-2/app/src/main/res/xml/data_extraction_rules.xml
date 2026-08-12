@@ -9,7 +9,7 @@
            The chat transcript is personal content and stays on the device it
            was written on. Without this it is uploaded to the user's Google
            account and restored onto any other device they sign in from.
-           Path must track ChatSessionStore.PREFS_NAME + ".xml".
+           Path must track ConversationStore.PREFS_NAME + ".xml".
         -->
         <exclude domain="sharedpref" path="typeagent_chat_session.xml" />
     </cloud-backup>

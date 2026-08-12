@@ -31,6 +31,14 @@ class WebSocketManager {
     private var pendingUserInteraction: PendingUserInteraction? = null
     private var clientActionHandler: ClientActionHandler? = null
 
+    /**
+     * The conversation this connection asked to resume, if any. Kept separate
+     * from [conversationId] so an in-flight resume is never mistaken for a
+     * conversation that has actually been joined.
+     */
+    private var requestedConversationId: String? = null
+    private var staleConversationHandler: (() -> Unit)? = null
+
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages
     private val _pendingYesNoPrompt = MutableStateFlow<PendingYesNoPrompt?>(null)
@@ -38,11 +46,13 @@ class WebSocketManager {
 
     /**
      * The conversation the server handed back on the last successful join.
-     * Exposed so the transcript can be reconciled with the server session it
-     * belongs to after the app process is recreated.
+     *
+     * Survives a disconnect deliberately: it is persisted alongside the
+     * transcript and passed back into the next [connect] so the client resumes
+     * the same conversation instead of landing on the server's default one.
      */
-    private val _joinedConversationId = MutableStateFlow<String?>(null)
-    val joinedConversationId: StateFlow<String?> = _joinedConversationId
+    private val _lastJoinedConversationId = MutableStateFlow<String?>(null)
+    val lastJoinedConversationId: StateFlow<String?> = _lastJoinedConversationId
 
     private val _connectionStatus = MutableStateFlow(
         ConnectionStatus(
@@ -55,6 +65,17 @@ class WebSocketManager {
     internal fun setClientActionHandler(handler: ClientActionHandler?) {
         synchronized(lock) {
             clientActionHandler = handler
+        }
+    }
+
+    /**
+     * Called when a resume was requested for a conversation the server no
+     * longer has. The client fell back to the default conversation, so the
+     * restored transcript belongs to nothing and should be discarded.
+     */
+    internal fun setStaleConversationHandler(handler: (() -> Unit)?) {
+        synchronized(lock) {
+            staleConversationHandler = handler
         }
     }
 
@@ -78,8 +99,10 @@ class WebSocketManager {
     }
 
     /**
-     * Drops the local transcript. Used when the server reports a conversation
-     * the restored transcript does not belong to.
+     * Drops the local transcript.
+     *
+     * Used by the client-side "Clear chat" action, and when a resume lands on a
+     * conversation the restored transcript does not belong to.
      */
     fun clearMessages() {
         synchronized(lock) {
@@ -89,9 +112,18 @@ class WebSocketManager {
         }
     }
 
+    /**
+     * @param resumeConversationId the conversation to resume. When present it
+     *   is passed straight to `joinConversation`, so the client rejoins the
+     *   exact conversation it was last in. When the server no longer has it,
+     *   the join falls back to the default conversation and the
+     *   stale-conversation handler fires. When absent the server joins (or
+     *   creates) the default conversation.
+     */
     fun connect(
         url: String,
-        tunnelToken: String? = null
+        tunnelToken: String? = null,
+        resumeConversationId: String? = null
     ) {
         val targetUrl = url.trim()
         if (targetUrl.isBlank()) {
@@ -109,6 +141,7 @@ class WebSocketManager {
             pendingUserInteraction = null
             conversationId = null
             connectionId = null
+            requestedConversationId = resumeConversationId?.takeIf { it.isNotBlank() }
             displayThreads.clear()
             displayMessageIds.clear()
         }
@@ -131,7 +164,7 @@ class WebSocketManager {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (connectionGeneration.get() != generation) return
                 Log.d(TAG, "WebSocket connected")
-                joinConversation()
+                joinConversation(synchronized(lock) { requestedConversationId })
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -298,10 +331,19 @@ class WebSocketManager {
         return true
     }
 
-    private fun joinConversation() {
+    /**
+     * Joins [resumeConversationId] when supplied, otherwise the server's
+     * default conversation (which it creates if none exists).
+     *
+     * If the requested conversation is gone the server answers
+     * "Conversation not found", and this retries once against the default. The
+     * retry passes `null`, so it cannot recurse.
+     */
+    private fun joinConversation(resumeConversationId: String?) {
         val options = JSONObject()
             .put("clientType", "extension")
             .put("filter", false)
+            .putOpt("conversationId", resumeConversationId)
 
         sendInvoke(
             channelName = AGENT_SERVER_CHANNEL,
@@ -324,8 +366,9 @@ class WebSocketManager {
                 synchronized(lock) {
                     conversationId = joinedConversationId
                     connectionId = joinedConnectionId
+                    requestedConversationId = null
                 }
-                _joinedConversationId.value = joinedConversationId
+                _lastJoinedConversationId.value = joinedConversationId
 
                 Log.d(
                     TAG,
@@ -338,6 +381,24 @@ class WebSocketManager {
             },
             onError = { error ->
                 Log.e(TAG, "joinConversation error: $error")
+                if (resumeConversationId != null && isConversationNotFoundError(error)) {
+                    // The saved conversation is gone (server data wiped,
+                    // deleted elsewhere). Fall back to the default conversation
+                    // and tell the client its restored transcript is orphaned.
+                    Log.w(
+                        TAG,
+                        "Conversation $resumeConversationId no longer exists; joining the default"
+                    )
+                    // Read the handler under the lock but invoke it outside, so
+                    // a client callback can never re-enter and deadlock.
+                    val onStale = synchronized(lock) {
+                        requestedConversationId = null
+                        staleConversationHandler
+                    }
+                    onStale?.invoke()
+                    joinConversation(null)
+                    return@sendInvoke
+                }
                 _connectionStatus.value = ConnectionStatus(
                     text = "Error: $error",
                     state = ConnectionStatus.State.ERROR
@@ -1341,6 +1402,17 @@ class WebSocketManager {
         fun onSearchNearby(action: SearchNearbyAction)
     }
 }
+
+/**
+ * Recognises the server's "Conversation not found" join failure so a resume of
+ * a conversation that no longer exists can fall back to the default one,
+ * instead of being surfaced as a connection error like a transport or auth
+ * failure would be.
+ *
+ * Mirrors `isConversationNotFoundError` in the agentServer TypeScript client.
+ */
+internal fun isConversationNotFoundError(error: String?): Boolean =
+    error?.trimStart()?.startsWith("Conversation not found", ignoreCase = true) == true
 
 data class ConnectionStatus(
     val text: String,

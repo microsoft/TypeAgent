@@ -13,8 +13,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -34,8 +32,8 @@ internal sealed interface ClientAction {
 }
 
 /**
- * Owns the chat session so it survives configuration changes, and persists it
- * so it also survives process death.
+ * Owns the chat conversation so it survives configuration changes, and
+ * persists it so it also survives process death.
  *
  * The [WebSocketManager] used to be a field on `MainActivity`, which meant a
  * theme change, rotation, font-scale change or locale change destroyed the
@@ -46,15 +44,16 @@ internal sealed interface ClientAction {
  *
  * A ViewModel still dies with its process though, which is routine as soon as
  * the user switches to another app. The transcript is therefore mirrored to
- * [ChatSessionStore] and restored on the next start. The server cannot supply
- * that history - it exposes no history RPC - but it does keep handing back the
- * same conversation, so a restored transcript still lines up with what the
- * agent remembers.
+ * [ConversationStore] and restored on the next start, alongside the id of the
+ * conversation it belongs to. That id is passed back into
+ * [WebSocketManager.connect] so the client rejoins the exact same server-side
+ * conversation - the restored transcript then always lines up with what the
+ * agent remembers, with no post-hoc reconciliation needed.
  */
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val webSocketManager = WebSocketManager()
-    private val sessionStore = ChatSessionStore(application)
+    private val conversationStore = ConversationStore(application)
 
     val messages: StateFlow<List<Message>> = webSocketManager.messages
     val connectionStatus: StateFlow<ConnectionStatus> = webSocketManager.connectionStatus
@@ -73,14 +72,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private var hasConnected = false
 
-    /** The conversation the restored transcript was recorded against. */
+    /**
+     * The conversation the restored transcript was recorded against, and the
+     * one the next connect asks the server to resume.
+     */
     @Volatile
-    private var restoredConversationId: String? = null
+    private var savedConversationId: String? = null
 
     /**
      * Completes once the persisted transcript has been read back and handed to
      * the socket. Connecting waits on it so a slow disk read can never race the
-     * first inbound message.
+     * first inbound message, and so the saved conversation id is known before
+     * the join is issued.
      */
     private val restored = CompletableDeferred<Unit>()
 
@@ -99,20 +102,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         })
 
+        webSocketManager.setStaleConversationHandler {
+            // The saved conversation no longer exists on the server, so the
+            // join fell back to the default one. The restored transcript is a
+            // record of a conversation nothing remembers - drop it rather than
+            // graft it onto a different one.
+            Log.w(TAG, "Saved conversation is gone; discarding the restored transcript")
+            savedConversationId = null
+            webSocketManager.clearMessages()
+            viewModelScope.launch {
+                withContext(Dispatchers.IO) { conversationStore.clear() }
+            }
+        }
+
         viewModelScope.launch {
-            val session = withContext(Dispatchers.IO) { sessionStore.load() }
-            restoredConversationId = session.conversationId
-            webSocketManager.restoreMessages(session.messages)
+            val conversation = withContext(Dispatchers.IO) { conversationStore.load() }
+            savedConversationId = conversation.conversationId
+            webSocketManager.restoreMessages(conversation.messages)
             Log.d(
                 TAG,
-                "Restored ${session.messages.size} messages " +
-                    "for conversationId=${session.conversationId ?: "none"}"
+                "Restored ${conversation.messages.size} messages " +
+                    "for conversationId=${conversation.conversationId ?: "none"}"
             )
             restored.complete(Unit)
         }
 
-        observeSessionForPersistence()
-        reconcileRestoredTranscript()
+        observeConversationForPersistence()
     }
 
     /**
@@ -128,16 +143,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * The initial value is dropped so the empty list the socket starts with
      * cannot overwrite a transcript that is still being read back.
      */
-    private fun observeSessionForPersistence() {
+    private fun observeConversationForPersistence() {
         viewModelScope.launch {
             restored.await()
             webSocketManager.messages.drop(1).collectLatest { messages ->
                 delay(SAVE_DEBOUNCE_MS)
                 val conversationId =
-                    webSocketManager.joinedConversationId.value ?: restoredConversationId
+                    webSocketManager.lastJoinedConversationId.value ?: savedConversationId
                 withContext(Dispatchers.IO) {
-                    sessionStore.save(
-                        PersistedChatSession(
+                    conversationStore.save(
+                        PersistedConversation(
                             conversationId = conversationId,
                             messages = messages
                         )
@@ -148,27 +163,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Drops a restored transcript that belongs to a conversation the server has
-     * since replaced, so the user is not left reading history the agent has no
-     * memory of.
+     * Connects on first use only, so Activity recreation does not restart the
+     * conversation. The saved conversation id is passed through so the server
+     * rejoins it directly.
      */
-    private fun reconcileRestoredTranscript() {
-        viewModelScope.launch {
-            restored.await()
-            val previous = restoredConversationId ?: return@launch
-            val joined = webSocketManager.joinedConversationId.filterNotNull().first()
-            if (joined == previous) {
-                return@launch
-            }
-            Log.w(
-                TAG,
-                "Server conversation changed ($previous -> $joined); dropping stale transcript"
-            )
-            webSocketManager.clearMessages()
-        }
-    }
-
-    /** Connects on first use only, so Activity recreation does not restart the session. */
     fun connectIfNeeded(url: String, tunnelToken: String?) {
         if (hasConnected) {
             return
@@ -176,7 +174,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         hasConnected = true
         viewModelScope.launch {
             restored.await()
-            webSocketManager.connect(url = url, tunnelToken = tunnelToken)
+            webSocketManager.connect(
+                url = url,
+                tunnelToken = tunnelToken,
+                resumeConversationId = savedConversationId
+            )
         }
     }
 
@@ -184,7 +186,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         hasConnected = true
         viewModelScope.launch {
             restored.await()
-            webSocketManager.connect(url = url, tunnelToken = tunnelToken)
+            webSocketManager.connect(
+                url = url,
+                tunnelToken = tunnelToken,
+                resumeConversationId = webSocketManager.lastJoinedConversationId.value
+                    ?: savedConversationId
+            )
         }
     }
 
@@ -223,16 +230,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun respondToPendingYesNo(yes: Boolean): Boolean = webSocketManager.respondToPendingYesNo(yes)
 
     /**
-     * Starts a new chat: clears the on-screen transcript and the copy on disk.
+     * Clears the chat history: the on-screen transcript and the copy on disk.
      *
-     * This is a client-side reset only. `joinConversation` keeps returning the
-     * same server-side conversation, so the agent's own memory is untouched -
-     * the server exposes no RPC to start a fresh one.
+     * This is a client-side reset only, matching `@clear` on the other
+     * TypeAgent canvases. The server-side conversation is untouched, so the
+     * agent keeps its own memory and the next connect resumes the same
+     * conversation. Starting a genuinely new server-side conversation would
+     * need `createConversation` / `leaveConversation`, which this client does
+     * not yet drive.
      */
-    fun startNewChat() {
+    fun clearChatHistory() {
         webSocketManager.clearMessages()
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { sessionStore.clear() }
+            withContext(Dispatchers.IO) { conversationStore.clear() }
         }
     }
 
@@ -248,9 +258,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         webSocketManager.setClientActionHandler(null)
+        webSocketManager.setStaleConversationHandler(null)
         webSocketManager.disconnect()
         clientActionEvents.close()
-        flushSessionToDisk()
+        flushConversationToDisk()
         super.onCleared()
     }
 
@@ -267,14 +278,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * read would otherwise persist the still-empty transcript over the stored
      * one and lose the whole history.
      */
-    private fun flushSessionToDisk() {
+    private fun flushConversationToDisk() {
         if (!restored.isCompleted) {
             return
         }
-        sessionStore.save(
-            PersistedChatSession(
-                conversationId = webSocketManager.joinedConversationId.value
-                    ?: restoredConversationId,
+        conversationStore.save(
+            PersistedConversation(
+                conversationId = webSocketManager.lastJoinedConversationId.value
+                    ?: savedConversationId,
                 messages = webSocketManager.messages.value
             )
         )

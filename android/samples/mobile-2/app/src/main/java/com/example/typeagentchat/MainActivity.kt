@@ -288,8 +288,8 @@ private fun ChatApp(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             ChatHeader(
-                canStartNewChat = messages.isNotEmpty(),
-                onNewChat = { viewModel.startNewChat() }
+                canClearChat = messages.isNotEmpty(),
+                onClearChat = { viewModel.clearChatHistory() }
             )
             ConnectionStatusIndicator(
                 status = connectionStatus,
@@ -555,8 +555,8 @@ private fun ChatInputBar(
 
 @Composable
 private fun ChatHeader(
-    canStartNewChat: Boolean,
-    onNewChat: () -> Unit
+    canClearChat: Boolean,
+    onClearChat: () -> Unit
 ) {
     var showConfirmation by remember { mutableStateOf(false) }
 
@@ -587,9 +587,9 @@ private fun ChatHeader(
             }
             TextButton(
                 onClick = { showConfirmation = true },
-                enabled = canStartNewChat
+                enabled = canClearChat
             ) {
-                Text("New chat")
+                Text("Clear chat")
             }
         }
     }
@@ -599,21 +599,22 @@ private fun ChatHeader(
     if (showConfirmation) {
         AlertDialog(
             onDismissRequest = { showConfirmation = false },
-            title = { Text("Start a new chat?") },
+            title = { Text("Clear this chat?") },
             text = {
                 Text(
                     "This deletes the messages on this device and cannot be undone. " +
-                        "The agent keeps its own memory of the conversation."
+                        "The conversation itself is not affected - the agent keeps its " +
+                        "own memory of it."
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showConfirmation = false
-                        onNewChat()
+                        onClearChat()
                     }
                 ) {
-                    Text("Start new chat")
+                    Text("Clear chat")
                 }
             },
             dismissButton = {
