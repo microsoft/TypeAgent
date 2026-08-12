@@ -178,7 +178,9 @@ process.once("message", (message) => {
 // Load config from YAML layers + Key Vault (replacing legacy dotenv).
 // vault.shared is auto-discovered from config.local.yaml / config.defaults.yaml.
 await loadConfig({ keyVault: {}, strict: false });
+const telemetryConfig = otel.resolveTelemetryConfig();
 const telemetryInit = otel.initTelemetry({
+    config: telemetryConfig,
     debugModules: [registerDebug],
     debugBridge: {
         includedNamespacePrefixes: ["typeagent:", "agent-server:"],
@@ -346,7 +348,7 @@ async function main() {
                 developerMode,
                 traceId,
                 telemetry: {
-                    structuredLogs: true,
+                    structuredLogs: telemetryConfig.structuredLogs === true,
                 },
                 indexingServiceRegistry: await getIndexingServiceRegistry(
                     instanceDir,

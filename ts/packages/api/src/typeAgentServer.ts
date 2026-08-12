@@ -40,7 +40,10 @@ export class TypeAgentServer {
     private storageProvider: TypeAgentStorageProvider | undefined;
     private config: TypeAgentAPIServerConfig;
 
-    constructor(private readonly requestExit: (exitCode: number) => void) {
+    constructor(
+        private readonly requestExit: (exitCode: number) => void,
+        private readonly structuredLogs: boolean,
+    ) {
         // Build typed runtime Config from process.env (already populated
         // by loadConfig in the entry point) so aiclient consumers can
         // use the typed accessor; legacy callers still see the same
@@ -83,7 +86,7 @@ export class TypeAgentServer {
             sw.stop("Downloaded Session Backup");
         }
 
-        this.webDispatcher = await createWebDispatcher();
+        this.webDispatcher = await createWebDispatcher(this.structuredLogs);
         debug("Web Dispatcher created.");
 
         // web server

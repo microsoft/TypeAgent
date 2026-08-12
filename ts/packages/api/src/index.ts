@@ -41,7 +41,9 @@ process.once("SIGTERM", () => {
 async function main(): Promise<void> {
     // Load config from YAML layers + Key Vault (replacing legacy dotenv).
     await loadConfig({ keyVault: {}, strict: false });
+    const telemetryConfig = otel.resolveTelemetryConfig();
     await otel.initTelemetry({
+        config: telemetryConfig,
         debugModules: [registerDebug],
         debugBridge: {
             includedNamespacePrefixes: ["typeagent:", "agent-server:"],
@@ -53,7 +55,7 @@ async function main(): Promise<void> {
 
     typeAgentServer = new TypeAgentServer((exitCode) => {
         void shutdownHost(exitCode);
-    });
+    }, telemetryConfig.structuredLogs === true);
 
     await typeAgentServer.start();
 }

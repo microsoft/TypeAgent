@@ -411,5 +411,6 @@ typeagent:
 #   otlpEndpoint: http://localhost:4318
 #   logFile: ~/.typeagent/logs/typeagent-{service}-{pid}.jsonl
 #   debugBridge: true
+#   structuredLogs: true
 #   tracesSampler: parentbased_traceidratio
 #   tracesSamplerArg: 0.1

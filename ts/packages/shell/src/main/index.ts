@@ -209,12 +209,15 @@ async function initialize() {
 
     const appPath = app.getAppPath();
     await initializeKeys(appPath);
+    const telemetryConfig = otel.resolveTelemetryConfig();
     await otel.initTelemetry({
+        config: telemetryConfig,
         debugModules: [registerDebug],
         debugBridge: {
             includedNamespacePrefixes: ["typeagent:", "agent-server:"],
         },
     });
+    structuredLogs = telemetryConfig.structuredLogs === true;
     // Standalone hosts the agent-server in-process, so warm up the aiclient
     // runtime config locally. The connect-only shell delegates all model work
     // to the remote server and never imports aiclient here.
@@ -389,6 +392,7 @@ async function initialize() {
                 parsedArgs.hidden,
                 parsedArgs.idleTimeout,
                 parsedArgs.resume,
+                structuredLogs,
             );
     });
 
@@ -403,6 +407,7 @@ async function initialize() {
         parsedArgs.hidden,
         parsedArgs.idleTimeout,
         parsedArgs.resume,
+        structuredLogs,
     );
 
     shellWindow.waitForReady().then(() => {
@@ -438,6 +443,7 @@ process.on("unhandledRejection", (reason: any) => {
 });
 
 let reloadingInstance = false;
+let structuredLogs = false;
 export async function reloadInstance() {
     reloadingInstance = true;
     try {
@@ -453,6 +459,7 @@ export async function reloadInstance() {
             parsedArgs.hidden,
             parsedArgs.idleTimeout,
             parsedArgs.resume,
+            structuredLogs,
         );
     } finally {
         reloadingInstance = false;

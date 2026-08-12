@@ -107,12 +107,13 @@ Logs require explicit composition:
 - Installing an OTel SDK alone does neither.
 
 TypeAgent-owned Node composition roots attach `OtelLoggerSink` alongside the
-existing debug and database sinks by explicitly enabling
-`DispatcherOptions.telemetry.structuredLogs`. The option defaults to false so
-embedded dispatcher consumers do not export event payloads merely because
-another component installed a global OTel logs provider. Hosts also pass each
-process's `debug` module instance to `initTelemetry()` so the optional bridge
-can preserve existing output while copying eligible records into OTel.
+existing debug and database sinks when `telemetry.structuredLogs` is enabled.
+The setting defaults to false so embedded dispatcher consumers do not export
+event payloads merely because another component installed a global OTel logs
+provider. The environment override is
+`TYPEAGENT_OTEL_STRUCTURED_LOGS=true`. Hosts also pass each process's `debug`
+module instance to `initTelemetry()` so the optional bridge can preserve
+existing output while copying eligible records into OTel.
 
 The dispatcher prompt logger is intentionally not connected to
 `OtelLoggerSink`, and its debug namespace remains excluded from the bridge.
