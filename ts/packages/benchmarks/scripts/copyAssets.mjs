@@ -46,6 +46,14 @@ const files = [
         "dist/translationBench/action-parameters-grader.generated.json",
     ],
     [
+        "src/translationBench/config.schema.json",
+        "dist/translationBench/config.schema.json",
+    ],
+    [
+        "src/translationBench/config/run-config.example.json",
+        "dist/translationBench/config/run-config.example.json",
+    ],
+    [
         "src/core/model-prices.generated.json",
         "dist/core/model-prices.generated.json",
     ],
