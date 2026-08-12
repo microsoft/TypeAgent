@@ -53,7 +53,7 @@
     "lib0": "^0.2.52",
     "markdown-it": "^14.2.0",
     "markdown-it-texmath": "^1.0.0",
-    "mermaid": "^11.15.0",
+    "mermaid": "^11.16.1",
     "prosemirror-inputrules": "^1.2.0",
     "prosemirror-model": "^1.19.0",
     "prosemirror-state": "^1.4.2",
