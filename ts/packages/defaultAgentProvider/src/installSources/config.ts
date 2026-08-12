@@ -63,7 +63,21 @@ export interface ResolvedCandidate {
     // candidate may leave this unset for the registry to backfill from the
     // resolved directory's package.json before materialization.
     defaultAgentName?: string;
+    // Which kind of extension this candidate installs. Absent means "agent"
+    // (the historical default); "mcp" marks a candidate that resolves to an MCP
+    // server config rather than a native app-agent package. Additive: every
+    // existing source leaves this unset and is treated as an agent.
+    extensionKind?: ExtensionKind;
 }
+
+/**
+ * The kind of extension an install source resolves. "agent" is a native
+ * TypeAgent app-agent package (the historical default when this field is
+ * absent); "mcp" is an MCP server config. Kept as a small open-for-extension
+ * discriminator shared by candidates, available rows, and installed records so
+ * one `@package` command surface can manage both.
+ */
+export type ExtensionKind = "agent" | "mcp";
 
 /**
  * One enumerable install target advertised by a source for `@package available`
@@ -78,6 +92,9 @@ export interface AvailableInstallRow {
     readonly defaultAgentName?: string | undefined; // shown as the install name
     readonly packageName?: string | undefined; // shown as the package; absent for path-only
     readonly description?: string | undefined; // one-line summary from package metadata, when published
+    // Which kind of extension this row installs; absent means "agent". Lets
+    // `@package available --type` filter native agents from MCP servers.
+    readonly extensionKind?: ExtensionKind | undefined;
 }
 
 /**
@@ -200,6 +217,12 @@ export interface InstalledAgentRecord {
     // Opaque, kind-specific metadata interpreted by the loader named by `kind`
     // (e.g. npm: `{ execMode }`).
     loaderConfig?: Record<string, unknown>;
+    // Which kind of extension this record installs; absent means "agent" (the
+    // historical default, so every pre-existing agents.json record keeps its
+    // meaning). "mcp" records are persisted in the separate MCP server store,
+    // not agents.json, but the field is defined here so the shared record shape
+    // and the unified `@package` facade can carry it.
+    extensionKind?: ExtensionKind;
 }
 
 /**
@@ -285,7 +308,7 @@ export type UninstallOutcomeStatus = "uninstalled" | "reverted";
  * provider, not an install source (they are never installed/uninstalled/
  * updated). Install sources only resolve user-installed agents.
  */
-export type InstallSourceKind = "path" | "catalog" | "feed";
+export type InstallSourceKind = "path" | "catalog" | "feed" | "mcp-config";
 
 /**
  * A `path` source validates a filesystem path the user supplies. `ref` is a
@@ -341,7 +364,24 @@ export interface CatalogSourceConfig {
 export type InstallSourceConfig =
     | PathSourceConfig
     | FeedSourceConfig
-    | CatalogSourceConfig;
+    | CatalogSourceConfig
+    | McpConfigSourceConfig;
+
+/**
+ * An `mcp-config` source enumerates MCP servers declared in a local MCP config
+ * file (`.mcp.json`, `.vscode/mcp.json`, or a Claude-desktop
+ * `mcpServers` file). `find`/`ref` is a server name; `listAgents` enumerates the
+ * declared servers as `extensionKind: "mcp"` rows. The file is imported and
+ * normalized through {@link ../mcp/mcpConfigImport}, so what the user sees is
+ * the TypeAgent-normalized server list, not the raw file. Local filesystem
+ * path only; remote URLs are not supported (that is the future `registry`
+ * source).
+ */
+export interface McpConfigSourceConfig {
+    kind: "mcp-config";
+    name: string; // e.g. "mcp-config"
+    file: string; // local filesystem path to the MCP config JSON
+}
 
 /**
  * The host-rendered summary of one configured source for `@package source list`.

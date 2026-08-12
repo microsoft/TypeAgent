@@ -292,6 +292,24 @@ Useful operation attributes include `typeagent.agent.name`,
 `typeagent.action.name`, `gen_ai.system`, and `gen_ai.request.model`.
 High-cardinality correlation belongs on spans and logs, never metrics.
 
+TypeAgent-owned processes also record source revisions as resource attributes.
+Resources are attached to every exported span, so the values remain available
+for span filtering without duplicating them on every operation:
+
+- `vcs.ref.head.revision` is the commit checked out at `HEAD`.
+- `vcs.ref.base.revision` is the merge-base of `HEAD` and `origin/main`,
+  identifying the standard revision the local work is based on.
+
+These OpenTelemetry VCS semantic-convention attributes distinguish source
+revisions from `service.version`, which remains the version of the deployable
+service component. The revision attributes primarily support local debugging:
+they identify the exact checkout that produced telemetry and the standard
+`origin/main` revision on which the local work is based. Local development
+resolves the revisions from Git once during telemetry initialization.
+`InitTelemetryOptions.sourceVersion` remains available for tests or hosts that
+already have revision metadata. Packaged deployments without a Git checkout
+omit unavailable values.
+
 ## Configuration and Local Files
 
 TypeAgent-owned processes support:
@@ -309,7 +327,6 @@ Standard `OTEL_*` variables override YAML. Relevant settings include:
 - `OTEL_EXPORTER_OTLP_ENDPOINT`
 - `OTEL_EXPORTER_OTLP_HEADERS`
 - `OTEL_SERVICE_NAME`
-- `OTEL_RESOURCE_ATTRIBUTES`
 - `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`
 - `TYPEAGENT_OTEL_LOG_FILE`
 - `TYPEAGENT_OTEL_DEBUG_BRIDGE`
@@ -400,34 +417,62 @@ a guarded path that cannot recurse into the failing exporter.
 Ordinary `debug(...)` and `logger.logEvent(...)` calls do not change. Add a span
 for an externally meaningful or independently timed operation:
 
+### Adding a new span
+
+Use the global OTel API directly with TypeAgent's shared instrumentation scope,
+span-name contract, and allowlisted attribute helper. A manual span has this
+structure:
+
+1. Acquire a tracer with the shared instrumentation scope.
+2. Start an active span so nested asynchronous work inherits its context.
+3. Set only allowlisted attributes.
+4. Record a stable, privacy-safe error classification and status.
+5. End the span in `finally`.
+
 ```ts
 import { SpanStatusCode, trace } from "@opentelemetry/api";
+import { otel } from "@typeagent/telemetry";
 
-const tracer = trace.getTracer("typeagent");
+const tracer = trace.getTracer(
+  otel.INSTRUMENTATION_SCOPE_NAME,
+  otel.INSTRUMENTATION_SCOPE_VERSION,
+);
 
-return tracer.startActiveSpan("typeagent.translation", async (span) => {
-  try {
-    span.setAttribute("typeagent.agent.name", agentName);
-    return await translateRequest(request);
-  } catch (error) {
-    span.recordException({
-      name: "TranslationError",
-      message: "translation failed",
-    });
-    span.setStatus({
-      code: SpanStatusCode.ERROR,
-      message: "translation failed",
-    });
-    throw error;
-  } finally {
-    span.end();
-  }
-});
+return tracer.startActiveSpan(
+  otel.TYPEAGENT_SPAN_NAMES.TRANSLATION,
+  async (span) => {
+    otel.setTypeAgentSpanAttributes(span, { agentName });
+
+    try {
+      return await translateRequest(request);
+    } catch (error) {
+      span.recordException({
+        name: "TranslationError",
+        message: "translation failed",
+      });
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: "translation failed",
+      });
+      throw error;
+    } finally {
+      span.end();
+    }
+  },
+);
 ```
 
 `startActiveSpan()` makes nested async work a child automatically. Logs emitted
 inside the callback receive its trace and span IDs. If code converts an exception
 to `ActionResult`, it must still record the exception and error status.
+
+Before introducing a new stable `typeagent.*` span name or attribute, add it to
+`packages/telemetry/src/otel/traceContract.ts` and use the exported constant or
+helper at the call site. Do not put prompts, responses, user content, exception
+messages, or stacks on spans.
+
+For a complete implementation example, see
+[PR #2842](https://github.com/microsoft/TypeAgent/pull/2842).
 
 Dispatcher request spans start a new trace by default. Embedded hosts can join
 the OTel context active when each request is submitted with a one-time option:
@@ -615,6 +660,15 @@ Use the repository build and test flow:
 ```text
 pnpm run build
 pnpm --filter @typeagent/telemetry test
+pnpm --filter agent-dispatcher run jest-esm --testPathPattern="otel.*spec.js"
+```
+
+The dispatcher suite includes deterministic one-process trace coverage with an
+in-memory provider. Run the separate OTLP/protobuf receiver smoke path explicitly:
+
+```powershell
+$env:TYPEAGENT_OTEL_OTLP_SMOKE = "1"
+pnpm --filter agent-dispatcher run jest-esm --runInBand --testPathPattern="otelOtlpSmoke.spec.js"
 ```
 
 ## References

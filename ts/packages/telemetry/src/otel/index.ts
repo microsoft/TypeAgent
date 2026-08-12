@@ -54,6 +54,13 @@ export {
 } from "./resources.js";
 
 export {
+    getTypeAgentSourceVersion,
+    resolveTypeAgentSourceVersion,
+    type GitVersionReader,
+    type TypeAgentSourceVersion,
+} from "./sourceVersion.js";
+
+export {
     redactText,
     redactObject,
     type RedactionOptions,

@@ -16,6 +16,7 @@ import {
 import { createPathSource } from "./pathSource.js";
 import { createCatalogSource } from "./catalogSource.js";
 import { createFeedSource } from "./feedSource.js";
+import { createMcpConfigSource } from "./mcpConfigSource.js";
 import { readPackageMeta, isLegalAgentName } from "./packageMeta.js";
 import { createLimiter, Limiter } from "@typeagent/common-utils";
 
@@ -183,6 +184,8 @@ function buildSource(
             return createFeedSource(config, {
                 installDir: deps.installDir,
             });
+        case "mcp-config":
+            return createMcpConfigSource(config);
         default: {
             const exhaustive: never = config;
             throw new Error(

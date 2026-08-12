@@ -23,15 +23,11 @@ describe("resolveReasoningTimeoutMs", () => {
             const saved = process.env[ENV_KEY];
             process.env[ENV_KEY] = "1";
             let abortCalls = 0;
-            let rejectWait!: (error: Error) => void;
-            const waitPromise = new Promise<never>((_resolve, reject) => {
-                rejectWait = reject;
-            });
+            const waitPromise = new Promise<never>(() => {});
             const session = {
                 sendAndWait: () => waitPromise,
                 abort: async () => {
                     abortCalls++;
-                    rejectWait(new Error("session aborted"));
                 },
             } as unknown as CopilotSession;
 
