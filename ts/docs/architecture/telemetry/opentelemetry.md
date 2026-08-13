@@ -275,6 +275,10 @@ use documented `typeagent.*` instruments instead.
 
 Inject W3C `traceparent` into a dedicated TypeAgent RPC metadata envelope.
 Receivers validate and extract it before handling the operation.
+Outbound injection and inbound extraction are separate explicit channel
+policies. TypeAgent-owned composition roots enable both only for approved
+destinations and trusted transports; a globally configured propagator alone
+does not cause metadata disclosure.
 
 OTel owns the canonical trace ID. Preserve the existing caller value as
 `typeagent.trace.id`. Carry these values on spans and logs:

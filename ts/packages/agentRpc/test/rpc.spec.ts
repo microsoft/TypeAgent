@@ -416,6 +416,7 @@ describe("createRpc OpenTelemetry propagation", () => {
             { tracing: { trustRemoteContext: true } },
             {
                 tracing: {
+                    propagateContext: true,
                     getCorrelationFields: () => ({
                         traceId: "legacy-trace",
                         sessionId: "session-1",
@@ -455,7 +456,9 @@ describe("createRpc OpenTelemetry propagation", () => {
     });
 
     it("does not extract valid remote context unless the channel opts into trust", async () => {
-        const { clientRpc } = createTracingPair();
+        const { clientRpc } = createTracingPair(undefined, {
+            tracing: { propagateContext: true },
+        });
 
         await clientRpc.invoke("echo", 1);
 
@@ -468,10 +471,35 @@ describe("createRpc OpenTelemetry propagation", () => {
         expect(getParentSpanId(serverSpan)).toBeUndefined();
     });
 
+    it("does not disclose propagation metadata without outbound opt-in", async () => {
+        const { client, clientRpc } = createTracingPair(
+            { tracing: { trustRemoteContext: true } },
+            {
+                tracing: {
+                    getCorrelationFields: () => ({
+                        sessionId: "must-not-leave",
+                    }),
+                },
+            },
+        );
+
+        await clientRpc.invoke("echo", 1);
+
+        expect(client.sent[0].metadata).toBeUndefined();
+        const spans = fixture!.exporter.getFinishedSpans();
+        const clientSpan = findSpan(spans, SpanKind.CLIENT);
+        const serverSpan = findSpan(spans, SpanKind.SERVER);
+        expect(serverSpan.spanContext().traceId).not.toBe(
+            clientSpan.spanContext().traceId,
+        );
+        expect(clientSpan.attributes["typeagent.session.id"]).toBeUndefined();
+    });
+
     it("ignores malformed propagated context without failing the RPC", async () => {
-        const { client, clientRpc } = createTracingPair({
-            tracing: { trustRemoteContext: true },
-        });
+        const { client, clientRpc } = createTracingPair(
+            { tracing: { trustRemoteContext: true } },
+            { tracing: { propagateContext: true } },
+        );
 
         const result = clientRpc.invoke("echo", 7);
         client.sent[0].metadata.traceparent = "malformed";
@@ -487,9 +515,10 @@ describe("createRpc OpenTelemetry propagation", () => {
     });
 
     it("accepts bounded W3C tracestate on a trusted channel", async () => {
-        const { client, clientRpc } = createTracingPair({
-            tracing: { trustRemoteContext: true },
-        });
+        const { client, clientRpc } = createTracingPair(
+            { tracing: { trustRemoteContext: true } },
+            { tracing: { propagateContext: true } },
+        );
 
         const result = clientRpc.invoke("echo", 7);
         client.sent[0].metadata.tracestate =
@@ -520,16 +549,11 @@ describe("createRpc OpenTelemetry propagation", () => {
                 metadata.traceparent = "0".repeat(513);
             },
         ],
-        [
-            "an oversized tracestate",
-            (metadata: any) => {
-                metadata.tracestate = `key=${"x".repeat(509)}`;
-            },
-        ],
     ])("ignores %s without failing the RPC", async (_name, mutateMetadata) => {
-        const { client, clientRpc } = createTracingPair({
-            tracing: { trustRemoteContext: true },
-        });
+        const { client, clientRpc } = createTracingPair(
+            { tracing: { trustRemoteContext: true } },
+            { tracing: { propagateContext: true } },
+        );
 
         const result = clientRpc.invoke("echo", 7);
         mutateMetadata(client.sent[0].metadata);
@@ -544,11 +568,33 @@ describe("createRpc OpenTelemetry propagation", () => {
         expect(getParentSpanId(serverSpan)).toBeUndefined();
     });
 
+    it("drops malformed tracestate without discarding a valid traceparent", async () => {
+        const { client, clientRpc } = createTracingPair(
+            { tracing: { trustRemoteContext: true } },
+            { tracing: { propagateContext: true } },
+        );
+
+        const result = clientRpc.invoke("echo", 7);
+        client.sent[0].metadata.tracestate = `key=${"x".repeat(509)}`;
+        await expect(result).resolves.toBe(7);
+
+        const spans = fixture!.exporter.getFinishedSpans();
+        const clientSpan = findSpan(spans, SpanKind.CLIENT);
+        const serverSpan = findSpan(spans, SpanKind.SERVER);
+        expect(serverSpan.spanContext().traceId).toBe(
+            clientSpan.spanContext().traceId,
+        );
+        expect(getParentSpanId(serverSpan)).toBe(
+            clientSpan.spanContext().spanId,
+        );
+    });
+
     it("omits unknown, malformed, and oversized correlation fields", async () => {
         const { client, clientRpc } = createTracingPair(
             { tracing: { trustRemoteContext: true } },
             {
                 tracing: {
+                    propagateContext: true,
                     getCorrelationFields: () =>
                         ({
                             sessionId: "session-valid",
@@ -578,6 +624,32 @@ describe("createRpc OpenTelemetry propagation", () => {
         ).toBeUndefined();
     });
 
+    it("resolves correlation fields from each invocation", async () => {
+        const invocations: { method: string; args: readonly unknown[] }[] = [];
+        const { client, clientRpc } = createTracingPair(
+            { tracing: { trustRemoteContext: true } },
+            {
+                tracing: {
+                    propagateContext: true,
+                    getCorrelationFields: (invocation) => {
+                        invocations.push(invocation);
+                        return { sessionId: `session-${invocation.args[0]}` };
+                    },
+                },
+            },
+        );
+
+        await clientRpc.invoke("echo", 3);
+        await clientRpc.invoke("echo", 4);
+
+        expect(invocations).toEqual([
+            { method: "echo", args: [3] },
+            { method: "echo", args: [4] },
+        ]);
+        expect(client.sent[0].metadata.typeagent.sessionId).toBe("session-3");
+        expect(client.sent[1].metadata.typeagent.sessionId).toBe("session-4");
+    });
+
     it("does not create spans for one-way notifications", async () => {
         const client = createFakeChannel();
         const server = createFakeChannel();
@@ -593,11 +665,111 @@ describe("createRpc OpenTelemetry propagation", () => {
         expect(fixture!.exporter.getFinishedSpans()).toHaveLength(0);
     });
 
+    it("rejects malformed invoke messages with a usable callId", async () => {
+        const server = createFakeChannel();
+        createRpc<{}, {}, EchoInvoke>("server", server, {
+            echo: async (value) => value,
+        });
+
+        server.deliver({
+            type: "invoke",
+            callId: 17,
+            name: null,
+            args: [1],
+        });
+        await flushMicrotasks();
+
+        expect(server.sent).toEqual([
+            {
+                type: "invokeError",
+                callId: 17,
+                error: "Invalid invoke message",
+            },
+        ]);
+        expect(fixture!.exporter.getFinishedSpans()).toHaveLength(0);
+    });
+
+    it("does not orphan an active span when a callId is duplicated", async () => {
+        const server = createFakeChannel();
+        createRpc<{}, {}, EchoInvoke>("server", server, {
+            echo: () => new Promise<number>(() => {}),
+        });
+        const message = {
+            type: "invoke",
+            callId: 5,
+            name: "echo",
+            args: [1],
+        };
+
+        server.deliver(message);
+        server.deliver({ ...message, args: [2] });
+        await flushMicrotasks();
+        expect(fixture!.exporter.getFinishedSpans()).toHaveLength(0);
+
+        server.fireDisconnect();
+        await flushMicrotasks();
+
+        const serverSpans = fixture!.exporter
+            .getFinishedSpans()
+            .filter((span) => span.kind === SpanKind.SERVER);
+        expect(serverSpans).toHaveLength(1);
+        expect(serverSpans[0]!.status).toEqual({
+            code: SpanStatusCode.ERROR,
+            message: "rpc failed",
+        });
+    });
+
+    it("notifies the old peer when a pending invoke is rebound", async () => {
+        const client = createFakeChannel();
+        const server = createFakeChannel();
+        connect(client, server);
+        const clientRpc = createRpc<EchoInvoke>(
+            "client",
+            client,
+            undefined,
+            undefined,
+            {
+                rebindable: true,
+                tracing: { propagateContext: true },
+            },
+        );
+        createRpc<{}, {}, EchoInvoke>(
+            "server",
+            server,
+            {
+                echo: () => new Promise<number>(() => {}),
+            },
+            undefined,
+            { tracing: { trustRemoteContext: true } },
+        );
+
+        const result = clientRpc.invoke("echo", 1);
+        await flushMicrotasks();
+        clientRpc.rebind(createFakeChannel());
+        await expect(result).rejects.toThrow("Agent channel rebound");
+        await flushMicrotasks();
+
+        expect(client.sent.map((message) => message.type)).toEqual([
+            "invoke",
+            "invokeCancel",
+        ]);
+        const spans = fixture!.exporter.getFinishedSpans();
+        expect(spans).toHaveLength(2);
+        expect(findSpan(spans, SpanKind.CLIENT).status).toEqual({
+            code: SpanStatusCode.ERROR,
+            message: "rpc failed",
+        });
+        expect(findSpan(spans, SpanKind.SERVER).status).toEqual({
+            code: SpanStatusCode.ERROR,
+            message: "cancelled",
+        });
+    });
+
     it("marks both spans as cancelled when the client aborts locally", async () => {
         const handler = () => new Promise<number>(() => {});
         const { clientRpc } = createTracingPair(
             { tracing: { trustRemoteContext: true } },
-            undefined,
+            { tracing: { propagateContext: true } },
             handler,
         );
         const controller = new AbortController();
@@ -625,7 +797,7 @@ describe("createRpc OpenTelemetry propagation", () => {
     it("preserves server cancellation and ends both spans", async () => {
         const { clientRpc } = createTracingPair(
             { tracing: { trustRemoteContext: true } },
-            undefined,
+            { tracing: { propagateContext: true } },
             async () => {
                 throw new DOMException("cancelled by server", "AbortError");
             },
@@ -648,7 +820,7 @@ describe("createRpc OpenTelemetry propagation", () => {
     it("records stable statuses for remote errors and ends both spans", async () => {
         const { clientRpc } = createTracingPair(
             { tracing: { trustRemoteContext: true } },
-            undefined,
+            { tracing: { propagateContext: true } },
             async () => {
                 throw new Error("private server detail");
             },

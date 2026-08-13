@@ -93,25 +93,41 @@ notifications are not traced. The request may carry a versioned metadata envelop
 with bounded W3C `traceparent`/`tracestate` values and the allowlisted TypeAgent
 `traceId`, `sessionId`, and `activationId` correlation fields.
 
-Remote context is ignored unless the receiving RPC explicitly trusts its channel:
+Outbound metadata and inbound trust are separate opt-ins. Enable each only for an
+approved destination or transport:
 
 ```ts
 createRpc(name, channel, handlers, undefined, {
   tracing: {
+    propagateContext: true,
     trustRemoteContext: true,
-    getCorrelationFields: () => ({
-      sessionId,
-      activationId,
-      traceId,
-    }),
+    getCorrelationFields: ({ method, args }) =>
+      getCorrelationForInvocation(method, args),
   },
 });
 ```
 
+Additive envelope fields retain version 1. Increment the version only for an
+incompatible interpretation; unsupported versions are ignored during rolling
+upgrades.
+
+These are factory-level primitives. Higher-level RPC factories and their
+composition roots must deliberately thread these options to TypeAgent-owned IPC
+channels; adding the envelope type alone does not activate cross-process
+parenting.
+
 Use `invokeWithOptions(name, { signal }, ...args)` when the local caller can
 cancel. Cancellation ends both RPC spans with a stable `cancelled` status.
+It abandons the generic RPC result but does not forcibly interrupt arbitrary
+handler work; application protocols that support execution cancellation must
+still deliver and observe their own cancellation signal.
 Malformed, oversized, untrusted, or unsupported metadata is ignored without
 failing the invocation.
+
+RPC spans use enqueue-time completion: a SERVER span ends after its terminal
+response is handed to `RpcChannel.send`. The callback is optional in the channel
+contract, so later transport-delivery failures are debug diagnostics rather than
+changes to an already-ended span.
 
 ## Trademarks
 

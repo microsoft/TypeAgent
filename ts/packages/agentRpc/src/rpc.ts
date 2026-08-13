@@ -70,7 +70,18 @@ export type RpcInvokeOptions = {
     signal?: AbortSignal;
 };
 
+export type RpcInvocation = {
+    method: string;
+    args: readonly unknown[];
+};
+
 export type RpcTracingOptions = {
+    /**
+     * Attach the active client span context and allowlisted correlation fields
+     * to outbound invokes. This must only be enabled for an approved
+     * destination because tracestate can contain vendor-specific data.
+     */
+    propagateContext?: boolean;
     /**
      * Accept propagated context and correlation fields from this channel.
      * This must only be enabled for an explicitly trusted transport.
@@ -80,7 +91,9 @@ export type RpcTracingOptions = {
      * Supplies the allowlisted correlation identifiers for an outbound invoke.
      * Invalid or oversized values are omitted.
      */
-    getCorrelationFields?: () => RpcCorrelationFields | undefined;
+    getCorrelationFields?: (
+        invocation: RpcInvocation,
+    ) => RpcCorrelationFields | undefined;
 };
 
 export type RpcOptions = {
@@ -173,6 +186,36 @@ export function createRpc<
         debugOut(message);
         currentChannel.send(message, cbErr);
     };
+    const sendBestEffort = (message: RpcMessage) => {
+        try {
+            out(message, (error) => {
+                if (error !== null) {
+                    debugError(
+                        "Failed to send RPC message",
+                        message.type,
+                        getErrorMessage(error),
+                    );
+                }
+            });
+        } catch (error) {
+            debugError(
+                "Failed to send RPC message",
+                message.type,
+                getErrorMessage(error),
+            );
+        }
+    };
+    const sendResponse = (message: InvokeResult | InvokeError) => {
+        out(message, (error) => {
+            if (error !== null) {
+                debugError(
+                    "Failed to send RPC response",
+                    message.type,
+                    getErrorMessage(error),
+                );
+            }
+        });
+    };
 
     const processInvoke = async (message: InvokeMessage) => {
         const remote = extractRemoteMetadata(
@@ -238,7 +281,7 @@ export function createRpc<
                     }
                     serverInvokes.delete(message.callId);
                     if (result.kind === "result") {
-                        out({
+                        sendResponse({
                             type: "invokeResult",
                             callId: message.callId,
                             result: result.result,
@@ -248,7 +291,7 @@ export function createRpc<
 
                     const cancellationError = isAbortError(result.error);
                     recordServerError(span, cancellationError);
-                    out({
+                    sendResponse({
                         type: "invokeError",
                         callId: message.callId,
                         error: getErrorMessage(result.error),
@@ -302,7 +345,22 @@ export function createRpc<
             }
             return;
         }
-        if (isInvokeMessage(message)) {
+        if (message?.type === "invoke") {
+            if (!isInvokeMessage(message)) {
+                debugError("Invalid invoke message", message);
+                if (isValidCallId(message?.callId)) {
+                    sendBestEffort({
+                        type: "invokeError",
+                        callId: message.callId,
+                        error: "Invalid invoke message",
+                    });
+                }
+                return;
+            }
+            if (serverInvokes.has(message.callId)) {
+                debugError("Duplicate in-flight callId", message.callId);
+                return;
+            }
             void processInvoke(message).catch((error) => {
                 debugError(
                     "Invoke instrumentation failed",
@@ -383,7 +441,14 @@ export function createRpc<
                 attributes: createSpanAttributes(methodName as string),
             },
             async (span) => {
-                const correlation = getOutboundCorrelation(options?.tracing);
+                const invocation = {
+                    method: methodName as string,
+                    args,
+                };
+                const correlation = getOutboundCorrelation(
+                    options?.tracing,
+                    invocation,
+                );
                 setCorrelationAttributes(span, correlation);
                 try {
                     const signal = invokeOptions?.signal;
@@ -391,7 +456,10 @@ export function createRpc<
                         throw createCancellationError(signal.reason);
                     }
 
-                    const metadata = createMetadataEnvelope(correlation);
+                    const metadata =
+                        options?.tracing?.propagateContext === true
+                            ? createMetadataEnvelope(correlation)
+                            : undefined;
                     const message: InvokeMessage = {
                         type: "invoke",
                         callId: nextCallId++,
@@ -428,17 +496,10 @@ export function createRpc<
                                 return;
                             }
                             pending.delete(message.callId);
-                            try {
-                                out({
-                                    type: "invokeCancel",
-                                    callId: message.callId,
-                                });
-                            } catch (error) {
-                                debugError(
-                                    "Failed to send invoke cancellation",
-                                    getErrorMessage(error),
-                                );
-                            }
+                            sendBestEffort({
+                                type: "invokeCancel",
+                                callId: message.callId,
+                            });
                             pendingInvoke.reject(
                                 createCancellationError(signal?.reason),
                             );
@@ -508,6 +569,16 @@ export function createRpc<
             if (!rebindable) {
                 throw new Error("rpc was not created as rebindable");
             }
+            for (const callId of pending.keys()) {
+                sendBestEffort({ type: "invokeCancel", callId });
+            }
+            for (const callId of serverInvokes.keys()) {
+                sendBestEffort({
+                    type: "invokeError",
+                    callId,
+                    error: "Agent channel rebound",
+                });
+            }
             currentChannel.off("message", cb);
             rejectAllPending("Agent channel rebound");
             cancelAllServerInvokes("rebind");
@@ -552,10 +623,14 @@ function setCorrelationAttributes(
 
 function getOutboundCorrelation(
     tracingOptions: RpcTracingOptions | undefined,
+    invocation: RpcInvocation,
 ): RpcCorrelationFields | undefined {
+    if (tracingOptions?.propagateContext !== true) {
+        return undefined;
+    }
     try {
         return validateCorrelationFields(
-            tracingOptions?.getCorrelationFields?.(),
+            tracingOptions.getCorrelationFields?.(invocation),
         );
     } catch {
         return undefined;
@@ -629,14 +704,11 @@ function extractTrustedRemoteMetadata(metadata: unknown): {
     if (!validateTraceparent(traceparent)) {
         return { parentContext: ROOT_CONTEXT, correlation };
     }
-    if (tracestate !== undefined && !validateTracestate(tracestate)) {
-        return { parentContext: ROOT_CONTEXT, correlation };
-    }
 
     const carrier: Record<string, string> = {
         traceparent,
     };
-    if (tracestate !== undefined) {
+    if (validateTracestate(tracestate)) {
         carrier.tracestate = tracestate;
     }
     try {
@@ -698,7 +770,7 @@ function isValidCorrelationValue(value: unknown): value is string {
     return (
         typeof value === "string" &&
         value.length > 0 &&
-        [...value].length <= MAX_CORRELATION_LENGTH &&
+        value.length <= MAX_CORRELATION_LENGTH &&
         CORRELATION_VALUE_PATTERN.test(value)
     );
 }
@@ -821,23 +893,43 @@ function toError(error: unknown): RpcFailure {
 }
 
 function isCallMessage(message: any): message is CallMessage {
-    return message?.type === "call";
+    return (
+        message?.type === "call" &&
+        isValidCallId(message.callId) &&
+        typeof message.name === "string" &&
+        Array.isArray(message.args)
+    );
 }
 
 function isInvokeMessage(message: any): message is InvokeMessage {
-    return message?.type === "invoke";
+    return (
+        message?.type === "invoke" &&
+        isValidCallId(message.callId) &&
+        typeof message.name === "string" &&
+        Array.isArray(message.args)
+    );
 }
 
 function isInvokeCancel(message: any): message is InvokeCancel {
-    return message?.type === "invokeCancel";
+    return message?.type === "invokeCancel" && isValidCallId(message.callId);
 }
 
 function isInvokeResult(message: any): message is InvokeResult {
-    return message?.type === "invokeResult";
+    return message?.type === "invokeResult" && isValidCallId(message.callId);
 }
 
 function isInvokeError(message: any): message is InvokeError {
-    return message?.type === "invokeError";
+    return (
+        message?.type === "invokeError" &&
+        isValidCallId(message.callId) &&
+        typeof message.error === "string"
+    );
+}
+
+function isValidCallId(value: unknown): value is number {
+    return (
+        typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    );
 }
 
 type CallMessage = {
