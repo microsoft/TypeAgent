@@ -249,13 +249,16 @@ test("ADO Windows always runs full shell:test (PR, main, merge-queue)", () => {
     assert.match(yaml, /npm run shell:smoke/);
 });
 
-test("Windows merge-gate jobs exclude the workspace from Defender", () => {
+test("Windows merge-gate jobs still run full install/build/test/package", () => {
     const buildTs = fs.readFileSync(buildTsYml, "utf8");
     const buildShell = fs.readFileSync(buildPackageShellYml, "utf8");
     const smoke = fs.readFileSync(azureSmokeYml, "utf8");
-    assert.match(buildTs, /Exclude workspace from Windows Defender/);
-    assert.match(buildShell, /Exclude workspace from Windows Defender/);
-    assert.match(smoke, /Exclude workspace from Windows Defender/);
+    // Leave Windows Defender at the host default — do not disable it in CI.
+    assert.equal(
+        /Defender|MpPreference|ExclusionPath/.test(buildTs + buildShell + smoke),
+        false,
+        "CI must not turn off or exclude Windows Defender",
+    );
     assert.match(buildTs, /npm run test:local/);
     assert.match(buildShell, /pnpm run shell:package/);
     assert.match(smoke, /npm run shell:test/);

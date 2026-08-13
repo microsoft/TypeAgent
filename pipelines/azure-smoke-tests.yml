@@ -184,11 +184,6 @@ jobs:
     pool:
       vmImage: $(image)
     steps:
-      - pwsh: |
-          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-          Add-MpPreference -ExclusionPath "$(Agent.BuildDirectory)" -ErrorAction SilentlyContinue
-        displayName: Exclude workspace from Windows Defender
-        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))
       # Checkout + internal npm registry auth + Node + pnpm install
       # (--frozen-lockfile --strict-peer-dependencies).
       - template: include-prepare-repo.yml
