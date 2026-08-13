@@ -86,6 +86,33 @@ if (rpc) {
   `docs/plans/.../rpc-rebindable-channel-design.md` (where maintained) for the full
   rationale and the per-consumer assessment.
 
+## OpenTelemetry context propagation
+
+Every `invoke` creates one `CLIENT` span and one `SERVER` span. One-way `send`
+notifications are not traced. The request may carry a versioned metadata envelope
+with bounded W3C `traceparent`/`tracestate` values and the allowlisted TypeAgent
+`traceId`, `sessionId`, and `activationId` correlation fields.
+
+Remote context is ignored unless the receiving RPC explicitly trusts its channel:
+
+```ts
+createRpc(name, channel, handlers, undefined, {
+  tracing: {
+    trustRemoteContext: true,
+    getCorrelationFields: () => ({
+      sessionId,
+      activationId,
+      traceId,
+    }),
+  },
+});
+```
+
+Use `invokeWithOptions(name, { signal }, ...args)` when the local caller can
+cancel. Cancellation ends both RPC spans with a stable `cancelled` status.
+Malformed, oversized, untrusted, or unsupported metadata is ignored without
+failing the invocation.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

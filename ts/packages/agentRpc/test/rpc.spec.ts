@@ -1,7 +1,26 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createRpc } from "../src/rpc.js";
+import {
+    context,
+    propagation,
+    SpanKind,
+    SpanStatusCode,
+    trace,
+} from "@opentelemetry/api";
+import { W3CTraceContextPropagator } from "@opentelemetry/core";
+import {
+    InMemorySpanExporter,
+    SimpleSpanProcessor,
+    type ReadableSpan,
+} from "@opentelemetry/sdk-trace-base";
+import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
+
+import {
+    createRpc,
+    RPC_METADATA_VERSION,
+    type RpcOptions,
+} from "../src/rpc.js";
 import type { RpcChannel } from "../src/common.js";
 
 type FakeChannel = RpcChannel & {
@@ -104,6 +123,48 @@ function createEchoServer(name: string, channel: RpcChannel, offset = 0) {
 
 function flushMicrotasks() {
     return new Promise((r) => queueMicrotask(() => r(undefined)));
+}
+
+type TraceFixture = {
+    exporter: InMemorySpanExporter;
+    provider: NodeTracerProvider;
+};
+
+function installTraceFixture(): TraceFixture {
+    const exporter = new InMemorySpanExporter();
+    const provider = new NodeTracerProvider({
+        spanProcessors: [new SimpleSpanProcessor(exporter)],
+    });
+    provider.register({
+        propagator: new W3CTraceContextPropagator(),
+    });
+    return { exporter, provider };
+}
+
+async function disposeTraceFixture(
+    fixture: TraceFixture | undefined,
+): Promise<void> {
+    if (fixture === undefined) {
+        return;
+    }
+    await fixture.provider.shutdown();
+    trace.disable();
+    context.disable();
+    propagation.disable();
+}
+
+function findSpan(spans: ReadableSpan[], kind: SpanKind): ReadableSpan {
+    const matching = spans.filter((span) => span.kind === kind);
+    if (matching.length !== 1) {
+        throw new Error(
+            `Expected one ${SpanKind[kind]} span, got ${matching.length}`,
+        );
+    }
+    return matching[0]!;
+}
+
+function getParentSpanId(span: ReadableSpan): string | undefined {
+    return span.parentSpanContext?.spanId;
 }
 
 describe("createRpc default (non-rebindable)", () => {
@@ -310,5 +371,303 @@ describe("createRpc rebindable", () => {
             clientRpc.rebind(c);
             await expect(clientRpc.invoke("echo", 10)).resolves.toBe(10 + i);
         }
+    });
+});
+
+describe("createRpc OpenTelemetry propagation", () => {
+    let fixture: TraceFixture | undefined;
+
+    beforeEach(() => {
+        fixture = installTraceFixture();
+    });
+
+    afterEach(async () => {
+        await disposeTraceFixture(fixture);
+        fixture = undefined;
+    });
+
+    function createTracingPair(
+        serverOptions?: RpcOptions,
+        clientOptions?: RpcOptions,
+        handler: (value: number) => Promise<number> = async (value) => value,
+    ) {
+        const client = createFakeChannel();
+        const server = createFakeChannel();
+        connect(client, server);
+        const clientRpc = createRpc<EchoInvoke>(
+            "client",
+            client,
+            undefined,
+            undefined,
+            clientOptions,
+        );
+        createRpc<{}, {}, EchoInvoke>(
+            "server",
+            server,
+            { echo: handler },
+            undefined,
+            serverOptions,
+        );
+        return { client, server, clientRpc };
+    }
+
+    it("creates one CLIENT span and one parented SERVER span on a trusted channel", async () => {
+        const { client, clientRpc } = createTracingPair(
+            { tracing: { trustRemoteContext: true } },
+            {
+                tracing: {
+                    getCorrelationFields: () => ({
+                        traceId: "legacy-trace",
+                        sessionId: "session-1",
+                        activationId: "activation-1",
+                    }),
+                },
+            },
+        );
+
+        await expect(clientRpc.invoke("echo", 42)).resolves.toBe(42);
+
+        const spans = fixture!.exporter.getFinishedSpans();
+        expect(spans).toHaveLength(2);
+        const clientSpan = findSpan(spans, SpanKind.CLIENT);
+        const serverSpan = findSpan(spans, SpanKind.SERVER);
+        expect(serverSpan.spanContext().traceId).toBe(
+            clientSpan.spanContext().traceId,
+        );
+        expect(getParentSpanId(serverSpan)).toBe(
+            clientSpan.spanContext().spanId,
+        );
+        expect(clientSpan.status.code).toBe(SpanStatusCode.UNSET);
+        expect(serverSpan.status.code).toBe(SpanStatusCode.UNSET);
+        expect(serverSpan.attributes).toMatchObject({
+            "typeagent.trace.id": "legacy-trace",
+            "typeagent.session.id": "session-1",
+            "typeagent.activation.id": "activation-1",
+        });
+        expect(client.sent[0].metadata).toMatchObject({
+            version: RPC_METADATA_VERSION,
+            typeagent: {
+                traceId: "legacy-trace",
+                sessionId: "session-1",
+                activationId: "activation-1",
+            },
+        });
+    });
+
+    it("does not extract valid remote context unless the channel opts into trust", async () => {
+        const { clientRpc } = createTracingPair();
+
+        await clientRpc.invoke("echo", 1);
+
+        const spans = fixture!.exporter.getFinishedSpans();
+        const clientSpan = findSpan(spans, SpanKind.CLIENT);
+        const serverSpan = findSpan(spans, SpanKind.SERVER);
+        expect(serverSpan.spanContext().traceId).not.toBe(
+            clientSpan.spanContext().traceId,
+        );
+        expect(getParentSpanId(serverSpan)).toBeUndefined();
+    });
+
+    it("ignores malformed propagated context without failing the RPC", async () => {
+        const { client, clientRpc } = createTracingPair({
+            tracing: { trustRemoteContext: true },
+        });
+
+        const result = clientRpc.invoke("echo", 7);
+        client.sent[0].metadata.traceparent = "malformed";
+        await expect(result).resolves.toBe(7);
+
+        const spans = fixture!.exporter.getFinishedSpans();
+        const clientSpan = findSpan(spans, SpanKind.CLIENT);
+        const serverSpan = findSpan(spans, SpanKind.SERVER);
+        expect(serverSpan.spanContext().traceId).not.toBe(
+            clientSpan.spanContext().traceId,
+        );
+        expect(getParentSpanId(serverSpan)).toBeUndefined();
+    });
+
+    it("accepts bounded W3C tracestate on a trusted channel", async () => {
+        const { client, clientRpc } = createTracingPair({
+            tracing: { trustRemoteContext: true },
+        });
+
+        const result = clientRpc.invoke("echo", 7);
+        client.sent[0].metadata.tracestate =
+            "vendor=value, tenant@system=other";
+        await expect(result).resolves.toBe(7);
+
+        const spans = fixture!.exporter.getFinishedSpans();
+        const clientSpan = findSpan(spans, SpanKind.CLIENT);
+        const serverSpan = findSpan(spans, SpanKind.SERVER);
+        expect(serverSpan.spanContext().traceId).toBe(
+            clientSpan.spanContext().traceId,
+        );
+        expect(getParentSpanId(serverSpan)).toBe(
+            clientSpan.spanContext().spanId,
+        );
+    });
+
+    it.each([
+        [
+            "an unsupported envelope version",
+            (metadata: any) => {
+                metadata.version = RPC_METADATA_VERSION + 1;
+            },
+        ],
+        [
+            "an oversized traceparent",
+            (metadata: any) => {
+                metadata.traceparent = "0".repeat(513);
+            },
+        ],
+        [
+            "an oversized tracestate",
+            (metadata: any) => {
+                metadata.tracestate = `key=${"x".repeat(509)}`;
+            },
+        ],
+    ])("ignores %s without failing the RPC", async (_name, mutateMetadata) => {
+        const { client, clientRpc } = createTracingPair({
+            tracing: { trustRemoteContext: true },
+        });
+
+        const result = clientRpc.invoke("echo", 7);
+        mutateMetadata(client.sent[0].metadata);
+        await expect(result).resolves.toBe(7);
+
+        const spans = fixture!.exporter.getFinishedSpans();
+        const clientSpan = findSpan(spans, SpanKind.CLIENT);
+        const serverSpan = findSpan(spans, SpanKind.SERVER);
+        expect(serverSpan.spanContext().traceId).not.toBe(
+            clientSpan.spanContext().traceId,
+        );
+        expect(getParentSpanId(serverSpan)).toBeUndefined();
+    });
+
+    it("omits unknown, malformed, and oversized correlation fields", async () => {
+        const { client, clientRpc } = createTracingPair(
+            { tracing: { trustRemoteContext: true } },
+            {
+                tracing: {
+                    getCorrelationFields: () =>
+                        ({
+                            sessionId: "session-valid",
+                            traceId: "contains spaces",
+                            activationId: "x".repeat(257),
+                            userText: "must-not-propagate",
+                        }) as any,
+                },
+            },
+        );
+
+        await clientRpc.invoke("echo", 1);
+
+        expect(client.sent[0].metadata.typeagent).toEqual({
+            sessionId: "session-valid",
+        });
+        const serverSpan = findSpan(
+            fixture!.exporter.getFinishedSpans(),
+            SpanKind.SERVER,
+        );
+        expect(serverSpan.attributes["typeagent.session.id"]).toBe(
+            "session-valid",
+        );
+        expect(serverSpan.attributes["typeagent.trace.id"]).toBeUndefined();
+        expect(
+            serverSpan.attributes["typeagent.activation.id"],
+        ).toBeUndefined();
+    });
+
+    it("does not create spans for one-way notifications", async () => {
+        const client = createFakeChannel();
+        const server = createFakeChannel();
+        connect(client, server);
+        const clientRpc = createRpc<{}, Notify>("client", client);
+        createRpc<{}, {}, {}, Notify>("server", server, undefined, {
+            notify: () => {},
+        });
+
+        clientRpc.send("notify", 1);
+        await flushMicrotasks();
+
+        expect(fixture!.exporter.getFinishedSpans()).toHaveLength(0);
+    });
+
+    it("marks both spans as cancelled when the client aborts locally", async () => {
+        const handler = () => new Promise<number>(() => {});
+        const { clientRpc } = createTracingPair(
+            { tracing: { trustRemoteContext: true } },
+            undefined,
+            handler,
+        );
+        const controller = new AbortController();
+
+        const result = clientRpc.invokeWithOptions(
+            "echo",
+            { signal: controller.signal },
+            1,
+        );
+        await flushMicrotasks();
+        controller.abort();
+        await expect(result).rejects.toMatchObject({ name: "AbortError" });
+        await flushMicrotasks();
+
+        const spans = fixture!.exporter.getFinishedSpans();
+        expect(spans).toHaveLength(2);
+        for (const span of spans) {
+            expect(span.status).toEqual({
+                code: SpanStatusCode.ERROR,
+                message: "cancelled",
+            });
+        }
+    });
+
+    it("preserves server cancellation and ends both spans", async () => {
+        const { clientRpc } = createTracingPair(
+            { tracing: { trustRemoteContext: true } },
+            undefined,
+            async () => {
+                throw new DOMException("cancelled by server", "AbortError");
+            },
+        );
+
+        await expect(clientRpc.invoke("echo", 1)).rejects.toMatchObject({
+            name: "AbortError",
+        });
+
+        const spans = fixture!.exporter.getFinishedSpans();
+        expect(spans).toHaveLength(2);
+        for (const span of spans) {
+            expect(span.status).toEqual({
+                code: SpanStatusCode.ERROR,
+                message: "cancelled",
+            });
+        }
+    });
+
+    it("records stable statuses for remote errors and ends both spans", async () => {
+        const { clientRpc } = createTracingPair(
+            { tracing: { trustRemoteContext: true } },
+            undefined,
+            async () => {
+                throw new Error("private server detail");
+            },
+        );
+
+        await expect(clientRpc.invoke("echo", 1)).rejects.toThrow(
+            "private server detail",
+        );
+
+        const spans = fixture!.exporter.getFinishedSpans();
+        const clientSpan = findSpan(spans, SpanKind.CLIENT);
+        const serverSpan = findSpan(spans, SpanKind.SERVER);
+        expect(clientSpan.status).toEqual({
+            code: SpanStatusCode.ERROR,
+            message: "remote error",
+        });
+        expect(serverSpan.status).toEqual({
+            code: SpanStatusCode.ERROR,
+            message: "request failed",
+        });
     });
 });
