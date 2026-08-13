@@ -319,7 +319,10 @@ test("ADO smoke overlaps Playwright chromium with shell+cli build", () => {
             livePkgNames.push(pkg.name);
         }
     }
-    assert.ok(livePkgNames.length >= 1, "expected at least one test:live package");
+    assert.ok(
+        livePkgNames.length >= 1,
+        "expected at least one test:live package",
+    );
     for (const name of livePkgNames) {
         // Filter is a regexp; bare names and @scope/(a|b|c) forms both match.
         const re = new RegExp(LIVE_TEST_PACKAGE_FILTER);

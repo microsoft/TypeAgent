@@ -34,12 +34,12 @@ only need `HEAD` to install/build/test.
 
 ## PR suite parity (must match main baseline smoke)
 
-| Suite | Baseline PR | This branch |
-| --- | --- | --- |
-| CLI smoke | yes | yes |
-| Linux `shell:smoke` | yes | yes |
-| Windows `shell:test` | yes | yes |
-| Linux `test:live` | yes (`continueOnError`) | yes (parallel job, `continueOnError`) |
+| Suite                | Baseline PR             | This branch                           |
+| -------------------- | ----------------------- | ------------------------------------- |
+| CLI smoke            | yes                     | yes                                   |
+| Linux `shell:smoke`  | yes                     | yes                                   |
+| Windows `shell:test` | yes                     | yes                                   |
+| Linux `test:live`    | yes (`continueOnError`) | yes (parallel job, `continueOnError`) |
 
 Allowed cuts are **redundant steps only** (duplicate ratchets, extra fetches,
 full-history clones, serial live after shell, full monorepo build where a
