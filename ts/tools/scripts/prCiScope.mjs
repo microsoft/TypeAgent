@@ -82,6 +82,16 @@ export function shouldRunShellPackage({ eventName, tsFilter }) {
     return pathFilterAllows(tsFilter);
 }
 
+/**
+ * ADO Windows shell suite.  Pull requests run the same electron smoke as
+ * Linux (`shell:smoke` / simple.spec.ts).  The full Playwright + jest
+ * suite (`shell:test`) still runs on main and the merge-queue CI trigger
+ * (Build.Reason != PullRequest), which is what actually gates merge.
+ */
+export function windowsShellSuite(buildReason) {
+    return buildReason === "PullRequest" ? "shell:smoke" : "shell:test";
+}
+
 export function resolveScope(ctx) {
     return {
         full: shouldRunBuildTsFull(ctx),
@@ -199,6 +209,12 @@ export function writeGithubOutput(scope, env = process.env) {
 function main(argv = process.argv.slice(2), env = process.env) {
     if (argv.includes("--table")) {
         process.stdout.write(`${formatScopeTable()}\n`);
+        return 0;
+    }
+    if (argv.includes("--windows-shell-suite")) {
+        process.stdout.write(
+            `${windowsShellSuite(env.BUILD_REASON ?? env.EVENT_NAME ?? "")}\n`,
+        );
         return 0;
     }
     const scope = resolveScope(readCtxFromEnv(env));

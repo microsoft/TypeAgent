@@ -23,6 +23,10 @@ only need `HEAD` to install/build/test.
   - Playwright install overlaps `npm run build` on the smoke agents
   - `test:live` is a parallel Linux job (still runs; `continueOnError`
     unchanged). The required Linux smoke job no longer waits for it.
+  - Windows PRs run `shell:smoke` (same electron smoke as Linux). Full
+    `shell:test` still runs on main and the merge-queue CI trigger. The
+    parent GitHub check stays queued until this Windows leg finishes —
+    that was the 33 min pole on SHA `82791dcf4`.
 
 ## Job counts (from the shipped helper)
 

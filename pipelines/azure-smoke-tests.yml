@@ -261,8 +261,23 @@ jobs:
       # WorkloadIdentityCredential against the now-stale token file, and a failed
       # assertion exchange is a hard error that stops the chain before it reaches
       # this task's fresh AzureCliCredential. Clearing them makes it fall through.
+      # PRs: same electron smoke as Linux (`shell:smoke`).  The parent
+      # GitHub check stays "queued" until this Windows leg finishes — the
+      # full `shell:test` Playwright suite is 30+ min and is the PR
+      # wall-clock.  Full Playwright+jest still runs on main and
+      # gh-readonly-queue/main/* (merge queue; Build.Reason != PullRequest).
+      - bash: |
+          set -euo pipefail
+          SUITE=$(node "$(buildDirectory)/tools/scripts/prCiScope.mjs" --windows-shell-suite)
+          echo "windowsShellSuite=$SUITE"
+          echo "##vso[task.setvariable variable=windowsShellSuite]$SUITE"
+        displayName: Decide Windows shell suite
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))
+        env:
+          BUILD_REASON: $(Build.Reason)
+
       - task: AzureCLI@2
-        displayName: Shell Tests - full (Windows)
+        displayName: Shell Tests (Windows)
         timeoutInMinutes: 60
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))
         inputs:
@@ -272,7 +287,7 @@ jobs:
           workingDirectory: $(buildDirectory)/packages/shell
           inlineScript: |
             'AZURE_CLIENT_ID','AZURE_TENANT_ID','AZURE_FEDERATED_TOKEN_FILE' | ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
-            npm run shell:test
+            npm run $(windowsShellSuite)
 
       # Own AzureCLI@2 login with the published AZURE_* vars cleared — same
       # rationale as "Shell Tests - full" above.

@@ -20,6 +20,7 @@ import {
     shouldRunBuildTsLint,
     shouldRunBuildTsRatchet,
     shouldRunShellPackage,
+    windowsShellSuite,
 } from "../prCiScope.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -224,6 +225,33 @@ test("ADO detect job uses a shallow PR checkout", () => {
     );
 });
 
+test("ADO Windows PRs smoke; main and merge-queue still run the full suite", () => {
+    assert.equal(windowsShellSuite("PullRequest"), "shell:smoke");
+    assert.equal(windowsShellSuite("IndividualCI"), "shell:test");
+    assert.equal(windowsShellSuite("Manual"), "shell:test");
+    const pr = execFileSync(
+        process.execPath,
+        [scriptPath, "--windows-shell-suite"],
+        {
+            env: { ...process.env, BUILD_REASON: "PullRequest" },
+            encoding: "utf8",
+        },
+    ).trim();
+    const ci = execFileSync(
+        process.execPath,
+        [scriptPath, "--windows-shell-suite"],
+        {
+            env: { ...process.env, BUILD_REASON: "IndividualCI" },
+            encoding: "utf8",
+        },
+    ).trim();
+    assert.equal(pr, "shell:smoke");
+    assert.equal(ci, "shell:test");
+    const yaml = fs.readFileSync(azureSmokeYml, "utf8");
+    assert.match(yaml, /--windows-shell-suite/);
+    assert.match(yaml, /npm run \$\(windowsShellSuite\)/);
+});
+
 test("Windows merge-gate jobs exclude the workspace from Defender", () => {
     const buildTs = fs.readFileSync(buildTsYml, "utf8");
     const buildShell = fs.readFileSync(buildPackageShellYml, "utf8");
@@ -233,7 +261,7 @@ test("Windows merge-gate jobs exclude the workspace from Defender", () => {
     assert.match(smoke, /Exclude workspace from Windows Defender/);
     assert.match(buildTs, /npm run test:local/);
     assert.match(buildShell, /pnpm run shell:package/);
-    assert.match(smoke, /npm run shell:test/);
+    assert.match(smoke, /npm run \$\(windowsShellSuite\)/);
 });
 
 test("ADO smoke overlaps Playwright with build and runs live tests in parallel", () => {
