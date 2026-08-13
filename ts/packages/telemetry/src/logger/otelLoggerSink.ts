@@ -445,101 +445,146 @@ function cloneBounded(
     depth: number,
     state: BoundedTraversalState,
 ): unknown {
-    // Once the size cap has been crossed, everything downstream becomes
-    // a marker so partial containers stop growing.
     if (state.sizeTruncated) {
         return truncationMarker("size");
     }
-
     if (depth >= BODY_MAX_DEPTH) {
         return boundedMarker("depth", state);
     }
-
-    // JSON-compatible primitives.
-    if (
-        value === null ||
-        typeof value === "string" ||
-        typeof value === "boolean" ||
-        (typeof value === "number" && Number.isFinite(value))
-    ) {
-        if (!tryCharge(state, approxPrimitiveChars(value))) {
-            return truncationMarker("size");
-        }
-        return value;
+    if (value === null) {
+        return clonePrimitive(value, state);
+    }
+    if (isJsonPrimitive(value)) {
+        return clonePrimitive(value, state);
     }
     if (typeof value !== "object") {
         return boundedMarker("unsupported", state);
     }
-
-    // Cycles.
-    if (state.visited.has(value as object)) {
+    if (state.visited.has(value)) {
         return boundedMarker("cycle", state);
     }
 
-    state.visited.add(value as object);
+    state.visited.add(value);
     try {
-        if (Array.isArray(value)) {
-            if (!tryCharge(state, 2)) {
-                return [truncationMarker("size")];
-            }
-            const result: unknown[] = [];
-            for (let i = 0; i < value.length; i++) {
-                if (state.sizeTruncated) {
-                    result.push(truncationMarker("size"));
-                    break;
-                }
-                if (i > 0 && !tryCharge(state, 1)) {
-                    result.push(truncationMarker("size"));
-                    break;
-                }
-                result.push(cloneBounded(value[i], depth + 1, state));
-                if (state.sizeTruncated) {
-                    break;
-                }
-            }
-            return result;
-        }
-
-        const prototype = Object.getPrototypeOf(value);
-        if (prototype !== Object.prototype && prototype !== null) {
-            return boundedMarker("unsupported", state);
-        }
-
-        const source = value as Record<string, unknown>;
-        const clone: Record<string, unknown> = {};
-        if (!tryCharge(state, 2)) {
-            setOwnValue(clone, TRUNCATION_MARKER_KEY, "size");
-            return clone;
-        }
-        let first = true;
-        for (const key in source) {
-            if (!Object.prototype.hasOwnProperty.call(source, key)) {
-                continue;
-            }
-            if (state.sizeTruncated) {
-                setOwnValue(clone, TRUNCATION_MARKER_KEY, "size");
-                break;
-            }
-            const propertyChars =
-                (first ? 0 : 1) + approxPrimitiveChars(key) + 1;
-            if (!tryCharge(state, propertyChars)) {
-                setOwnValue(clone, TRUNCATION_MARKER_KEY, "size");
-                break;
-            }
-            first = false;
-            setOwnValue(
-                clone,
-                key,
-                cloneBounded(source[key], depth + 1, state),
-            );
-            if (state.sizeTruncated) {
-                break;
-            }
-        }
-        return clone;
+        return Array.isArray(value)
+            ? cloneArray(value, depth, state)
+            : cloneObject(value, depth, state);
     } finally {
-        state.visited.delete(value as object);
+        state.visited.delete(value);
     }
+}
+
+type JsonPrimitive = null | string | boolean | number;
+
+function isJsonPrimitive(
+    value: unknown,
+): value is Exclude<JsonPrimitive, null> {
+    return (
+        typeof value === "string" ||
+        typeof value === "boolean" ||
+        (typeof value === "number" && Number.isFinite(value))
+    );
+}
+
+function clonePrimitive(
+    value: JsonPrimitive,
+    state: BoundedTraversalState,
+): JsonPrimitive | Record<string, string> {
+    return tryCharge(state, approxPrimitiveChars(value))
+        ? value
+        : truncationMarker("size");
+}
+
+function cloneArray(
+    source: readonly unknown[],
+    depth: number,
+    state: BoundedTraversalState,
+): unknown[] {
+    if (!tryCharge(state, 2)) {
+        return [truncationMarker("size")];
+    }
+
+    const clone: unknown[] = [];
+    for (let index = 0; index < source.length; index++) {
+        if (!chargeArraySeparator(index, state)) {
+            clone.push(truncationMarker("size"));
+            break;
+        }
+        clone.push(cloneBounded(source[index], depth + 1, state));
+        if (state.sizeTruncated) {
+            break;
+        }
+    }
+    return clone;
+}
+
+function chargeArraySeparator(
+    index: number,
+    state: BoundedTraversalState,
+): boolean {
+    return !state.sizeTruncated && (index === 0 || tryCharge(state, 1));
+}
+
+function cloneObject(
+    source: object,
+    depth: number,
+    state: BoundedTraversalState,
+): Record<string, unknown> {
+    if (!isPlainObject(source)) {
+        return boundedMarker("unsupported", state);
+    }
+
+    const clone: Record<string, unknown> = {};
+    if (!tryCharge(state, 2)) {
+        markObjectSizeTruncated(clone);
+        return clone;
+    }
+
+    let propertyCount = 0;
+    for (const key in source) {
+        if (!Object.prototype.hasOwnProperty.call(source, key)) {
+            continue;
+        }
+        if (!chargeObjectProperty(key, propertyCount, state)) {
+            markObjectSizeTruncated(clone);
+            break;
+        }
+        propertyCount++;
+        setOwnValue(
+            clone,
+            key,
+            cloneBounded(
+                (source as Record<string, unknown>)[key],
+                depth + 1,
+                state,
+            ),
+        );
+        if (state.sizeTruncated) {
+            break;
+        }
+    }
+    return clone;
+}
+
+function isPlainObject(value: object): boolean {
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+}
+
+function chargeObjectProperty(
+    key: string,
+    propertyCount: number,
+    state: BoundedTraversalState,
+): boolean {
+    if (state.sizeTruncated) {
+        return false;
+    }
+    const separatorChars = propertyCount === 0 ? 0 : 1;
+    return tryCharge(state, separatorChars + approxPrimitiveChars(key) + 1);
+}
+
+function markObjectSizeTruncated(target: Record<string, unknown>): void {
+    setOwnValue(target, TRUNCATION_MARKER_KEY, "size");
 }
 
 function boundedMarker(

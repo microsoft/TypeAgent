@@ -544,8 +544,10 @@ dispatcher fields are excluded by the dispatcher projection.
 
 ### 5. Inspect the Same Logs in Grafana
 
-Open [http://localhost:3000](http://localhost:3000), select **Explore**, and
-choose the **Loki** data source. Query all records from this validation run:
+Open [http://localhost:3000](http://localhost:3000), select **Explore**, choose
+the **Loki** data source, and switch the query editor to **Code** mode. Do not
+use Logs Drilldown or its search box; those use a different search API rather
+than executing the LogQL below. Query all records from this validation run:
 
 ```logql
 {service_name="typeagent-local"}

@@ -14,7 +14,7 @@ import { redactText, type RedactionOptions } from "./redaction.js";
 
 export interface DebugModule {
     log: DebugFunction;
-    formatArgs?: DebugFunction;
+    formatArgs?: unknown;
 }
 
 export interface DebugBridgeOptions extends RedactionOptions {
@@ -28,13 +28,16 @@ export interface DebugBridge {
 
 interface InstalledBridge {
     readonly hook: "formatArgs" | "log";
-    readonly prior: DebugFunction;
+    readonly prior: Function;
     readonly wrapped: DebugFunction;
     readonly options: EffectiveDebugBridgeOptions;
     refCount: number;
 }
 
-type DebugFunction = (this: any, ...args: any[]) => unknown;
+type DebugFunction = (
+    this: { namespace?: string },
+    ...args: unknown[]
+) => unknown;
 
 interface EffectiveDebugBridgeOptions extends RedactionOptions {
     readonly includedNamespacePrefixes: readonly string[];
@@ -87,9 +90,10 @@ export function installDebugBridge(
             continue;
         }
 
-        const hook =
-            debugModule.formatArgs === undefined ? "log" : "formatArgs";
-        const prior = debugModule[hook]!;
+        const formatArgs = debugModule.formatArgs;
+        const hook = typeof formatArgs === "function" ? "formatArgs" : "log";
+        const prior: Function =
+            typeof formatArgs === "function" ? formatArgs : debugModule.log;
         const wrapped: DebugFunction =
             hook === "formatArgs"
                 ? function (
@@ -98,10 +102,10 @@ export function installDebugBridge(
                   ): unknown {
                       const args = callArgs[0];
                       if (!Array.isArray(args)) {
-                          return prior.apply(this, callArgs);
+                          return Reflect.apply(prior, this, callArgs);
                       }
                       const rawArgs = [...args];
-                      const result = prior.apply(this, callArgs);
+                      const result = Reflect.apply(prior, this, callArgs);
                       emitDebugRecord(
                           this?.namespace,
                           rawArgs,
@@ -113,11 +117,11 @@ export function installDebugBridge(
                       this: { namespace?: string },
                       ...args: unknown[]
                   ): unknown {
-                      const result = prior.apply(this, args);
+                      const result = Reflect.apply(prior, this, args);
                       emitDebugRecord(this?.namespace, args, effectiveOptions);
                       return result;
                   };
-        debugModule[hook] = wrapped;
+        setDebugHook(debugModule, hook, wrapped);
         installedBridges.set(debugModule, {
             hook,
             prior,
@@ -144,13 +148,32 @@ export function installDebugBridge(
                 if (state.refCount > 0) {
                     continue;
                 }
-                if (debugModule[state.hook] === state.wrapped) {
-                    debugModule[state.hook] = state.prior;
+                if (getDebugHook(debugModule, state.hook) === state.wrapped) {
+                    setDebugHook(debugModule, state.hook, state.prior);
                 }
                 installedBridges.delete(debugModule);
             }
         },
     };
+}
+
+function getDebugHook(
+    debugModule: DebugModule,
+    hook: "formatArgs" | "log",
+): unknown {
+    return hook === "formatArgs" ? debugModule.formatArgs : debugModule.log;
+}
+
+function setDebugHook(
+    debugModule: DebugModule,
+    hook: "formatArgs" | "log",
+    value: Function,
+): void {
+    if (hook === "formatArgs") {
+        debugModule.formatArgs = value;
+    } else {
+        debugModule.log = value as DebugFunction;
+    }
 }
 
 function emitDebugRecord(
