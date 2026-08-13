@@ -44,7 +44,7 @@ export interface ScriptRecipe {
 
 export interface ScriptParameter {
     name: string;
-    type: "string" | "number" | "boolean" | "path";
+    type: "string" | "number" | "boolean" | "path" | "executable";
     required: boolean;
     description: string;
     default?: unknown;
@@ -251,7 +251,8 @@ Generate a script recipe JSON object that:
 1. Has a camelCase actionName derived from what the script does
 2. Has a human-readable displayName
 3. Generalizes hardcoded values (paths, search patterns, filenames, counts) into parameters with sensible defaults
-4. Parameters use types: "string", "number", "boolean", or "path" (for filesystem paths)
+4. Parameters use types: "string", "number", "boolean", "path" (for filesystem paths),
+   or "executable" (for values passed to executable command parameters such as Start-Process -FilePath)
 5. The script body uses PowerShell param() block with the generalized parameters
 6. Includes grammarPatterns array with objects containing:
    - pattern: AGR grammar pattern using $(paramName:wildcard) for strings/paths or $(paramName:number) for numbers
@@ -273,7 +274,7 @@ Return ONLY a JSON object matching this schema (no markdown fences, no explanati
   "description": "what this script does",
   "displayName": "Human Readable Name",
   "parameters": [
-    { "name": "paramName", "type": "string|number|boolean|path", "required": true|false, "description": "...", "default": "optional default" }
+    { "name": "paramName", "type": "string|number|boolean|path|executable", "required": true|false, "description": "...", "default": "optional default" }
   ],
   "script": {
     "language": "powershell",
