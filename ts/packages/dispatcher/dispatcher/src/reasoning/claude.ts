@@ -1438,6 +1438,8 @@ function getClaudeOptions(
                           "",
                           "BEST PRACTICES:",
                           "- Always include param() block matching scriptParameters",
+                          "- Use script parameter type 'path' for filesystem paths",
+                          "- Use script parameter type 'executable' for values passed to executable command parameters such as Start-Process -FilePath",
                           "- Output objects or text, avoid Format-Table (hard to parse)",
                           "- Use [PSCustomObject] for structured output",
                           "",

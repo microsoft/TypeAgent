@@ -7,6 +7,8 @@ internal object AndroidDeviceAgent {
     const val NAME = "androidDevice"
     const val CHANNEL_NAME = "agent:$NAME"
     const val SCHEMA_ASSET = "typeagent/androidDeviceSchema.ts"
+    private const val AGENT_DESCRIPTION =
+        "Sets alarms and countdown timers, and searches for nearby places, on this Android device."
 
     fun createRegistrationParams(
         conversationId: String,
@@ -16,12 +18,12 @@ internal object AndroidDeviceAgent {
             .put("format", "ts")
             .put("content", schemaContent)
         val schema = JSONObject()
-            .put("description", "Sets alarms and countdown timers on this Android device.")
+            .put("description", AGENT_DESCRIPTION)
             .put("schemaType", "AndroidDeviceAction")
             .put("schemaFile", schemaFile)
         val manifest = JSONObject()
             .put("emojiChar", "\u23F0")
-            .put("description", "Sets alarms and countdown timers on this Android device.")
+            .put("description", AGENT_DESCRIPTION)
             .put("defaultEnabled", true)
             .put("schemaDefaultEnabled", true)
             .put("actionDefaultEnabled", true)
@@ -71,6 +73,14 @@ internal object AndroidDeviceAgent {
                 AndroidDeviceActionParseResult.Success(AndroidDeviceAction.Timer(parsed))
             }
 
+            "searchNearby" -> {
+                val parsed = parseSearchNearbyActionPayload(parameters)
+                    ?: return AndroidDeviceActionParseResult.ActionError(
+                        "Invalid searchNearby parameters."
+                    )
+                AndroidDeviceActionParseResult.Success(AndroidDeviceAction.SearchNearby(parsed))
+            }
+
             else -> AndroidDeviceActionParseResult.ActionError(
                 "Unsupported Android agent action: $actionName"
             )
@@ -92,6 +102,7 @@ internal object AndroidDeviceAgent {
 internal sealed interface AndroidDeviceAction {
     data class Alarm(val action: SetAlarmAction) : AndroidDeviceAction
     data class Timer(val action: SetTimerAction) : AndroidDeviceAction
+    data class SearchNearby(val action: SearchNearbyAction) : AndroidDeviceAction
 }
 
 internal sealed interface AndroidDeviceActionParseResult {

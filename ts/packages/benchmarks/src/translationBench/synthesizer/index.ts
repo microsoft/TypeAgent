@@ -19,3 +19,4 @@ export * from "./emptyGoldUtterance.js";
 export * from "./goldParameterHygiene.js";
 export * from "./actionValidation.js";
 export * from "./negativeFairness.js";
+export * from "./goldSchema.js";

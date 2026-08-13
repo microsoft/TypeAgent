@@ -66,10 +66,10 @@ test("StudioServiceSandboxSource delegates lifecycle + routes sandbox events", a
     });
     const source = new StudioServiceSandboxSource(connection);
     try {
-        assert.equal(await connection.connect(), true);
         let changes = 0;
         source.onSandboxChanged(() => (changes += 1));
 
+        assert.equal(await connection.connect(), true);
         assert.equal((await source.listSandboxes()).length, 1);
         const started = await source.startSandbox({ id: "s1" });
         assert.equal(started.id, "s1");

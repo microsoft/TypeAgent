@@ -13,6 +13,19 @@ export {
 } from "./config.js";
 
 export {
+    installDebugBridge,
+    type DebugBridge,
+    type DebugBridgeOptions,
+    type DebugModule,
+} from "./debugBridge.js";
+
+export {
+    JsonlLogExporter,
+    resolveJsonlLogPath,
+    type JsonlLogExporterOptions,
+} from "./jsonlLogExporter.js";
+
+export {
     createTelemetryLifecycle,
     TelemetryLifecycleClosedError,
     TelemetryShutdownTimeoutError,
@@ -37,6 +50,7 @@ export {
 
 export {
     createProcessResource,
+    TYPEAGENT_PROCESS_NAME_ATTRIBUTE,
     type ProcessResourceOptions,
 } from "./resources.js";
 
