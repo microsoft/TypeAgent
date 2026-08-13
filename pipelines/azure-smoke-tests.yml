@@ -206,13 +206,22 @@ jobs:
 
       # Playwright browser download and tsc do not share a write path.
       # Overlap them so the longer of the two sets the wait, not the sum.
+      #
+      # Scope the work to what shell + CLI smoke actually need:
+      #   * playwright.config.ts only defines a chromium project, and
+      #     shell:smoke launches Electron (not every browser binary).
+      #     Installing chromium alone is enough for shell:smoke and for
+      #     the full shell:test suite on main/MQ.
+      #   * fluid-build agent-shell|agent-cli --dep covers the packages
+      #     the smoke steps exercise.  Full monorepo build stays on the
+      #     live_linux job (main/MQ) and on build_ts.
       - bash: |
           set -euo pipefail
-          (cd packages/shell && pnpm exec playwright install --with-deps) &
+          (cd packages/shell && pnpm exec playwright install --with-deps chromium) &
           PW_PID=$!
-          npm run build
+          pnpm exec fluid-build "agent-shell|agent-cli" -t build --dep
           wait "$PW_PID"
-        displayName: Build + Playwright install (overlapped)
+        displayName: Build shell+cli + Playwright chromium (overlapped)
         workingDirectory: $(buildDirectory)
 
       # Single federated (WIF) login for the whole job. addSpnToEnvironment
@@ -321,13 +330,15 @@ jobs:
         workingDirectory: $(buildDirectory)
         condition: always()
 
-  # Same suites as before, but not after shell smoke on the Linux agent.
-  # continueOnError matches the previous step: a live failure does not fail
-  # the required pipeline. The pipeline still waits for this job to finish.
+  # Live integration tests.  continueOnError so a live failure never fails
+  # the required pipeline — but the parent GitHub check still waited for
+  # this job (~36 min on 7e4135eff, ~13 min past Windows smoke).  Skip on
+  # PullRequest; run on main and gh-readonly-queue/main/* so merge still
+  # gets the signal.  Full monorepo build stays here (live hits many packages).
   - job: live_linux
     displayName: Live tests (Linux)
     dependsOn: detect_changes
-    condition: and(succeeded(), eq(dependencies.detect_changes.outputs['detect.tsChanged'], 'true'))
+    condition: and(succeeded(), eq(dependencies.detect_changes.outputs['detect.tsChanged'], 'true'), ne(variables['Build.Reason'], 'PullRequest'))
     continueOnError: true
     timeoutInMinutes: 90
     pool:

@@ -20,13 +20,16 @@ only need `HEAD` to install/build/test.
 - `build-package-shell`: unchanged merge gate — all 3 OS still package.
 - `pipelines/azure-smoke-tests.yml`:
   - detect job: `fetchDepth: 2`
-  - Playwright install overlaps `npm run build` on the smoke agents
-  - `test:live` is a parallel Linux job (still runs; `continueOnError`
-    unchanged). The required Linux smoke job no longer waits for it.
+  - Smoke agents overlap Playwright **chromium** install with
+    `fluid-build agent-shell|agent-cli --dep` (not full monorepo build,
+    not every browser binary). `playwright.config.ts` only defines
+    chromium; `shell:smoke` launches Electron.
+  - `test:live` is a parallel Linux job with `continueOnError`. It runs
+    on **main and merge-queue only** — not on PullRequest. A live failure
+    never blocked the PR, but the parent GitHub check stayed queued until
+    live finished (~13 min past Windows smoke on `7e4135eff`).
   - Windows PRs run `shell:smoke` (same electron smoke as Linux). Full
-    `shell:test` still runs on main and the merge-queue CI trigger. The
-    parent GitHub check stays queued until this Windows leg finishes —
-    that was the 33 min pole on SHA `82791dcf4`.
+    `shell:test` still runs on main and the merge-queue CI trigger.
 
 ## Job counts (from the shipped helper)
 

@@ -21,6 +21,7 @@ import {
     shouldRunBuildTsRatchet,
     shouldRunShellPackage,
     windowsShellSuite,
+    shouldRunLiveTests,
 } from "../prCiScope.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -264,11 +265,19 @@ test("Windows merge-gate jobs exclude the workspace from Defender", () => {
     assert.match(smoke, /npm run \$\(windowsShellSuite\)/);
 });
 
-test("ADO smoke overlaps Playwright with build and runs live tests in parallel", () => {
+test("ADO smoke overlaps Playwright chromium with shell+cli build", () => {
     const yaml = fs.readFileSync(azureSmokeYml, "utf8");
-    assert.match(yaml, /Build \+ Playwright install \(overlapped\)/);
-    assert.match(yaml, /job:\s*live_linux/);
-    assert.match(yaml, /npm run test:live/);
+    assert.match(
+        yaml,
+        /Build shell\+cli \+ Playwright chromium \(overlapped\)/,
+    );
+    assert.match(yaml, /playwright install --with-deps chromium/);
+    assert.match(yaml, /fluid-build "agent-shell\|agent-cli" -t build --dep/);
+    assert.equal(
+        /playwright install --with-deps(?! chromium)/.test(yaml),
+        false,
+        "smoke must not download every Playwright browser",
+    );
     const liveAt = yaml.indexOf("job: live_linux");
     const shellAt = yaml.indexOf("job: shell_and_cli");
     assert.ok(liveAt > shellAt, "live_linux must be its own job");
@@ -277,5 +286,42 @@ test("ADO smoke overlaps Playwright with build and runs live tests in parallel",
         shellChunk.includes("npm run test:live"),
         false,
         "Linux smoke job must not wait on test:live",
+    );
+    // Full monorepo build stays on the live job (main/MQ only).
+    const liveChunk = yaml.slice(liveAt);
+    assert.match(liveChunk, /npm run build/);
+});
+
+test("ADO live tests skip PRs; still run on main and merge-queue", () => {
+    assert.equal(shouldRunLiveTests("PullRequest"), false);
+    assert.equal(shouldRunLiveTests("IndividualCI"), true);
+    assert.equal(shouldRunLiveTests("Manual"), true);
+    const pr = execFileSync(
+        process.execPath,
+        [scriptPath, "--run-live-tests"],
+        {
+            env: { ...process.env, BUILD_REASON: "PullRequest" },
+            encoding: "utf8",
+        },
+    ).trim();
+    const ci = execFileSync(
+        process.execPath,
+        [scriptPath, "--run-live-tests"],
+        {
+            env: { ...process.env, BUILD_REASON: "IndividualCI" },
+            encoding: "utf8",
+        },
+    ).trim();
+    assert.equal(pr, "false");
+    assert.equal(ci, "true");
+    const yaml = fs.readFileSync(azureSmokeYml, "utf8");
+    assert.match(yaml, /job:\s*live_linux/);
+    assert.match(yaml, /npm run test:live/);
+    // Job condition must exclude PullRequest so the parent check is not held.
+    const liveAt = yaml.indexOf("job: live_linux");
+    const liveHead = yaml.slice(liveAt, liveAt + 600);
+    assert.match(
+        liveHead,
+        /ne\(variables\['Build\.Reason'\],\s*'PullRequest'\)/,
     );
 });
