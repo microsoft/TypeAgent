@@ -4,7 +4,10 @@
 import type { ActionContext, ActionResult } from "@typeagent/agent-sdk";
 import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { homedir } from "os";
-import { executeScript } from "../execution/powershellRunner.mjs";
+import {
+    executeScript,
+    type ScriptParameterRole,
+} from "../execution/powershellRunner.mjs";
 import type { PowerShellAgentContext } from "../types/powerShellAgentContext.mjs";
 import {
     createPowerShellExecutionFailure,
@@ -17,20 +20,34 @@ export type PowerShellAction = {
     parameters?: Record<string, unknown>;
 };
 
-export type StaticPowerShellActionDefinition = {
+type ActionParameters<
+    TAction extends { actionName: string; parameters: Record<string, unknown> },
+    TName extends TAction["actionName"],
+> = Extract<TAction, { actionName: TName }>["parameters"];
+
+export type StaticPowerShellActionDefinition<
+    TParameterName extends string = string,
+> = {
     script: string;
     allowedCmdlets: readonly string[];
     allowedPaths?: readonly string[];
+    parameterRoles?: Partial<Record<TParameterName, ScriptParameterRole>>;
     allowedModules?: readonly string[];
     networkAccess?: boolean;
     maxExecutionTime?: number;
     confirmation?: string;
 };
 
-export type NamespaceActionDefinitions<TAction extends { actionName: string }> =
-    {
-        [Name in TAction["actionName"]]: StaticPowerShellActionDefinition;
-    };
+export type NamespaceActionDefinitions<
+    TAction extends {
+        actionName: string;
+        parameters: Record<string, unknown>;
+    },
+> = {
+    [Name in TAction["actionName"]]: StaticPowerShellActionDefinition<
+        Extract<keyof ActionParameters<TAction, Name>, string>
+    >;
+};
 
 export interface PowerShellNamespaceActionHandler {
     readonly schemaName: string;
@@ -43,7 +60,10 @@ export interface PowerShellNamespaceActionHandler {
 }
 
 export function createPowerShellNamespaceActionHandler<
-    TAction extends { actionName: string },
+    TAction extends {
+        actionName: string;
+        parameters: Record<string, unknown>;
+    },
 >(
     schemaName: string,
     definitions: NamespaceActionDefinitions<TAction>,
@@ -89,6 +109,9 @@ export function createPowerShellNamespaceActionHandler<
             const result = await executeScript({
                 script: definition.script,
                 parameters: action.parameters ?? {},
+                ...(definition.parameterRoles
+                    ? { parameterRoles: definition.parameterRoles }
+                    : {}),
                 sandbox: {
                     allowedCmdlets: [...definition.allowedCmdlets],
                     allowedPaths: [...(definition.allowedPaths ?? [])],

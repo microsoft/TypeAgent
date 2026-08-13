@@ -7,6 +7,28 @@ import type { ScriptRecipe } from "../src/types/scriptRecipe.js";
 
 class MockStorage implements Storage {
     private data = new Map<string, string>();
+    private writeFailure:
+        | {
+              path: string;
+              remainingWrites: number;
+              error: Error;
+              beforeFailure?: () => Promise<void>;
+          }
+        | undefined;
+
+    failWriteAfter(
+        path: string,
+        remainingWrites: number,
+        error: Error,
+        beforeFailure?: () => Promise<void>,
+    ): void {
+        this.writeFailure = {
+            path,
+            remainingWrites,
+            error,
+            ...(beforeFailure ? { beforeFailure } : {}),
+        };
+    }
 
     async read(storagePath: string): Promise<Uint8Array>;
     async read(
@@ -25,6 +47,15 @@ class MockStorage implements Storage {
     }
 
     async write(storagePath: string, data: string | Uint8Array): Promise<void> {
+        if (this.writeFailure?.path === storagePath) {
+            if (this.writeFailure.remainingWrites === 0) {
+                const { error, beforeFailure } = this.writeFailure;
+                this.writeFailure = undefined;
+                await beforeFailure?.();
+                throw error;
+            }
+            this.writeFailure.remainingWrites--;
+        }
         this.data.set(
             storagePath,
             typeof data === "string" ? data : new TextDecoder().decode(data),
@@ -105,6 +136,81 @@ describe("PowerShellStore capability lifecycle", () => {
         ).resolves.toBe("showPorts");
         await expect(store.listPending()).resolves.toEqual([]);
         expect(store.hasFlow("showPorts")).toBe(true);
+    });
+
+    it("removes partial flow state when save fails", async () => {
+        const storage = new MockStorage();
+        const store = new PowerShellStore(storage);
+        await store.initialize();
+        storage.failWriteAfter(
+            "scripts/showPorts.ps1",
+            0,
+            new Error("script write failed"),
+        );
+
+        await expect(
+            store.saveFlow(createRecipe(), "reasoning"),
+        ).rejects.toThrow("script write failed");
+        expect(store.hasFlow("showPorts")).toBe(false);
+        await expect(storage.exists("flows/showPorts.flow.json")).resolves.toBe(
+            false,
+        );
+        await expect(storage.exists("scripts/showPorts.ps1")).resolves.toBe(
+            false,
+        );
+    });
+
+    it("preserves unrelated flows when a concurrent save fails", async () => {
+        const storage = new MockStorage();
+        const store = new PowerShellStore(storage);
+        await store.initialize();
+        storage.failWriteAfter(
+            "scripts/failingFlow.ps1",
+            0,
+            new Error("script write failed"),
+            async () => {
+                await store.saveFlow(
+                    createRecipe("concurrentFlow"),
+                    "reasoning",
+                );
+            },
+        );
+
+        await expect(
+            store.saveFlow(createRecipe("failingFlow"), "reasoning"),
+        ).rejects.toThrow("script write failed");
+        expect(store.hasFlow("failingFlow")).toBe(false);
+        expect(store.hasFlow("concurrentFlow")).toBe(true);
+        await expect(store.getScript("concurrentFlow")).resolves.toBe(
+            "Get-NetTCPConnection -State Listen",
+        );
+    });
+
+    it("restores flow state when an update fails", async () => {
+        const storage = new MockStorage();
+        const store = new PowerShellStore(storage);
+        await store.initialize();
+        await store.saveFlow(createRecipe(), "reasoning");
+        storage.failWriteAfter(
+            "flows/showPorts.flow.json",
+            0,
+            new Error("flow definition write failed"),
+        );
+
+        await expect(
+            store.updateFlowScript("showPorts", "Write-Output 'changed'", [
+                "Write-Output",
+            ]),
+        ).rejects.toThrow("flow definition write failed");
+        await expect(store.getScript("showPorts")).resolves.toBe(
+            "Get-NetTCPConnection -State Listen",
+        );
+        await expect(store.getFlow("showPorts")).resolves.toMatchObject({
+            sandbox: {
+                allowedCmdlets: ["Get-NetTCPConnection"],
+                allowedModules: ["NetTCPIP"],
+            },
+        });
     });
 
     it("adds new grammar patterns without duplicating existing ones", async () => {

@@ -39,6 +39,7 @@ if ($Id -gt 0) { Stop-Process -Id $Id } else { Stop-Process -Name $Name }`,
 if ($Arguments) { Start-Process -FilePath $Path -ArgumentList $Arguments } else { Start-Process -FilePath $Path }`,
         allowedCmdlets: ["Start-Process"],
         allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
+        parameterRoles: { path: "executable" },
         confirmation: "Start the requested process?",
     },
     waitProcess: {

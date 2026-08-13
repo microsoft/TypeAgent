@@ -34,6 +34,10 @@ if ([System.IO.Directory]::Exists($SourcePath)) {
 }`,
         allowedCmdlets: ["Add-Type", "Out-Null"],
         allowedPaths,
+        parameterRoles: {
+            sourcePath: "path",
+            destinationPath: "path",
+        },
         confirmation: "Create the requested ZIP archive?",
     },
     expand: {
@@ -44,6 +48,10 @@ if (-not $DestinationPath) { $DestinationPath = "." }
 [System.IO.Compression.ZipFile]::ExtractToDirectory($ArchivePath, $DestinationPath)`,
         allowedCmdlets: ["Add-Type"],
         allowedPaths,
+        parameterRoles: {
+            archivePath: "path",
+            destinationPath: "path",
+        },
         confirmation: "Extract the requested archive?",
     },
 } satisfies NamespaceActionDefinitions<PowerShellArchivesActions>;

@@ -7,6 +7,7 @@ import type {
     Storage,
     TokenCachePersistence,
 } from "@typeagent/agent-sdk";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { jest } from "@jest/globals";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -23,6 +24,51 @@ const itOnWindows = process.platform === "win32" ? it : it.skip;
 
 class MemoryStorage implements Storage {
     private readonly files = new Map<string, string>();
+    private readonly writeFailures = new Map<
+        string,
+        { remainingWrites: number; error: Error }
+    >();
+    private readonly writeBlocks = new Map<
+        string,
+        {
+            started: () => void;
+            waitForRelease: Promise<void>;
+        }
+    >();
+    private readonly afterWriteCallbacks = new Map<
+        string,
+        () => void | Promise<void>
+    >();
+
+    failWriteAfter(path: string, remainingWrites: number, error: Error): void {
+        this.writeFailures.set(path, { remainingWrites, error });
+    }
+
+    blockNextWrite(path: string): {
+        started: Promise<void>;
+        release: () => void;
+    } {
+        let markStarted: () => void;
+        let release: () => void;
+        const started = new Promise<void>((resolve) => {
+            markStarted = resolve;
+        });
+        const waitForRelease = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        this.writeBlocks.set(path, {
+            started: () => markStarted!(),
+            waitForRelease,
+        });
+        return {
+            started,
+            release: () => release!(),
+        };
+    }
+
+    afterNextWrite(path: string, callback: () => void | Promise<void>): void {
+        this.afterWriteCallbacks.set(path, callback);
+    }
 
     async read(path: string): Promise<Uint8Array>;
     async read(path: string, options: "utf8" | "base64"): Promise<string>;
@@ -38,10 +84,29 @@ class MemoryStorage implements Storage {
     }
 
     async write(path: string, data: string | Uint8Array): Promise<void> {
+        const block = this.writeBlocks.get(path);
+        if (block) {
+            this.writeBlocks.delete(path);
+            block.started();
+            await block.waitForRelease;
+        }
+        const failure = this.writeFailures.get(path);
+        if (failure) {
+            if (failure.remainingWrites === 0) {
+                this.writeFailures.delete(path);
+                throw failure.error;
+            }
+            failure.remainingWrites--;
+        }
         this.files.set(
             path,
             typeof data === "string" ? data : new TextDecoder().decode(data),
         );
+        const afterWrite = this.afterWriteCallbacks.get(path);
+        if (afterWrite) {
+            this.afterWriteCallbacks.delete(path);
+            await afterWrite();
+        }
     }
 
     async delete(path: string): Promise<void> {
@@ -327,6 +392,75 @@ describe("createAndExecutePowerShellFlow", () => {
                 await rm(directory, { recursive: true, force: true });
             }
         });
+
+        itOnWindows(
+            "does not validate URL file content as a path",
+            async () => {
+                const directory = await mkdtemp(
+                    join(tmpdir(), "typeagent-powershell-url-content-"),
+                );
+                const outputPath = join(directory, "url.txt");
+                try {
+                    const approve = jest.fn(async () => 0);
+                    const { agent, context } = await createAgentHarness(
+                        undefined,
+                        undefined,
+                        undefined,
+                        approve,
+                    );
+
+                    const result = await agent.executeAction?.(
+                        {
+                            schemaName: "powershell.powershell-files",
+                            actionName: "writeFile",
+                            parameters: {
+                                path: outputPath,
+                                content: "https://example.test/api",
+                            },
+                        },
+                        context,
+                    );
+
+                    expect(result).not.toHaveProperty("error");
+                    expect(await readFile(outputPath, "utf8")).toContain(
+                        "https://example.test/api",
+                    );
+                } finally {
+                    await rm(directory, { recursive: true, force: true });
+                }
+            },
+        );
+
+        itOnWindows(
+            "denies a bare executable resolved outside allowed paths",
+            async () => {
+                const approve = jest.fn(async () => 0);
+                const { agent, context } = await createAgentHarness(
+                    undefined,
+                    undefined,
+                    undefined,
+                    approve,
+                );
+
+                const result = await agent.executeAction?.(
+                    {
+                        schemaName: "powershell.powershell-processes",
+                        actionName: "startProcess",
+                        parameters: {
+                            path: "powershell.exe",
+                            arguments: "-NoProfile -Command Get-Process",
+                        },
+                    },
+                    context,
+                );
+
+                expect(result).toMatchObject({
+                    errorCode: "powershell.policyDenied",
+                    retryable: false,
+                });
+                expect(result?.error).toMatch(/Path access denied/i);
+            },
+        );
     });
 
     describe("static network actions", () => {
@@ -672,6 +806,7 @@ describe("createAndExecutePowerShellFlow", () => {
             const result = await executeScript({
                 script: "param([string]$Path)\nGet-Item -LiteralPath $Path",
                 parameters: { Path: "C:\\PROGRA~1" },
+                parameterRoles: { Path: "path" },
                 sandbox: {
                     allowedCmdlets: ["Get-Item"],
                     allowedPaths: ["C:\\Program Files"],
@@ -705,6 +840,7 @@ describe("createAndExecutePowerShellFlow", () => {
                     script: `param([string]$Path)
 Set-Content -LiteralPath $Path -Value "blocked"`,
                     parameters: { Path: blockedPath },
+                    parameterRoles: { Path: "path" },
                     sandbox: {
                         allowedCmdlets: ["Set-Content"],
                         allowedPaths: [allowedDirectory],
@@ -722,4 +858,262 @@ Set-Content -LiteralPath $Path -Value "blocked"`,
             }
         },
     );
+
+    itOnWindows(
+        "derives executable validation from dynamic flow parameter types",
+        async () => {
+            const { agent, storage, context } = await createAgentHarness();
+
+            const result = await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "createAndExecutePowerShellFlow",
+                    parameters: {
+                        actionName: "startNamedExecutable",
+                        description: "Start a named executable",
+                        script: `param([string]$Path)
+Start-Process -FilePath $Path`,
+                        scriptParameters: [
+                            {
+                                name: "Path",
+                                type: "executable",
+                                required: true,
+                                description: "Executable to start",
+                            },
+                        ],
+                        allowedCmdlets: ["Start-Process"],
+                        executionParametersJson: JSON.stringify({
+                            Path: "powershell.exe",
+                        }),
+                    },
+                },
+                context,
+            );
+
+            expect(result).toMatchObject({
+                errorCode: "powershell.policyDenied",
+                retryable: false,
+                error: expect.stringContaining("Path access denied"),
+            });
+            expect(await storage.list("pending")).toEqual([]);
+            expect(
+                await storage.exists("flows/startNamedExecutable.flow.json"),
+            ).toBe(false);
+        },
+    );
+
+    itOnWindows(
+        "returns partial side effects when repair persistence fails",
+        async () => {
+            const { agent, storage, context } = await createAgentHarness();
+            await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "createAndExecutePowerShellFlow",
+                    parameters: {
+                        actionName: "updateFailureFlow",
+                        description: "Test repair persistence failure",
+                        script: "Write-Output 'original'",
+                        allowedCmdlets: ["Write-Output"],
+                        executionParametersJson: "{}",
+                    },
+                },
+                context,
+            );
+            storage.failWriteAfter(
+                "flows/updateFailureFlow.flow.json",
+                0,
+                new Error("flow definition update failed"),
+            );
+
+            const result = await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "repairAndExecutePowerShellFlow",
+                    parameters: {
+                        flowName: "updateFailureFlow",
+                        script: "Write-Output 'repaired'",
+                        allowedCmdlets: ["Write-Output"],
+                        executionParametersJson: "{}",
+                    },
+                },
+                context,
+            );
+
+            expect(result).toMatchObject({
+                errorCode: "powershell.partialSideEffects",
+                retryable: false,
+                mayHaveSideEffects: true,
+                error: expect.stringContaining("flow definition update failed"),
+            });
+            await expect(
+                storage.read("scripts/updateFailureFlow.ps1", "utf8"),
+            ).resolves.toBe("Write-Output 'original'");
+        },
+    );
+
+    itOnWindows(
+        "returns partial side effects when cancelled after repair execution",
+        async () => {
+            const controller = new AbortController();
+            const { agent, storage, context } = await createAgentHarness(
+                undefined,
+                controller.signal,
+            );
+            await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "createAndExecutePowerShellFlow",
+                    parameters: {
+                        actionName: "postExecutionCancellation",
+                        description: "Test post-execution cancellation",
+                        script: "Write-Output 'original'",
+                        allowedCmdlets: ["Write-Output"],
+                        executionParametersJson: "{}",
+                    },
+                },
+                context,
+            );
+            storage.afterNextWrite("index.json", () => controller.abort());
+
+            const result = await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "repairAndExecutePowerShellFlow",
+                    parameters: {
+                        flowName: "postExecutionCancellation",
+                        script: "Write-Output 'repaired'",
+                        allowedCmdlets: ["Write-Output"],
+                        executionParametersJson: "{}",
+                    },
+                },
+                context,
+            );
+
+            expect(result).toMatchObject({
+                errorCode: "powershell.partialSideEffects",
+                retryable: false,
+                mayHaveSideEffects: true,
+                error: expect.stringContaining(
+                    "before the repaired flow could be activated",
+                ),
+            });
+            await expect(
+                storage.read("scripts/postExecutionCancellation.ps1", "utf8"),
+            ).resolves.toBe("Write-Output 'original'");
+        },
+    );
+
+    itOnWindows("preserves success when usage accounting fails", async () => {
+        const { agent, storage, sessionContext, context } =
+            await createAgentHarness();
+        await agent.executeAction?.(
+            {
+                schemaName: "powershell",
+                actionName: "createAndExecutePowerShellFlow",
+                parameters: {
+                    actionName: "usageFailureFlow",
+                    description: "Test usage accounting failure",
+                    script: "Write-Output 'original'",
+                    allowedCmdlets: ["Write-Output"],
+                    executionParametersJson: "{}",
+                },
+            },
+            context,
+        );
+        storage.failWriteAfter(
+            "index.json",
+            1,
+            new Error("usage write failed"),
+        );
+
+        const result = await agent.executeAction?.(
+            {
+                schemaName: "powershell",
+                actionName: "repairAndExecutePowerShellFlow",
+                parameters: {
+                    flowName: "usageFailureFlow",
+                    script: "Write-Output 'repaired'",
+                    allowedCmdlets: ["Write-Output"],
+                    executionParametersJson: "{}",
+                },
+            },
+            context,
+        );
+
+        expect(result).not.toHaveProperty("error");
+        expect(sessionContext.notify).toHaveBeenCalledWith(
+            AppAgentEvent.Warning,
+            expect.stringContaining("usage accounting failed"),
+        );
+    });
+
+    itOnWindows("serializes edits and repairs for the same flow", async () => {
+        const directory = await mkdtemp(
+            join(tmpdir(), "typeagent-powershell-edit-lock-"),
+        );
+        const outputPath = join(directory, "repair.txt");
+        try {
+            const { agent, storage, context } = await createAgentHarness();
+            await agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "createAndExecutePowerShellFlow",
+                    parameters: {
+                        actionName: "serializedFlow",
+                        description: "Test edit and repair serialization",
+                        script: "Write-Output 'original'",
+                        allowedCmdlets: ["Write-Output"],
+                        executionParametersJson: "{}",
+                    },
+                },
+                context,
+            );
+
+            const blockedWrite = storage.blockNextWrite(
+                "scripts/serializedFlow.ps1",
+            );
+            const edit = agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "editPowerShellFlow",
+                    parameters: {
+                        flowName: "serializedFlow",
+                        script: "Write-Output 'edited'",
+                        allowedCmdlets: ["Write-Output"],
+                    },
+                },
+                context,
+            );
+            await blockedWrite.started;
+
+            const repair = agent.executeAction?.(
+                {
+                    schemaName: "powershell",
+                    actionName: "repairAndExecutePowerShellFlow",
+                    parameters: {
+                        flowName: "serializedFlow",
+                        script: `param([string]$Path)
+Set-Content -LiteralPath $Path -Value "repaired"`,
+                        allowedCmdlets: ["Set-Content"],
+                        executionParametersJson: JSON.stringify({
+                            Path: outputPath,
+                        }),
+                    },
+                },
+                context,
+            );
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            await expect(readFile(outputPath, "utf8")).rejects.toThrow();
+
+            blockedWrite.release();
+            expect(await edit).not.toHaveProperty("error");
+            expect(await repair).not.toHaveProperty("error");
+            expect((await readFile(outputPath, "utf8")).trim()).toBe(
+                "repaired",
+            );
+        } finally {
+            await rm(directory, { recursive: true, force: true });
+        }
+    });
 });

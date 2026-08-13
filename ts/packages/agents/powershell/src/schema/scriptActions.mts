@@ -43,7 +43,7 @@ export type CreatePowerShellFlow = {
         // Script parameters
         scriptParameters: {
             name: string;
-            type: "string" | "number" | "boolean" | "path";
+            type: "string" | "number" | "boolean" | "path" | "executable";
             required: boolean;
             description: string;
             default?: string;
@@ -78,7 +78,7 @@ export type CreateAndExecutePowerShellFlow = {
         // Script parameters
         scriptParameters: {
             name: string;
-            type: "string" | "number" | "boolean" | "path";
+            type: "string" | "number" | "boolean" | "path" | "executable";
             required: boolean;
             description: string;
             default?: string;

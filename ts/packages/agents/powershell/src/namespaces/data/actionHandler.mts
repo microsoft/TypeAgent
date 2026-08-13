@@ -19,12 +19,14 @@ if ($PropertyPath) {
 $value`,
         allowedCmdlets: ["Get-Content", "ConvertFrom-Json"],
         allowedPaths,
+        parameterRoles: { path: "path" },
     },
     writeJson: {
         script: `param([string]$Path, [string]$Data)
 $Data | ConvertFrom-Json | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $Path`,
         allowedCmdlets: ["ConvertFrom-Json", "ConvertTo-Json", "Set-Content"],
         allowedPaths,
+        parameterRoles: { path: "path" },
         confirmation: "Write JSON data to the requested file?",
     },
     readCsv: {
@@ -33,12 +35,14 @@ if (-not $Delimiter) { $Delimiter = "," }
 Import-Csv -LiteralPath $Path -Delimiter $Delimiter`,
         allowedCmdlets: ["Import-Csv"],
         allowedPaths,
+        parameterRoles: { path: "path" },
     },
     writeCsv: {
         script: `param([string]$Path, [string]$Data)
 $Data | ConvertFrom-Json | Export-Csv -LiteralPath $Path -NoTypeInformation`,
         allowedCmdlets: ["ConvertFrom-Json", "Export-Csv"],
         allowedPaths,
+        parameterRoles: { path: "path" },
         confirmation: "Write CSV data to the requested file?",
     },
     filterCsv: {
@@ -46,6 +50,7 @@ $Data | ConvertFrom-Json | Export-Csv -LiteralPath $Path -NoTypeInformation`,
 Import-Csv -LiteralPath $Path | Where-Object { $_.$Column -match $Pattern }`,
         allowedCmdlets: ["Import-Csv", "Where-Object"],
         allowedPaths,
+        parameterRoles: { path: "path" },
     },
     convertFormat: {
         script: `param([string]$Input, [string]$Format)
@@ -73,6 +78,7 @@ if ($Format -eq "json") {
             "ConvertTo-Xml",
         ],
         allowedPaths,
+        parameterRoles: { input: "path" },
     },
 } satisfies NamespaceActionDefinitions<PowerShellDataActions>;
 

@@ -82,7 +82,10 @@ function buildTsType(recipe) {
     const paramLines = params
         .map((p) => {
             const opt = p.required === false ? "?" : "";
-            const tsType = p.type === "path" ? "string" : p.type;
+            const tsType =
+                p.type === "path" || p.type === "executable"
+                    ? "string"
+                    : p.type;
             const comment = p.description
                 ? `        // ${p.description}\n`
                 : "";
@@ -97,7 +100,12 @@ function buildTsType(recipe) {
 function buildFlowJson(recipe) {
     const params = {};
     for (const p of recipe.parameters || []) {
-        const def = { type: p.type === "path" ? "string" : p.type };
+        const def = {
+            type:
+                p.type === "path" || p.type === "executable"
+                    ? "string"
+                    : p.type,
+        };
         if (p.required !== undefined) def.required = p.required;
         if (p.default !== undefined) def.default = p.default;
         if (p.description) def.description = p.description;

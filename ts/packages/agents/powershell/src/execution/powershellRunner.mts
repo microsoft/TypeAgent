@@ -33,9 +33,12 @@ const packageRoot = findPackageRoot();
 
 const MAX_OUTPUT_SIZE = 1024 * 1024; // 1MB
 
+export type ScriptParameterRole = "path" | "executable";
+
 export interface ScriptExecutionRequest {
     script: string;
     parameters: Record<string, unknown>;
+    parameterRoles?: Partial<Record<string, ScriptParameterRole>>;
     sandbox: {
         allowedCmdlets: string[];
         allowedPaths: string[];
@@ -73,6 +76,8 @@ export async function executeScript(
         request.script,
         "-ParametersJson",
         JSON.stringify(request.parameters),
+        "-ParameterRolesJson",
+        JSON.stringify(request.parameterRoles ?? {}),
         "-AllowedCmdletsJson",
         JSON.stringify(request.sandbox.allowedCmdlets),
         "-NetworkAccess",

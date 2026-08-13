@@ -13,6 +13,8 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$ParametersJson,
 
+    [string]$ParameterRolesJson = '{}',
+
     [Parameter(Mandatory=$true)]
     [string]$AllowedCmdletsJson,
 
@@ -65,9 +67,51 @@ function Get-CanonicalFileSystemPath {
     return Remove-TrailingDirectorySeparator ([System.IO.Path]::GetFullPath($canonicalPath))
 }
 
+function Get-CanonicalExecutablePath {
+    param([string]$Path)
+
+    if (
+        [System.IO.Path]::IsPathRooted($Path) -or
+        $Path.Contains('\') -or
+        $Path.Contains('/') -or
+        $Path.StartsWith('.')
+    ) {
+        return Get-CanonicalFileSystemPath $Path
+    }
+
+    $commands = @(Get-Command -Name $Path -CommandType Application -ErrorAction Stop)
+    if ($commands.Count -ne 1 -or -not $commands[0].Path) {
+        throw "Unable to resolve executable '$Path' to one application."
+    }
+    return Get-CanonicalFileSystemPath $commands[0].Path
+}
+
+function Test-AllowedFileSystemPath {
+    param(
+        [string]$Path,
+        [string[]]$AllowedPaths
+    )
+
+    foreach ($allowedPath in $AllowedPaths) {
+        if (
+            $Path.Equals($allowedPath, [System.StringComparison]::OrdinalIgnoreCase) -or
+            $Path.StartsWith("$allowedPath\", [System.StringComparison]::OrdinalIgnoreCase) -or
+            $Path.StartsWith("$allowedPath/", [System.StringComparison]::OrdinalIgnoreCase)
+        ) {
+            return $true
+        }
+    }
+    return $false
+}
+
 try {
     $allowedCmdlets = $AllowedCmdletsJson | ConvertFrom-Json
     $params = $ParametersJson | ConvertFrom-Json
+    $parameterRoles = $ParameterRolesJson | ConvertFrom-Json
+    if ($null -eq $parameterRoles -or $parameterRoles -isnot [pscustomobject]) {
+        Write-Error "Parameter roles must be a JSON object."
+        exit 1
+    }
     # Parse allowed paths - must handle array properly to avoid PowerShell array unwrapping issues
     $parsedPaths = $AllowedPathsJson | ConvertFrom-Json
     if ($parsedPaths -is [array]) {
@@ -96,46 +140,57 @@ try {
         }
     }
 
-    # Validate path parameters against allowed paths
-    # NOTE: Only validate paths that look like absolute or relative file paths.
-    # Skip short single-word strings (like "videos", "downloads") that might be
-    # library names - let the script handle those with its own resolution logic.
-    if ($expandedAllowedPaths.Count -gt 0) {
-        foreach ($prop in $params.PSObject.Properties) {
-            $val = $prop.Value
-            if ($val -is [string]) {
-                # Skip empty values
-                if (-not $val -or $val -match '^\s*$') { continue }
+    $roleProperties = @($parameterRoles.PSObject.Properties)
+    if ($roleProperties.Count -gt 0 -and $expandedAllowedPaths.Count -eq 0) {
+        Write-Error "Path parameter roles require at least one allowed path."
+        exit 1
+    }
 
-                # Skip short single-word values that look like library names
-                # (no slashes, no drive letter, not starting with dot)
-                if ($val -notmatch '[/\\]' -and $val -notmatch '^[a-zA-Z]:' -and $val -notmatch '^\.' -and $val.Length -lt 50) {
-                    continue
-                }
+    foreach ($roleProperty in $roleProperties) {
+        $role = [string]$roleProperty.Value
+        if ($role -ne 'path' -and $role -ne 'executable') {
+            Write-Error "Unsupported parameter role '$role' for '$($roleProperty.Name)'."
+            exit 1
+        }
 
-                try {
-                    $resolvedPath = Get-CanonicalFileSystemPath $val
-                } catch {
-                    Write-Error "Invalid path parameter '$($prop.Name)': $_"
-                    exit 1
-                }
-                $pathAllowed = $false
-                foreach ($ap in $expandedAllowedPaths) {
-                    if (
-                        $resolvedPath.Equals($ap, [System.StringComparison]::OrdinalIgnoreCase) -or
-                        $resolvedPath.StartsWith("$ap\", [System.StringComparison]::OrdinalIgnoreCase) -or
-                        $resolvedPath.StartsWith("$ap/", [System.StringComparison]::OrdinalIgnoreCase)
-                    ) {
-                        $pathAllowed = $true
-                        break
-                    }
-                }
-                # ENFORCEMENT: Block execution if path not allowed
-                if (-not $pathAllowed) {
-                    Write-Error "Path access denied: '$resolvedPath' is not in allowedPaths. Allowed paths: $($expandedAllowedPaths -join ', ')"
-                    exit 1
-                }
+        $parameterProperty = @(
+            $params.PSObject.Properties |
+                Where-Object { $_.Name -ieq $roleProperty.Name }
+        ) | Select-Object -First 1
+        if ($null -eq $parameterProperty) {
+            continue
+        }
+
+        $value = $parameterProperty.Value
+        if ($null -eq $value -or $value -eq '') {
+            continue
+        }
+        if ($value -isnot [string]) {
+            Write-Error "Parameter '$($parameterProperty.Name)' with role '$role' must be a string."
+            exit 1
+        }
+        if ([System.Management.Automation.WildcardPattern]::ContainsWildcardCharacters($value)) {
+            Write-Error "Parameter '$($parameterProperty.Name)' with role '$role' cannot contain wildcard characters."
+            exit 1
+        }
+        if ($value -match '^[a-zA-Z][a-zA-Z0-9-]*:' -and $value -notmatch '^[a-zA-Z]:[\\/]') {
+            Write-Error "Parameter '$($parameterProperty.Name)' uses an unsupported provider or URI path."
+            exit 1
+        }
+
+        try {
+            $resolvedPath = if ($role -eq 'executable') {
+                Get-CanonicalExecutablePath $value
+            } else {
+                Get-CanonicalFileSystemPath $value
             }
+        } catch {
+            Write-Error "Invalid $role parameter '$($parameterProperty.Name)': $_"
+            exit 1
+        }
+        if (-not (Test-AllowedFileSystemPath $resolvedPath $expandedAllowedPaths)) {
+            Write-Error "Path access denied: '$resolvedPath' is not in allowedPaths. Allowed paths: $($expandedAllowedPaths -join ', ')"
+            exit 1
         }
     }
 

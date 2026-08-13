@@ -20,6 +20,7 @@ if ($Filter) {
 }`,
         allowedCmdlets: ["Get-ChildItem"],
         allowedPaths,
+        parameterRoles: { path: "path" },
     },
     readFile: {
         script: `param([string]$Path, [int]$Tail, [int]$Head)
@@ -32,6 +33,7 @@ if ($Tail -gt 0) {
 }`,
         allowedCmdlets: ["Get-Content"],
         allowedPaths,
+        parameterRoles: { path: "path" },
     },
     writeFile: {
         script: `param([string]$Path, [string]$Content, [bool]$Append)
@@ -42,6 +44,7 @@ if ($Append) {
 }`,
         allowedCmdlets: ["Add-Content", "Set-Content"],
         allowedPaths,
+        parameterRoles: { path: "path" },
         confirmation: "Write content to the requested file?",
     },
     copyFile: {
@@ -49,6 +52,7 @@ if ($Append) {
 Copy-Item -LiteralPath $Source -Destination $Destination -Recurse:$Recurse`,
         allowedCmdlets: ["Copy-Item"],
         allowedPaths,
+        parameterRoles: { source: "path", destination: "path" },
         confirmation: "Copy the requested file or directory?",
     },
     moveFile: {
@@ -56,6 +60,7 @@ Copy-Item -LiteralPath $Source -Destination $Destination -Recurse:$Recurse`,
 Move-Item -LiteralPath $Source -Destination $Destination`,
         allowedCmdlets: ["Move-Item"],
         allowedPaths,
+        parameterRoles: { source: "path", destination: "path" },
         confirmation: "Move or rename the requested file or directory?",
     },
     deleteFile: {
@@ -63,6 +68,7 @@ Move-Item -LiteralPath $Source -Destination $Destination`,
 Remove-Item -LiteralPath $Path -Recurse:$Recurse`,
         allowedCmdlets: ["Remove-Item"],
         allowedPaths,
+        parameterRoles: { path: "path" },
         confirmation: "Delete the requested file or directory?",
     },
     testPath: {
@@ -70,6 +76,7 @@ Remove-Item -LiteralPath $Path -Recurse:$Recurse`,
 Test-Path -LiteralPath $Path`,
         allowedCmdlets: ["Test-Path"],
         allowedPaths,
+        parameterRoles: { path: "path" },
     },
     findText: {
         script: `param([string]$Pattern, [string]$Path, [string]$Include)
@@ -81,6 +88,7 @@ if ($Include) {
 }`,
         allowedCmdlets: ["Get-ChildItem", "Select-String"],
         allowedPaths,
+        parameterRoles: { path: "path" },
     },
     newItem: {
         script: `param([string]$Path, [string]$ItemType)
@@ -88,6 +96,7 @@ $type = if ($ItemType -eq "directory") { "Directory" } else { "File" }
 New-Item -Path $Path -ItemType $type`,
         allowedCmdlets: ["New-Item"],
         allowedPaths,
+        parameterRoles: { path: "path" },
         confirmation: "Create the requested file or directory?",
     },
 } satisfies NamespaceActionDefinitions<PowerShellFilesActions>;
