@@ -83,16 +83,23 @@ export function shouldRunShellPackage({ eventName, tsFilter }) {
 }
 
 /**
- * Live integration tests (`test:live`).  They already use continueOnError
- * on the required ADO pipeline, so a live failure never blocked the PR —
- * but the parent GitHub check stayed queued until they finished (~36 min
- * on SHA 7e4135eff, ~13 min after Windows smoke).  Skip them on
- * PullRequest; still run on main and merge-queue CI so merge keeps the
- * signal.  Windows shell stays on full `shell:test` for every trigger.
+ * Live integration tests (`test:live`).  Same suite on every ADO trigger
+ * that has ts changes — PullRequest, main, and merge-queue.  Baseline ran
+ * live on the Linux smoke leg with continueOnError; we keep that blocking
+ * semantics and only move live to a parallel job so shell does not wait
+ * on it serially.  Do not gate this off PullRequest.
  */
-export function shouldRunLiveTests(buildReason) {
-    return buildReason !== "PullRequest";
+export function shouldRunLiveTests(_buildReason) {
+    return true;
 }
+
+/**
+ * Package-name regexp for fluid-build of packages that define test:live
+ * (plus --dep).  Kept here so tests fail if the live job drifts to a full
+ * monorepo build or drops a live package.
+ */
+export const LIVE_TEST_PACKAGE_FILTER =
+    "agent-api|default-agent-provider|@typeagent/(aiclient|knowpro|knowledge-processor|azure-ai-foundry)";
 
 export function resolveScope(ctx) {
     return {
@@ -217,6 +224,10 @@ function main(argv = process.argv.slice(2), env = process.env) {
         process.stdout.write(
             `${shouldRunLiveTests(env.BUILD_REASON ?? env.EVENT_NAME ?? "")}\n`,
         );
+        return 0;
+    }
+    if (argv.includes("--live-package-filter")) {
+        process.stdout.write(`${LIVE_TEST_PACKAGE_FILTER}\n`);
         return 0;
     }
     const scope = resolveScope(readCtxFromEnv(env));

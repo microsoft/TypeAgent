@@ -21,6 +21,7 @@ import {
     shouldRunBuildTsRatchet,
     shouldRunShellPackage,
     shouldRunLiveTests,
+    LIVE_TEST_PACKAGE_FILTER,
 } from "../prCiScope.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -283,18 +284,54 @@ test("ADO smoke overlaps Playwright chromium with shell+cli build", () => {
     const shellAt = yaml.indexOf("job: shell_and_cli");
     assert.ok(liveAt > shellAt, "live_linux must be its own job");
     const shellChunk = yaml.slice(shellAt, liveAt);
+    // Shell job must not own a Live Tests step (parallel live_linux does).
     assert.equal(
-        shellChunk.includes("npm run test:live"),
+        /displayName:\s*Live Tests/.test(shellChunk),
         false,
-        "Linux smoke job must not wait on test:live",
+        "Linux smoke job must not run Live Tests serially",
     );
-    // Full monorepo build stays on the live job (main/MQ only).
+    assert.equal(
+        /^\s*npm run test:live\s*$/m.test(shellChunk),
+        false,
+        "Linux smoke job must not invoke npm run test:live",
+    );
+    // Live job builds only packages that define test:live (+deps).
     const liveChunk = yaml.slice(liveAt);
-    assert.match(liveChunk, /npm run build/);
+    assert.match(liveChunk, /Build live packages \(\+deps\)/);
+    assert.match(liveChunk, /npm run test:live/);
+    assert.match(liveChunk, /--live-package-filter/);
+    assert.match(liveChunk, /fluid-build "\$FILTER" -t build --dep/);
+    const filterOut = execFileSync(
+        process.execPath,
+        [scriptPath, "--live-package-filter"],
+        { encoding: "utf8" },
+    ).trim();
+    assert.equal(filterOut, LIVE_TEST_PACKAGE_FILTER);
+    // Every package that ships test:live must appear in the filter.
+    const packagesRoot = path.join(repoRoot, "ts/packages");
+    const livePkgNames = [];
+    for (const ent of fs.readdirSync(packagesRoot, { withFileTypes: true })) {
+        if (!ent.isDirectory()) continue;
+        const pkgPath = path.join(packagesRoot, ent.name, "package.json");
+        if (!fs.existsSync(pkgPath)) continue;
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+        if (pkg.scripts && pkg.scripts["test:live"]) {
+            livePkgNames.push(pkg.name);
+        }
+    }
+    assert.ok(livePkgNames.length >= 1, "expected at least one test:live package");
+    for (const name of livePkgNames) {
+        // Filter is a regexp; bare names and @scope/(a|b|c) forms both match.
+        const re = new RegExp(LIVE_TEST_PACKAGE_FILTER);
+        assert.ok(
+            re.test(name),
+            `LIVE_TEST_PACKAGE_FILTER must match package ${name}`,
+        );
+    }
 });
 
-test("ADO live tests skip PRs; still run on main and merge-queue", () => {
-    assert.equal(shouldRunLiveTests("PullRequest"), false);
+test("ADO live tests run on PullRequest (same suite as main baseline)", () => {
+    assert.equal(shouldRunLiveTests("PullRequest"), true);
     assert.equal(shouldRunLiveTests("IndividualCI"), true);
     assert.equal(shouldRunLiveTests("Manual"), true);
     const pr = execFileSync(
@@ -313,16 +350,49 @@ test("ADO live tests skip PRs; still run on main and merge-queue", () => {
             encoding: "utf8",
         },
     ).trim();
-    assert.equal(pr, "false");
+    assert.equal(pr, "true");
     assert.equal(ci, "true");
     const yaml = fs.readFileSync(azureSmokeYml, "utf8");
     assert.match(yaml, /job:\s*live_linux/);
     assert.match(yaml, /npm run test:live/);
-    // Job condition must exclude PullRequest so the parent check is not held.
+    // Must not gate live off PullRequest (suite parity with baseline).
     const liveAt = yaml.indexOf("job: live_linux");
     const liveHead = yaml.slice(liveAt, liveAt + 600);
+    assert.equal(
+        /ne\(\s*variables\s*\[\s*['"]Build\.Reason['"]\s*\]\s*,\s*['"]PullRequest['"]\s*\)/.test(
+            liveHead,
+        ),
+        false,
+        "live_linux must run on PullRequest",
+    );
     assert.match(
         liveHead,
-        /ne\(variables\['Build\.Reason'\],\s*'PullRequest'\)/,
+        /condition:\s*and\(succeeded\(\),\s*eq\(dependencies\.detect_changes\.outputs\['detect\.tsChanged'\],\s*'true'\)\)/,
+    );
+    // Fail closed: if someone reintroduces a PR skip, this test fails.
+    assert.equal(
+        yaml.includes("ne(variables['Build.Reason'], 'PullRequest')"),
+        false,
+        "no Build.Reason PullRequest exclusion anywhere in smoke YAML",
+    );
+});
+
+test("PR smoke suite parity with main baseline (CLI, shell smoke/test, live)", () => {
+    const yaml = fs.readFileSync(azureSmokeYml, "utf8");
+    // Linux CLI smoke
+    assert.match(yaml, /Test CLI - smoke/);
+    assert.match(yaml, /npm run start:dev/);
+    // Linux shell:smoke
+    assert.match(yaml, /Shell Tests - smoke \(Linux\)/);
+    assert.match(yaml, /npm run shell:smoke/);
+    // Windows full shell:test
+    assert.match(yaml, /Shell Tests - full \(Windows\)/);
+    assert.match(yaml, /npm run shell:test/);
+    // Linux test:live on PR path (parallel job, not PR-skipped)
+    assert.match(yaml, /job:\s*live_linux/);
+    assert.match(yaml, /npm run test:live/);
+    assert.equal(
+        yaml.includes("ne(variables['Build.Reason'], 'PullRequest')"),
+        false,
     );
 });

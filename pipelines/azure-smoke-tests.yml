@@ -207,7 +207,7 @@ jobs:
       #     suites still use the Playwright runner). Chromium alone is enough.
       #   * fluid-build agent-shell|agent-cli --dep covers the packages the
       #     smoke/shell steps exercise.  Full monorepo build stays on the
-      #     live_linux job (main/MQ) and on build_ts.
+      #     live_linux job and on build_ts.
       - bash: |
           set -euo pipefail
           (cd packages/shell && pnpm exec playwright install --with-deps chromium) &
@@ -310,15 +310,16 @@ jobs:
         workingDirectory: $(buildDirectory)
         condition: always()
 
-  # Live integration tests.  continueOnError so a live failure never fails
-  # the required pipeline — but the parent GitHub check still waited for
-  # this job (~36 min on 7e4135eff, ~13 min past Windows smoke).  Skip on
-  # PullRequest; run on main and gh-readonly-queue/main/* so merge still
-  # gets the signal.  Full monorepo build stays here (live hits many packages).
+  # Live integration tests on every trigger that has ts changes — including
+  # PullRequest (same suite as main baseline).  Own job so shell/CLI legs do
+  # not serialize behind live; continueOnError matches baseline (a live
+  # failure does not fail the required pipeline).  Parent still waits for
+  # this job to finish.  Build only packages that define test:live (+deps);
+  # npm run test:live still walks the whole workspace.
   - job: live_linux
     displayName: Live tests (Linux)
     dependsOn: detect_changes
-    condition: and(succeeded(), eq(dependencies.detect_changes.outputs['detect.tsChanged'], 'true'), ne(variables['Build.Reason'], 'PullRequest'))
+    condition: and(succeeded(), eq(dependencies.detect_changes.outputs['detect.tsChanged'], 'true'))
     continueOnError: true
     timeoutInMinutes: 90
     pool:
@@ -334,9 +335,15 @@ jobs:
           sudo apt install libsecret-1-0
         displayName: Install libsecret-1-0
 
-      - script: |
-          npm run build
-        displayName: Build
+      # Packages that ship a test:live script (see ts/packages/*/package.json
+      # and LIVE_TEST_PACKAGE_FILTER in prCiScope.mjs). --dep pulls their
+      # workspace dependencies; full monorepo build is redundant for this suite.
+      - bash: |
+          set -euo pipefail
+          FILTER=$(node tools/scripts/prCiScope.mjs --live-package-filter)
+          echo "livePackageFilter=$FILTER"
+          pnpm exec fluid-build "$FILTER" -t build --dep
+        displayName: Build live packages (+deps)
         workingDirectory: $(buildDirectory)
 
       - task: AzureCLI@2

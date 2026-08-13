@@ -24,12 +24,26 @@ only need `HEAD` to install/build/test.
     `fluid-build agent-shell|agent-cli --dep` (not full monorepo build,
     not every browser binary). `playwright.config.ts` only defines
     chromium; `shell:smoke` launches Electron.
-  - `test:live` is a parallel Linux job with `continueOnError`. It runs
-    on **main and merge-queue only** — not on PullRequest. A live failure
-    never blocked the PR, but the parent GitHub check stayed queued until
-    live finished (~13 min past Windows smoke on `7e4135eff`).
+  - `test:live` is a **parallel** Linux job with `continueOnError` (same
+    blocking semantics as main baseline). It runs on **PullRequest, main,
+    and merge-queue** — same suite as baseline. Shell/CLI no longer wait
+    on live serially. Live job builds only packages that define
+    `test:live` (+deps); still runs `npm run test:live`.
   - Windows always runs full `shell:test` (PR, main, merge-queue). Linux
     stays on `shell:smoke` (unchanged from before this work).
+
+## PR suite parity (must match main baseline smoke)
+
+| Suite | Baseline PR | This branch |
+| --- | --- | --- |
+| CLI smoke | yes | yes |
+| Linux `shell:smoke` | yes | yes |
+| Windows `shell:test` | yes | yes |
+| Linux `test:live` | yes (`continueOnError`) | yes (parallel job, `continueOnError`) |
+
+Allowed cuts are **redundant steps only** (duplicate ratchets, extra fetches,
+full-history clones, serial live after shell, full monorepo build where a
+scoped `--dep` build covers the suite). Skipping a suite is not allowed.
 
 ## Job counts (from the shipped helper)
 
