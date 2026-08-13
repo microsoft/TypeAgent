@@ -172,7 +172,7 @@ async function defaultNpmInstall(args: RegistryNpmInstallArgs): Promise<void> {
 
 function packageUrl(registry: string, identifier: string): URL {
     const encoded = identifier.startsWith("@")
-        ? identifier.replace("/", "%2F")
+        ? identifier.replaceAll("/", "%2F")
         : encodeURIComponent(identifier);
     return new URL(encoded, registry.endsWith("/") ? registry : `${registry}/`);
 }

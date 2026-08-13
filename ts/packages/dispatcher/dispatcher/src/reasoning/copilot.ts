@@ -21,7 +21,6 @@ import {
     type PermissionHandler,
     type PermissionRequest,
     type PermissionRequestResult,
-
     type SessionConfig,
 } from "@github/copilot-sdk";
 import registerDebug from "debug";

@@ -284,6 +284,38 @@ describe("MCP Registry descriptor conversion/materialization", () => {
         });
     });
 
+    it("URL-encodes scoped npm package names when resolving metadata", async () => {
+        const dir = installDir();
+        let requested: string | undefined;
+        await expect(
+            materializeRegistryNpmPackage(
+                registryEntryToCandidate(
+                    entry(),
+                    "official",
+                    "https://registry.example/",
+                    { installDir: dir },
+                ).config,
+                {
+                    registryType: "npm",
+                    identifier: "@example/weather-mcp",
+                    version: "1.2.3",
+                    transport: { type: "stdio" },
+                },
+                "a".repeat(64),
+                {
+                    installDir: dir,
+                    fetchFn: async (input) => {
+                        requested = String(input);
+                        return response({}, 404);
+                    },
+                },
+            ),
+        ).rejects.toThrow(/Could not resolve npm package/);
+        expect(requested).toBe(
+            "https://registry.npmjs.org/@example%2Fweather-mcp",
+        );
+    });
+
     it("materializes exact npm content, verifies hash, and builds argv", async () => {
         const dir = installDir();
         const bytes = Buffer.from("package tar bytes");
