@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=5a55c28e63f390d00bd7ba8647105949c204baf5b55c0398a6bb95c977465e49 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=028c3076cf5247f35bd204e9ad449213f5e92600c0edb8dc93c4dbe3b3143f7e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -34,7 +34,7 @@ Workspace:
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 
-External: `commander`, `js-yaml`, `zod`
+External: `commander`, `gpt-tokenizer`, `js-yaml`, `zod`
 
 ### Used by
 
@@ -51,11 +51,11 @@ _None._
 - [./src/core/paths.ts](./src/core/paths.ts)
 - [./src/core/prices.ts](./src/core/prices.ts)
 - [./src/core/rateLimiter.ts](./src/core/rateLimiter.ts)
-- [./src/core/types.ts](./src/core/types.ts)
-- _…and 36 more under `./src/`._
+- [./src/core/tokenEstimate.ts](./src/core/tokenEstimate.ts)
+- _…and 37 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `f74ed3ce0a3e0edee3262495549cb41f30e944af` on `2026-08-13T08:06:45.967Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `ec5d9161876ae305ea1c253d6e038fa7d364fa62` on `2026-08-13T08:21:46.174Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
