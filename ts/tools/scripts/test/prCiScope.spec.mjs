@@ -224,6 +224,18 @@ test("ADO detect job uses a shallow PR checkout", () => {
     );
 });
 
+test("Windows merge-gate jobs exclude the workspace from Defender", () => {
+    const buildTs = fs.readFileSync(buildTsYml, "utf8");
+    const buildShell = fs.readFileSync(buildPackageShellYml, "utf8");
+    const smoke = fs.readFileSync(azureSmokeYml, "utf8");
+    assert.match(buildTs, /Exclude workspace from Windows Defender/);
+    assert.match(buildShell, /Exclude workspace from Windows Defender/);
+    assert.match(smoke, /Exclude workspace from Windows Defender/);
+    assert.match(buildTs, /npm run test:local/);
+    assert.match(buildShell, /pnpm run shell:package/);
+    assert.match(smoke, /npm run shell:test/);
+});
+
 test("ADO smoke overlaps Playwright with build and runs live tests in parallel", () => {
     const yaml = fs.readFileSync(azureSmokeYml, "utf8");
     assert.match(yaml, /Build \+ Playwright install \(overlapped\)/);

@@ -35,6 +35,31 @@ Run `node tools/scripts/prCiScope.mjs --table` from `ts/`:
 | pull_request (after)      | no ts change | 0 / 6   | 0 / 6      | 0 / 3         |
 | merge_group / push / main | (ignored)    | 6 / 6   | 0 / 6      | 3 / 3         |
 
+## Required-check span (the 30% bar)
+
+Span = last required check `completedAt` − first required check `startedAt`
+on one SHA. Required names: `Repo Policy Check`, `build_dotnet (Debug|Release)`,
+six `build_ts (os, 22|24)`, three `build_package_shell (os, 22)`,
+`TypeAgent Smoke Tests`.
+
+**Baseline — microsoft/TypeAgent#2847** (merged to `main`, SHA of that PR’s
+merge; rollup from the PR checks API):
+
+|                      |                                                        |
+| -------------------- | ------------------------------------------------------ |
+| First required start | `TypeAgent Smoke Tests` `2026-08-12T16:39:50Z`         |
+| Last required finish | `build_ts (windows-latest, 24)` `2026-08-12T17:45:44Z` |
+| **Baseline span**    | **3954 s (65.90 min)**                                 |
+| **30% target**       | **≤ 2768 s (46.13 min)**                               |
+
+Why #2847 is that long: `build_ts (windows-latest, 22)` waited 24.13 min for
+a runner, then ran 20.63 min; `windows-24` waited until that finished
+(started `17:28:43Z`, 17.02 min). Smoke itself was 39.48 min
+(`16:39:50Z`–`17:19:19Z`) and was _not_ the last required check.
+
+New span for this draft is filled in after a complete required rollup.
+Do not treat a still-running rollup as the 30% win.
+
 ## Timed local analog (this clone, file://)
 
 Repo history at the branch tip: **2689** commits.

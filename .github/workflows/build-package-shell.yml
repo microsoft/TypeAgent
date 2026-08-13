@@ -38,6 +38,12 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Exclude workspace from Windows Defender
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE" -ErrorAction SilentlyContinue
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
