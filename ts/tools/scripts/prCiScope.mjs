@@ -83,22 +83,12 @@ export function shouldRunShellPackage({ eventName, tsFilter }) {
 }
 
 /**
- * ADO Windows shell suite.  Pull requests run the same electron smoke as
- * Linux (`shell:smoke` / simple.spec.ts).  The full Playwright + jest
- * suite (`shell:test`) still runs on main and the merge-queue CI trigger
- * (Build.Reason != PullRequest), which is what actually gates merge.
- */
-export function windowsShellSuite(buildReason) {
-    return buildReason === "PullRequest" ? "shell:smoke" : "shell:test";
-}
-
-/**
  * Live integration tests (`test:live`).  They already use continueOnError
  * on the required ADO pipeline, so a live failure never blocked the PR —
  * but the parent GitHub check stayed queued until they finished (~36 min
  * on SHA 7e4135eff, ~13 min after Windows smoke).  Skip them on
  * PullRequest; still run on main and merge-queue CI so merge keeps the
- * signal.
+ * signal.  Windows shell stays on full `shell:test` for every trigger.
  */
 export function shouldRunLiveTests(buildReason) {
     return buildReason !== "PullRequest";
@@ -221,12 +211,6 @@ export function writeGithubOutput(scope, env = process.env) {
 function main(argv = process.argv.slice(2), env = process.env) {
     if (argv.includes("--table")) {
         process.stdout.write(`${formatScopeTable()}\n`);
-        return 0;
-    }
-    if (argv.includes("--windows-shell-suite")) {
-        process.stdout.write(
-            `${windowsShellSuite(env.BUILD_REASON ?? env.EVENT_NAME ?? "")}\n`,
-        );
         return 0;
     }
     if (argv.includes("--run-live-tests")) {

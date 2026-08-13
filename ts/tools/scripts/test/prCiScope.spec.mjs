@@ -20,7 +20,6 @@ import {
     shouldRunBuildTsLint,
     shouldRunBuildTsRatchet,
     shouldRunShellPackage,
-    windowsShellSuite,
     shouldRunLiveTests,
 } from "../prCiScope.mjs";
 
@@ -226,31 +225,28 @@ test("ADO detect job uses a shallow PR checkout", () => {
     );
 });
 
-test("ADO Windows PRs smoke; main and merge-queue still run the full suite", () => {
-    assert.equal(windowsShellSuite("PullRequest"), "shell:smoke");
-    assert.equal(windowsShellSuite("IndividualCI"), "shell:test");
-    assert.equal(windowsShellSuite("Manual"), "shell:test");
-    const pr = execFileSync(
-        process.execPath,
-        [scriptPath, "--windows-shell-suite"],
-        {
-            env: { ...process.env, BUILD_REASON: "PullRequest" },
-            encoding: "utf8",
-        },
-    ).trim();
-    const ci = execFileSync(
-        process.execPath,
-        [scriptPath, "--windows-shell-suite"],
-        {
-            env: { ...process.env, BUILD_REASON: "IndividualCI" },
-            encoding: "utf8",
-        },
-    ).trim();
-    assert.equal(pr, "shell:smoke");
-    assert.equal(ci, "shell:test");
+test("ADO Windows always runs full shell:test (PR, main, merge-queue)", () => {
     const yaml = fs.readFileSync(azureSmokeYml, "utf8");
-    assert.match(yaml, /--windows-shell-suite/);
-    assert.match(yaml, /npm run \$\(windowsShellSuite\)/);
+    assert.match(yaml, /Shell Tests - full \(Windows\)/);
+    assert.match(yaml, /npm run shell:test/);
+    // No PR-only downgrade to shell:smoke on Windows.
+    assert.equal(
+        yaml.includes("--windows-shell-suite"),
+        false,
+        "Windows suite must not be switched by prCiScope",
+    );
+    const winAt = yaml.indexOf("Shell Tests - full (Windows)");
+    assert.ok(winAt > 0);
+    const winChunk = yaml.slice(winAt, winAt + 800);
+    assert.match(winChunk, /npm run shell:test/);
+    assert.equal(
+        winChunk.includes("shell:smoke"),
+        false,
+        "Windows full step must not call shell:smoke",
+    );
+    // Linux PR path stays smoke-only (pre-existing).
+    assert.match(yaml, /Shell Tests - smoke \(Linux\)/);
+    assert.match(yaml, /npm run shell:smoke/);
 });
 
 test("Windows merge-gate jobs exclude the workspace from Defender", () => {
@@ -262,7 +258,7 @@ test("Windows merge-gate jobs exclude the workspace from Defender", () => {
     assert.match(smoke, /Exclude workspace from Windows Defender/);
     assert.match(buildTs, /npm run test:local/);
     assert.match(buildShell, /pnpm run shell:package/);
-    assert.match(smoke, /npm run \$\(windowsShellSuite\)/);
+    assert.match(smoke, /npm run shell:test/);
 });
 
 test("ADO smoke overlaps Playwright chromium with shell+cli build", () => {

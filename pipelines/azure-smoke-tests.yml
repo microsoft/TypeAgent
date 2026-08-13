@@ -208,12 +208,10 @@ jobs:
       # Overlap them so the longer of the two sets the wait, not the sum.
       #
       # Scope the work to what shell + CLI smoke actually need:
-      #   * playwright.config.ts only defines a chromium project, and
-      #     shell:smoke launches Electron (not every browser binary).
-      #     Installing chromium alone is enough for shell:smoke and for
-      #     the full shell:test suite on main/MQ.
-      #   * fluid-build agent-shell|agent-cli --dep covers the packages
-      #     the smoke steps exercise.  Full monorepo build stays on the
+      #   * playwright.config.ts only defines a chromium project (Electron
+      #     suites still use the Playwright runner). Chromium alone is enough.
+      #   * fluid-build agent-shell|agent-cli --dep covers the packages the
+      #     smoke/shell steps exercise.  Full monorepo build stays on the
       #     live_linux job (main/MQ) and on build_ts.
       - bash: |
           set -euo pipefail
@@ -270,23 +268,10 @@ jobs:
       # WorkloadIdentityCredential against the now-stale token file, and a failed
       # assertion exchange is a hard error that stops the chain before it reaches
       # this task's fresh AzureCliCredential. Clearing them makes it fall through.
-      # PRs: same electron smoke as Linux (`shell:smoke`).  The parent
-      # GitHub check stays "queued" until this Windows leg finishes — the
-      # full `shell:test` Playwright suite is 30+ min and is the PR
-      # wall-clock.  Full Playwright+jest still runs on main and
-      # gh-readonly-queue/main/* (merge queue; Build.Reason != PullRequest).
-      - bash: |
-          set -euo pipefail
-          SUITE=$(node "$(buildDirectory)/tools/scripts/prCiScope.mjs" --windows-shell-suite)
-          echo "windowsShellSuite=$SUITE"
-          echo "##vso[task.setvariable variable=windowsShellSuite]$SUITE"
-        displayName: Decide Windows shell suite
-        condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))
-        env:
-          BUILD_REASON: $(Build.Reason)
-
+      # Full shell:test (jest + all Playwright) on every trigger — PR, main,
+      # and merge-queue. Linux stays on shell:smoke (unchanged from before).
       - task: AzureCLI@2
-        displayName: Shell Tests (Windows)
+        displayName: Shell Tests - full (Windows)
         timeoutInMinutes: 60
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Windows_NT'))
         inputs:
@@ -296,7 +281,7 @@ jobs:
           workingDirectory: $(buildDirectory)/packages/shell
           inlineScript: |
             'AZURE_CLIENT_ID','AZURE_TENANT_ID','AZURE_FEDERATED_TOKEN_FILE' | ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
-            npm run $(windowsShellSuite)
+            npm run shell:test
 
       # Own AzureCLI@2 login with the published AZURE_* vars cleared — same
       # rationale as "Shell Tests - full" above.

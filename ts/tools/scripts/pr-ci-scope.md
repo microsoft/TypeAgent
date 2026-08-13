@@ -28,8 +28,8 @@ only need `HEAD` to install/build/test.
     on **main and merge-queue only** — not on PullRequest. A live failure
     never blocked the PR, but the parent GitHub check stayed queued until
     live finished (~13 min past Windows smoke on `7e4135eff`).
-  - Windows PRs run `shell:smoke` (same electron smoke as Linux). Full
-    `shell:test` still runs on main and the merge-queue CI trigger.
+  - Windows always runs full `shell:test` (PR, main, merge-queue). Linux
+    stays on `shell:smoke` (unchanged from before this work).
 
 ## Job counts (from the shipped helper)
 
