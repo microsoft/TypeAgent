@@ -17,3 +17,4 @@ export * from "./catalogGenerator/index.js";
 export { seedQaJsonlAdapter } from "./adapters/seedQaJsonlAdapter.js";
 export * from "./emptyGoldUtterance.js";
 export * from "./goldParameterHygiene.js";
+export * from "./actionValidation.js";
