@@ -395,6 +395,197 @@ diagnostic path that cannot recurse into the exporter.
 The OS or external tools manage rotation and retention. JSONL and OTLP are
 additive. A JSONL-only configuration creates only the logs provider.
 
+## Local End-to-End Validation with Grafana
+
+This procedure runs the Grafana LGTM development stack locally, sends TypeAgent
+telemetry to it over OTLP/HTTP, and writes the same OTel logs to JSONL. It
+validates the complete path:
+
+```text
+TypeAgent debug + Structured Logger
+  └─► OTel logs provider
+        ├─► local JSONL file
+        └─► OTLP/HTTP collector ─► Loki ─► Grafana
+
+TypeAgent spans ─► OTLP/HTTP collector ─► Tempo ─► Grafana
+```
+
+### Prerequisites
+
+Install the TypeAgent workspace dependencies with `pnpm run setup` from `ts/`
+if the checkout has not already been provisioned.
+
+Docker Desktop is the only external prerequisite. On Windows and macOS, the
+repository helper can install it explicitly:
+
+```powershell
+pnpm run telemetry:grafana --install
+```
+
+This uses `winget` on Windows or Homebrew on macOS and may request elevation or
+acceptance of the Docker Desktop installer. Linux developers should install
+Docker Engine using their distribution's supported procedure. Docker Desktop
+may require a restart or sign-out after its first installation.
+
+Docker Desktop may also be
+[installed manually](https://docs.docker.com/desktop/) before running the
+normal start command.
+
+The Grafana
+[`otel-lgtm`](https://hub.docker.com/r/grafana/otel-lgtm) image contains an OTel
+collector, Loki, Tempo, Prometheus, and Grafana with the data sources already
+connected.
+
+### 1. Start Grafana LGTM
+
+Run the repository helper from `ts/`:
+
+```powershell
+pnpm run telemetry:grafana
+```
+
+The helper:
+
+- Optionally installs Docker Desktop when `--install` is specified.
+- Verifies that the Docker CLI is installed.
+- Starts Docker Desktop when needed on Windows or macOS and waits for its
+  engine.
+- Pulls `grafana/otel-lgtm:latest` when it is not already installed.
+- Starts or reuses the `typeagent-otel` container.
+- Waits for Grafana to become healthy.
+- Publishes Grafana and both collector receivers on `127.0.0.1` only.
+
+The loopback binding keeps the services inaccessible from other machines on
+the network. Do not publish these ports on all interfaces unless remote access
+is intentional and protected separately.
+
+The relevant endpoints are:
+
+| Port | Endpoint                          |
+| ---- | --------------------------------- |
+| 3000 | Grafana UI                        |
+| 4317 | OTel collector OTLP/gRPC          |
+| 4318 | OTel collector OTLP/HTTP/protobuf |
+
+Verify that Grafana is ready:
+
+```powershell
+Invoke-RestMethod http://localhost:3000/api/health
+```
+
+### 2. Configure and Start TypeAgent
+
+From `ts/`, build the agent server and configure its process environment:
+
+```powershell
+pnpm run build agent-server
+
+$env:OTEL_SERVICE_NAME = "typeagent-local"
+$env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
+$env:OTEL_TRACES_SAMPLER = "always_on"
+$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\typeagent-{service}-{pid}.jsonl"
+$env:TYPEAGENT_OTEL_DEBUG_BRIDGE = "true"
+$env:TYPEAGENT_OTEL_STRUCTURED_LOGS = "true"
+$env:DEBUG = "typeagent:*,agent-server:*"
+
+pnpm run start:agent-server
+```
+
+The environment settings enable:
+
+- OTLP export for configured signals.
+- One local JSONL file per process.
+- Copies of enabled `debug` namespaces in the OTel logs pipeline.
+- Privacy-filtered dispatcher Structured Logger events.
+- Full local trace sampling so every generated trace can be inspected.
+
+The equivalent settings may be placed under `telemetry` in
+`config.local.yaml`. Environment variables are useful for validation because
+they apply only to the current terminal and override YAML.
+
+Only enabled `DEBUG` namespaces are bridged. Existing terminal debug output is
+unchanged. Structured logging must be enabled explicitly because dispatcher
+events can originate from user requests.
+
+### 3. Generate Telemetry
+
+In another terminal, connect the CLI:
+
+```powershell
+cd C:\path\to\TypeAgent\ts
+pnpm cli
+```
+
+Run a supported `@` command and a normal TypeAgent request. Wait a few seconds
+for the batch exporters, or stop the agent server with `Ctrl+C` to flush pending
+telemetry.
+
+### 4. Inspect the Local JSONL Logs
+
+Find the most recently written process log:
+
+```powershell
+$log = Get-ChildItem "$HOME\.typeagent\logs\typeagent-local-*.jsonl" |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+
+$log.FullName
+Get-Content $log.FullName -Wait
+```
+
+Each line is a JSON object. Expected fields include `timestamp`,
+`severityText`, `body`, `eventName`, `traceId`, `spanId`, `attributes`, and
+`resource`.
+
+Structured dispatcher records include events such as `command` and
+`requestQueue:start`. Bridged debug records include their debug namespace.
+Prompt text, response text, action parameters, errors, stacks, and unknown
+dispatcher fields are excluded by the dispatcher projection.
+
+### 5. Inspect the Same Logs in Grafana
+
+Open [http://localhost:3000](http://localhost:3000), select **Explore**, and
+choose the **Loki** data source. Query all records from this validation run:
+
+```logql
+{service_name="typeagent-local"}
+```
+
+Useful filters include:
+
+```logql
+{service_name="typeagent-local"} |= "command"
+```
+
+```logql
+{service_name="typeagent-local"} |= "requestQueue"
+```
+
+Expand a log entry to inspect its structured body, resource attributes,
+severity, and trace correlation. The local JSONL and Loki records come from the
+same OTel log pipeline, so event names, bodies, and correlation identifiers
+should agree.
+
+### 6. Inspect the Correlated Trace
+
+In Grafana **Explore**, choose the **Tempo** data source and search for service
+name `typeagent-local`. A log emitted inside an active span contains `traceId`
+and `spanId`; use the trace ID from either Loki or the JSONL record to open the
+corresponding request trace in Tempo.
+
+This demonstrates the tangible improvement over terminal-only debug output:
+structured application events and familiar debug records are searchable in one
+backend and can be correlated with the request trace that produced them.
+
+### 7. Stop the Local Stack
+
+Stop TypeAgent with `Ctrl+C` first so its telemetry providers flush, then stop
+Grafana LGTM:
+
+```powershell
+pnpm run telemetry:grafana --stop
+```
+
 ## Privacy and Reliability
 
 - Do not capture prompts, responses, user content, or known secrets by default.
