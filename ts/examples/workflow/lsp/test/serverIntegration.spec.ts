@@ -22,6 +22,8 @@ import {
     DefinitionRequest,
     RenameRequest,
     DocumentRangeFormattingRequest,
+    ShutdownRequest,
+    ExitNotification,
     StreamMessageReader,
     StreamMessageWriter,
 } from "vscode-languageserver-protocol/node.js";
@@ -67,16 +69,17 @@ async function startSession(debounceMs = 5) {
         server,
         publishes,
         cleanup: async () => {
-            // Add a small delay to let pending operations and error handlers complete
-            // before disposing connections. This prevents "Connection is disposed" errors
-            // when error handlers try to send notifications after test completion.
-            await new Promise((resolve) => setTimeout(resolve, 50));
-            client.dispose();
-            server.dispose();
-            pipes.serverTransport.input.destroy();
-            pipes.serverTransport.output.destroy();
-            pipes.clientReader.dispose();
-            pipes.clientWriter.dispose();
+            try {
+                await client.sendRequest(ShutdownRequest.type);
+                await client.sendNotification(ExitNotification.type);
+            } finally {
+                server.dispose();
+                client.dispose();
+                pipes.clientReader.dispose();
+                pipes.clientWriter.dispose();
+                pipes.serverTransport.input.destroy();
+                pipes.serverTransport.output.destroy();
+            }
         },
     };
 }
