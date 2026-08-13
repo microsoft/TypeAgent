@@ -178,11 +178,17 @@ test("shipped workflows call prCiScope and keep required matrix names", () => {
     );
     assert.deepEqual(extractYamlList(buildShell, "os"), BUILD_PACKAGE_SHELL_OS);
 
-    const fetches = buildTs.match(/git fetch --no-tags origin/g) ?? [];
+    const fetches =
+        buildTs.match(/git fetch --no-tags --depth=1 origin/g) ?? [];
     assert.equal(
         fetches.length,
         1,
         "PR base must be fetched once, not once per ratchet step",
+    );
+    assert.match(
+        buildTs,
+        /fetch-depth: \$\{\{ github\.event_name == 'pull_request' && 2 \|\| 0 \}\}/,
+        "PR checkout is the merge commit plus parents, not full history",
     );
 
     const prFull = BUILD_TS_OS.flatMap((os) =>
@@ -215,5 +221,21 @@ test("ADO detect job uses a shallow PR checkout", () => {
         yaml,
         /job:\s*detect_changes[\s\S]*fetchDepth:\s*2/,
         "detect_changes must not clone full history just to diff HEAD^1",
+    );
+});
+
+test("ADO smoke overlaps Playwright with build and runs live tests in parallel", () => {
+    const yaml = fs.readFileSync(azureSmokeYml, "utf8");
+    assert.match(yaml, /Build \+ Playwright install \(overlapped\)/);
+    assert.match(yaml, /job:\s*live_linux/);
+    assert.match(yaml, /npm run test:live/);
+    const liveAt = yaml.indexOf("job: live_linux");
+    const shellAt = yaml.indexOf("job: shell_and_cli");
+    assert.ok(liveAt > shellAt, "live_linux must be its own job");
+    const shellChunk = yaml.slice(shellAt, liveAt);
+    assert.equal(
+        shellChunk.includes("npm run test:live"),
+        false,
+        "Linux smoke job must not wait on test:live",
     );
 });

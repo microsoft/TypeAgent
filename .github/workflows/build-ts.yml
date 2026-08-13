@@ -44,11 +44,10 @@ jobs:
           git config --global core.autocrlf false
       - uses: actions/checkout@v5
         with:
-          # Full history only on the PR ratchet cell (ubuntu/22), which diffs
-          # against the merge-base.  Other PR cells are shallow.  push /
-          # merge_group keep a full clone so `npm run lint -- --ratchet` can
-          # still resolve origin/main.
-          fetch-depth: ${{ github.event_name == 'pull_request' && !(matrix.os == 'ubuntu-latest' && matrix.version == 22) && 1 || 0 }}
+          # pull_request checks out the merge commit. Depth 2 is enough for
+          # merge-base / HEAD^1.  push / merge_group keep a full clone so
+          # `npm run lint -- --ratchet` can still resolve origin/main.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
       - uses: dorny/paths-filter@v3
         id: filter
         continue-on-error: true
@@ -91,7 +90,7 @@ jobs:
           npm run build
       - name: Fetch PR base
         if: ${{ steps.scope.outputs.fetch == 'true' }}
-        run: git fetch --no-tags origin "${{ github.base_ref }}"
+        run: git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
       # On pull requests only changed files are checked (fast); the
       # format-pr workflow auto-fixes them.  Other events check the whole repo.
       - name: Lint

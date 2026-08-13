@@ -14,12 +14,15 @@ only need `HEAD` to install/build/test.
 - `build-ts` PRs: ratchets + one `git fetch` of the base run once (ubuntu/22)
   instead of five fetches and four ratchet steps on every cell. The circular
   ratchet is the heavy one (madge twice).
-- `build-ts` PRs: non-ratchet cells use `fetch-depth: 1` (tests do not need
-  the other ~2700 commits).
+- `build-ts` PRs: every cell uses `fetch-depth: 2` (merge commit + parents).
+  Tests and ratchets do not need the other ~2700 commits. The base ref is
+  fetched once with `--depth=1`.
 - `build-package-shell`: unchanged merge gate — all 3 OS still package.
-- `pipelines/azure-smoke-tests.yml` detect job: `fetchDepth: 2` (only HEAD
-  and `HEAD^1` are needed on a PR merge commit). The smoke-test jobs still
-  run when `ts/**` changed.
+- `pipelines/azure-smoke-tests.yml`:
+  - detect job: `fetchDepth: 2`
+  - Playwright install overlaps `npm run build` on the smoke agents
+  - `test:live` is a parallel Linux job (still runs; `continueOnError`
+    unchanged). The required Linux smoke job no longer waits for it.
 
 ## Job counts (from the shipped helper)
 
