@@ -8,7 +8,10 @@ internal object AndroidDeviceAgent {
     const val CHANNEL_NAME = "agent:$NAME"
     const val SCHEMA_ASSET = "typeagent/androidDeviceSchema.ts"
     private const val AGENT_DESCRIPTION =
-        "Sets alarms and countdown timers, and searches for nearby places, on this Android device."
+        "Acts on this Android device: sets alarms and countdown timers, shows the " +
+            "alarm and timer lists, searches for nearby places, shows a place on the " +
+            "map, opens the dialer or a text message draft, runs a web search and " +
+            "opens web pages."
 
     fun createRegistrationParams(
         conversationId: String,
@@ -51,10 +54,14 @@ internal object AndroidDeviceAgent {
                 "executeAction action is missing actionName."
             )
         }
+        // Not every action has parameters: `showAlarms` and `showTimers` take
+        // none, so the dispatcher sends no `parameters` object at all for them.
         val parameters = action.optJSONObject("parameters")
-            ?: return AndroidDeviceActionParseResult.ActionError(
+        if (parameters == null && actionName !in NO_PARAMETER_ACTIONS) {
+            return AndroidDeviceActionParseResult.ActionError(
                 "Action '$actionName' is missing parameters."
             )
+        }
 
         return when (actionName) {
             "setAlarm" -> {
@@ -81,6 +88,51 @@ internal object AndroidDeviceAgent {
                 AndroidDeviceActionParseResult.Success(AndroidDeviceAction.SearchNearby(parsed))
             }
 
+            "showAlarms" -> AndroidDeviceActionParseResult.Success(AndroidDeviceAction.ShowAlarms)
+
+            "showTimers" -> AndroidDeviceActionParseResult.Success(AndroidDeviceAction.ShowTimers)
+
+            "showLocation" -> {
+                val parsed = parseShowLocationActionPayload(parameters)
+                    ?: return AndroidDeviceActionParseResult.ActionError(
+                        "Invalid showLocation parameters."
+                    )
+                AndroidDeviceActionParseResult.Success(AndroidDeviceAction.ShowLocation(parsed))
+            }
+
+            "dialPhoneNumber" -> {
+                val parsed = parseDialPhoneNumberActionPayload(parameters)
+                    ?: return AndroidDeviceActionParseResult.ActionError(
+                        "Invalid dialPhoneNumber parameters."
+                    )
+                AndroidDeviceActionParseResult.Success(AndroidDeviceAction.DialPhoneNumber(parsed))
+            }
+
+            "composeSms" -> {
+                val parsed = parseComposeSmsActionPayload(parameters)
+                    ?: return AndroidDeviceActionParseResult.ActionError(
+                        "Invalid composeSms parameters."
+                    )
+                AndroidDeviceActionParseResult.Success(AndroidDeviceAction.ComposeSms(parsed))
+            }
+
+            "webSearch" -> {
+                val parsed = parseWebSearchActionPayload(parameters)
+                    ?: return AndroidDeviceActionParseResult.ActionError(
+                        "Invalid webSearch parameters."
+                    )
+                AndroidDeviceActionParseResult.Success(AndroidDeviceAction.WebSearch(parsed))
+            }
+
+            "openWebPage" -> {
+                val parsed = parseOpenWebPageActionPayload(parameters)
+                    ?: return AndroidDeviceActionParseResult.ActionError(
+                        "Invalid openWebPage parameters: the url must be an " +
+                            "absolute http:// or https:// address."
+                    )
+                AndroidDeviceActionParseResult.Success(AndroidDeviceAction.OpenWebPage(parsed))
+            }
+
             else -> AndroidDeviceActionParseResult.ActionError(
                 "Unsupported Android agent action: $actionName"
             )
@@ -97,12 +149,22 @@ internal object AndroidDeviceAgent {
     fun createErrorResult(message: String): JSONObject {
         return JSONObject().put("error", message)
     }
+
+    /** Actions whose schema declares no `parameters` object. */
+    private val NO_PARAMETER_ACTIONS = setOf("showAlarms", "showTimers")
 }
 
 internal sealed interface AndroidDeviceAction {
     data class Alarm(val action: SetAlarmAction) : AndroidDeviceAction
     data class Timer(val action: SetTimerAction) : AndroidDeviceAction
     data class SearchNearby(val action: SearchNearbyAction) : AndroidDeviceAction
+    data object ShowAlarms : AndroidDeviceAction
+    data object ShowTimers : AndroidDeviceAction
+    data class ShowLocation(val action: ShowLocationAction) : AndroidDeviceAction
+    data class DialPhoneNumber(val action: DialPhoneNumberAction) : AndroidDeviceAction
+    data class ComposeSms(val action: ComposeSmsAction) : AndroidDeviceAction
+    data class WebSearch(val action: WebSearchAction) : AndroidDeviceAction
+    data class OpenWebPage(val action: OpenWebPageAction) : AndroidDeviceAction
 }
 
 internal sealed interface AndroidDeviceActionParseResult {
