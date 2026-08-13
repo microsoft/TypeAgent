@@ -63,6 +63,48 @@ describe("resolveTelemetryConfig", () => {
         });
     });
 
+    it("resolves the debug bridge from YAML and environment", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                "telemetry:\n  debugBridge: true\n",
+            );
+            expect(resolve(root).debugBridge).toBe(true);
+            expect(
+                resolve(root, {
+                    env: { TYPEAGENT_OTEL_DEBUG_BRIDGE: "off" },
+                }).debugBridge,
+            ).toBe(false);
+            expect(() =>
+                resolve(root, {
+                    env: { TYPEAGENT_OTEL_DEBUG_BRIDGE: "sometimes" },
+                }),
+            ).toThrow(/expected true\/false/);
+        });
+    });
+
+    it("resolves structured logs from YAML and environment", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                "telemetry:\n  structuredLogs: true\n",
+            );
+            expect(resolve(root).structuredLogs).toBe(true);
+            expect(
+                resolve(root, {
+                    env: { TYPEAGENT_OTEL_STRUCTURED_LOGS: "off" },
+                }).structuredLogs,
+            ).toBe(false);
+            expect(() =>
+                resolve(root, {
+                    env: { TYPEAGENT_OTEL_STRUCTURED_LOGS: "sometimes" },
+                }),
+            ).toThrow(/expected true\/false/);
+        });
+    });
+
     /* ------------------------------------------------------------------ */
     /* YAML endpoint                                                       */
     /* ------------------------------------------------------------------ */

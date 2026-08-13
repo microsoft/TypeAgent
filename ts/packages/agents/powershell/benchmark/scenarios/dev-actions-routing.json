@@ -31,7 +31,7 @@
   {
     "id": "dev-route-02",
     "category": "dev-actions-routing",
-    "description": "PowerShell schema family includes the root flow schema",
+    "description": "PowerShell schema family includes the files namespace",
     "required": true,
     "setup": {
       "requiredFlows": ["listFiles"]
@@ -51,7 +51,7 @@
           "disposition": {
             "status": "handled",
             "path": "action",
-            "schemas": ["powershell"]
+            "schemas": ["powershell.powershell-files"]
           }
         }
       }

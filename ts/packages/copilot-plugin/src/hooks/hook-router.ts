@@ -166,46 +166,60 @@ function handleSlashCommand(
 }
 
 async function main(): Promise<void> {
-    let inputData = "";
-    process.stdin.setEncoding("utf8");
+    const abortController = new AbortController();
+    const abortRequest = () => abortController.abort();
+    process.once("SIGINT", abortRequest);
+    process.once("SIGTERM", abortRequest);
 
-    for await (const chunk of process.stdin) {
-        inputData += chunk;
-    }
-
-    let input: HookInput;
     try {
-        input = JSON.parse(inputData);
-    } catch {
-        console.error("Failed to parse hook input");
-        process.exit(1);
+        let inputData = "";
+        process.stdin.setEncoding("utf8");
+
+        for await (const chunk of process.stdin) {
+            inputData += chunk;
+        }
+
+        let input: HookInput;
+        try {
+            input = JSON.parse(inputData);
+        } catch {
+            console.error("Failed to parse hook input");
+            process.exit(1);
+        }
+
+        // Check for slash commands first
+        const slashResult = await handleSlashCommand(input.prompt);
+        if (slashResult) {
+            console.log(JSON.stringify(slashResult));
+            emitDemoStateForOutput(input, slashResult, "direct");
+            return;
+        }
+
+        // Route based on current mode
+        const mode = getMode();
+        let output: HookOutput;
+
+        if (mode === "bypass") {
+            // Bypass mode: return empty to fall through to other handlers
+            output = {};
+        } else if (mode === "mcp") {
+            output = handleMcpRedirect(input);
+        } else if (mode === "dev") {
+            output = await handleDevActions(
+                input,
+                undefined,
+                abortController.signal,
+            );
+        } else {
+            output = await handleDirect(input);
+        }
+
+        console.log(JSON.stringify(output));
+        emitDemoStateForOutput(input, output, mode);
+    } finally {
+        process.removeListener("SIGINT", abortRequest);
+        process.removeListener("SIGTERM", abortRequest);
     }
-
-    // Check for slash commands first
-    const slashResult = await handleSlashCommand(input.prompt);
-    if (slashResult) {
-        console.log(JSON.stringify(slashResult));
-        emitDemoStateForOutput(input, slashResult, "direct");
-        return;
-    }
-
-    // Route based on current mode
-    const mode = getMode();
-    let output: HookOutput;
-
-    if (mode === "bypass") {
-        // Bypass mode: return empty to fall through to other handlers
-        output = {};
-    } else if (mode === "mcp") {
-        output = handleMcpRedirect(input);
-    } else if (mode === "dev") {
-        output = await handleDevActions(input);
-    } else {
-        output = await handleDirect(input);
-    }
-
-    console.log(JSON.stringify(output));
-    emitDemoStateForOutput(input, output, mode);
 }
 
 /**

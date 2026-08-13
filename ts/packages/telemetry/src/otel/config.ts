@@ -66,10 +66,10 @@ export interface LogConfig {
     readonly otlp?: OtlpExporterConfig;
     /**
      * Local file path for OTel log records, e.g.
-     * `"~/.typeagent/logs/typeagent-{service}-{pid}.jsonl"`. Template
-     * placeholders such as `{service}` and `{pid}` are preserved verbatim
-     * by the resolver; only a leading `~`, `~/`, or `~\` is expanded to
-     * the user's home directory.
+     * `"~/.typeagent/logs/typeagent-{service}-{process}-{pid}.jsonl"`.
+     * Template placeholders such as `{service}`, `{process}`, and `{pid}` are
+     * preserved verbatim by the resolver; only a leading `~`, `~/`, or `~\`
+     * is expanded to the user's home directory.
      */
     readonly logFile?: string;
 }
@@ -82,6 +82,10 @@ export interface TelemetryConfig {
     readonly traces?: TraceConfig;
     readonly metrics?: MetricConfig;
     readonly logs?: LogConfig;
+    /** Copy enabled TypeAgent debug output into the OTel logs pipeline. */
+    readonly debugBridge?: boolean;
+    /** Export structured dispatcher events into the OTel logs pipeline. */
+    readonly structuredLogs?: boolean;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -178,6 +182,14 @@ export function resolveTelemetryConfig(
         yaml.TELEMETRY_TRACESSAMPLERARG,
         "telemetry.tracesSamplerArg",
     );
+    const yamlDebugBridge = parseBoolean(
+        yaml.TELEMETRY_DEBUGBRIDGE,
+        "telemetry.debugBridge",
+    );
+    const yamlStructuredLogs = parseBoolean(
+        yaml.TELEMETRY_STRUCTUREDLOGS,
+        "telemetry.structuredLogs",
+    );
 
     // ---- Env values.
     const envGlobalEndpoint = requireNonEmpty(
@@ -196,6 +208,14 @@ export function resolveTelemetryConfig(
     const envLogFile = requireNonEmpty(
         env.TYPEAGENT_OTEL_LOG_FILE,
         "TYPEAGENT_OTEL_LOG_FILE",
+    );
+    const envDebugBridge = parseBoolean(
+        env.TYPEAGENT_OTEL_DEBUG_BRIDGE,
+        "TYPEAGENT_OTEL_DEBUG_BRIDGE",
+    );
+    const envStructuredLogs = parseBoolean(
+        env.TYPEAGENT_OTEL_STRUCTURED_LOGS,
+        "TYPEAGENT_OTEL_STRUCTURED_LOGS",
     );
 
     const signalEndpoints: Record<Signal, string | undefined> = {
@@ -290,6 +310,8 @@ export function resolveTelemetryConfig(
         traces?: TraceConfig;
         metrics?: MetricConfig;
         logs?: LogConfig;
+        debugBridge?: boolean;
+        structuredLogs?: boolean;
     } = {};
 
     if (tracesOtlp !== undefined) {
@@ -318,6 +340,14 @@ export function resolveTelemetryConfig(
             logs.logFile = logFile;
         }
         result.logs = logs;
+    }
+    const debugBridge = envDebugBridge ?? yamlDebugBridge;
+    if (debugBridge !== undefined) {
+        result.debugBridge = debugBridge;
+    }
+    const structuredLogs = envStructuredLogs ?? yamlStructuredLogs;
+    if (structuredLogs !== undefined) {
+        result.structuredLogs = structuredLogs;
     }
 
     return result;
@@ -374,6 +404,29 @@ function requireNonEmpty(
         throw new Error(`${name} must not be blank.`);
     }
     return value;
+}
+
+function parseBoolean(
+    value: string | undefined,
+    name: string,
+): boolean | undefined {
+    if (value === undefined || value === "") {
+        return undefined;
+    }
+    switch (value.trim().toLowerCase()) {
+        case "true":
+        case "on":
+        case "1":
+            return true;
+        case "false":
+        case "off":
+        case "0":
+            return false;
+        default:
+            throw new Error(
+                `${name}="${value}" is invalid; expected true/false, on/off, or 1/0.`,
+            );
+    }
 }
 
 /**
