@@ -35,7 +35,9 @@ export interface WebDispatcher {
     handleAction(action: FullAction): Promise<CommandResult>;
 }
 
-export async function createWebDispatcher(): Promise<WebDispatcher> {
+export async function createWebDispatcher(
+    structuredLogs: boolean,
+): Promise<WebDispatcher> {
     let ws: WebSocket | null = null;
     const clientIOChannel = createChannelAdapter((message: any) =>
         ws?.send(
@@ -64,6 +66,9 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         metrics: true,
         dblogging: true,
         traceId: getTraceId(),
+        telemetry: {
+            structuredLogs,
+        },
         clientIO: clientIO,
         constructionProvider: getDefaultConstructionProvider(),
         indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),

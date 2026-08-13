@@ -25,6 +25,7 @@ import {
 } from "@opentelemetry/semantic-conventions/incubating";
 
 const PROCESS_INSTANCE_ID = randomUUID();
+export const TYPEAGENT_PROCESS_NAME_ATTRIBUTE = "typeagent.process.name";
 
 /**
  * Constructs the process-level OTel {@link Resource} TypeAgent-owned hosts
@@ -36,6 +37,8 @@ const PROCESS_INSTANCE_ID = randomUUID();
 export interface ProcessResourceOptions {
     /** `service.name`. Required: every TypeAgent-owned process must set it. */
     readonly serviceName: string;
+    /** Stable TypeAgent process role, such as `agent-server` or `shell`. */
+    readonly processName?: string;
     /** `service.version`, when known. */
     readonly serviceVersion?: string;
     /** VCS revision checked out in the running build. */
@@ -73,6 +76,7 @@ export function createProcessResource(
         options.serviceVersion,
         "serviceVersion",
     );
+    const processName = normalizeOptional(options.processName, "processName");
     const serviceInstanceId =
         normalizeOptional(options.serviceInstanceId, "serviceInstanceId") ??
         PROCESS_INSTANCE_ID;
@@ -101,6 +105,9 @@ export function createProcessResource(
     if (serviceVersion !== undefined) {
         identity[ATTR_SERVICE_VERSION] = serviceVersion;
     }
+    if (processName !== undefined) {
+        identity[TYPEAGENT_PROCESS_NAME_ATTRIBUTE] = processName;
+    }
     if (deploymentEnvironment !== undefined) {
         identity[ATTR_DEPLOYMENT_ENVIRONMENT_NAME] = deploymentEnvironment;
     }
@@ -124,6 +131,7 @@ export function createProcessResource(
         ATTR_PROCESS_RUNTIME_VERSION,
         ATTR_VCS_REF_HEAD_REVISION,
         ATTR_VCS_REF_BASE_REVISION,
+        TYPEAGENT_PROCESS_NAME_ATTRIBUTE,
     ]) {
         delete attributes[key];
     }

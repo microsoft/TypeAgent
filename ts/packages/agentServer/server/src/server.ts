@@ -179,7 +179,15 @@ process.once("message", (message) => {
 // Load config from YAML layers + Key Vault (replacing legacy dotenv).
 // vault.shared is auto-discovered from config.local.yaml / config.defaults.yaml.
 await loadConfig({ keyVault: {}, strict: false });
-const telemetryInit = otel.initTelemetry();
+const telemetryConfig = otel.resolveTelemetryConfig();
+const telemetryInit = otel.initTelemetry({
+    config: telemetryConfig,
+    processName: "agent-server",
+    debugModules: [registerDebug],
+    debugBridge: {
+        includedNamespacePrefixes: ["typeagent:", "agent-server:"],
+    },
+});
 
 // Snapshot whether this server's local config differs from the shared Key
 // Vault, so clients can be warned on connect (same delivery path as the
@@ -342,6 +350,9 @@ async function main() {
                 dblogging: true,
                 developerMode,
                 traceId,
+                telemetry: {
+                    structuredLogs: telemetryConfig.structuredLogs === true,
+                },
                 indexingServiceRegistry: await getIndexingServiceRegistry(
                     instanceDir,
                     configName,
