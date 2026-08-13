@@ -16,7 +16,6 @@ import {
     CopilotClient,
     RuntimeConnection,
     defineTool,
-    approveAll,
     type AssistantMessageEvent,
     type CopilotSession,
     type PermissionHandler,
