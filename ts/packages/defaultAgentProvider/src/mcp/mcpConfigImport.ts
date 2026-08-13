@@ -91,6 +91,13 @@ function toTransport(entry: Record<string, unknown>): TransportConfig {
         if (headers !== undefined) {
             transport.headers = headers;
         }
+        if (
+            typeof entry.timeoutMs === "number" &&
+            Number.isFinite(entry.timeoutMs) &&
+            entry.timeoutMs > 0
+        ) {
+            transport.timeoutMs = entry.timeoutMs;
+        }
         return transport;
     }
 
@@ -120,10 +127,17 @@ function toNormalized(
     entry: Record<string, unknown>,
 ): NormalizedMcpServerConfig {
     const config: NormalizedMcpServerConfig = {
+        id: name,
         name,
         transport: toTransport(entry),
         scope: "workspace",
         trust: "untrusted",
+        enabled: true,
+        provenance: {
+            source: "imported-config",
+            sourceKind: "mcp-config",
+            ref: name,
+        },
     };
     if (typeof entry.description === "string") {
         config.description = entry.description;

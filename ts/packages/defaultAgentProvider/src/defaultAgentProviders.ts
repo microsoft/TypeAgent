@@ -22,9 +22,11 @@ import {
     InstallPreview,
     InstallPreviewMatch,
     InstallResult,
+    McpInstallCandidate,
     UpdateResult,
     deriveMatchKind,
 } from "./installSources/config.js";
+import { cleanupOwnedMcpPaths } from "./installSources/mcpRegistryMaterializer.js";
 import {
     createPackageAppAgentProvider,
     AgentSourceGroup,
@@ -32,6 +34,8 @@ import {
     InstalledAgentInfo,
     InstalledAgentSourceApi,
 } from "./installSources/packageAgent.js";
+import type { McpServerSourceApi } from "./mcp/mcpAppAgentSource.js";
+import type { NormalizedMcpServerConfig } from "./mcp/mcpServerConfig.js";
 
 import fs from "node:fs";
 import path from "node:path";
@@ -375,6 +379,8 @@ export function createDefaultInstalledAgentSource(
     sourceFactory?: InstallSourceFactory,
     /** @internal Test-only store writer for exercising commit failures. */
     storeWriter: typeof writeAgentsJson = writeAgentsJson,
+    /** MCP runtime API shared with this source's per-session @package agent. */
+    mcpSource?: McpServerSourceApi,
 ): InstalledAgentSourceForTest {
     const instanceConfigs = getInstanceConfigProvider(instanceDir);
     const installDir = getInstallDir(instanceConfigs);
@@ -1265,9 +1271,18 @@ export function createDefaultInstalledAgentSource(
                 registry,
                 recordsUsingSource: (sourceName: string) => {
                     const agents = readAgentsJson(instanceDir)?.agents ?? {};
-                    return Object.values(agents)
+                    const agentNames = Object.values(agents)
                         .filter((record) => record.source === sourceName)
                         .map((record) => record.name);
+                    const mcpNames =
+                        mcpSource
+                            ?.listServers()
+                            .filter(
+                                (config) =>
+                                    config.provenance.source === sourceName,
+                            )
+                            .map((config) => config.name) ?? [];
+                    return [...agentNames, ...mcpNames];
                 },
             });
         },
@@ -1442,6 +1457,36 @@ export function createDefaultInstalledAgentSource(
                 matches: result.matches.map(toMatch),
             };
         },
+        async resolveMcp(
+            ref: string,
+            sourceName?: string,
+            onStatus?: SourceStatus,
+        ): Promise<McpInstallCandidate[]> {
+            return registry.resolveMcp(ref, sourceName, undefined, onStatus);
+        },
+        async materializeMcp(
+            candidate: McpInstallCandidate,
+            abortSignal?: AbortSignal,
+        ): Promise<NormalizedMcpServerConfig> {
+            return candidate.materialize === undefined
+                ? candidate.config
+                : candidate.materialize(abortSignal);
+        },
+        cleanupMcp(config: NormalizedMcpServerConfig): void {
+            const referencedPaths = new Set(
+                mcpSource
+                    ?.listServers()
+                    .filter((other) => other.id !== config.id)
+                    .flatMap((other) => other.provenance.ownedPaths ?? []) ??
+                    [],
+            );
+            cleanupOwnedMcpPaths(
+                resolvedInstallDir,
+                config.provenance.ownedPaths?.filter(
+                    (ownedPath) => !referencedPaths.has(ownedPath),
+                ),
+            );
+        },
         async refresh(sourceName?: string): Promise<void> {
             // Refresh cache-backed source metadata; a fetch failure propagates
             // so the `--refresh` command fails rather than acting on stale data.
@@ -1460,6 +1505,7 @@ export function createDefaultInstalledAgentSource(
             const packageProvider = createPackageAppAgentProvider({
                 appAgentProviderSetController: controller,
                 source,
+                ...(mcpSource === undefined ? {} : { mcpSource }),
             });
             // Torn down before the initial set resolved: a connection disposed
             // while still parked on an in-flight barrier must NOT join the

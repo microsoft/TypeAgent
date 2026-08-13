@@ -20,12 +20,19 @@ function tmpInstanceDir(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), "ta-mcp-src-"));
 }
 
-function makeConfig(name: string): NormalizedMcpServerConfig {
+function makeConfig(
+    name: string,
+    update: Partial<NormalizedMcpServerConfig> = {},
+): NormalizedMcpServerConfig {
     return {
+        id: name,
         name,
         scope: "user",
         trust: "trusted",
+        enabled: true,
+        provenance: { source: "test" },
         transport: { kind: "stdio", command: "node", args: ["server.js"] },
+        ...update,
     };
 }
 
@@ -73,10 +80,12 @@ describe("createMcpAppAgentSource", () => {
             clientInfo,
         );
 
-        expect(source.testApi.listServers().sort()).toEqual([
-            "mine",
-            "shipped",
-        ]);
+        expect(
+            source.testApi
+                .listServers()
+                .map((config) => config.name)
+                .sort(),
+        ).toEqual(["mine", "shipped"]);
 
         const { controller } = fakeController();
         const conn = source.connect(controller);
@@ -102,7 +111,57 @@ describe("createMcpAppAgentSource", () => {
         expect(a.ops).toEqual([{ op: "add", names: ["new"] }]);
         expect(b.ops).toEqual([{ op: "add", names: ["new"] }]);
         expect(store.has("new")).toBe(true);
-        expect(source.testApi.listServers()).toContain("new");
+        expect(source.testApi.getServer("new")).toEqual(makeConfig("new"));
+    });
+
+    it("gates user configs until both trusted and enabled", async () => {
+        const dir = tmpInstanceDir();
+        const store = openMcpServerStore(dir);
+        store.set(
+            makeConfig("gated", {
+                trust: "untrusted",
+                enabled: true,
+            }),
+        );
+        const source = createMcpAppAgentSource(store, {}, clientInfo);
+        const client = fakeController();
+        const conn = source.connect(client.controller);
+        await expect(conn.providers).resolves.toEqual([]);
+
+        await source.testApi.setTrust("gated", "trusted", client.controller);
+        expect(client.ops).toEqual([{ op: "add", names: ["gated"] }]);
+
+        await source.testApi.setEnabled("gated", false, client.controller);
+        expect(client.ops).toEqual([
+            { op: "add", names: ["gated"] },
+            { op: "remove", names: ["gated"] },
+        ]);
+        expect(store.get("gated")).toMatchObject({
+            trust: "trusted",
+            enabled: false,
+        });
+    });
+
+    it("replaces an active provider when its config is updated", async () => {
+        const dir = tmpInstanceDir();
+        const store = openMcpServerStore(dir);
+        store.set(makeConfig("stable", { name: "old-name" }));
+        const source = createMcpAppAgentSource(store, {}, clientInfo);
+        const client = fakeController();
+        source.connect(client.controller);
+
+        const updated = await source.testApi.updateServer(
+            "stable",
+            { name: "new-name" },
+            client.controller,
+        );
+
+        expect(updated.id).toBe("stable");
+        expect(updated.name).toBe("new-name");
+        expect(client.ops).toEqual([
+            { op: "remove", names: ["old-name"] },
+            { op: "add", names: ["new-name"] },
+        ]);
     });
 
     it("replaces in place with remove-then-add on re-add", async () => {
@@ -172,6 +231,18 @@ describe("createMcpAppAgentSource", () => {
 
         await source.testApi.addServer(makeConfig("late"));
         expect(a.ops).toEqual([]);
+    });
+
+    it("returns no providers when disposed before the provider promise settles", async () => {
+        const dir = tmpInstanceDir();
+        const store = openMcpServerStore(dir);
+        store.set(makeConfig("late"));
+        const source = createMcpAppAgentSource(store, {}, clientInfo);
+
+        const conn = source.connect(fakeController().controller);
+        conn.dispose();
+
+        await expect(conn.providers).resolves.toEqual([]);
     });
 
     it("tolerates a closed session during fan-out", async () => {

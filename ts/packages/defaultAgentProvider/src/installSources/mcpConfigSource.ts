@@ -7,6 +7,7 @@ import {
     InstallSource,
     McpConfigSourceConfig,
     MaterializedInstallRecord,
+    McpInstallCandidate,
     ResolvedCandidate,
     SourceWarning,
     AvailableInstallRow,
@@ -63,26 +64,13 @@ function loadFile(file: string): unknown {
  * and enumerates the normalized servers as `extensionKind: "mcp"` rows for
  * `@package available --type mcp`.
  *
- * It deliberately does NOT participate in the native-agent resolution walk:
- * `find` / `findName` return `undefined` so an MCP server name never resolves
- * as an installable npm agent. Actually adding an MCP server routes through the
- * MCP server store / {@link ../mcp/mcpAppAgentSource.McpServerSourceApi}, kept as
- * a separate store behind the unified `@package` facade per the near-term
- * staging plan; `materialize` therefore throws if ever reached.
- *
- * `getServers` exposes the normalized snapshot so the facade (and tests) can
- * pull a named server's config to hand to the MCP source.
+ * It deliberately does NOT participate in the native-agent resolution walk.
+ * MCP artifacts resolve through `findMcp`, which returns a normalized
+ * candidate for the MCP store without materializing an InstalledAgentRecord.
  */
-export interface McpConfigInstallSource extends InstallSource {
-    // The normalized configs of every server that imported cleanly, keyed by
-    // server name. Used by the `@package` facade to route an MCP install to the
-    // MCP server store.
-    getServers(): ReadonlyMap<string, NormalizedMcpServerConfig>;
-}
-
 export function createMcpConfigSource(
     config: McpConfigSourceConfig,
-): McpConfigInstallSource {
+): InstallSource {
     function buildSnapshot(): McpConfigSnapshot {
         const entryWarnings: string[] = [];
         let parsed: unknown;
@@ -108,17 +96,21 @@ export function createMcpConfigSource(
         return { serversByName, entryWarnings };
     }
 
-    const snapshot = buildSnapshot();
-
-    function warnLoad(onWarn?: SourceWarning): void {
+    function warnLoad(
+        snapshot: McpConfigSnapshot,
+        onWarn?: SourceWarning,
+    ): void {
         if (snapshot.loadWarning !== undefined) {
             debug(snapshot.loadWarning);
             onWarn?.(snapshot.loadWarning);
         }
     }
 
-    function warnAll(onWarn?: SourceWarning): void {
-        warnLoad(onWarn);
+    function warnAll(
+        snapshot: McpConfigSnapshot,
+        onWarn?: SourceWarning,
+    ): void {
+        warnLoad(snapshot, onWarn);
         for (const message of snapshot.entryWarnings) {
             debug(message);
             onWarn?.(message);
@@ -131,14 +123,40 @@ export function createMcpConfigSource(
         describe(): string {
             return config.file;
         },
-        getServers(): ReadonlyMap<string, NormalizedMcpServerConfig> {
-            return snapshot.serversByName;
-        },
         // An MCP server is not a native npm agent: never resolve one through the
         // agent resolution walk. The unified `@package` facade routes MCP
         // installs to the MCP server store instead (see class doc).
         async find(): Promise<ResolvedCandidate | undefined> {
             return undefined;
+        },
+        async findMcp(
+            ref: string,
+            onWarn?: SourceWarning,
+        ): Promise<McpInstallCandidate | undefined> {
+            const snapshot = buildSnapshot();
+            warnLoad(snapshot, onWarn);
+            const imported = snapshot.serversByName.get(ref);
+            if (imported === undefined) {
+                return undefined;
+            }
+            return {
+                extensionKind: "mcp",
+                source: config.name,
+                sourceKind: config.kind,
+                ref,
+                config: {
+                    ...imported,
+                    id: `mcp:${encodeURIComponent(config.name)}:${encodeURIComponent(ref)}`,
+                    enabled: false,
+                    trust: "untrusted",
+                    scope: "workspace",
+                    provenance: {
+                        source: config.name,
+                        sourceKind: config.kind,
+                        ref,
+                    },
+                },
+            };
         },
         async materialize(): Promise<MaterializedInstallRecord> {
             throw new Error(
@@ -149,7 +167,8 @@ export function createMcpConfigSource(
         async listAgents(
             onWarn?: SourceWarning,
         ): Promise<AvailableInstallRow[]> {
-            warnAll(onWarn);
+            const snapshot = buildSnapshot();
+            warnAll(snapshot, onWarn);
             const rows: AvailableInstallRow[] = [];
             for (const [name, server] of snapshot.serversByName) {
                 const row: AvailableInstallRow = {

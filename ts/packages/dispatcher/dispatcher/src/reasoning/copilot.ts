@@ -19,6 +19,10 @@ import {
     approveAll,
     type AssistantMessageEvent,
     type CopilotSession,
+    type PermissionHandler,
+    type PermissionRequest,
+    type PermissionRequestResult,
+
     type SessionConfig,
 } from "@github/copilot-sdk";
 import registerDebug from "debug";
@@ -683,6 +687,53 @@ async function copilotSubagentResult(
             error: message,
         };
     }
+}
+
+export function getCopilotPermissionDefault(
+    request: PermissionRequest,
+): PermissionRequestResult | undefined {
+    if (request.kind === "read" && request.requestSandboxBypass !== true) {
+        return { kind: "approve-once" };
+    }
+    if (request.kind === "mcp" && request.readOnly === true) {
+        return { kind: "approve-once" };
+    }
+    if (
+        request.kind === "shell" &&
+        request.requestSandboxBypass !== true &&
+        request.hasWriteFileRedirection === false &&
+        request.commands.length > 0 &&
+        request.commands.every((command) => command.readOnly)
+    ) {
+        return { kind: "approve-once" };
+    }
+    return undefined;
+}
+
+function createCopilotPermissionHandler(
+    context: ActionContext<CommandHandlerContext>,
+): PermissionHandler {
+    return async (request) => {
+        const safe = getCopilotPermissionDefault(request);
+        if (safe !== undefined) {
+            return safe;
+        }
+        const identity =
+            request.kind === "mcp"
+                ? `MCP tool '${request.serverName}/${request.toolName}'`
+                : `Copilot ${request.kind} operation`;
+        const choice = await context.sessionContext.popupQuestion(
+            `${identity} requests sensitive permission. Allow this request once?`,
+            ["Allow once", "Deny"],
+            1,
+        );
+        return choice === 0
+            ? { kind: "approve-once" }
+            : {
+                  kind: "reject",
+                  feedback: "Denied by the TypeAgent host permission policy.",
+              };
+    };
 }
 
 /**
@@ -1513,7 +1564,7 @@ function getCopilotSessionConfig(
             "shell",
         ],
         workingDirectory: getRepoRoot(),
-        onPermissionRequest: approveAll,
+        onPermissionRequest: createCopilotPermissionHandler(context),
         systemMessage: {
             mode: "append" as const,
             content: [
