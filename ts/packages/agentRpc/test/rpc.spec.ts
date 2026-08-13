@@ -719,70 +719,48 @@ describe("createRpc OpenTelemetry propagation", () => {
         });
     });
 
-    it("notifies the old peer when a pending invoke is rebound", async () => {
+    it("marks both spans as cancelled when existing application cancellation aborts the handler", async () => {
+        type Cancel = { cancel: () => void };
         const client = createFakeChannel();
         const server = createFakeChannel();
         connect(client, server);
-        const clientRpc = createRpc<EchoInvoke>(
+        const controller = new AbortController();
+        const clientRpc = createRpc<EchoInvoke, Cancel>(
             "client",
             client,
             undefined,
             undefined,
-            {
-                rebindable: true,
-                tracing: { propagateContext: true },
-            },
+            { tracing: { propagateContext: true } },
         );
-        createRpc<{}, {}, EchoInvoke>(
+        createRpc<{}, {}, EchoInvoke, Cancel>(
             "server",
             server,
             {
-                echo: () => new Promise<number>(() => {}),
+                echo: () =>
+                    new Promise<number>((_resolve, reject) => {
+                        controller.signal.addEventListener(
+                            "abort",
+                            () =>
+                                reject(
+                                    new DOMException(
+                                        "cancelled by caller",
+                                        "AbortError",
+                                    ),
+                                ),
+                            { once: true },
+                        );
+                    }),
             },
-            undefined,
+            {
+                cancel: () => controller.abort(),
+            },
             { tracing: { trustRemoteContext: true } },
         );
 
         const result = clientRpc.invoke("echo", 1);
         await flushMicrotasks();
-        clientRpc.rebind(createFakeChannel());
-        await expect(result).rejects.toThrow("Agent channel rebound");
-        await flushMicrotasks();
-
-        expect(client.sent.map((message) => message.type)).toEqual([
-            "invoke",
-            "invokeCancel",
-        ]);
-        const spans = fixture!.exporter.getFinishedSpans();
-        expect(spans).toHaveLength(2);
-        expect(findSpan(spans, SpanKind.CLIENT).status).toEqual({
-            code: SpanStatusCode.ERROR,
-            message: "rpc failed",
-        });
-        expect(findSpan(spans, SpanKind.SERVER).status).toEqual({
-            code: SpanStatusCode.ERROR,
-            message: "cancelled",
-        });
-    });
-
-    it("marks both spans as cancelled when the client aborts locally", async () => {
-        const handler = () => new Promise<number>(() => {});
-        const { clientRpc } = createTracingPair(
-            { tracing: { trustRemoteContext: true } },
-            { tracing: { propagateContext: true } },
-            handler,
-        );
-        const controller = new AbortController();
-
-        const result = clientRpc.invokeWithOptions(
-            "echo",
-            { signal: controller.signal },
-            1,
-        );
-        await flushMicrotasks();
-        controller.abort();
+        clientRpc.send("cancel");
         await expect(result).rejects.toMatchObject({ name: "AbortError" });
-        await flushMicrotasks();
 
         const spans = fixture!.exporter.getFinishedSpans();
         expect(spans).toHaveLength(2);

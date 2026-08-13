@@ -28,14 +28,6 @@ type RpcInvokeMethod<T extends RpcInvokeFunctions> = <
     ...args: Parameters<T[K]>
 ) => ReturnType<T[K]>;
 
-type RpcInvokeWithOptionsMethod<T extends RpcInvokeFunctions> = <
-    K extends keyof T & string,
->(
-    name: K,
-    options: RpcInvokeOptions,
-    ...args: Parameters<T[K]>
-) => ReturnType<T[K]>;
-
 type RpcSendMethod<T extends RpcCallFunctions> = <K extends keyof T & string>(
     name: K,
     ...args: Parameters<T[K]>
@@ -46,7 +38,6 @@ type RpcReturn<
     CallTargetFunctions extends RpcCallFunctions,
 > = {
     invoke: RpcInvokeMethod<InvokeTargetFunctions>;
-    invokeWithOptions: RpcInvokeWithOptionsMethod<InvokeTargetFunctions>;
     send: RpcSendMethod<CallTargetFunctions>;
     rebind(channel: RpcChannel): void;
 };
@@ -64,10 +55,6 @@ export type RpcMetadataEnvelope = {
     traceparent?: string;
     tracestate?: string;
     typeagent?: RpcCorrelationFields;
-};
-
-export type RpcInvokeOptions = {
-    signal?: AbortSignal;
 };
 
 export type RpcInvocation = {
@@ -125,7 +112,7 @@ type PendingInvoke = {
     reject: (error: any) => void;
 };
 
-type ServerCancellation = "client" | "disconnect" | "rebind";
+type ServerCancellation = "disconnect" | "rebind";
 
 type ServerInvoke = {
     cancel(reason: ServerCancellation): void;
@@ -276,7 +263,7 @@ export function createRpc<
                         cancellation,
                     ]);
                     if (result.kind === "cancelled") {
-                        recordServerCancellation(span, result.reason);
+                        recordServerCancellation(span);
                         return;
                     }
                     serverInvokes.delete(message.callId);
@@ -369,10 +356,6 @@ export function createRpc<
             });
             return;
         }
-        if (isInvokeCancel(message)) {
-            serverInvokes.get(message.callId)?.cancel("client");
-            return;
-        }
         if (!isInvokeResult(message) && !isInvokeError(message)) {
             return;
         }
@@ -418,7 +401,6 @@ export function createRpc<
             cancelAllServerInvokes("disconnect");
             if (!rebindable) {
                 rpc.invoke = errorFunc;
-                rpc.invokeWithOptions = errorFunc;
                 rpc.send = errorFunc;
             }
         });
@@ -428,7 +410,6 @@ export function createRpc<
     const invoke = async (
         methodName: keyof InvokeTargetFunctions,
         args: any[],
-        invokeOptions?: RpcInvokeOptions,
     ): Promise<any> => {
         if (!connected) {
             throw new Error("Agent channel disconnected");
@@ -451,11 +432,6 @@ export function createRpc<
                 );
                 setCorrelationAttributes(span, correlation);
                 try {
-                    const signal = invokeOptions?.signal;
-                    if (signal?.aborted === true) {
-                        throw createCancellationError(signal.reason);
-                    }
-
                     const metadata =
                         options?.tracing?.propagateContext === true
                             ? createMetadataEnvelope(correlation)
@@ -469,50 +445,12 @@ export function createRpc<
                     };
 
                     return await new Promise<any>((resolve, reject) => {
-                        let settled = false;
-                        const cleanup = () => {
-                            signal?.removeEventListener("abort", onAbort);
-                        };
                         const pendingInvoke: PendingInvoke = {
-                            resolve(result) {
-                                if (settled) {
-                                    return;
-                                }
-                                settled = true;
-                                cleanup();
-                                resolve(result);
-                            },
-                            reject(error) {
-                                if (settled) {
-                                    return;
-                                }
-                                settled = true;
-                                cleanup();
-                                reject(error);
-                            },
-                        };
-                        const onAbort = () => {
-                            if (pending.get(message.callId) !== pendingInvoke) {
-                                return;
-                            }
-                            pending.delete(message.callId);
-                            sendBestEffort({
-                                type: "invokeCancel",
-                                callId: message.callId,
-                            });
-                            pendingInvoke.reject(
-                                createCancellationError(signal?.reason),
-                            );
+                            resolve,
+                            reject,
                         };
 
                         pending.set(message.callId, pendingInvoke);
-                        signal?.addEventListener("abort", onAbort, {
-                            once: true,
-                        });
-                        if (signal?.aborted === true) {
-                            onAbort();
-                            return;
-                        }
                         try {
                             out(message, (error) => {
                                 if (
@@ -542,11 +480,6 @@ export function createRpc<
     const rpc = {
         invoke: (methodName: keyof InvokeTargetFunctions, ...args: any[]) =>
             invoke(methodName, args),
-        invokeWithOptions: (
-            methodName: keyof InvokeTargetFunctions,
-            invokeOptions: RpcInvokeOptions,
-            ...args: any[]
-        ) => invoke(methodName, args, invokeOptions),
         send: (methodName: keyof CallTargetFunctions, ...args: any[]) => {
             if (!connected) {
                 throw new Error("Agent channel disconnected");
@@ -568,9 +501,6 @@ export function createRpc<
         rebind: (newChannel: RpcChannel) => {
             if (!rebindable) {
                 throw new Error("rpc was not created as rebindable");
-            }
-            for (const callId of pending.keys()) {
-                sendBestEffort({ type: "invokeCancel", callId });
             }
             for (const callId of serverInvokes.keys()) {
                 sendBestEffort({
@@ -840,34 +770,13 @@ function recordServerError(span: Span, cancelled: boolean): void {
     span.setStatus({ code: SpanStatusCode.ERROR, message });
 }
 
-function recordServerCancellation(
-    span: Span,
-    reason: ServerCancellation,
-): void {
-    if (reason === "client") {
-        span.recordException({ name: "AbortError", message: "cancelled" });
-        span.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: "cancelled",
-        });
-    } else {
-        recordLocalRpcError(span);
-    }
+function recordServerCancellation(span: Span): void {
+    recordLocalRpcError(span);
 }
 
 function recordLocalRpcError(span: Span): void {
     span.recordException({ name: "RpcServerError", message: "rpc failed" });
     span.setStatus({ code: SpanStatusCode.ERROR, message: "rpc failed" });
-}
-
-function createCancellationError(reason: unknown): RpcFailure {
-    if (isAbortError(reason)) {
-        return reason as RpcFailure;
-    }
-    const error = new Error("The operation was aborted.") as RpcFailure;
-    error.name = "AbortError";
-    error.rpcFailureKind = "cancelled";
-    return error;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -910,10 +819,6 @@ function isInvokeMessage(message: any): message is InvokeMessage {
     );
 }
 
-function isInvokeCancel(message: any): message is InvokeCancel {
-    return message?.type === "invokeCancel" && isValidCallId(message.callId);
-}
-
 function isInvokeResult(message: any): message is InvokeResult {
     return message?.type === "invokeResult" && isValidCallId(message.callId);
 }
@@ -947,11 +852,6 @@ type InvokeMessage = {
     metadata?: RpcMetadataEnvelope;
 };
 
-type InvokeCancel = {
-    type: "invokeCancel";
-    callId: number;
-};
-
 type InvokeResult = {
     type: "invokeResult";
     callId: number;
@@ -967,9 +867,4 @@ type InvokeError = {
     stack?: string; // Optional stack trace for debugging.
 };
 
-type RpcMessage =
-    | CallMessage
-    | InvokeMessage
-    | InvokeCancel
-    | InvokeResult
-    | InvokeError;
+type RpcMessage = CallMessage | InvokeMessage | InvokeResult | InvokeError;

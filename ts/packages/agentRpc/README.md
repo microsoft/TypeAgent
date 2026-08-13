@@ -116,11 +116,11 @@ composition roots must deliberately thread these options to TypeAgent-owned IPC
 channels; adding the envelope type alone does not activate cross-process
 parenting.
 
-Use `invokeWithOptions(name, { signal }, ...args)` when the local caller can
-cancel. Cancellation ends both RPC spans with a stable `cancelled` status.
-It abandons the generic RPC result but does not forcibly interrupt arbitrary
-handler work; application protocols that support execution cancellation must
-still deliver and observe their own cancellation signal.
+Cancellation continues to use each application protocol's existing mechanism.
+For example, agent actions send `cancelAction`, abort the server handler, and
+cause the original invoke to reject with `AbortError`. The RPC SERVER and CLIENT
+spans classify that handler rejection with the stable `cancelled` status; the
+telemetry layer does not introduce a second cancellation wire protocol.
 Malformed, oversized, untrusted, or unsupported metadata is ignored without
 failing the invocation.
 
