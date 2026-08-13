@@ -19,9 +19,10 @@ private val controlCharRegex = Regex("""\p{Cntrl}""")
 private val whitespaceRunRegex = Regex("""\s+""")
 
 /**
- * Parses `takeAction("search-nearby", ...)` from the androidMobile agent:
- * `{ originalRequest: string; searchTerm: string }`. Re-validated here because
- * `takeAction` is fire-and-forget and carries no schema guarantee over the wire.
+ * Parses the `parameters` of the `searchNearby` action declared by
+ * `androidDeviceSchema.ts`: `{ originalRequest: string; searchTerm: string }`.
+ * Re-validated here because the values are shaped by an LLM and reach
+ * `startActivity` unmodified.
  */
 internal fun parseSearchNearbyActionPayload(data: Any?): SearchNearbyAction? {
     val payload = data as? JSONObject ?: return null
