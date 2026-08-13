@@ -73,14 +73,12 @@ test("StudioServiceCollisionsSource delegates scan/clear and routes events", asy
     });
     const source = new StudioServiceCollisionsSource(connection);
     try {
-        assert.equal(await connection.connect(), true);
-        // Register listeners BEFORE any awaited round-trips so the one-shot
-        // push (~20ms after subscribe) isn't missed.
         let collisions = 0;
         let agentLoads = 0;
         source.onCollisionDetected(() => (collisions += 1));
         source.onAgentLoadChanged(() => (agentLoads += 1));
 
+        assert.equal(await connection.connect(), true);
         const scan = await source.scanGrammarCollisions();
         assert.deepEqual(scan.scanned, ["player"]);
         assert.equal(await source.clearCollisions(), 0);

@@ -11,7 +11,6 @@ An Android Jetpack Compose chat client that connects to a TypeAgent agent-server
   - `registerClientAgent` with an inline action schema
   - Client-hosted `executeAction` callbacks
   - Inbound `appendDisplay`, `setDisplay`, `setDisplayInfo`, and command completion events
-  - Inbound `takeAction` client actions
 - Incremental assistant response streaming into a single bubble per `requestId`, honouring
   the SDK's `DisplayAppendMode` (`inline`, `block`, `temporary`, `step`) and
   `DisplayMessageKind` styling the same way the Electron shell does
@@ -85,25 +84,30 @@ keeps its memory and the next launch resumes the same conversation.
 ## Client-hosted Android agent
 
 After joining a conversation, the app registers `androidDevice` as a
-client-hosted agent. Its alarm and timer schema is packaged in the APK and sent
-inline to TypeAgent. TypeAgent translates or directly invokes the typed action,
-then calls `executeAction` on the app over the existing WebSocket connection.
+client-hosted agent. Its action schema is packaged in the APK and sent inline to
+TypeAgent. TypeAgent translates or directly invokes the typed action, then calls
+`executeAction` on the app over the existing WebSocket connection, and the app
+reports success or failure back as the action result.
 
-The app also retains its existing `takeAction` handlers for compatibility with
-the static `androidMobile` agent.
+This is the only path for device actions. The legacy fire-and-forget
+`takeAction` path served by the server-side `androidMobile` agent has been
+removed; the `clientio:` channel is still used, but only for display and user
+interaction traffic.
 
-| Client action | Android intent | Notes |
+| Schema action | Android intent | Notes |
 |---|---|---|
-| `set-alarm` | `AlarmClock.ACTION_SET_ALARM` | Opens the clock app so the user can confirm the alarm. |
-| `set-timer` | `AlarmClock.ACTION_SET_TIMER` | Starts the countdown in the background (`EXTRA_SKIP_UI = true`) and confirms with a toast, so a chat request never yanks the user out of the conversation. Durations outside the documented 1..86400 second range are rejected rather than clamped. |
+| `setAlarm` | `AlarmClock.ACTION_SET_ALARM` | Opens the clock app so the user can confirm the alarm. |
+| `setTimer` | `AlarmClock.ACTION_SET_TIMER` | Starts the countdown in the background (`EXTRA_SKIP_UI = true`) and confirms with a toast, so a chat request never yanks the user out of the conversation. Durations outside the documented 1..86400 second range are rejected rather than clamped. |
+| `searchNearby` | `Intent.ACTION_VIEW` with a `geo:0,0?q=` URI | Opens the device's maps app on a local search. The intent is implicit rather than pinned to Google Maps, so it resolves on any device with a maps app. |
 
-Both actions require the app to be in the foreground: Android 10+ silently refuses
+All actions require the app to be in the foreground: Android 10+ silently refuses
 background activity starts (no exception is thrown), so the app checks its own
 lifecycle state first and reports a failure rather than a false confirmation.
 
-Both require the `com.android.alarm.permission.SET_ALARM` permission (declared in
-the manifest, install-time only) and matching `<queries>` entries so
-`resolveActivity` works under Android 11+ package visibility rules.
+The clock actions require the `com.android.alarm.permission.SET_ALARM` permission
+(declared in the manifest, install-time only). Every action needs a matching
+`<queries>` entry so `resolveActivity` works under Android 11+ package
+visibility rules.
 
 The registered client agent does not require installing the server-side
 `androidMobile` package. Use `@action` for a deterministic registration test:

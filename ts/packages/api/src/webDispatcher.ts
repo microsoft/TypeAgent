@@ -17,6 +17,7 @@ import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import {
     getDefaultAppAgentProviders,
     getDefaultAppAgentSource,
+    getMcpAppAgentSource,
     getDefaultConstructionProvider,
     getIndexingServiceRegistry,
 } from "default-agent-provider";
@@ -34,7 +35,9 @@ export interface WebDispatcher {
     handleAction(action: FullAction): Promise<CommandResult>;
 }
 
-export async function createWebDispatcher(): Promise<WebDispatcher> {
+export async function createWebDispatcher(
+    structuredLogs: boolean,
+): Promise<WebDispatcher> {
     let ws: WebSocket | null = null;
     const clientIOChannel = createChannelAdapter((message: any) =>
         ws?.send(
@@ -55,6 +58,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
             getDefaultAppAgentSource(instanceDir, {
                 excludePathSources: true,
             }),
+            getMcpAppAgentSource(instanceDir),
         ],
         persistSession: true,
         persistDir: instanceDir,
@@ -62,6 +66,9 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         metrics: true,
         dblogging: true,
         traceId: getTraceId(),
+        telemetry: {
+            structuredLogs,
+        },
         clientIO: clientIO,
         constructionProvider: getDefaultConstructionProvider(),
         indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),

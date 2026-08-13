@@ -18,7 +18,7 @@ import { PowerShellDataActions } from "./dataActionsSchema.mts";
       -> { actionName: "readJson", parameters: { path } }
   | (read|get) $(propertyPath:wildcard) from (json)? $(path:wildcard)
       -> { actionName: "readJson", parameters: { path, propertyPath } }
-  | (show|display) (json)? (file)? $(path:wildcard)
+  | (show|display) (json|json file) $(path:wildcard)
       -> { actionName: "readJson", parameters: { path } };
 
 <WriteJson> =

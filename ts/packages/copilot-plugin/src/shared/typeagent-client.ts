@@ -43,27 +43,12 @@ export function createClientIO(callbacks: DisplayCallbacks): ClientIO {
         },
         appendDiagnosticData(): void {},
         setDynamicDisplay(): void {},
-        async askYesNo(
-            _requestId: RequestId,
-            _message: string,
-            defaultValue?: boolean,
-        ): Promise<boolean> {
-            return defaultValue ?? true;
-        },
         async proposeAction(
             _requestId: RequestId,
             _actionTemplates: TemplateEditConfig,
             _source: string,
         ): Promise<unknown> {
             return undefined;
-        },
-        async popupQuestion(
-            _message: string,
-            _choices: string[],
-            defaultId: number | undefined,
-            _source: string,
-        ): Promise<number> {
-            return defaultId ?? 0;
         },
         notify(): void {},
         async openLocalView(): Promise<void> {},
@@ -72,8 +57,14 @@ export function createClientIO(callbacks: DisplayCallbacks): ClientIO {
         requestForm(): void {},
         takeAction(): void {},
         shutdown(): void {},
-        async question(): Promise<number> {
-            return 0;
+        async question(
+            _requestId: RequestId | undefined,
+            _message: string,
+            choices: string[],
+            defaultId?: number,
+            _source?: string,
+        ): Promise<number> {
+            return defaultId ?? Math.max(choices.length - 1, 0);
         },
         requestInteraction(): void {},
         interactionResolved(): void {},

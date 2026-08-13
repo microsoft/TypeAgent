@@ -26,16 +26,16 @@ private const val MAX_TIMER_SECONDS = 86_400L
 private const val MAX_ORIGINAL_REQUEST_CHARS = 256
 
 /**
- * Parses the payload of `takeAction("set-timer", ...)` emitted by the
- * androidMobile agent's `SetTimerAction` (TypeAgent PR #2780):
+ * Parses the `parameters` of the `setTimer` action declared by
+ * `androidDeviceSchema.ts`:
  *
  * ```ts
  * parameters: { originalRequest: string; durationInSeconds: number }
  * ```
  *
- * The agent already floors the value and rejects non-positive durations, but
- * this client re-validates because `takeAction` is fire-and-forget and carries
- * no schema guarantee over the wire.
+ * The server-side dispatcher already validates against the schema, but this
+ * client re-validates because the value is shaped by an LLM and reaches
+ * `startActivity` unmodified.
  */
 internal fun parseSetTimerActionPayload(data: Any?): SetTimerAction? {
     val payload = data as? JSONObject ?: return null

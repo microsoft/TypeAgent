@@ -498,11 +498,15 @@ export class AgentCache {
                         message: `Grammar generation error: ${error.message}`,
                     };
 
-                    this.logger?.logEvent("grammarGeneration", {
-                        request: requestAction.request,
-                        success: false,
-                        error: error.message,
-                    });
+                    this.logger?.logEvent(
+                        "grammarGeneration",
+                        {
+                            request: requestAction.request,
+                            success: false,
+                            error: error.message,
+                        },
+                        "error",
+                    );
                 }
             }
 
@@ -518,15 +522,19 @@ export class AgentCache {
                 ...(grammarResult !== undefined && { grammarResult }),
             };
         } catch (e: any) {
-            this.logger?.logEvent("error", {
-                request: requestAction.request,
-                actions: requestAction.actions,
-                history: requestAction.history,
-                cache,
-                options,
-                message: e.message,
-                stack: e.stack,
-            });
+            this.logger?.logEvent(
+                "error",
+                {
+                    request: requestAction.request,
+                    actions: requestAction.actions,
+                    history: requestAction.history,
+                    cache,
+                    options,
+                    message: e.message,
+                    stack: e.stack,
+                },
+                "error",
+            );
             throw e;
         }
     }

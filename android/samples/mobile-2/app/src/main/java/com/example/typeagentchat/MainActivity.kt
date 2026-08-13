@@ -92,7 +92,29 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        viewModel.connectIfNeeded(
+        webSocketManager.setClientActionHandler(object : WebSocketManager.ClientActionHandler {
+            override fun onSetAlarm(
+                action: SetAlarmAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                runOnUiThread { launchSetAlarmIntent(action, completion) }
+            }
+
+            override fun onSetTimer(
+                action: SetTimerAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                runOnUiThread { launchSetTimerIntent(action, completion) }
+            }
+
+            override fun onSearchNearby(
+                action: SearchNearbyAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                runOnUiThread { launchSearchNearbyIntent(action, completion) }
+            }
+        })
+        webSocketManager.connect(
             url = tunnelUrl,
             tunnelToken = tunnelToken,
             schemaContent = agentSchemaContent
@@ -205,7 +227,8 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Handles `takeAction("set-timer", ...)` from the androidMobile agent.
+     * Handles the `setTimer` action of the registered `androidDevice` client
+     * agent.
      *
      * `EXTRA_SKIP_UI` is true so the clock app starts the countdown in the
      * background instead of coming to the foreground. The reference
@@ -240,12 +263,22 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Opens the device maps app on a local search. The intent is left implicit
-     * rather than pinned to `com.google.android.apps.maps` as TypeAgent's
+     * Handles the `searchNearby` action of the registered `androidDevice`
+     * client agent by opening the device maps app on a local search.
+     *
+     * Unlike the clock intents there is no `EXTRA_SKIP_UI` equivalent, so maps
+     * necessarily comes to the foreground; that makes the RESUMED guard in
+     * [launchExternalIntent] load-bearing.
+     *
+     * The intent is left implicit rather than pinned to
+     * `com.google.android.apps.maps` as TypeAgent's
      * `JavaScriptInterface.searchNearby` does, so it still resolves on devices
      * without Google Maps.
      */
-    private fun launchSearchNearbyIntent(action: SearchNearbyAction) {
+    private fun launchSearchNearbyIntent(
+        action: SearchNearbyAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(buildGeoSearchUri(action.searchTerm)))
         launchExternalIntent(
             intent = intent,
@@ -254,7 +287,8 @@ class MainActivity : ComponentActivity() {
             successMessage = "Searching nearby for ${action.searchTerm}",
             missingAppMessage = "No maps app is available on this device.",
             deniedMessage = "This app is not allowed to open the maps app.",
-            backgroundMessage = "Could not open maps while the app was in the background."
+            backgroundMessage = "Could not open maps while the app was in the background.",
+            completion = completion
         )
     }
 
@@ -284,7 +318,7 @@ class MainActivity : ComponentActivity() {
         missingAppMessage: String,
         deniedMessage: String,
         backgroundMessage: String,
-        completion: (AndroidDeviceExecutionResult) -> Unit = {}
+        completion: (AndroidDeviceExecutionResult) -> Unit
     ) {
         val target = intent.resolveActivity(packageManager)
         Log.d(

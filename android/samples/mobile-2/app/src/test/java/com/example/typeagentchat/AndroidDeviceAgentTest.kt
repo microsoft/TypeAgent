@@ -68,6 +68,41 @@ class AndroidDeviceAgentTest {
     }
 
     @Test
+    fun parsesSearchNearbyExecuteAction() {
+        val parameters = JSONObject()
+            .put("originalRequest", "Find coffee shops near me")
+            .put("searchTerm", "coffee shops")
+        val action = JSONObject()
+            .put("actionName", "searchNearby")
+            .put("parameters", parameters)
+        val args = JSONArray().put(JSONObject().put("action", action))
+
+        val parsed = AndroidDeviceAgent.parseExecuteAction(args)
+
+        assertTrue(parsed is AndroidDeviceActionParseResult.Success)
+        val search = (parsed as AndroidDeviceActionParseResult.Success).action
+            as AndroidDeviceAction.SearchNearby
+        assertEquals("coffee shops", search.action.searchTerm)
+    }
+
+    @Test
+    fun classifiesInvalidSearchNearbyParametersAsActionError() {
+        val action = JSONObject()
+            .put("actionName", "searchNearby")
+            .put(
+                "parameters",
+                JSONObject()
+                    .put("originalRequest", "Find something")
+                    .put("searchTerm", "   ")
+            )
+        val args = JSONArray().put(JSONObject().put("action", action))
+
+        val parsed = AndroidDeviceAgent.parseExecuteAction(args)
+
+        assertTrue(parsed is AndroidDeviceActionParseResult.ActionError)
+    }
+
+    @Test
     fun classifiesInvalidParametersAsActionError() {
         val action = JSONObject()
             .put("actionName", "setTimer")
@@ -87,7 +122,7 @@ class AndroidDeviceAgentTest {
     @Test
     fun classifiesUnsupportedActionAsActionError() {
         val action = JSONObject()
-            .put("actionName", "openMaps")
+            .put("actionName", "sendSms")
             .put("parameters", JSONObject())
         val args = JSONArray().put(JSONObject().put("action", action))
 

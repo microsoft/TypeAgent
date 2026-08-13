@@ -89,6 +89,7 @@ async function initializeDispatcher(
     connect?: number,
     hidden?: boolean,
     idleTimeout?: number,
+    structuredLogs: boolean = false,
 ): Promise<InitResult | undefined> {
     if (cleanupP !== undefined) {
         // Make sure the previous cleanup is done.
@@ -557,6 +558,7 @@ async function initializeDispatcher(
             const [
                 {
                     getDefaultAppAgentSource,
+                    getMcpAppAgentSource,
                     getDefaultAppAgentProviders,
                     getDefaultConstructionProvider,
                     getIndexingServiceRegistry,
@@ -625,12 +627,16 @@ async function initializeDispatcher(
                     portRegistrar,
                     appAgentSources: [
                         getDefaultAppAgentSource(instanceDir, { configName }),
+                        getMcpAppAgentSource(instanceDir),
                     ],
                     persistSession: true,
                     storageProvider: getFsStorageProvider(),
                     metrics: true,
                     dblogging: true,
                     traceId: getTraceId(),
+                    telemetry: {
+                        structuredLogs,
+                    },
                     indexingServiceRegistry,
                     constructionProvider: getDefaultConstructionProvider(),
                     allowSharedLocalView: ["browser"],
@@ -871,6 +877,7 @@ export function initializeInstance(
     hidden?: boolean,
     idleTimeout?: number,
     _resume?: boolean, // reserved: shell conversation resume not yet implemented
+    structuredLogs: boolean = false,
 ) {
     if (instance !== undefined) {
         throw new Error("Instance already initialized");
@@ -980,6 +987,7 @@ export function initializeInstance(
         connect,
         hidden,
         idleTimeout,
+        structuredLogs,
     );
 
     const onChatViewReady = async (event: Electron.IpcMainEvent) => {
