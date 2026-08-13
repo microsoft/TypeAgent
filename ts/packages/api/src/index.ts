@@ -44,6 +44,7 @@ async function main(): Promise<void> {
     const telemetryConfig = otel.resolveTelemetryConfig();
     await otel.initTelemetry({
         config: telemetryConfig,
+        processName: "api-server",
         debugModules: [registerDebug],
         debugBridge: {
             includedNamespacePrefixes: ["typeagent:", "agent-server:"],

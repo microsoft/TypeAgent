@@ -84,7 +84,10 @@ async function startAgentProcess(): Promise<void> {
         agentDebug === undefined
             ? [registerDebug]
             : [registerDebug, agentDebug];
-    await otel.initTelemetry({ debugModules });
+    await otel.initTelemetry({
+        processName: `agent-${agentName}`,
+        debugModules,
+    });
 
     //=================================================================
     // Load the module.

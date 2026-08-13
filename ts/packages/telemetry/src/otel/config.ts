@@ -66,10 +66,10 @@ export interface LogConfig {
     readonly otlp?: OtlpExporterConfig;
     /**
      * Local file path for OTel log records, e.g.
-     * `"~/.typeagent/logs/typeagent-{service}-{pid}.jsonl"`. Template
-     * placeholders such as `{service}` and `{pid}` are preserved verbatim
-     * by the resolver; only a leading `~`, `~/`, or `~\` is expanded to
-     * the user's home directory.
+     * `"~/.typeagent/logs/typeagent-{service}-{process}-{pid}.jsonl"`.
+     * Template placeholders such as `{service}`, `{process}`, and `{pid}` are
+     * preserved verbatim by the resolver; only a leading `~`, `~/`, or `~\`
+     * is expanded to the user's home directory.
      */
     readonly logFile?: string;
 }

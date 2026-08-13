@@ -13,6 +13,7 @@ import type {
 export interface JsonlLogExporterOptions {
     readonly filePath: string;
     readonly serviceName: string;
+    readonly processName?: string;
     readonly pid?: number;
     readonly maxPendingRecords?: number;
     readonly diagnostic?: (message: string, error?: unknown) => void;
@@ -38,6 +39,7 @@ export class JsonlLogExporter implements LogRecordExporter {
             options.filePath,
             options.serviceName,
             options.pid,
+            options.processName,
         );
         this.maxPendingRecords =
             options.maxPendingRecords ?? DEFAULT_MAX_PENDING_RECORDS;
@@ -285,20 +287,27 @@ export function resolveJsonlLogPath(
     template: string,
     serviceName: string,
     pid = process.pid,
+    processName = "process",
 ): string {
     if (!Number.isInteger(pid) || pid <= 0) {
         throw new Error("JSONL pid must be a positive integer.");
     }
     const service = sanitizePathSegment(serviceName);
+    const processRole = sanitizePathSegment(processName);
     const hadPidPlaceholder = template.includes("{pid}");
+    const hadProcessPlaceholder = template.includes("{process}");
+    if (!hadProcessPlaceholder && hadPidPlaceholder) {
+        template = template.replaceAll("{pid}", "{process}-{pid}");
+    }
     let resolved = template
         .replaceAll("{service}", service)
+        .replaceAll("{process}", processRole)
         .replaceAll("{pid}", String(pid));
     if (!hadPidPlaceholder) {
         const parsed = path.parse(resolved);
         resolved = path.join(
             parsed.dir,
-            `${parsed.name}-${pid}${parsed.ext || ".jsonl"}`,
+            `${parsed.name}${hadProcessPlaceholder ? "" : `-${processRole}`}-${pid}${parsed.ext || ".jsonl"}`,
         );
     }
     return path.resolve(resolved);

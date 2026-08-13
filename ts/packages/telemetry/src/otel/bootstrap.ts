@@ -57,7 +57,10 @@ import {
     type TelemetryLifecycle,
     type TelemetryLifecycleOptions,
 } from "./lifecycle.js";
-import { createProcessResource } from "./resources.js";
+import {
+    createProcessResource,
+    TYPEAGENT_PROCESS_NAME_ATTRIBUTE,
+} from "./resources.js";
 import {
     installDebugBridge,
     type DebugBridgeOptions,
@@ -124,6 +127,8 @@ export interface InitTelemetryOptions {
     /** Shared resource supplied to every requested signal provider. */
     readonly resource?: Resource;
     readonly serviceName?: string;
+    /** Stable process role used in resource metadata and local log filenames. */
+    readonly processName?: string;
     readonly serviceVersion?: string;
     readonly serviceInstanceId?: string;
     readonly deploymentEnvironment?: string;
@@ -216,11 +221,19 @@ const DEFAULT_FACTORIES: TelemetryProviderFactories = {
                 configuredServiceName.length > 0
                     ? configuredServiceName
                     : "typeagent";
+            const configuredProcessName =
+                resource.attributes[TYPEAGENT_PROCESS_NAME_ATTRIBUTE];
+            const processName =
+                typeof configuredProcessName === "string" &&
+                configuredProcessName.length > 0
+                    ? configuredProcessName
+                    : "process";
             processors.push(
                 new BatchLogRecordProcessor({
                     exporter: new JsonlLogExporter({
                         filePath: config.logFile,
                         serviceName,
+                        processName,
                     }),
                     maxQueueSize: 2_048,
                     maxExportBatchSize: 256,
@@ -373,6 +386,9 @@ async function createDefaultTelemetryResource(
             options.serviceName ??
             (options.configOptions?.env ?? process.env).OTEL_SERVICE_NAME ??
             "typeagent",
+        ...(options.processName === undefined
+            ? {}
+            : { processName: options.processName }),
         ...(options.serviceVersion === undefined
             ? {}
             : { serviceVersion: options.serviceVersion }),

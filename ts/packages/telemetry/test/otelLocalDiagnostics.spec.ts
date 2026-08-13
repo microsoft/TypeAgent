@@ -77,9 +77,28 @@ describe("JsonlLogExporter", () => {
             path.join("logs", "typeagent-{service}.jsonl"),
             "agent/server",
             1234,
+            "agent-player",
         );
         expect(resolved).toBe(
-            path.resolve("logs", "typeagent-agent_server-1234.jsonl"),
+            path.resolve(
+                "logs",
+                "typeagent-agent_server-agent-player-1234.jsonl",
+            ),
+        );
+    });
+
+    it("adds the process role to legacy templates containing only a pid", () => {
+        const resolved = resolveJsonlLogPath(
+            path.join("logs", "typeagent-{service}-{pid}.jsonl"),
+            "typeagent-local",
+            1234,
+            "agent-server",
+        );
+        expect(resolved).toBe(
+            path.resolve(
+                "logs",
+                "typeagent-typeagent-local-agent-server-1234.jsonl",
+            ),
         );
     });
 

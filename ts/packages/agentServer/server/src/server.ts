@@ -182,6 +182,7 @@ await loadConfig({ keyVault: {}, strict: false });
 const telemetryConfig = otel.resolveTelemetryConfig();
 const telemetryInit = otel.initTelemetry({
     config: telemetryConfig,
+    processName: "agent-server",
     debugModules: [registerDebug],
     debugBridge: {
         includedNamespacePrefixes: ["typeagent:", "agent-server:"],

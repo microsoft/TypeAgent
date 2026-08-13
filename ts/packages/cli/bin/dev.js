@@ -16,7 +16,10 @@ async function main() {
     process.env.NODE_ENV = "development";
     settings.debug = true;
     try {
-        await otel.initTelemetry({ debugModules: [registerDebug] });
+        await otel.initTelemetry({
+            processName: "cli",
+            debugModules: [registerDebug],
+        });
         await run(process.argv.slice(2), import.meta.url);
         await flush();
         await otel.shutdownTelemetry();

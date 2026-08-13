@@ -400,7 +400,8 @@ typeagent:
 #   - otlpEndpoint       fallback endpoint for traces + metrics + logs
 #   - logFile            local JSONL log file; enables the logs signal
 #                        independently of any OTLP endpoint. Leading
-#                        `~`/`~/`/`~\` expands to your home dir.
+#                        `~`/`~/`/`~\` expands to your home dir. Supports
+#                        `{service}`, `{process}`, and `{pid}` placeholders.
 #   - debugBridge        copy enabled typeagent:* debug output to OTel logs
 #   - tracesSampler      one of always_on, always_off, traceidratio,
 #                        parentbased_always_on, parentbased_always_off,
@@ -409,7 +410,7 @@ typeagent:
 
 # telemetry:
 #   otlpEndpoint: http://localhost:4318
-#   logFile: ~/.typeagent/logs/typeagent-{service}-{pid}.jsonl
+#   logFile: ~/.typeagent/logs/typeagent-{service}-{process}-{pid}.jsonl
 #   debugBridge: true
 #   structuredLogs: true
 #   tracesSampler: parentbased_traceidratio

@@ -148,6 +148,7 @@ describe("telemetry bootstrap", () => {
                 logs: { logFile: "telemetry.jsonl" },
             },
             serviceName: "bootstrap-test",
+            processName: "agent-server",
             serviceVersion: "1.2.3",
             serviceInstanceId: "bootstrap-instance",
             deploymentEnvironment: "test",
@@ -175,6 +176,9 @@ describe("telemetry bootstrap", () => {
         expect(resources).toHaveLength(2);
         expect(resources[0]).toBe(resources[1]);
         expect(resources[0].attributes["service.name"]).toBe("bootstrap-test");
+        expect(resources[0].attributes["typeagent.process.name"]).toBe(
+            "agent-server",
+        );
         expect(resources[0].attributes["service.version"]).toBe("1.2.3");
         expect(resources[0].attributes["service.instance.id"]).toBe(
             "bootstrap-instance",

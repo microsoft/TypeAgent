@@ -330,7 +330,7 @@ TypeAgent-owned processes support:
 ```yaml
 telemetry:
   otlpEndpoint: http://localhost:4318
-  logFile: ~/.typeagent/logs/typeagent-{service}-{pid}.jsonl
+  logFile: ~/.typeagent/logs/typeagent-{service}-{process}-{pid}.jsonl
   debugBridge: true
   tracesSampler: always_on
 ```
@@ -358,7 +358,7 @@ Set `TYPEAGENT_OTEL_LOG_FILE` or YAML `telemetry.logFile` to write OTel logs
 directly, without OTLP, a collector, or a backend:
 
 ```powershell
-$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\typeagent-{service}-{pid}.jsonl"
+$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\typeagent-{service}-{process}-{pid}.jsonl"
 ```
 
 For dispatcher PID 12345, the resolved path may be:
@@ -387,10 +387,13 @@ The path is implemented as an OTel `LogRecordExporter` behind a bounded
 - Rate-limit diagnostics and disable or retry under a documented policy.
 - Apply redaction before enqueueing records.
 
-Expand `~` before `path.resolve()`. Sanitize `{service}` and `{pid}`. If `{pid}`
-is absent, insert it before the extension so processes never share a writer.
-Create parent directories and report the resolved path once through a status or
-diagnostic path that cannot recurse into the exporter.
+Expand `~` before `path.resolve()`. Sanitize `{service}`, `{process}`, and
+`{pid}`. TypeAgent-owned hosts identify their process role as `agent-server`,
+`api-server`, `shell`, `cli`, or `agent-<name>`. If `{process}` or `{pid}` is
+absent, insert it before the extension so filenames remain identifiable and
+processes never share a writer. Create parent directories and report the
+resolved path once through a status or diagnostic path that cannot recurse into
+the exporter.
 
 The OS or external tools manage rotation and retention. JSONL and OTLP are
 additive. A JSONL-only configuration creates only the logs provider.
@@ -483,7 +486,7 @@ pnpm run build agent-server
 $env:OTEL_SERVICE_NAME = "typeagent-local"
 $env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
 $env:OTEL_TRACES_SAMPLER = "always_on"
-$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\typeagent-{service}-{pid}.jsonl"
+$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\typeagent-{service}-{process}-{pid}.jsonl"
 $env:TYPEAGENT_OTEL_DEBUG_BRIDGE = "true"
 $env:TYPEAGENT_OTEL_STRUCTURED_LOGS = "true"
 $env:DEBUG = "typeagent:*,agent-server:*"
