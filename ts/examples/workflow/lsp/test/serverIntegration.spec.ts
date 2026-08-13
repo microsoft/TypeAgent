@@ -75,10 +75,6 @@ async function startSession(debounceMs = 5) {
             } finally {
                 server.dispose();
                 client.dispose();
-                pipes.clientReader.dispose();
-                pipes.clientWriter.dispose();
-                pipes.serverTransport.input.destroy();
-                pipes.serverTransport.output.destroy();
             }
         },
     };
