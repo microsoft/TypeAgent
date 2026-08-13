@@ -1,0 +1,31 @@
+{
+  "$schema": "../config.schema.json",
+  "models": {
+    "azure/gpt-4.1": { "tpmLimit": 0, "maxConcurrency": 10 },
+    "azure/gpt-4.1-mini": { "tpmLimit": 0, "maxConcurrency": 20 },
+    "azure/gpt-5.4": { "tpmLimit": 0, "maxConcurrency": 8 }
+  },
+  "base": {
+    "synthesizer": {
+      "generatorModel": "azure/gpt-5.4",
+      "reviewerModel": "azure/gpt-5.4",
+      "caseCount": 100,
+      "genCases": 2,
+      "maxAttempts": 5,
+      "concurrency": 8,
+      "headroom": 0.85
+    },
+    "eval": {
+      "models": ["azure/gpt-4.1", "azure/gpt-4.1-mini"],
+      "modelConcurrency": 2,
+      "headroom": 0.85
+    }
+  },
+  "batches": {
+    "synthesizer": {},
+    "eval": {},
+    "eval_fast": {
+      "eval": { "maxCases": 100, "models": ["azure/gpt-4.1-mini"] }
+    }
+  }
+}
