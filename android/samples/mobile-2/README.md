@@ -109,8 +109,8 @@ The clock actions require the `com.android.alarm.permission.SET_ALARM` permissio
 `<queries>` entry so `resolveActivity` works under Android 11+ package
 visibility rules.
 
-The registered client agent does not require installing the server-side
-`androidMobile` package. Use `@action` for a deterministic registration test:
+The registered client agent needs nothing installed on the server side. Use
+`@action` for a deterministic registration test:
 
 ```text
 @action --parameters {"originalRequest":"timer","durationInSeconds":30} androidDevice setTimer
