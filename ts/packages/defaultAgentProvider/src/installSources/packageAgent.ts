@@ -27,6 +27,7 @@ import {
 } from "agent-dispatcher";
 import chalk from "chalk";
 import {
+    ExtensionKind,
     InstallMatchKind,
     InstallPreview,
     InstallResult,
@@ -54,6 +55,10 @@ export interface AvailableAgentInfo {
     readonly defaultAgentName?: string | undefined;
     readonly packageName?: string | undefined;
     readonly description?: string | undefined;
+    // Which kind of extension this row installs; absent means "agent". Threaded
+    // from the source's `AvailableInstallRow` so `@package available --type`
+    // can filter native agents from MCP servers.
+    readonly extensionKind?: ExtensionKind | undefined;
 }
 
 /** Agent information grouped under one configured install source. */
@@ -144,9 +149,11 @@ export interface InstalledAgentSourceApi {
     // Source names in resolution order (for `@package install --source`).
     listSources(): string[];
     // Enumerable install targets grouped in source order. Optional source
-    // filter narrows results to one source.
+    // filter narrows results to one source; optional `type` filter narrows to
+    // one extension kind ("agent" / "mcp").
     listAvailableAgents(opts?: {
         sourceName?: string;
+        type?: ExtensionKind;
     }): Promise<AgentSourceGroup<AvailableAgentInfo>[]>;
     // The host-owned source command table, nested under `@package source`.
     sourceCommands(): CommandHandlerTable;
@@ -264,6 +271,13 @@ class ListAvailableCommandHandler implements CommandHandler {
                 type: "string",
                 optional: true,
             },
+            type: {
+                description:
+                    "Filter by extension kind: 'agent', 'mcp', or 'all'",
+                char: "t",
+                type: "string",
+                default: "all",
+            },
             refresh: {
                 description:
                     "Refresh cache-backed source metadata before listing",
@@ -279,13 +293,22 @@ class ListAvailableCommandHandler implements CommandHandler {
     ) {
         const { source } = context.sessionContext.agentContext;
         const sourceName = params.flags?.source ?? undefined;
+        const typeFlag = params.flags?.type ?? "all";
+        if (typeFlag !== "all" && typeFlag !== "agent" && typeFlag !== "mcp") {
+            throw new Error(
+                `Invalid --type '${typeFlag}'. Expected 'agent', 'mcp', or 'all'.`,
+            );
+        }
+        const type =
+            typeFlag === "all" ? undefined : (typeFlag as ExtensionKind);
         if (params.flags?.refresh) {
             displayStatus("Refreshing source metadata...", context);
             await source.refresh(sourceName);
         }
-        const groups = await source.listAvailableAgents(
-            sourceName !== undefined ? { sourceName } : undefined,
-        );
+        const groups = await source.listAvailableAgents({
+            ...(sourceName !== undefined ? { sourceName } : {}),
+            ...(type !== undefined ? { type } : {}),
+        });
         if (groups.length === 0) {
             displayResult("No installable agents found.", context);
             return;
@@ -322,6 +345,12 @@ class ListAvailableCommandHandler implements CommandHandler {
                 completions.push({
                     name,
                     completions: source.listSources(),
+                });
+            }
+            if (name === "--type") {
+                completions.push({
+                    name,
+                    completions: ["agent", "mcp", "all"],
                 });
             }
         }

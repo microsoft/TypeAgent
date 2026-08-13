@@ -166,6 +166,98 @@ describe("translation bench utterance disambiguation", () => {
         expect(result.targetCuesMatched.length).toBeGreaterThan(0);
     });
 
+    it("rejects getWebFlowsForDomain gold that reads as detectPageActions", () => {
+        // gen1k case generated-000920: "Inspect github.com to discover which
+        // browser actions are supported for that domain" — terra/luna both
+        // chose detectPageActions; utterance never says web flows.
+        const discoveryCatalog: TranslationBenchBenchmarkSchema[] = [
+            {
+                schemaName: "browser.actionDiscovery",
+                description: "discovery",
+                tools: [
+                    {
+                        type: "function",
+                        function: {
+                            name: "getWebFlowsForDomain",
+                            description: "List web flows for a domain",
+                            parameters: {
+                                type: "object",
+                                properties: {
+                                    domain: { type: "string" },
+                                },
+                            },
+                        },
+                    },
+                    {
+                        type: "function",
+                        function: {
+                            name: "detectPageActions",
+                            description: "Detect page actions",
+                            parameters: { type: "object", properties: {} },
+                        },
+                    },
+                ],
+                typeAgent: {
+                    sourceHash: `discovery-${HASH}`,
+                    schemaType: "DiscoveryAction",
+                    parsedActionSchema: toJSONParsedActionSchema(
+                        parseToolsJsonSchema([
+                            {
+                                name: "getWebFlowsForDomain",
+                                description: "List web flows for a domain",
+                                inputSchema: {
+                                    type: "object",
+                                    properties: {
+                                        domain: { type: "string" },
+                                    },
+                                    additionalProperties: false,
+                                },
+                            },
+                            {
+                                name: "detectPageActions",
+                                description: "Detect page actions",
+                                inputSchema: {
+                                    type: "object",
+                                    properties: {},
+                                    additionalProperties: false,
+                                },
+                            },
+                        ]),
+                    ),
+                },
+            },
+            ...catalog,
+        ];
+        const target = {
+            schemaName: "browser.actionDiscovery",
+            actionName: "getWebFlowsForDomain",
+        } as const;
+        const siblings = findTranslationBenchConfusableSiblings(
+            target,
+            discoveryCatalog,
+        );
+        expect(siblings.map((s) => s.actionName)).toEqual(
+            expect.arrayContaining(["detectPageActions", "openWebPage"]),
+        );
+        const ambiguous = checkTranslationBenchUtteranceDisambiguation(
+            "Inspect github.com to discover which browser actions are supported for that domain.",
+            target,
+            siblings,
+            "$.seed.utterance",
+        );
+        expect(ambiguous.ok).toBe(false);
+        expect(ambiguous.message).toMatch(/disambiguat|confusable|cue/i);
+
+        const clear = checkTranslationBenchUtteranceDisambiguation(
+            "List the saved web flows for the domain github.com",
+            target,
+            siblings,
+            "$.seed.utterance",
+        );
+        expect(clear.ok).toBe(true);
+        expect(clear.targetCuesMatched.length).toBeGreaterThan(0);
+    });
+
     it("skips negatives in candidate check", () => {
         const issues = checkTranslationBenchCandidateDisambiguation(
             {
