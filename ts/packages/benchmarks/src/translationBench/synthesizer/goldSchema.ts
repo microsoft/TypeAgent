@@ -147,44 +147,49 @@ function isOptionalBooleanField(type: ActionParamObject, key: string): boolean {
     return resolved?.type === "boolean";
 }
 
-function stripOptionalFalseValue(
-    value: unknown,
+type StripResult = { kept: true; value: unknown } | { kept: false };
+
+function stripOptionalFalseArray(
+    value: unknown[],
     type: SchemaType,
     path: string,
     removed: string[],
-): { kept: true; value: unknown } | { kept: false } {
-    if (Array.isArray(value)) {
-        const resolved = resolveTypeReference(type) ?? type;
-        if (resolved.type !== "array") {
-            return { kept: true, value };
-        }
-        const next: unknown[] = [];
-        let changed = false;
-        for (let i = 0; i < value.length; i += 1) {
-            const child = stripOptionalFalseValue(
-                value[i],
-                resolved.elementType,
-                `${path}[${i}]`,
-                removed,
-            );
-            if (!child.kept) {
-                changed = true;
-                continue;
-            }
-            if (child.value !== value[i]) {
-                changed = true;
-            }
-            next.push(child.value);
-        }
-        if (next.length === 0 && value.length > 0) {
-            removed.push(path);
-            return { kept: false };
-        }
-        return { kept: true, value: changed ? next : value };
-    }
-    if (!isPlainObject(value)) {
+): StripResult {
+    const resolved = resolveTypeReference(type) ?? type;
+    if (resolved.type !== "array") {
         return { kept: true, value };
     }
+    const next: unknown[] = [];
+    let changed = false;
+    for (let i = 0; i < value.length; i += 1) {
+        const child = stripOptionalFalseValue(
+            value[i],
+            resolved.elementType,
+            `${path}[${i}]`,
+            removed,
+        );
+        if (!child.kept) {
+            changed = true;
+            continue;
+        }
+        if (child.value !== value[i]) {
+            changed = true;
+        }
+        next.push(child.value);
+    }
+    if (next.length === 0 && value.length > 0) {
+        removed.push(path);
+        return { kept: false };
+    }
+    return { kept: true, value: changed ? next : value };
+}
+
+function stripOptionalFalseObject(
+    value: Record<string, unknown>,
+    type: SchemaType,
+    path: string,
+    removed: string[],
+): StripResult {
     const objectType = matchingUnionObject(type, value);
     if (objectType === undefined) {
         return { kept: true, value };
@@ -225,6 +230,21 @@ function stripOptionalFalseValue(
         return { kept: false };
     }
     return { kept: true, value: changed ? next : value };
+}
+
+function stripOptionalFalseValue(
+    value: unknown,
+    type: SchemaType,
+    path: string,
+    removed: string[],
+): StripResult {
+    if (Array.isArray(value)) {
+        return stripOptionalFalseArray(value, type, path, removed);
+    }
+    if (!isPlainObject(value)) {
+        return { kept: true, value };
+    }
+    return stripOptionalFalseObject(value, type, path, removed);
 }
 
 export function stripOptionalFalseGoldBooleans(
