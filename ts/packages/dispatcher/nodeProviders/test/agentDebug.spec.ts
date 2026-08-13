@@ -34,7 +34,9 @@ describe("loadAgentDebug", () => {
 
         expect(loaded).toBeDefined();
         expect(loaded?.debug).not.toBe(registerDebug);
-        expect(loaded?.path).toBe(path.join(debugDir, "index.js"));
+        expect(loaded && fs.realpathSync(loaded.path)).toBe(
+            fs.realpathSync(path.join(debugDir, "index.js")),
+        );
     });
 
     test("does not return the host debug module as a second instance", () => {
