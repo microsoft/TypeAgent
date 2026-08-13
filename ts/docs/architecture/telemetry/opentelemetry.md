@@ -551,11 +551,19 @@ choose the **Loki** data source. Query all records from this validation run:
 {service_name="typeagent-local"}
 ```
 
-Useful filters include:
+Set the Explore time range to cover the validation run. For the `@help`
+example, this query matches both structured and bridged records containing
+`help`:
 
 ```logql
-{service_name="typeagent-local"} |= "command"
+{service_name="typeagent-local"} |= "help"
 ```
+
+Use a distinctive, non-sensitive term from the command you ran when validating
+a different request. Avoid copying PowerShell-escaped strings such as `\"`
+into the Grafana query editor; LogQL strings use normal quotes there.
+
+To inspect queue bridge output:
 
 ```logql
 {service_name="typeagent-local"} |= "requestQueue"

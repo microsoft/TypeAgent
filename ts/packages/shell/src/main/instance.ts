@@ -89,6 +89,7 @@ async function initializeDispatcher(
     connect?: number,
     hidden?: boolean,
     idleTimeout?: number,
+    structuredLogs: boolean = false,
 ): Promise<InitResult | undefined> {
     if (cleanupP !== undefined) {
         // Make sure the previous cleanup is done.
@@ -986,6 +987,7 @@ export function initializeInstance(
         connect,
         hidden,
         idleTimeout,
+        structuredLogs,
     );
 
     const onChatViewReady = async (event: Electron.IpcMainEvent) => {

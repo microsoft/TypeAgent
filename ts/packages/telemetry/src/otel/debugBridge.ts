@@ -34,10 +34,7 @@ interface InstalledBridge {
     refCount: number;
 }
 
-type DebugFunction = (
-    this: { namespace?: string },
-    ...args: unknown[]
-) => unknown;
+type DebugFunction = (this: any, ...args: any[]) => unknown;
 
 interface EffectiveDebugBridgeOptions extends RedactionOptions {
     readonly includedNamespacePrefixes: readonly string[];
