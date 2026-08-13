@@ -1,9 +1,0 @@
-{
-  "emojiChar": "📱",
-  "description": "Agent to perform actions on an Android phone or mobile device — send SMS, make calls, set alarms, set timers, and search nearby locations on the Android device. Use this agent (not the Windows Clock agent) when the request comes from or targets a mobile phone.",
-  "schema": {
-    "description": "Android mobile agent that performs actions on an Android phone: send SMS messages, call phone numbers, set device alarms, set countdown timers, and search nearby locations. Prefer this agent over windowsClock for alarm and timer requests when the user is on a mobile device.",
-    "schemaFile": "./androidMobileSchema.ts",
-    "schemaType": "AndroidMobileAction"
-  }
-}
