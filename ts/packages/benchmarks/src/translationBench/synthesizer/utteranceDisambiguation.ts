@@ -109,6 +109,26 @@ const KNOWN_CONFUSABLE_PAIRS: ReadonlyArray<
         { schemaName: "browser", actionName: "openWebPage" },
         "list flows for domain hostname vs navigate to that hostname",
     ],
+    [
+        { schemaName: "github-cli", actionName: "browseIssue" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "GitHub issue via gh/browseIssue vs generic browser open of a URL/page; prefer 'GitHub issue #N', 'gh browse issue', 'in this repo' — avoid bare 'open in the browser' / 'web page'",
+    ],
+    [
+        { schemaName: "github-cli", actionName: "browsePr" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "GitHub PR via gh/browsePr vs generic browser open; prefer 'pull request #N', 'gh browse pr', 'in this repo'",
+    ],
+    [
+        { schemaName: "github-cli", actionName: "browseRepo" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "GitHub repo via gh/browseRepo vs generic browser open; prefer 'this GitHub repo', 'gh browse', owner/name",
+    ],
+    [
+        { schemaName: "browser.external", actionName: "openTab" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "external/system browser tab vs in-app openWebPage; prefer 'external browser', 'system browser', 'outside the app', 'default browser app' — avoid bare 'new tab' / 'in my browser'",
+    ],
 ];
 
 /**
