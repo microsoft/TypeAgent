@@ -255,7 +255,9 @@ test("Windows merge-gate jobs still run full install/build/test/package", () => 
     const smoke = fs.readFileSync(azureSmokeYml, "utf8");
     // Leave Windows Defender at the host default — do not disable it in CI.
     assert.equal(
-        /Defender|MpPreference|ExclusionPath/.test(buildTs + buildShell + smoke),
+        /Defender|MpPreference|ExclusionPath/.test(
+            buildTs + buildShell + smoke,
+        ),
         false,
         "CI must not turn off or exclude Windows Defender",
     );
