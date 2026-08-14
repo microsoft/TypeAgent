@@ -53,10 +53,10 @@ To set up and use the `default-agent-provider` package, follow these steps:
    - `TYPEAGENT_FEED_SCOPES`: Defines the scopes for the agent feed. Ensure this variable is set appropriately for your environment.
 
 3. **Optional setup for non-bundled agents**:
-    - To install agents like `vampire`, use the following command:
-       ```text
-       @package install vampire
-       ```
+   - To install agents like `vampire`, use the following command:
+     ```text
+     @package install vampire
+     ```
    - If the installation fails due to a missing catalog source, run `@package source list` to verify the catalog source configuration.
 
 ## Key Files
