@@ -141,6 +141,9 @@ restartable or replace host globals.
 
 Each subprocess extracts RPC context, creates child spans with its own provider,
 and exports independently. Telemetry payloads do not pass through the dispatcher.
+Browser-shared RPC code reads active TypeAgent metadata through the
+`@typeagent/telemetry/traceContext` subpath. It does not import the Node-only
+telemetry composition root.
 
 ## Signals
 

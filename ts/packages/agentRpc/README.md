@@ -118,6 +118,11 @@ composition roots must deliberately thread these options to TypeAgent-owned IPC
 channels; adding the envelope type alone does not activate cross-process
 parenting.
 
+Code shared with browser RPC consumers must import active TypeAgent trace
+metadata from `@typeagent/telemetry/traceContext`. The main
+`@typeagent/telemetry` entry point is Node-only because it includes provider and
+exporter lifecycle support.
+
 Cancellation continues to use each application protocol's existing mechanism.
 For example, agent actions send `cancelAction`, abort the server handler, and
 cause the original invoke to reject with `AbortError`. The RPC SERVER and CLIENT
