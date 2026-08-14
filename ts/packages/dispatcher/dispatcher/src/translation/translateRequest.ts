@@ -145,6 +145,16 @@ export function isSwitchEnabled(config: DispatcherConfig) {
     );
 }
 
+export function resolveTranslatedActionSchemaName(
+    action: TranslatedAction,
+    translator: Pick<TypeAgentTranslator, "getSchemaName">,
+): string | undefined {
+    // UnknownAction belongs to the dispatcher and is absent from translator maps.
+    return isUnknownAction(action)
+        ? DispatcherName
+        : translator.getSchemaName(action.actionName);
+}
+
 export function getTranslatorForSchema(
     context: CommandHandlerContext,
     schemaName: string,
@@ -1066,8 +1076,9 @@ async function finalizeAction(
     }
 
     // A translator may combine actions from multiple schemas (inline, selected actions)
-    const currentActionSchemaName = currentTranslator.getSchemaName(
-        currentAction.actionName,
+    const currentActionSchemaName = resolveTranslatedActionSchemaName(
+        currentAction,
+        currentTranslator,
     );
 
     if (currentActionSchemaName === undefined) {
