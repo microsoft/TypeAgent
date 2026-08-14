@@ -7,6 +7,7 @@ import {
     SpanKind,
     SpanStatusCode,
     trace,
+    type Context,
     type Span,
 } from "@opentelemetry/api";
 import type {
@@ -15,8 +16,19 @@ import type {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { otel } from "@typeagent/telemetry";
+import { createChannelProvider } from "@typeagent/agent-rpc/channel";
+import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
+import {
+    createDispatcherFromContext,
+    type CommandHandlerContext,
+} from "agent-dispatcher/internal";
+import { fork, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
+import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { createAgentProcess } from "../src/agentProvider/process/agentProcessShim.js";
 
@@ -68,20 +80,7 @@ describe("agent subprocess OpenTelemetry propagation", () => {
             throw new Error("Expected a TCP receiver address");
         }
         const endpoint = `http://127.0.0.1:${address.port}/v1/traces`;
-        const previousEnv = captureEnv([
-            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-            "OTEL_TRACES_EXPORTER",
-            "OTEL_METRICS_EXPORTER",
-            "OTEL_LOGS_EXPORTER",
-            "OTEL_TRACES_SAMPLER",
-            "OTEL_TRACES_SAMPLER_ARG",
-        ]);
-        process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = endpoint;
-        process.env.OTEL_TRACES_EXPORTER = "otlp";
-        process.env.OTEL_METRICS_EXPORTER = "none";
-        process.env.OTEL_LOGS_EXPORTER = "none";
-        process.env.OTEL_TRACES_SAMPLER = "always_on";
-        delete process.env.OTEL_TRACES_SAMPLER_ARG;
+        const telemetryEnvironment = configureTelemetryEnvironment(endpoint);
 
         const coordinator = otel.createTelemetryCoordinator();
         let agentProcess:
@@ -118,7 +117,7 @@ describe("agent subprocess OpenTelemetry propagation", () => {
         } finally {
             await agentProcess?.close?.();
             await coordinator.shutdown();
-            restoreEnv(previousEnv);
+            restoreTelemetryEnvironment(telemetryEnvironment);
             receiver.close();
             await once(receiver, "close");
         }
@@ -129,7 +128,323 @@ describe("agent subprocess OpenTelemetry propagation", () => {
             assertActionRpcChain(spans, actionName);
         }
     });
+
+    it("preserves the full client, dispatcher, request, action, and subprocess chain", async () => {
+        const payloads: Buffer[] = [];
+        const receiver = createServer(async (request, response) => {
+            expect(request.url).toBe("/v1/traces");
+            payloads.push(await readRequestBody(request));
+            response.writeHead(200, {
+                "content-type": "application/x-protobuf",
+            });
+            response.end();
+        });
+        receiver.listen(0, "127.0.0.1");
+        await once(receiver, "listening");
+
+        const address = receiver.address();
+        if (address === null || typeof address === "string") {
+            throw new Error("Expected a TCP receiver address");
+        }
+        const endpoint = `http://127.0.0.1:${address.port}/v1/traces`;
+        const telemetryEnvironment = configureTelemetryEnvironment(endpoint);
+
+        const coordinator = otel.createTelemetryCoordinator();
+        let agentProcess:
+            | Awaited<ReturnType<typeof createAgentProcess>>
+            | undefined;
+        let clientProcess: ChildProcess | undefined;
+        let clientExit: Promise<ChildExit> | undefined;
+        try {
+            await coordinator.init({
+                config: {
+                    traces: {
+                        otlp: { endpoint },
+                    },
+                },
+                serviceName: "typeagent-agent-server-test",
+                processName: "agent-server-test",
+            });
+            agentProcess = await createAgentProcess(
+                AGENT_NAME,
+                new URL("./fixtures/telemetryAgent.js", import.meta.url).href,
+            );
+
+            let resolveExecution!: () => void;
+            let rejectExecution!: (error: unknown) => void;
+            const execution = new Promise<void>((resolve, reject) => {
+                resolveExecution = resolve;
+                rejectExecution = reject;
+            });
+            const commandContext = {
+                telemetryOptions: { joinActiveTrace: true },
+                requestQueue: {
+                    submit(input: {
+                        readonly text: string;
+                        readonly traceContext?: Context;
+                    }) {
+                        const traceContext = input.traceContext;
+                        if (traceContext === undefined) {
+                            throw new Error(
+                                "Expected dispatcher to capture the RPC context",
+                            );
+                        }
+                        setImmediate(() => {
+                            void context
+                                .with(traceContext, () =>
+                                    runQueuedRequest(agentProcess!.appAgent),
+                                )
+                                .then(resolveExecution, rejectExecution);
+                        });
+                        return {
+                            requestId: "full-trace-request",
+                            originatorConnectionId: "client-test",
+                            text: input.text,
+                            submittedAt: Date.now(),
+                            state: "queued",
+                            completion: execution.then(() => undefined),
+                        };
+                    },
+                },
+            } as unknown as CommandHandlerContext;
+            const dispatcher = createDispatcherFromContext(
+                commandContext,
+                "client-test",
+            );
+
+            clientProcess = fork(
+                fileURLToPath(
+                    new URL(
+                        "./fixtures/dispatcherRpcClient.js",
+                        import.meta.url,
+                    ),
+                ),
+                [],
+                {
+                    env: { ...process.env },
+                    stdio: ["ignore", "inherit", "inherit", "ipc"],
+                    windowsHide: true,
+                } as Parameters<typeof fork>[2] & { windowsHide: boolean },
+            );
+            clientExit = observeChildExit(clientProcess);
+            const channelProvider = createChannelProvider(
+                "dispatcher-telemetry-server",
+                clientProcess,
+            );
+            createDispatcherRpcServer(
+                dispatcher,
+                channelProvider.createChannel("dispatcher"),
+                {
+                    trustedContextPropagation: true,
+                },
+            );
+            const controlChannel =
+                channelProvider.createChannel<string>("control");
+            const submitted = waitForChannelMessage(
+                controlChannel,
+                "submitted",
+            );
+            controlChannel.send("run");
+
+            await Promise.race([
+                submitted,
+                clientExit.then(({ code, signal }) => {
+                    throw new Error(
+                        `Dispatcher RPC client exited before submission ` +
+                            `(code=${code ?? "null"}, signal=${signal ?? "null"})`,
+                    );
+                }),
+            ]);
+            await execution;
+            await agentProcess.close?.();
+            agentProcess = undefined;
+            controlChannel.send("shutdown");
+            await clientExit;
+            clientProcess = undefined;
+            clientExit = undefined;
+            await coordinator.shutdown();
+        } finally {
+            await agentProcess?.close?.();
+            if (clientProcess !== undefined) {
+                if (
+                    clientProcess.exitCode === null &&
+                    clientProcess.signalCode === null
+                ) {
+                    clientProcess.kill();
+                }
+                await clientExit?.catch(() => {});
+            }
+            await coordinator.shutdown();
+            restoreTelemetryEnvironment(telemetryEnvironment);
+            receiver.close();
+            await once(receiver, "close");
+        }
+
+        assertFullProcessChain(payloads.flatMap(decodeSpans));
+    });
 });
+
+async function runQueuedRequest(
+    appAgent: Awaited<ReturnType<typeof createAgentProcess>>["appAgent"],
+): Promise<void> {
+    const executeAction = appAgent.executeAction;
+    if (executeAction === undefined) {
+        throw new Error("Fixture agent must implement executeAction");
+    }
+    const attributes = {
+        agentName: AGENT_NAME,
+        actionName: "succeed",
+        sessionId: SESSION_ID,
+        activationId: ACTIVATION_ID,
+        traceId: LEGACY_TRACE_ID,
+    };
+    const tracer = trace.getTracer(
+        otel.INSTRUMENTATION_SCOPE_NAME,
+        otel.INSTRUMENTATION_SCOPE_VERSION,
+    );
+    await tracer.startActiveSpan(
+        otel.TYPEAGENT_SPAN_NAMES.REQUEST,
+        async (requestSpan) => {
+            otel.setTypeAgentSpanAttributes(requestSpan, attributes);
+            try {
+                await tracer.startActiveSpan(
+                    otel.TYPEAGENT_SPAN_NAMES.ACTION,
+                    async (actionSpan) => {
+                        otel.setTypeAgentSpanAttributes(actionSpan, attributes);
+                        try {
+                            await context.with(
+                                otel.setActiveTypeAgentSpanAttributes(
+                                    context.active(),
+                                    attributes,
+                                ),
+                                () =>
+                                    executeAction(
+                                        {
+                                            schemaName: AGENT_NAME,
+                                            actionName: "succeed",
+                                            parameters: {},
+                                        },
+                                        createActionContext(
+                                            new AbortController().signal,
+                                        ),
+                                    ),
+                            );
+                        } finally {
+                            actionSpan.end();
+                        }
+                    },
+                );
+            } finally {
+                requestSpan.end();
+            }
+        },
+    );
+}
+
+function waitForChannelMessage(
+    channel: {
+        on(event: "message", callback: (message: string) => void): void;
+        off(event: "message", callback: (message: string) => void): void;
+    },
+    expected: string,
+): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const listener = (message: string) => {
+            if (message === expected) {
+                channel.off("message", listener);
+                resolve();
+            } else if (message.startsWith("error:")) {
+                channel.off("message", listener);
+                reject(new Error(message.slice("error:".length)));
+            }
+        };
+        channel.on("message", listener);
+    });
+}
+
+interface ChildExit {
+    readonly code: number | null;
+    readonly signal: NodeJS.Signals | null;
+}
+
+function observeChildExit(child: ChildProcess): Promise<ChildExit> {
+    return new Promise((resolve, reject) => {
+        const onError = (error: Error) => {
+            child.off("exit", onExit);
+            reject(error);
+        };
+        const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+            child.off("error", onError);
+            resolve({ code, signal });
+        };
+        child.once("error", onError);
+        child.once("exit", onExit);
+    });
+}
+
+function assertFullProcessChain(spans: readonly ExportedSpan[]): void {
+    const clientRpc = spans.find(
+        (span) =>
+            span.name === "typeagent.rpc.invoke" &&
+            span.kind === SpanKind.CLIENT &&
+            span.processName === "cli-test" &&
+            span.attributes.get("rpc.method") === "submitCommand",
+    );
+    const dispatcherRpc = spans.find(
+        (span) =>
+            span.name === "typeagent.rpc.invoke" &&
+            span.kind === SpanKind.SERVER &&
+            span.processName === "agent-server-test" &&
+            span.attributes.get("rpc.method") === "submitCommand",
+    );
+    const request = spans.find(
+        (span) =>
+            span.name === otel.TYPEAGENT_SPAN_NAMES.REQUEST &&
+            span.processName === "agent-server-test",
+    );
+    const action = spans.find(
+        (span) =>
+            span.name === otel.TYPEAGENT_SPAN_NAMES.ACTION &&
+            span.processName === "agent-server-test" &&
+            span.attributes.get("typeagent.action.name") === "succeed",
+    );
+    const agentClientRpc = spans.find(
+        (span) =>
+            span.name === "typeagent.rpc.invoke" &&
+            span.kind === SpanKind.CLIENT &&
+            span.processName === "agent-server-test" &&
+            span.attributes.get("rpc.method") === "executeAction",
+    );
+    const agentServerRpc = spans.find(
+        (span) =>
+            span.name === "typeagent.rpc.invoke" &&
+            span.kind === SpanKind.SERVER &&
+            span.processName === `agent-${AGENT_NAME}` &&
+            span.attributes.get("rpc.method") === "executeAction",
+    );
+    const chain = [
+        clientRpc,
+        dispatcherRpc,
+        request,
+        action,
+        agentClientRpc,
+        agentServerRpc,
+    ];
+    for (const span of chain) {
+        expect(span).toBeDefined();
+    }
+    for (const span of chain.slice(1)) {
+        expect(span!.traceId).toBe(clientRpc!.traceId);
+    }
+    expect(dispatcherRpc!.parentSpanId).toBe(clientRpc!.spanId);
+    expect(request!.parentSpanId).toBe(dispatcherRpc!.spanId);
+    expect(action!.parentSpanId).toBe(request!.spanId);
+    expect(agentClientRpc!.parentSpanId).toBe(action!.spanId);
+    expect(agentServerRpc!.parentSpanId).toBe(agentClientRpc!.spanId);
+    expect(new Set(chain.map((span) => span!.processName))).toEqual(
+        new Set(["cli-test", "agent-server-test", `agent-${AGENT_NAME}`]),
+    );
+}
 
 async function runAction(
     appAgent: Awaited<ReturnType<typeof createAgentProcess>>["appAgent"],
@@ -518,4 +833,53 @@ function restoreEnv(values: ReadonlyMap<string, string | undefined>): void {
             process.env[name] = value;
         }
     }
+}
+
+const TELEMETRY_ENVIRONMENT_NAMES = [
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+    "OTEL_TRACES_EXPORTER",
+    "OTEL_METRICS_EXPORTER",
+    "OTEL_LOGS_EXPORTER",
+    "OTEL_TRACES_SAMPLER",
+    "OTEL_TRACES_SAMPLER_ARG",
+    "TYPEAGENT_CONFIG_DIR",
+    "TYPEAGENT_CONFIG_DEFAULTS",
+    "TYPEAGENT_CONFIG_LOCAL",
+    "TYPEAGENT_DOTENV",
+    "TYPEAGENT_OTEL_LOG_FILE",
+    "TYPEAGENT_OTEL_DEBUG_BRIDGE",
+    "DEBUG",
+] as const;
+
+interface TelemetryTestEnvironment {
+    readonly configDir: string;
+    readonly previousEnv: ReadonlyMap<string, string | undefined>;
+}
+
+function configureTelemetryEnvironment(
+    endpoint: string,
+): TelemetryTestEnvironment {
+    const configDir = mkdtempSync(join(tmpdir(), "typeagent-otel-test-"));
+    const previousEnv = captureEnv(TELEMETRY_ENVIRONMENT_NAMES);
+    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = endpoint;
+    process.env.OTEL_TRACES_EXPORTER = "otlp";
+    process.env.OTEL_METRICS_EXPORTER = "none";
+    process.env.OTEL_LOGS_EXPORTER = "none";
+    process.env.OTEL_TRACES_SAMPLER = "always_on";
+    process.env.TYPEAGENT_CONFIG_DIR = configDir;
+    process.env.TYPEAGENT_OTEL_DEBUG_BRIDGE = "false";
+    delete process.env.OTEL_TRACES_SAMPLER_ARG;
+    delete process.env.TYPEAGENT_CONFIG_DEFAULTS;
+    delete process.env.TYPEAGENT_CONFIG_LOCAL;
+    delete process.env.TYPEAGENT_DOTENV;
+    delete process.env.TYPEAGENT_OTEL_LOG_FILE;
+    delete process.env.DEBUG;
+    return { configDir, previousEnv };
+}
+
+function restoreTelemetryEnvironment(
+    environment: TelemetryTestEnvironment,
+): void {
+    restoreEnv(environment.previousEnv);
+    rmSync(environment.configDir, { recursive: true, force: true });
 }

@@ -351,6 +351,7 @@ async function main() {
                 developerMode,
                 traceId,
                 telemetry: {
+                    joinActiveTrace: true,
                     structuredLogs: telemetryConfig.structuredLogs === true,
                 },
                 indexingServiceRegistry: await getIndexingServiceRegistry(
