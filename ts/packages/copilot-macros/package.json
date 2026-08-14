@@ -1,7 +1,14 @@
 {
   "name": "@typeagent/copilot-macros",
   "version": "0.0.1",
-  "private": true,
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/copilot-macros"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
   "type": "module",
   "exports": {
     ".": "./dist/index.js"

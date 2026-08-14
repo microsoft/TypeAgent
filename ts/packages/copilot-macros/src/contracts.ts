@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 export interface RecordedToolCall {
     toolCallId: string;
     name: string;

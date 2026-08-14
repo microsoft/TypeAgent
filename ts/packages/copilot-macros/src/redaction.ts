@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 const secretKey =
     /^(?:authorization|cookie|password|passwd|secret|token|api[_-]?key|access[_-]?key)$/i;
 const secretValue =
