@@ -20,6 +20,7 @@ import {
     createClientIO,
     connectToTypeAgent,
 } from "../shared/typeagent-client.js";
+import { isTypeAgentAgentServerTool } from "../shared/tool-identities.js";
 
 interface TranscriptEvent {
     type: string;
@@ -99,8 +100,10 @@ function extractLastTurn(transcriptPath: string): TurnSummary | undefined {
                 for (const tool of event.data.toolRequests) {
                     toolsUsed.push(tool.name);
                     if (
-                        tool.mcpServerName === "typeagent" ||
-                        tool.name.includes("typeagent")
+                        isTypeAgentAgentServerTool(
+                            tool.name,
+                            tool.mcpServerName,
+                        )
                     ) {
                         handledByTypeAgent = true;
                     }

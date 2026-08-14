@@ -13,6 +13,7 @@ import {
     createClientIO,
     connectToTypeAgent,
 } from "../shared/typeagent-client.js";
+import { isTypeAgentAgentServerTool } from "../shared/tool-identities.js";
 
 interface PostToolInput {
     sessionId: string;
@@ -45,8 +46,9 @@ async function main(): Promise<void> {
         process.exit(1);
     }
 
-    // Skip TypeAgent tool calls — already tracked on the TypeAgent side
-    if (input.toolName.includes("typeagent")) {
+    // Agent-server calls are already tracked by TypeAgent. Workspace-tool calls
+    // execute in the plugin process and must remain visible to trace capture.
+    if (isTypeAgentAgentServerTool(input.toolName)) {
         console.log("{}");
         return;
     }
