@@ -319,6 +319,9 @@ export function createAgentServerConnectionHandler(
                         createDispatcherRpcServer(
                             result.dispatcher,
                             dispatcherChannel,
+                            {
+                                trustedContextPropagation: true,
+                            },
                         );
                     } catch (e) {
                         channelProvider.deleteChannel(

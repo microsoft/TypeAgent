@@ -283,6 +283,9 @@ export function createAgentServerConnection(
                     getDispatcherChannelName(conversationId),
                 ),
                 result.connectionId,
+                {
+                    trustedContextPropagation: true,
+                },
             );
 
             createClientIORpcServer(

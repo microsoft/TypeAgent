@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    context,
     SpanStatusCode,
     trace,
     type Span,
@@ -75,21 +76,29 @@ export async function wrapActionSpan<T>(
         otel.TYPEAGENT_SPAN_NAMES.ACTION,
         async (span) => {
             otel.setTypeAgentSpanAttributes(span, attributes);
-            try {
-                return await body(span);
-            } catch (error) {
-                const isAbort =
-                    error !== null &&
-                    typeof error === "object" &&
-                    (error as { name?: unknown }).name === "AbortError";
-                const name = isAbort ? "AbortError" : "ActionError";
-                const message = isAbort ? "cancelled" : "action failed";
-                span.recordException({ name, message });
-                span.setStatus({ code: SpanStatusCode.ERROR, message });
-                throw error;
-            } finally {
-                span.end();
-            }
+            return context.with(
+                otel.setActiveTypeAgentSpanAttributes(
+                    context.active(),
+                    attributes,
+                ),
+                async () => {
+                    try {
+                        return await body(span);
+                    } catch (error) {
+                        const isAbort =
+                            error !== null &&
+                            typeof error === "object" &&
+                            (error as { name?: unknown }).name === "AbortError";
+                        const name = isAbort ? "AbortError" : "ActionError";
+                        const message = isAbort ? "cancelled" : "action failed";
+                        span.recordException({ name, message });
+                        span.setStatus({ code: SpanStatusCode.ERROR, message });
+                        throw error;
+                    } finally {
+                        span.end();
+                    }
+                },
+            );
         },
     );
 }

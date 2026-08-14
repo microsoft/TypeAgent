@@ -43,6 +43,14 @@ export interface DispatcherRpcClient {
     notifyRequestCancelled(requestId: string, reason: QueueCancelReason): void;
 }
 
+export interface DispatcherRpcOptions {
+    /**
+     * Propagate the active OTel context across this TypeAgent-owned channel.
+     * Enable only when the destination is the trusted agent-server endpoint.
+     */
+    trustedContextPropagation?: boolean;
+}
+
 type PendingEntry = {
     resolve: (value: CommandResult | undefined) => void;
     reject: (err: unknown) => void;
@@ -55,10 +63,20 @@ type SettledEntry =
 export function createDispatcherRpcClient(
     channel: RpcChannel,
     connectionId?: ConnectionId,
+    options?: DispatcherRpcOptions,
 ): DispatcherRpcClient {
     const rpc = createRpc<DispatcherInvokeFunctions, DispatcherCallFunctions>(
         "dispatcher",
         channel,
+        undefined,
+        undefined,
+        options?.trustedContextPropagation === true
+            ? {
+                  tracing: {
+                      propagateContext: true,
+                  },
+              }
+            : undefined,
     );
 
     // requestId → pending submitCommand awaiter (set on submit, resolved by
