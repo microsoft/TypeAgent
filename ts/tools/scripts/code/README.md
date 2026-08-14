@@ -115,12 +115,13 @@ Four code-quality steps run in
 [`build-ts.yml`](../../../../.github/workflows/build-ts.yml), **on pull requests
 only**, sequenced after `Build` and before `Test`. They are skipped entirely
 unless the PR touches `ts/**` or the workflow file itself (a `dorny/paths-filter`
-guard), and — like the rest of the job — they run on every matrix cell
-(`ubuntu`/`windows`/`macos` × Node 22/24).
+guard). The gates are repo-wide, not OS-specific, so they run once on the
+`ubuntu-latest` + Node 22 cell (see `ts/tools/scripts/prCiScope.mjs`).
 
-Each step is a **changed-files diff against the PR's base branch**: it first
-`git fetch --no-tags origin <base_ref>`, then passes `--base origin/<base_ref>`
-so only what the PR actually touches is judged. Two flavors:
+Each step is a **changed-files diff against the PR's base branch**: the
+workflow fetches `origin/<base_ref>` once, then every gate passes
+`--base origin/<base_ref>` so only what the PR actually touches is judged. Two
+flavors:
 
 - **Ratchet** (`--ratchet`) — _stateless_: the base branch _is_ the baseline
   (there is no committed baseline file), so the metric can only trend down.

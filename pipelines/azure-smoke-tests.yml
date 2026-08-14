@@ -114,10 +114,11 @@ jobs:
     pool:
       vmImage: ubuntu-latest
     steps:
-      # Full history so merge-base / parent diffs resolve on both PR merge
-      # commits and merge-queue branches.
+      # PR merge commits only need HEAD and HEAD^1 for the diff below.
+      # CI / merge-queue builds fetch origin main in the script and treat a
+      # missing merge-base as "run the tests", so a shallow clone is safe.
       - checkout: self
-        fetchDepth: 0
+        fetchDepth: 2
       - bash: |
           set -uo pipefail
           # Default to running the tests; only skip when we can positively
@@ -169,9 +170,9 @@ jobs:
     # required status check keeps passing on PRs that do not touch ts/**.
     dependsOn: detect_changes
     condition: and(succeeded(), eq(dependencies.detect_changes.outputs['detect.tsChanged'], 'true'))
-    # Generous cap: the Linux leg can run the shell smoke (60m) + live (60m)
-    # tests back to back. Requires purchased parallelism for hosted agents.
-    timeoutInMinutes: 150
+    # Shell/CLI only. Live tests run in parallel on live_linux so this job
+    # no longer waits for test:live. Requires purchased parallelism.
+    timeoutInMinutes: 90
     strategy:
       # Both legs run independently; one failing does not cancel the other
       # (equivalent to the GitHub matrix's fail-fast: false).
@@ -198,14 +199,22 @@ jobs:
         displayName: Install libsecret-1-0
         condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
 
-      - script: |
-          pnpm exec playwright install --with-deps
-        displayName: Install Playwright Browsers
-        workingDirectory: $(buildDirectory)/packages/shell
-
-      - script: |
-          npm run build
-        displayName: Build
+      # Playwright browser download and tsc do not share a write path.
+      # Overlap them so the longer of the two sets the wait, not the sum.
+      #
+      # Scope the work to what shell + CLI smoke actually need:
+      #   * playwright.config.ts only defines a chromium project (Electron
+      #     suites still use the Playwright runner). Chromium alone is enough.
+      #   * fluid-build agent-shell|agent-cli --dep covers the packages the
+      #     smoke/shell steps exercise.  Full monorepo build stays on the
+      #     live_linux job and on build_ts.
+      - bash: |
+          set -euo pipefail
+          (cd packages/shell && pnpm exec playwright install --with-deps chromium) &
+          PW_PID=$!
+          pnpm exec fluid-build "agent-shell|agent-cli" -t build --dep
+          wait "$PW_PID"
+        displayName: Build shell+cli + Playwright chromium (overlapped)
         workingDirectory: $(buildDirectory)
 
       # Single federated (WIF) login for the whole job. addSpnToEnvironment
@@ -254,6 +263,8 @@ jobs:
       # WorkloadIdentityCredential against the now-stale token file, and a failed
       # assertion exchange is a hard error that stops the chain before it reaches
       # this task's fresh AzureCliCredential. Clearing them makes it fall through.
+      # Full shell:test (jest + all Playwright) on every trigger — PR, main,
+      # and merge-queue. Linux stays on shell:smoke (unchanged from before).
       - task: AzureCLI@2
         displayName: Shell Tests - full (Windows)
         timeoutInMinutes: 60
@@ -291,14 +302,69 @@ jobs:
             export DISPLAY=:99
             npm run shell:smoke
 
-      # Own AzureCLI@2 login with the published AZURE_* vars cleared — same
-      # rationale as "Shell Tests - full" above. Non-blocking (continueOnError)
-      # so a late auth issue won't fail the run.
+      # Remove provisioned secrets even if a prior step failed.
+      - pwsh: |
+          node -e "try{require('fs').unlinkSync('./.env');}catch(e){}"
+          node -e "try{require('fs').unlinkSync('./config.local.yaml');}catch(e){}"
+        displayName: Clean up Keys
+        workingDirectory: $(buildDirectory)
+        condition: always()
+
+  # Live integration tests on every trigger that has ts changes — including
+  # PullRequest (same suite as main baseline).  Own job so shell/CLI legs do
+  # not serialize behind live; continueOnError matches baseline (a live
+  # failure does not fail the required pipeline).  Parent still waits for
+  # this job to finish.  Build only packages that define test:live (+deps);
+  # npm run test:live still walks the whole workspace.
+  - job: live_linux
+    displayName: Live tests (Linux)
+    dependsOn: detect_changes
+    condition: and(succeeded(), eq(dependencies.detect_changes.outputs['detect.tsChanged'], 'true'))
+    continueOnError: true
+    timeoutInMinutes: 90
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - template: include-prepare-repo.yml
+        parameters:
+          buildDirectory: $(buildDirectory)
+          nodeVersion: $(nodeVersion)
+          registry: $(INSTALL_REGISTRY)
+
+      - script: |
+          sudo apt install libsecret-1-0
+        displayName: Install libsecret-1-0
+
+      # Packages that ship a test:live script (see ts/packages/*/package.json
+      # and LIVE_TEST_PACKAGE_FILTER in prCiScope.mjs). --dep pulls their
+      # workspace dependencies; full monorepo build is redundant for this suite.
+      - bash: |
+          set -euo pipefail
+          FILTER=$(node tools/scripts/prCiScope.mjs --live-package-filter)
+          echo "livePackageFilter=$FILTER"
+          pnpm exec fluid-build "$FILTER" -t build --dep
+        displayName: Build live packages (+deps)
+        workingDirectory: $(buildDirectory)
+
+      - task: AzureCLI@2
+        displayName: Azure login + Get Keys
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: pscore
+          scriptLocation: inlineScript
+          addSpnToEnvironment: true
+          workingDirectory: $(buildDirectory)
+          inlineScript: |
+            $tokenFile = Join-Path "$(Agent.TempDirectory)" "wif-federated-token.txt"
+            Set-Content -Path $tokenFile -Value "$env:idToken" -NoNewline
+            Write-Host "##vso[task.setvariable variable=AZURE_CLIENT_ID]$env:servicePrincipalId"
+            Write-Host "##vso[task.setvariable variable=AZURE_TENANT_ID]$env:tenantId"
+            Write-Host "##vso[task.setvariable variable=AZURE_FEDERATED_TOKEN_FILE]$tokenFile"
+            node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
+
       - task: AzureCLI@2
         displayName: Live Tests (Linux)
         timeoutInMinutes: 60
-        continueOnError: true
-        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
         inputs:
           azureSubscription: $(azureSubscription)
           scriptType: bash
@@ -308,7 +374,6 @@ jobs:
             unset AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_FEDERATED_TOKEN_FILE
             npm run test:live
 
-      # Remove provisioned secrets even if a prior step failed.
       - pwsh: |
           node -e "try{require('fs').unlinkSync('./.env');}catch(e){}"
           node -e "try{require('fs').unlinkSync('./config.local.yaml');}catch(e){}"
