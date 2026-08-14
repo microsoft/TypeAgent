@@ -20,7 +20,11 @@ import { handleDirect } from "./hook-direct.js";
 import { handleMcpRedirect } from "./hook-mcp-redirect.js";
 import { handleDevActions } from "./hook-dev-actions.js";
 import { makeTurnId, writeDemoState } from "./demo-state.js";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import type { HookInput, HookOutput } from "./types.js";
+import { connectToAgentServer } from "../shared/typeagent-client.js";
+import { redactTraceValue } from "@typeagent/copilot-macros";
 import {
     getConfigPath,
     getMode,
@@ -41,11 +45,59 @@ const modeDescriptions: Record<Mode, string> = {
  * was handled, or undefined if the prompt is not a slash command.
  * Returns a Promise for commands that need async work (e.g., @typeagent run).
  */
-function handleSlashCommand(
-    prompt: string,
-): HookOutput | Promise<HookOutput> | undefined {
+async function handleSlashCommand(
+    input: HookInput,
+): Promise<HookOutput | undefined> {
+    const { prompt } = input;
     const trimmed = prompt.trim();
     const lower = trimmed.toLowerCase();
+
+    const macroMatch = lower.match(
+        /^@typeagent\s+macro\s+(record|cancel|status)\s*$/,
+    );
+    if (macroMatch) {
+        const command = macroMatch[1];
+        const connection = await connectToAgentServer();
+        try {
+            if (command === "record") {
+                const token = await connection.armMacroRecording({
+                    sessionId: input.sessionId,
+                });
+                return {
+                    handled: true,
+                    responseContent: `Macro recording armed for the next interaction. Recording token: \`${token.id}\``,
+                    handledBy: "typeagent",
+                };
+            }
+            if (command === "cancel") {
+                await connection.cancelMacroRecording(input.sessionId);
+                return {
+                    handled: true,
+                    responseContent: "Macro recording cancelled.",
+                    handledBy: "typeagent",
+                };
+            }
+
+            const state = await connection.getMacroRecordingState(
+                input.sessionId,
+            );
+            const detail =
+                state.status === "completed" && state.trace
+                    ? ` Trace ID: \`${state.trace.traceId}\``
+                    : state.status === "failed" && state.error
+                      ? ` ${state.error}`
+                      : state.token
+                        ? ` Recording token: \`${state.token.id}\``
+                        : "";
+            return {
+                handled: true,
+                responseContent: `Macro recording status: **${state.status}**.${detail}`,
+                handledBy: "typeagent",
+            };
+        } finally {
+            await connection.close();
+        }
+    }
 
     // @typeagent run <command> — force-route to TypeAgent directly
     const runMatch = trimmed.match(/^@typeagent\s+run\s+(.+)$/i);
@@ -53,9 +105,9 @@ function handleSlashCommand(
         const command = runMatch[1];
         return handleDirect({
             prompt: command,
-            sessionId: "",
-            timestamp: 0,
-            cwd: "",
+            sessionId: input.sessionId,
+            timestamp: input.timestamp,
+            cwd: input.cwd,
         });
     }
 
@@ -157,9 +209,9 @@ function handleSlashCommand(
         const command = catchAll[1];
         return handleDirect({
             prompt: command,
-            sessionId: "",
-            timestamp: 0,
-            cwd: "",
+            sessionId: input.sessionId,
+            timestamp: input.timestamp,
+            cwd: input.cwd,
         });
     }
 
@@ -189,37 +241,70 @@ async function main(): Promise<void> {
         }
 
         // Check for slash commands first
-        const slashResult = await handleSlashCommand(input.prompt);
+        const slashResult = await handleSlashCommand(input);
         if (slashResult) {
             console.log(JSON.stringify(slashResult));
             emitDemoStateForOutput(input, slashResult, "direct");
             return;
         }
 
-        // Route based on current mode
         const mode = getMode();
-        let output: HookOutput;
-
-        if (mode === "bypass") {
-            // Bypass mode: return empty to fall through to other handlers
-            output = {};
-        } else if (mode === "mcp") {
-            output = handleMcpRedirect(input);
-        } else if (mode === "dev") {
-            output = await handleDevActions(
-                input,
-                undefined,
-                abortController.signal,
-            );
-        } else {
-            output = await handleDirect(input);
-        }
+        const output = await routePrompt(input, mode, abortController.signal);
 
         console.log(JSON.stringify(output));
         emitDemoStateForOutput(input, output, mode);
     } finally {
         process.removeListener("SIGINT", abortRequest);
         process.removeListener("SIGTERM", abortRequest);
+    }
+}
+
+export interface RoutePromptDependencies {
+    claimRecording: (input: HookInput) => Promise<boolean>;
+    direct: (input: HookInput) => Promise<HookOutput>;
+    mcp: (input: HookInput) => HookOutput;
+    dev: (input: HookInput, signal: AbortSignal) => Promise<HookOutput>;
+}
+
+const routePromptDefaults: RoutePromptDependencies = {
+    claimRecording: claimMacroRecording,
+    direct: handleDirect,
+    mcp: handleMcpRedirect,
+    dev: (input, signal) => handleDevActions(input, undefined, signal),
+};
+
+export async function routePrompt(
+    input: HookInput,
+    mode: Mode,
+    signal: AbortSignal,
+    dependencies: RoutePromptDependencies = routePromptDefaults,
+): Promise<HookOutput> {
+    if (mode === "bypass") return {};
+    if (await dependencies.claimRecording(input)) return {};
+    if (mode === "mcp") return dependencies.mcp(input);
+    if (mode === "dev") return dependencies.dev(input, signal);
+    return dependencies.direct(input);
+}
+
+async function claimMacroRecording(input: HookInput): Promise<boolean> {
+    let connection;
+    try {
+        connection = await connectToAgentServer();
+        const token = await connection.claimMacroRecording({
+            sessionId: input.sessionId,
+            cwd: input.cwd,
+            promptHash: createHash("sha256")
+                .update(redactTraceValue(input.prompt) as string)
+                .digest("hex"),
+        });
+        return token !== undefined;
+    } catch (error) {
+        console.error(
+            `[macro] Unable to claim recording: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return false;
+    } finally {
+        await connection?.close();
     }
 }
 
@@ -246,7 +331,9 @@ function emitDemoStateForOutput(
     });
 }
 
-main().catch((error) => {
-    console.error("Hook error:", error);
-    process.exit(1);
-});
+if (fileURLToPath(import.meta.url) === process.argv[1]) {
+    main().catch((error) => {
+        console.error("Hook error:", error);
+        process.exit(1);
+    });
+}

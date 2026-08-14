@@ -33,6 +33,7 @@
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
+    "@typeagent/copilot-macros": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "html-to-text": "^9.0.5",
     "zod": "^3.25.0"

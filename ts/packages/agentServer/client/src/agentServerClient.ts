@@ -33,6 +33,12 @@ import {
     JoinConversationResult,
     RenameConversationOptions,
     SpeechToken,
+    ArmRecordingRequest,
+    ClaimRecordingRequest,
+    FinalizeRecordingRequest,
+    RecordingState,
+    RecordingToken,
+    TraceSummary,
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -107,6 +113,20 @@ export type ConversationDispatcher = {
 };
 
 export type AgentServerConnection = {
+    armMacroRecording(request: ArmRecordingRequest): Promise<RecordingToken>;
+    getMacroRecordingState(sessionId: string): Promise<RecordingState>;
+    claimMacroRecording(
+        request: ClaimRecordingRequest,
+    ): Promise<RecordingToken | undefined>;
+    cancelMacroRecording(sessionId: string): Promise<void>;
+    failMacroRecording(
+        sessionId: string,
+        tokenId: string,
+        error: string,
+    ): Promise<void>;
+    finalizeMacroRecording(
+        request: FinalizeRecordingRequest,
+    ): Promise<TraceSummary>;
     joinConversation(
         clientIO: ClientIO,
         options?: DispatcherConnectOptions,
@@ -250,6 +270,42 @@ export function createAgentServerConnection(
     let closed = false;
 
     const connection: AgentServerConnection = {
+        async armMacroRecording(
+            request: ArmRecordingRequest,
+        ): Promise<RecordingToken> {
+            return rpc.invoke("armMacroRecording", request);
+        },
+
+        async getMacroRecordingState(
+            sessionId: string,
+        ): Promise<RecordingState> {
+            return rpc.invoke("getMacroRecordingState", sessionId);
+        },
+
+        async claimMacroRecording(
+            request: ClaimRecordingRequest,
+        ): Promise<RecordingToken | undefined> {
+            return rpc.invoke("claimMacroRecording", request);
+        },
+
+        async cancelMacroRecording(sessionId: string): Promise<void> {
+            return rpc.invoke("cancelMacroRecording", sessionId);
+        },
+
+        async failMacroRecording(
+            sessionId: string,
+            tokenId: string,
+            error: string,
+        ): Promise<void> {
+            return rpc.invoke("failMacroRecording", sessionId, tokenId, error);
+        },
+
+        async finalizeMacroRecording(
+            request: FinalizeRecordingRequest,
+        ): Promise<TraceSummary> {
+            return rpc.invoke("finalizeMacroRecording", request);
+        },
+
         async joinConversation(
             clientIO: ClientIO,
             options?: DispatcherConnectOptions,

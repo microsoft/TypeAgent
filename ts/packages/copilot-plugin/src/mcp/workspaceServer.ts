@@ -198,12 +198,7 @@ export async function readWorkspaceFile(args: {
     const handle = await fs.open(resolved.absolutePath, "r");
     try {
         const buffer = Buffer.alloc(Math.min(stat.size, maxBytes + 1));
-        const { bytesRead } = await handle.read(
-            buffer,
-            0,
-            buffer.length,
-            0,
-        );
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
         const content = buffer.subarray(0, bytesRead);
         assertText(content, args.path);
 
@@ -542,14 +537,19 @@ async function resolvePublicAddress(
     const family = isIP(hostname);
     if (family !== 0) {
         if (!isPublicIp(hostname)) {
-            throw new Error(`Private network target is not allowed: ${hostname}`);
+            throw new Error(
+                `Private network target is not allowed: ${hostname}`,
+            );
         }
         return { address: hostname, family: family as 4 | 6 };
     }
 
     const addresses = await lookup(hostname, { all: true, verbatim: true });
     const publicAddress = addresses.find((entry) => isPublicIp(entry.address));
-    if (!publicAddress || addresses.some((entry) => !isPublicIp(entry.address))) {
+    if (
+        !publicAddress ||
+        addresses.some((entry) => !isPublicIp(entry.address))
+    ) {
         throw new Error(`Private network target is not allowed: ${hostname}`);
     }
     return {
@@ -632,8 +632,7 @@ export async function fetchWorkspaceUrl(args: {
         throw new Error(`Invalid URL: ${args.url}`);
     }
     if (
-        (currentUrl.protocol !== "http:" &&
-            currentUrl.protocol !== "https:") ||
+        (currentUrl.protocol !== "http:" && currentUrl.protocol !== "https:") ||
         currentUrl.username ||
         currentUrl.password
     ) {
@@ -647,12 +646,9 @@ export async function fetchWorkspaceUrl(args: {
         DEFAULT_MAX_BYTES,
         MAX_FETCH_BYTES,
     );
-    const acceptedContentTypes =
-        args.acceptedContentTypes?.map((value) => value.toLowerCase()) ?? [
-            "text/",
-            "application/json",
-            "application/xml",
-        ];
+    const acceptedContentTypes = args.acceptedContentTypes?.map((value) =>
+        value.toLowerCase(),
+    ) ?? ["text/", "application/json", "application/xml"];
 
     for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
         const response = await fetchOnce(currentUrl, maxBytes);
@@ -694,7 +690,9 @@ export async function fetchWorkspaceUrl(args: {
                     : contentType === accepted,
             )
         ) {
-            throw new Error(`Fetch content type is not allowed: ${contentType}`);
+            throw new Error(
+                `Fetch content type is not allowed: ${contentType}`,
+            );
         }
 
         const rawText = response.body.toString("utf8");
@@ -803,7 +801,9 @@ export class TypeAgentWorkspaceMcpServer {
         );
     }
 
-    private async invoke(operation: () => Promise<unknown>): Promise<CallToolResult> {
+    private async invoke(
+        operation: () => Promise<unknown>,
+    ): Promise<CallToolResult> {
         if (getMode() === "bypass") {
             return toolError("TypeAgent is disabled in bypass mode.");
         }

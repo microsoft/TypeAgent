@@ -118,6 +118,20 @@ export function makeStubConnection(
         }) as ConversationDispatcher;
 
     const stub: AgentServerConnection = {
+        async armMacroRecording() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async getMacroRecordingState() {
+            return { status: "idle" };
+        },
+        async claimMacroRecording() {
+            return undefined;
+        },
+        async cancelMacroRecording() {},
+        async failMacroRecording() {},
+        async finalizeMacroRecording() {
+            throw new Error("Not implemented by conversation test stub");
+        },
         async listConversations(name?: string) {
             const idx = nextCount("listConversations");
             calls.push({ method: "listConversations", args: [name] });

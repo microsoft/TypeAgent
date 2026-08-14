@@ -318,12 +318,12 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 
 **Environment variable overrides** (take precedence over config file):
 
-| Variable                | Default                | Description                         |
-| ----------------------- | ---------------------- | ----------------------------------- |
-| `TYPEAGENT_MODE`        | `direct`               | `direct`, `mcp`, `dev`, or `bypass` |
-| `TYPEAGENT_HOST`        | `localhost`            | TypeAgent server host               |
-| `TYPEAGENT_PORT`        | `8999`                 | TypeAgent server port               |
-| `TYPEAGENT_PLUGIN_DATA` | `~/.typeagent-copilot` | Config directory                    |
+| Variable                    | Default                           | Description                                                                      |
+| --------------------------- | --------------------------------- | -------------------------------------------------------------------------------- |
+| `TYPEAGENT_MODE`            | `direct`                          | `direct`, `mcp`, `dev`, or `bypass`                                              |
+| `TYPEAGENT_HOST`            | `localhost`                       | TypeAgent server host                                                            |
+| `TYPEAGENT_PORT`            | `8999`                            | TypeAgent server port                                                            |
+| `TYPEAGENT_PLUGIN_DATA`     | `~/.typeagent-copilot`            | Config directory                                                                 |
 | `TYPEAGENT_WORKSPACE_ROOTS` | Copilot process working directory | Approved roots for workspace MCP tools, separated by the platform path delimiter |
 
 ---
@@ -344,15 +344,15 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 The plugin starts two logical MCP servers from the same bundled entry point and
 single-file release executable:
 
-| Server | Tool | Description |
-| ------ | ---- | ----------- |
-| `typeagent` | `typeagent-processCommand` | Send a command to the TypeAgent agent-server |
-| `typeagent` | `typeagent-listAgents` | List available TypeAgent agents |
-| `typeagent` | `typeagent-getStatus` | Get TypeAgent server status |
-| `typeagent-workspace` | `read` | Read bounded text under approved workspace roots |
-| `typeagent-workspace` | `glob` | Find bounded, deterministically ordered workspace files |
-| `typeagent-workspace` | `grep` | Search bounded workspace text |
-| `typeagent-workspace` | `fetch` | Fetch bounded public HTTP(S) text without ambient credentials or private-network access |
+| Server                | Tool                       | Description                                                                             |
+| --------------------- | -------------------------- | --------------------------------------------------------------------------------------- |
+| `typeagent`           | `typeagent-processCommand` | Send a command to the TypeAgent agent-server                                            |
+| `typeagent`           | `typeagent-listAgents`     | List available TypeAgent agents                                                         |
+| `typeagent`           | `typeagent-getStatus`      | Get TypeAgent server status                                                             |
+| `typeagent-workspace` | `read`                     | Read bounded text under approved workspace roots                                        |
+| `typeagent-workspace` | `glob`                     | Find bounded, deterministically ordered workspace files                                 |
+| `typeagent-workspace` | `grep`                     | Search bounded workspace text                                                           |
+| `typeagent-workspace` | `fetch`                    | Fetch bounded public HTTP(S) text without ambient credentials or private-network access |
 
 Workspace tools are available in direct, MCP, and dev modes. In bypass mode
 they remain discoverable because Copilot fixes the MCP catalog when the session

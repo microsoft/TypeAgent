@@ -14,6 +14,7 @@
  */
 
 import { readFileSync } from "fs";
+import { readFile } from "node:fs/promises";
 import type { Dispatcher } from "@typeagent/agent-server-client";
 import { awaitCommand } from "@typeagent/dispatcher-types";
 import {
@@ -21,6 +22,8 @@ import {
     connectToTypeAgent,
 } from "../shared/typeagent-client.js";
 import { isTypeAgentAgentServerTool } from "../shared/tool-identities.js";
+import { connectToAgentServer } from "../shared/typeagent-client.js";
+import { normalizeRecordedInteraction } from "./macro-transcript.js";
 
 interface TranscriptEvent {
     type: string;
@@ -41,6 +44,74 @@ interface TurnSummary {
     assistantMessage: string;
     toolsUsed: string[];
     handledByTypeAgent: boolean;
+}
+
+async function readStableTranscript(
+    transcriptPath: string,
+    timeoutMs = 2_000,
+    intervalMs = 100,
+): Promise<string | undefined> {
+    const deadline = Date.now() + timeoutMs;
+    let previous: string | undefined;
+    while (Date.now() < deadline) {
+        let current: string;
+        try {
+            current = await readFile(transcriptPath, "utf8");
+        } catch {
+            return undefined;
+        }
+        if (current === previous) return current;
+        previous = current;
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    return undefined;
+}
+
+async function captureMacroRecording(input: AgentStopInput): Promise<void> {
+    const connection = await connectToAgentServer();
+    let tokenId: string | undefined;
+    try {
+        const state = await connection.getMacroRecordingState(input.sessionId);
+        if (state.status !== "claimed" || !state.token) return;
+        tokenId = state.token.id;
+
+        const transcript = await readStableTranscript(input.transcriptPath);
+        const trace = transcript
+            ? normalizeRecordedInteraction(
+                  transcript,
+                  input.sessionId,
+                  state.token.cwd ?? input.cwd,
+                  state.token.promptHash,
+              )
+            : undefined;
+        if (!trace) {
+            await connection.failMacroRecording(
+                input.sessionId,
+                tokenId,
+                "The selected interaction was incomplete and was not stored.",
+            );
+            return;
+        }
+
+        const summary = await connection.finalizeMacroRecording({
+            tokenId,
+            trace,
+        });
+        console.error(`[macro] Captured trace ${summary.traceId}`);
+    } catch (error) {
+        if (tokenId) {
+            await connection.failMacroRecording(
+                input.sessionId,
+                tokenId,
+                "The selected interaction could not be stored.",
+            );
+        }
+        console.error(
+            `[macro] Capture failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+    } finally {
+        await connection.close();
+    }
 }
 
 /**
@@ -215,6 +286,8 @@ export async function handleAgentStop(
         console.error("[agentStop] No transcriptPath, skipping");
         return {};
     }
+
+    await captureMacroRecording(input);
 
     const turn = extractLastTurn(input.transcriptPath);
     if (!turn) {
