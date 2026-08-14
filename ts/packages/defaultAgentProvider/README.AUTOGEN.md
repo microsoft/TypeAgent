@@ -29,7 +29,7 @@ The package includes test agents, such as the `vampire` agent, which are used to
 
 ### Managing Non-Bundled Agents
 
-Some agents, such as `androidMobile` and `vampire`, are not included in the default provider profile. These agents can be installed on demand using the `@package` commands. Catalog source entries for these agents are defined in [../agents/agents.catalog.json](../agents/agents.catalog.json).
+Some agents, such as `vampire`, are not included in the default provider profile. These agents can be installed on demand using the `@package` commands. Catalog source entries for these agents are defined in [../agents/agents.catalog.json](../agents/agents.catalog.json).
 
 ### Collision Testing
 
@@ -53,11 +53,10 @@ To set up and use the `default-agent-provider` package, follow these steps:
    - `TYPEAGENT_FEED_SCOPES`: Defines the scopes for the agent feed. Ensure this variable is set appropriately for your environment.
 
 3. **Optional setup for non-bundled agents**:
-   - To install agents like `androidMobile` and `vampire`, use the following commands:
-     ```text
-     @package install androidMobile
-     @package install vampire
-     ```
+    - To install agents like `vampire`, use the following command:
+       ```text
+       @package install vampire
+       ```
    - If the installation fails due to a missing catalog source, run `@package source list` to verify the catalog source configuration.
 
 ## Key Files
