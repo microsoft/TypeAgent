@@ -91,7 +91,9 @@ if (rpc) {
 Every `invoke` creates one `CLIENT` span and one `SERVER` span. One-way `send`
 notifications are not traced. The request may carry a versioned metadata envelope
 with bounded W3C `traceparent`/`tracestate` values and the allowlisted TypeAgent
-`traceId`, `sessionId`, and `activationId` correlation fields.
+`agentName`, `actionName`, `traceId`, `sessionId`, and `activationId` metadata
+fields. Values that fail bounds, character validation, or telemetry secret
+filtering are omitted.
 
 Outbound metadata and inbound trust are separate opt-ins. Enable each only for an
 approved destination or transport:

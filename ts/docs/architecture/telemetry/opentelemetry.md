@@ -289,6 +289,9 @@ OTel owns the canonical trace ID. Preserve the existing caller value as
 
 Send TypeAgent correlation values as explicit, allowlisted RPC metadata, not
 broad W3C baggage. V1 does not inject them into generic HTTP propagation.
+The process-backed agent boundary also carries bounded `agentName` and
+`actionName` values already known at dispatch time. It never adds action
+parameters or RPC-internal context identifiers.
 
 Accept remote context only on designated RPC channels. Enforce OTel parsing,
 size limits, and correlation-field length and character rules. Ignore malformed

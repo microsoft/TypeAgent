@@ -14,7 +14,7 @@ import {
     type Span,
 } from "@opentelemetry/api";
 import registerDebug from "debug";
-import { otel } from "@typeagent/telemetry";
+import { filterSecrets } from "@typeagent/common-utils";
 
 import { RpcChannel } from "./common.js";
 
@@ -745,7 +745,7 @@ function isValidCorrelationValue(value: unknown): value is string {
     ) {
         return false;
     }
-    return otel.redactText(value) === value;
+    return filterSecrets(value) === value;
 }
 
 function validateTraceparent(value: unknown): value is string {

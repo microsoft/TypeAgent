@@ -74,12 +74,14 @@ describe("agent subprocess OpenTelemetry propagation", () => {
             "OTEL_METRICS_EXPORTER",
             "OTEL_LOGS_EXPORTER",
             "OTEL_TRACES_SAMPLER",
+            "OTEL_TRACES_SAMPLER_ARG",
         ]);
         process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = endpoint;
         process.env.OTEL_TRACES_EXPORTER = "otlp";
         process.env.OTEL_METRICS_EXPORTER = "none";
         process.env.OTEL_LOGS_EXPORTER = "none";
         process.env.OTEL_TRACES_SAMPLER = "always_on";
+        delete process.env.OTEL_TRACES_SAMPLER_ARG;
 
         const coordinator = otel.createTelemetryCoordinator();
         let agentProcess:

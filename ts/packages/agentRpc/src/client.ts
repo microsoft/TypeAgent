@@ -40,7 +40,7 @@ import { ChannelProvider } from "./common.js";
 import { getObjectProperty, uint8ArrayToBase64 } from "@typeagent/common-utils";
 import { AgentInterfaceFunctionName } from "./server.js";
 import { randomUUID } from "crypto";
-import { otel } from "@typeagent/telemetry";
+import { getActiveTypeAgentSpanAttributes } from "@typeagent/telemetry/traceContext";
 
 export type AgentRpcOptions = {
     trustedContextPropagation?: boolean;
@@ -898,7 +898,7 @@ function getAgentRpcCorrelation(
     agentName: string,
     invocation: RpcInvocation,
 ): RpcCorrelationFields {
-    const active = otel.getActiveTypeAgentSpanAttributes();
+    const active = getActiveTypeAgentSpanAttributes();
     return {
         agentName,
         ...(active?.actionName === undefined
