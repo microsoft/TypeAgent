@@ -35,6 +35,11 @@ export interface RegistryMaterializerDeps {
     npxCliPath?: string;
 }
 
+type ValidatedRegistryPackage = RegistryPackage & {
+    registryType: "npm";
+    version: string;
+};
+
 function findNpxCli(): string {
     const candidates =
         process.platform === "win32"
@@ -245,13 +250,9 @@ export function cleanupOwnedMcpPaths(
     }
 }
 
-export async function materializeRegistryNpmPackage(
-    config: NormalizedMcpServerConfig,
+function validateRegistryNpmPackage(
     pkg: RegistryPackage,
-    descriptorDigest: string,
-    deps: RegistryMaterializerDeps,
-    signal?: AbortSignal,
-): Promise<NormalizedMcpServerConfig> {
+): ValidatedRegistryPackage {
     if (pkg.registryType !== "npm") {
         throw new Error(
             `Unsupported registry package type '${pkg.registryType}'`,
@@ -276,20 +277,33 @@ export async function materializeRegistryNpmPackage(
             `Invalid registry npm package version '${pkg.version}'`,
         );
     }
+    return {
+        ...pkg,
+        registryType: "npm",
+        version: pkg.version,
+    };
+}
+
+function validateRuntimeHint(pkg: RegistryPackage): "npx" | "node" {
     const runtimeHint = pkg.runtimeHint ?? "npx";
     if (runtimeHint !== "npx" && runtimeHint !== "node") {
         throw new Error(`Unsupported registry runtime hint '${runtimeHint}'`);
     }
-    const runtimeArguments = registryArgumentsToArgv(pkg.runtimeArguments);
-    const packageArguments = registryArgumentsToArgv(pkg.packageArguments);
-    const environment = registryEnvironment(pkg.environmentVariables);
-    const registry = pkg.registryBaseUrl ?? "https://registry.npmjs.org/";
-    const fetchFn = deps.fetchFn ?? fetch;
+    return runtimeHint;
+}
+
+async function downloadRegistryPackage(
+    pkg: ValidatedRegistryPackage,
+    registry: string,
+    fetchFn: typeof fetch,
+    signal?: AbortSignal,
+): Promise<{ bytes: Buffer; packageHash: string }> {
+    const requestOptions = signal === undefined ? {} : { signal };
     const packumentResponse = await fetchFn(
         packageUrl(registry, pkg.identifier),
         {
             headers: { accept: "application/json" },
-            ...(signal === undefined ? {} : { signal }),
+            ...requestOptions,
         },
     );
     if (!packumentResponse.ok) {
@@ -298,24 +312,15 @@ export async function materializeRegistryNpmPackage(
         );
     }
     const packument = (await packumentResponse.json()) as {
-        versions?: Record<
-            string,
-            {
-                dist?: { tarball?: string };
-                bin?: string | Record<string, string>;
-            }
-        >;
+        versions?: Record<string, { dist?: { tarball?: string } }>;
     };
-    const manifest = packument.versions?.[pkg.version];
-    const tarball = manifest?.dist?.tarball;
-    if (manifest === undefined || typeof tarball !== "string") {
+    const tarball = packument.versions?.[pkg.version]?.dist?.tarball;
+    if (typeof tarball !== "string") {
         throw new Error(
             `npm package '${pkg.identifier}' has no published version '${pkg.version}'`,
         );
     }
-    const tarballResponse = await fetchFn(tarball, {
-        ...(signal === undefined ? {} : { signal }),
-    });
+    const tarballResponse = await fetchFn(tarball, requestOptions);
     if (!tarballResponse.ok) {
         throw new Error(
             `Could not download npm package '${pkg.identifier}@${pkg.version}' (${tarballResponse.status})`,
@@ -331,58 +336,117 @@ export async function materializeRegistryNpmPackage(
             `SHA-256 mismatch for '${pkg.identifier}@${pkg.version}': expected ${pkg.fileSha256}, got ${packageHash}`,
         );
     }
+    return { bytes, packageHash };
+}
+
+async function installRegistryPackage(
+    pkg: ValidatedRegistryPackage,
+    bytes: Buffer,
+    registry: string,
+    finalRoot: string,
+    deps: RegistryMaterializerDeps,
+    signal?: AbortSignal,
+): Promise<void> {
+    const rootsDir = path.dirname(finalRoot);
+    fs.mkdirSync(rootsDir, { recursive: true });
+    const randomId =
+        deps.randomId?.() ??
+        `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const tempRoot = validateOwnedRoot(
+        deps.installDir,
+        path.join(rootsDir, `.tmp-${safeLeaf(randomId)}`),
+    );
+    fs.mkdirSync(tempRoot, { recursive: true });
+    const tarPath = path.join(tempRoot, "package.tgz");
+    try {
+        fs.writeFileSync(
+            path.join(tempRoot, "package.json"),
+            JSON.stringify({ private: true }),
+        );
+        fs.writeFileSync(tarPath, bytes);
+        await (deps.npmInstall ?? defaultNpmInstall)({
+            spec: tarPath,
+            cwd: tempRoot,
+            registry,
+            ...(signal === undefined ? {} : { signal }),
+        });
+        if (
+            !fs.existsSync(path.join(tempRoot, "node_modules", pkg.identifier))
+        ) {
+            throw new Error(
+                `npm install did not materialize '${pkg.identifier}@${pkg.version}'`,
+            );
+        }
+        readPackageBin(tempRoot, pkg.identifier, pkg.version);
+        fs.rmSync(tarPath, { force: true });
+        if (fs.existsSync(finalRoot)) {
+            fs.rmSync(tempRoot, { recursive: true, force: true });
+        } else {
+            fs.renameSync(tempRoot, finalRoot);
+        }
+    } catch (error) {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+        throw error;
+    }
+}
+
+export async function materializeRegistryNpmPackage(
+    config: NormalizedMcpServerConfig,
+    pkg: RegistryPackage,
+    descriptorDigest: string,
+    deps: RegistryMaterializerDeps,
+    signal?: AbortSignal,
+): Promise<NormalizedMcpServerConfig> {
+    const validatedPackage = validateRegistryNpmPackage(pkg);
+    const runtimeHint = validateRuntimeHint(validatedPackage);
+    const runtimeArguments = registryArgumentsToArgv(
+        validatedPackage.runtimeArguments,
+    );
+    const packageArguments = registryArgumentsToArgv(
+        validatedPackage.packageArguments,
+    );
+    const environment = registryEnvironment(
+        validatedPackage.environmentVariables,
+    );
+    const registry =
+        validatedPackage.registryBaseUrl ?? "https://registry.npmjs.org/";
+    const fetchFn = deps.fetchFn ?? fetch;
+    const { bytes, packageHash } = await downloadRegistryPackage(
+        validatedPackage,
+        registry,
+        fetchFn,
+        signal,
+    );
     const rootsDir = path.join(deps.installDir, MCP_INSTALL_ROOTS_SUBDIR);
-    const leaf = `${safeLeaf(pkg.identifier)}@${safeLeaf(pkg.version)}-${descriptorDigest.slice(0, 16)}`;
+    const leaf = `${safeLeaf(validatedPackage.identifier)}@${safeLeaf(validatedPackage.version)}-${descriptorDigest.slice(0, 16)}`;
     const finalRoot = validateOwnedRoot(
         deps.installDir,
         path.join(rootsDir, leaf),
     );
-    if (!fs.existsSync(path.join(finalRoot, "node_modules", pkg.identifier))) {
-        fs.mkdirSync(rootsDir, { recursive: true });
-        const randomId =
-            deps.randomId?.() ??
-            `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        const tempRoot = validateOwnedRoot(
-            deps.installDir,
-            path.join(rootsDir, `.tmp-${safeLeaf(randomId)}`),
+    if (
+        !fs.existsSync(
+            path.join(finalRoot, "node_modules", validatedPackage.identifier),
+        )
+    ) {
+        await installRegistryPackage(
+            validatedPackage,
+            bytes,
+            registry,
+            finalRoot,
+            deps,
+            signal,
         );
-        fs.mkdirSync(tempRoot, { recursive: true });
-        const tarPath = path.join(tempRoot, "package.tgz");
-        try {
-            fs.writeFileSync(
-                path.join(tempRoot, "package.json"),
-                JSON.stringify({ private: true }),
-            );
-            fs.writeFileSync(tarPath, bytes);
-            await (deps.npmInstall ?? defaultNpmInstall)({
-                spec: tarPath,
-                cwd: tempRoot,
-                registry,
-                ...(signal === undefined ? {} : { signal }),
-            });
-            if (
-                !fs.existsSync(
-                    path.join(tempRoot, "node_modules", pkg.identifier),
-                )
-            ) {
-                throw new Error(
-                    `npm install did not materialize '${pkg.identifier}@${pkg.version}'`,
-                );
-            }
-            readPackageBin(tempRoot, pkg.identifier, pkg.version);
-            fs.rmSync(tarPath, { force: true });
-            if (fs.existsSync(finalRoot)) {
-                fs.rmSync(tempRoot, { recursive: true, force: true });
-            } else {
-                fs.renameSync(tempRoot, finalRoot);
-            }
-        } catch (error) {
-            fs.rmSync(tempRoot, { recursive: true, force: true });
-            throw error;
-        }
     }
-    const binPath = readPackageBin(finalRoot, pkg.identifier, pkg.version);
-    const packageDir = path.resolve(finalRoot, "node_modules", pkg.identifier);
+    const binPath = readPackageBin(
+        finalRoot,
+        validatedPackage.identifier,
+        validatedPackage.version,
+    );
+    const packageDir = path.resolve(
+        finalRoot,
+        "node_modules",
+        validatedPackage.identifier,
+    );
     const args =
         runtimeHint === "npx"
             ? [
@@ -390,7 +454,7 @@ export async function materializeRegistryNpmPackage(
                   ...runtimeArguments,
                   "--offline",
                   "--no-install",
-                  pkg.identifier,
+                  validatedPackage.identifier,
                   ...packageArguments,
               ]
             : [...runtimeArguments, binPath, ...packageArguments];
@@ -403,15 +467,15 @@ export async function materializeRegistryNpmPackage(
             ...(environment === undefined
                 ? {}
                 : {
-                      env: environment as Record<string, EnvValue>,
+                      env: environment,
                   }),
             cwd: packageDir,
         },
         provenance: {
             ...config.provenance,
             ownedPaths: [finalRoot],
-            packageIdentifier: pkg.identifier,
-            packageVersion: pkg.version,
+            packageIdentifier: validatedPackage.identifier,
+            packageVersion: validatedPackage.version,
             packageHash,
         },
     };

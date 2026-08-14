@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type {
+    ActionResult,
     AppAgent,
     AppAgentManifest,
     SessionContext,
@@ -31,6 +32,7 @@ import {
     buildMcpToolCatalog,
     getMcpToolIdentity,
     type McpToolCatalog,
+    type McpToolCatalogEntry,
 } from "./mcpToolCatalog.js";
 
 const debug = registerDebug("typeagent:mcp:server");
@@ -90,6 +92,11 @@ type McpServerAgent = {
     getManifest(): AppAgentManifest;
     dispose(): Promise<void>;
 };
+
+type McpExecuteAction = NonNullable<AppAgent["executeAction"]>;
+type McpAction = Parameters<McpExecuteAction>[0];
+type McpActionContext = Parameters<McpExecuteAction>[1];
+type McpToolDecision = "allow" | "allow-once" | "session-allow" | "deny";
 
 function filterConfiguredTools(
     tools: Tool[],
@@ -153,6 +160,236 @@ function getTransportSensitiveValues(
     return transport.kind === "http"
         ? Object.values(transport.headers ?? {})
         : Object.values(transport.env ?? {});
+}
+
+function getConfiguredToolDecision(
+    config: NormalizedMcpServerConfig,
+    toolName: string,
+): "allow" | "deny" | undefined {
+    return (
+        config.toolApproval?.persisted?.[toolName] ??
+        (config.toolApproval?.deny?.includes(toolName)
+            ? "deny"
+            : config.toolApproval?.allow?.includes(toolName)
+              ? "allow"
+              : undefined)
+    );
+}
+
+function shouldPromptForTool(
+    config: NormalizedMcpServerConfig,
+    tool: McpToolCatalogEntry,
+): boolean {
+    return (
+        config.toolApproval?.prompt?.includes(tool.name) === true ||
+        tool.annotations?.destructiveHint === true ||
+        tool.annotations?.readOnlyHint !== true
+    );
+}
+
+async function requestToolDecision(
+    context: McpActionContext,
+    config: NormalizedMcpServerConfig,
+    tool: McpToolCatalogEntry,
+    toolId: string,
+    configured: "allow" | undefined,
+    sessionApprovals: Map<string, Set<string>>,
+    parameters: Record<string, unknown> | undefined,
+    sensitiveValues: string[],
+): Promise<McpToolDecision> {
+    const sessionId = context.sessionContext.sessionContextId;
+    if (
+        configured === "allow" ||
+        !shouldPromptForTool(config, tool) ||
+        sessionApprovals.get(sessionId)?.has(toolId)
+    ) {
+        return configured ?? "allow";
+    }
+    const choice = await context.sessionContext.popupQuestion(
+        `Allow MCP server '${config.name}' to run potentially mutating tool '${tool.name}'? Tool annotations are untrusted hints. Arguments: ${JSON.stringify(
+            sanitizeMcpAuditEvent({
+                timestamp: "",
+                operation: "tool-invocation",
+                configId: config.id,
+                configName: config.name,
+                arguments: parameters,
+                sensitiveValues,
+            }).arguments,
+        )}`,
+        ["Allow once", "Allow for session", "Deny"],
+        2,
+    );
+    if (choice !== 1) {
+        return choice === 2 ? "deny" : "allow-once";
+    }
+    const session = sessionApprovals.get(sessionId) ?? new Set<string>();
+    session.add(toolId);
+    sessionApprovals.set(sessionId, session);
+    return "session-allow";
+}
+
+async function writeToolResultAudit(
+    services: McpHostServices,
+    config: NormalizedMcpServerConfig,
+    tool: McpToolCatalogEntry,
+    toolId: string,
+    sessionId: string,
+    started: number,
+    status: "success" | "failure",
+    error?: string,
+): Promise<void> {
+    await services.audit.write({
+        timestamp: new Date().toISOString(),
+        operation: "tool-result",
+        configId: config.id,
+        configName: config.name,
+        tool: tool.name,
+        toolId,
+        sessionId,
+        status,
+        durationMs: Date.now() - started,
+        ...(error === undefined ? {} : { error }),
+    });
+}
+
+async function callMcpTool(
+    connection: McpConnectionLike,
+    services: McpHostServices,
+    config: NormalizedMcpServerConfig,
+    tool: McpToolCatalogEntry,
+    toolId: string,
+    sessionId: string,
+    parameters: Record<string, unknown>,
+): Promise<ActionResult | undefined> {
+    const started = Date.now();
+    try {
+        const result = await connection.callTool(tool.name, parameters);
+        if (!result.isError && tool.validateOutput !== undefined) {
+            const outputValidation = tool.validateOutput(
+                result.structuredContent,
+            );
+            if (!outputValidation.valid) {
+                const message = `MCP tool '${tool.name}' on server '${config.name}' (${config.id}) returned output that does not match outputSchema: ${outputValidation.errorMessage}`;
+                await writeToolResultAudit(
+                    services,
+                    config,
+                    tool,
+                    toolId,
+                    sessionId,
+                    started,
+                    "failure",
+                    message,
+                );
+                return createActionResultFromError(message);
+            }
+        }
+        await writeToolResultAudit(
+            services,
+            config,
+            tool,
+            toolId,
+            sessionId,
+            started,
+            "success",
+        );
+        return convertToolResult(tool.name, result);
+    } catch (error) {
+        const errorMessage =
+            error instanceof Error ? error.message : String(error);
+        await writeToolResultAudit(
+            services,
+            config,
+            tool,
+            toolId,
+            sessionId,
+            started,
+            "failure",
+            errorMessage,
+        );
+        if (
+            /output schema|outputSchema|structured content/i.test(errorMessage)
+        ) {
+            return createActionResultFromError(
+                `MCP tool '${tool.name}' on server '${config.name}' (${config.id}) returned invalid output: ${errorMessage}`,
+            );
+        }
+        throw error;
+    }
+}
+
+function createMcpExecuteAction(
+    config: NormalizedMcpServerConfig,
+    services: McpHostServices,
+    connection: McpConnectionLike,
+    getSnapshot: () => CatalogSnapshot | undefined,
+    sessionContexts: Set<SessionContext>,
+    sessionApprovals: Map<string, Set<string>>,
+    sensitiveValues: string[],
+): McpExecuteAction {
+    return async (action: McpAction, context: McpActionContext) => {
+        sessionContexts.add(context.sessionContext);
+        enforceMcpPolicy(services.policy, "invoke", config);
+        const toolId = getMcpToolIdentity(config.id, action.actionName);
+        const tool = getSnapshot()?.catalog.entries.get(toolId);
+        if (tool === undefined) {
+            return createActionResultFromError(
+                `MCP tool '${action.actionName}' is not enabled for server '${config.name}' (${config.id}).`,
+            );
+        }
+        const argumentValidation = tool.validateArguments(
+            action.parameters ?? {},
+        );
+        if (!argumentValidation.valid) {
+            return createActionResultFromError(
+                `MCP tool '${tool.name}' on server '${config.name}' (${config.id}) rejected its arguments: ${argumentValidation.errorMessage}`,
+            );
+        }
+        const configured = getConfiguredToolDecision(config, tool.name);
+        if (configured === "deny") {
+            return createActionResultFromError(
+                `MCP tool '${tool.name}' is denied by server '${config.name}' policy.`,
+            );
+        }
+        const sessionId = context.sessionContext.sessionContextId;
+        const decision = await requestToolDecision(
+            context,
+            config,
+            tool,
+            toolId,
+            configured,
+            sessionApprovals,
+            action.parameters,
+            sensitiveValues,
+        );
+        if (decision === "deny") {
+            return createActionResultFromError(
+                `MCP tool '${tool.name}' on server '${config.name}' was denied by the user.`,
+            );
+        }
+        await services.audit.write({
+            timestamp: new Date().toISOString(),
+            operation: "tool-invocation",
+            configId: config.id,
+            configName: config.name,
+            tool: tool.name,
+            toolId,
+            sessionId,
+            transport: config.transport.kind,
+            source: config.provenance.source,
+            decision,
+            arguments: action.parameters,
+            sensitiveValues,
+        });
+        return callMcpTool(
+            connection,
+            services,
+            config,
+            tool,
+            toolId,
+            sessionId,
+            argumentValidation.data,
+        );
+    };
 }
 
 async function connectServerAgent(
@@ -366,156 +603,15 @@ async function connectServerAgent(
                 sessionContexts.delete(context);
                 sessionApprovals.delete(context.sessionContextId);
             },
-            executeAction: async (action, context) => {
-                sessionContexts.add(context.sessionContext);
-                enforceMcpPolicy(services.policy, "invoke", config);
-                const toolId = getMcpToolIdentity(config.id, action.actionName);
-                const tool = snapshot?.catalog.entries.get(toolId);
-                if (tool === undefined) {
-                    return createActionResultFromError(
-                        `MCP tool '${action.actionName}' is not enabled for server '${config.name}' (${config.id}).`,
-                    );
-                }
-                const argumentValidation = tool.validateArguments(
-                    action.parameters ?? {},
-                );
-                if (!argumentValidation.valid) {
-                    return createActionResultFromError(
-                        `MCP tool '${tool.name}' on server '${config.name}' (${config.id}) rejected its arguments: ${argumentValidation.errorMessage}`,
-                    );
-                }
-                const configured =
-                    config.toolApproval?.persisted?.[tool.name] ??
-                    (config.toolApproval?.deny?.includes(tool.name)
-                        ? "deny"
-                        : config.toolApproval?.allow?.includes(tool.name)
-                          ? "allow"
-                          : undefined);
-                const prompt =
-                    config.toolApproval?.prompt?.includes(tool.name) ||
-                    tool.annotations?.destructiveHint === true ||
-                    tool.annotations?.readOnlyHint !== true;
-                let decision: string = configured ?? "allow";
-                if (configured === "deny") {
-                    return createActionResultFromError(
-                        `MCP tool '${tool.name}' is denied by server '${config.name}' policy.`,
-                    );
-                }
-                const sessionId = context.sessionContext.sessionContextId;
-                if (
-                    prompt &&
-                    configured !== "allow" &&
-                    !sessionApprovals.get(sessionId)?.has(toolId)
-                ) {
-                    const choice = await context.sessionContext.popupQuestion(
-                        `Allow MCP server '${config.name}' to run potentially mutating tool '${tool.name}'? Tool annotations are untrusted hints. Arguments: ${JSON.stringify(
-                            sanitizeMcpAuditEvent({
-                                timestamp: "",
-                                operation: "tool-invocation",
-                                configId: config.id,
-                                configName: config.name,
-                                arguments: action.parameters,
-                                sensitiveValues,
-                            }).arguments,
-                        )}`,
-                        ["Allow once", "Allow for session", "Deny"],
-                        2,
-                    );
-                    if (choice === 2) {
-                        decision = "deny";
-                        return createActionResultFromError(
-                            `MCP tool '${tool.name}' on server '${config.name}' was denied by the user.`,
-                        );
-                    }
-                    decision = choice === 1 ? "session-allow" : "allow-once";
-                    if (choice === 1) {
-                        const session =
-                            sessionApprovals.get(sessionId) ??
-                            new Set<string>();
-                        session.add(toolId);
-                        sessionApprovals.set(sessionId, session);
-                    }
-                }
-                const started = Date.now();
-                await services.audit.write({
-                    timestamp: new Date().toISOString(),
-                    operation: "tool-invocation",
-                    configId: config.id,
-                    configName: config.name,
-                    tool: tool.name,
-                    toolId,
-                    sessionId,
-                    transport: config.transport.kind,
-                    source: config.provenance.source,
-                    decision,
-                    arguments: action.parameters,
-                    sensitiveValues,
-                });
-                try {
-                    const result = await activeConnection.callTool(
-                        tool.name,
-                        argumentValidation.data,
-                    );
-                    if (!result.isError && tool.validateOutput !== undefined) {
-                        const outputValidation = tool.validateOutput(
-                            result.structuredContent,
-                        );
-                        if (!outputValidation.valid) {
-                            const message = `MCP tool '${tool.name}' on server '${config.name}' (${config.id}) returned output that does not match outputSchema: ${outputValidation.errorMessage}`;
-                            await services.audit.write({
-                                timestamp: new Date().toISOString(),
-                                operation: "tool-result",
-                                configId: config.id,
-                                configName: config.name,
-                                tool: tool.name,
-                                toolId,
-                                sessionId,
-                                status: "failure",
-                                durationMs: Date.now() - started,
-                                error: message,
-                            });
-                            return createActionResultFromError(message);
-                        }
-                    }
-                    await services.audit.write({
-                        timestamp: new Date().toISOString(),
-                        operation: "tool-result",
-                        configId: config.id,
-                        configName: config.name,
-                        tool: tool.name,
-                        toolId,
-                        sessionId,
-                        status: "success",
-                        durationMs: Date.now() - started,
-                    });
-                    return convertToolResult(tool.name, result);
-                } catch (error) {
-                    const errorMessage =
-                        error instanceof Error ? error.message : String(error);
-                    await services.audit.write({
-                        timestamp: new Date().toISOString(),
-                        operation: "tool-result",
-                        configId: config.id,
-                        configName: config.name,
-                        tool: tool.name,
-                        toolId,
-                        sessionId,
-                        status: "failure",
-                        durationMs: Date.now() - started,
-                        error: errorMessage,
-                    });
-                    if (
-                        /output schema|outputSchema|structured content/i.test(
-                            errorMessage,
-                        )
-                    ) {
-                        return createActionResultFromError(
-                            `MCP tool '${tool.name}' on server '${config.name}' (${config.id}) returned invalid output: ${errorMessage}`,
-                        );
-                    }
-                    throw error;
-                }
-            },
+            executeAction: createMcpExecuteAction(
+                config,
+                services,
+                activeConnection,
+                () => snapshot,
+                sessionContexts,
+                sessionApprovals,
+                sensitiveValues,
+            ),
         };
         return {
             agent,
