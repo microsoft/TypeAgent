@@ -86,6 +86,49 @@ if (rpc) {
   `docs/plans/.../rpc-rebindable-channel-design.md` (where maintained) for the full
   rationale and the per-consumer assessment.
 
+## OpenTelemetry context propagation
+
+Every `invoke` creates one `CLIENT` span and one `SERVER` span. One-way `send`
+notifications are not traced. The request may carry a versioned metadata envelope
+with bounded W3C `traceparent`/`tracestate` values and the allowlisted TypeAgent
+`traceId`, `sessionId`, and `activationId` correlation fields.
+
+Outbound metadata and inbound trust are separate opt-ins. Enable each only for an
+approved destination or transport:
+
+```ts
+createRpc(name, channel, handlers, undefined, {
+  tracing: {
+    propagateContext: true,
+    trustRemoteContext: true,
+    getCorrelationFields: ({ method, args }) =>
+      getCorrelationForInvocation(method, args),
+  },
+});
+```
+
+Additive envelope fields retain version 1. Increment the version only for an
+incompatible interpretation; unsupported versions are ignored during rolling
+upgrades.
+
+These are factory-level primitives. Higher-level RPC factories and their
+composition roots must deliberately thread these options to TypeAgent-owned IPC
+channels; adding the envelope type alone does not activate cross-process
+parenting.
+
+Cancellation continues to use each application protocol's existing mechanism.
+For example, agent actions send `cancelAction`, abort the server handler, and
+cause the original invoke to reject with `AbortError`. The RPC SERVER and CLIENT
+spans classify that handler rejection with the stable `cancelled` status; the
+telemetry layer does not introduce a second cancellation wire protocol.
+Malformed, oversized, untrusted, or unsupported metadata is ignored without
+failing the invocation.
+
+RPC spans use enqueue-time completion: a SERVER span ends after its terminal
+response is handed to `RpcChannel.send`. The callback is optional in the channel
+contract, so later transport-delivery failures are debug diagnostics rather than
+changes to an already-ended span.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
