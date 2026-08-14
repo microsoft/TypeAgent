@@ -932,7 +932,6 @@ async function handlePowerShellFlowAction(
                 try {
                     context.abortSignal?.throwIfAborted();
                     await context.sessionContext.reloadAgentSchema();
-                    context.abortSignal?.throwIfAborted();
                 } catch (error) {
                     await flowStore.deleteFlow(newActionName);
                     throw error;
@@ -1299,7 +1298,6 @@ async function handlePowerShellFlowAction(
                 try {
                     context.abortSignal?.throwIfAborted();
                     await context.sessionContext.reloadAgentSchema();
-                    context.abortSignal?.throwIfAborted();
                 } catch (error) {
                     await flowStore.deleteFlow(recipe.actionName);
                     throw error;
