@@ -17,6 +17,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,6 +37,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -68,11 +71,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withStateAtLeast
 import com.example.typeagentchat.ui.theme.TypeAgentChatTheme
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class MainActivity : ComponentActivity() {
 
-    private val webSocketManager = WebSocketManager()
+    private val viewModel: ChatViewModel by viewModels()
     private val tunnelUrl = BuildConfig.TYPEAGENT_SERVER_URL.trim()
     private val tunnelToken = BuildConfig.TYPEAGENT_TUNNEL_TOKEN.trim().ifBlank { null }
     private val agentSchemaContent by lazy {
@@ -99,8 +107,11 @@ class MainActivity : ComponentActivity() {
                 runOnUiThread { launchSetTimerIntent(action, completion) }
             }
 
-            override fun onSearchNearby(action: SearchNearbyAction) {
-                runOnUiThread { launchSearchNearbyIntent(action) }
+            override fun onSearchNearby(
+                action: SearchNearbyAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                runOnUiThread { launchSearchNearbyIntent(action, completion) }
             }
         })
         webSocketManager.connect(
@@ -109,21 +120,83 @@ class MainActivity : ComponentActivity() {
             schemaContent = agentSchemaContent
         )
 
+        // Collected for the Activity's whole lifetime rather than only while
+        // RESUMED. An agent-driven action has an `executeAction` RPC waiting on
+        // its completion, so it must be answered promptly even when the app is
+        // backgrounded - launchExternalIntent does the foreground check itself
+        // and reports the refusal. Gating collection on RESUMED would instead
+        // leave the action queued, and the server's call hanging, until the
+        // user happened to come back.
+        lifecycleScope.launch {
+            viewModel.clientActions.collect { action ->
+                try {
+                    awaitResumedOrGiveUp()
+                    when (action) {
+                        is ClientAction.Alarm ->
+                            launchSetAlarmIntent(action.action, action.completion)
+                        is ClientAction.Timer ->
+                            launchSetTimerIntent(action.action, action.completion)
+                        is ClientAction.SearchNearby -> launchSearchNearbyIntent(action.action)
+                    }
+                } catch (cancellation: CancellationException) {
+                    // The action was already taken off the channel, so no other
+                    // Activity will ever see it. Answer the waiting RPC before
+                    // unwinding rather than leaving the agent blocked.
+                    action.failWith(ACTIVITY_GONE_MESSAGE)
+                    throw cancellation
+                }
+            }
+        }
+
         setContent {
             TypeAgentChatTheme {
                 ChatApp(
-                    webSocketManager = webSocketManager,
+                    viewModel = viewModel,
                     tunnelUrl = tunnelUrl,
-                    tunnelToken = tunnelToken
+                    tunnelToken = tunnelToken,
+                    schemaContent = agentSchemaContent
                 )
             }
         }
     }
 
-    override fun onDestroy() {
-        webSocketManager.setClientActionHandler(null)
-        webSocketManager.disconnect()
-        super.onDestroy()
+    // No onDestroy teardown: the socket is owned by ChatViewModel and released
+    // in its onCleared. Disconnecting here would tear the connection down on
+    // every rotation, theme or locale change.
+
+    /**
+     * Waits a short while for the Activity to reach RESUMED, giving up quietly
+     * if it does not.
+     *
+     * `lifecycleScope` dispatches with `Dispatchers.Main.immediate`, so the
+     * collector above starts running inline inside `onCreate` and an action
+     * buffered across a configuration change is picked up while the new
+     * Activity is still CREATED. Dispatching it right then would hit
+     * [launchExternalIntent]'s foreground guard and refuse a perfectly valid
+     * action, blaming a backgrounded app that is in fact mid-recreation.
+     * onResume follows within a frame or two, so a brief wait lets it through.
+     *
+     * The wait is bounded so a genuinely backgrounded app still fails fast and
+     * releases the agent's `executeAction` call instead of holding it until the
+     * user returns.
+     */
+    private suspend fun awaitResumedOrGiveUp() {
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            return
+        }
+        withTimeoutOrNull(RESUME_GRACE_MILLIS) {
+            lifecycle.withStateAtLeast(Lifecycle.State.RESUMED) { }
+        }
+    }
+
+    private fun ClientAction.failWith(message: String) {
+        val result = AndroidDeviceExecutionResult.Failure(message)
+        when (this) {
+            is ClientAction.Alarm -> completion(result)
+            is ClientAction.Timer -> completion(result)
+            // Nothing is waiting on this one, it is fire and forget.
+            is ClientAction.SearchNearby -> Unit
+        }
     }
 
     private fun launchSetAlarmIntent(
@@ -154,7 +227,8 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Handles `takeAction("set-timer", ...)` from the androidMobile agent.
+     * Handles the `setTimer` action of the registered `androidDevice` client
+     * agent.
      *
      * `EXTRA_SKIP_UI` is true so the clock app starts the countdown in the
      * background instead of coming to the foreground. The reference
@@ -189,12 +263,22 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Opens the device maps app on a local search. The intent is left implicit
-     * rather than pinned to `com.google.android.apps.maps` as TypeAgent's
+     * Handles the `searchNearby` action of the registered `androidDevice`
+     * client agent by opening the device maps app on a local search.
+     *
+     * Unlike the clock intents there is no `EXTRA_SKIP_UI` equivalent, so maps
+     * necessarily comes to the foreground; that makes the RESUMED guard in
+     * [launchExternalIntent] load-bearing.
+     *
+     * The intent is left implicit rather than pinned to
+     * `com.google.android.apps.maps` as TypeAgent's
      * `JavaScriptInterface.searchNearby` does, so it still resolves on devices
      * without Google Maps.
      */
-    private fun launchSearchNearbyIntent(action: SearchNearbyAction) {
+    private fun launchSearchNearbyIntent(
+        action: SearchNearbyAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(buildGeoSearchUri(action.searchTerm)))
         launchExternalIntent(
             intent = intent,
@@ -203,7 +287,8 @@ class MainActivity : ComponentActivity() {
             successMessage = "Searching nearby for ${action.searchTerm}",
             missingAppMessage = "No maps app is available on this device.",
             deniedMessage = "This app is not allowed to open the maps app.",
-            backgroundMessage = "Could not open maps while the app was in the background."
+            backgroundMessage = "Could not open maps while the app was in the background.",
+            completion = completion
         )
     }
 
@@ -233,7 +318,7 @@ class MainActivity : ComponentActivity() {
         missingAppMessage: String,
         deniedMessage: String,
         backgroundMessage: String,
-        completion: (AndroidDeviceExecutionResult) -> Unit = {}
+        completion: (AndroidDeviceExecutionResult) -> Unit
     ) {
         val target = intent.resolveActivity(packageManager)
         Log.d(
@@ -274,39 +359,48 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         private const val TAG = "MainActivity"
+
+        /**
+         * How long a client action waits for the Activity to resume before it
+         * is treated as arriving while the app is backgrounded. Long enough to
+         * cover an Activity recreation, short enough that the agent is not left
+         * waiting on a user who has switched away.
+         */
+        private const val RESUME_GRACE_MILLIS = 2_000L
+
+        private const val ACTIVITY_GONE_MESSAGE =
+            "The Android app closed the chat screen before the action could run."
     }
 }
 
 @Composable
 private fun ChatApp(
-    webSocketManager: WebSocketManager,
+    viewModel: ChatViewModel,
     tunnelUrl: String,
-    tunnelToken: String?
+    tunnelToken: String?,
+    schemaContent: String
 ) {
-    val messages by webSocketManager.messages.collectAsState()
-    val connectionStatus by webSocketManager.connectionStatus.collectAsState()
-    val pendingYesNoPrompt by webSocketManager.pendingYesNoPrompt.collectAsState()
-    var inputText by remember { mutableStateOf("") }
+    val messages by viewModel.messages.collectAsState()
+    val connectionStatus by viewModel.connectionStatus.collectAsState()
+    val pendingYesNoPrompt by viewModel.pendingYesNoPrompt.collectAsState()
+    val inputText by viewModel.inputText.collectAsState()
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
-    val canSend = connectionStatus.state == ConnectionStatus.State.CONNECTED && inputText.isNotBlank()
+    val isConnected = connectionStatus.state == ConnectionStatus.State.CONNECTED
+    val canSend = isConnected && inputText.isNotBlank()
+
     val voiceInput = rememberVoiceInputController(
         onRecognizedText = { recognizedText ->
-            inputText = mergeSpeechInputText(
-                currentText = inputText,
-                recognizedText = recognizedText
-            )
+            if (viewModel.onRecognizedText(recognizedText)) {
+                focusManager.clearFocus()
+            }
         }
     )
 
     fun submitMessage() {
-        if (!canSend) {
-            return
+        if (viewModel.submitMessage()) {
+            focusManager.clearFocus()
         }
-        val message = inputText.trim()
-        webSocketManager.sendMessage(message)
-        inputText = ""
-        focusManager.clearFocus()
     }
 
     LaunchedEffect(messages.size) {
@@ -320,16 +414,21 @@ private fun ChatApp(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp),
+                .padding(16.dp)
+                .imePadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            ChatHeader()
+            ChatHeader(
+                canClearChat = messages.isNotEmpty(),
+                onClearChat = { viewModel.clearChatHistory() }
+            )
             ConnectionStatusIndicator(
                 status = connectionStatus,
                 onReconnect = {
-                    webSocketManager.connect(
+                    viewModel.reconnect(
                         url = tunnelUrl,
-                        tunnelToken = tunnelToken
+                        tunnelToken = tunnelToken,
+                        schemaContent = schemaContent
                     )
                 }
             )
@@ -372,15 +471,15 @@ private fun ChatApp(
 
             ChatInputBar(
                 inputText = inputText,
-                onInputTextChange = { inputText = it },
-                isConnected = connectionStatus.state == ConnectionStatus.State.CONNECTED,
+                onInputTextChange = { viewModel.onInputTextChange(it) },
+                isConnected = isConnected,
                 canSend = canSend,
                 onSend = { submitMessage() },
                 isVoiceInputAvailable = voiceInput.isAvailable,
                 onVoiceInputClick = voiceInput.onStartRequested,
                 pendingYesNoPrompt = pendingYesNoPrompt,
-                onConfirmYes = { webSocketManager.respondToPendingYesNo(true) },
-                onConfirmNo = { webSocketManager.respondToPendingYesNo(false) }
+                onConfirmYes = { viewModel.respondToPendingYesNo(true) },
+                onConfirmNo = { viewModel.respondToPendingYesNo(false) }
             )
         }
     }
@@ -477,17 +576,6 @@ private fun rememberVoiceInputController(
                 }
             }
         )
-    }
-}
-
-private fun mergeSpeechInputText(
-    currentText: String,
-    recognizedText: String
-): String {
-    return if (currentText.isBlank()) {
-        recognizedText
-    } else {
-        "$currentText $recognizedText"
     }
 }
 
@@ -598,27 +686,75 @@ private fun ChatInputBar(
 }
 
 @Composable
-private fun ChatHeader() {
+private fun ChatHeader(
+    canClearChat: Boolean,
+    onClearChat: () -> Unit
+) {
+    var showConfirmation by remember { mutableStateOf(false) }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         tonalElevation = 3.dp
     ) {
-        Column(
+        Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "TypeAgent Chat",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "A simple local chat client for your TypeAgent server.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "TypeAgent Chat",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "A simple local chat client for your TypeAgent server.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            TextButton(
+                onClick = { showConfirmation = true },
+                enabled = canClearChat
+            ) {
+                Text("Clear chat")
+            }
         }
+    }
+
+    // Clearing deletes the only copy of the transcript, so it is confirmed
+    // rather than fired on a single stray tap.
+    if (showConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showConfirmation = false },
+            title = { Text("Clear this chat?") },
+            text = {
+                Text(
+                    "This deletes the messages on this device and cannot be undone. " +
+                        "The conversation itself is not affected - the agent keeps its " +
+                        "own memory of it."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showConfirmation = false
+                        onClearChat()
+                    }
+                ) {
+                    Text("Clear chat")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
