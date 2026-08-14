@@ -289,13 +289,18 @@ function stripEmptyGoldPlaceholdersFromActions(
     actions: TranslationBenchBenchmarkAction[],
 ): TranslationBenchBenchmarkAction[] {
     return actions.map((action) => {
+        if (action.parameters === undefined) {
+            return action;
+        }
         const { parameters } = stripEmptyGoldPlaceholders(action.parameters);
         if (parameters === action.parameters) {
             return action;
         }
         if (parameters === undefined) {
-            const { parameters: _drop, ...rest } = action;
-            return rest;
+            // Keep parameters:{} when nested empties strip to nothing. Schemas
+            // like code.getSelection / desktop.ListThemes require the key
+            // (empty object type); dropping it fails validateAction.
+            return { ...action, parameters: {} };
         }
         return { ...action, parameters };
     });
