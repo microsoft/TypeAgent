@@ -141,6 +141,10 @@ jobs:
         working-directory: ts
         run: |
           pnpm run postinstall:better-sqlite3-node-restore
+      # Runs the unit suite once, then reruns only the packages that owned a
+      # failing test (serially) to tell flaky failures from real ones.  Flaky
+      # tests (passed on retry) are reported as annotations / a step summary but
+      # do not fail the build; a test that fails twice does.
       - name: Test
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
