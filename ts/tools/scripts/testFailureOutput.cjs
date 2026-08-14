@@ -12,11 +12,11 @@ function writeTestFailures(failures) {
     }
 
     fs.mkdirSync(outputDirectory, { recursive: true });
-    const outputPath = path.join(
-        outputDirectory,
-        `${process.pid}-${randomUUID()}.json`,
-    );
-    fs.writeFileSync(outputPath, JSON.stringify(failures), "utf8");
+    const outputName = `${process.pid}-${randomUUID()}`;
+    const temporaryPath = path.join(outputDirectory, `${outputName}.tmp`);
+    const outputPath = path.join(outputDirectory, `${outputName}.json`);
+    fs.writeFileSync(temporaryPath, JSON.stringify(failures), "utf8");
+    fs.renameSync(temporaryPath, outputPath);
 }
 
 module.exports = { writeTestFailures };

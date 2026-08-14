@@ -20,7 +20,16 @@ class JestFailureReporter {
                 });
             }
 
-            if (
+            if (testFileResult.testExecError !== undefined) {
+                failures.push({
+                    testFilePath: testFileResult.testFilePath,
+                    fullName: "Test suite failed outside an individual test",
+                    failureMessages: [
+                        testFileResult.testExecError.stack ??
+                            testFileResult.testExecError.message,
+                    ],
+                });
+            } else if (
                 failedTests.length === 0 &&
                 typeof testFileResult.failureMessage === "string"
             ) {
@@ -30,6 +39,17 @@ class JestFailureReporter {
                     failureMessages: [testFileResult.failureMessage],
                 });
             }
+        }
+
+        if (aggregatedResult.runExecError !== undefined) {
+            failures.push({
+                testFilePath: "<Jest run>",
+                fullName: "Jest failed outside a test suite",
+                failureMessages: [
+                    aggregatedResult.runExecError.stack ??
+                        aggregatedResult.runExecError.message,
+                ],
+            });
         }
 
         writeTestFailures(failures);

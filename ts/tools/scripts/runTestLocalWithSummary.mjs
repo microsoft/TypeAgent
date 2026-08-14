@@ -43,9 +43,7 @@ function printFailureSummary(directory, exitCode) {
     const failures = fs
         .readdirSync(directory)
         .filter((fileName) => fileName.endsWith(".json"))
-        .flatMap((fileName) =>
-            JSON.parse(fs.readFileSync(path.join(directory, fileName), "utf8")),
-        );
+        .flatMap((fileName) => readFailureArtifact(directory, fileName));
     const uniqueFailures = [
         ...new Map(
             failures.map((failure) => [JSON.stringify(failure), failure]),
@@ -74,8 +72,25 @@ function printFailureSummary(directory, exitCode) {
     console.error(`\n${"=".repeat(80)}`);
 }
 
+function readFailureArtifact(directory, fileName) {
+    try {
+        return JSON.parse(
+            fs.readFileSync(path.join(directory, fileName), "utf8"),
+        );
+    } catch (error) {
+        console.error(
+            `Unable to read test failure artifact ${fileName}: ${error.message}`,
+        );
+        return [];
+    }
+}
+
 function normalizePath(filePath) {
-    return path.relative(process.cwd(), filePath).replaceAll("\\", "/");
+    return (
+        path.isAbsolute(filePath)
+            ? path.relative(process.cwd(), filePath)
+            : filePath
+    ).replaceAll("\\", "/");
 }
 
 function stripAnsi(value) {
