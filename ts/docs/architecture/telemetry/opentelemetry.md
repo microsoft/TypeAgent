@@ -141,6 +141,29 @@ restartable or replace host globals.
 
 Each subprocess extracts RPC context, creates child spans with its own provider,
 and exports independently. Telemetry payloads do not pass through the dispatcher.
+Browser-shared RPC code reads active TypeAgent metadata through the
+`@typeagent/telemetry/traceContext` subpath. It does not import the Node-only
+telemetry composition root.
+
+The trusted dispatcher RPC channel extends the same trace from a client host
+into agent-server request processing:
+
+```text
+client rpc.client
+  -> agent-server rpc.server
+    -> typeagent.request
+      -> typeagent.action
+        -> agent-server rpc.client
+          -> agent subprocess rpc.server
+```
+
+Dispatcher RPC propagation remains opt-in. The agent-server client and server
+composition roots enable it for their TypeAgent-owned channel. The shared
+agent-server dispatcher also enables `telemetry.joinActiveTrace`, which captures
+the RPC SERVER context when a command is submitted and restores it when the
+queued `typeagent.request` begins. Embedded dispatcher hosts retain the default
+`joinActiveTrace: false`, so installing a provider does not implicitly join
+their requests to an unrelated active span.
 
 ## Signals
 
@@ -289,6 +312,9 @@ OTel owns the canonical trace ID. Preserve the existing caller value as
 
 Send TypeAgent correlation values as explicit, allowlisted RPC metadata, not
 broad W3C baggage. V1 does not inject them into generic HTTP propagation.
+The process-backed agent boundary also carries bounded `agentName` and
+`actionName` values already known at dispatch time. It never adds action
+parameters or RPC-internal context identifiers.
 
 Accept remote context only on designated RPC channels. Enforce OTel parsing,
 size limits, and correlation-field length and character rules. Ignore malformed
@@ -839,6 +865,10 @@ Always end manual spans in `finally`.
 | **4. Local Grafana POC**          | Visual proof of OTLP interoperability | Optional `otel-lgtm` or Alloy/Tempo/Loki setup and short verification steps                                                       | A developer views one Phase 3 trace and correlated logs in Grafana                                 |
 | **5. Metrics**                    | **Operational visibility**            | Token and duration instruments, bounded attributes, in-memory tests, optional Grafana queries                                     | Readers verify values; partner metrics join the host provider; POC can inspect export              |
 | **6. Hardening**                  | **Production-ready v1**               | Provider/no-provider, partner wiring, privacy, compatibility, overhead, queue/disk/export/shutdown failures                       | Partner and operational tests meet ownership, reliability, privacy, and performance requirements   |
+
+Phase 3 is complete. A real three-process OTLP smoke test verifies the literal
+client, agent-server, request, action, and agent-subprocess chain above with one
+trace ID, exact parent span IDs, and distinct process resources.
 
 Phases normally proceed in order. Phase 4 depends on Phase 3 so the POC shows
 the Functional MVP. Metrics implementation may start after Phase 0, but the

@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Span } from "@opentelemetry/api";
+import {
+    context,
+    createContextKey,
+    type Context,
+    type Span,
+} from "@opentelemetry/api";
 import { redactText, type RedactionOptions } from "./redaction.js";
 
 /**
@@ -92,6 +97,25 @@ export interface TypeAgentSpanAttributes {
      * log correlation). OTel owns the canonical trace id.
      */
     readonly traceId?: string;
+}
+
+const ACTIVE_TYPEAGENT_ATTRIBUTES = createContextKey(
+    "typeagent.active-span-attributes",
+);
+
+export function getActiveTypeAgentSpanAttributes():
+    | TypeAgentSpanAttributes
+    | undefined {
+    return context.active().getValue(ACTIVE_TYPEAGENT_ATTRIBUTES) as
+        | TypeAgentSpanAttributes
+        | undefined;
+}
+
+export function setActiveTypeAgentSpanAttributes(
+    activeContext: Context,
+    attributes: TypeAgentSpanAttributes,
+): Context {
+    return activeContext.setValue(ACTIVE_TYPEAGENT_ATTRIBUTES, attributes);
 }
 
 const ATTRIBUTE_KEY_FOR_FIELD: {

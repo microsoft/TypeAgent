@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { SpanStatusCode, trace } from "@opentelemetry/api";
+import { otel } from "@typeagent/telemetry";
 import {
     createInMemorySpanManager,
     type CapturedSpan,
@@ -105,15 +106,18 @@ describe("wrapActionSpan", () => {
 
     it("keeps the action span active through asynchronous work", async () => {
         let activeSpanId: string | undefined;
+        let activeAttributes: otel.TypeAgentSpanAttributes | undefined;
 
         await wrapActionSpan(ATTRIBUTES, async () => {
             await Promise.resolve();
             activeSpanId = trace.getActiveSpan()?.spanContext().spanId;
+            activeAttributes = otel.getActiveTypeAgentSpanAttributes();
         });
 
         expect(activeSpanId).toBe(
             getOnlySpan(manager, "typeagent.action").spanContext().spanId,
         );
+        expect(activeAttributes).toEqual(ATTRIBUTES);
     });
 
     it("records bounded setup and typed-result failures", async () => {

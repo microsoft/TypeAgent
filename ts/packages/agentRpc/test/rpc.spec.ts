@@ -421,6 +421,8 @@ describe("createRpc OpenTelemetry propagation", () => {
                         traceId: "legacy-trace",
                         sessionId: "session-1",
                         activationId: "activation-1",
+                        agentName: "player",
+                        actionName: "play",
                     }),
                 },
             },
@@ -444,6 +446,8 @@ describe("createRpc OpenTelemetry propagation", () => {
             "typeagent.trace.id": "legacy-trace",
             "typeagent.session.id": "session-1",
             "typeagent.activation.id": "activation-1",
+            "typeagent.agent.name": "player",
+            "typeagent.action.name": "play",
         });
         expect(client.sent[0].metadata).toMatchObject({
             version: RPC_METADATA_VERSION,
@@ -451,6 +455,8 @@ describe("createRpc OpenTelemetry propagation", () => {
                 traceId: "legacy-trace",
                 sessionId: "session-1",
                 activationId: "activation-1",
+                agentName: "player",
+                actionName: "play",
             },
         });
     });
@@ -598,8 +604,10 @@ describe("createRpc OpenTelemetry propagation", () => {
                     getCorrelationFields: () =>
                         ({
                             sessionId: "session-valid",
-                            traceId: "contains spaces",
+                            traceId: "sk-secret-shaped-identifier",
                             activationId: "x".repeat(257),
+                            agentName: "agent valid",
+                            actionName: "action valid",
                             userText: "must-not-propagate",
                         }) as any,
                 },
