@@ -36,6 +36,9 @@ describe("AppAgentProvider", () => {
                 agents: enabledAgentNames,
             });
             await dispatcher.close();
-        }, 120000); // take longer time to start up on CI's small machines.
+            // Startup + shutdown of every default agent can occasionally spike
+            // past the old 2-minute limit on CI's small, contended machines, so
+            // allow some headroom rather than fail flakily on a slow run.
+        }, 180000);
     });
 });

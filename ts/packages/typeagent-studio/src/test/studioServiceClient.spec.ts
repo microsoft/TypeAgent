@@ -172,18 +172,23 @@ test("StudioServiceClient presents the capability token as a Bearer header", asy
 test("heartbeat keeps a healthy connection alive (no false positives)", async () => {
     const stub = await startStubServer();
     let closed = false;
-    // Short period so several beats elapse quickly; the ws server auto-pongs,
-    // so the watchdog must NOT terminate a healthy socket.
+    // The ws server auto-pongs, so the watchdog must NOT terminate a healthy
+    // socket. This asserts a negative (no termination), so the interval must
+    // sit well above CI event-loop scheduling jitter: a false termination needs
+    // the loop stalled for a full interval right after a ping. A 25ms period
+    // made that easy to hit under parallel-jest CPU contention (the flaky
+    // "true !== false" / "WebSocket CLOSING" failures), so use a comfortably
+    // larger interval that still exercises several ping/pong sweeps.
     const client = await StudioServiceClient.connect({
         endpoint: stub.endpoint,
-        heartbeatMs: 25,
+        heartbeatMs: 250,
         onClose: () => {
             closed = true;
         },
     });
     assert.ok(client);
     try {
-        await new Promise((r) => setTimeout(r, 200)); // ~8 beats
+        await new Promise((r) => setTimeout(r, 1250)); // ~5 beats
         assert.equal(closed, false, "healthy connection must stay open");
         const info = await client!.getStudioInfo();
         assert.equal(info.repoRootInfo.repoRoot, "/repo/ts");

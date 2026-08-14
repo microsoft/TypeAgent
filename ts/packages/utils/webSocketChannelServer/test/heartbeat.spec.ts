@@ -9,6 +9,13 @@ import { attachHeartbeat } from "../src/heartbeat.js";
 // peer is reaped in `intervalMs`..`2 * intervalMs`.
 const INTERVAL_MS = 40;
 
+// The "healthy peer stays connected" case asserts a negative (the watchdog does
+// NOT reap a responsive socket), so it must tolerate CI event-loop stalls: a
+// false reap needs the loop blocked for a full interval right after a ping. The
+// 40ms sweep is small enough that parallel-jest CPU contention tripped it, so
+// the healthy-path assertion uses a comfortably larger interval.
+const HEALTHY_INTERVAL_MS = 250;
+
 const openServers: WebSocketServer[] = [];
 const openClients: WebSocket[] = [];
 const stops: Array<() => void> = [];
@@ -102,12 +109,12 @@ describe("attachHeartbeat", () => {
 
     it("keeps a responsive client connected across many sweeps", async () => {
         const { wss, url } = await startServer();
-        stops.push(attachHeartbeat(wss, { intervalMs: INTERVAL_MS }));
+        stops.push(attachHeartbeat(wss, { intervalMs: HEALTHY_INTERVAL_MS }));
 
         const client = connect(url); // default autoPong:true
         await waitForOpen(client);
 
-        await delay(INTERVAL_MS * 6);
+        await delay(HEALTHY_INTERVAL_MS * 4);
         expect(client.readyState).toBe(WebSocket.OPEN);
         expect(wss.clients.size).toBe(1);
     });

@@ -114,7 +114,7 @@ describe("selectFromPartitions", () => {
 
     test("all partitions run in parallel", async () => {
         const startTimes: number[] = [];
-        const delayMs = 100;
+        const delayMs = 200;
         const makeTimedTranslator = (
             result: Result<AssistantSelection>,
             delay: number,
@@ -146,16 +146,20 @@ describe("selectFromPartitions", () => {
         await selectFromPartitions(partitions, "test");
         const elapsed = Date.now() - before;
 
-        // All three started nearly simultaneously (within 10ms of each other)
+        // selectFromPartitions dispatches every translator synchronously before
+        // awaiting any, so parallel start times cluster near 0, while a
+        // sequential rewrite would space them ~delayMs apart (spread ~2*delayMs).
+        // The threshold sits in that gap with wide margin for CI scheduling
+        // jitter: a single GC pause between the synchronous dispatch calls used
+        // to break the old 10ms bound.
         expect(startTimes).toHaveLength(3);
         const spread = Math.max(...startTimes) - Math.min(...startTimes);
-        expect(spread).toBeLessThan(10);
+        expect(spread).toBeLessThan(delayMs);
 
-        // Parallel: total time should be well under sequential (3 × delayMs).
-        // The 2.5× threshold gives ~150ms of headroom for CI timer jitter
-        // while still catching any accidental sequential execution (which
-        // would take ~300ms and clearly exceed the limit).
-        expect(elapsed).toBeLessThan(delayMs * 2.5);
+        // Parallel total is ~delayMs; a sequential rewrite would take ~3*delayMs.
+        // The 2x bound leaves ~delayMs of headroom for late timers under CI load
+        // while still catching any accidental sequential execution.
+        expect(elapsed).toBeLessThan(delayMs * 2);
     });
 
     test("error from a partition is propagated in order", async () => {
