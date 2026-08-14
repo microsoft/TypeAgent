@@ -145,7 +145,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
-          npm run test:local
+          node tools/scripts/runTestLocalWithSummary.mjs
       - name: UI tests (requires display)
         if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false') && runner.os == 'Linux' }}
         working-directory: ts

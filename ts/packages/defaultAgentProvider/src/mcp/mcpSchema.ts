@@ -15,7 +15,7 @@ const debug = registerDebug("typeagent:mcp:schema");
 // human-readable reason (unsupported JSON Schema construct, name collision,
 // etc.). Surfaced as a diagnostic so one problematic tool does not silently
 // disappear or take the whole server down with it.
-export type SkippedTool = { name: string; reason: string };
+export type SkippedTool = { id: string; name: string; reason: string };
 
 export type ConvertToolsResult = {
     // Serialized JSONParsedActionSchema for the accepted tools.
@@ -68,6 +68,7 @@ function toParserTool(tool: Tool): ParserTool {
 export function convertToolsSchema(
     tools: Tool[],
     entryTypeName: string,
+    serverConfigId = "",
 ): ConvertToolsResult {
     const accepted: string[] = [];
     const acceptedTools: ParserTool[] = [];
@@ -76,6 +77,7 @@ export function convertToolsSchema(
 
     for (const tool of tools) {
         const name = typeof tool?.name === "string" ? tool.name : "(unnamed)";
+        const id = JSON.stringify([serverConfigId, name]);
 
         // Two distinct tool names can collapse to the same PascalCase type
         // name (e.g. "get_weather" and "get-weather"); keep the first and skip
@@ -84,7 +86,7 @@ export function convertToolsSchema(
         const collidesWith = seenTypeNames.get(typeName);
         if (collidesWith !== undefined) {
             const reason = `type name '${typeName}' collides with tool '${collidesWith}'`;
-            skipped.push({ name, reason });
+            skipped.push({ id, name, reason });
             debug(`skipping tool '${name}': ${reason}`);
             continue;
         }
@@ -96,7 +98,7 @@ export function convertToolsSchema(
             parseToolsJsonSchema([parserTool], entryTypeName);
         } catch (e: any) {
             const reason = e?.message ?? String(e);
-            skipped.push({ name, reason });
+            skipped.push({ id, name, reason });
             debug(`skipping tool '${name}': ${reason}`);
             continue;
         }

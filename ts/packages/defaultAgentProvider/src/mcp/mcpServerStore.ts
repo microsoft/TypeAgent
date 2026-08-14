@@ -14,18 +14,42 @@ export type McpServersJson = {
     servers: Record<string, NormalizedMcpServerConfig>;
 };
 
+type PersistedMcpServerConfig = Partial<NormalizedMcpServerConfig> &
+    Pick<NormalizedMcpServerConfig, "transport">;
+
 function mcpServersJsonPath(instanceDir: string): string {
     return path.join(instanceDir, "mcpServers.json");
 }
 
+function assertNoPlaintextCredentials(config: NormalizedMcpServerConfig): void {
+    const values =
+        config.transport.kind === "http"
+            ? config.transport.headers
+            : config.transport.env;
+    for (const [name, value] of Object.entries(values ?? {})) {
+        if (
+            /authorization|cookie|password|secret|token|api[-_]?key/i.test(
+                name,
+            ) &&
+            typeof value === "string"
+        ) {
+            throw new Error(
+                `MCP server '${config.name}' cannot persist plaintext credential '${name}'. Use an env or secure credential reference.`,
+            );
+        }
+    }
+}
+
 export function readMcpServersJson(
     instanceDir: string,
-): McpServersJson | undefined {
+): { servers: Record<string, PersistedMcpServerConfig> } | undefined {
     const filePath = mcpServersJsonPath(instanceDir);
     if (!fs.existsSync(filePath)) {
         return undefined;
     }
-    return JSON.parse(fs.readFileSync(filePath, "utf8")) as McpServersJson;
+    return JSON.parse(fs.readFileSync(filePath, "utf8")) as {
+        servers: Record<string, PersistedMcpServerConfig>;
+    };
 }
 
 export function writeMcpServersJson(
@@ -48,27 +72,58 @@ export function writeMcpServersJson(
  */
 export interface McpServerStore {
     list(): NormalizedMcpServerConfig[];
-    get(name: string): NormalizedMcpServerConfig | undefined;
-    has(name: string): boolean;
+    get(id: string): NormalizedMcpServerConfig | undefined;
+    has(id: string): boolean;
     // Add or replace a server config, writing through to disk. Returns the
     // stored config.
     set(config: NormalizedMcpServerConfig): NormalizedMcpServerConfig;
     // Remove a server config; returns true when a config was removed.
-    remove(name: string): boolean;
+    remove(id: string): boolean;
+}
+
+function migrateConfig(
+    persistedId: string,
+    config: PersistedMcpServerConfig,
+): NormalizedMcpServerConfig {
+    const id = config.id ?? persistedId;
+    const name = config.name ?? persistedId;
+    return {
+        ...config,
+        id,
+        name,
+        enabled: config.enabled ?? true,
+        trust: config.trust ?? "untrusted",
+        scope: config.scope ?? "user",
+        provenance: config.provenance ?? {
+            source: "legacy-mcpServers.json",
+            sourceKind: "legacy",
+            ref: persistedId,
+        },
+    };
 }
 
 export function openMcpServerStore(
     instanceDir: string,
     reservedNames: ReadonlySet<string> = new Set(),
+    reservedIds: ReadonlySet<string> = new Set(),
 ): McpServerStore {
     const servers = new Map<string, NormalizedMcpServerConfig>();
     const existing = readMcpServersJson(instanceDir);
     if (existing !== undefined) {
-        for (const [name, config] of Object.entries(existing.servers)) {
+        for (const [persistedId, rawConfig] of Object.entries(
+            existing.servers ?? {},
+        )) {
+            const config = migrateConfig(persistedId, rawConfig);
             // Drop any stored server whose name collides with a shipped server
             // (the seeded provider owns it).
-            if (!reservedNames.has(name)) {
-                servers.set(name, { ...config, name });
+            if (
+                !reservedNames.has(config.name) &&
+                !reservedIds.has(config.id) &&
+                ![...servers.values()].some(
+                    (existingConfig) => existingConfig.name === config.name,
+                )
+            ) {
+                servers.set(config.id, config);
             }
         }
     }
@@ -78,28 +133,44 @@ export function openMcpServerStore(
 
     function flush(): void {
         const out: Record<string, NormalizedMcpServerConfig> = {};
-        for (const [name, config] of servers) {
-            out[name] = config;
+        for (const [id, config] of servers) {
+            out[id] = config;
         }
         writeMcpServersJson(instanceDir, { servers: out });
     }
 
     return {
         list: () => [...servers.values()],
-        get: (name) => servers.get(name),
-        has: (name) => servers.has(name),
+        get: (id) => servers.get(id),
+        has: (id) => servers.has(id),
         set(config) {
+            assertNoPlaintextCredentials(config);
+            if (reservedIds.has(config.id)) {
+                throw new Error(
+                    `Cannot store MCP server config '${config.id}': id is reserved by a shipped server`,
+                );
+            }
             if (reservedNames.has(config.name)) {
                 throw new Error(
                     `Cannot store MCP server '${config.name}': name is reserved by a shipped server`,
                 );
             }
-            servers.set(config.name, config);
+            for (const existing of servers.values()) {
+                if (
+                    existing.id !== config.id &&
+                    existing.name === config.name
+                ) {
+                    throw new Error(
+                        `Cannot store MCP server '${config.name}': name is already used by config '${existing.id}'`,
+                    );
+                }
+            }
+            servers.set(config.id, config);
             flush();
             return config;
         },
-        remove(name) {
-            const removed = servers.delete(name);
+        remove(id) {
+            const removed = servers.delete(id);
             if (removed) {
                 flush();
             }
