@@ -16,6 +16,7 @@ import {
     McpAppAgentSourceForTest,
 } from "./mcp/mcpAppAgentSource.js";
 import type { NormalizedMcpServerConfig } from "./mcp/mcpServerConfig.js";
+import type { McpHostServices } from "./mcp/mcpServerProvider.js";
 
 const MCP_CLIENT_INFO = { name: "typeagent", version: "0.0.1" };
 
@@ -99,6 +100,7 @@ export function getMcpAppAgentSource(instanceDir: string): AppAgentSource {
  */
 export function createMcpAppAgentSourceForInstance(
     instanceConfigs: InstanceConfigProvider,
+    services?: McpHostServices,
 ): McpAppAgentSourceForTest {
     const instanceDir = instanceConfigs.getInstanceDir();
     if (instanceDir === undefined) {
@@ -110,6 +112,10 @@ export function createMcpAppAgentSourceForInstance(
     // Reserve ALL shipped server names (both seeded and legacy) so the user
     // store can never register a name owned by another provider.
     const reserved = new Set(Object.keys(getProviderConfig().mcpServers ?? {}));
-    const store = openMcpServerStore(instanceDir, reserved);
-    return createMcpAppAgentSource(store, seed, MCP_CLIENT_INFO);
+    const store = openMcpServerStore(
+        instanceDir,
+        reserved,
+        new Set(Object.values(seed).map((config) => config.id)),
+    );
+    return createMcpAppAgentSource(store, seed, MCP_CLIENT_INFO, services);
 }

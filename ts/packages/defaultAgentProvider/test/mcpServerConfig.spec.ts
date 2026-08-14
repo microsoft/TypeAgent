@@ -39,21 +39,49 @@ describe("resolveEnvValue", () => {
 });
 
 describe("toTransportConfig", () => {
-    it("maps an http config to an http transport", () => {
-        const config: NormalizedMcpServerConfig = {
-            name: "remote",
-            transport: { kind: "http", url: "https://example.com/mcp" },
+    function config(
+        transport: NormalizedMcpServerConfig["transport"],
+    ): NormalizedMcpServerConfig {
+        return {
+            id: "test",
+            name: "test",
+            enabled: true,
+            trust: "trusted",
+            scope: "user",
+            provenance: { source: "test" },
+            transport,
         };
-        expect(toTransportConfig(config)).toEqual({
+    }
+
+    it("maps an http config to an http transport", () => {
+        expect(
+            toTransportConfig(
+                config({
+                    kind: "http",
+                    url: "https://example.com/mcp",
+                    headers: {
+                        Literal: "plain",
+                        Authorization: { kind: "env", name: "TOKEN" },
+                    },
+                    timeoutMs: 1234,
+                }),
+                undefined,
+                { TOKEN: "Bearer secret" },
+            ),
+        ).toEqual({
             kind: "http",
             url: "https://example.com/mcp",
+            headers: {
+                Literal: "plain",
+                Authorization: "Bearer secret",
+            },
+            timeoutMs: 1234,
         });
     });
 
     it("maps a stdio config and resolves env references", () => {
-        const config: NormalizedMcpServerConfig = {
-            name: "local",
-            transport: {
+        const result = toTransportConfig(
+            config({
                 kind: "stdio",
                 command: "node",
                 args: ["server.js"],
@@ -62,9 +90,9 @@ describe("toTransportConfig", () => {
                     SECRET: { kind: "input", name: "key" },
                 },
                 cwd: "/work",
-            },
-        };
-        const result = toTransportConfig(config, { key: "resolved" });
+            }),
+            { key: "resolved" },
+        );
         expect(result).toEqual({
             kind: "stdio",
             command: "node",
@@ -74,30 +102,39 @@ describe("toTransportConfig", () => {
         });
     });
 
-    it("omits unresolved env entries instead of emitting undefined", () => {
-        const config: NormalizedMcpServerConfig = {
-            name: "local",
-            transport: {
-                kind: "stdio",
-                command: "node",
-                env: { MISSING: { kind: "env", name: "NOPE" } },
-            },
-        };
-        const result = toTransportConfig(config, undefined, {});
-        expect(result).toEqual({
-            kind: "stdio",
-            command: "node",
-            args: [],
-            env: {},
-        });
+    it("fails explicitly for unresolved stdio env references", () => {
+        expect(() =>
+            toTransportConfig(
+                config({
+                    kind: "stdio",
+                    command: "node",
+                    env: { MISSING: { kind: "env", name: "NOPE" } },
+                }),
+                undefined,
+                {},
+            ),
+        ).toThrow(/environment variable 'MISSING'.*env:NOPE/);
+    });
+
+    it("fails explicitly for unresolved HTTP header references", () => {
+        expect(() =>
+            toTransportConfig(
+                config({
+                    kind: "http",
+                    url: "https://example.com/mcp",
+                    headers: {
+                        Authorization: { kind: "input", name: "api-key" },
+                    },
+                }),
+                {},
+            ),
+        ).toThrow(/HTTP header 'Authorization'.*input:api-key/);
     });
 
     it("defaults args to an empty array when absent", () => {
-        const config: NormalizedMcpServerConfig = {
-            name: "local",
-            transport: { kind: "stdio", command: "run" },
-        };
-        expect(toTransportConfig(config)).toEqual({
+        expect(
+            toTransportConfig(config({ kind: "stdio", command: "run" })),
+        ).toEqual({
             kind: "stdio",
             command: "run",
             args: [],

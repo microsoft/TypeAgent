@@ -27,8 +27,7 @@ import {
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
-    getDefaultAppAgentSource,
-    getMcpAppAgentSource,
+    getDefaultAppAgentSources,
 } from "default-agent-provider";
 import { existsSync } from "node:fs";
 
@@ -77,10 +76,7 @@ export async function generateCommandReferenceMarkdown(
     const appAgentProviders = getDefaultAppAgentProviders(instanceDir);
     // The @package management commands are provided by the install source
     // rather than a static provider; include it so they are documented too.
-    const appAgentSources = [
-        getDefaultAppAgentSource(instanceDir),
-        getMcpAppAgentSource(instanceDir),
-    ];
+    const appAgentSources = getDefaultAppAgentSources(instanceDir);
 
     // Resolve each command's declared action to a fully-qualified name and a
     // link to its schema source. Built from the same providers, so it does not

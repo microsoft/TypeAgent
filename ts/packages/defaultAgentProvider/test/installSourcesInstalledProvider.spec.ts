@@ -2470,6 +2470,43 @@ describe("installed agent source api (install/uninstall/update)", () => {
         expect(fs.existsSync(sharedDir)).toBe(false);
     });
 
+    it("MCP cleanup keeps an owned path until the final config reference is removed", () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const sharedDir = path.join(
+            instanceDir,
+            "installedAgents",
+            "mcp",
+            "shared",
+        );
+        fs.mkdirSync(sharedDir, { recursive: true });
+        const firstConfig = {
+            id: "first",
+            provenance: { ownedPaths: [sharedDir] },
+        } as any;
+        const secondConfig = {
+            id: "second",
+            provenance: { ownedPaths: [sharedDir] },
+        } as any;
+        const configs = [firstConfig, secondConfig];
+        const installer = createDefaultInstalledAgentSource(
+            instanceDir,
+            undefined,
+            undefined,
+            undefined,
+            {
+                listServers: () => configs,
+            } as any,
+        ).testApi;
+
+        configs.splice(0, 1);
+        installer.cleanupMcp!(firstConfig);
+        expect(fs.existsSync(sharedDir)).toBe(true);
+
+        configs.pop();
+        installer.cleanupMcp!(secondConfig);
+        expect(fs.existsSync(sharedDir)).toBe(false);
+    });
+
     it("unsupported path update does not prune a shared root", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const installer =

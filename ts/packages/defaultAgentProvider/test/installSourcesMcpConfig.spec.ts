@@ -60,7 +60,7 @@ describe("mcpConfigSource", () => {
         expect(rows[0].extensionKind).toBe("mcp");
     });
 
-    it("exposes normalized configs via getServers", async () => {
+    it("resolves normalized MCP candidates without native materialization", async () => {
         const file = writeConfig({
             mcpServers: {
                 web: { url: "https://example.com/mcp" },
@@ -71,9 +71,50 @@ describe("mcpConfigSource", () => {
             name: "mcp",
             file,
         });
-        const servers = source.getServers();
-        expect([...servers.keys()]).toEqual(["web"]);
-        expect(servers.get("web")?.transport).toMatchObject({ kind: "http" });
+        const candidate = await source.findMcp!("web");
+        expect(candidate).toMatchObject({
+            source: "mcp",
+            sourceKind: "mcp-config",
+            ref: "web",
+            config: {
+                id: "mcp:mcp:web",
+                enabled: false,
+                trust: "untrusted",
+                transport: { kind: "http" },
+                provenance: {
+                    source: "mcp",
+                    sourceKind: "mcp-config",
+                    ref: "web",
+                },
+            },
+        });
+    });
+
+    it("re-reads the local config when resolving an update", async () => {
+        const file = writeConfig({
+            mcpServers: {
+                web: { url: "https://example.com/v1" },
+            },
+        });
+        const source = createMcpConfigSource({
+            kind: "mcp-config",
+            name: "mcp",
+            file,
+        });
+        expect((await source.findMcp!("web"))?.config.transport).toMatchObject({
+            url: "https://example.com/v1",
+        });
+        fs.writeFileSync(
+            file,
+            JSON.stringify({
+                mcpServers: {
+                    web: { url: "https://example.com/v2" },
+                },
+            }),
+        );
+        expect((await source.findMcp!("web"))?.config.transport).toMatchObject({
+            url: "https://example.com/v2",
+        });
     });
 
     it("never resolves through the agent walk (find/materialize)", async () => {
