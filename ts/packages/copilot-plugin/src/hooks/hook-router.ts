@@ -90,10 +90,7 @@ async function handleMacroCommand(
     }
 }
 
-function directCommand(
-    input: HookInput,
-    command: string,
-): Promise<HookOutput> {
+function directCommand(input: HookInput, command: string): Promise<HookOutput> {
     return handleDirect({
         prompt: command,
         sessionId: input.sessionId,
@@ -137,9 +134,7 @@ function handleModeCommand(lower: string): HookOutput | undefined {
 }
 
 function handlePowerShellCommand(lower: string): HookOutput | undefined {
-    const match = lower.match(
-        /^@typeagent\s+powershell(?:\s+(on|off))?\s*$/,
-    );
+    const match = lower.match(/^@typeagent\s+powershell(?:\s+(on|off))?\s*$/);
     if (!match) return undefined;
 
     const setting = match[1] as "on" | "off" | undefined;

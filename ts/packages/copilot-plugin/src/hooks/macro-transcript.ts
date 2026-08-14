@@ -112,11 +112,7 @@ function recordToolStart(
 ): boolean {
     const toolCallId = getString(data, "toolCallId");
     const name = getString(data, "toolName");
-    if (
-        !toolCallId ||
-        !name ||
-        accumulator.completedCalls.has(toolCallId)
-    ) {
+    if (!toolCallId || !name || accumulator.completedCalls.has(toolCallId)) {
         return false;
     }
     const existing = accumulator.calls.get(toolCallId);

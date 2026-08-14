@@ -504,10 +504,7 @@ function parseIpv4(address: string): number | undefined {
         return undefined;
     }
     return (
-        parts[0] * 0x1000000 +
-        parts[1] * 0x10000 +
-        parts[2] * 0x100 +
-        parts[3]
+        parts[0] * 0x1000000 + parts[1] * 0x10000 + parts[2] * 0x100 + parts[3]
     );
 }
 
