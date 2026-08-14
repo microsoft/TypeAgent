@@ -46,6 +46,87 @@ interface TurnSummary {
     handledByTypeAgent: boolean;
 }
 
+function readTranscriptEvents(
+    transcriptPath: string,
+): TranscriptEvent[] | undefined {
+    let content: string;
+    try {
+        content = readFileSync(transcriptPath, "utf-8");
+    } catch {
+        return undefined;
+    }
+
+    const events: TranscriptEvent[] = [];
+    for (const line of content.trim().split("\n").filter(Boolean)) {
+        try {
+            events.push(JSON.parse(line));
+        } catch {
+            // Skip malformed lines
+        }
+    }
+    return events;
+}
+
+function findLastUserIndex(events: TranscriptEvent[]): number {
+    let index = events.length - 1;
+    while (index >= 0 && events[index].type !== "user.message") index--;
+    return index;
+}
+
+function recordAssistantEvent(
+    event: TranscriptEvent,
+    summary: TurnSummary,
+): void {
+    if (event.data.content) summary.assistantMessage += event.data.content;
+    for (const tool of event.data.toolRequests ?? []) {
+        summary.toolsUsed.push(tool.name);
+        if (isTypeAgentAgentServerTool(tool.name, tool.mcpServerName)) {
+            summary.handledByTypeAgent = true;
+        }
+    }
+}
+
+function recordToolCompletion(
+    event: TranscriptEvent,
+    toolsUsed: string[],
+): void {
+    const toolName = (event.data as { toolName?: string }).toolName;
+    if (toolName && !toolsUsed.includes(toolName)) toolsUsed.push(toolName);
+}
+
+function collectTurnEvents(
+    events: TranscriptEvent[],
+    lastUserIndex: number,
+    summary: TurnSummary,
+): void {
+    for (const event of events.slice(lastUserIndex + 1)) {
+        if (event.type === "assistant.message") {
+            recordAssistantEvent(event, summary);
+        }
+        if (event.type === "tool.execution_complete") {
+            recordToolCompletion(event, summary.toolsUsed);
+        }
+    }
+}
+
+function wasHandledByHook(
+    events: TranscriptEvent[],
+    lastUserIndex: number,
+): boolean {
+    const firstCandidate = Math.max(0, lastUserIndex - 5);
+    for (let index = lastUserIndex - 1; index >= firstCandidate; index--) {
+        const event = events[index];
+        if (event.type !== "hook.end") continue;
+        const output = (
+            event.data as {
+                output?: { handled?: boolean; handledBy?: string };
+            }
+        ).output;
+        if (output?.handled && output.handledBy === "typeagent") return true;
+    }
+    return false;
+}
+
 async function readStableTranscript(
     transcriptPath: string,
     timeoutMs = 2_000,
@@ -119,103 +200,24 @@ async function captureMacroRecording(input: AgentStopInput): Promise<void> {
  * (user message + assistant response + tools used).
  */
 function extractLastTurn(transcriptPath: string): TurnSummary | undefined {
-    let lines: string[];
-    try {
-        const content = readFileSync(transcriptPath, "utf-8");
-        lines = content.trim().split("\n").filter(Boolean);
-    } catch {
-        return undefined;
-    }
-
-    // Parse events from the end, looking for the last user.message
-    // and all assistant.message events after it
-    const events: TranscriptEvent[] = [];
-    for (const line of lines) {
-        try {
-            events.push(JSON.parse(line));
-        } catch {
-            // Skip malformed lines
-        }
-    }
-
-    // Find the last user.message
-    let lastUserIdx = -1;
-    for (let i = events.length - 1; i >= 0; i--) {
-        if (events[i].type === "user.message") {
-            lastUserIdx = i;
-            break;
-        }
-    }
-
-    if (lastUserIdx === -1) return undefined;
+    const events = readTranscriptEvents(transcriptPath);
+    if (!events) return undefined;
+    const lastUserIdx = findLastUserIndex(events);
+    if (lastUserIdx < 0) return undefined;
 
     const userEvent = events[lastUserIdx];
     const userMessage = userEvent.data.content ?? "";
-
-    // Collect assistant messages and tool calls after the user message
-    let assistantMessage = "";
-    const toolsUsed: string[] = [];
-    let handledByTypeAgent = false;
-
-    for (let i = lastUserIdx + 1; i < events.length; i++) {
-        const event = events[i];
-
-        if (event.type === "assistant.message") {
-            // Accumulate assistant text
-            if (event.data.content) {
-                assistantMessage += event.data.content;
-            }
-
-            // Check tool requests for TypeAgent MCP calls
-            if (event.data.toolRequests) {
-                for (const tool of event.data.toolRequests) {
-                    toolsUsed.push(tool.name);
-                    if (
-                        isTypeAgentAgentServerTool(
-                            tool.name,
-                            tool.mcpServerName,
-                        )
-                    ) {
-                        handledByTypeAgent = true;
-                    }
-                }
-            }
-        }
-
-        // Also check tool execution results for the tool names
-        if (event.type === "tool.execution_complete") {
-            const toolName = (event.data as { toolName?: string }).toolName;
-            if (toolName && !toolsUsed.includes(toolName)) {
-                toolsUsed.push(toolName);
-            }
-        }
-    }
-
-    // Also check if the hook itself handled it (direct mode)
-    // In direct mode, there's a hook.end event with handled: true before user.message
-    for (let i = lastUserIdx - 1; i >= 0 && i >= lastUserIdx - 5; i--) {
-        const event = events[i];
-        if (event.type === "hook.end") {
-            const output = (
-                event.data as {
-                    output?: { handled?: boolean; handledBy?: string };
-                }
-            ).output;
-            if (output?.handled && output?.handledBy === "typeagent") {
-                handledByTypeAgent = true;
-                break;
-            }
-        }
-    }
-
     if (!userMessage) return undefined;
 
-    return {
+    const summary: TurnSummary = {
         userMessage,
-        assistantMessage,
-        toolsUsed,
-        handledByTypeAgent,
+        assistantMessage: "",
+        toolsUsed: [],
+        handledByTypeAgent: false,
     };
+    collectTurnEvents(events, lastUserIdx, summary);
+    summary.handledByTypeAgent ||= wasHandledByHook(events, lastUserIdx);
+    return summary;
 }
 
 /**

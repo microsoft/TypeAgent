@@ -479,29 +479,45 @@ export async function grepWorkspace(args: {
     return { matches, truncated };
 }
 
-function isPublicIpv4(address: string): boolean {
+const nonPublicIpv4Ranges: readonly (readonly [number, number])[] = [
+    [0x00000000, 0x00ffffff],
+    [0x0a000000, 0x0affffff],
+    [0x64400000, 0x647fffff],
+    [0x7f000000, 0x7fffffff],
+    [0xa9fe0000, 0xa9feffff],
+    [0xac100000, 0xac1fffff],
+    [0xc0000000, 0xc00000ff],
+    [0xc0000200, 0xc00002ff],
+    [0xc0a80000, 0xc0a8ffff],
+    [0xc6120000, 0xc613ffff],
+    [0xc6336400, 0xc63364ff],
+    [0xcb007100, 0xcb0071ff],
+    [0xe0000000, 0xffffffff],
+];
+
+function parseIpv4(address: string): number | undefined {
     const parts = address.split(".").map(Number);
     if (
         parts.length !== 4 ||
         parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
     ) {
-        return false;
+        return undefined;
     }
-    const [a, b, c] = parts;
-    return !(
-        a === 0 ||
-        a === 10 ||
-        a === 127 ||
-        (a === 100 && b >= 64 && b <= 127) ||
-        (a === 169 && b === 254) ||
-        (a === 172 && b >= 16 && b <= 31) ||
-        (a === 192 && b === 0 && c === 0) ||
-        (a === 192 && b === 0 && c === 2) ||
-        (a === 192 && b === 168) ||
-        (a === 198 && (b === 18 || b === 19)) ||
-        (a === 198 && b === 51 && c === 100) ||
-        (a === 203 && b === 0 && c === 113) ||
-        a >= 224
+    return (
+        parts[0] * 0x1000000 +
+        parts[1] * 0x10000 +
+        parts[2] * 0x100 +
+        parts[3]
+    );
+}
+
+function isPublicIpv4(address: string): boolean {
+    const value = parseIpv4(address);
+    return (
+        value !== undefined &&
+        !nonPublicIpv4Ranges.some(
+            ([start, end]) => value >= start && value <= end,
+        )
     );
 }
 
