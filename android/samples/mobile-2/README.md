@@ -96,9 +96,16 @@ interaction traffic.
 
 | Schema action | Android intent | Notes |
 |---|---|---|
-| `setAlarm` | `AlarmClock.ACTION_SET_ALARM` | Opens the clock app so the user can confirm the alarm. |
+| `setAlarm` | `AlarmClock.ACTION_SET_ALARM` | Scheduled in the background (`EXTRA_SKIP_UI = true`) and confirmed with a toast. The optional `days` parameter takes lowercase weekday names and becomes a repeating alarm via `EXTRA_DAYS`; an unrecognised name fails the whole action rather than setting the alarm on a subset of the days asked for. |
 | `setTimer` | `AlarmClock.ACTION_SET_TIMER` | Starts the countdown in the background (`EXTRA_SKIP_UI = true`) and confirms with a toast, so a chat request never yanks the user out of the conversation. Durations outside the documented 1..86400 second range are rejected rather than clamped. |
+| `showAlarms` | `AlarmClock.ACTION_SHOW_ALARMS` | Opens the clock app's alarm list. Takes no parameters, so the dispatcher sends no `parameters` object and the parser must not require one. |
+| `showTimers` | `AlarmClock.ACTION_SHOW_TIMERS` | Opens the clock app's timer list. Added in API 26; on API 24–25 the action reports that the device does not support it instead of throwing. |
 | `searchNearby` | `Intent.ACTION_VIEW` with a `geo:0,0?q=` URI | Opens the device's maps app on a local search. The intent is implicit rather than pinned to Google Maps, so it resolves on any device with a maps app. |
+| `showLocation` | `Intent.ACTION_VIEW` with a `geo:0,0?q=` URI | Shows one named place. `0,0` means "wherever the query resolves to", so no location permission is involved and no device coordinates are read. |
+| `dialPhoneNumber` | `Intent.ACTION_DIAL` with a `tel:` URI | Only pre-fills the dialer — the user still presses call, so no `CALL_PHONE` permission is needed and a hallucinated number cannot dial itself. Numbers are held to a dialable charset and rejected, never rewritten. |
+| `composeSms` | `Intent.ACTION_SENDTO` with an `smsto:` URI and `sms_body` | Opens a pre-filled draft — the user still presses send, so no `SEND_SMS` permission is needed. With no recipient the draft opens with an empty To field; an *unusable* recipient is rejected rather than silently dropped. |
+| `webSearch` | `Intent.ACTION_WEB_SEARCH` with `SearchManager.QUERY` | The query travels as an extra rather than being spliced into a URL, so it needs no encoding. |
+| `openWebPage` | `Intent.ACTION_VIEW` with an `http`/`https` URI | The scheme allowlist is the load-bearing check: `ACTION_VIEW` would otherwise follow `market:`, `file:` or any app's own deep-link scheme, turning "open this page" into an arbitrary-app launcher driven by text the model read. URLs containing whitespace are refused rather than repaired into a different host. |
 
 All actions require the app to be in the foreground: Android 10+ silently refuses
 background activity starts (no exception is thrown), so the app checks its own

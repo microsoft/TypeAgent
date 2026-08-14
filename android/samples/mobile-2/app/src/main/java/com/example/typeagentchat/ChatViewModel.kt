@@ -26,10 +26,8 @@ import kotlinx.coroutines.withContext
  * Activity across configuration changes, so it must not hold a reference to the
  * Activity that will ultimately handle them.
  *
- * [ClientAction.Alarm] and [ClientAction.Timer] carry the `executeAction`
- * completion, because the server is holding an RPC open waiting for the result.
- * `SearchNearby` arrives over the legacy fire-and-forget `takeAction` path and
- * has nothing to report back to.
+ * Every action carries the `executeAction` completion, because the server is
+ * holding an RPC open waiting for the result.
  */
 internal sealed interface ClientAction {
     data class Alarm(
@@ -42,7 +40,43 @@ internal sealed interface ClientAction {
         val completion: (AndroidDeviceExecutionResult) -> Unit
     ) : ClientAction
 
-    data class SearchNearby(val action: SearchNearbyAction) : ClientAction
+    data class SearchNearby(
+        val action: SearchNearbyAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class ShowAlarms(
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class ShowTimers(
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class ShowLocation(
+        val action: ShowLocationAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class DialPhoneNumber(
+        val action: DialPhoneNumberAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class ComposeSms(
+        val action: ComposeSmsAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class WebSearch(
+        val action: WebSearchAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
+
+    data class OpenWebPage(
+        val action: OpenWebPageAction,
+        val completion: (AndroidDeviceExecutionResult) -> Unit
+    ) : ClientAction
 }
 
 /**
@@ -124,8 +158,54 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 dispatchClientAction(ClientAction.Timer(action, completion), completion)
             }
 
-            override fun onSearchNearby(action: SearchNearbyAction) {
-                dispatchClientAction(ClientAction.SearchNearby(action))
+            override fun onSearchNearby(
+                action: SearchNearbyAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.SearchNearby(action, completion), completion)
+            }
+
+            override fun onShowAlarms(completion: (AndroidDeviceExecutionResult) -> Unit) {
+                dispatchClientAction(ClientAction.ShowAlarms(completion), completion)
+            }
+
+            override fun onShowTimers(completion: (AndroidDeviceExecutionResult) -> Unit) {
+                dispatchClientAction(ClientAction.ShowTimers(completion), completion)
+            }
+
+            override fun onShowLocation(
+                action: ShowLocationAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.ShowLocation(action, completion), completion)
+            }
+
+            override fun onDialPhoneNumber(
+                action: DialPhoneNumberAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.DialPhoneNumber(action, completion), completion)
+            }
+
+            override fun onComposeSms(
+                action: ComposeSmsAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.ComposeSms(action, completion), completion)
+            }
+
+            override fun onWebSearch(
+                action: WebSearchAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.WebSearch(action, completion), completion)
+            }
+
+            override fun onOpenWebPage(
+                action: OpenWebPageAction,
+                completion: (AndroidDeviceExecutionResult) -> Unit
+            ) {
+                dispatchClientAction(ClientAction.OpenWebPage(action, completion), completion)
             }
         })
 
