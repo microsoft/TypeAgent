@@ -9,22 +9,66 @@ import type {
     ArmRecordingRequest,
     ClaimRecordingRequest,
     FinalizeRecordingRequest,
+    InspectMacroRequest,
+    ListMacrosRequest,
+    MacroMatch,
+    MacroRequirements,
+    MacroRunRecord,
+    MacroSummary,
+    MacroValidationReport,
+    MacroVersionRef,
+
     RecordedInteractionTrace,
+    ReplayToolHost,
     RecordingState,
     RecordingToken,
     TraceSummary,
+    RunMacroRequest,
+    RunMacroResponse,
+    ValidateMacroRequest,
 } from "./contracts.js";
+import {
+    inspectReplayTools,
+    replayMacro,
+    ReplayValidationError,
+} from "./deterministicReplay.js";
+import { induceMacroFromTrace, validateMacro } from "./macroDefinition.js";
+
 import { redactTraceValue } from "./redaction.js";
 
 const defaultRecordingTtlMs = 10 * 60 * 1000;
+const maxPersistedRunValueBytes = 256 * 1024;
+const maxPersistedRunPreviewCharacters = 16 * 1024;
+
+function sanitizeRunValue(value: unknown): unknown {
+    const redacted = redactTraceValue(value);
+    const serialized = JSON.stringify(redacted);
+    if (
+        serialized === undefined ||
+        Buffer.byteLength(serialized) <= maxPersistedRunValueBytes
+    ) {
+        return redacted;
+    }
+    return {
+        truncated: true,
+        originalBytes: Buffer.byteLength(serialized),
+        preview: serialized.slice(0, maxPersistedRunPreviewCharacters),
+    };
+}
 
 export class MacroManager {
     private readonly recordings = new Map<string, RecordingToken>();
     private readonly completed = new Map<string, TraceSummary>();
     private readonly failures = new Map<string, string>();
     private readonly rootDir: string;
+    private readonly activeRuns = new Map<string, AbortController>();
+    private catalogMutation: Promise<void> = Promise.resolve();
 
-    constructor(instanceDir: string) {
+
+    constructor(
+        instanceDir: string,
+        private readonly replayHost?: ReplayToolHost,
+    ) {
         this.rootDir = path.join(instanceDir, "copilot-macros");
     }
 
@@ -150,6 +194,310 @@ export class MacroManager {
         return summary;
     }
 
+    async createMacroFromTrace(
+        request: CreateMacroFromTraceRequest,
+    ): Promise<MacroVersionRef> {
+        if (!request.name.trim()) throw new Error("Macro name is required.");
+        return this.mutateCatalog(async () => {
+            const trace = await this.readTrace(request.traceId);
+            const macro = induceMacroFromTrace(
+                request.traceId,
+                trace,
+                randomUUID(),
+                request.name.trim(),
+                request.description?.trim() ?? trace.prompt,
+                new Date().toISOString(),
+            );
+            await this.writeVersion(macro);
+            await this.upsertSummary(macro);
+            return this.versionRef(macro);
+        });
+    }
+
+    async listMacros(request: ListMacrosRequest = {}): Promise<MacroSummary[]> {
+        const limit = Math.min(Math.max(request.limit ?? 100, 1), 500);
+        const summaries = await this.readCatalog();
+        return summaries
+            .filter((macro) => !request.state || macro.state === request.state)
+            .sort((left, right) =>
+                right.updatedAt.localeCompare(left.updatedAt),
+            )
+            .slice(0, limit);
+    }
+
+    async searchMacros(request: SearchMacrosRequest): Promise<MacroMatch[]> {
+        const terms = request.query.toLowerCase().split(/\s+/).filter(Boolean);
+        if (terms.length === 0) return [];
+        const macros = await this.listMacros({ limit: 500 });
+        return macros
+            .map((macro) => {
+                const name = macro.name.toLowerCase();
+                const text = `${name} ${macro.description.toLowerCase()}`;
+                const matches = terms.filter((term) => text.includes(term));
+                const nameMatches = terms.filter((term) => name.includes(term));
+                return {
+                    macro,
+                    score:
+                        (matches.length + nameMatches.length) /
+                        (terms.length * 2),
+                };
+            })
+            .filter((match) => match.score > 0)
+            .sort((left, right) => right.score - left.score)
+            .slice(0, Math.min(Math.max(request.limit ?? 20, 1), 100));
+    }
+
+    async inspectMacro(
+        request: InspectMacroRequest,
+    ): Promise<CopilotToolMacro> {
+        this.validateMacroId(request.macroId);
+        const version =
+            request.version ??
+            (await this.getLatestSummary(request.macroId)).version;
+        return this.readJson<CopilotToolMacro>(
+            this.versionPath(request.macroId, version),
+            `Macro version not found: ${request.macroId}@${version}`,
+        );
+    }
+
+    async getMacroRequirements(
+        request: InspectMacroRequest,
+    ): Promise<MacroRequirements> {
+        const macro = await this.inspectMacro(request);
+        return {
+            macroId: macro.macroId,
+            version: macro.version,
+            executionClass: macro.executionClass,
+            inputs: macro.inputs,
+            tools: macro.steps.map((step) => ({
+                toolName: step.toolName,
+                ...(step.mcpServerName
+                    ? { mcpServerName: step.mcpServerName }
+                    : {}),
+                executionClass: step.executionClass,
+            })),
+        };
+    }
+
+    async validateMacro(
+        request: ValidateMacroRequest,
+    ): Promise<MacroValidationReport> {
+        const macro = await this.inspectMacro(request);
+        const trace = await this.readTrace(macro.sourceTraceId);
+        return validateMacro(macro, trace);
+    }
+
+    async approveMacro(request: ApproveMacroRequest): Promise<MacroVersionRef> {
+        return this.mutateCatalog(async () => {
+            const current = await this.inspectMacro(request);
+            if (current.state !== "draft") {
+                throw new Error("Only a draft macro version can be approved.");
+            }
+            const report = await this.validateMacro({
+                macroId: current.macroId,
+                version: current.version,
+            });
+            if (!report.valid) {
+                throw new Error(
+                    "Macro validation failed; approval was not recorded.",
+                );
+            }
+            let steps = current.steps;
+            if (
+                this.replayHost !== undefined &&
+                current.executionClass === "replayable"
+            ) {
+                const trace = await this.readTrace(current.sourceTraceId);
+                steps = await Promise.all(
+                    current.steps.map(async (step) => {
+                        const descriptor = await this.replayHost!.inspectTool(
+                            step.mcpServerName,
+                            step.toolName,
+                            { cwd: trace.cwd },
+                        );
+                        if (!descriptor) {
+                            throw new Error(
+                                `Replay tool is unavailable: ${step.mcpServerName ?? "native"}/${step.toolName}`,
+                            );
+                        }
+                        return {
+                            ...step,
+                            schemaFingerprint: descriptor.schemaFingerprint,
+                        };
+                    }),
+                );
+            }
+            const approved: CopilotToolMacro = {
+                ...current,
+                steps,
+                version: current.version + 1,
+                state: "approved",
+                createdAt: new Date().toISOString(),
+            };
+            await this.writeVersion(approved);
+            await this.upsertSummary(approved);
+            return this.versionRef(approved);
+        });
+    }
+
+    async disableMacro(request: DisableMacroRequest): Promise<MacroVersionRef> {
+        return this.mutateCatalog(async () => {
+            const current = await this.inspectMacro({
+                macroId: request.macroId,
+            });
+            if (current.state !== "approved") {
+                throw new Error("Only an approved macro can be disabled.");
+            }
+            const disabled: CopilotToolMacro = {
+                ...current,
+                version: current.version + 1,
+                state: "disabled",
+                createdAt: new Date().toISOString(),
+            };
+            await this.writeVersion(disabled);
+            await this.upsertSummary(disabled);
+            return this.versionRef(disabled);
+        });
+    }
+
+    async deleteMacro(request: DeleteMacroRequest): Promise<void> {
+        await this.mutateCatalog(async () => {
+            this.validateMacroId(request.macroId);
+            await rm(path.join(this.rootDir, "macros", request.macroId), {
+                recursive: true,
+                force: true,
+            });
+            const summaries = (await this.readCatalog()).filter(
+                (macro) => macro.macroId !== request.macroId,
+            );
+            await this.writeJsonAtomic(this.catalogPath(), summaries);
+        });
+    }
+
+    async runMacro(request: RunMacroRequest): Promise<RunMacroResponse> {
+        this.validateMacroId(request.runId);
+        if (this.activeRuns.has(request.runId)) {
+            throw new Error(`Macro run is already active: ${request.runId}`);
+        }
+        const macro = await this.inspectMacro(request);
+        if (macro.state !== "approved") {
+            throw new Error("Only approved macros can run.");
+        }
+        const preference = request.preference ?? "auto";
+        if (
+            preference === "agent" ||
+            macro.executionClass === "agentRequired"
+        ) {
+            if (preference === "replay") {
+                throw new Error("This macro requires agent-guided execution.");
+            }
+            return {
+                status: "agentRequired",
+                runId: request.runId,
+                macroId: macro.macroId,
+                version: macro.version,
+                reason:
+                    preference === "agent"
+                        ? "Agent-guided execution was requested."
+                        : "The macro contains steps that are not replayable.",
+            };
+        }
+        if (!this.replayHost) {
+            throw new Error("Deterministic macro replay is not configured.");
+        }
+        const sourceTrace = await this.readTrace(macro.sourceTraceId);
+        if (request.dryRun === true) {
+            await inspectReplayTools(
+                macro,
+                this.replayHost,
+                {
+                    cwd: sourceTrace.cwd,
+                },
+                request.inputs ?? {},
+            );
+            return {
+                status: "validated",
+                runId: request.runId,
+                macroId: macro.macroId,
+                version: macro.version,
+            };
+        }
+        const timeoutMs = Math.min(
+            Math.max(request.timeoutMs ?? 60_000, 1),
+            10 * 60_000,
+        );
+        const controller = new AbortController();
+        let timedOut = false;
+        const timeout = setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+        }, timeoutMs);
+        this.activeRuns.set(request.runId, controller);
+        let run: MacroRunRecord;
+        try {
+            run = await replayMacro(
+                macro,
+                request.runId,
+                request.inputs ?? {},
+                this.replayHost,
+                controller.signal,
+                { cwd: sourceTrace.cwd },
+            );
+        } catch (error) {
+            const now = new Date().toISOString();
+            run = {
+                runId: request.runId,
+                macroId: macro.macroId,
+                version: macro.version,
+                status: controller.signal.aborted ? "cancelled" : "failed",
+                executionClass: macro.executionClass,
+                inputs: request.inputs ?? {},
+                steps: [],
+                startedAt: now,
+                completedAt: now,
+                error: {
+                    code:
+                        error instanceof ReplayValidationError
+                            ? error.code
+                            : controller.signal.aborted
+                              ? "cancelled"
+                              : "replayFailed",
+                    message:
+                        error instanceof Error ? error.message : String(error),
+                },
+            };
+        } finally {
+            clearTimeout(timeout);
+            this.activeRuns.delete(request.runId);
+        }
+        if (timedOut) {
+            run = {
+                ...run,
+                status: "failed",
+                error: {
+                    code: "timeout",
+                    message: `Macro replay exceeded its ${timeoutMs}ms deadline.`,
+                },
+            };
+        }
+        run = await this.writeRun(run, macro);
+        return { status: run.status, run } as RunMacroResponse;
+    }
+
+    cancelMacroRun(runId: string): void {
+        this.validateMacroId(runId);
+        this.activeRuns.get(runId)?.abort();
+    }
+
+    async getMacroRun(runId: string): Promise<MacroRunRecord> {
+        this.validateMacroId(runId);
+        return this.readJson<MacroRunRecord>(
+            this.runPath(runId),
+            `Macro run not found: ${runId}`,
+        );
+    }
+
+
     private removeExpired(sessionId: string): void {
         const token = this.recordings.get(sessionId);
         if (token && Date.parse(token.expiresAt) <= Date.now()) {
@@ -179,4 +527,166 @@ export class MacroManager {
             throw new Error("The recorded interaction trace is incomplete.");
         }
     }
+
+    private async readTrace(
+        traceId: string,
+    ): Promise<RecordedInteractionTrace> {
+        this.validateMacroId(traceId);
+        return this.readJson<RecordedInteractionTrace>(
+            path.join(this.rootDir, "traces", `${traceId}.json`),
+            `Trace not found: ${traceId}`,
+        );
+    }
+
+    private async readCatalog(): Promise<MacroSummary[]> {
+        try {
+            return JSON.parse(
+                await readFile(this.catalogPath(), "utf8"),
+            ) as MacroSummary[];
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+            throw error;
+        }
+    }
+
+    private async upsertSummary(macro: CopilotToolMacro): Promise<void> {
+        const summaries = (await this.readCatalog()).filter(
+            (summary) => summary.macroId !== macro.macroId,
+        );
+        summaries.push({
+            macroId: macro.macroId,
+            version: macro.version,
+            name: macro.name,
+            description: macro.description,
+            state: macro.state,
+            executionClass: macro.executionClass,
+            stepCount: macro.steps.length,
+            updatedAt: macro.createdAt,
+        });
+        await this.writeJsonAtomic(this.catalogPath(), summaries);
+    }
+
+    private async writeVersion(macro: CopilotToolMacro): Promise<void> {
+        const destination = this.versionPath(macro.macroId, macro.version);
+        await mkdir(path.dirname(destination), { recursive: true });
+        await writeFile(destination, JSON.stringify(macro, undefined, 2), {
+            encoding: "utf8",
+            flag: "wx",
+        });
+    }
+
+    private async writeJsonAtomic(
+        destination: string,
+        value: unknown,
+    ): Promise<void> {
+        await mkdir(path.dirname(destination), { recursive: true });
+        const temporary = `${destination}.${randomUUID()}.tmp`;
+        await writeFile(temporary, JSON.stringify(value, undefined, 2), {
+            encoding: "utf8",
+            flag: "wx",
+        });
+        await rename(temporary, destination);
+    }
+
+    private async readJson<T>(
+        filePath: string,
+        notFoundMessage: string,
+    ): Promise<T> {
+        try {
+            return JSON.parse(await readFile(filePath, "utf8")) as T;
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                throw new Error(notFoundMessage);
+            }
+            throw error;
+        }
+    }
+
+    private async getLatestSummary(macroId: string): Promise<MacroSummary> {
+        this.validateMacroId(macroId);
+        const summary = (await this.readCatalog()).find(
+            (macro) => macro.macroId === macroId,
+        );
+        if (!summary) throw new Error(`Macro not found: ${macroId}`);
+        return summary;
+    }
+
+    private catalogPath(): string {
+        return path.join(this.rootDir, "index.json");
+    }
+
+    private versionPath(macroId: string, version: number): string {
+        return path.join(
+            this.rootDir,
+            "macros",
+            macroId,
+            "versions",
+            `${version}.json`,
+        );
+    }
+
+    private runPath(runId: string): string {
+        return path.join(this.rootDir, "runs", `${runId}.json`);
+    }
+
+    private async writeRun(
+        run: MacroRunRecord,
+        macro: CopilotToolMacro,
+    ): Promise<MacroRunRecord> {
+        const secretInputs = new Set(
+            macro.inputs
+                .filter((input) => input.secret)
+                .map((input) => input.name),
+        );
+        const sanitized = redactTraceValue({
+            ...run,
+            inputs: Object.fromEntries(
+                Object.entries(run.inputs).map(([name, value]) => [
+                    name,
+                    secretInputs.has(name)
+                        ? "[REDACTED]"
+                        : sanitizeRunValue(value),
+                ]),
+            ),
+            steps: run.steps.map((step) => ({
+                ...step,
+                ...(step.result === undefined
+                    ? {}
+                    : { result: sanitizeRunValue(step.result) }),
+            })),
+            ...(run.result === undefined
+                ? {}
+                : { result: sanitizeRunValue(run.result) }),
+        }) as MacroRunRecord;
+        const destination = this.runPath(run.runId);
+        await mkdir(path.dirname(destination), { recursive: true });
+        await writeFile(destination, JSON.stringify(sanitized, undefined, 2), {
+            encoding: "utf8",
+            flag: "wx",
+        });
+        return sanitized;
+    }
+
+    private validateMacroId(id: string): void {
+        if (!/^[a-zA-Z0-9-]+$/.test(id))
+            throw new Error("Invalid macro identifier.");
+    }
+
+    private versionRef(macro: CopilotToolMacro): MacroVersionRef {
+        return {
+            macroId: macro.macroId,
+            version: macro.version,
+            state: macro.state,
+        };
+    }
+
+    private mutateCatalog<T>(operation: () => Promise<T>): Promise<T> {
+        const result = this.catalogMutation.then(operation, operation);
+        this.catalogMutation = result.then(
+            () => undefined,
+            () => undefined,
+        );
+        return result;
+    }
+
 }

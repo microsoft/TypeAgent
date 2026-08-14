@@ -9,8 +9,20 @@ import type {
     ArmRecordingRequest,
     ClaimRecordingRequest,
     FinalizeRecordingRequest,
+    InspectMacroRequest,
+    ListMacrosRequest,
+    MacroMatch,
+    MacroRequirements,
+    MacroRunRecord,
+    MacroSummary,
+    MacroValidationReport,
+    MacroVersionRef,
     RecordingState,
     RecordingToken,
+    RunMacroRequest,
+    RunMacroResponse,
+    SearchMacrosRequest,
+
     TraceSummary,
 } from "@typeagent/copilot-macros";
 
@@ -18,10 +30,23 @@ export type {
     ArmRecordingRequest,
     ClaimRecordingRequest,
     FinalizeRecordingRequest,
+    InspectMacroRequest,
+    ListMacrosRequest,
+    MacroMatch,
+    MacroRequirements,
+    MacroRunRecord,
+    MacroSummary,
+    MacroValidationReport,
+    MacroVersionRef,
+
     RecordedInteractionTrace,
     RecordedToolCall,
     RecordingState,
     RecordingToken,
+    RunMacroRequest,
+    RunMacroResponse,
+    SearchMacrosRequest,
+
     TraceSummary,
 } from "@typeagent/copilot-macros";
 
@@ -163,6 +188,25 @@ export type AgentServerInvokeFunctions = {
     finalizeMacroRecording: (
         request: FinalizeRecordingRequest,
     ) => Promise<TraceSummary>;
+    listMacros: (request?: ListMacrosRequest) => Promise<MacroSummary[]>;
+    searchMacros: (request: SearchMacrosRequest) => Promise<MacroMatch[]>;
+    inspectMacro: (request: InspectMacroRequest) => Promise<CopilotToolMacro>;
+    getMacroRequirements: (
+        request: InspectMacroRequest,
+    ) => Promise<MacroRequirements>;
+    createMacroFromTrace: (
+        request: CreateMacroFromTraceRequest,
+    ) => Promise<MacroVersionRef>;
+    validateMacro: (
+        request: ValidateMacroRequest,
+    ) => Promise<MacroValidationReport>;
+    approveMacro: (request: ApproveMacroRequest) => Promise<MacroVersionRef>;
+    disableMacro: (request: DisableMacroRequest) => Promise<MacroVersionRef>;
+    deleteMacro: (request: DeleteMacroRequest) => Promise<void>;
+    runMacro: (request: RunMacroRequest) => Promise<RunMacroResponse>;
+    cancelMacroRun: (runId: string) => Promise<void>;
+    getMacroRun: (runId: string) => Promise<MacroRunRecord>;
+
     joinConversation: (
         options?: DispatcherConnectOptions,
     ) => Promise<JoinConversationResult>;

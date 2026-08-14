@@ -560,6 +560,19 @@ function makeConnectionAdapter(): AgentServerConnection {
             const { rpc } = requireFresh();
             return rpc.invoke("finalizeMacroRecording", request);
         },
+        listMacros: () => notSupported("listMacros"),
+        searchMacros: () => notSupported("searchMacros"),
+        inspectMacro: () => notSupported("inspectMacro"),
+        getMacroRequirements: () => notSupported("getMacroRequirements"),
+        createMacroFromTrace: () => notSupported("createMacroFromTrace"),
+        validateMacro: () => notSupported("validateMacro"),
+        approveMacro: () => notSupported("approveMacro"),
+        disableMacro: () => notSupported("disableMacro"),
+        deleteMacro: () => notSupported("deleteMacro"),
+        runMacro: () => notSupported("runMacro"),
+        cancelMacroRun: () => notSupported("cancelMacroRun"),
+        getMacroRun: () => notSupported("getMacroRun"),
+
         joinConversation: (
             _clientIO: ClientIO,
             options?: DispatcherConnectOptions,
