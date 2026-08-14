@@ -3,6 +3,7 @@
 
 import {
     context,
+    createContextKey,
     isSpanContextValid,
     propagation,
     ROOT_CONTEXT,
@@ -13,6 +14,7 @@ import {
     type Span,
 } from "@opentelemetry/api";
 import registerDebug from "debug";
+import { otel } from "@typeagent/telemetry";
 
 import { RpcChannel } from "./common.js";
 
@@ -45,6 +47,8 @@ type RpcReturn<
 export const RPC_METADATA_VERSION = 1;
 
 export type RpcCorrelationFields = {
+    agentName?: string;
+    actionName?: string;
     traceId?: string;
     sessionId?: string;
     activationId?: string;
@@ -100,6 +104,9 @@ const MAX_RPC_METHOD_LENGTH = 256;
 const MAX_TRACESTATE_MEMBERS = 32;
 const CORRELATION_VALUE_PATTERN = /^[A-Za-z0-9._:@/-]+$/;
 const RPC_METHOD_PATTERN = /^[A-Za-z0-9._:/-]+$/;
+const ACTIVE_RPC_CORRELATION = createContextKey(
+    "typeagent.rpc.correlation-fields",
+);
 const TRACEPARENT_PATTERN =
     /^([0-9a-f]{2})-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}(.*)$/;
 const SIMPLE_TRACESTATE_KEY_PATTERN = /^[a-z][a-z0-9_*/-]{0,255}$/;
@@ -236,26 +243,31 @@ export function createRpc<
                 serverInvokes.set(message.callId, serverInvoke);
 
                 const handler = invokeHandlers?.[message.name];
-                const handlerResult =
-                    handler === undefined
-                        ? Promise.resolve({
-                              kind: "error" as const,
-                              error: new Error(
-                                  `No invoke handler ${message.name}`,
-                              ),
-                          })
-                        : Promise.resolve()
-                              .then(() => handler(...message.args))
-                              .then(
-                                  (result) => ({
-                                      kind: "result" as const,
-                                      result,
-                                  }),
-                                  (error) => ({
-                                      kind: "error" as const,
-                                      error,
-                                  }),
-                              );
+                const handlerResult = context.with(
+                    context
+                        .active()
+                        .setValue(ACTIVE_RPC_CORRELATION, remote.correlation),
+                    () =>
+                        handler === undefined
+                            ? Promise.resolve({
+                                  kind: "error" as const,
+                                  error: new Error(
+                                      `No invoke handler ${message.name}`,
+                                  ),
+                              })
+                            : Promise.resolve()
+                                  .then(() => handler(...message.args))
+                                  .then(
+                                      (result) => ({
+                                          kind: "result" as const,
+                                          result,
+                                      }),
+                                      (error) => ({
+                                          kind: "error" as const,
+                                          error,
+                                      }),
+                                  ),
+                );
 
                 try {
                     const result = await Promise.race([
@@ -540,6 +552,12 @@ function setCorrelationAttributes(
     span: Span,
     correlation: RpcCorrelationFields | undefined,
 ): void {
+    if (correlation?.agentName !== undefined) {
+        span.setAttribute("typeagent.agent.name", correlation.agentName);
+    }
+    if (correlation?.actionName !== undefined) {
+        span.setAttribute("typeagent.action.name", correlation.actionName);
+    }
     if (correlation?.traceId !== undefined) {
         span.setAttribute("typeagent.trace.id", correlation.traceId);
     }
@@ -560,11 +578,27 @@ function getOutboundCorrelation(
     }
     try {
         return validateCorrelationFields(
-            tracingOptions.getCorrelationFields?.(invocation),
+            mergeCorrelationFields(
+                context.active().getValue(ACTIVE_RPC_CORRELATION),
+                tracingOptions.getCorrelationFields?.(invocation),
+            ),
         );
     } catch {
         return undefined;
     }
+}
+
+function mergeCorrelationFields(
+    inherited: unknown,
+    supplied: RpcCorrelationFields | undefined,
+): RpcCorrelationFields | undefined {
+    if (inherited === null || typeof inherited !== "object") {
+        return supplied;
+    }
+    return {
+        ...(inherited as RpcCorrelationFields),
+        ...supplied,
+    };
 }
 
 function createMetadataEnvelope(
@@ -684,6 +718,12 @@ function validateCorrelationFields(
     }
     const source = value as RpcCorrelationFields;
     const correlation: RpcCorrelationFields = {};
+    if (isValidCorrelationValue(source.agentName)) {
+        correlation.agentName = source.agentName;
+    }
+    if (isValidCorrelationValue(source.actionName)) {
+        correlation.actionName = source.actionName;
+    }
     if (isValidCorrelationValue(source.traceId)) {
         correlation.traceId = source.traceId;
     }
@@ -697,12 +737,15 @@ function validateCorrelationFields(
 }
 
 function isValidCorrelationValue(value: unknown): value is string {
-    return (
-        typeof value === "string" &&
-        value.length > 0 &&
-        value.length <= MAX_CORRELATION_LENGTH &&
-        CORRELATION_VALUE_PATTERN.test(value)
-    );
+    if (
+        typeof value !== "string" ||
+        value.length === 0 ||
+        value.length > MAX_CORRELATION_LENGTH ||
+        !CORRELATION_VALUE_PATTERN.test(value)
+    ) {
+        return false;
+    }
+    return otel.redactText(value) === value;
 }
 
 function validateTraceparent(value: unknown): value is string {

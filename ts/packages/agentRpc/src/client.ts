@@ -30,11 +30,21 @@ import {
     AgentInvokeFunctions,
     ContextParams,
 } from "./types.js";
-import { createRpc } from "./rpc.js";
+import {
+    createRpc,
+    type RpcCorrelationFields,
+    type RpcInvocation,
+    type RpcOptions,
+} from "./rpc.js";
 import { ChannelProvider } from "./common.js";
 import { getObjectProperty, uint8ArrayToBase64 } from "@typeagent/common-utils";
 import { AgentInterfaceFunctionName } from "./server.js";
 import { randomUUID } from "crypto";
+import { otel } from "@typeagent/telemetry";
+
+export type AgentRpcOptions = {
+    trustedContextPropagation?: boolean;
+};
 
 /**
  * Race a promise against an AbortSignal. If the signal fires before the
@@ -147,37 +157,47 @@ function getOptionsFunctions(options?: any): string[] | undefined {
     return funcs.length > 0 ? funcs : undefined;
 }
 
-function createOptionsRpc(channelProvider: ChannelProvider, name: string) {
+function createOptionsRpc(
+    channelProvider: ChannelProvider,
+    name: string,
+    options?: AgentRpcOptions,
+) {
     const channel = channelProvider.createChannel(`options:${name}`);
     const optionsMap = createObjectMap();
     return {
         optionsMap,
-        rpc: createRpc(name, channel, {
-            callback: async (param: {
-                id: number;
-                name: string;
-                args: any[];
-            }) => {
-                const options: any = optionsMap.get(param.id);
-                let thisObject: any = undefined;
-                let fn: (...args: any[]) => any;
-                const name = param.name;
-                if (name === "") {
-                    fn = options;
-                } else {
-                    const names = param.name.split(".");
-                    if (names.length === 1) {
-                        thisObject = options;
-                        fn = options[name];
+        rpc: createRpc(
+            name,
+            channel,
+            {
+                callback: async (param: {
+                    id: number;
+                    name: string;
+                    args: any[];
+                }) => {
+                    const options: any = optionsMap.get(param.id);
+                    let thisObject: any = undefined;
+                    let fn: (...args: any[]) => any;
+                    const name = param.name;
+                    if (name === "") {
+                        fn = options;
                     } else {
-                        const funcName = names.pop();
-                        thisObject = getObjectProperty(options, name);
-                        fn = thisObject[funcName!];
+                        const names = param.name.split(".");
+                        if (names.length === 1) {
+                            thisObject = options;
+                            fn = options[name];
+                        } else {
+                            const funcName = names.pop();
+                            thisObject = getObjectProperty(options, name);
+                            fn = thisObject[funcName!];
+                        }
                     }
-                }
-                return fn.call(thisObject, ...param.args);
+                    return fn.call(thisObject, ...param.args);
+                },
             },
-        }),
+            undefined,
+            getTrustedRpcOptions(options),
+        ),
     };
 }
 
@@ -185,6 +205,7 @@ export async function createAgentRpcClient(
     name: string,
     channelProvider: ChannelProvider,
     agentInterface: AgentInterfaceFunctionName[],
+    options?: AgentRpcOptions,
 ) {
     const channel = channelProvider.createChannel(`agent:${name}`);
     const contextMap = createObjectMap<SessionContext<ShimContext>>();
@@ -211,16 +232,16 @@ export async function createAgentRpcClient(
 
     const actionContextMap = createObjectMap<ActionContext<ShimContext>>();
     let optionsRpc: ReturnType<typeof createOptionsRpc> | undefined;
-    function getOptionsCallBack(options?: any) {
-        const functions = getOptionsFunctions(options);
+    function getOptionsCallBack(initOptions?: any) {
+        const functions = getOptionsFunctions(initOptions);
         if (functions === undefined) {
             return undefined;
         }
         if (optionsRpc === undefined) {
-            optionsRpc = createOptionsRpc(channelProvider, name);
+            optionsRpc = createOptionsRpc(channelProvider, name, options);
         }
         return {
-            id: optionsRpc.optionsMap.getId(options),
+            id: optionsRpc.optionsMap.getId(initOptions),
             functions,
         };
     }
@@ -295,6 +316,7 @@ export async function createAgentRpcClient(
                         param.name,
                         channelProvider,
                         param.agentInterface,
+                        options,
                     ),
                 );
             } catch (e: any) {
@@ -570,12 +592,21 @@ export async function createAgentRpcClient(
         },
     };
 
+    const rpcOptions = getTrustedRpcOptions(options, (invocation) =>
+        getAgentRpcCorrelation(name, invocation),
+    );
     const rpc = createRpc<
         AgentInvokeFunctions,
         AgentCallFunctions,
         AgentContextInvokeFunctions,
         AgentContextCallFunctions
-    >(name, channel, agentContextInvokeHandlers, agentContextCallHandlers);
+    >(
+        name,
+        channel,
+        agentContextInvokeHandlers,
+        agentContextCallHandlers,
+        rpcOptions,
+    );
 
     // The shim needs to implement all the APIs regardless whether the actual agent
     // has that API.  We remove remove it the one that is not necessary below.
@@ -842,4 +873,66 @@ export async function createAgentRpcClient(
     };
 
     return result;
+}
+
+function getTrustedRpcOptions(
+    options: AgentRpcOptions | undefined,
+    getCorrelationFields?: (
+        invocation: RpcInvocation,
+    ) => RpcCorrelationFields | undefined,
+): RpcOptions | undefined {
+    return options?.trustedContextPropagation === true
+        ? {
+              tracing: {
+                  propagateContext: true,
+                  trustRemoteContext: true,
+                  ...(getCorrelationFields === undefined
+                      ? undefined
+                      : { getCorrelationFields }),
+              },
+          }
+        : undefined;
+}
+
+function getAgentRpcCorrelation(
+    agentName: string,
+    invocation: RpcInvocation,
+): RpcCorrelationFields {
+    const active = otel.getActiveTypeAgentSpanAttributes();
+    return {
+        agentName,
+        ...(active?.actionName === undefined
+            ? getInvocationActionName(invocation)
+            : { actionName: active.actionName }),
+        ...(active?.traceId === undefined
+            ? undefined
+            : { traceId: active.traceId }),
+        ...(active?.sessionId === undefined
+            ? undefined
+            : { sessionId: active.sessionId }),
+        ...(active?.activationId === undefined
+            ? undefined
+            : { activationId: active.activationId }),
+    };
+}
+
+function getInvocationActionName(
+    invocation: RpcInvocation,
+): { actionName: string } | undefined {
+    if (
+        invocation.method !== "executeAction" &&
+        invocation.method !== "validateWildcardMatch"
+    ) {
+        return undefined;
+    }
+    const param = invocation.args[0];
+    if (param === null || typeof param !== "object") {
+        return undefined;
+    }
+    const action = (param as { action?: unknown }).action;
+    if (action === null || typeof action !== "object") {
+        return undefined;
+    }
+    const actionName = (action as { actionName?: unknown }).actionName;
+    return typeof actionName === "string" ? { actionName } : undefined;
 }

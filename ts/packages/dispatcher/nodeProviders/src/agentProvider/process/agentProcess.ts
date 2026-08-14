@@ -111,6 +111,7 @@ async function startAgentProcess(): Promise<void> {
         agentName,
         agent,
         channelProvider,
+        { trustedContextPropagation: true },
     );
 
     const controlChannel = channelProvider.createChannel<
