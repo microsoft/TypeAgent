@@ -42,11 +42,11 @@ jobs:
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # Full history so the changed-files lint can diff against the base.
           fetch-depth: 0
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
         id: filter
         continue-on-error: true
         with:
@@ -54,12 +54,12 @@ jobs:
             ts:
               - "ts/**"
               - ".github/workflows/build-ts.yml"
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         with:
           node-version: ${{ matrix.version }}
