@@ -24,6 +24,7 @@ const SAFE_STRING_FIELDS = [
     "reason",
     "phase",
     "position",
+    "path",
 ] as const;
 
 const SAFE_NUMBER_FIELDS = [
@@ -37,6 +38,7 @@ const SAFE_NUMBER_FIELDS = [
     "depth",
     "count",
     "attachmentCount",
+    "actionIndex",
 ] as const;
 
 const SAFE_BOOLEAN_FIELDS = [
@@ -44,9 +46,14 @@ const SAFE_BOOLEAN_FIELDS = [
     "running",
     "developerMode",
     "includeContext",
+    "cancelled",
 ] as const;
 
-const SAFE_STRING_ARRAY_FIELDS = ["schemaNames", "command"] as const;
+const SAFE_STRING_ARRAY_FIELDS = [
+    "schemaNames",
+    "actionNames",
+    "command",
+] as const;
 const MAX_ARRAY_LENGTH = 64;
 const MAX_STRING_LENGTH = 256;
 

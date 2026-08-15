@@ -76,6 +76,10 @@ import { setActivityContext } from "./activityContext.js";
 import { tryGetActionSchema } from "../translation/actionSchemaFileCache.js";
 import { processFlow, type FlowDefinition } from "./flowInterpreter.js";
 import { getSessionName } from "../context/session.js";
+import {
+    logActionCompleted,
+    logActionStarted,
+} from "../otel/structuredEvents.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 const debugCommandExecError = registerDebug(
@@ -424,44 +428,64 @@ export async function executeAction(
     }
 
     return wrapActionSpan(actionSpanAttributes, async (actionSpan) => {
-        const outcome = await executeForActionSpan(actionSpan, {
-            executableAction,
-            context,
-            actionIndex,
-            systemContext,
-            appAgentName,
-            appAgent,
-            actionContext,
-        });
-        // If the agent ran to completion but a cancel arrived while it was executing,
-        // discard the result and treat this as a cancellation.
-        systemContext.currentAbortSignal?.throwIfAborted();
-        actionContext.profiler?.stop();
-        actionContext.profiler = undefined;
-
-        if (debugActions.enabled) {
-            debugActions(actionResultToString(outcome.result));
-        }
-
-        if (
-            !outcome.failureRecorded &&
-            !outcome.setupReplacementResult &&
-            outcome.result.error !== undefined
-        ) {
-            recordActionResultError(actionSpan);
-        }
-        emitActionResult(
-            outcome.result,
-            actionContext,
-            systemContext,
-            requestId,
-            appAgentName,
-            actionIndex,
+        const eventData = {
+            requestId: requestId.requestId,
             schemaName,
-        );
+            actionName: action.actionName,
+            appAgentName,
+            actionIndex,
+        };
+        logActionStarted(systemContext.logger, eventData);
+        try {
+            const outcome = await executeForActionSpan(actionSpan, {
+                executableAction,
+                context,
+                actionIndex,
+                systemContext,
+                appAgentName,
+                appAgent,
+                actionContext,
+            });
+            // If the agent ran to completion but a cancel arrived while it was executing,
+            // discard the result and treat this as a cancellation.
+            systemContext.currentAbortSignal?.throwIfAborted();
+            actionContext.profiler?.stop();
+            actionContext.profiler = undefined;
 
-        closeActionContext();
-        return outcome.result;
+            if (debugActions.enabled) {
+                debugActions(actionResultToString(outcome.result));
+            }
+
+            if (
+                !outcome.failureRecorded &&
+                !outcome.setupReplacementResult &&
+                outcome.result.error !== undefined
+            ) {
+                recordActionResultError(actionSpan);
+            }
+            emitActionResult(
+                outcome.result,
+                actionContext,
+                systemContext,
+                requestId,
+                appAgentName,
+                actionIndex,
+                schemaName,
+            );
+
+            logActionCompleted(systemContext.logger, {
+                ...eventData,
+                success: outcome.result.error === undefined,
+            });
+            closeActionContext();
+            return outcome.result;
+        } catch (error) {
+            logActionCompleted(systemContext.logger, {
+                ...eventData,
+                success: false,
+            });
+            throw error;
+        }
     });
 }
 

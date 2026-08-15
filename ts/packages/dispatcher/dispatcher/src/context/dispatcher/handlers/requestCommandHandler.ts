@@ -64,6 +64,7 @@ import {
     getPowerShellCapabilityDisposition,
     getPowerShellCapabilityOutcome,
 } from "../../../reasoning/powershellCapabilityOutcome.js";
+import { logActionsSelected } from "../../../otel/structuredEvents.js";
 
 type ReasoningFallbackContext = {
     failedSchema: string;
@@ -841,6 +842,13 @@ export class RequestCommandHandler implements CommandHandler {
             }
 
             const { requestAction, tokenUsage } = interpretResult;
+            logActionsSelected(systemContext.logger, {
+                requestId: getRequestId(systemContext).requestId,
+                strategy: interpretResult.fromUser
+                    ? "user"
+                    : interpretResult.fromCache || "translate",
+                actions: requestAction.actions,
+            });
 
             if (tokenUsage) {
                 ensureCommandResult(systemContext).tokenUsage = tokenUsage;

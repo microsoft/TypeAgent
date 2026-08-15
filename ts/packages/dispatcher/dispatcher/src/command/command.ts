@@ -39,6 +39,10 @@ import {
 } from "@typeagent/dispatcher-types";
 import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 import { getAppAgentName } from "../internal.js";
+import {
+    logRequestCompleted,
+    logRequestReceived,
+} from "../otel/structuredEvents.js";
 
 const debugCommand = registerDebug("typeagent:dispatcher:command");
 const debugCommandError = registerDebug("typeagent:dispatcher:command:error");
@@ -507,6 +511,16 @@ export async function processCommand(
     return await wrapRootRequestSpan(
         rootAttributes,
         async () => {
+            logRequestReceived(context.logger, {
+                requestId: requestId.requestId,
+                ...(requestId.connectionId === undefined
+                    ? {}
+                    : { connectionId: requestId.connectionId }),
+                kind: originalInput.trimStart().startsWith("@")
+                    ? "command"
+                    : "request",
+                attachmentCount: attachments?.length ?? 0,
+            });
             try {
                 // Process one command at a time.
                 return await context.commandLock(async () => {
@@ -546,7 +560,13 @@ export async function processCommand(
                     } finally {
                         context.activeRequests.delete(requestIdStr);
                         context.currentOptions = undefined;
-                        return endProcessCommand(requestId, context);
+                        const result = endProcessCommand(requestId, context);
+                        logRequestCompleted(
+                            context.logger,
+                            requestId.requestId,
+                            result,
+                        );
+                        return result;
                     }
                 });
             } finally {
