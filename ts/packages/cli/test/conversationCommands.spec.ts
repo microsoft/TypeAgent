@@ -194,10 +194,9 @@ describe("@conversation new", () => {
         expect(ctx.connection.createConversation).toHaveBeenCalledWith(
             "MyChat",
         );
-        expect(ctx.connection.joinConversation).toHaveBeenCalledWith(
-            clientIO,
-            { conversationId: "new-id" },
-        );
+        expect(ctx.connection.joinConversation).toHaveBeenCalledWith(clientIO, {
+            conversationId: "new-id",
+        });
         expect(onSwitched).toHaveBeenCalledWith(joined);
     });
 
