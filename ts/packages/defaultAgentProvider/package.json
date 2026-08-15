@@ -51,6 +51,7 @@
     "@typeagent/code-agent": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
+    "@typeagent/copilot-macros": "workspace:*",
     "@typeagent/desktop-automation": "workspace:*",
     "@typeagent/discord-agent": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
