@@ -17,7 +17,6 @@ import type {
     MacroSummary,
     MacroValidationReport,
     MacroVersionRef,
-
     RecordedInteractionTrace,
     ReplayToolHost,
     RecordingState,
@@ -63,7 +62,6 @@ export class MacroManager {
     private readonly rootDir: string;
     private readonly activeRuns = new Map<string, AbortController>();
     private catalogMutation: Promise<void> = Promise.resolve();
-
 
     constructor(
         instanceDir: string,
@@ -497,7 +495,6 @@ export class MacroManager {
         );
     }
 
-
     private removeExpired(sessionId: string): void {
         const token = this.recordings.get(sessionId);
         if (token && Date.parse(token.expiresAt) <= Date.now()) {
@@ -688,5 +685,4 @@ export class MacroManager {
         );
         return result;
     }
-
 }

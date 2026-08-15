@@ -49,7 +49,6 @@ import {
     RunMacroRequest,
     RunMacroResponse,
     SearchMacrosRequest,
-
     TraceSummary,
     getDispatcherChannelName,
     getClientIOChannelName,
@@ -398,7 +397,6 @@ export function createAgentServerConnection(
         async getMacroRun(runId: string): Promise<MacroRunRecord> {
             return rpc.invoke("getMacroRun", runId);
         },
-
 
         async joinConversation(
             clientIO: ClientIO,

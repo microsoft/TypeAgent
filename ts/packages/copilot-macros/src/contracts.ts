@@ -265,4 +265,3 @@ export interface ReplayToolHost {
         context?: ReplayToolContext,
     ): Promise<unknown>;
 }
-

@@ -36,7 +36,6 @@ export {
     MacroSummary,
     MacroValidationReport,
     MacroVersionRef,
-
     RecordedInteractionTrace,
     RecordedToolCall,
     RecordingState,
@@ -44,7 +43,6 @@ export {
     RunMacroRequest,
     RunMacroResponse,
     SearchMacrosRequest,
-
     TraceSummary,
     getDispatcherChannelName,
     getClientIOChannelName,

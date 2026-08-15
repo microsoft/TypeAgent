@@ -22,7 +22,6 @@ import type {
     RunMacroRequest,
     RunMacroResponse,
     SearchMacrosRequest,
-
     TraceSummary,
 } from "@typeagent/copilot-macros";
 
@@ -38,7 +37,6 @@ export type {
     MacroSummary,
     MacroValidationReport,
     MacroVersionRef,
-
     RecordedInteractionTrace,
     RecordedToolCall,
     RecordingState,
@@ -46,7 +44,6 @@ export type {
     RunMacroRequest,
     RunMacroResponse,
     SearchMacrosRequest,
-
     TraceSummary,
 } from "@typeagent/copilot-macros";
 
