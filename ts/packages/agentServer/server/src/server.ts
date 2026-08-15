@@ -36,6 +36,7 @@ import os from "node:os";
 import { spawn } from "node:child_process";
 import { DefaultAzureCredential } from "@azure/identity";
 import { otel } from "@typeagent/telemetry";
+import { MacroManager } from "@typeagent/copilot-macros";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
@@ -375,6 +376,7 @@ async function main() {
             },
             instanceDir,
         );
+    const macroManager = new MacroManager(instanceDir);
 
     debugStartup("conversation manager ready; prewarming default conversation");
     // Pre-initialize the default conversation dispatcher before accepting clients,
@@ -491,6 +493,7 @@ async function main() {
     const { handler: connectionHandler, broadcastStaleNotice } =
         createAgentServerConnectionHandler({
             conversationManager,
+            macroManager,
             shutdown: shutdownServer,
             restart: restartServer,
             isStale: isStaleBuild,

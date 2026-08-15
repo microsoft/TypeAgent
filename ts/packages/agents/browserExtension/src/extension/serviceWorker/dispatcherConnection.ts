@@ -532,6 +532,34 @@ function makeConnectionAdapter(): AgentServerConnection {
         throw new Error(`${op} not supported in browser extension adapter`);
     };
     return {
+        armMacroRecording: (request) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("armMacroRecording", request);
+        },
+        getMacroRecordingState: (sessionId: string) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("getMacroRecordingState", sessionId);
+        },
+        claimMacroRecording: (request) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("claimMacroRecording", request);
+        },
+        cancelMacroRecording: (sessionId: string) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("cancelMacroRecording", sessionId);
+        },
+        failMacroRecording: (
+            sessionId: string,
+            tokenId: string,
+            error: string,
+        ) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("failMacroRecording", sessionId, tokenId, error);
+        },
+        finalizeMacroRecording: (request) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("finalizeMacroRecording", request);
+        },
         joinConversation: (
             _clientIO: ClientIO,
             options?: DispatcherConnectOptions,

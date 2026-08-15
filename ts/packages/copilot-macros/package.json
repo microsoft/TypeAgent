@@ -1,12 +1,11 @@
 {
-  "name": "@typeagent/agent-server-protocol",
+  "name": "@typeagent/copilot-macros",
   "version": "0.0.1",
-  "description": "Protocol definition for the Type Agent Server",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/agentServer/protocol"
+    "directory": "ts/packages/copilot-macros"
   },
   "license": "MIT",
   "author": "Microsoft",
@@ -14,6 +13,7 @@
   "exports": {
     ".": "./dist/index.js"
   },
+  "types": "./dist/index.d.ts",
   "files": [
     "dist",
     "!dist/test"
@@ -21,18 +21,17 @@
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
-    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
-    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "test": "npm run test:local",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b"
   },
-  "dependencies": {
-    "@typeagent/agent-rpc": "workspace:*",
-    "@typeagent/agent-sdk": "workspace:*",
-    "@typeagent/copilot-macros": "workspace:*",
-    "@typeagent/dispatcher-rpc": "workspace:*",
-    "@typeagent/dispatcher-types": "workspace:*"
-  },
   "devDependencies": {
+    "@types/jest": "^29.5.7",
+    "@types/node": "^20.10.0",
+    "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"

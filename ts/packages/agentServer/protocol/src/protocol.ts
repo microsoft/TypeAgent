@@ -5,6 +5,25 @@ import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
 import type { QueueSnapshot } from "@typeagent/dispatcher-types";
 import type { AppAgentManifest } from "@typeagent/agent-sdk";
 import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
+import type {
+    ArmRecordingRequest,
+    ClaimRecordingRequest,
+    FinalizeRecordingRequest,
+    RecordingState,
+    RecordingToken,
+    TraceSummary,
+} from "@typeagent/copilot-macros";
+
+export type {
+    ArmRecordingRequest,
+    ClaimRecordingRequest,
+    FinalizeRecordingRequest,
+    RecordedInteractionTrace,
+    RecordedToolCall,
+    RecordingState,
+    RecordingToken,
+    TraceSummary,
+} from "@typeagent/copilot-macros";
 
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
@@ -128,6 +147,22 @@ export type SpeechToken = {
 };
 
 export type AgentServerInvokeFunctions = {
+    armMacroRecording: (
+        request: ArmRecordingRequest,
+    ) => Promise<RecordingToken>;
+    getMacroRecordingState: (sessionId: string) => Promise<RecordingState>;
+    claimMacroRecording: (
+        request: ClaimRecordingRequest,
+    ) => Promise<RecordingToken | undefined>;
+    cancelMacroRecording: (sessionId: string) => Promise<void>;
+    failMacroRecording: (
+        sessionId: string,
+        tokenId: string,
+        error: string,
+    ) => Promise<void>;
+    finalizeMacroRecording: (
+        request: FinalizeRecordingRequest,
+    ) => Promise<TraceSummary>;
     joinConversation: (
         options?: DispatcherConnectOptions,
     ) => Promise<JoinConversationResult>;

@@ -14,12 +14,19 @@
  */
 
 import { readFileSync } from "fs";
-import type { Dispatcher } from "@typeagent/agent-server-client";
+import { readFile } from "node:fs/promises";
+import type {
+    AgentServerConnection,
+    Dispatcher,
+} from "@typeagent/agent-server-client";
 import { awaitCommand } from "@typeagent/dispatcher-types";
 import {
     createClientIO,
     connectToTypeAgent,
 } from "../shared/typeagent-client.js";
+import { isTypeAgentAgentServerTool } from "../shared/tool-identities.js";
+import { connectToAgentServer } from "../shared/typeagent-client.js";
+import { normalizeRecordedInteraction } from "./macro-transcript.js";
 
 interface TranscriptEvent {
     type: string;
@@ -42,106 +49,182 @@ interface TurnSummary {
     handledByTypeAgent: boolean;
 }
 
-/**
- * Parse the transcript JSONL and extract the last complete turn
- * (user message + assistant response + tools used).
- */
-function extractLastTurn(transcriptPath: string): TurnSummary | undefined {
-    let lines: string[];
+function readTranscriptEvents(
+    transcriptPath: string,
+): TranscriptEvent[] | undefined {
+    let content: string;
     try {
-        const content = readFileSync(transcriptPath, "utf-8");
-        lines = content.trim().split("\n").filter(Boolean);
+        content = readFileSync(transcriptPath, "utf-8");
     } catch {
         return undefined;
     }
 
-    // Parse events from the end, looking for the last user.message
-    // and all assistant.message events after it
     const events: TranscriptEvent[] = [];
-    for (const line of lines) {
+    for (const line of content.trim().split("\n").filter(Boolean)) {
         try {
             events.push(JSON.parse(line));
         } catch {
             // Skip malformed lines
         }
     }
+    return events;
+}
 
-    // Find the last user.message
-    let lastUserIdx = -1;
-    for (let i = events.length - 1; i >= 0; i--) {
-        if (events[i].type === "user.message") {
-            lastUserIdx = i;
-            break;
+function findLastUserIndex(events: TranscriptEvent[]): number {
+    let index = events.length - 1;
+    while (index >= 0 && events[index].type !== "user.message") index--;
+    return index;
+}
+
+function recordAssistantEvent(
+    event: TranscriptEvent,
+    summary: TurnSummary,
+): void {
+    if (event.data.content) summary.assistantMessage += event.data.content;
+    for (const tool of event.data.toolRequests ?? []) {
+        summary.toolsUsed.push(tool.name);
+        if (isTypeAgentAgentServerTool(tool.name, tool.mcpServerName)) {
+            summary.handledByTypeAgent = true;
         }
     }
+}
 
-    if (lastUserIdx === -1) return undefined;
+function recordToolCompletion(
+    event: TranscriptEvent,
+    toolsUsed: string[],
+): void {
+    const toolName = (event.data as { toolName?: string }).toolName;
+    if (toolName && !toolsUsed.includes(toolName)) toolsUsed.push(toolName);
+}
+
+function collectTurnEvents(
+    events: TranscriptEvent[],
+    lastUserIndex: number,
+    summary: TurnSummary,
+): void {
+    for (const event of events.slice(lastUserIndex + 1)) {
+        if (event.type === "assistant.message") {
+            recordAssistantEvent(event, summary);
+        }
+        if (event.type === "tool.execution_complete") {
+            recordToolCompletion(event, summary.toolsUsed);
+        }
+    }
+}
+
+function wasHandledByHook(
+    events: TranscriptEvent[],
+    lastUserIndex: number,
+): boolean {
+    const firstCandidate = Math.max(0, lastUserIndex - 5);
+    for (let index = lastUserIndex - 1; index >= firstCandidate; index--) {
+        const event = events[index];
+        if (event.type !== "hook.end") continue;
+        const output = (
+            event.data as {
+                output?: { handled?: boolean; handledBy?: string };
+            }
+        ).output;
+        if (output?.handled && output.handledBy === "typeagent") return true;
+    }
+    return false;
+}
+
+async function readStableTranscript(
+    transcriptPath: string,
+    timeoutMs = 2_000,
+    intervalMs = 100,
+): Promise<string | undefined> {
+    const deadline = Date.now() + timeoutMs;
+    let previous: string | undefined;
+    while (Date.now() < deadline) {
+        let current: string;
+        try {
+            current = await readFile(transcriptPath, "utf8");
+        } catch {
+            return undefined;
+        }
+        if (current === previous) return current;
+        previous = current;
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    return undefined;
+}
+
+export async function captureMacroRecording(
+    input: AgentStopInput,
+    connect: () => Promise<AgentServerConnection> = connectToAgentServer,
+): Promise<void> {
+    let connection: AgentServerConnection | undefined;
+    let tokenId: string | undefined;
+    try {
+        connection = await connect();
+        const state = await connection.getMacroRecordingState(input.sessionId);
+        if (state.status !== "claimed" || !state.token) return;
+        tokenId = state.token.id;
+
+        const transcript = await readStableTranscript(input.transcriptPath);
+        const trace = transcript
+            ? normalizeRecordedInteraction(
+                  transcript,
+                  input.sessionId,
+                  state.token.cwd ?? input.cwd,
+                  state.token.promptHash,
+              )
+            : undefined;
+        if (!trace) {
+            await connection.failMacroRecording(
+                input.sessionId,
+                tokenId,
+                "The selected interaction was incomplete and was not stored.",
+            );
+            return;
+        }
+
+        const summary = await connection.finalizeMacroRecording({
+            tokenId,
+            trace,
+        });
+        console.error(`[macro] Captured trace ${summary.traceId}`);
+    } catch (error) {
+        if (connection && tokenId) {
+            await connection.failMacroRecording(
+                input.sessionId,
+                tokenId,
+                "The selected interaction could not be stored.",
+            );
+        }
+        console.error(
+            `[macro] Capture failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+    } finally {
+        await connection?.close();
+    }
+}
+
+/**
+ * Parse the transcript JSONL and extract the last complete turn
+ * (user message + assistant response + tools used).
+ */
+function extractLastTurn(transcriptPath: string): TurnSummary | undefined {
+    const events = readTranscriptEvents(transcriptPath);
+    if (!events) return undefined;
+    const lastUserIdx = findLastUserIndex(events);
+    if (lastUserIdx < 0) return undefined;
 
     const userEvent = events[lastUserIdx];
     const userMessage = userEvent.data.content ?? "";
-
-    // Collect assistant messages and tool calls after the user message
-    let assistantMessage = "";
-    const toolsUsed: string[] = [];
-    let handledByTypeAgent = false;
-
-    for (let i = lastUserIdx + 1; i < events.length; i++) {
-        const event = events[i];
-
-        if (event.type === "assistant.message") {
-            // Accumulate assistant text
-            if (event.data.content) {
-                assistantMessage += event.data.content;
-            }
-
-            // Check tool requests for TypeAgent MCP calls
-            if (event.data.toolRequests) {
-                for (const tool of event.data.toolRequests) {
-                    toolsUsed.push(tool.name);
-                    if (
-                        tool.mcpServerName === "typeagent" ||
-                        tool.name.includes("typeagent")
-                    ) {
-                        handledByTypeAgent = true;
-                    }
-                }
-            }
-        }
-
-        // Also check tool execution results for the tool names
-        if (event.type === "tool.execution_complete") {
-            const toolName = (event.data as { toolName?: string }).toolName;
-            if (toolName && !toolsUsed.includes(toolName)) {
-                toolsUsed.push(toolName);
-            }
-        }
-    }
-
-    // Also check if the hook itself handled it (direct mode)
-    // In direct mode, there's a hook.end event with handled: true before user.message
-    for (let i = lastUserIdx - 1; i >= 0 && i >= lastUserIdx - 5; i--) {
-        const event = events[i];
-        if (event.type === "hook.end") {
-            const output = (
-                event.data as {
-                    output?: { handled?: boolean; handledBy?: string };
-                }
-            ).output;
-            if (output?.handled && output?.handledBy === "typeagent") {
-                handledByTypeAgent = true;
-                break;
-            }
-        }
-    }
-
     if (!userMessage) return undefined;
 
-    return {
+    const summary: TurnSummary = {
         userMessage,
-        assistantMessage,
-        toolsUsed,
-        handledByTypeAgent,
+        assistantMessage: "",
+        toolsUsed: [],
+        handledByTypeAgent: false,
     };
+    collectTurnEvents(events, lastUserIdx, summary);
+    summary.handledByTypeAgent ||= wasHandledByHook(events, lastUserIdx);
+    return summary;
 }
 
 /**
@@ -212,6 +295,8 @@ export async function handleAgentStop(
         console.error("[agentStop] No transcriptPath, skipping");
         return {};
     }
+
+    await captureMacroRecording(input);
 
     const turn = extractLastTurn(input.transcriptPath);
     if (!turn) {

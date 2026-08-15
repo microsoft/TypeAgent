@@ -18,6 +18,7 @@ import {
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
 import type { ConfigDrift } from "@typeagent/config";
+import type { MacroManager } from "@typeagent/copilot-macros";
 import type { Dispatcher } from "agent-dispatcher";
 import type { PortRegistrar } from "agent-dispatcher";
 import type { ConversationManager } from "./conversationManager.js";
@@ -38,6 +39,7 @@ export type ConnectionHandler = (
 export type ConnectionHandlerDeps = {
     /** The conversation manager backing this server. */
     conversationManager: ConversationManager;
+    macroManager: MacroManager;
     /**
      * Invoked when the dispatcher (or an RPC client) requests a server
      * shutdown. For the standalone agent-server this kills the process; for an
@@ -172,6 +174,7 @@ export function createAgentServerConnectionHandler(
 } {
     const {
         conversationManager,
+        macroManager,
         shutdown,
         restart,
         isStale,
@@ -256,6 +259,18 @@ export function createAgentServerConnectionHandler(
         let staleNotifier: (() => void) | undefined;
 
         const invokeFunctions: AgentServerInvokeFunctions = {
+            armMacroRecording: async (request) =>
+                macroManager.armRecording(request),
+            getMacroRecordingState: async (sessionId) =>
+                macroManager.getRecordingState(sessionId),
+            claimMacroRecording: async (request) =>
+                macroManager.claimRecording(request),
+            cancelMacroRecording: async (sessionId) =>
+                macroManager.cancelRecording(sessionId),
+            failMacroRecording: async (sessionId, tokenId, error) =>
+                macroManager.failRecording(sessionId, tokenId, error),
+            finalizeMacroRecording: async (request) =>
+                macroManager.finalizeRecording(request),
             joinConversation: async (options?: DispatcherConnectOptions) => {
                 // Resolve conversation ID first (may auto-create default)
                 const conversationId =

@@ -1714,6 +1714,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/copilot-macros':
+        specifier: workspace:*
+        version: link:../../copilot-macros
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
@@ -1763,6 +1766,9 @@ importers:
       '@typeagent/conversation-memory':
         specifier: workspace:*
         version: link:../../memory/conversation
+      '@typeagent/copilot-macros':
+        specifier: workspace:*
+        version: link:../../copilot-macros
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
@@ -4607,6 +4613,27 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/copilot-macros:
+    devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.19.40
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@20.19.40)(ts-node@10.9.2(@types/node@20.19.40)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/copilot-plugin:
     dependencies:
       '@modelcontextprotocol/sdk':
@@ -4618,6 +4645,9 @@ importers:
       '@typeagent/agent-server-client':
         specifier: workspace:*
         version: link:../agentServer/client
+      '@typeagent/copilot-macros':
+        specifier: workspace:*
+        version: link:../copilot-macros
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types

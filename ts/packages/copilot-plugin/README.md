@@ -245,7 +245,9 @@ pnpm run register    # re-copies the fresh build (runs `copilot plugin update`)
 
 ## Integration Modes
 
-The plugin supports three routing modes, plus bypass:
+The plugin supports three prompt-routing modes, plus bypass. These modes decide
+how the `userPromptSubmitted` hook routes a request; they do not select a
+different MCP tool catalog.
 
 ### Direct Mode (default)
 
@@ -272,8 +274,11 @@ Recording directives such as `learn:`, `record`, and `dev: learn:` are sent to
 the configured TypeAgent reasoning engine with a PowerShell flow recording
 profile.
 
-The broad TypeAgent MCP tools and PowerShell pre-tool redirect are disabled in
-this mode. Once the hook returns a miss, the Copilot runtime handles the request
+Calls to the broad TypeAgent agent-server MCP tools and the PowerShell pre-tool
+redirect are disabled in this mode. The tool definitions remain registered so
+mode changes take effect without restarting Copilot. The read-only
+`typeagent-workspace` MCP server remains available for deterministic macro
+steps. Once the hook returns a miss, the Copilot runtime handles the request
 with its normal tool set.
 
 - **Pros:** Reuses deterministic development actions without taking over normal
@@ -313,12 +318,13 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 
 **Environment variable overrides** (take precedence over config file):
 
-| Variable                | Default                | Description                         |
-| ----------------------- | ---------------------- | ----------------------------------- |
-| `TYPEAGENT_MODE`        | `direct`               | `direct`, `mcp`, `dev`, or `bypass` |
-| `TYPEAGENT_HOST`        | `localhost`            | TypeAgent server host               |
-| `TYPEAGENT_PORT`        | `8999`                 | TypeAgent server port               |
-| `TYPEAGENT_PLUGIN_DATA` | `~/.typeagent-copilot` | Config directory                    |
+| Variable                    | Default                           | Description                                                                      |
+| --------------------------- | --------------------------------- | -------------------------------------------------------------------------------- |
+| `TYPEAGENT_MODE`            | `direct`                          | `direct`, `mcp`, `dev`, or `bypass`                                              |
+| `TYPEAGENT_HOST`            | `localhost`                       | TypeAgent server host                                                            |
+| `TYPEAGENT_PORT`            | `8999`                            | TypeAgent server port                                                            |
+| `TYPEAGENT_PLUGIN_DATA`     | `~/.typeagent-copilot`            | Config directory                                                                 |
+| `TYPEAGENT_WORKSPACE_ROOTS` | Copilot process working directory | Approved roots for workspace MCP tools, separated by the platform path delimiter |
 
 ---
 
@@ -333,15 +339,48 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 | `postToolUse`         | `hook-post-tool.js`  | Track Copilot tool results in TypeAgent history              |
 | `preToolUse`          | `hook-powershell.js` | Inject TypeAgent PowerShell guidance for PowerShell commands |
 
-### MCP Server (`.mcp.json`)
+### MCP Servers (`.mcp.json`)
 
-Exposes TypeAgent as MCP tools for the LLM (used in MCP mode):
+The plugin starts two logical MCP servers from the same bundled entry point and
+single-file release executable:
 
-| Tool                       | Description                                      |
-| -------------------------- | ------------------------------------------------ |
-| `typeagent-processCommand` | Send a command to TypeAgent and get the response |
-| `typeagent-listAgents`     | List available TypeAgent agents                  |
-| `typeagent-getStatus`      | Get TypeAgent server status                      |
+| Server                | Tool                       | Description                                                                             |
+| --------------------- | -------------------------- | --------------------------------------------------------------------------------------- |
+| `typeagent`           | `typeagent-processCommand` | Send a command to the TypeAgent agent-server                                            |
+| `typeagent`           | `typeagent-listAgents`     | List available TypeAgent agents                                                         |
+| `typeagent`           | `typeagent-getStatus`      | Get TypeAgent server status                                                             |
+| `typeagent-workspace` | `read`                     | Read bounded text under approved workspace roots                                        |
+| `typeagent-workspace` | `glob`                     | Find bounded, deterministically ordered workspace files                                 |
+| `typeagent-workspace` | `grep`                     | Search bounded workspace text                                                           |
+| `typeagent-workspace` | `fetch`                    | Fetch bounded public HTTP(S) text without ambient credentials or private-network access |
+
+Workspace tools are available in direct, MCP, and dev modes. In bypass mode
+they remain discoverable because Copilot fixes the MCP catalog when the session
+starts, but calls return a disabled error. This makes `@typeagent mode` changes
+take effect without requiring tool re-registration or a Copilot restart.
+
+### Macro mode
+
+Macros do not add a fourth routing mode. Direct, MCP, and dev describe ownership
+of the root user prompt, while deterministic workspace tools are capabilities
+that may be used by a macro in any of those modes. A separate macro mode would
+couple tool availability to a catalog that was already registered at session
+startup and would become stale after `@typeagent mode` changes.
+
+The hooks therefore behave as follows:
+
+- `userPromptSubmitted` keeps its existing direct/MCP/dev routing behavior;
+- `postToolUse` records workspace MCP calls because they execute in the plugin,
+  not in agent-server;
+- `agentStop` does not classify a workspace-only turn as already handled by
+  TypeAgent, so the completed Copilot turn remains available to history and
+  future trace induction; and
+- `preToolUse` keeps its existing PowerShell guidance policy.
+
+The workspace MCP server is local to the plugin and does not require
+agent-server. Agent-server continues to receive bounded tool/turn history from
+the hooks. Macro catalog, validation, promotion, and D1 orchestration remain
+agent-server responsibilities when those provider components are added.
 
 ### Agents (`agents/`)
 
