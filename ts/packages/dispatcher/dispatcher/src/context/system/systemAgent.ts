@@ -33,6 +33,7 @@ import { executeNotificationAction } from "./action/notificationActionHandler.js
 import { executeHistoryAction } from "./action/historyActionHandler.js";
 import { executeGrammarAction } from "./action/grammarActionHandler.js";
 import { executeSettingsAction } from "./action/settingsActionHandler.js";
+import { executeLogAction } from "./action/logActionHandler.js";
 import { ConfigAction } from "./schema/configActionSchema.js";
 import { HelpAction } from "./schema/helpActionSchema.js";
 import { NotificationAction } from "./schema/notificationActionSchema.js";
@@ -40,6 +41,7 @@ import { HistoryAction } from "./schema/historyActionSchema.js";
 import { ConversationAction } from "./schema/conversationActionSchema.js";
 import { GrammarAction } from "./schema/grammarActionSchema.js";
 import { UserSettingsAction } from "./schema/settingsActionSchema.js";
+import { LogAction } from "./schema/logActionSchema.js";
 
 // handlers
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
@@ -181,6 +183,7 @@ function executeSystemAction(
         | TypeAgentAction<HistoryAction, "system.history">
         | TypeAgentAction<GrammarAction, "system.grammar">
         | TypeAgentAction<UserSettingsAction, "system.settings">
+        | TypeAgentAction<LogAction, "system.log">
         | TypeAgentAction<HelpAction, "system.help">,
     context: ActionContext<CommandHandlerContext>,
 ) {
@@ -197,6 +200,8 @@ function executeSystemAction(
             return executeGrammarAction(action, context);
         case "system.settings":
             return executeSettingsAction(action, context);
+        case "system.log":
+            return executeLogAction(action, context);
         case "system.help":
             return executeHelpAction(action, context);
         default:
@@ -285,6 +290,20 @@ export const systemManifest: AppAgentManifest = {
                 schemaFile:
                     "./src/context/system/schema/settingsActionSchema.ts",
                 schemaType: "UserSettingsAction",
+            },
+        },
+        log: {
+            schema: {
+                description:
+                    "Manage local OpenTelemetry JSONL debugging. " +
+                    "Show local logging status and settings; select the focused, diagnostic, verbose, or off profile; " +
+                    "enable or disable copying already-enabled debug output into local JSONL logs; " +
+                    "or reset local logging to its defaults. " +
+                    "Examples: 'show local log status', 'set local logging profile to diagnostic', " +
+                    "'include debug output in local logs', 'stop copying debug logs locally', and 'reset local logging'.",
+                schemaFile: "./src/context/system/schema/logActionSchema.ts",
+                schemaType: "LogAction",
+                grammarFile: "./src/context/system/schema/logActionSchema.agr",
             },
         },
         help: {
