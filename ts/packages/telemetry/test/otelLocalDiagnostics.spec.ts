@@ -26,17 +26,23 @@ import {
     JsonlLogExporter,
     resolveJsonlLogPath,
 } from "../src/otel/jsonlLogExporter.js";
+import {
+    createLocalTelemetryState,
+    setLocalTelemetryState,
+} from "../src/otel/localTelemetryState.js";
+import { LocalLogRecordProcessor } from "../src/otel/localLogRecordProcessor.js";
 
 function makeTempDir(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-otel-local-"));
 }
 
-function createRecord(body: string): ReadableLogRecord {
+function createRecord(body: string, eventName?: string): ReadableLogRecord {
     return {
         hrTime: [1_700_000_000, 0],
         hrTimeObserved: [1_700_000_001, 0],
         severityText: "INFO",
         body,
+        ...(eventName === undefined ? {} : { eventName }),
         resource: resourceFromAttributes({ "service.name": "test" }),
         instrumentationScope: { name: "test", version: "1" },
         attributes: {},
@@ -67,6 +73,7 @@ describe("JsonlLogExporter", () => {
     const tempDirs: string[] = [];
 
     afterEach(() => {
+        setLocalTelemetryState(undefined);
         for (const dir of tempDirs.splice(0)) {
             fs.rmSync(dir, { recursive: true, force: true });
         }
@@ -126,6 +133,34 @@ describe("JsonlLogExporter", () => {
             .split("\n")
             .map((line) => JSON.parse(line) as { body: string });
         expect(lines.map((line) => line.body)).toEqual(["first", "second"]);
+    });
+
+    it("exports every record admitted by its local processor", async () => {
+        const dir = makeTempDir();
+        tempDirs.push(dir);
+        const exporter = new JsonlLogExporter({
+            filePath: path.join(dir, "filtered-{pid}.jsonl"),
+            serviceName: "test",
+            pid: 1007,
+            diagnostic: () => undefined,
+        });
+        expect(
+            await exportRecords(exporter, [
+                createRecord("structured-one", "request.received"),
+                createRecord("debug-one", "debug"),
+            ]),
+        ).toBe(ExportResultCode.SUCCESS);
+        await exporter.shutdown();
+
+        const records = fs
+            .readFileSync(exporter.filePath, "utf8")
+            .trimEnd()
+            .split("\n")
+            .map((line) => JSON.parse(line) as { body: string });
+        expect(records.map((record) => record.body)).toEqual([
+            "structured-one",
+            "debug-one",
+        ]);
     });
 
     it("creates private directories and files", async () => {
@@ -252,6 +287,38 @@ describe("debug bridge", () => {
         await provider?.shutdown();
         provider = undefined;
         logs.disable();
+        setLocalTelemetryState(undefined);
+    });
+
+    it("applies local policy when each record is emitted", () => {
+        const exporter = new InMemoryLogRecordExporter();
+        provider = new LoggerProvider({
+            processors: [
+                new LocalLogRecordProcessor(
+                    new SimpleLogRecordProcessor({ exporter }),
+                ),
+            ],
+        });
+        logs.setGlobalLoggerProvider(provider);
+        const state = createLocalTelemetryState();
+        setLocalTelemetryState(state);
+        const logger = logs.getLogger("local-policy");
+
+        logger.emit({ eventName: "structured-one", body: "structured-one" });
+        logger.emit({ eventName: "debug", body: "debug-hidden" });
+        state.setDebugCopy(true);
+        logger.emit({ eventName: "debug", body: "debug-visible" });
+        state.setProfile("off");
+        logger.emit({ eventName: "structured-hidden", body: "hidden" });
+
+        expect(
+            exporter
+                .getFinishedLogRecords()
+                .map((record) => [record.eventName, record.body]),
+        ).toEqual([
+            ["structured-one", "structured-one"],
+            ["debug", "debug-visible"],
+        ]);
     });
 
     it("tees distinct debug modules exactly once and restores prior output", () => {
@@ -439,6 +506,9 @@ describe("debug bridge", () => {
 
 describe("local diagnostics correlation", () => {
     it("writes structured and debug records with the same active span", async () => {
+        setLocalTelemetryState(
+            createLocalTelemetryState({ initialDebugCopy: true }),
+        );
         const dir = makeTempDir();
         const jsonlExporter = new JsonlLogExporter({
             filePath: path.join(dir, "correlated-{pid}.jsonl"),
@@ -511,6 +581,7 @@ describe("local diagnostics correlation", () => {
             logs.disable();
             trace.disable();
             context.disable();
+            setLocalTelemetryState(undefined);
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });

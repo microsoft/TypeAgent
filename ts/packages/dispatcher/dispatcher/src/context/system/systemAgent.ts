@@ -54,6 +54,7 @@ import { getCollisionCommandHandlers } from "./handlers/collisionCommandHandlers
 import { getGrammarCommandHandlers } from "./handlers/grammarCommandHandlers.js";
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
+import { getLogCommandHandlers } from "./handlers/logCommandHandler.js";
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
 import { getNotifyCommandHandlers } from "./handlers/notifyCommandHandler.js";
 import { DisplayCommandHandler } from "./handlers/displayCommandHandler.js";
@@ -111,6 +112,7 @@ export const systemHandlers: CommandHandlerTable = {
         feedback: getFeedbackCommandHandlers(),
         display: new DisplayCommandHandler(),
         trace: new TraceCommandHandler(),
+        log: getLogCommandHandlers(),
         help: new HelpCommandHandler(),
         debug: new DebugCommandHandler(),
         clear: {

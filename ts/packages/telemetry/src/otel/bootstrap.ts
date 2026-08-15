@@ -67,6 +67,11 @@ import {
     type DebugModule,
 } from "./debugBridge.js";
 import { JsonlLogExporter } from "./jsonlLogExporter.js";
+import { LocalLogRecordProcessor } from "./localLogRecordProcessor.js";
+import {
+    createLocalTelemetryState,
+    setLocalTelemetryState,
+} from "./localTelemetryState.js";
 import {
     getTypeAgentSourceVersion,
     type TypeAgentSourceVersion,
@@ -229,18 +234,20 @@ const DEFAULT_FACTORIES: TelemetryProviderFactories = {
                     ? configuredProcessName
                     : "process";
             processors.push(
-                new BatchLogRecordProcessor({
-                    exporter: new JsonlLogExporter({
-                        filePath: config.logFile,
-                        serviceName,
-                        processName,
+                new LocalLogRecordProcessor(
+                    new BatchLogRecordProcessor({
+                        exporter: new JsonlLogExporter({
+                            filePath: config.logFile,
+                            serviceName,
+                            processName,
+                        }),
+                        maxQueueSize: 2_048,
+                        maxExportBatchSize: 256,
+                        scheduledDelayMillis: 250,
+                        exportTimeoutMillis: 5_000,
+                        selfObsMeterProvider: metrics.getMeterProvider(),
                     }),
-                    maxQueueSize: 2_048,
-                    maxExportBatchSize: 256,
-                    scheduledDelayMillis: 250,
-                    exportTimeoutMillis: 5_000,
-                    selfObsMeterProvider: metrics.getMeterProvider(),
-                }),
+                ),
             );
         }
         return {
@@ -411,11 +418,31 @@ async function createDefaultTelemetryResource(
 }
 
 const processTelemetry = createTelemetryCoordinator();
+let processLocalStateInitialized = false;
 
 export function initTelemetry(
     options: InitTelemetryOptions = {},
 ): Promise<void> {
-    return processTelemetry.init(options);
+    if (processLocalStateInitialized) {
+        return processTelemetry.init(options);
+    }
+    const config =
+        options.config ?? resolveTelemetryConfig(options.configOptions);
+    setLocalTelemetryState(
+        createLocalTelemetryState({
+            initialProfile: "focused",
+            initialDebugCopy:
+                config.debugBridge === true &&
+                config.logs?.logFile !== undefined,
+            debugBridgeAvailable:
+                config.debugBridge === true &&
+                options.debugModules !== undefined &&
+                options.debugModules.length > 0,
+            localLogAvailable: config.logs?.logFile !== undefined,
+        }),
+    );
+    processLocalStateInitialized = true;
+    return processTelemetry.init({ ...options, config });
 }
 
 export function shutdownTelemetry(): Promise<void> {

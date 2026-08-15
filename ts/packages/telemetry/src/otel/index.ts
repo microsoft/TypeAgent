@@ -20,10 +20,26 @@ export {
 } from "./debugBridge.js";
 
 export {
+    createLocalTelemetryState,
+    expandTracePresets,
+    getLocalTelemetryState,
+    setLocalTelemetryState,
+    LOCAL_TELEMETRY_PROFILES,
+    TRACE_PRESETS,
+    type CreateLocalTelemetryStateOptions,
+    type LocalTelemetryProfile,
+    type LocalTelemetrySnapshot,
+    type LocalTelemetryState,
+    type TracePresetName,
+} from "./localTelemetryState.js";
+
+export {
     JsonlLogExporter,
     resolveJsonlLogPath,
     type JsonlLogExporterOptions,
 } from "./jsonlLogExporter.js";
+
+export { LocalLogRecordProcessor } from "./localLogRecordProcessor.js";
 
 export {
     createTelemetryLifecycle,

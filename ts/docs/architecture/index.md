@@ -77,6 +77,9 @@ The browser agent is large enough to warrant its own set of docs:
 
 - [OpenTelemetry in TypeAgent](./telemetry/opentelemetry.md) — the shared
   instrumentation, local diagnostics, export, and partner-integration design.
+- [Local OpenTelemetry debugging](./telemetry/local-debugging.md) — focused
+  profiles, runtime `@log` control, local span export, and cross-process trace
+  inspection.
 
 ## Workflow system
 
