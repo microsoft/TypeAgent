@@ -79,7 +79,7 @@ function tokensIn(name, tokens) {
  * point of a prebuilt-binary variant: `...-win32-x64`, `...-win32-arm64`,
  * `@esbuild/linux-arm`, ...). We therefore require an arch token before
  * considering a directory for removal — this avoids false positives on agent
- * package names that merely contain an OS word (e.g. `android-mobile-agent`).
+ * package names that merely contain an OS word (e.g. `windowsclock-agent`).
  *
  * Given an arch token, the package is foreign when its arch is not ours, or
  * when it also names an OS that is not ours (e.g. `linux-x64` on a win32-x64
