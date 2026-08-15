@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import type { HookInput, HookOutput } from "./types.js";
 import { connectToAgentServer } from "../shared/typeagent-client.js";
 import { redactTraceValue } from "@typeagent/copilot-macros";
+import { getMacroFeatures } from "../shared/macro-features.js";
 import {
     getConfigPath,
     getMode,
@@ -296,6 +297,7 @@ export async function routePrompt(
 }
 
 async function claimMacroRecording(input: HookInput): Promise<boolean> {
+    if (!getMacroFeatures().recording) return false;
     let connection;
     try {
         connection = await connectToAgentServer();

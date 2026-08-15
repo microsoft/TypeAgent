@@ -160,6 +160,9 @@ export function makeStubConnection(
         async runMacro() {
             throw new Error("Not implemented by conversation test stub");
         },
+        async submitMacroCandidate() {
+            throw new Error("Not implemented by conversation test stub");
+        },
         async cancelMacroRun() {},
         async getMacroRun() {
             throw new Error("Not implemented by conversation test stub");

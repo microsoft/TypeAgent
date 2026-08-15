@@ -99,6 +99,15 @@ export interface CopilotToolMacro {
     sourceTraceId: string;
     createdAt: string;
     warnings: string[];
+    candidateProvenance?: MacroCandidateProvenance;
+}
+
+export interface MacroCandidateProvenance {
+    sourceMacroId: string;
+    sourceVersion: number;
+    handoffRunId: string;
+    reason: string;
+    submittedAt: string;
 }
 
 export interface MacroSummary {
@@ -199,6 +208,50 @@ export interface RunMacroRequest extends InspectMacroRequest {
     dryRun?: boolean;
 }
 
+export interface AgentRunnerLaunchPayload {
+    agent: "typeagent-macro-runner";
+    macro: CopilotToolMacro;
+    inputs: Record<string, unknown>;
+    reason: {
+        code: "agentRequested" | "agentRequired";
+        message: string;
+        stepIds: string[];
+    };
+    budgets: {
+        maxToolCalls: number;
+        maxRetries: number;
+        timeoutMs: number;
+        maxTokens: number;
+    };
+    candidate: {
+        sourceMacroId: string;
+        sourceVersion: number;
+        handoffRunId: string;
+    };
+}
+
+export interface SubmitMacroCandidateRequest {
+    sourceMacroId: string;
+    sourceVersion: number;
+    handoffRunId: string;
+    reason: string;
+    name?: string;
+    description?: string;
+    inputs: MacroInput[];
+    steps: MacroStep[];
+    executionEvidence: {
+        outcome: "completed";
+        toolCalls: number;
+        retries: number;
+        durationMs: number;
+        tokensUsed: number;
+        steps: Array<{
+            stepId: string;
+            status: "completed" | "failed" | "denied" | "cancelled";
+        }>;
+    };
+}
+
 export interface MacroRunStep {
     stepId: string;
     toolName: string;
@@ -239,6 +292,7 @@ export type RunMacroResponse =
           macroId: string;
           version: number;
           reason: string;
+          launch: AgentRunnerLaunchPayload;
       };
 
 export interface ReplayToolDescriptor {

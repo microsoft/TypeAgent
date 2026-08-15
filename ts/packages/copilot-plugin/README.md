@@ -169,6 +169,47 @@ Check that the plugin loaded:
 
 Should show `typeagent` under the plugins section.
 
+## Tool-Composed Macros
+
+The plugin includes the `typeagent-macros` MCP server, the TypeAgent Macro
+Runner agent, and the `typeagent-macros` skill. Approved replayable macros run
+deterministically. If `run_macro` returns `agentRequired`, the skill hands the
+complete launch payload to the runner, which executes the whole macro through
+Copilot's live tool and permission surface.
+
+Agent-guided adaptations may be saved only through
+`submit_macro_candidate`. The server validates handoff provenance, execution
+budgets, and macro structure, then creates a new draft. It never mutates or
+promotes the approved version.
+
+### Rollout Controls
+
+Each macro boundary is enabled by default and can be disabled independently:
+
+| Environment variable                    | Boundary                   |
+| --------------------------------------- | -------------------------- |
+| `TYPEAGENT_MACRO_RECORDING_ENABLED`     | Explicit trace recording   |
+| `TYPEAGENT_MACRO_INDUCTION_ENABLED`     | Draft creation from traces |
+| `TYPEAGENT_MACRO_REPLAY_ENABLED`        | Deterministic replay       |
+| `TYPEAGENT_MACRO_AGENT_HANDOFF_ENABLED` | Agent-runner handoff       |
+
+Set a variable to `0`, `false`, or `off` before starting Copilot to disable
+that boundary. `@typeagent status` reports the effective settings. These flags
+do not change direct, MCP, dev, or PowerShell mode selection.
+
+### Recovery And Rollback
+
+Macro data is stored under the agent-server instance directory in
+`copilot-macros/`. Back up that directory before schema or deployment changes.
+Run records, handoffs, and immutable macro versions are separate files;
+`metrics.jsonl` contains only timestamp, operation, and outcome.
+
+To stop a rollout, disable the affected boundary and restart Copilot. Existing
+approved versions and drafts remain intact. Restore the backed-up
+`copilot-macros/` directory only while agent-server is stopped. To roll back the
+plugin, reinstall the previous plugin snapshot and leave the newer boundary
+disabled until compatibility is confirmed.
+
 ---
 
 ## Install Globally (available in every `copilot` session)

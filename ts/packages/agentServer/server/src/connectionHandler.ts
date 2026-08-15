@@ -284,6 +284,8 @@ export function createAgentServerConnectionHandler(
             disableMacro: async (request) => macroManager.disableMacro(request),
             deleteMacro: async (request) => macroManager.deleteMacro(request),
             runMacro: async (request) => macroManager.runMacro(request),
+            submitMacroCandidate: async (request) =>
+                macroManager.submitMacroCandidate(request),
             cancelMacroRun: async (runId) => macroManager.cancelMacroRun(runId),
             getMacroRun: async (runId) => macroManager.getMacroRun(runId),
 

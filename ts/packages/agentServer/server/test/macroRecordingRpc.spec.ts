@@ -124,7 +124,41 @@ describe("macro recording RPC", () => {
             status: "completed",
             macroId: approved.macroId,
         });
-
+        const approvedMacro = await connection.inspectMacro(approved);
+        await expect(
+            connection.runMacro({
+                runId: "agent-run-1",
+                macroId: approved.macroId,
+                version: approved.version,
+                preference: "agent",
+            }),
+        ).resolves.toMatchObject({
+            status: "agentRequired",
+            launch: {
+                agent: "typeagent-macro-runner",
+                candidate: { handoffRunId: "agent-run-1" },
+            },
+        });
+        const candidate = await connection.submitMacroCandidate({
+            sourceMacroId: approved.macroId,
+            sourceVersion: approved.version,
+            handoffRunId: "agent-run-1",
+            reason: "Adapted during agent-guided execution.",
+            inputs: approvedMacro.inputs,
+            steps: approvedMacro.steps,
+            executionEvidence: {
+                outcome: "completed",
+                toolCalls: 1,
+                retries: 0,
+                durationMs: 100,
+                tokensUsed: 100,
+                steps: [{ stepId: "step-1", status: "completed" }],
+            },
+        });
+        expect(candidate).toMatchObject({ version: 3, state: "draft" });
+        await expect(connection.inspectMacro(approved)).resolves.toMatchObject({
+            state: "approved",
+        });
         await connection.close();
     });
 });

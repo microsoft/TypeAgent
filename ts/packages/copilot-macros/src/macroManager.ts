@@ -3,7 +3,14 @@
 
 import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import {
+    appendFile,
+    mkdir,
+    readFile,
+    rename,
+    rm,
+    writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import type {
     ApproveMacroRequest,
@@ -31,6 +38,7 @@ import type {
     RunMacroRequest,
     RunMacroResponse,
     ValidateMacroRequest,
+    SubmitMacroCandidateRequest,
 } from "./contracts.js";
 import {
     inspectReplayTools,
@@ -44,6 +52,21 @@ import { redactTraceValue } from "./redaction.js";
 const defaultRecordingTtlMs = 10 * 60 * 1000;
 const maxPersistedRunValueBytes = 256 * 1024;
 const maxPersistedRunPreviewCharacters = 16 * 1024;
+const maxCandidateBytes = 256 * 1024;
+const maxCandidateItems = 100;
+
+interface AgentHandoffRecord {
+    runId: string;
+    macroId: string;
+    version: number;
+    createdAt: string;
+    budgets: {
+        maxToolCalls: number;
+        maxRetries: number;
+        timeoutMs: number;
+        maxTokens: number;
+    };
+}
 
 function sanitizeRunValue(value: unknown): unknown {
     const redacted = redactTraceValue(value);
@@ -378,6 +401,133 @@ export class MacroManager {
         });
     }
 
+    async submitMacroCandidate(
+        request: SubmitMacroCandidateRequest,
+    ): Promise<MacroVersionRef> {
+        if (!request.reason.trim() || request.reason.length > 2_000) {
+            throw new Error("A bounded candidate reason is required.");
+        }
+        this.validateMacroId(request.handoffRunId);
+        if (
+            request.inputs.length > maxCandidateItems ||
+            request.steps.length === 0 ||
+            request.steps.length > maxCandidateItems ||
+            Buffer.byteLength(JSON.stringify(request)) > maxCandidateBytes
+        ) {
+            throw new Error("Macro candidate exceeds submission limits.");
+        }
+        if (
+            request.steps.some(
+                (step) =>
+                    (step.executionClass !== "replayable" &&
+                        step.executionClass !== "agentRequired") ||
+                    !step.id.trim() ||
+                    !step.toolName.trim() ||
+                    !step.sourceToolCallId.trim(),
+            )
+        ) {
+            throw new Error("Macro candidate contains an invalid step.");
+        }
+        return this.mutateCatalog(async () => {
+            const source = await this.inspectMacro({
+                macroId: request.sourceMacroId,
+                version: request.sourceVersion,
+            });
+            if (source.state !== "approved") {
+                throw new Error(
+                    "Macro candidates must derive from an approved version.",
+                );
+            }
+            const handoff = await this.readJson<AgentHandoffRecord>(
+                this.handoffPath(request.handoffRunId),
+                `Agent handoff not found: ${request.handoffRunId}`,
+            );
+            if (
+                handoff.macroId !== source.macroId ||
+                handoff.version !== source.version
+            ) {
+                throw new Error(
+                    "Macro candidate provenance does not match its agent handoff.",
+                );
+            }
+            if (
+                request.executionEvidence.outcome !== "completed" ||
+                request.executionEvidence.toolCalls < 0 ||
+                request.executionEvidence.toolCalls >
+                    handoff.budgets.maxToolCalls ||
+                request.executionEvidence.retries < 0 ||
+                request.executionEvidence.retries >
+                    handoff.budgets.maxRetries ||
+                request.executionEvidence.durationMs < 0 ||
+                request.executionEvidence.durationMs >
+                    handoff.budgets.timeoutMs ||
+                request.executionEvidence.tokensUsed < 0 ||
+                request.executionEvidence.tokensUsed >
+                    handoff.budgets.maxTokens ||
+                request.executionEvidence.steps.length !==
+                    request.steps.length ||
+                request.executionEvidence.steps.some(
+                    (step) => step.status !== "completed",
+                ) ||
+                request.steps.some(
+                    (step) =>
+                        !request.executionEvidence.steps.some(
+                            (evidence) => evidence.stepId === step.id,
+                        ),
+                )
+            ) {
+                throw new Error(
+                    "Macro candidate execution evidence exceeds its handoff budget.",
+                );
+            }
+            const latest = await this.getLatestSummary(source.macroId);
+            const createdAt = new Date().toISOString();
+            const candidate: CopilotToolMacro = {
+                ...source,
+                version: latest.version + 1,
+                name: request.name?.trim() || source.name,
+                description: request.description?.trim() || source.description,
+                state: "draft",
+                executionClass: request.steps.every(
+                    (step) => step.executionClass === "replayable",
+                )
+                    ? "replayable"
+                    : "agentRequired",
+                inputs: request.inputs,
+                steps: request.steps,
+                createdAt,
+                warnings: [
+                    ...source.warnings,
+                    "Agent-guided adaptation requires explicit review and approval.",
+                ],
+                candidateProvenance: {
+                    sourceMacroId: source.macroId,
+                    sourceVersion: source.version,
+                    handoffRunId: request.handoffRunId,
+                    reason: request.reason.trim(),
+                    submittedAt: createdAt,
+                },
+            };
+            const report = validateMacro(
+                candidate,
+                await this.readTrace(source.sourceTraceId),
+            );
+            if (!report.valid) {
+                throw new Error(
+                    `Macro candidate validation failed: ${report.issues
+                        .filter((issue) => issue.severity === "error")
+                        .map((issue) => issue.message)
+                        .join("; ")}`,
+                );
+            }
+            await this.writeVersion(candidate);
+            await this.upsertSummary(candidate);
+            await this.recordMetric("candidate", "submitted");
+            await rm(this.handoffPath(request.handoffRunId), { force: true });
+            return this.versionRef(candidate);
+        });
+    }
+
     async runMacro(request: RunMacroRequest): Promise<RunMacroResponse> {
         this.validateMacroId(request.runId);
         if (this.activeRuns.has(request.runId)) {
@@ -395,15 +545,55 @@ export class MacroManager {
             if (preference === "replay") {
                 throw new Error("This macro requires agent-guided execution.");
             }
+            const agentStepIds = macro.steps
+                .filter((step) => step.executionClass === "agentRequired")
+                .map((step) => step.id);
+            const reason =
+                preference === "agent"
+                    ? "Agent-guided execution was requested."
+                    : "The macro contains steps that are not replayable.";
+            const budgets = {
+                maxToolCalls: Math.max(macro.steps.length * 2, 10),
+                maxRetries: 1,
+                timeoutMs: Math.min(
+                    Math.max(request.timeoutMs ?? 10 * 60_000, 1),
+                    10 * 60_000,
+                ),
+                maxTokens: 16_000,
+            };
+            await this.writeAgentHandoff({
+                runId: request.runId,
+                macroId: macro.macroId,
+                version: macro.version,
+                createdAt: new Date().toISOString(),
+                budgets,
+            });
+            await this.recordMetric("agentHandoff", "required");
             return {
                 status: "agentRequired",
                 runId: request.runId,
                 macroId: macro.macroId,
                 version: macro.version,
-                reason:
-                    preference === "agent"
-                        ? "Agent-guided execution was requested."
-                        : "The macro contains steps that are not replayable.",
+                reason,
+                launch: {
+                    agent: "typeagent-macro-runner",
+                    macro,
+                    inputs: request.inputs ?? {},
+                    reason: {
+                        code:
+                            preference === "agent"
+                                ? "agentRequested"
+                                : "agentRequired",
+                        message: reason,
+                        stepIds: agentStepIds,
+                    },
+                    budgets,
+                    candidate: {
+                        sourceMacroId: macro.macroId,
+                        sourceVersion: macro.version,
+                        handoffRunId: request.runId,
+                    },
+                },
             };
         }
         if (!this.replayHost) {
@@ -485,6 +675,7 @@ export class MacroManager {
             };
         }
         run = await this.writeRun(run, macro);
+        await this.recordMetric("replay", run.status);
         return { status: run.status, run } as RunMacroResponse;
     }
 
@@ -630,6 +821,34 @@ export class MacroManager {
 
     private runPath(runId: string): string {
         return path.join(this.rootDir, "runs", `${runId}.json`);
+    }
+
+    private handoffPath(runId: string): string {
+        return path.join(this.rootDir, "handoffs", `${runId}.json`);
+    }
+
+    private async writeAgentHandoff(
+        handoff: AgentHandoffRecord,
+    ): Promise<void> {
+        const destination = this.handoffPath(handoff.runId);
+        await mkdir(path.dirname(destination), { recursive: true });
+        await writeFile(destination, JSON.stringify(handoff, undefined, 2), {
+            encoding: "utf8",
+            flag: "wx",
+        });
+    }
+
+    private async recordMetric(
+        operation: "replay" | "agentHandoff" | "candidate",
+        outcome: string,
+    ): Promise<void> {
+        const destination = path.join(this.rootDir, "metrics.jsonl");
+        await mkdir(path.dirname(destination), { recursive: true });
+        await appendFile(
+            destination,
+            `${JSON.stringify({ timestamp: new Date().toISOString(), operation, outcome })}\n`,
+            "utf8",
+        ).catch(() => undefined);
     }
 
     private async writeRun(

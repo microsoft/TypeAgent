@@ -162,6 +162,96 @@ describe("MacroManager draft catalog", () => {
             version: 2,
             state: "approved",
         });
+        const handoff = await manager.runMacro({
+            runId: "agent-run-1",
+            macroId: agentDraft.macroId,
+        });
+        expect(handoff).toMatchObject({
+            status: "agentRequired",
+            launch: {
+                agent: "typeagent-macro-runner",
+                macro: { macroId: agentDraft.macroId, version: 2 },
+                reason: { stepIds: ["step-1"] },
+                candidate: { handoffRunId: "agent-run-1" },
+            },
+        });
+        const approved = await manager.inspectMacro({
+            macroId: agentDraft.macroId,
+            version: 2,
+        });
+        await expect(
+            manager.submitMacroCandidate({
+                sourceMacroId: approved.macroId,
+                sourceVersion: approved.version,
+                handoffRunId: "agent-run-1",
+                reason: "Permission was denied.",
+                inputs: approved.inputs,
+                steps: approved.steps,
+                executionEvidence: {
+                    outcome: "completed",
+                    toolCalls: 1,
+                    retries: 0,
+                    durationMs: 100,
+                    tokensUsed: 100,
+                    steps: [{ stepId: "step-1", status: "denied" }],
+                },
+            }),
+        ).rejects.toThrow("execution evidence");
+        const candidate = await manager.submitMacroCandidate({
+            sourceMacroId: approved.macroId,
+            sourceVersion: approved.version,
+            handoffRunId: "agent-run-1",
+            reason: "Adapted the native tool arguments.",
+            inputs: approved.inputs,
+            steps: approved.steps,
+            executionEvidence: {
+                outcome: "completed",
+                toolCalls: 1,
+                retries: 0,
+                durationMs: 100,
+                tokensUsed: 100,
+                steps: [{ stepId: "step-1", status: "completed" }],
+            },
+        });
+        expect(candidate).toMatchObject({ version: 3, state: "draft" });
+        await expect(
+            manager.inspectMacro({
+                macroId: approved.macroId,
+                version: approved.version,
+            }),
+        ).resolves.toMatchObject({ state: "approved" });
+        await expect(manager.inspectMacro(candidate)).resolves.toMatchObject({
+            state: "draft",
+            candidateProvenance: {
+                sourceVersion: 2,
+                handoffRunId: "agent-run-1",
+            },
+        });
+        await expect(
+            manager.submitMacroCandidate({
+                sourceMacroId: approved.macroId,
+                sourceVersion: approved.version,
+                handoffRunId: "unknown-run",
+                reason: "This content must not become telemetry.",
+                inputs: approved.inputs,
+                steps: approved.steps,
+                executionEvidence: {
+                    outcome: "completed",
+                    toolCalls: 1,
+                    retries: 0,
+                    durationMs: 100,
+                    tokensUsed: 100,
+                    steps: [{ stepId: "step-1", status: "completed" }],
+                },
+            }),
+        ).rejects.toThrow("Agent handoff not found");
+        const metrics = await readFile(
+            path.join(instanceDir, "copilot-macros", "metrics.jsonl"),
+            "utf8",
+        );
+        expect(metrics).toContain('"operation":"agentHandoff"');
+        expect(metrics).toContain('"operation":"candidate"');
+        expect(metrics).not.toContain("Adapted the native tool arguments");
         await expect(
             manager.inspectMacro({ macroId: agentDraft.macroId }),
         ).resolves.toMatchObject({

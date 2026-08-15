@@ -27,6 +27,7 @@ import type {
     RunMacroRequest,
     RunMacroResponse,
     SearchMacrosRequest,
+    SubmitMacroCandidateRequest,
     TraceSummary,
     ValidateMacroRequest,
 } from "@typeagent/copilot-macros";
@@ -55,6 +56,7 @@ export type {
     RunMacroRequest,
     RunMacroResponse,
     SearchMacrosRequest,
+    SubmitMacroCandidateRequest,
     TraceSummary,
     ValidateMacroRequest,
 } from "@typeagent/copilot-macros";
@@ -213,6 +215,9 @@ export type AgentServerInvokeFunctions = {
     disableMacro: (request: DisableMacroRequest) => Promise<MacroVersionRef>;
     deleteMacro: (request: DeleteMacroRequest) => Promise<void>;
     runMacro: (request: RunMacroRequest) => Promise<RunMacroResponse>;
+    submitMacroCandidate: (
+        request: SubmitMacroCandidateRequest,
+    ) => Promise<MacroVersionRef>;
     cancelMacroRun: (runId: string) => Promise<void>;
     getMacroRun: (runId: string) => Promise<MacroRunRecord>;
 
