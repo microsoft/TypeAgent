@@ -6,8 +6,13 @@ import type { QueueSnapshot } from "@typeagent/dispatcher-types";
 import type { AppAgentManifest } from "@typeagent/agent-sdk";
 import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 import type {
+    ApproveMacroRequest,
     ArmRecordingRequest,
     ClaimRecordingRequest,
+    CopilotToolMacro,
+    CreateMacroFromTraceRequest,
+    DeleteMacroRequest,
+    DisableMacroRequest,
     FinalizeRecordingRequest,
     InspectMacroRequest,
     ListMacrosRequest,
@@ -23,11 +28,17 @@ import type {
     RunMacroResponse,
     SearchMacrosRequest,
     TraceSummary,
+    ValidateMacroRequest,
 } from "@typeagent/copilot-macros";
 
 export type {
+    ApproveMacroRequest,
     ArmRecordingRequest,
     ClaimRecordingRequest,
+    CopilotToolMacro,
+    CreateMacroFromTraceRequest,
+    DeleteMacroRequest,
+    DisableMacroRequest,
     FinalizeRecordingRequest,
     InspectMacroRequest,
     ListMacrosRequest,
@@ -45,6 +56,7 @@ export type {
     RunMacroResponse,
     SearchMacrosRequest,
     TraceSummary,
+    ValidateMacroRequest,
 } from "@typeagent/copilot-macros";
 
 export type DispatcherConnectOptions = {

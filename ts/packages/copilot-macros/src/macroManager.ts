@@ -3,11 +3,16 @@
 
 import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
+    ApproveMacroRequest,
     ArmRecordingRequest,
     ClaimRecordingRequest,
+    CopilotToolMacro,
+    CreateMacroFromTraceRequest,
+    DeleteMacroRequest,
+    DisableMacroRequest,
     FinalizeRecordingRequest,
     InspectMacroRequest,
     ListMacrosRequest,
@@ -21,6 +26,7 @@ import type {
     ReplayToolHost,
     RecordingState,
     RecordingToken,
+    SearchMacrosRequest,
     TraceSummary,
     RunMacroRequest,
     RunMacroResponse,
