@@ -93,26 +93,38 @@ export function findPackageDir(testFilePath, workspaceRoot, isPackageDir) {
 // Compare the two rounds and bucket every failure.
 //   confirmed      - failed round 1 and again on the isolated retry (real bug)
 //   flakyRecovered - failed round 1, passed on retry (flaky, not fatal)
-//   newOnRetry     - passed round 1, failed on retry (unstable, not fatal)
+//   newOnRetry     - passed round 1, failed on retry (unstable and fatal)
 //   unretriable    - round 1 failure with no owning package to rerun (fatal)
 // first entries carry a `package` field (string) or undefined when unretriable.
 // retryTrusted is false when the retry process itself crashed without emitting
 // results; in that case round 1 failures cannot be cleared as flaky.
-export function classifyRetryResults({ first, second, retryTrusted = true }) {
-    const secondKeys = new Set(second.map((failure) => failure.key));
+export function classifyRetryResults({
+    first,
+    second,
+    retryTrusted = true,
+    retryFailed = false,
+}) {
+    const secondByKey = new Map(
+        second.map((failure) => [failure.key, failure]),
+    );
+    const secondKeys = new Set(secondByKey.keys());
     const firstKeys = new Set(first.map((failure) => failure.key));
 
     const unretriable = first.filter(
         (failure) => failure.package === undefined,
     );
-    const retriable = first.filter(
-        (failure) => failure.package !== undefined,
-    );
+    const retriable = first.filter((failure) => failure.package !== undefined);
 
     let confirmed;
     let flakyRecovered;
     if (retryTrusted) {
-        confirmed = retriable.filter((failure) => secondKeys.has(failure.key));
+        confirmed = retriable
+            .filter((failure) => secondKeys.has(failure.key))
+            .map((failure) => ({
+                ...secondByKey.get(failure.key),
+                key: failure.key,
+                package: failure.package,
+            }));
         flakyRecovered = retriable.filter(
             (failure) => !secondKeys.has(failure.key),
         );
@@ -124,12 +136,20 @@ export function classifyRetryResults({ first, second, retryTrusted = true }) {
 
     const newOnRetry = second.filter((failure) => !firstKeys.has(failure.key));
 
-    return { confirmed, flakyRecovered, newOnRetry, unretriable };
+    return {
+        confirmed,
+        flakyRecovered,
+        newOnRetry,
+        unretriable,
+        retryFailed,
+    };
 }
 
 export function hasHardFailures(classification) {
     return (
+        classification.retryFailed ||
         classification.confirmed.length > 0 ||
+        classification.newOnRetry.length > 0 ||
         classification.unretriable.length > 0
     );
 }
@@ -178,34 +198,37 @@ export function buildSummaryLines(classification) {
         classification;
     const lines = [];
 
-    if (flakyRecovered.length > 0 || newOnRetry.length > 0) {
-        const flakyCount = flakyRecovered.length + newOnRetry.length;
+    if (flakyRecovered.length > 0) {
         lines.push(
-            `\n${RULE}\nFLAKY TESTS (${flakyCount}) - passed on retry, not failing the build\n${RULE}`,
+            `\n${RULE}\nFLAKY TESTS (${flakyRecovered.length}) - failed initially, passed on retry\n${RULE}`,
         );
         for (const failure of flakyRecovered) {
             lines.push(...formatFailure(failure));
         }
-        for (const failure of newOnRetry) {
-            lines.push(
-                `\nFLAKY ${normalizeTestFilePath(failure.testFilePath)}`,
-                `  ${failure.fullName}`,
-                indent(
-                    "Passed on the first run but failed when the package was retried.",
-                    4,
-                ),
-            );
-        }
         lines.push(`\n${RULE}`);
     }
 
-    if (confirmed.length > 0 || unretriable.length > 0) {
-        const failCount = confirmed.length + unretriable.length;
+    if (
+        confirmed.length > 0 ||
+        newOnRetry.length > 0 ||
+        unretriable.length > 0
+    ) {
+        const failCount =
+            confirmed.length + newOnRetry.length + unretriable.length;
         lines.push(
-            `\n${RULE}\nFAILED TESTS (${failCount}) - failed on retry\n${RULE}`,
+            `\n${RULE}\nBUILD-BLOCKING TEST FAILURES (${failCount})\n${RULE}`,
         );
         for (const failure of confirmed) {
             lines.push(...formatFailure(failure));
+        }
+        for (const failure of newOnRetry) {
+            lines.push(...formatFailure(failure));
+            lines.push(
+                indent(
+                    "(passed initially but failed when the package was retried)",
+                    2,
+                ),
+            );
         }
         for (const failure of unretriable) {
             lines.push(...formatFailure(failure));
@@ -217,6 +240,11 @@ export function buildSummaryLines(classification) {
             );
         }
         lines.push(`\n${RULE}`);
+    }
+    if (classification.retryFailed) {
+        lines.push(
+            "\nThe retry command exited unsuccessfully; the build remains failed.",
+        );
     }
 
     return lines;
@@ -233,10 +261,7 @@ function githubEscape(value) {
 // annotations in the PR checks UI (tracked, not silently masked).
 export function buildGithubAnnotations(classification) {
     const annotations = [];
-    for (const failure of [
-        ...classification.flakyRecovered,
-        ...classification.newOnRetry,
-    ]) {
+    for (const failure of classification.flakyRecovered) {
         annotations.push(
             `::warning title=Flaky test::${githubEscape(
                 `${failure.fullName} (${normalizeTestFilePath(failure.testFilePath)}) passed only after a retry`,
@@ -245,12 +270,18 @@ export function buildGithubAnnotations(classification) {
     }
     for (const failure of [
         ...classification.confirmed,
+        ...classification.newOnRetry,
         ...classification.unretriable,
     ]) {
         annotations.push(
             `::error title=Test failed::${githubEscape(
                 `${failure.fullName} (${normalizeTestFilePath(failure.testFilePath)})`,
             )}`,
+        );
+    }
+    if (classification.retryFailed) {
+        annotations.push(
+            "::error title=Test retry failed::The retry command exited unsuccessfully.",
         );
     }
     return annotations;
@@ -264,7 +295,8 @@ export function buildStepSummaryMarkdown(classification) {
         confirmed.length === 0 &&
         unretriable.length === 0 &&
         flakyRecovered.length === 0 &&
-        newOnRetry.length === 0
+        newOnRetry.length === 0 &&
+        !classification.retryFailed
     ) {
         return "";
     }
@@ -280,7 +312,10 @@ export function buildStepSummaryMarkdown(classification) {
     addRows(confirmed, "❌ Failed on retry");
     addRows(unretriable, "❌ Failed (no retry)");
     addRows(flakyRecovered, "⚠️ Flaky (recovered)");
-    addRows(newOnRetry, "⚠️ Flaky (new on retry)");
+    addRows(newOnRetry, "❌ Failed only on retry");
+    if (classification.retryFailed) {
+        rows.push("| ❌ Retry command failed | - | See the test log |");
+    }
 
     return [
         "### Test retry summary",

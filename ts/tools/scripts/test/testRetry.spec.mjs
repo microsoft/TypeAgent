@@ -113,10 +113,19 @@ test("classify: a failure that fails again on retry is confirmed and fatal", () 
         withKey("/repo/ts/packages/a/test/x.spec.js", "broken", "a"),
     ];
     const second = [
-        { ...failure("/repo/ts/packages/a/test/x.spec.js", "broken") },
+        {
+            ...failure(
+                "/repo/ts/packages/a/test/x.spec.js",
+                "broken",
+                "retry failure",
+            ),
+        },
     ].map((f) => ({ ...f, key: failureKey(f, cwd) }));
     const classification = classifyRetryResults({ first, second });
     assert.equal(classification.confirmed.length, 1);
+    assert.deepEqual(classification.confirmed[0].failureMessages, [
+        "retry failure",
+    ]);
     assert.equal(classification.flakyRecovered.length, 0);
     assert.equal(hasHardFailures(classification), true);
 });
@@ -128,7 +137,7 @@ test("classify: a failure with no owning package is unretriable and fatal", () =
     assert.equal(hasHardFailures(classification), true);
 });
 
-test("classify: a test that only fails on retry is reported flaky, not fatal", () => {
+test("classify: a test that only fails on retry is fatal", () => {
     const first = [
         withKey("/repo/ts/packages/a/test/x.spec.js", "broken", "a"),
     ];
@@ -144,6 +153,7 @@ test("classify: a test that only fails on retry is reported flaky, not fatal", (
     assert.equal(classification.confirmed.length, 1);
     assert.equal(classification.newOnRetry.length, 1);
     assert.equal(classification.newOnRetry[0].fullName, "was passing");
+    assert.equal(hasHardFailures(classification), true);
 });
 
 test("classify: an untrusted (crashed) retry keeps round-1 failures as confirmed", () => {
@@ -160,6 +170,17 @@ test("classify: an untrusted (crashed) retry keeps round-1 failures as confirmed
     assert.equal(hasHardFailures(classification), true);
 });
 
+test("classify: a nonzero retry remains fatal even when failures were captured", () => {
+    const first = [withKey("/repo/ts/packages/a/test/x.spec.js", "flaky", "a")];
+    const classification = classifyRetryResults({
+        first,
+        second: [],
+        retryFailed: true,
+    });
+    assert.equal(classification.flakyRecovered.length, 1);
+    assert.equal(hasHardFailures(classification), true);
+});
+
 test("buildSummaryLines separates flaky from failed sections", () => {
     const classification = {
         confirmed: [
@@ -173,9 +194,36 @@ test("buildSummaryLines separates flaky from failed sections", () => {
     };
     const text = buildSummaryLines(classification).join("\n");
     assert.match(text, /FLAKY TESTS \(1\)/);
-    assert.match(text, /FAILED TESTS \(1\)/);
+    assert.match(text, /BUILD-BLOCKING TEST FAILURES \(1\)/);
     assert.match(text, /broken/);
     assert.match(text, /flaky/);
+});
+
+test("buildSummaryLines lists each flaky and confirmed test by name", () => {
+    const classification = {
+        confirmed: [
+            withKey(
+                "/repo/ts/packages/a/test/x.spec.js",
+                "confirmed failure",
+                "a",
+            ),
+        ],
+        flakyRecovered: [
+            withKey(
+                "/repo/ts/packages/b/test/y.spec.js",
+                "recovered flaky test",
+                "b",
+            ),
+        ],
+        newOnRetry: [],
+        unretriable: [],
+        retryFailed: true,
+    };
+    const text = buildSummaryLines(classification).join("\n");
+    assert.match(
+        text,
+        /FLAKY TESTS[\s\S]*recovered flaky test[\s\S]*BUILD-BLOCKING TEST FAILURES[\s\S]*confirmed failure/,
+    );
 });
 
 test("buildGithubAnnotations emits warnings for flaky and errors for failed", () => {
@@ -192,6 +240,27 @@ test("buildGithubAnnotations emits warnings for flaky and errors for failed", ()
     const annotations = buildGithubAnnotations(classification);
     assert.ok(annotations.some((line) => line.startsWith("::warning ")));
     assert.ok(annotations.some((line) => line.startsWith("::error ")));
+});
+
+test("buildGithubAnnotations reports new-on-retry failures as errors", () => {
+    const classification = {
+        confirmed: [],
+        flakyRecovered: [],
+        newOnRetry: [
+            withKey("/repo/ts/packages/a/test/x.spec.js", "new failure", "a"),
+        ],
+        unretriable: [],
+        retryFailed: true,
+    };
+    const annotations = buildGithubAnnotations(classification);
+    assert.ok(
+        annotations.some(
+            (line) =>
+                line.startsWith("::error title=Test failed::") &&
+                line.includes("new failure"),
+        ),
+    );
+    assert.ok(annotations.every((line) => !line.includes("passed only after")));
 });
 
 test("buildStepSummaryMarkdown is empty when there is nothing to report", () => {

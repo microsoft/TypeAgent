@@ -11,7 +11,7 @@
 //  3. Classify each round-1 failure as flaky (passed on retry) or confirmed
 //     (failed again), print a summary, and emit GitHub annotations / a step
 //     summary so flaky tests are tracked instead of silently masked (option
-//     #3). The build only fails on confirmed failures.
+//     #3). The build fails unless the retry command completes successfully.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -87,6 +87,7 @@ function handleFailures(firstFailures) {
 
     let second = [];
     let retryTrusted = true;
+    let retryFailed = false;
     if (packages.length > 0) {
         const retriableCount = annotated.filter(
             (failure) => failure.package !== undefined,
@@ -112,6 +113,10 @@ function handleFailures(firstFailures) {
         );
 
         second = dedupeFailures(readFailures(secondDirectory), workspaceRoot);
+        retryFailed =
+            retryResult.error !== undefined ||
+            retryResult.signal !== null ||
+            (retryResult.status ?? 1) !== 0;
 
         // If the retry itself crashed without producing any results, we cannot
         // trust an empty second round as "everything recovered".
@@ -126,6 +131,7 @@ function handleFailures(firstFailures) {
         first: annotated,
         second,
         retryTrusted,
+        retryFailed,
     });
 
     for (const line of buildSummaryLines(classification)) {

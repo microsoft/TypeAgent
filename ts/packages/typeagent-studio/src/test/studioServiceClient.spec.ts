@@ -34,13 +34,16 @@ const STUB_INFO: StudioInfo = {
  * handlers, so the client is exercised over an actual socket. Returns the bound
  * `ws://` endpoint and a close fn.
  */
-async function startStubServer(): Promise<{
+async function startStubServer(onPing?: () => void): Promise<{
     endpoint: string;
     close: () => Promise<void>;
 }> {
     const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
     await new Promise<void>((resolve) => server.once("listening", resolve));
     server.on("connection", (socket) => {
+        if (onPing !== undefined) {
+            socket.on("ping", onPing);
+        }
         let push: (e: StudioEvent) => void = () => {};
         const handlers = stubInvokeHandlers({
             getStudioInfo: async () => STUB_INFO,
@@ -71,6 +74,49 @@ async function startStubServer(): Promise<{
                 for (const c of server.clients) c.terminate();
                 server.close(() => resolve());
             }),
+    };
+}
+
+function createSignalCounter(
+    target: number,
+    timeoutMs: number,
+    timeoutMessage: string,
+): {
+    promise: Promise<void>;
+    signal: () => void;
+    reject: (error: Error) => void;
+} {
+    let count = 0;
+    let resolvePromise!: () => void;
+    let rejectPromise!: (error: Error) => void;
+    let settled = false;
+    const promise = new Promise<void>((resolve, reject) => {
+        resolvePromise = resolve;
+        rejectPromise = reject;
+    });
+    const timer = setTimeout(() => {
+        settled = true;
+        rejectPromise(new Error(timeoutMessage));
+    }, timeoutMs);
+    timer.unref?.();
+
+    const settle = (complete: () => void) => {
+        if (settled) {
+            return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        complete();
+    };
+    return {
+        promise,
+        signal: () => {
+            count++;
+            if (count >= target) {
+                settle(resolvePromise);
+            }
+        },
+        reject: (error) => settle(() => rejectPromise(error)),
     };
 }
 
@@ -170,7 +216,12 @@ test("StudioServiceClient presents the capability token as a Bearer header", asy
 });
 
 test("heartbeat keeps a healthy connection alive (no false positives)", async () => {
-    const stub = await startStubServer();
+    const heartbeatSweeps = createSignalCounter(
+        3,
+        3000,
+        "healthy connection did not complete three heartbeat sweeps",
+    );
+    const stub = await startStubServer(heartbeatSweeps.signal);
     let closed = false;
     // The ws server auto-pongs, so the watchdog must NOT terminate a healthy
     // socket. This asserts a negative (no termination), so the interval must
@@ -184,11 +235,14 @@ test("heartbeat keeps a healthy connection alive (no false positives)", async ()
         heartbeatMs: 250,
         onClose: () => {
             closed = true;
+            heartbeatSweeps.reject(
+                new Error("healthy connection closed during heartbeat sweeps"),
+            );
         },
     });
     assert.ok(client);
     try {
-        await new Promise((r) => setTimeout(r, 1250)); // ~5 beats
+        await heartbeatSweeps.promise;
         assert.equal(closed, false, "healthy connection must stay open");
         const info = await client!.getStudioInfo();
         assert.equal(info.repoRootInfo.repoRoot, "/repo/ts");

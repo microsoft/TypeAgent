@@ -57,6 +57,38 @@ function waitForClose(ws: WebSocket, timeoutMs: number): Promise<void> {
     });
 }
 
+function waitForPings(
+    ws: WebSocket,
+    target: number,
+    timeoutMs: number,
+): Promise<void> {
+    return new Promise((resolve, reject) => {
+        let count = 0;
+        const cleanup = () => {
+            clearTimeout(timer);
+            ws.off("ping", onPing);
+            ws.off("close", onClose);
+        };
+        const onPing = () => {
+            count++;
+            if (count >= target) {
+                cleanup();
+                resolve();
+            }
+        };
+        const onClose = () => {
+            cleanup();
+            reject(new Error("responsive client closed during heartbeat test"));
+        };
+        const timer = setTimeout(() => {
+            cleanup();
+            reject(new Error("heartbeat pings did not arrive in time"));
+        }, timeoutMs);
+        ws.on("ping", onPing);
+        ws.once("close", onClose);
+    });
+}
+
 function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -114,7 +146,7 @@ describe("attachHeartbeat", () => {
         const client = connect(url); // default autoPong:true
         await waitForOpen(client);
 
-        await delay(HEALTHY_INTERVAL_MS * 4);
+        await waitForPings(client, 3, HEALTHY_INTERVAL_MS * 10);
         expect(client.readyState).toBe(WebSocket.OPEN);
         expect(wss.clients.size).toBe(1);
     });

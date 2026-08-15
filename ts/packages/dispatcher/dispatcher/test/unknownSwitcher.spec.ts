@@ -113,53 +113,44 @@ describe("selectFromPartitions", () => {
     });
 
     test("all partitions run in parallel", async () => {
-        const startTimes: number[] = [];
-        const delayMs = 200;
-        const makeTimedTranslator = (
+        const started: string[] = [];
+        const pending: Array<() => void> = [];
+        const makeDeferredTranslator = (
+            name: string,
             result: Result<AssistantSelection>,
-            delay: number,
         ) => ({
             translate: (_request: string) => {
-                startTimes.push(Date.now());
-                return new Promise<Result<AssistantSelection>>((resolve) =>
-                    setTimeout(() => resolve(result), delay),
-                );
+                started.push(name);
+                return new Promise<Result<AssistantSelection>>((resolve) => {
+                    pending.push(() => resolve(result));
+                });
             },
         });
 
         const partitions = [
             {
                 names: ["a"],
-                translator: makeTimedTranslator(unknownResult, delayMs),
+                translator: makeDeferredTranslator("a", unknownResult),
             },
             {
                 names: ["b"],
-                translator: makeTimedTranslator(unknownResult, delayMs),
+                translator: makeDeferredTranslator("b", unknownResult),
             },
             {
                 names: ["c"],
-                translator: makeTimedTranslator(unknownResult, delayMs),
+                translator: makeDeferredTranslator("c", unknownResult),
             },
         ];
 
-        const before = Date.now();
-        await selectFromPartitions(partitions, "test");
-        const elapsed = Date.now() - before;
+        const selection = selectFromPartitions(partitions, "test");
 
-        // selectFromPartitions dispatches every translator synchronously before
-        // awaiting any, so parallel start times cluster near 0, while a
-        // sequential rewrite would space them ~delayMs apart (spread ~2*delayMs).
-        // The threshold sits in that gap with wide margin for CI scheduling
-        // jitter: a single GC pause between the synchronous dispatch calls used
-        // to break the old 10ms bound.
-        expect(startTimes).toHaveLength(3);
-        const spread = Math.max(...startTimes) - Math.min(...startTimes);
-        expect(spread).toBeLessThan(delayMs);
-
-        // Parallel total is ~delayMs; a sequential rewrite would take ~3*delayMs.
-        // The 2x bound leaves ~delayMs of headroom for late timers under CI load
-        // while still catching any accidental sequential execution.
-        expect(elapsed).toBeLessThan(delayMs * 2);
+        // Every translator must be invoked before any result is allowed to
+        // resolve. A sequential implementation would only have started "a".
+        expect(started).toEqual(["a", "b", "c"]);
+        for (const resolve of pending) {
+            resolve();
+        }
+        await selection;
     });
 
     test("error from a partition is propagated in order", async () => {
