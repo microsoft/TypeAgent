@@ -3879,12 +3879,18 @@ importers:
       '@github/copilot-sdk':
         specifier: 1.0.5
         version: 1.0.5
+      '@opentelemetry/api':
+        specifier: 1.9.0
+        version: 1.9.0
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../telemetry
       async:
         specifier: ^3.2.5
         version: 3.2.6

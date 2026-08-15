@@ -3,10 +3,19 @@
 
 import { jest } from "@jest/globals";
 
-const mockProcessCommandNoLock = jest.fn();
-jest.unstable_mockModule("../src/command/command.js", () => ({
-    processCommandNoLock: mockProcessCommandNoLock,
-}));
+const mockShowLogStatus = jest.fn();
+const mockSetLogProfile = jest.fn();
+const mockSetLogDebugCopy = jest.fn();
+const mockClearLogSettings = jest.fn();
+jest.unstable_mockModule(
+    "../src/context/system/handlers/logCommandHandler.js",
+    () => ({
+        showLogStatus: mockShowLogStatus,
+        setLogProfile: mockSetLogProfile,
+        setLogDebugCopy: mockSetLogDebugCopy,
+        clearLogSettings: mockClearLogSettings,
+    }),
+);
 
 const { executeLogAction } = await import(
     "../src/context/system/action/logActionHandler.js"
@@ -15,42 +24,47 @@ const { executeLogAction } = await import(
 const agentContext = { id: "agent-context" } as any;
 
 async function run(action: any) {
-    mockProcessCommandNoLock.mockClear();
+    jest.clearAllMocks();
     await executeLogAction({ schemaName: "system.log", ...action }, {
         sessionContext: { agentContext },
     } as any);
 }
 
-describe("executeLogAction delegates to @log commands", () => {
+describe("executeLogAction delegates to shared log controls", () => {
     it.each([
-        [{ actionName: "showLogStatus" }, "@log status"],
+        [{ actionName: "showLogStatus" }, mockShowLogStatus, []],
         [
             {
                 actionName: "setLogProfile",
                 parameters: { profile: "diagnostic" },
             },
-            "@log profile diagnostic",
+            mockSetLogProfile,
+            ["diagnostic"],
         ],
         [
             {
                 actionName: "setLogDebugCopy",
                 parameters: { enabled: true },
             },
-            "@log debug-copy on",
+            mockSetLogDebugCopy,
+            ["on"],
         ],
         [
             {
                 actionName: "setLogDebugCopy",
                 parameters: { enabled: false },
             },
-            "@log debug-copy off",
+            mockSetLogDebugCopy,
+            ["off"],
         ],
-        [{ actionName: "clearLogSettings" }, "@log clear"],
-    ])("maps %j to %s", async (action, command) => {
+        [{ actionName: "clearLogSettings" }, mockClearLogSettings, []],
+    ])("maps %j to the shared control", async (action, handler, args) => {
         await run(action);
-        expect(mockProcessCommandNoLock).toHaveBeenCalledWith(
-            command,
-            agentContext,
+        expect(handler).toHaveBeenCalledWith(
+            ...args,
+            expect.objectContaining({
+                sessionContext: { agentContext },
+            }),
         );
     });
 });

@@ -19,6 +19,9 @@ const SAFE_STRING_FIELDS = [
     "kind",
     "strategy",
     "classifier",
+    "provider",
+    "model",
+    "operation",
     "state",
     "status",
     "reason",
@@ -39,6 +42,10 @@ const SAFE_NUMBER_FIELDS = [
     "count",
     "attachmentCount",
     "actionIndex",
+    "inputTokens",
+    "outputTokens",
+    "totalTokens",
+    "cachedTokens",
 ] as const;
 
 const SAFE_BOOLEAN_FIELDS = [
@@ -47,6 +54,7 @@ const SAFE_BOOLEAN_FIELDS = [
     "developerMode",
     "includeContext",
     "cancelled",
+    "streaming",
 ] as const;
 
 const SAFE_STRING_ARRAY_FIELDS = [

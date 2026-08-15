@@ -533,9 +533,12 @@ export class RequestQueue {
         severity: "info" | "warning" | "error" = "info",
     ): void {
         try {
-            debug(name, data);
-            debugInternal(name, data);
-            this.logger?.logEvent(name, data, severity);
+            if (this.logger !== undefined) {
+                this.logger.logEvent(name, data, severity);
+            } else {
+                debug(name, data);
+                debugInternal(name, data);
+            }
         } catch {
             // best-effort telemetry
         }

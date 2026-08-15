@@ -1234,6 +1234,7 @@ export async function initializeCommandHandlerContext(
                     ? getSessionName(context.session.sessionDirPath)
                     : undefined,
             activationId,
+            requestId: () => context.currentRequestId?.requestId,
         });
 
         const cacheDir = persistDir ? ensureCacheDir(persistDir) : undefined;

@@ -64,7 +64,10 @@ import {
     getPowerShellCapabilityDisposition,
     getPowerShellCapabilityOutcome,
 } from "../../../reasoning/powershellCapabilityOutcome.js";
-import { logActionsSelected } from "../../../otel/structuredEvents.js";
+import {
+    logTranslationCompleted,
+    logTranslationStarted,
+} from "../../../otel/structuredEvents.js";
 
 type ReasoningFallbackContext = {
     failedSchema: string;
@@ -808,6 +811,11 @@ export class RequestCommandHandler implements CommandHandler {
                 addRequestToMemory(systemContext, request);
             }
             let interpretResult: InterpretResult;
+            const requestId = getRequestId(systemContext).requestId;
+            logTranslationStarted(systemContext.logger, {
+                requestId,
+                schemaNames: activeSchemaScope.schemaNames,
+            });
             try {
                 interpretResult = await interpretRequest(
                     context,
@@ -829,24 +837,23 @@ export class RequestCommandHandler implements CommandHandler {
                         DispatcherName,
                     );
                 }
-                systemContext?.logger?.logEvent(
-                    "request:exception",
-                    {
-                        request,
-                        message: e.message,
-                        stack: e.stack,
-                    },
-                    "error",
-                );
+                logTranslationCompleted(systemContext.logger, {
+                    requestId,
+                    strategy: "translate",
+                    success: false,
+                    actions: [],
+                });
+                debugRequest(`Request translation failed: ${e.message}`);
                 throw e;
             }
 
             const { requestAction, tokenUsage } = interpretResult;
-            logActionsSelected(systemContext.logger, {
-                requestId: getRequestId(systemContext).requestId,
+            logTranslationCompleted(systemContext.logger, {
+                requestId,
                 strategy: interpretResult.fromUser
                     ? "user"
                     : interpretResult.fromCache || "translate",
+                success: true,
                 actions: requestAction.actions,
             });
 

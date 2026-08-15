@@ -497,6 +497,7 @@ export async function processCommand(
     if (sessionId !== undefined) rootAttributes.sessionId = sessionId;
     if (context.activationId !== undefined)
         rootAttributes.activationId = context.activationId;
+    rootAttributes.requestId = requestId.requestId;
     if (context.traceId !== undefined) rootAttributes.traceId = context.traceId;
     // wrapRootRequestSpan opens `typeagent.request` and applies the
     // correlation attributes; the callback body preserves the original

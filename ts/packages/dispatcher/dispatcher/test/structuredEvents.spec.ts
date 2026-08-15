@@ -6,9 +6,10 @@ import {
     DISPATCHER_STRUCTURED_EVENTS,
     logActionCompleted,
     logActionStarted,
-    logActionsSelected,
     logRequestCompleted,
     logRequestReceived,
+    logTranslationCompleted,
+    logTranslationStarted,
 } from "../src/otel/structuredEvents.js";
 
 function createCapture(): {
@@ -44,9 +45,14 @@ describe("dispatcher structured lifecycle events", () => {
             kind: "request",
             attachmentCount: 1,
         });
-        logActionsSelected(logger, {
+        logTranslationStarted(logger, {
+            requestId: "request-1",
+            schemaNames: ["calendar"],
+        });
+        logTranslationCompleted(logger, {
             requestId: "request-1",
             strategy: "grammar",
+            success: true,
             actions: [
                 {
                     action: {
@@ -81,23 +87,31 @@ describe("dispatcher structured lifecycle events", () => {
 
         expect(events.map(({ name }) => name)).toEqual([
             DISPATCHER_STRUCTURED_EVENTS.requestReceived,
-            DISPATCHER_STRUCTURED_EVENTS.actionsSelected,
+            DISPATCHER_STRUCTURED_EVENTS.translationStarted,
+            DISPATCHER_STRUCTURED_EVENTS.translationCompleted,
             DISPATCHER_STRUCTURED_EVENTS.actionStarted,
             DISPATCHER_STRUCTURED_EVENTS.actionCompleted,
             DISPATCHER_STRUCTURED_EVENTS.requestCompleted,
         ]);
         expect(events[1]?.data).toEqual({
             requestId: "request-1",
+            schemaNames: ["calendar"],
+            count: 1,
+        });
+        expect(events[2]?.data).toEqual({
+            requestId: "request-1",
             strategy: "grammar",
+            success: true,
+            status: "succeeded",
             schemaNames: ["calendar"],
             actionNames: ["calendar.addEvent"],
             count: 1,
         });
-        expect(events[3]).toMatchObject({
+        expect(events[4]).toMatchObject({
             severity: "info",
             data: { status: "succeeded", success: true },
         });
-        expect(events[4]).toMatchObject({
+        expect(events[5]).toMatchObject({
             severity: "info",
             data: {
                 status: "handled",

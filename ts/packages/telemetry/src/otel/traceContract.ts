@@ -66,6 +66,7 @@ export const TYPEAGENT_SPAN_ATTRIBUTES = Object.freeze({
     GEN_AI_REQUEST_MODEL: "gen_ai.request.model",
     SESSION_ID: "typeagent.session.id",
     ACTIVATION_ID: "typeagent.activation.id",
+    REQUEST_ID: "typeagent.request.id",
     TRACE_ID: "typeagent.trace.id",
 } as const);
 
@@ -92,6 +93,8 @@ export interface TypeAgentSpanAttributes {
     readonly sessionId?: string;
     /** `typeagent.activation.id` - dispatcher activation id (not per request). */
     readonly activationId?: string;
+    /** `typeagent.request.id` - dispatcher request identifier. */
+    readonly requestId?: string;
     /**
      * `typeagent.trace.id` - the caller's pre-OTel trace id (preserved for
      * log correlation). OTel owns the canonical trace id.
@@ -115,7 +118,13 @@ export function setActiveTypeAgentSpanAttributes(
     activeContext: Context,
     attributes: TypeAgentSpanAttributes,
 ): Context {
-    return activeContext.setValue(ACTIVE_TYPEAGENT_ATTRIBUTES, attributes);
+    const current = activeContext.getValue(ACTIVE_TYPEAGENT_ATTRIBUTES) as
+        | TypeAgentSpanAttributes
+        | undefined;
+    return activeContext.setValue(ACTIVE_TYPEAGENT_ATTRIBUTES, {
+        ...current,
+        ...attributes,
+    });
 }
 
 const ATTRIBUTE_KEY_FOR_FIELD: {
@@ -127,6 +136,7 @@ const ATTRIBUTE_KEY_FOR_FIELD: {
     genAiRequestModel: TYPEAGENT_SPAN_ATTRIBUTES.GEN_AI_REQUEST_MODEL,
     sessionId: TYPEAGENT_SPAN_ATTRIBUTES.SESSION_ID,
     activationId: TYPEAGENT_SPAN_ATTRIBUTES.ACTIVATION_ID,
+    requestId: TYPEAGENT_SPAN_ATTRIBUTES.REQUEST_ID,
     traceId: TYPEAGENT_SPAN_ATTRIBUTES.TRACE_ID,
 };
 

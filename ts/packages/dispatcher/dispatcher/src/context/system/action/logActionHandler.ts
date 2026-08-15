@@ -1,37 +1,37 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
+import type { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
 
-import { processCommandNoLock } from "../../../command/command.js";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { LogAction } from "../schema/logActionSchema.js";
+import type { CommandHandlerContext } from "../../commandHandlerContext.js";
+import {
+    clearLogSettings,
+    setLogDebugCopy,
+    setLogProfile,
+    showLogStatus,
+} from "../handlers/logCommandHandler.js";
+import type { LogAction } from "../schema/logActionSchema.js";
 
-// Keep @log as the canonical implementation so command and natural-language
-// behavior cannot drift.
 export async function executeLogAction(
     action: TypeAgentAction<LogAction>,
     context: ActionContext<CommandHandlerContext>,
 ) {
-    let command: string;
     switch (action.actionName) {
         case "showLogStatus":
-            command = "@log status";
-            break;
+            showLogStatus(context);
+            return;
         case "setLogProfile":
-            command = `@log profile ${action.parameters.profile}`;
-            break;
+            setLogProfile(action.parameters.profile, context);
+            return;
         case "setLogDebugCopy":
-            command = `@log debug-copy ${action.parameters.enabled ? "on" : "off"}`;
-            break;
+            setLogDebugCopy(action.parameters.enabled ? "on" : "off", context);
+            return;
         case "clearLogSettings":
-            command = "@log clear";
-            break;
+            clearLogSettings(context);
+            return;
         default:
             throw new Error(
                 `Invalid log action: ${(action as TypeAgentAction).actionName}`,
             );
     }
-
-    await processCommandNoLock(command, context.sessionContext.agentContext);
 }

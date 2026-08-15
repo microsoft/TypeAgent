@@ -61,6 +61,10 @@ describe("dispatcher structured request lifecycle", () => {
         expect(lifecycle[0]?.event.requestId).toBe(
             lifecycle[1]?.event.requestId,
         );
+        expect(
+            captured.find((event) => event.eventName === "dispatcher:command")
+                ?.event.requestId,
+        ).toBe(lifecycle[0]?.event.requestId);
         expect(JSON.stringify(lifecycle)).not.toContain("@help");
     });
 });

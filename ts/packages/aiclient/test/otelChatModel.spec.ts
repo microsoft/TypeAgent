@@ -1,0 +1,144 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import {
+    createInMemorySpanManager,
+    type InMemorySpanManager,
+} from "@typeagent/telemetry/testing/inMemorySpanManager";
+import { error, success } from "typechat";
+import type { ChatModelWithStreaming } from "../src/models.js";
+import { instrumentChatModel } from "../src/otelChatModel.js";
+
+function createModel(): ChatModelWithStreaming {
+    return {
+        completionSettings: {},
+        async complete(_prompt, usageCallback) {
+            usageCallback?.({
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
+            });
+            return success("done");
+        },
+        async completeStream(_prompt, usageCallback) {
+            async function* stream() {
+                yield "one";
+                usageCallback?.({
+                    prompt_tokens: 4,
+                    completion_tokens: 2,
+                    total_tokens: 6,
+                });
+                yield "two";
+            }
+            return success(stream());
+        },
+    };
+}
+
+describe("instrumentChatModel", () => {
+    let spans: InMemorySpanManager;
+
+    beforeEach(() => {
+        spans = createInMemorySpanManager();
+    });
+
+    afterEach(async () => {
+        await spans.shutdown();
+    });
+
+    it("records successful complete calls as typeagent.llm spans", async () => {
+        const model = instrumentChatModel(createModel(), {
+            provider: "test-provider",
+            model: "test-model",
+        });
+
+        await expect(model.complete("private prompt")).resolves.toEqual(
+            success("done"),
+        );
+
+        const span = spans.findSpansByName("typeagent.llm")[0];
+        expect(span?.attributes).toMatchObject({
+            "gen_ai.system": "test-provider",
+            "gen_ai.request.model": "test-model",
+        });
+        expect(span?.status.code).toBe(0);
+    });
+
+    it("keeps streaming spans open until the iterator completes", async () => {
+        const model = instrumentChatModel(createModel(), {
+            provider: "test-provider",
+        });
+
+        const result = await model.completeStream("private prompt");
+        expect(result.success).toBe(true);
+        expect(spans.findSpansByName("typeagent.llm")).toHaveLength(0);
+        if (!result.success) {
+            return;
+        }
+
+        const chunks: string[] = [];
+        for await (const chunk of result.data) {
+            chunks.push(chunk);
+        }
+
+        expect(chunks).toEqual(["one", "two"]);
+        expect(spans.findSpansByName("typeagent.llm")).toHaveLength(1);
+    });
+
+    it("marks returned model failures as failed spans", async () => {
+        const base = createModel();
+        base.complete = async () => error("private provider error");
+        const model = instrumentChatModel(base, {
+            provider: "test-provider",
+        });
+
+        const result = await model.complete("private prompt");
+
+        expect(result.success).toBe(false);
+        expect(spans.findSpansByName("typeagent.llm")[0]?.status.code).toBe(2);
+    });
+
+    it("supports callers that capture and replace complete", async () => {
+        const model = instrumentChatModel(createModel(), {
+            provider: "test-provider",
+        });
+        const instrumentedComplete = model.complete;
+        model.complete = async (...args) => instrumentedComplete(...args);
+
+        await expect(model.complete("private prompt")).resolves.toEqual(
+            success("done"),
+        );
+
+        expect(spans.findSpansByName("typeagent.llm")).toHaveLength(1);
+    });
+
+    it("marks streams that end after abort as cancelled", async () => {
+        const model = instrumentChatModel(createModel(), {
+            provider: "test-provider",
+        });
+        const controller = new AbortController();
+        const result = await model.completeStream(
+            "private prompt",
+            undefined,
+            undefined,
+            undefined,
+            controller.signal,
+        );
+        expect(result.success).toBe(true);
+        if (!result.success) {
+            return;
+        }
+
+        controller.abort();
+        for await (const _chunk of result.data) {
+            // Consume the provider stream so its normal completion is observed.
+        }
+
+        expect(spans.findSpansByName("typeagent.llm")[0]?.status).toMatchObject(
+            {
+                code: 2,
+                message: "cancelled",
+            },
+        );
+    });
+});

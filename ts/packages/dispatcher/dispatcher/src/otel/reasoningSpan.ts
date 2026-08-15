@@ -14,6 +14,10 @@ import type { ActionContext } from "@typeagent/agent-sdk";
 import { otel } from "@typeagent/telemetry";
 import type { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { getSessionName } from "../context/session.js";
+import {
+    logReasoningCompleted,
+    logReasoningStarted,
+} from "./structuredEvents.js";
 
 export const REASONING_SPAN_EVENTS = Object.freeze({
     TOOL_CALL: "reasoning.tool_call",
@@ -131,9 +135,56 @@ export function runInReasoningSpan<T>(
         attributes.traceId = systemContext.traceId;
     }
 
+    const requestId = systemContext.currentRequestId?.requestId;
+    const eventModel = {
+        ...(modelAttributes?.genAiSystem === undefined
+            ? {}
+            : { provider: modelAttributes.genAiSystem }),
+        ...(modelAttributes?.genAiRequestModel === undefined
+            ? {}
+            : { model: modelAttributes.genAiRequestModel }),
+    };
     return wrapReasoningSpan(
         attributes,
-        body,
+        async (span) => {
+            const startedAt = Date.now();
+            if (requestId !== undefined) {
+                logReasoningStarted(systemContext.logger, {
+                    requestId,
+                    ...eventModel,
+                });
+            }
+            try {
+                const result = await body(span);
+                if (requestId !== undefined) {
+                    logReasoningCompleted(systemContext.logger, {
+                        requestId,
+                        ...eventModel,
+                        success: true,
+                        cancelled: false,
+                        elapsedMs: Date.now() - startedAt,
+                    });
+                }
+                return result;
+            } catch (error) {
+                const cancelled =
+                    cancellationSignal?.aborted === true ||
+                    context.abortSignal?.aborted === true ||
+                    (error !== null &&
+                        typeof error === "object" &&
+                        (error as { name?: unknown }).name === "AbortError");
+                if (requestId !== undefined) {
+                    logReasoningCompleted(systemContext.logger, {
+                        requestId,
+                        ...eventModel,
+                        success: false,
+                        cancelled,
+                        elapsedMs: Date.now() - startedAt,
+                    });
+                }
+                throw error;
+            }
+        },
         (error) =>
             cancellationSignal?.aborted === true ||
             context.abortSignal?.aborted === true ||

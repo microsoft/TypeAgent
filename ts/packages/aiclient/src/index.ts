@@ -3,6 +3,10 @@
 
 export * from "./common.js";
 export * from "./models.js";
+export {
+    instrumentChatModel,
+    type ChatModelTelemetryInfo,
+} from "./otelChatModel.js";
 export * as openai from "./openai.js";
 export * as bing from "./bing.js";
 export * from "./restClient.js";

@@ -42,6 +42,7 @@ describe("trace contract span-name and attribute-key constants", () => {
             GEN_AI_REQUEST_MODEL: "gen_ai.request.model",
             SESSION_ID: "typeagent.session.id",
             ACTIVATION_ID: "typeagent.activation.id",
+            REQUEST_ID: "typeagent.request.id",
             TRACE_ID: "typeagent.trace.id",
         });
         expect(Object.isFrozen(TYPEAGENT_SPAN_ATTRIBUTES)).toBe(true);
