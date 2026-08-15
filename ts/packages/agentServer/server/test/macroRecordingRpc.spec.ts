@@ -65,7 +65,16 @@ describe("macro recording RPC", () => {
                 response: "Done",
                 startedAt: "2026-08-14T10:00:00.000Z",
                 completedAt: "2026-08-14T10:00:01.000Z",
-                toolCalls: [],
+                toolCalls: [
+                    {
+                        toolCallId: "call-1",
+                        name: "read",
+                        mcpServerName: "typeagent-workspace",
+                        arguments: { path: "package.json" },
+                        result: { content: "{}" },
+                        status: "completed",
+                    },
+                ],
             },
         });
 
