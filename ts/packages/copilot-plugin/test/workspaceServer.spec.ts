@@ -36,6 +36,16 @@ describe("workspace MCP primitives", () => {
             "answer appears here\n",
         );
         writeFileSync(
+            path.join(workspace, "src", "lines.data"),
+            Array.from({ length: 30 }, (_, index) => `line-${index + 1}`).join(
+                "\n",
+            ),
+        );
+        writeFileSync(
+            path.join(workspace, "src", "binary.data"),
+            Buffer.from([0x61, 0x00, 0x62]),
+        );
+        writeFileSync(
             path.join(workspace, "node_modules", "ignored", "hidden.ts"),
             "const answer = 0;\n",
         );
@@ -65,6 +75,29 @@ describe("workspace MCP primitives", () => {
             endLine: 2,
             text: "const answer = 42;",
         });
+    });
+
+    it("reads later line ranges without applying maxBytes to the file prefix", async () => {
+        await expect(
+            readWorkspaceFile({
+                path: "src/lines.data",
+                startLine: 20,
+                endLine: 21,
+                maxBytes: 32,
+            }),
+        ).resolves.toEqual({
+            path: "src/lines.data",
+            startLine: 20,
+            endLine: 21,
+            truncated: true,
+            text: "line-20\nline-21",
+        });
+    });
+
+    it("rejects binary files", async () => {
+        await expect(
+            readWorkspaceFile({ path: "src/binary.data" }),
+        ).rejects.toThrow("Binary files are not supported");
     });
 
     it("rejects paths outside approved workspace roots", async () => {

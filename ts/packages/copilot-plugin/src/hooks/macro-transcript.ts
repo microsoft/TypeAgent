@@ -44,9 +44,10 @@ function matchesPrompt(
     if (event.type !== "user.message") return false;
     const content = getString(event.data ?? {}, "content");
     if (!content) return false;
+    const normalizedContent = redactTraceValue(content) as string;
     return (
         !expectedPromptHash ||
-        createHash("sha256").update(content).digest("hex") ===
+        createHash("sha256").update(normalizedContent).digest("hex") ===
             expectedPromptHash
     );
 }

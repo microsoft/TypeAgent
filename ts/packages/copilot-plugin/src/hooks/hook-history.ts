@@ -15,7 +15,10 @@
 
 import { readFileSync } from "fs";
 import { readFile } from "node:fs/promises";
-import type { Dispatcher } from "@typeagent/agent-server-client";
+import type {
+    AgentServerConnection,
+    Dispatcher,
+} from "@typeagent/agent-server-client";
 import { awaitCommand } from "@typeagent/dispatcher-types";
 import {
     createClientIO,
@@ -148,10 +151,14 @@ async function readStableTranscript(
     return undefined;
 }
 
-async function captureMacroRecording(input: AgentStopInput): Promise<void> {
-    const connection = await connectToAgentServer();
+export async function captureMacroRecording(
+    input: AgentStopInput,
+    connect: () => Promise<AgentServerConnection> = connectToAgentServer,
+): Promise<void> {
+    let connection: AgentServerConnection | undefined;
     let tokenId: string | undefined;
     try {
+        connection = await connect();
         const state = await connection.getMacroRecordingState(input.sessionId);
         if (state.status !== "claimed" || !state.token) return;
         tokenId = state.token.id;
@@ -180,7 +187,7 @@ async function captureMacroRecording(input: AgentStopInput): Promise<void> {
         });
         console.error(`[macro] Captured trace ${summary.traceId}`);
     } catch (error) {
-        if (tokenId) {
+        if (connection && tokenId) {
             await connection.failMacroRecording(
                 input.sessionId,
                 tokenId,
@@ -191,7 +198,7 @@ async function captureMacroRecording(input: AgentStopInput): Promise<void> {
             `[macro] Capture failed: ${error instanceof Error ? error.message : String(error)}`,
         );
     } finally {
-        await connection.close();
+        await connection?.close();
     }
 }
 

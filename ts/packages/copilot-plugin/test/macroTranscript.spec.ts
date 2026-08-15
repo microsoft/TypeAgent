@@ -51,7 +51,7 @@ describe("macro transcript normalization", () => {
             "session-1",
             "C:\\repo",
             createHash("sha256")
-                .update("Fetch data with token=prompt-secret")
+                .update("Fetch data with [REDACTED]")
                 .digest("hex"),
         );
 

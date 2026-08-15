@@ -1,12 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { promises as fs } from "node:fs";
+import { createReadStream, promises as fs } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
 import path from "node:path";
+import { createInterface } from "node:readline";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -165,12 +166,6 @@ function clampInteger(
     return value;
 }
 
-function assertText(buffer: Buffer, filePath: string): void {
-    if (buffer.includes(0)) {
-        throw new Error(`Binary files are not supported: ${filePath}`);
-    }
-}
-
 export async function readWorkspaceFile(args: {
     path: string;
     startLine?: number | undefined;
@@ -195,37 +190,71 @@ export async function readWorkspaceFile(args: {
         DEFAULT_MAX_BYTES,
         MAX_READ_BYTES,
     );
-    const handle = await fs.open(resolved.absolutePath, "r");
-    try {
-        const buffer = Buffer.alloc(Math.min(stat.size, maxBytes + 1));
-        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-        const content = buffer.subarray(0, bytesRead);
-        assertText(content, args.path);
-
-        const allLines = content.toString("utf8").split(/\r?\n/);
-        const startLine = args.startLine ?? 1;
-        const endLine = args.endLine ?? allLines.length;
-        if (
-            !Number.isInteger(startLine) ||
-            !Number.isInteger(endLine) ||
-            startLine < 1 ||
-            endLine < startLine
-        ) {
-            throw new Error(
-                "Line range must use positive integers with endLine >= startLine.",
-            );
-        }
-
-        return {
-            path: workspacePath(resolved.absolutePath, resolved.root),
-            startLine,
-            endLine: Math.min(endLine, allLines.length),
-            truncated: stat.size > maxBytes || endLine < allLines.length,
-            text: allLines.slice(startLine - 1, endLine).join("\n"),
-        };
-    } finally {
-        await handle.close();
+    const startLine = args.startLine ?? 1;
+    const requestedEndLine = args.endLine;
+    if (
+        !Number.isInteger(startLine) ||
+        (requestedEndLine !== undefined &&
+            (!Number.isInteger(requestedEndLine) ||
+                requestedEndLine < startLine)) ||
+        startLine < 1
+    ) {
+        throw new Error(
+            "Line range must use positive integers with endLine >= startLine.",
+        );
     }
+
+    const stream = createReadStream(resolved.absolutePath, {
+        encoding: "utf8",
+    });
+    const lines = createInterface({ input: stream, crlfDelay: Infinity });
+    const selected: string[] = [];
+    let selectedBytes = 0;
+    let lineNumber = 0;
+    let truncated = false;
+
+    try {
+        for await (const line of lines) {
+            lineNumber++;
+            if (line.includes("\0")) {
+                throw new Error(`Binary files are not supported: ${args.path}`);
+            }
+            if (
+                requestedEndLine !== undefined &&
+                lineNumber > requestedEndLine
+            ) {
+                truncated = true;
+                break;
+            }
+            if (lineNumber < startLine) continue;
+
+            const separatorBytes = selected.length > 0 ? 1 : 0;
+            const lineBytes = Buffer.byteLength(line, "utf8");
+            if (selectedBytes + separatorBytes + lineBytes > maxBytes) {
+                truncated = true;
+                break;
+            }
+            selected.push(line);
+            selectedBytes += separatorBytes + lineBytes;
+        }
+    } finally {
+        lines.close();
+        stream.destroy();
+    }
+
+    const actualEndLine =
+        selected.length > 0 ? startLine + selected.length - 1 : startLine - 1;
+    if (requestedEndLine !== undefined && actualEndLine < requestedEndLine) {
+        truncated ||= lineNumber >= startLine;
+    }
+
+    return {
+        path: workspacePath(resolved.absolutePath, resolved.root),
+        startLine,
+        endLine: actualEndLine,
+        truncated,
+        text: selected.join("\n"),
+    };
 }
 
 function compileGlob(pattern: string): RegExp {
