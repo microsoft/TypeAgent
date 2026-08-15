@@ -10,7 +10,7 @@ import {
     type ChannelProviderAdapter,
 } from "@typeagent/agent-rpc/channel";
 import { createAgentServerConnection } from "@typeagent/agent-server-client";
-import { MacroManager } from "@typeagent/copilot-macros";
+import { MacroManager, type ReplayToolHost } from "@typeagent/copilot-macros";
 import type { ConversationManager } from "../src/conversationManager.js";
 import { createAgentServerConnectionHandler } from "../src/connectionHandler.js";
 
@@ -26,9 +26,17 @@ describe("macro recording RPC", () => {
             "macro-rpc:client",
             (message) => serverAdapter.notifyMessage(message),
         );
+        const replayHost: ReplayToolHost = {
+            inspectTool: async (mcpServerName, toolName) => ({
+                ...(mcpServerName ? { mcpServerName } : {}),
+                toolName,
+                schemaFingerprint: "v1",
+            }),
+            callTool: async () => ({ content: "{}" }),
+        };
         const { handler } = createAgentServerConnectionHandler({
             conversationManager: {} as ConversationManager,
-            macroManager: new MacroManager(instanceDir),
+            macroManager: new MacroManager(instanceDir, replayHost),
             shutdown: () => {},
             getUserIdentity: () => ({
                 username: "test",
@@ -57,13 +65,66 @@ describe("macro recording RPC", () => {
                 response: "Done",
                 startedAt: "2026-08-14T10:00:00.000Z",
                 completedAt: "2026-08-14T10:00:01.000Z",
-                toolCalls: [],
+                toolCalls: [
+                    {
+                        toolCallId: "call-1",
+                        name: "read",
+                        mcpServerName: "typeagent-workspace",
+                        arguments: { path: "package.json" },
+                        result: { content: "{}" },
+                        status: "completed",
+                    },
+                ],
             },
         });
 
         await expect(
             connection.getMacroRecordingState("session-1"),
         ).resolves.toEqual({ status: "completed", trace: summary });
+        const draft = await connection.createMacroFromTrace({
+            traceId: summary.traceId,
+            name: "Read package",
+            description: "Reads package metadata",
+        });
+        await expect(connection.validateMacro(draft)).resolves.toMatchObject({
+            valid: true,
+            executionClass: "replayable",
+        });
+        const approved = await connection.approveMacro(draft);
+        await expect(connection.listMacros()).resolves.toMatchObject([
+            { macroId: draft.macroId, version: 2, state: "approved" },
+        ]);
+        await expect(
+            connection.searchMacros({ query: "package" }),
+        ).resolves.toMatchObject([
+            { macro: { macroId: draft.macroId }, score: 1 },
+        ]);
+        await expect(connection.inspectMacro(approved)).resolves.toMatchObject({
+            macroId: draft.macroId,
+            version: 2,
+            state: "approved",
+        });
+        await expect(
+            connection.getMacroRequirements(approved),
+        ).resolves.toMatchObject({
+            executionClass: "replayable",
+            tools: [{ toolName: "read" }],
+        });
+        await expect(
+            connection.runMacro({
+                runId: "run-1",
+                macroId: approved.macroId,
+                version: approved.version,
+            }),
+        ).resolves.toMatchObject({
+            status: "completed",
+            run: { runId: "run-1", result: { content: "{}" } },
+        });
+        await expect(connection.getMacroRun("run-1")).resolves.toMatchObject({
+            status: "completed",
+            macroId: approved.macroId,
+        });
+
         await connection.close();
     });
 });

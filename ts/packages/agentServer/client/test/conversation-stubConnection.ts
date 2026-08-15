@@ -132,6 +132,39 @@ export function makeStubConnection(
         async finalizeMacroRecording() {
             throw new Error("Not implemented by conversation test stub");
         },
+        async listMacros() {
+            return [];
+        },
+        async searchMacros() {
+            return [];
+        },
+        async inspectMacro() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async getMacroRequirements() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async createMacroFromTrace() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async validateMacro() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async approveMacro() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async disableMacro() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async deleteMacro() {},
+        async runMacro() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async cancelMacroRun() {},
+        async getMacroRun() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+
         async listConversations(name?: string) {
             const idx = nextCount("listConversations");
             calls.push({ method: "listConversations", args: [name] });

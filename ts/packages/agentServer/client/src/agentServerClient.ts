@@ -33,12 +33,29 @@ import {
     JoinConversationResult,
     RenameConversationOptions,
     SpeechToken,
+    ApproveMacroRequest,
     ArmRecordingRequest,
     ClaimRecordingRequest,
+    CopilotToolMacro,
+    CreateMacroFromTraceRequest,
+    DeleteMacroRequest,
+    DisableMacroRequest,
     FinalizeRecordingRequest,
+    InspectMacroRequest,
+    ListMacrosRequest,
+    MacroMatch,
+    MacroRequirements,
+    MacroRunRecord,
+    MacroSummary,
+    MacroValidationReport,
+    MacroVersionRef,
     RecordingState,
     RecordingToken,
+    RunMacroRequest,
+    RunMacroResponse,
+    SearchMacrosRequest,
     TraceSummary,
+    ValidateMacroRequest,
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -127,6 +144,25 @@ export type AgentServerConnection = {
     finalizeMacroRecording(
         request: FinalizeRecordingRequest,
     ): Promise<TraceSummary>;
+    listMacros(request?: ListMacrosRequest): Promise<MacroSummary[]>;
+    searchMacros(request: SearchMacrosRequest): Promise<MacroMatch[]>;
+    inspectMacro(request: InspectMacroRequest): Promise<CopilotToolMacro>;
+    getMacroRequirements(
+        request: InspectMacroRequest,
+    ): Promise<MacroRequirements>;
+    createMacroFromTrace(
+        request: CreateMacroFromTraceRequest,
+    ): Promise<MacroVersionRef>;
+    validateMacro(
+        request: ValidateMacroRequest,
+    ): Promise<MacroValidationReport>;
+    approveMacro(request: ApproveMacroRequest): Promise<MacroVersionRef>;
+    disableMacro(request: DisableMacroRequest): Promise<MacroVersionRef>;
+    deleteMacro(request: DeleteMacroRequest): Promise<void>;
+    runMacro(request: RunMacroRequest): Promise<RunMacroResponse>;
+    cancelMacroRun(runId: string): Promise<void>;
+    getMacroRun(runId: string): Promise<MacroRunRecord>;
+
     joinConversation(
         clientIO: ClientIO,
         options?: DispatcherConnectOptions,
@@ -304,6 +340,68 @@ export function createAgentServerConnection(
             request: FinalizeRecordingRequest,
         ): Promise<TraceSummary> {
             return rpc.invoke("finalizeMacroRecording", request);
+        },
+
+        async listMacros(request?: ListMacrosRequest): Promise<MacroSummary[]> {
+            return rpc.invoke("listMacros", request);
+        },
+
+        async searchMacros(
+            request: SearchMacrosRequest,
+        ): Promise<MacroMatch[]> {
+            return rpc.invoke("searchMacros", request);
+        },
+
+        async inspectMacro(
+            request: InspectMacroRequest,
+        ): Promise<CopilotToolMacro> {
+            return rpc.invoke("inspectMacro", request);
+        },
+
+        async getMacroRequirements(
+            request: InspectMacroRequest,
+        ): Promise<MacroRequirements> {
+            return rpc.invoke("getMacroRequirements", request);
+        },
+
+        async createMacroFromTrace(
+            request: CreateMacroFromTraceRequest,
+        ): Promise<MacroVersionRef> {
+            return rpc.invoke("createMacroFromTrace", request);
+        },
+
+        async validateMacro(
+            request: ValidateMacroRequest,
+        ): Promise<MacroValidationReport> {
+            return rpc.invoke("validateMacro", request);
+        },
+
+        async approveMacro(
+            request: ApproveMacroRequest,
+        ): Promise<MacroVersionRef> {
+            return rpc.invoke("approveMacro", request);
+        },
+
+        async disableMacro(
+            request: DisableMacroRequest,
+        ): Promise<MacroVersionRef> {
+            return rpc.invoke("disableMacro", request);
+        },
+
+        async deleteMacro(request: DeleteMacroRequest): Promise<void> {
+            return rpc.invoke("deleteMacro", request);
+        },
+
+        async runMacro(request: RunMacroRequest): Promise<RunMacroResponse> {
+            return rpc.invoke("runMacro", request);
+        },
+
+        async cancelMacroRun(runId: string): Promise<void> {
+            return rpc.invoke("cancelMacroRun", runId);
+        },
+
+        async getMacroRun(runId: string): Promise<MacroRunRecord> {
+            return rpc.invoke("getMacroRun", runId);
         },
 
         async joinConversation(

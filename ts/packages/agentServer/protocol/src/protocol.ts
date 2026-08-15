@@ -6,23 +6,57 @@ import type { QueueSnapshot } from "@typeagent/dispatcher-types";
 import type { AppAgentManifest } from "@typeagent/agent-sdk";
 import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 import type {
+    ApproveMacroRequest,
     ArmRecordingRequest,
     ClaimRecordingRequest,
+    CopilotToolMacro,
+    CreateMacroFromTraceRequest,
+    DeleteMacroRequest,
+    DisableMacroRequest,
     FinalizeRecordingRequest,
+    InspectMacroRequest,
+    ListMacrosRequest,
+    MacroMatch,
+    MacroRequirements,
+    MacroRunRecord,
+    MacroSummary,
+    MacroValidationReport,
+    MacroVersionRef,
     RecordingState,
     RecordingToken,
+    RunMacroRequest,
+    RunMacroResponse,
+    SearchMacrosRequest,
     TraceSummary,
+    ValidateMacroRequest,
 } from "@typeagent/copilot-macros";
 
 export type {
+    ApproveMacroRequest,
     ArmRecordingRequest,
     ClaimRecordingRequest,
+    CopilotToolMacro,
+    CreateMacroFromTraceRequest,
+    DeleteMacroRequest,
+    DisableMacroRequest,
     FinalizeRecordingRequest,
+    InspectMacroRequest,
+    ListMacrosRequest,
+    MacroMatch,
+    MacroRequirements,
+    MacroRunRecord,
+    MacroSummary,
+    MacroValidationReport,
+    MacroVersionRef,
     RecordedInteractionTrace,
     RecordedToolCall,
     RecordingState,
     RecordingToken,
+    RunMacroRequest,
+    RunMacroResponse,
+    SearchMacrosRequest,
     TraceSummary,
+    ValidateMacroRequest,
 } from "@typeagent/copilot-macros";
 
 export type DispatcherConnectOptions = {
@@ -163,6 +197,25 @@ export type AgentServerInvokeFunctions = {
     finalizeMacroRecording: (
         request: FinalizeRecordingRequest,
     ) => Promise<TraceSummary>;
+    listMacros: (request?: ListMacrosRequest) => Promise<MacroSummary[]>;
+    searchMacros: (request: SearchMacrosRequest) => Promise<MacroMatch[]>;
+    inspectMacro: (request: InspectMacroRequest) => Promise<CopilotToolMacro>;
+    getMacroRequirements: (
+        request: InspectMacroRequest,
+    ) => Promise<MacroRequirements>;
+    createMacroFromTrace: (
+        request: CreateMacroFromTraceRequest,
+    ) => Promise<MacroVersionRef>;
+    validateMacro: (
+        request: ValidateMacroRequest,
+    ) => Promise<MacroValidationReport>;
+    approveMacro: (request: ApproveMacroRequest) => Promise<MacroVersionRef>;
+    disableMacro: (request: DisableMacroRequest) => Promise<MacroVersionRef>;
+    deleteMacro: (request: DeleteMacroRequest) => Promise<void>;
+    runMacro: (request: RunMacroRequest) => Promise<RunMacroResponse>;
+    cancelMacroRun: (runId: string) => Promise<void>;
+    getMacroRun: (runId: string) => Promise<MacroRunRecord>;
+
     joinConversation: (
         options?: DispatcherConnectOptions,
     ) => Promise<JoinConversationResult>;

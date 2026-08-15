@@ -18,6 +18,7 @@ import {
     getDefaultAppAgentSources,
     getIndexingServiceRegistry,
     getDefaultConstructionProvider,
+    McpReplayHost,
 } from "default-agent-provider";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
@@ -376,7 +377,10 @@ async function main() {
             },
             instanceDir,
         );
-    const macroManager = new MacroManager(instanceDir);
+    const macroManager = new MacroManager(
+        instanceDir,
+        new McpReplayHost(instanceDir),
+    );
 
     debugStartup("conversation manager ready; prewarming default conversation");
     // Pre-initialize the default conversation dispatcher before accepting clients,

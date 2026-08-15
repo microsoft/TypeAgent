@@ -271,6 +271,22 @@ export function createAgentServerConnectionHandler(
                 macroManager.failRecording(sessionId, tokenId, error),
             finalizeMacroRecording: async (request) =>
                 macroManager.finalizeRecording(request),
+            listMacros: async (request) => macroManager.listMacros(request),
+            searchMacros: async (request) => macroManager.searchMacros(request),
+            inspectMacro: async (request) => macroManager.inspectMacro(request),
+            getMacroRequirements: async (request) =>
+                macroManager.getMacroRequirements(request),
+            createMacroFromTrace: async (request) =>
+                macroManager.createMacroFromTrace(request),
+            validateMacro: async (request) =>
+                macroManager.validateMacro(request),
+            approveMacro: async (request) => macroManager.approveMacro(request),
+            disableMacro: async (request) => macroManager.disableMacro(request),
+            deleteMacro: async (request) => macroManager.deleteMacro(request),
+            runMacro: async (request) => macroManager.runMacro(request),
+            cancelMacroRun: async (runId) => macroManager.cancelMacroRun(runId),
+            getMacroRun: async (runId) => macroManager.getMacroRun(runId),
+
             joinConversation: async (options?: DispatcherConnectOptions) => {
                 // Resolve conversation ID first (may auto-create default)
                 const conversationId =
