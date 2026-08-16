@@ -48,6 +48,7 @@ export {
     RunMacroRequest,
     RunMacroResponse,
     SearchMacrosRequest,
+    SubmitMacroCandidateRequest,
     TraceSummary,
     ValidateMacroRequest,
     getDispatcherChannelName,

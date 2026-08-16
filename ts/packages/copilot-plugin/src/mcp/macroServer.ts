@@ -7,17 +7,27 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
+import type {
+    SubmitMacroCandidateRequest,
+    ValueExpression,
+} from "@typeagent/copilot-macros";
 import { connectToAgentServer } from "../shared/typeagent-client.js";
 import { getMode, type Mode } from "../shared/plugin-config.js";
+import {
+    getMacroFeatures,
+    type MacroFeatures,
+} from "../shared/macro-features.js";
 
 export interface MacroServerDependencies {
     connect: () => Promise<AgentServerConnection>;
     getMode: () => Mode;
+    getFeatures?: () => MacroFeatures;
 }
 
 const defaultDependencies: MacroServerDependencies = {
     connect: connectToAgentServer,
     getMode,
+    getFeatures: getMacroFeatures,
 };
 
 function result(value: unknown): CallToolResult {
@@ -96,6 +106,11 @@ export class MacroCatalogAdapter {
         name: string;
         description?: string | undefined;
     }) {
+        if (!this.features().induction) {
+            return Promise.resolve(
+                errorResult("Macro induction is disabled by configuration."),
+            );
+        }
         return this.call((connection) =>
             connection.createMacroFromTrace({
                 traceId: request.traceId,
@@ -134,6 +149,12 @@ export class MacroCatalogAdapter {
         return this.call((connection) => connection.getMacroRun(request.runId));
     }
 
+    submitMacroCandidate(request: SubmitMacroCandidateRequest) {
+        return this.call((connection) =>
+            connection.submitMacroCandidate(request),
+        );
+    }
+
     async runMacro(
         request: {
             macroId: string;
@@ -156,6 +177,26 @@ export class MacroCatalogAdapter {
         try {
             connection = await this.dependencies.connect();
             const activeConnection = connection;
+            const features = this.features();
+            if (!features.replay || !features.agentHandoff) {
+                const requirements = await connection.getMacroRequirements(
+                    this.macroRef(request),
+                );
+                const usesAgent =
+                    request.preference === "agent" ||
+                    (request.preference !== "replay" &&
+                        requirements.executionClass === "agentRequired");
+                if (usesAgent && !features.agentHandoff) {
+                    return errorResult(
+                        "Macro agent-runner handoff is disabled by configuration.",
+                    );
+                }
+                if (!usesAgent && !features.replay) {
+                    return errorResult(
+                        "Deterministic macro replay is disabled by configuration.",
+                    );
+                }
+            }
             if (signal) {
                 const cancel = () => {
                     void activeConnection.cancelMacroRun(runId);
@@ -204,6 +245,10 @@ export class MacroCatalogAdapter {
         };
     }
 
+    private features(): MacroFeatures {
+        return this.dependencies.getFeatures?.() ?? getMacroFeatures();
+    }
+
     private async call(
         operation: (connection: AgentServerConnection) => Promise<unknown>,
     ): Promise<CallToolResult> {
@@ -228,6 +273,33 @@ const macroRefSchema = {
     macroId: z.string().min(1),
     version: z.number().int().positive().optional(),
 };
+
+const valueExpressionSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("literal"), value: z.unknown() }),
+    z.object({ kind: z.literal("input"), name: z.string().min(1) }),
+    z.object({
+        kind: z.literal("stepResult"),
+        stepId: z.string().min(1),
+        path: z.array(z.string()).optional(),
+    }),
+]);
+
+const macroInputSchema = z.object({
+    name: z.string().min(1),
+    description: z.string(),
+    required: z.boolean(),
+    secret: z.boolean(),
+});
+
+const macroStepSchema = z.object({
+    id: z.string().min(1),
+    toolName: z.string().min(1),
+    mcpServerName: z.string().min(1).optional(),
+    arguments: valueExpressionSchema,
+    executionClass: z.enum(["replayable", "agentRequired"]),
+    sourceToolCallId: z.string().min(1),
+    schemaFingerprint: z.string().optional(),
+});
 
 export class TypeAgentMacroMcpServer {
     private readonly server = new McpServer({
@@ -318,6 +390,69 @@ export class TypeAgentMacroMcpServer {
             "Inspect a sanitized macro run record.",
             { runId: z.string().min(1) },
             (request) => adapter.getMacroRun(request),
+        );
+        this.server.tool(
+            "submit_macro_candidate",
+            "Save an agent-guided adaptation as a validated draft version for explicit review.",
+            {
+                sourceMacroId: z.string().min(1),
+                sourceVersion: z.number().int().positive(),
+                handoffRunId: z.string().min(1),
+                reason: z.string().min(1).max(2_000),
+                name: z.string().min(1).optional(),
+                description: z.string().optional(),
+                inputs: z.array(macroInputSchema).max(100),
+                steps: z.array(macroStepSchema).min(1).max(100),
+                executionEvidence: z.object({
+                    outcome: z.literal("completed"),
+                    toolCalls: z.number().int().nonnegative(),
+                    retries: z.number().int().nonnegative(),
+                    durationMs: z.number().nonnegative(),
+                    tokensUsed: z.number().int().nonnegative(),
+                    steps: z
+                        .array(
+                            z.object({
+                                stepId: z.string().min(1),
+                                status: z.enum([
+                                    "completed",
+                                    "failed",
+                                    "denied",
+                                    "cancelled",
+                                ]),
+                            }),
+                        )
+                        .min(1)
+                        .max(100),
+                }),
+            },
+            (request) =>
+                adapter.submitMacroCandidate({
+                    sourceMacroId: request.sourceMacroId,
+                    sourceVersion: request.sourceVersion,
+                    handoffRunId: request.handoffRunId,
+                    reason: request.reason,
+                    inputs: request.inputs,
+                    executionEvidence: request.executionEvidence,
+                    steps: request.steps.map((step) => ({
+                        id: step.id,
+                        toolName: step.toolName,
+                        ...(step.mcpServerName !== undefined
+                            ? { mcpServerName: step.mcpServerName }
+                            : {}),
+                        arguments: step.arguments as ValueExpression,
+                        executionClass: step.executionClass,
+                        sourceToolCallId: step.sourceToolCallId,
+                        ...(step.schemaFingerprint !== undefined
+                            ? { schemaFingerprint: step.schemaFingerprint }
+                            : {}),
+                    })),
+                    ...(request.name !== undefined
+                        ? { name: request.name }
+                        : {}),
+                    ...(request.description !== undefined
+                        ? { description: request.description }
+                        : {}),
+                }),
         );
     }
 

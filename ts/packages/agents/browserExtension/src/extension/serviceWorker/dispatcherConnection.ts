@@ -570,6 +570,7 @@ function makeConnectionAdapter(): AgentServerConnection {
         disableMacro: () => notSupported("disableMacro"),
         deleteMacro: () => notSupported("deleteMacro"),
         runMacro: () => notSupported("runMacro"),
+        submitMacroCandidate: () => notSupported("submitMacroCandidate"),
         cancelMacroRun: () => notSupported("cancelMacroRun"),
         getMacroRun: () => notSupported("getMacroRun"),
 

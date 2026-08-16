@@ -54,6 +54,7 @@ import {
     RunMacroRequest,
     RunMacroResponse,
     SearchMacrosRequest,
+    SubmitMacroCandidateRequest,
     TraceSummary,
     ValidateMacroRequest,
     getDispatcherChannelName,
@@ -160,6 +161,9 @@ export type AgentServerConnection = {
     disableMacro(request: DisableMacroRequest): Promise<MacroVersionRef>;
     deleteMacro(request: DeleteMacroRequest): Promise<void>;
     runMacro(request: RunMacroRequest): Promise<RunMacroResponse>;
+    submitMacroCandidate(
+        request: SubmitMacroCandidateRequest,
+    ): Promise<MacroVersionRef>;
     cancelMacroRun(runId: string): Promise<void>;
     getMacroRun(runId: string): Promise<MacroRunRecord>;
 
@@ -394,6 +398,12 @@ export function createAgentServerConnection(
 
         async runMacro(request: RunMacroRequest): Promise<RunMacroResponse> {
             return rpc.invoke("runMacro", request);
+        },
+
+        async submitMacroCandidate(
+            request: SubmitMacroCandidateRequest,
+        ): Promise<MacroVersionRef> {
+            return rpc.invoke("submitMacroCandidate", request);
         },
 
         async cancelMacroRun(runId: string): Promise<void> {
