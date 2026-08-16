@@ -3,7 +3,6 @@
 
 import type { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
 
-import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import {
     clearLogSettings,
     setLogDebugCopy,
@@ -14,7 +13,7 @@ import type { LogAction } from "../schema/logActionSchema.js";
 
 export async function executeLogAction(
     action: TypeAgentAction<LogAction>,
-    context: ActionContext<CommandHandlerContext>,
+    context: ActionContext<unknown>,
 ) {
     switch (action.actionName) {
         case "showLogStatus":

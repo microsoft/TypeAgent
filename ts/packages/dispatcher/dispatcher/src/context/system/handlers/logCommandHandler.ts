@@ -30,21 +30,17 @@ import {
 import { otel } from "@typeagent/telemetry";
 import { metrics as otelMetrics, trace as otelTrace } from "@opentelemetry/api";
 
-import type { CommandHandlerContext } from "../../commandHandlerContext.js";
-
 const KNOWN_PROFILES = otel.LOCAL_TELEMETRY_PROFILES;
 
 class LogStatusCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Show local OTel sink profile, debug-copy state, and current @trace patterns";
-    public async run(context: ActionContext<CommandHandlerContext>) {
+    public async run(context: ActionContext<unknown>) {
         showLogStatus(context);
     }
 }
 
-export function showLogStatus(
-    context: ActionContext<CommandHandlerContext>,
-): void {
+export function showLogStatus(context: ActionContext<unknown>): void {
     const snapshot = otel.getLocalTelemetryState().getSnapshot();
 
     // Read current @trace namespaces without changing them: `disable()`
@@ -126,7 +122,7 @@ class LogProfileCommandHandler implements CommandHandler {
         },
     } as const;
     public async run(
-        context: ActionContext<CommandHandlerContext>,
+        context: ActionContext<unknown>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         setLogProfile(params.args.profile, context);
@@ -135,7 +131,7 @@ class LogProfileCommandHandler implements CommandHandler {
 
 export function setLogProfile(
     profile: string,
-    context: ActionContext<CommandHandlerContext>,
+    context: ActionContext<unknown>,
 ): void {
     const raw = profile.trim().toLowerCase();
     if (!isProfileName(raw)) {
@@ -174,7 +170,7 @@ class LogDebugCopyCommandHandler implements CommandHandler {
         },
     } as const;
     public async run(
-        context: ActionContext<CommandHandlerContext>,
+        context: ActionContext<unknown>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         setLogDebugCopy(params.args.state, context);
@@ -183,7 +179,7 @@ class LogDebugCopyCommandHandler implements CommandHandler {
 
 export function setLogDebugCopy(
     state: string,
-    context: ActionContext<CommandHandlerContext>,
+    context: ActionContext<unknown>,
 ): void {
     const raw = state.trim().toLowerCase();
     if (raw !== "on" && raw !== "off") {
@@ -216,14 +212,12 @@ export function setLogDebugCopy(
 class LogClearCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Reset local OTel sinks to defaults: profile=focused, debug-copy=off. Leaves @trace unchanged.";
-    public async run(context: ActionContext<CommandHandlerContext>) {
+    public async run(context: ActionContext<unknown>) {
         clearLogSettings(context);
     }
 }
 
-export function clearLogSettings(
-    context: ActionContext<CommandHandlerContext>,
-): void {
+export function clearLogSettings(context: ActionContext<unknown>): void {
     otel.getLocalTelemetryState().clear();
     displaySuccess(
         "Local OTel sinks reset: profile=focused, debug-copy=off. @trace patterns unchanged.",
