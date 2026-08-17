@@ -4068,6 +4068,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
+      '@typeagent/agent-cache':
+        specifier: workspace:*
+        version: link:../cache
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk

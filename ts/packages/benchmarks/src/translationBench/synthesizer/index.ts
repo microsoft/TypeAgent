@@ -10,6 +10,7 @@ export * from "./sourceAdapter.js";
 export * from "./sourceBuilder.js";
 export * from "./generationCandidate.js";
 export * from "./datasetGenerator.js";
+export * from "./benchmarkAdapter.js";
 export * from "./dataQualityVerifier.js";
 export * from "./synthesizerPrompts.js";
 export * from "./utteranceDisambiguation.js";

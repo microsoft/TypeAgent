@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@typeagent/action-schema": "workspace:*",
+    "@typeagent/agent-cache": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "agent-dispatcher": "workspace:*",
