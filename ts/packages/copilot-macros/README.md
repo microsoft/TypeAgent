@@ -1,17 +1,6 @@
-# androidMobile
+# @typeagent/copilot-macros
 
-Android mobile dispatcher agent. Used to perform actions on a mobile android device.
-
-## How to use
-
-This agent is not bundled by default. Install it from the workspace catalog source:
-
-```text
-@package source list
-@package install androidMobile
-```
-
-The catalog source entry for `androidMobile` lives in [../agents.catalog.json](../agents.catalog.json).
+undefined
 
 ## Trademarks
 

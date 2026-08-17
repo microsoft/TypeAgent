@@ -28,6 +28,7 @@ import {
 } from "../shared/typeagent-client.js";
 import { extractMessageText } from "../shared/message-formatter.js";
 import { getMode } from "../shared/plugin-config.js";
+import { TypeAgentWorkspaceMcpServer } from "./workspaceServer.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,10 @@ function stripAnsi(text: string): string {
 
 function toolResult(text: string): CallToolResult {
     return { content: [{ type: "text", text }] };
+}
+
+function toolError(text: string): CallToolResult {
+    return { isError: true, content: [{ type: "text", text }] };
 }
 
 /**
@@ -88,19 +93,12 @@ class TypeAgentMcpServer {
         const transport = new StdioServerTransport();
         await this.server.connect(transport);
         const mode = getMode();
-        if (mode === "bypass" || mode === "dev") {
-            log(`TypeAgent MCP tools are disabled in ${mode} mode`);
-        } else {
-            log(`TypeAgent MCP server started (target: ${TYPEAGENT_URL})`);
-        }
+        log(
+            `TypeAgent MCP server started (target: ${TYPEAGENT_URL}, mode: ${mode})`,
+        );
     }
 
     private registerTools(): void {
-        const mode = getMode();
-        if (mode === "bypass" || mode === "dev") {
-            log(`Skipping tool registration in ${mode} mode`);
-            return;
-        }
         this.server.registerTool(
             "typeagent-processCommand",
             {
@@ -207,6 +205,10 @@ class TypeAgentMcpServer {
         command: string,
         extra?: ToolExtra,
     ): Promise<CallToolResult> {
+        const disabled = this.getDisabledReason();
+        if (disabled) {
+            return toolError(disabled);
+        }
         log(`processCommand: ${command}`);
 
         const responseCollector = { messages: [] as string[] };
@@ -300,6 +302,10 @@ class TypeAgentMcpServer {
     }
 
     private async listAgents(): Promise<CallToolResult> {
+        const disabled = this.getDisabledReason();
+        if (disabled) {
+            return toolError(disabled);
+        }
         let dispatcher: Dispatcher | null = null;
         try {
             const clientIO = createClientIO({});
@@ -323,6 +329,10 @@ class TypeAgentMcpServer {
     }
 
     private async getStatus(): Promise<CallToolResult> {
+        const disabled = this.getDisabledReason();
+        if (disabled) {
+            return toolError(disabled);
+        }
         let dispatcher: Dispatcher | null = null;
         try {
             const clientIO = createClientIO({});
@@ -339,11 +349,21 @@ class TypeAgentMcpServer {
             }
         }
     }
+
+    private getDisabledReason(): string | undefined {
+        const mode = getMode();
+        if (mode === "dev" || mode === "bypass") {
+            return `TypeAgent agent-server MCP tools are disabled in ${mode} mode.`;
+        }
+        return undefined;
+    }
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
-const server = new TypeAgentMcpServer();
+const server = process.argv.includes("--workspace")
+    ? new TypeAgentWorkspaceMcpServer()
+    : new TypeAgentMcpServer();
 server.start().catch((error) => {
     log(`Fatal error: ${error}`);
     process.exit(1);
