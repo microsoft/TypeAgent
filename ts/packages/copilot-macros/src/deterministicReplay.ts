@@ -33,7 +33,11 @@ function resolveExpression(
             let parent = value as Record<string, unknown>;
             for (const segment of binding.path.slice(0, -1)) {
                 const child = parent[segment];
-                if (child === null || typeof child !== "object") {
+                if (
+                    !Object.prototype.hasOwnProperty.call(parent, segment) ||
+                    child === null ||
+                    typeof child !== "object"
+                ) {
                     throw new ReplayValidationError(
                         "invalidTemplatePath",
                         `Template path is unavailable: ${binding.path.join(".")}`,
@@ -41,11 +45,12 @@ function resolveExpression(
                 }
                 parent = child as Record<string, unknown>;
             }
-            parent[binding.path.at(-1)!] = resolveExpression(
-                binding.expression,
-                inputs,
-                results,
-            );
+            Object.defineProperty(parent, binding.path.at(-1)!, {
+                value: resolveExpression(binding.expression, inputs, results),
+                configurable: true,
+                enumerable: true,
+                writable: true,
+            });
         }
         return value;
     }

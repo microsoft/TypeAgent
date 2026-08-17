@@ -108,6 +108,50 @@ describe("deterministic macro replay", () => {
         ]);
     });
 
+    it("treats __proto__ template paths as own data properties", async () => {
+        const source = macro();
+        source.inputs[0].valueType = "object";
+        source.steps = [
+            {
+                ...source.steps[0],
+                arguments: {
+                    kind: "template",
+                    value: JSON.parse('{"__proto__":"captured"}'),
+                    bindings: [
+                        {
+                            path: ["__proto__"],
+                            expression: { kind: "input", name: "path" },
+                        },
+                    ],
+                },
+                postconditions: [],
+            },
+        ];
+        const replayHost = host();
+        const injectedPrototype = { polluted: true };
+
+        const run = await replayMacro(
+            source,
+            "run-1",
+            { path: injectedPrototype },
+            replayHost.value,
+            new AbortController().signal,
+        );
+
+        const argumentsValue = replayHost.calls[0].argumentsValue as Record<
+            string,
+            unknown
+        >;
+        expect(run.status).toBe("completed");
+        expect(Object.getPrototypeOf(argumentsValue)).not.toBe(
+            injectedPrototype,
+        );
+        expect(
+            Object.prototype.hasOwnProperty.call(argumentsValue, "__proto__"),
+        ).toBe(true);
+        expect(argumentsValue["__proto__"]).toBe(injectedPrototype);
+    });
+
     it("preflights every tool before executing step one", async () => {
         const replayHost = host({
             inspectTool: async (_server, toolName) =>

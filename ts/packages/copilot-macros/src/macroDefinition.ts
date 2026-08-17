@@ -66,6 +66,62 @@ function inferPostconditions(result: unknown): MacroPostcondition[] {
     return postconditions;
 }
 
+type BoundValueExpression = Exclude<ValueExpression, { kind: "template" }>;
+
+function findPriorResultExpression(
+    leaf: unknown,
+    priorSteps: MacroStep[],
+    priorCalls: RecordedInteractionTrace["toolCalls"],
+): BoundValueExpression | undefined {
+    if (typeof leaf !== "string" || leaf === "[REDACTED]" || leaf.length < 3) {
+        return undefined;
+    }
+    for (let index = priorCalls.length - 1; index >= 0; index--) {
+        const resultPath = findValuePath(priorCalls[index].result, leaf);
+        if (resultPath !== undefined) {
+            return {
+                kind: "stepResult",
+                stepId: priorSteps[index].id,
+                ...(resultPath.length > 0 ? { path: resultPath } : {}),
+            };
+        }
+    }
+    return undefined;
+}
+
+function createInputExpression(
+    leaf: unknown,
+    stepId: string,
+    path: string[],
+    prompt: string,
+    inputs: MacroInput[],
+    warnings: string[],
+): BoundValueExpression | undefined {
+    const redacted = leaf === "[REDACTED]";
+    const mentionedInPrompt =
+        typeof leaf === "string" &&
+        leaf.length >= 3 &&
+        prompt.toLowerCase().includes(leaf.toLowerCase());
+    if (!redacted && !mentionedInPrompt) return undefined;
+
+    const name = getInputName(stepId, path);
+    inputs.push({
+        name,
+        description: redacted
+            ? `Secret value required by ${stepId} at ${path.join(".") || "arguments"}`
+            : `Value captured from the request for ${stepId} at ${path.join(".") || "arguments"}`,
+        required: true,
+        secret: redacted,
+        ...(redacted ? {} : { valueType: getValueType(leaf) }),
+    });
+    if (redacted) {
+        warnings.push(
+            `${stepId} contains a redacted value and requires review of the generated secret input.`,
+        );
+    }
+    return { kind: "input", name };
+}
+
 function convertArguments(
     value: unknown,
     stepId: string,
@@ -85,52 +141,9 @@ function convertArguments(
         for (const segment of path) {
             leaf = (leaf as Record<string, unknown>)[segment];
         }
-        let expression:
-            | Exclude<ValueExpression, { kind: "template" }>
-            | undefined;
-        if (
-            typeof leaf === "string" &&
-            leaf !== "[REDACTED]" &&
-            leaf.length >= 3
-        ) {
-            for (let index = priorCalls.length - 1; index >= 0; index--) {
-                const resultPath = findValuePath(
-                    priorCalls[index].result,
-                    leaf,
-                );
-                if (resultPath !== undefined) {
-                    expression = {
-                        kind: "stepResult",
-                        stepId: priorSteps[index].id,
-                        ...(resultPath.length > 0 ? { path: resultPath } : {}),
-                    };
-                    break;
-                }
-            }
-        }
-        const redacted = leaf === "[REDACTED]";
-        const mentionedInPrompt =
-            typeof leaf === "string" &&
-            leaf.length >= 3 &&
-            prompt.toLowerCase().includes(leaf.toLowerCase());
-        if (!expression && (redacted || mentionedInPrompt)) {
-            const name = getInputName(stepId, path);
-            inputs.push({
-                name,
-                description: redacted
-                    ? `Secret value required by ${stepId} at ${path.join(".") || "arguments"}`
-                    : `Value captured from the request for ${stepId} at ${path.join(".") || "arguments"}`,
-                required: true,
-                secret: redacted,
-                ...(redacted ? {} : { valueType: getValueType(leaf) }),
-            });
-            expression = { kind: "input", name };
-            if (redacted) {
-                warnings.push(
-                    `${stepId} contains a redacted value and requires review of the generated secret input.`,
-                );
-            }
-        }
+        const expression =
+            findPriorResultExpression(leaf, priorSteps, priorCalls) ??
+            createInputExpression(leaf, stepId, path, prompt, inputs, warnings);
         if (expression) bindings.push({ path, expression });
     }
     return bindings.length === 0
