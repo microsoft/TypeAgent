@@ -111,9 +111,36 @@ export class McpConfigDiscovery {
                   options.repositoryRoot ?? findRepositoryRoot(workspacePath),
               )
             : undefined;
-        const files: ConfigFile[] = [];
+
+        const files = this.collectConfigFiles(
+            options,
+            workspacePath,
+            repositoryRoot,
+        );
         const diagnostics: McpDiscoveryDiagnostic[] = [];
         const searchedFiles: string[] = [];
+        const selected = new Map<string, DiscoveredMcpConfig>();
+
+        for (const file of files) {
+            searchedFiles.push(file.filePath);
+            this.processConfigFile(file, selected, diagnostics);
+        }
+
+        return {
+            configs: [...selected.values()],
+            diagnostics,
+            searchedFiles,
+            ...(workspacePath === undefined ? {} : { workspacePath }),
+            ...(repositoryRoot === undefined ? {} : { repositoryRoot }),
+        };
+    }
+
+    private collectConfigFiles(
+        options: McpConfigDiscoveryOptions,
+        workspacePath: string | undefined,
+        repositoryRoot: string | undefined,
+    ): ConfigFile[] {
+        const files: ConfigFile[] = [];
 
         if (options.includeUserConfig !== false) {
             files.push({
@@ -152,79 +179,104 @@ export class McpConfigDiscovery {
             }
         }
 
-        const selected = new Map<string, DiscoveredMcpConfig>();
-        for (const file of files) {
-            searchedFiles.push(file.filePath);
-            if (!fs.existsSync(file.filePath)) {
-                continue;
-            }
-            if (!file.trusted) {
-                diagnostics.push({
-                    kind: "untrusted",
-                    filePath: file.filePath,
-                    message: `Skipped MCP config in untrusted folder: ${file.filePath}`,
-                });
-                continue;
-            }
-            let parsed: unknown;
-            try {
-                parsed = JSON.parse(fs.readFileSync(file.filePath, "utf8"));
-            } catch (error) {
-                diagnostics.push({
-                    kind: "unreadable",
-                    filePath: file.filePath,
-                    message: `Unable to read MCP config '${file.filePath}': ${error instanceof Error ? error.message : String(error)}`,
-                });
-                continue;
-            }
-            const imported = importMcpConfig(parsed);
-            for (const error of imported.errors) {
-                diagnostics.push({
-                    kind: "invalid",
-                    filePath: file.filePath,
-                    ...(error.name === "(root)"
-                        ? {}
-                        : { serverName: error.name }),
-                    message: `Invalid MCP config '${file.filePath}'${error.name === "(root)" ? "" : ` server '${error.name}'`}: ${error.reason}`,
-                });
-            }
-            for (const importedServer of imported.servers) {
-                const previous = selected.get(importedServer.name);
-                if (previous !== undefined) {
-                    diagnostics.push({
-                        kind: "duplicate",
-                        filePath: file.filePath,
-                        serverName: importedServer.name,
-                        replacedFilePath: previous.filePath,
-                        message: `MCP server '${importedServer.name}' from '${file.filePath}' overrides '${previous.filePath}'.`,
-                    });
-                }
-                selected.set(importedServer.name, {
-                    filePath: file.filePath,
-                    sourceKind: file.sourceKind,
-                    config: {
-                        ...importedServer.config,
-                        id: `discovered:${file.sourceKind}:${importedServer.name}`,
-                        scope: file.scope,
-                        trust: "untrusted",
-                        enabled: false,
-                        provenance: {
-                            ...importedServer.config.provenance,
-                            source: file.filePath,
-                            sourceKind: file.sourceKind,
-                            ref: importedServer.name,
-                        },
-                    },
-                });
-            }
+        return files;
+    }
+
+    private processConfigFile(
+        file: ConfigFile,
+        selected: Map<string, DiscoveredMcpConfig>,
+        diagnostics: McpDiscoveryDiagnostic[],
+    ): void {
+        if (!fs.existsSync(file.filePath)) {
+            return;
+        }
+        if (!file.trusted) {
+            diagnostics.push({
+                kind: "untrusted",
+                filePath: file.filePath,
+                message: `Skipped MCP config in untrusted folder: ${file.filePath}`,
+            });
+            return;
         }
 
-        return {
-            configs: [...selected.values()],
-            diagnostics,
-            searchedFiles,
-            ...(workspacePath === undefined ? {} : { workspacePath }),
-            ...(repositoryRoot === undefined ? {} : { repositoryRoot }),
-        };
+        const parsed = this.readConfigFile(file.filePath, diagnostics);
+        if (parsed === undefined) {
+            return;
+        }
+
+        const imported = importMcpConfig(parsed);
+        this.recordImportErrors(file, imported.errors, diagnostics);
+        this.mergeServers(file, imported.servers, selected, diagnostics);
+    }
+
+    private readConfigFile(
+        filePath: string,
+        diagnostics: McpDiscoveryDiagnostic[],
+    ): unknown | undefined {
+        try {
+            return JSON.parse(fs.readFileSync(filePath, "utf8"));
+        } catch (error) {
+            diagnostics.push({
+                kind: "unreadable",
+                filePath,
+                message: `Unable to read MCP config '${filePath}': ${error instanceof Error ? error.message : String(error)}`,
+            });
+            return undefined;
+        }
+    }
+
+    private recordImportErrors(
+        file: ConfigFile,
+        errors: ReadonlyArray<{ name: string; reason: string }>,
+        diagnostics: McpDiscoveryDiagnostic[],
+    ): void {
+        for (const error of errors) {
+            diagnostics.push({
+                kind: "invalid",
+                filePath: file.filePath,
+                ...(error.name === "(root)" ? {} : { serverName: error.name }),
+                message: `Invalid MCP config '${file.filePath}'${error.name === "(root)" ? "" : ` server '${error.name}'`}: ${error.reason}`,
+            });
+        }
+    }
+
+    private mergeServers(
+        file: ConfigFile,
+        servers: ReadonlyArray<{
+            name: string;
+            config: NormalizedMcpServerConfig;
+        }>,
+        selected: Map<string, DiscoveredMcpConfig>,
+        diagnostics: McpDiscoveryDiagnostic[],
+    ): void {
+        for (const importedServer of servers) {
+            const previous = selected.get(importedServer.name);
+            if (previous !== undefined) {
+                diagnostics.push({
+                    kind: "duplicate",
+                    filePath: file.filePath,
+                    serverName: importedServer.name,
+                    replacedFilePath: previous.filePath,
+                    message: `MCP server '${importedServer.name}' from '${file.filePath}' overrides '${previous.filePath}'.`,
+                });
+            }
+            selected.set(importedServer.name, {
+                filePath: file.filePath,
+                sourceKind: file.sourceKind,
+                config: {
+                    ...importedServer.config,
+                    id: `discovered:${file.sourceKind}:${importedServer.name}`,
+                    scope: file.scope,
+                    trust: "untrusted",
+                    enabled: false,
+                    provenance: {
+                        ...importedServer.config.provenance,
+                        source: file.filePath,
+                        sourceKind: file.sourceKind,
+                        ref: importedServer.name,
+                    },
+                },
+            });
+        }
     }
 }
