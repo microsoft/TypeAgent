@@ -95,7 +95,6 @@ describe("dispatcher structured lifecycle events", () => {
         ]);
         expect(events[1]?.data).toEqual({
             requestId: "request-1",
-            schemaNames: ["calendar"],
             count: 1,
         });
         expect(events[2]?.data).toEqual({

@@ -35,7 +35,7 @@ export function logTranslationStarted(
     },
 ): void {
     logger?.logEvent(DISPATCHER_STRUCTURED_EVENTS.translationStarted, {
-        ...data,
+        requestId: data.requestId,
         count: data.schemaNames.length,
     });
 }

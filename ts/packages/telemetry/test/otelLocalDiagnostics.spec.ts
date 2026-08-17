@@ -135,6 +135,61 @@ describe("JsonlLogExporter", () => {
         expect(lines.map((line) => line.body)).toEqual(["first", "second"]);
     });
 
+    it("writes the reduced local envelope", async () => {
+        const dir = makeTempDir();
+        tempDirs.push(dir);
+        const exporter = new JsonlLogExporter({
+            filePath: path.join(dir, "compact-{pid}.jsonl"),
+            serviceName: "test",
+            pid: 1008,
+            diagnostic: () => undefined,
+        });
+        const record: ReadableLogRecord = {
+            ...createRecord("compact", "dispatcher:request:completed"),
+            body: {
+                message: "Request completed: handled",
+                status: "handled",
+            },
+            attributes: {
+                "typeagent.session.id": "session",
+                "typeagent.activation.id": "activation",
+                "typeagent.request.id": "request",
+                custom: "value",
+            },
+            spanContext: {
+                traceId: "1".repeat(32),
+                spanId: "2".repeat(16),
+                traceFlags: 1,
+            },
+        };
+
+        await exportRecords(exporter, [record]);
+        await exporter.shutdown();
+
+        const parsed = JSON.parse(
+            fs.readFileSync(exporter.filePath, "utf8").trimEnd(),
+        );
+        expect(parsed).toEqual({
+            timestamp: "2023-11-14T22:13:20.000Z",
+            severity: "INFO",
+            event: "dispatcher:request:completed",
+            sessionId: "session",
+            activationId: "activation",
+            requestId: "request",
+            traceId: "1".repeat(32),
+            spanId: "2".repeat(16),
+            message: "Request completed: handled",
+            body: { status: "handled" },
+            attributes: { custom: "value" },
+        });
+        expect(parsed).not.toHaveProperty("observedTimestamp");
+        expect(parsed).not.toHaveProperty("resource");
+        expect(parsed).not.toHaveProperty("instrumentationScope");
+        expect(parsed).not.toHaveProperty("severityNumber");
+        expect(parsed).not.toHaveProperty("traceFlags");
+        expect(parsed).not.toHaveProperty("droppedAttributesCount");
+    });
+
     it("exports every record admitted by its local processor", async () => {
         const dir = makeTempDir();
         tempDirs.push(dir);
@@ -305,6 +360,10 @@ describe("debug bridge", () => {
         const logger = logs.getLogger("local-policy");
 
         logger.emit({ eventName: "structured-one", body: "structured-one" });
+        logger.emit({
+            eventName: "dispatcher:command",
+            body: "legacy-command",
+        });
         logger.emit({ eventName: "debug", body: "debug-hidden" });
         state.setDebugCopy(true);
         logger.emit({ eventName: "debug", body: "debug-visible" });
@@ -559,12 +618,12 @@ describe("local diagnostics correlation", () => {
                 .map(
                     (line) =>
                         JSON.parse(line) as {
-                            eventName: string;
+                            event: string;
                             traceId: string;
                             spanId: string;
                         },
                 );
-            expect(records.map((record) => record.eventName)).toEqual([
+            expect(records.map((record) => record.event)).toEqual([
                 "structured",
                 "debug",
             ]);

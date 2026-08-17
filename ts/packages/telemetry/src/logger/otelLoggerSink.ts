@@ -26,6 +26,7 @@ import {
     redactText,
     type RedactionOptions,
 } from "../otel/redaction.js";
+import { getStructuredLogMessage } from "./structuredLogMessage.js";
 
 /**
  * Options for {@link createOtelLoggerSink} / {@link OtelLoggerSink}.
@@ -252,7 +253,12 @@ export class OtelLoggerSink implements LoggerSink {
             // redaction. Guarantees an acyclic, depth-limited tree so the
             // downstream `redactObject` recursion cannot hang or overflow
             // regardless of what the caller passed.
-            const snapshot = boundedSnapshot(event.event);
+            const message = getStructuredLogMessage(eventName, event.event);
+            const sourceBody =
+                message === undefined
+                    ? event.event
+                    : { ...event.event, message };
+            const snapshot = boundedSnapshot(sourceBody);
             // `redactObject` rebuilds every reachable container when it
             // finds a string to redact, but short-circuits back to the
             // caller's own reference when the payload has no strings.

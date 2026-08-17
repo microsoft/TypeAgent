@@ -566,9 +566,18 @@ $log.FullName
 Get-Content $log.FullName -Wait
 ```
 
-Each line is a JSON object. Expected fields include `timestamp`,
-`severityText`, `body`, `eventName`, `traceId`, `spanId`, `attributes`, and
-`resource`.
+Each line uses a reduced local envelope intended for direct inspection:
+`timestamp`, `severity`, `event`, `message`, `body`, and, when available,
+`requestId`, `traceId`, `spanId`, `sessionId`, `activationId`, `namespace`,
+and remaining `attributes`. The `message` is a payload-free lifecycle summary,
+such as `Request accepted and queued` or `Translation succeeded via grammar`.
+Use opt-in debug records for detailed diagnostics behind that lifecycle step.
+Correlation fields are elevated once rather than repeated in the body, and the
+redundant legacy `dispatcher:command` record is omitted from local JSONL.
+Repeated SDK metadata such as the observed timestamp, resource,
+instrumentation scope, numeric severity, trace flags, and dropped-attribute
+count is omitted from JSONL. The OTLP exporter still sends the full OTel log
+record, including the lifecycle message in its structured body.
 
 Structured dispatcher records include events such as `command` and
 `requestQueue:start`. Bridged debug records include their debug namespace.

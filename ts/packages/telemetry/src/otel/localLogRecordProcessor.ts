@@ -49,6 +49,7 @@ function shouldEmitLocalRecord(eventName: string | undefined): boolean {
     const snapshot = getLocalTelemetryState().getSnapshot();
     return (
         snapshot.profile !== "off" &&
+        eventName !== "dispatcher:command" &&
         (eventName !== "debug" || snapshot.debugCopy)
     );
 }
