@@ -49,6 +49,7 @@
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/conversation-memory": "workspace:*",
+    "@typeagent/copilot-macros": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "@typeagent/telemetry": "workspace:*",

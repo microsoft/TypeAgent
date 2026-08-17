@@ -38,16 +38,9 @@ import { loadConfig, type ResolvedAgentServerConfig } from "./config/index.js";
  * browser: use the Claude browser extension instead
  * settings: dead stub, real settings are in desktop sub-schemas
  * montage: requires the shell embedded browser
- * androidMobile: requires a connected Android device
  * markdown: not applicable for MCP use
  */
-const SKIP_AGENTS = new Set([
-    "browser",
-    "settings",
-    "montage",
-    "androidMobile",
-    "markdown",
-]);
+const SKIP_AGENTS = new Set(["browser", "settings", "montage", "markdown"]);
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 

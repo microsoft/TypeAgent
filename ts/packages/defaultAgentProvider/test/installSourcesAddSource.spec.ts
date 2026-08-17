@@ -36,7 +36,7 @@ function fakeContext(): any {
 
 // Run a handler and return the single config it added.
 async function run(
-    kind: "feed" | "catalog" | "path" | "mcp-config",
+    kind: "feed" | "catalog" | "path" | "mcp-config" | "registry",
     args: any,
     flags: any = {},
 ) {
@@ -49,7 +49,7 @@ async function run(
 
 // Run a handler expecting it to throw.
 function runExpectThrow(
-    kind: "feed" | "catalog" | "path" | "mcp-config",
+    kind: "feed" | "catalog" | "path" | "mcp-config" | "registry",
     args: any,
     flags: any = {},
 ) {
@@ -60,7 +60,7 @@ function runExpectThrow(
 }
 
 describe("getAddSourceCommandHandlers", () => {
-    it("exposes feed, catalog, path, and mcp-config subcommands", () => {
+    it("exposes all source subcommands", () => {
         const { registry } = makeRegistry();
         const handlers = getAddSourceCommandHandlers(registry);
         expect(Object.keys(handlers.commands).sort()).toEqual([
@@ -68,7 +68,35 @@ describe("getAddSourceCommandHandlers", () => {
             "feed",
             "mcp-config",
             "path",
+            "registry",
         ]);
+    });
+
+    describe("registry", () => {
+        it("requires and normalizes an https base URL", async () => {
+            expect(
+                await run(
+                    "registry",
+                    { name: "official" },
+                    {
+                        url: "https://registry.example/api",
+                        "cache-ttl": 120,
+                    },
+                ),
+            ).toEqual({
+                kind: "registry",
+                name: "official",
+                baseUrl: "https://registry.example/api/",
+                cacheTtlMs: 120000,
+            });
+            await expect(
+                runExpectThrow(
+                    "registry",
+                    { name: "bad" },
+                    { url: "http://registry.example" },
+                ),
+            ).rejects.toThrow(/https/);
+        });
     });
 
     describe("feed", () => {

@@ -23,7 +23,7 @@
     "compile": "node esbuild.mjs",
     "deploy:local": "npm run package && code --install-extension dist-pub/typeagent-studio.vsix --force",
     "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/typeagent-studio.vsix",
-    "test:local": "tsx --test src/test/*.spec.ts",
+    "test:local": "tsx --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../tools/scripts/nodeTestFailureReporter.mjs --test-reporter-destination=stdout src/test/*.spec.ts",
     "vscode:prepublish": "npm run compile",
     "watch": "node esbuild.mjs --watch"
   },

@@ -37,11 +37,25 @@ export function mcpInfoToNormalized(
 ): NormalizedMcpServerConfig | undefined {
     const base: Pick<
         NormalizedMcpServerConfig,
-        "name" | "description" | "emojiChar" | "scope" | "trust"
+        | "id"
+        | "name"
+        | "description"
+        | "emojiChar"
+        | "scope"
+        | "trust"
+        | "enabled"
+        | "provenance"
     > = {
+        id: `shipped:${name}`,
         name,
         scope: "shipped",
         trust: "trusted",
+        enabled: true,
+        provenance: {
+            source: "shipped",
+            sourceKind: "shipped",
+            ref: name,
+        },
     };
     if (info.description !== undefined) {
         base.description = info.description;

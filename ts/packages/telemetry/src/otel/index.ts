@@ -77,6 +77,8 @@ export {
 export {
     TYPEAGENT_SPAN_NAMES,
     TYPEAGENT_SPAN_ATTRIBUTES,
+    getActiveTypeAgentSpanAttributes,
+    setActiveTypeAgentSpanAttributes,
     setTypeAgentSpanAttributes,
     type TypeAgentSpanName,
     type TypeAgentSpanAttributeKey,
