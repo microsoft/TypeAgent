@@ -217,7 +217,7 @@
     "isomorphic-ws": "^5.0.0",
     "markdown-it": "^14.2.0",
     "microsoft-cognitiveservices-speech-sdk": "1.43.1",
-    "ws": "^8.21.2"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/debug": "^4.1.0",
@@ -228,7 +228,7 @@
     "@vscode/vsce": "^3.2.1",
     "concurrently": "^9.1.2",
     "copyfiles": "^2.4.1",
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "mkdirp": "^3.0.1",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
