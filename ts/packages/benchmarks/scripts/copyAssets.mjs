@@ -46,6 +46,10 @@ const files = [
         "dist/translationBench/action-parameters-grader.generated.json",
     ],
     [
+        "src/translationBench/eligible-gold-actions.generated.json",
+        "dist/translationBench/eligible-gold-actions.generated.json",
+    ],
+    [
         "src/translationBench/config.schema.json",
         "dist/translationBench/config.schema.json",
     ],
@@ -59,8 +63,18 @@ const files = [
     ],
 ];
 
+const requiredGenerated = new Set([
+    "src/translationBench/catalog.generated.json",
+    "src/translationBench/action-parameters-grader.generated.json",
+    "src/translationBench/eligible-gold-actions.generated.json",
+    "src/translationBench/policy/action-eligibility.json",
+]);
 for (const [fromRel, toRel] of files) {
-    copyFileFast(path.join(root, fromRel), path.join(root, toRel));
+    const from = path.join(root, fromRel);
+    if (requiredGenerated.has(fromRel) && !existsSync(from)) {
+        throw new Error(`copyAssets: missing required asset ${fromRel}`);
+    }
+    copyFileFast(from, path.join(root, toRel));
 }
 
 const yamlSrc = path.join(root, "src/translationBench/synthesizer");
@@ -74,6 +88,39 @@ if (existsSync(yamlSrc)) {
         copyFileFast(
             path.join(yamlSrc, name.name),
             path.join(yamlDst, name.name),
+        );
+    }
+}
+
+const policyFiles = [
+    [
+        "src/translationBench/policy/action-eligibility.json",
+        "dist/translationBench/policy/action-eligibility.json",
+    ],
+    [
+        "src/translationBench/policy/action-eligibility.schema.json",
+        "dist/translationBench/policy/action-eligibility.schema.json",
+    ],
+];
+for (const [fromRel, toRel] of policyFiles) {
+    const from = path.join(root, fromRel);
+    if (!existsSync(from)) {
+        throw new Error(`copyAssets: missing required asset ${fromRel}`);
+    }
+    copyFileFast(from, path.join(root, toRel));
+}
+
+const policyYamlSrc = path.join(root, "src/translationBench/policy");
+const policyYamlDst = path.join(root, "dist/translationBench/policy");
+if (existsSync(policyYamlSrc)) {
+    for (const name of readdirSync(policyYamlSrc, { withFileTypes: true })) {
+        if (!name.isFile()) continue;
+        if (!name.name.endsWith(".yaml") && !name.name.endsWith(".yml")) {
+            continue;
+        }
+        copyFileFast(
+            path.join(policyYamlSrc, name.name),
+            path.join(policyYamlDst, name.name),
         );
     }
 }
