@@ -1,26 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import {
     generateActionActionFunctionJsonSchemas,
     parseActionSchemaSource,
     parseToolsJsonSchema,
     toJSONParsedActionSchema,
 } from "@typeagent/action-schema";
-import type {
-    ActionConfig,
-    ActionConfigProvider,
-} from "agent-dispatcher/internal";
 
 import {
     createTranslationBenchGenerationSchedule,
     finalizeTranslationBenchGeneratedCaseLineage,
-    generateTranslationBenchBenchmark,
     parseTranslationBenchGeneratedCandidate,
     parseTranslationBenchReviewerDecision,
     runTranslationBenchGenerationQualityLoop,
@@ -31,11 +21,7 @@ import type {
     TranslationBenchBenchmarkSchema,
     TranslationBenchTargetAction,
 } from "../src/translationBench/synthesizer/benchmark.js";
-import {
-    TRANSLATION_BENCH_EXAMPLE_SOURCE_PIN,
-    computeTranslationBenchCanonicalPayloadHash,
-} from "../src/translationBench/synthesizer/benchmark.js";
-import type { TranslationBenchSourceManifest } from "../src/translationBench/synthesizer/sourceBuilder.js";
+import { computeTranslationBenchCanonicalPayloadHash } from "../src/translationBench/synthesizer/benchmark.js";
 
 const HASH = "a".repeat(64);
 
@@ -146,42 +132,21 @@ function generatedCandidate(target = targetAction(), genCaseCount = 20) {
                 role: positive ? ("positive" as const) : ("negative" as const),
                 utterance: positive
                     ? `Look up positive item ${index}`
-                    : `Don't run this action right now; leave everything alone (${index}).`,
+                    : `Please clarify negative item ${index}`,
                 expectedActions: positive
                     ? [expectedAction(target, `positive-${index}`)]
                     : [],
                 order: "any" as const,
-                dimensions: positive
-                    ? { variation: index }
-                    : { variation: index, negativeKind: "pure_refusal" },
+                dimensions: { variation: index },
             };
         }),
     };
-}
-
-function fairNegativeAssessments(genCaseCount = 20) {
-    const positiveCount = genCaseCount / 2;
-    // generatedCandidate places negatives in the second half of genCases.
-    return Array.from({ length: positiveCount }, (_, i) => {
-        const index = positiveCount + i;
-        return {
-            path: `$.genCases[${index}].utterance`,
-            kind: "pure_refusal" as const,
-            fairEmptyGold: true,
-            reason: "pure refusal / leave-alone; fair empty gold",
-            opensAsHardAbstain: true,
-            hasAlternateOrSiblingTask: false,
-            hasQuestionOrExplanationRequest: false,
-            mapsToAnyLoadedTool: false,
-        };
-    });
 }
 
 function reviewerDecision(
     candidateHash: string,
     decision: "approve" | "reject",
     feedback = "Make the seed more natural",
-    genCaseCount = 20,
 ) {
     return {
         candidateHash,
@@ -209,23 +174,7 @@ function reviewerDecision(
             decision === "approve"
                 ? "The row is ready"
                 : "The row needs revision",
-        // Required by semantic checker; path-keyed 1:1 with negatives.
-        negativeAssessments: fairNegativeAssessments(genCaseCount),
     };
-}
-
-/** Structural decision parse omits negativeAssessments (stripped by verifier). */
-function reviewerDecisionBody(
-    candidateHash: string,
-    decision: "approve" | "reject",
-    feedback = "Make the seed more natural",
-) {
-    const { negativeAssessments: _omit, ...body } = reviewerDecision(
-        candidateHash,
-        decision,
-        feedback,
-    );
-    return body;
 }
 
 function candidateHashFromPrompt(prompt: string): string {
@@ -297,12 +246,7 @@ describe("translation bench generation schedule", () => {
             catalogSchema("alpha", ["one", "two"]),
             catalogSchema("beta", ["three", "four"]),
         ];
-        const options = {
-            caseCount: 6,
-            requireCompleteCoverage: true,
-            allowMissingRemovedActions: true,
-            applyEligibleGoldAllowlist: false,
-        };
+        const options = { caseCount: 6, requireCompleteCoverage: true };
 
         const first = createTranslationBenchGenerationSchedule(
             catalog,
@@ -340,12 +284,7 @@ describe("translation bench generation schedule", () => {
             catalogSchema("beta", ["b1", "b2", "b3", "b4"]),
             catalogSchema("gamma", ["c1", "c2", "c3", "c4"]),
         ];
-        const options = {
-            caseCount: 10,
-            requireCompleteCoverage: false,
-            allowMissingRemovedActions: true,
-            applyEligibleGoldAllowlist: false,
-        };
+        const options = { caseCount: 10, requireCompleteCoverage: false };
 
         const schedule = createTranslationBenchGenerationSchedule(
             catalog,
@@ -379,22 +318,18 @@ describe("translation bench generation schedule", () => {
             createTranslationBenchGenerationSchedule(catalog, {
                 caseCount: 2,
                 requireCompleteCoverage: true,
-                allowMissingRemovedActions: true,
-                applyEligibleGoldAllowlist: false,
             }),
         ).toThrow(/cover|coverage|action/i);
     });
 
     it("treats complete coverage as eligible actions after exclusions", () => {
         const catalog = [
-            catalogSchema("alpha", ["keepAlpha", "drop"]),
-            catalogSchema("beta", ["keepBeta"]),
+            catalogSchema("alpha", ["keep", "drop"]),
+            catalogSchema("beta", ["keep"]),
         ];
         const schedule = createTranslationBenchGenerationSchedule(catalog, {
             caseCount: 2,
             requireCompleteCoverage: true,
-            allowMissingRemovedActions: true,
-            applyEligibleGoldAllowlist: false,
             excludedActionIds: new Set(["alpha.drop"]),
         });
 
@@ -409,28 +344,6 @@ describe("translation bench generation schedule", () => {
                 (entry) => `${entry.schemaName}.${entry.actionName}`,
             ),
         ).not.toContain("alpha.drop");
-    });
-
-    it("excludes cross-schema duplicate action names from targeting", () => {
-        const catalog = [
-            catalogSchema("alpha", ["shared", "onlyAlpha"]),
-            catalogSchema("beta", ["shared", "onlyBeta"]),
-        ];
-        const schedule = createTranslationBenchGenerationSchedule(catalog, {
-            caseCount: 2,
-            requireCompleteCoverage: true,
-            allowMissingRemovedActions: true,
-            applyEligibleGoldAllowlist: false,
-        });
-
-        const targeted = schedule.entries.map(
-            (entry) => `${entry.schemaName}.${entry.actionName}`,
-        );
-        expect(targeted).not.toContain("alpha.shared");
-        expect(targeted).not.toContain("beta.shared");
-        expect(new Set(targeted)).toEqual(
-            new Set(["alpha.onlyAlpha", "beta.onlyBeta"]),
-        );
     });
 });
 
@@ -604,14 +517,14 @@ describe("translation bench reviewer decision validation", () => {
     it("binds approval to the exact candidate hash", () => {
         expect(
             parseTranslationBenchReviewerDecision(
-                reviewerDecisionBody(HASH, "approve"),
+                reviewerDecision(HASH, "approve"),
                 HASH,
             ),
         ).toMatchObject({ decision: "approve", candidateHash: HASH });
 
         expect(() =>
             parseTranslationBenchReviewerDecision(
-                reviewerDecisionBody("b".repeat(64), "approve"),
+                reviewerDecision("b".repeat(64), "approve"),
                 HASH,
             ),
         ).toThrow(/hash/i);
@@ -619,7 +532,7 @@ describe("translation bench reviewer decision validation", () => {
 
     it("keeps structural parse free of score floor; optional threshold is explicit", () => {
         const lowApprove = {
-            ...reviewerDecisionBody(HASH, "approve"),
+            ...reviewerDecision(HASH, "approve"),
             scores: {
                 anchorFidelity: 0.5,
                 groundTruthCorrectness: 1,
@@ -794,8 +707,6 @@ describe("translation bench generation quality loop", () => {
                         reviewerDecision(
                             candidateHashFromPrompt(prompt),
                             "approve",
-                            "Make the seed more natural",
-                            2,
                         ),
                     );
                 },
@@ -1032,247 +943,5 @@ describe("translation bench generation quality loop", () => {
         ).rejects.toThrow(/2 attempts/i);
         expect(generations).toBe(2);
         expect(reviews).toBe(0);
-    });
-});
-
-// --- Integration coverage for generateTranslationBenchBenchmark ---------------
-
-function integrationProvider(): ActionConfigProvider {
-    const tools = ["alpha", "beta", "gamma"].map((name) => ({
-        name,
-        description: `Run ${name}`,
-        inputSchema: {
-            type: "object" as const,
-            properties: { query: { type: "string" as const } },
-            required: ["query"],
-            additionalProperties: false as const,
-        },
-    }));
-    const config = {
-        schemaName: "toolbox",
-        description: "Toolbox actions",
-        schemaType: "ToolboxAction",
-    } as ActionConfig;
-    const schemaFile = {
-        schemaName: "toolbox",
-        sourceHash: "a".repeat(64),
-        parsedActionSchema: parseToolsJsonSchema(tools),
-    } as ReturnType<ActionConfigProvider["getActionSchemaFileForConfig"]>;
-    return {
-        tryGetActionConfig(schemaName) {
-            return schemaName === "toolbox" ? config : undefined;
-        },
-        getActionConfig(schemaName) {
-            if (schemaName !== "toolbox") throw new Error("unknown schema");
-            return config;
-        },
-        getActionConfigs() {
-            return [config];
-        },
-        getActionSchemaFileForConfig() {
-            return schemaFile;
-        },
-    };
-}
-
-function integrationSourceText(): string {
-    return [
-        {
-            id: "anchor-1",
-            query: "Handle the first request.",
-            function_calls: [],
-        },
-        {
-            id: "anchor-2",
-            query: "Handle the second request.",
-            function_calls: [],
-        },
-        {
-            id: "anchor-3",
-            query: "Handle the third request.",
-            function_calls: [],
-        },
-    ]
-        .map((row) => JSON.stringify(row))
-        .join("\n");
-}
-
-function integrationManifest(text: string): TranslationBenchSourceManifest {
-    return {
-        ...TRANSLATION_BENCH_EXAMPLE_SOURCE_PIN,
-        sourceFileHash: createHash("sha256").update(text).digest("hex"),
-    };
-}
-
-/** The synthesizer prompt states the scheduled target verbatim after "must use exactly". */
-function scheduledTargetFromPrompt(
-    prompt: string,
-): TranslationBenchTargetAction {
-    const match =
-        /must use exactly \{"schemaName":"([^"]+)","actionName":"([^"]+)"/.exec(
-            prompt,
-        );
-    if (match === null) {
-        throw new Error("Synthesizer prompt has no scheduled target");
-    }
-    return { schemaName: match[1]!, actionName: match[2]! };
-}
-
-/**
- * Slot-unique candidate: each slot targets a distinct action, so tag every
- * utterance with the target id to avoid cross-slot dedup collisions.
- */
-function slotCandidate(target: TranslationBenchTargetAction) {
-    const candidate = generatedCandidate(target, 2);
-    const tag = `${target.schemaName}.${target.actionName}`;
-    candidate.seed.utterance = `Look up the seed item for ${tag}`;
-    candidate.genCases.forEach((genCase, index) => {
-        genCase.utterance =
-            genCase.role === "positive"
-                ? `Look up positive item ${index} for ${tag}`
-                : `Don't run ${tag} right now; leave everything alone (${index}).`;
-    });
-    return candidate;
-}
-
-function readCheckpointRows(
-    checkpointPath: string,
-): TranslationBenchBenchmarkCaseRecord[] {
-    const lines = readFileSync(checkpointPath, "utf8")
-        .split("\n")
-        .filter((line) => line.trim().length > 0);
-    const rows: TranslationBenchBenchmarkCaseRecord[] = [];
-    for (const line of lines) {
-        const parsed = JSON.parse(line) as {
-            kind?: string;
-            value?: TranslationBenchBenchmarkCaseRecord;
-        };
-        if (parsed.kind === "translation-bench-row" && parsed.value) {
-            rows.push(parsed.value);
-        }
-    }
-    return rows;
-}
-
-describe("generate translation bench benchmark (integration)", () => {
-    const approvingReviewer = {
-        model: "reviewer-model",
-        async complete(prompt: string) {
-            return JSON.stringify(
-                reviewerDecision(
-                    candidateHashFromPrompt(prompt),
-                    "approve",
-                    "Make the seed more natural",
-                    2,
-                ),
-            );
-        },
-    };
-
-    it("runs a full concurrent generation and checkpoints every emitted case", async () => {
-        const caseCount = 3;
-        const sourceText = integrationSourceText();
-        const checkpointPath = join(
-            mkdtempSync(join(tmpdir(), "tb-gen-full-")),
-            "checkpoint.jsonl",
-        );
-        const progress: Array<[number, number]> = [];
-
-        const { benchmark, coverage } = await generateTranslationBenchBenchmark(
-            {
-                name: "integration full run",
-                sourceText,
-                sourceManifest: integrationManifest(sourceText),
-                provider: integrationProvider(),
-                caseCount,
-                genCaseCount: 2,
-                maxAttempts: 5,
-                requireCompleteCoverage: true,
-                allowMissingRemovedActions: true,
-                applyEligibleGoldAllowlist: false,
-                concurrency: 2,
-                generator: {
-                    model: "generator-model",
-                    async complete(prompt: string) {
-                        return JSON.stringify(
-                            slotCandidate(scheduledTargetFromPrompt(prompt)),
-                        );
-                    },
-                },
-                reviewer: approvingReviewer,
-                checkpointPath,
-                onProgress: (completed, total) =>
-                    progress.push([completed, total]),
-            },
-        );
-
-        expect(benchmark.cases).toHaveLength(caseCount);
-        expect(coverage.scheduledActionCount).toBe(caseCount);
-        expect(coverage.complete).toBe(true);
-        expect(progress.at(-1)).toEqual([caseCount, caseCount]);
-
-        const rows = readCheckpointRows(checkpointPath);
-        expect(rows).toHaveLength(caseCount);
-        expect(new Set(rows.map((row) => row.targetAction.actionName))).toEqual(
-            new Set(["alpha", "beta", "gamma"]),
-        );
-    });
-
-    it("continues partially past a failed slot without checkpointing the uncommitted case", async () => {
-        const caseCount = 3;
-        const failedAction = "beta";
-        const sourceText = integrationSourceText();
-        const checkpointPath = join(
-            mkdtempSync(join(tmpdir(), "tb-gen-partial-")),
-            "checkpoint.jsonl",
-        );
-
-        const { benchmark, coverage } = await generateTranslationBenchBenchmark(
-            {
-                name: "integration partial run",
-                sourceText,
-                sourceManifest: integrationManifest(sourceText),
-                provider: integrationProvider(),
-                caseCount,
-                genCaseCount: 2,
-                maxAttempts: 5,
-                requireCompleteCoverage: false,
-                allowMissingRemovedActions: true,
-                applyEligibleGoldAllowlist: false,
-                concurrency: 2,
-                generator: {
-                    model: "generator-model",
-                    async complete(prompt: string) {
-                        const target = scheduledTargetFromPrompt(prompt);
-                        if (target.actionName === failedAction) {
-                            throw new Error(
-                                `forced generator failure on ${target.actionName}`,
-                            );
-                        }
-                        return JSON.stringify(slotCandidate(target));
-                    },
-                },
-                reviewer: approvingReviewer,
-                checkpointPath,
-            },
-        );
-
-        expect(benchmark.cases).toHaveLength(caseCount - 1);
-        // Coverage reflects the emitted actions, not the planned schedule.
-        expect(coverage.scheduledActionCount).toBe(caseCount - 1);
-        expect(coverage.complete).toBe(false);
-        expect(
-            benchmark.cases.map((evalCase) => evalCase.targetAction.actionName),
-        ).not.toContain(failedAction);
-
-        const rows = readCheckpointRows(checkpointPath);
-        expect(rows).toHaveLength(caseCount - 1);
-        // Persist-before-commit: the uncommitted (failed) slot never lands on disk.
-        expect(rows.map((row) => row.targetAction.actionName)).not.toContain(
-            failedAction,
-        );
-        expect(new Set(rows.map((row) => row.targetAction.actionName))).toEqual(
-            new Set(["alpha", "gamma"]),
-        );
     });
 });

@@ -1,5 +1,5 @@
 {
-  "catalogVersion": "2026-08-09",
+  "catalogVersion": "2026-08-06",
   "activeSchemas": [
     "browser",
     "browser.actionDiscovery",
@@ -8521,29 +8521,6 @@
         "fields": {}
       },
       "description": "Refresh the channel cache from the Discord server."
-    },
-    {
-      "schemaName": "dispatcher",
-      "actionName": "unknown",
-      "parameters": "request: string, reason: string",
-      "paramSpec": {
-        "kind": "object",
-        "fields": {
-          "request": {
-            "optional": false,
-            "spec": {
-              "kind": "string"
-            }
-          },
-          "reason": {
-            "optional": false,
-            "spec": {
-              "kind": "string"
-            }
-          }
-        }
-      },
-      "description": "Use UnknownAction when all the available actions in the schema is not relevant to the user request"
     },
     {
       "schemaName": "dispatcher.activity",
