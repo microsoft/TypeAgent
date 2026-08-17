@@ -61,6 +61,24 @@ class AgentAlreadyRegisteredErrorTest {
     }
 
     @Test
+    fun `the agent name may be quoted any way the server chooses`() {
+        listOf(
+            "App agent \"androidDevice\" already exists",
+            "App agent `androidDevice` already exists",
+            "App agent androidDevice already exists"
+        ).forEach { error ->
+            assertTrue(error, isAgentAlreadyRegisteredError(error, AndroidDeviceAgent.NAME))
+        }
+        // Loosening the quoting must not loosen the name match itself.
+        assertFalse(
+            isAgentAlreadyRegisteredError(
+                "App agent \"androidDeviceLegacy\" already exists",
+                AndroidDeviceAgent.NAME
+            )
+        )
+    }
+
+    @Test
     fun `the phrase is still found when the server wraps it in context`() {
         assertTrue(
             isAgentAlreadyRegisteredError(
@@ -99,13 +117,6 @@ class AgentAlreadyRegisteredErrorTest {
     @Test
     fun `a blank agent name never matches`() {
         assertFalse(isAgentAlreadyRegisteredError("App agent 'androidDevice' already exists", ""))
-    }
-
-    @Test
-    fun `a collision is retried before it is accepted`() {
-        // The recovery only claims a registration it did not make once a retry
-        // has failed to displace the orphan, so this must stay above one.
-        assertTrue(WebSocketManager.MAX_REGISTRATION_ATTEMPTS > 1)
     }
 
     @Test

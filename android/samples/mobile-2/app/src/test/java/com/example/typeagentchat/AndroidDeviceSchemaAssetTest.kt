@@ -72,6 +72,14 @@ class AndroidDeviceSchemaAssetTest {
             .map { it.groupValues[1] }
             .toList()
 
+        // Without this both lists can end up empty - a reformat of the type
+        // declarations alone would do it - and the comparison below would then
+        // pass while checking nothing at all.
+        assertFalse(
+            "No action type declarations were matched, so this test is not " +
+                "actually checking the schema any more",
+            declaredTypes.isEmpty()
+        )
         assertEquals(
             "Every action type must appear in the AndroidDeviceAction union, or the " +
                 "server never offers it",

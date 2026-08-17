@@ -10,9 +10,6 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.concurrent.Executors
-import java.util.concurrent.RejectedExecutionException
-import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -29,16 +26,7 @@ class WebSocketManager {
     private val displayThreads = mutableMapOf<String, AgentDisplayThread>()
     private val displayMessageIds = mutableMapOf<String, String>()
 
-    /**
-     * Runs the delayed retry of a client agent registration that collided with
-     * an orphaned one. A daemon thread so it can never hold the process up, and
-     * single threaded because at most one retry is ever outstanding.
-     */
-    private val registrationRetryScheduler: ScheduledExecutorService =
-        Executors.newSingleThreadScheduledExecutor { runnable ->
-            Thread(runnable, "typeagent-registration-retry").apply { isDaemon = true }
-        }
-
+    @Volatile
     private var webSocket: WebSocket? = null
     private var conversationId: String? = null
     private var connectionId: String? = null
@@ -166,6 +154,13 @@ class WebSocketManager {
             return
         }
 
+        // Claim the new generation before touching anything else. Everything
+        // below invalidates the previous connection, so its in-flight callbacks
+        // have to be able to see that they have been superseded; bumping the
+        // generation afterwards leaves a window in which one of them still
+        // believes it is current and writes over the connection replacing it.
+        val generation = connectionGeneration.incrementAndGet()
+
         synchronized(lock) {
             pendingInvokes.clear()
             pendingUserInteraction = null
@@ -179,7 +174,6 @@ class WebSocketManager {
         }
         _pendingYesNoPrompt.value = null
         webSocket?.cancel()
-        val generation = connectionGeneration.incrementAndGet()
         _connectionStatus.value = ConnectionStatus(
             text = "Connecting...",
             state = ConnectionStatus.State.CONNECTING
@@ -315,6 +309,10 @@ class WebSocketManager {
     }
 
     fun disconnect() {
+        // Retires this connection first, so the callbacks that the teardown
+        // below is about to fail cannot report a registration failure over the
+        // final state.
+        connectionGeneration.incrementAndGet()
         webSocket?.close(NORMAL_CLOSURE_STATUS, "App closed")
         webSocket = null
         synchronized(lock) {
@@ -324,7 +322,6 @@ class WebSocketManager {
         }
         _pendingYesNoPrompt.value = null
         failPendingInvokes("App closed")
-        registrationRetryScheduler.shutdownNow()
         client.dispatcher.executorService.shutdown()
         client.connectionPool.evictAll()
     }
@@ -446,14 +443,8 @@ class WebSocketManager {
         )
     }
 
-    /**
-     * Registers this client as the `androidDevice` agent for the joined
-     * conversation.
-     *
-     * @param attempt 1 for the first try, incremented by the retry that a
-     * collision with an orphaned registration schedules.
-     */
-    private fun registerClientAgent(joinedConversationId: String, attempt: Int = 1) {
+    /** Registers this client as the `androidDevice` agent for the conversation. */
+    private fun registerClientAgent(joinedConversationId: String) {
         val schemaContent = synchronized(lock) { agentSchemaContent }
         if (schemaContent.isNullOrBlank()) {
             val errorMessage = "The Android alarm and timer schema is unavailable."
@@ -500,7 +491,7 @@ class WebSocketManager {
                     return@sendInvoke
                 }
                 if (isAgentAlreadyRegisteredError(error, AndroidDeviceAgent.NAME)) {
-                    handleRegistrationCollision(joinedConversationId, attempt, generation)
+                    handleRegistrationCollision(joinedConversationId)
                     return@sendInvoke
                 }
                 synchronized(lock) {
@@ -519,69 +510,26 @@ class WebSocketManager {
      * Handles the server rejecting a registration because `androidDevice` is
      * already registered for this conversation.
      *
-     * A retry first, because the usual cause is a registration that outlived
-     * its socket and the server has simply not reaped it yet - a short wait
-     * often clears it, and re-registering is what binds the agent to *this*
-     * connection so invokes actually arrive here.
+     * The registration is accepted as it stands rather than retried. The cause
+     * is a registration that outlived its socket, and the server only drops
+     * those when its own keepalive gives up on the dead connection - tens of
+     * seconds at least, so no delay short enough to sit inside a connect is
+     * worth waiting. Claiming the agent is registered is still better than the
+     * alternative, which is refusing every action until the app is restarted.
      *
-     * Only once the retries are spent is the collision accepted, on the
-     * grounds that a permanently stuck registration is still better than
-     * refusing every action forever. That case gets its own status text: the
-     * app is then trusting a registration it did not make, and if the server
-     * is still routing invokes to the dead connection the actions will not
-     * arrive, so it must not be mistaken for a clean registration.
+     * It gets its own status text because the guarantee is weaker: the app is
+     * trusting a registration it did not make, and until the server drops the
+     * old connection it may keep routing invokes there, in which case actions
+     * silently do nothing. That must not look like a clean registration.
      */
-    private fun handleRegistrationCollision(
-        joinedConversationId: String,
-        attempt: Int,
-        generation: Int
-    ) {
-        if (attempt < MAX_REGISTRATION_ATTEMPTS) {
-            Log.w(
-                TAG,
-                "Client agent ${AndroidDeviceAgent.NAME} is already registered for " +
-                    "conversation $joinedConversationId; retrying in " +
-                    "${REGISTRATION_RETRY_DELAY_MS}ms (attempt $attempt of " +
-                    "$MAX_REGISTRATION_ATTEMPTS)"
-            )
-            _connectionStatus.value = ConnectionStatus(
-                text = "Retrying Android action registration...",
-                state = ConnectionStatus.State.CONNECTING
-            )
-            scheduleRegistrationRetry(joinedConversationId, attempt + 1, generation)
-            return
-        }
-
+    private fun handleRegistrationCollision(joinedConversationId: String) {
         markClientAgentRegistered(
-            logMessage = "Client agent ${AndroidDeviceAgent.NAME} is still registered for " +
-                "conversation $joinedConversationId after $attempt attempts; reusing that " +
-                "registration. Actions will fail silently if the server is still routing " +
-                "them to the previous connection.",
+            logMessage = "Client agent ${AndroidDeviceAgent.NAME} is already registered for " +
+                "conversation $joinedConversationId; reusing that registration. Actions will " +
+                "do nothing until the server drops the connection it was registered on.",
             statusText = STATUS_AGENT_REGISTRATION_REUSED,
             isRecovery = true
         )
-    }
-
-    private fun scheduleRegistrationRetry(
-        joinedConversationId: String,
-        attempt: Int,
-        generation: Int
-    ) {
-        try {
-            registrationRetryScheduler.schedule(
-                Runnable {
-                    if (isSupersededConnection(generation, "registerClientAgent retry")) {
-                        return@Runnable
-                    }
-                    registerClientAgent(joinedConversationId, attempt)
-                },
-                REGISTRATION_RETRY_DELAY_MS,
-                TimeUnit.MILLISECONDS
-            )
-        } catch (rejected: RejectedExecutionException) {
-            // The manager was disconnected while the retry was being scheduled.
-            Log.w(TAG, "Registration retry was not scheduled", rejected)
-        }
     }
 
     private fun markClientAgentRegistered(
@@ -1617,12 +1565,6 @@ class WebSocketManager {
          */
         internal const val STATUS_AGENT_REGISTRATION_REUSED =
             "Connected - reusing existing Android registration"
-
-        /** Total registration attempts, so one collision buys one retry. */
-        internal const val MAX_REGISTRATION_ATTEMPTS = 2
-
-        /** Long enough for the server to reap an orphan, short enough to demo. */
-        internal const val REGISTRATION_RETRY_DELAY_MS = 1500L
     }
 
     internal interface ClientActionHandler {
@@ -1700,15 +1642,18 @@ internal fun isConversationNotFoundError(error: String?): Boolean =
  * with this one, and on any unrelated error that happens to mention both.
  * Deliberately strict, because the caller reacts by claiming the agent is
  * registered: a missed match degrades to the visible pre-existing failure,
- * whereas a false match hides it.
+ * whereas a false match hides it. The quoting around the name is the one part
+ * left loose, since it carries no meaning and is the likeliest thing to change
+ * on the server.
  */
 internal fun isAgentAlreadyRegisteredError(error: String?, agentName: String): Boolean {
     val text = error?.trim().orEmpty()
     if (text.isEmpty() || agentName.isBlank()) {
         return false
     }
+    val quote = """['"`]?"""
     val pattern = Regex(
-        """app\s+agent\s+'?${Regex.escape(agentName)}'?\s+already\s+exists""",
+        """app\s+agent\s+$quote${Regex.escape(agentName)}$quote\s+already\s+exists""",
         RegexOption.IGNORE_CASE
     )
     return pattern.containsMatchIn(text)
