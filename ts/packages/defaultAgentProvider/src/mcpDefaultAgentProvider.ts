@@ -17,8 +17,11 @@ import {
 } from "./mcp/mcpAppAgentSource.js";
 import type { NormalizedMcpServerConfig } from "./mcp/mcpServerConfig.js";
 import type { McpHostServices } from "./mcp/mcpServerProvider.js";
+import type { McpConfigDiscoveryResult } from "./mcp/mcpConfigDiscovery.js";
+import registerDebug from "debug";
 
 const MCP_CLIENT_INFO = { name: "typeagent", version: "0.0.1" };
+const debug = registerDebug("typeagent:mcp:discovery");
 
 let mcpAppAgentProvider: AppAgentProvider | undefined;
 
@@ -101,6 +104,7 @@ export function getMcpAppAgentSource(instanceDir: string): AppAgentSource {
 export function createMcpAppAgentSourceForInstance(
     instanceConfigs: InstanceConfigProvider,
     services?: McpHostServices,
+    discovery?: McpConfigDiscoveryResult,
 ): McpAppAgentSourceForTest {
     const instanceDir = instanceConfigs.getInstanceDir();
     if (instanceDir === undefined) {
@@ -117,5 +121,73 @@ export function createMcpAppAgentSourceForInstance(
         reserved,
         new Set(Object.values(seed).map((config) => config.id)),
     );
-    return createMcpAppAgentSource(store, seed, MCP_CLIENT_INFO, services);
+    if (discovery !== undefined) {
+        for (const diagnostic of discovery.diagnostics) {
+            debug(diagnostic.message);
+        }
+        const existingByName = new Map(
+            store.list().map((config) => [config.name, config]),
+        );
+        for (const discovered of discovery.configs) {
+            const config = discovered.config;
+            if (reserved.has(config.name)) {
+                const message = `Skipped discovered MCP server '${config.name}': name is reserved by a shipped server.`;
+                discovery.diagnostics.push({
+                    kind: "duplicate",
+                    filePath: discovered.filePath,
+                    serverName: config.name,
+                    message,
+                });
+                debug(message);
+                continue;
+            }
+            const existing = existingByName.get(config.name);
+            if (
+                existing !== undefined &&
+                !existing.provenance.sourceKind?.startsWith("workspace-") &&
+                existing.provenance.sourceKind !== "copilot-user"
+            ) {
+                const message = `Skipped discovered MCP server '${config.name}': a managed server with that name already exists.`;
+                discovery.diagnostics.push({
+                    kind: "duplicate",
+                    filePath: discovered.filePath,
+                    serverName: config.name,
+                    replacedFilePath: existing.provenance.source,
+                    message,
+                });
+                debug(message);
+                continue;
+            }
+            const next =
+                existing === undefined
+                    ? config
+                    : {
+                          ...config,
+                          id: existing.id,
+                          trust: existing.trust,
+                          enabled: existing.enabled,
+                      };
+            try {
+                store.set(next);
+            } catch (error) {
+                const message = `Skipped discovered MCP server '${config.name}': ${error instanceof Error ? error.message : String(error)}`;
+                discovery.diagnostics.push({
+                    kind: "invalid",
+                    filePath: discovered.filePath,
+                    serverName: config.name,
+                    message,
+                });
+                debug(message);
+                continue;
+            }
+            existingByName.set(next.name, next);
+        }
+    }
+    return createMcpAppAgentSource(
+        store,
+        seed,
+        MCP_CLIENT_INFO,
+        services,
+        discovery,
+    );
 }

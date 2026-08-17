@@ -19,6 +19,14 @@ export {
     type McpCredentialStore,
 } from "./mcp/mcpCredentialStore.js";
 export {
+    McpConfigDiscovery,
+    type DiscoveredMcpConfig,
+    type McpConfigDiscoveryOptions,
+    type McpConfigDiscoveryResult,
+    type McpDiscoveryDiagnostic,
+    type McpDiscoverySourceKind,
+} from "./mcp/mcpConfigDiscovery.js";
+export {
     defaultMcpPolicy,
     enforceMcpPolicy,
     type McpPolicy,
