@@ -54,15 +54,37 @@ describe("macro induction and validation", () => {
             version: 1,
             state: "draft",
             executionClass: "replayable",
+            inputs: [
+                expect.objectContaining({
+                    name: "step_1_path",
+                    valueType: "string",
+                }),
+            ],
             steps: [
                 {
                     id: "step-1",
                     toolName: "read",
                     mcpServerName: "typeagent-workspace",
                     arguments: {
-                        kind: "literal",
+                        kind: "template",
                         value: { path: "package.json" },
+                        bindings: [
+                            {
+                                path: ["path"],
+                                expression: {
+                                    kind: "input",
+                                    name: "step_1_path",
+                                },
+                            },
+                        ],
                     },
+                    postconditions: [
+                        { kind: "resultType", valueType: "object" },
+                        {
+                            kind: "resultPathExists",
+                            path: ["content"],
+                        },
+                    ],
                 },
             ],
         });
@@ -113,15 +135,62 @@ describe("macro induction and validation", () => {
 
         expect(macro.inputs).toEqual([
             {
-                name: "step-1_secret",
-                description: "Secret value required by step-1",
+                name: "step_1_authorization",
+                description: "Secret value required by step-1 at authorization",
                 required: true,
                 secret: true,
             },
         ]);
         expect(macro.steps[0].arguments).toEqual({
-            kind: "input",
-            name: "step-1_secret",
+            kind: "template",
+            value: { authorization: "[REDACTED]" },
+            bindings: [
+                {
+                    path: ["authorization"],
+                    expression: {
+                        kind: "input",
+                        name: "step_1_authorization",
+                    },
+                },
+            ],
+        });
+    });
+
+    it("binds a later argument to an earlier captured result", () => {
+        const source = trace();
+        source.prompt = "Find package.json and inspect it";
+        source.toolCalls[0].result = { match: { path: "src/package.json" } };
+        source.toolCalls.push({
+            toolCallId: "call-2",
+            name: "read",
+            mcpServerName: "typeagent-workspace",
+            arguments: { path: "src/package.json", encoding: "utf8" },
+            result: { content: "{}" },
+            status: "completed",
+        });
+
+        const macro = induceMacroFromTrace(
+            "trace-1",
+            source,
+            "macro-1",
+            "Find and read package",
+            "",
+            "2026-08-14T10:01:00.000Z",
+        );
+
+        expect(macro.steps[1].arguments).toEqual({
+            kind: "template",
+            value: { path: "src/package.json", encoding: "utf8" },
+            bindings: [
+                {
+                    path: ["path"],
+                    expression: {
+                        kind: "stepResult",
+                        stepId: "step-1",
+                        path: ["match", "path"],
+                    },
+                },
+            ],
         });
     });
 

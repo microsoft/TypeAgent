@@ -14,14 +14,16 @@ async function captureTrace(
         toolName?: string;
         mcpServerName?: string;
         status?: "completed" | "failed" | "denied";
+        prompt?: string;
     } = {},
 ): Promise<string> {
     const sessionId = options.sessionId ?? "session-1";
+    const prompt = options.prompt ?? "Read package";
     manager.armRecording({ sessionId });
     const claimed = manager.claimRecording({
         sessionId,
         cwd: ".",
-        promptHash: createHash("sha256").update("Read package").digest("hex"),
+        promptHash: createHash("sha256").update(prompt).digest("hex"),
     });
     const summary = await manager.finalizeRecording({
         tokenId: claimed!.id,
@@ -29,7 +31,7 @@ async function captureTrace(
             schemaVersion: 1,
             sessionId,
             cwd: ".",
-            prompt: "Read package",
+            prompt,
             response: "Done",
             startedAt: "2026-08-14T10:00:00.000Z",
             completedAt: "2026-08-14T10:00:01.000Z",
@@ -53,6 +55,46 @@ async function captureTrace(
 }
 
 describe("MacroManager draft catalog", () => {
+    it("replays a captured workflow with a different prompt-derived input", async () => {
+        const instanceDir = await mkdtemp(path.join(os.tmpdir(), "catalog-"));
+        const calls: unknown[] = [];
+        const manager = new MacroManager(instanceDir, {
+            inspectTool: async (mcpServerName, toolName) => ({
+                ...(mcpServerName ? { mcpServerName } : {}),
+                toolName,
+                schemaFingerprint: "v1",
+            }),
+            callTool: async (_server, _tool, argumentsValue) => {
+                calls.push(argumentsValue);
+                return { content: "{}" };
+            },
+        });
+        const traceId = await captureTrace(manager, {
+            prompt: "Read package.json",
+        });
+        const draft = await manager.createMacroFromTrace({
+            traceId,
+            name: "Read package",
+        });
+        const definition = await manager.inspectMacro(draft);
+        const approved = await manager.approveMacro(draft);
+
+        await expect(
+            manager.runMacro({
+                runId: "run-reused-input",
+                macroId: approved.macroId,
+                inputs: { step_1_path: "src/package.json" },
+            }),
+        ).resolves.toMatchObject({ status: "completed" });
+        expect(definition.inputs).toEqual([
+            expect.objectContaining({
+                name: "step_1_path",
+                valueType: "string",
+            }),
+        ]);
+        expect(calls).toEqual([{ path: "src/package.json" }]);
+    });
+
     it("persists and approves immutable macro versions across restart", async () => {
         const instanceDir = await mkdtemp(path.join(os.tmpdir(), "catalog-"));
         const manager = new MacroManager(instanceDir);
@@ -474,7 +516,7 @@ describe("MacroManager draft catalog", () => {
                 toolName,
                 schemaFingerprint: "v1",
             }),
-            callTool: async () => ({ text: "x".repeat(300 * 1024) }),
+            callTool: async () => ({ content: "x".repeat(300 * 1024) }),
         });
         const traceId = await captureTrace(manager);
         const draft = await manager.createMacroFromTrace({

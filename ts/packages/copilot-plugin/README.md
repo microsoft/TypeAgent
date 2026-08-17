@@ -382,7 +382,7 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 
 ### MCP Servers (`.mcp.json`)
 
-The plugin starts two logical MCP servers from the same bundled entry point and
+The plugin starts three logical MCP servers from the same bundled entry point and
 single-file release executable:
 
 | Server                | Tool                       | Description                                                                             |
@@ -394,6 +394,9 @@ single-file release executable:
 | `typeagent-workspace` | `glob`                     | Find bounded, deterministically ordered workspace files                                 |
 | `typeagent-workspace` | `grep`                     | Search bounded workspace text                                                           |
 | `typeagent-workspace` | `fetch`                    | Fetch bounded public HTTP(S) text without ambient credentials or private-network access |
+| `typeagent-macros`    | `list_macros`              | List and search reusable captured procedures                                            |
+| `typeagent-macros`    | `run_macro`                | Replay an approved macro or return an agent-runner handoff                              |
+| `typeagent-macros`    | lifecycle tools            | Capture-derived draft validation, approval, disablement, and candidate submission       |
 
 Workspace tools are available in direct, MCP, and dev modes. In bypass mode
 they remain discoverable because Copilot fixes the MCP catalog when the session

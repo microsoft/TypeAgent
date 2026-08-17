@@ -12,9 +12,13 @@ Use the `typeagent-macros` MCP server for macro catalog and lifecycle work.
 1. Use `search_macros` or `list_macros` to find the macro.
 2. Use `inspect_macro` and `get_macro_requirements` before execution. Collect
    all required inputs without exposing secret values in chat.
+   Inputs may fill nested argument-template fields, and later steps may bind
+   values from earlier results.
 3. Call `run_macro` with `preference: "auto"`.
 4. For `completed`, report the sanitized result. For `failed` or `cancelled`,
-   report the structured failure without inventing a repair.
+   report the structured failure without inventing a repair. A
+   `postconditionFailed` result means the live tool output no longer has the
+   shape captured by the approved procedure.
 5. For `agentRequired`, invoke the `TypeAgent Macro Runner` agent with the
    complete returned `launch` object. Do not manually paraphrase or reconstruct
    the launch payload.

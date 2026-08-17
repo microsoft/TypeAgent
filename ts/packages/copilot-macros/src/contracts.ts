@@ -67,14 +67,35 @@ export type MacroVersionState = "draft" | "approved" | "disabled";
 export type ValueExpression =
     | { kind: "literal"; value: unknown }
     | { kind: "input"; name: string }
-    | { kind: "stepResult"; stepId: string; path?: string[] };
+    | { kind: "stepResult"; stepId: string; path?: string[] }
+    | {
+          kind: "template";
+          value: unknown;
+          bindings: Array<{
+              path: string[];
+              expression: Exclude<ValueExpression, { kind: "template" }>;
+          }>;
+      };
+
+export type MacroValueType =
+    | "null"
+    | "array"
+    | "object"
+    | "string"
+    | "number"
+    | "boolean";
 
 export interface MacroInput {
     name: string;
     description: string;
     required: boolean;
     secret: boolean;
+    valueType?: MacroValueType;
 }
+
+export type MacroPostcondition =
+    | { kind: "resultType"; valueType: MacroValueType }
+    | { kind: "resultPathExists"; path: string[] };
 
 export interface MacroStep {
     id: string;
@@ -84,6 +105,7 @@ export interface MacroStep {
     executionClass: MacroExecutionClass;
     sourceToolCallId: string;
     schemaFingerprint?: string;
+    postconditions?: MacroPostcondition[];
 }
 
 export interface CopilotToolMacro {
