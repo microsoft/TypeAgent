@@ -24,22 +24,6 @@ export const HARDCODED_NON_EVAL_ACTION_IDS: ReadonlySet<string> = new Set([
     "utility.claudeTask",
 ]);
 
-let legacyLlmJudgeExcludedActions: ReadonlySet<string> | undefined;
-
-/** Compatibility for the pre-policy synthesizer API; removed with its callers. */
-export function getPackagedLlmJudgeExcludedActions(): ReadonlySet<string> {
-    if (legacyLlmJudgeExcludedActions === undefined) {
-        legacyLlmJudgeExcludedActions = new Set(
-            listActionsWithLlmJudgeFields(loadPackagedGraderForEligibility()),
-        );
-    }
-    return legacyLlmJudgeExcludedActions;
-}
-
-export function clearPackagedLlmJudgeExcludedActionsCacheForTests(): void {
-    legacyLlmJudgeExcludedActions = undefined;
-}
-
 export {
     clearPackagedActionEligibilityPolicyCacheForTests,
     getPackagedActionEligibilityPolicy,

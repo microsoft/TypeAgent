@@ -30,10 +30,23 @@ import {
     findTranslationBenchConfusableSiblings,
     summarizeTranslationBenchConfusableSiblings,
 } from "./utteranceDisambiguation.js";
+import {
+    TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE,
+    applyTranslationBenchNegativeFairnessIssues,
+    checkTranslationBenchCandidateNegativeFairness,
+    parseTranslationBenchNegativeFairnessAssessments,
+    translationBenchNegativeAssessmentsJsonSchema,
+} from "./negativeFairness.js";
+import {
+    runTranslationBenchAmbiguityProbe,
+    type TranslationBenchAmbiguityCheckResult,
+    type TranslationBenchAmbiguityProbeTranslator,
+} from "./ambiguityProbe.js";
 
 export type TranslationBenchQualityStage =
     | "format_checker"
-    | "semantic_checker";
+    | "semantic_checker"
+    | "ambiguity_probe";
 
 export interface TranslationBenchFormatCheckResult {
     stage: "format_checker";
@@ -54,6 +67,7 @@ export interface TranslationBenchQualityVerifyResult {
     accepted: boolean;
     format: TranslationBenchFormatCheckResult;
     semantic?: TranslationBenchSemanticCheckResult;
+    ambiguity?: TranslationBenchAmbiguityCheckResult;
     feedback: TranslationBenchReviewIssue[];
 }
 
@@ -63,6 +77,10 @@ export interface TranslationBenchQualityVerifierOptions {
     candidateHash: string;
     candidate?: TranslationBenchGeneratedCandidate;
     semanticLlm: TranslationBenchGenerationLlm;
+    /** When set, stage 3 multi-model ambiguity probe runs after semantic approve. */
+    ambiguityProbe?: TranslationBenchAmbiguityProbeTranslator;
+    /** Judge model for stage 3 (defaults to semanticLlm). */
+    ambiguityJudgeLlm?: TranslationBenchGenerationLlm;
     promptsDir?: string;
     promptPack?: TranslationBenchQualityVerifierPromptPack;
 }
@@ -204,7 +222,8 @@ export function buildTranslationBenchSemanticCheckerPrompt(
                 confusableSiblings,
             ),
             disambiguationRule:
-                "Reject positives (AMBIGUOUS_INTENT) when a careful reader could equally choose a confusable sibling. Seed and every positive must uniquely identify the target action.",
+                "Reject positives (AMBIGUOUS_INTENT) when a careful reader could equally choose a confusable sibling. Seed and every positive must uniquely identify the target action. Prefer target-only cues when confusableSiblings is non-empty; a deterministic format gate also rejects double-meaning phrasing.",
+            negativeFairnessRule: TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE,
         },
         candidate,
         formatCheckerChecks: pack.formatChecker.checks,
@@ -266,6 +285,8 @@ export function semanticCheckerJsonSchema(
                     },
                 },
                 summary: { type: "string", minLength: 1 },
+                negativeAssessments:
+                    translationBenchNegativeAssessmentsJsonSchema(),
             },
             required: [
                 "candidateHash",
@@ -273,6 +294,7 @@ export function semanticCheckerJsonSchema(
                 "scores",
                 "issues",
                 "summary",
+                "negativeAssessments",
             ],
             additionalProperties: false,
         },
@@ -334,15 +356,56 @@ export async function runTranslationBenchSemanticChecker(options: {
     );
     const text = typeof completion === "string" ? completion : completion.text;
     try {
+        const raw = parseTranslationBenchDatasetBuilderJson(
+            text,
+            "Translation-bench quality verifier (semantic)",
+        );
+        const rawRecord =
+            typeof raw === "object" && raw !== null && !Array.isArray(raw)
+                ? (raw as Record<string, unknown>)
+                : {};
+        // Parse decision first (strip assessments) so structured reject
+        // issues/summary survive even when assessments are missing/invalid.
+        const decisionBody = { ...rawRecord };
+        const rawAssessments = decisionBody.negativeAssessments;
+        delete decisionBody.negativeAssessments;
         const parsed = parseTranslationBenchReviewerDecision(
-            parseTranslationBenchDatasetBuilderJson(
-                text,
-                "Translation-bench quality verifier (semantic)",
-            ),
+            decisionBody,
             options.candidateHash,
         );
-        const decision = enforceApproveThreshold(
+
+        let fairnessIssues: TranslationBenchReviewIssue[];
+        try {
+            const assessments =
+                parseTranslationBenchNegativeFairnessAssessments(
+                    rawAssessments === undefined ? [] : rawAssessments,
+                );
+            fairnessIssues = checkTranslationBenchCandidateNegativeFairness(
+                options.candidate,
+                options.loop.targetAction,
+                assessments,
+            );
+        } catch (assessmentError) {
+            fairnessIssues = [
+                {
+                    code: "BAD_NEGATIVE",
+                    path: "$.negativeAssessments",
+                    message:
+                        assessmentError instanceof Error
+                            ? assessmentError.message
+                            : String(assessmentError),
+                    suggestedFix:
+                        "Emit one valid {path, kind, fairEmptyGold, reason} per negative genCase path.",
+                },
+            ];
+        }
+
+        const withFairness = applyTranslationBenchNegativeFairnessIssues(
             parsed,
+            fairnessIssues,
+        );
+        const decision = enforceApproveThreshold(
+            withFairness,
             options.pack.semanticChecker.approveScoreThreshold,
         );
         return {
@@ -400,10 +463,40 @@ export async function runTranslationBenchDataQualityVerifier(
         llm: options.semanticLlm,
     });
 
+    if (!semantic.passed) {
+        return {
+            accepted: false,
+            format,
+            semantic,
+            feedback: semantic.decision.issues,
+        };
+    }
+
+    if (options.ambiguityProbe === undefined) {
+        return {
+            accepted: true,
+            format,
+            semantic,
+            feedback: [],
+        };
+    }
+
+    const ambiguity = await runTranslationBenchAmbiguityProbe({
+        pack,
+        candidate: format.candidate,
+        candidateHash: options.candidateHash,
+        targetAction: options.loop.targetAction,
+        activeSchemas: options.loop.activeSchemas,
+        catalog: catalogForLoop(options.loop),
+        translator: options.ambiguityProbe,
+        judgeLlm: options.ambiguityJudgeLlm ?? options.semanticLlm,
+    });
+
     return {
-        accepted: semantic.passed,
+        accepted: ambiguity.passed,
         format,
         semantic,
-        feedback: semantic.passed ? [] : semantic.decision.issues,
+        ambiguity,
+        feedback: ambiguity.passed ? [] : ambiguity.issues,
     };
 }
