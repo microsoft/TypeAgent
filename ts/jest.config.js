@@ -11,6 +11,9 @@ module.exports = {
         "^../src/(.*)$": "<rootDir>/dist/$1",
     },
     testTimeout: 90000,
+    // Retry from a clean module cache. Reusing the first ESM run's cache can
+    // expose stale synthetic exports for CommonJS dependencies.
+    ...(process.env.TYPEAGENT_JEST_NO_CACHE === "true" ? { cache: false } : {}),
     ...(process.env.TYPEAGENT_TEST_FAILURES_DIR === undefined
         ? {}
         : {
