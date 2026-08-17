@@ -46,6 +46,7 @@ export function logTranslationCompleted(
         requestId: string;
         strategy: string;
         success: boolean;
+        cancelled?: boolean;
         actions: readonly {
             action: { schemaName: string; actionName: string };
         }[];
@@ -57,7 +58,14 @@ export function logTranslationCompleted(
             requestId: data.requestId,
             strategy: data.strategy,
             success: data.success,
-            status: data.success ? "succeeded" : "failed",
+            ...(data.cancelled === undefined
+                ? {}
+                : { cancelled: data.cancelled }),
+            status: data.cancelled
+                ? "cancelled"
+                : data.success
+                  ? "succeeded"
+                  : "failed",
             schemaNames: [
                 ...new Set(data.actions.map(({ action }) => action.schemaName)),
             ],
@@ -66,7 +74,7 @@ export function logTranslationCompleted(
             ),
             count: data.actions.length,
         },
-        data.success ? "info" : "error",
+        data.success ? "info" : data.cancelled ? "warning" : "error",
     );
 }
 
@@ -128,15 +136,20 @@ export function logActionCompleted(
         appAgentName: string;
         actionIndex: number;
         success: boolean;
+        cancelled?: boolean;
     },
 ): void {
     logger?.logEvent(
         DISPATCHER_STRUCTURED_EVENTS.actionCompleted,
         {
             ...data,
-            status: data.success ? "succeeded" : "failed",
+            status: data.cancelled
+                ? "cancelled"
+                : data.success
+                  ? "succeeded"
+                  : "failed",
         },
-        data.success ? "info" : "error",
+        data.success ? "info" : data.cancelled ? "warning" : "error",
     );
 }
 

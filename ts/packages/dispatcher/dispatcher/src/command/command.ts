@@ -396,6 +396,11 @@ export async function processCommandNoLock(
         );
         debugCommandError(e.stack);
 
+        ensureCommandResult(context).disposition = {
+            status: "failed",
+            path: "command",
+            mayHaveSideEffects: false,
+        };
         context?.logger?.logEvent(
             "command:exception",
             {

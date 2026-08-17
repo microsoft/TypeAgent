@@ -100,3 +100,8 @@ export {
     type TypeAgentSpanAttributeKey,
     type TypeAgentSpanAttributes,
 } from "./traceContract.js";
+
+export {
+    isStructuredLoggingEnabled,
+    setStructuredLoggingEnabled,
+} from "./structuredLogging.js";

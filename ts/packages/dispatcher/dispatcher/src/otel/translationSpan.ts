@@ -144,16 +144,21 @@ export async function wrapTranslationSpan<T>(
         {},
         parentContext,
         async (span) => {
-            otel.setTypeAgentSpanAttributes(span, attributes);
+            const effectiveAttributes = {
+                ...otel.getActiveTypeAgentSpanAttributes(parentContext),
+                ...attributes,
+            };
+            otel.setTypeAgentSpanAttributes(span, effectiveAttributes);
             const state: TranslationSpanState = {
                 span,
                 parentContext,
                 retryNumber: 0,
                 ended: false,
             };
-            const spanContext: Context = context
-                .active()
-                .setValue(TRANSLATION_STATE_KEY, state);
+            const spanContext: Context = otel.setActiveTypeAgentSpanAttributes(
+                context.active().setValue(TRANSLATION_STATE_KEY, state),
+                effectiveAttributes,
+            );
             try {
                 return await context.with(spanContext, () => body(span));
             } catch (error) {

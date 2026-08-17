@@ -124,7 +124,7 @@ describe("dispatcher structured lifecycle events", () => {
         expect(JSON.stringify(events)).not.toContain("user request");
     });
 
-    it("marks failed actions and cancelled requests", () => {
+    it("distinguishes failed and cancelled lifecycle phases", () => {
         const { logger, events } = createCapture();
 
         logActionCompleted(logger, {
@@ -136,12 +136,44 @@ describe("dispatcher structured lifecycle events", () => {
             success: false,
         });
         logRequestCompleted(logger, "request-2", { cancelled: true });
+        logTranslationCompleted(logger, {
+            requestId: "request-2",
+            strategy: "translate",
+            success: false,
+            cancelled: true,
+            actions: [],
+        });
+        logActionCompleted(logger, {
+            requestId: "request-2",
+            schemaName: "email",
+            actionName: "send",
+            appAgentName: "email",
+            actionIndex: 1,
+            success: false,
+            cancelled: true,
+        });
 
         expect(events[0]).toMatchObject({
             severity: "error",
             data: { status: "failed", success: false },
         });
         expect(events[1]).toMatchObject({
+            severity: "warning",
+            data: {
+                status: "cancelled",
+                success: false,
+                cancelled: true,
+            },
+        });
+        expect(events[2]).toMatchObject({
+            severity: "warning",
+            data: {
+                status: "cancelled",
+                success: false,
+                cancelled: true,
+            },
+        });
+        expect(events[3]).toMatchObject({
             severity: "warning",
             data: {
                 status: "cancelled",

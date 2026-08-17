@@ -13,6 +13,7 @@ import {
     MultiSinkLogger,
     createOtelLoggerSink,
     otel,
+    type Logger,
 } from "@typeagent/telemetry";
 import type { Result } from "typechat";
 import type { CompletionUsageStats } from "./apiTypes.js";
@@ -35,9 +36,18 @@ type LlmCallState = {
     readonly span: Span;
     readonly activeContext: Context;
     readonly startedAt: number;
-    readonly requestId?: string;
+    readonly correlation: LlmCorrelation;
+    readonly logger: Logger;
     usage?: CompletionUsageStats;
     ended: boolean;
+};
+
+type LlmCorrelation = {
+    -readonly [Key in
+        | "sessionId"
+        | "activationId"
+        | "requestId"
+        | "traceId"]?: otel.TypeAgentSpanAttributes[Key];
 };
 
 const INSTRUMENTED_CHAT_MODEL = Symbol("typeagent.instrumentedChatModel");
@@ -45,6 +55,7 @@ const INSTRUMENTED_CHAT_MODEL = Symbol("typeagent.instrumentedChatModel");
 export function instrumentChatModel(
     model: ChatModelWithStreaming,
     info: ChatModelTelemetryInfo,
+    structuredLogger: Logger = logger,
 ): ChatModelWithStreaming {
     const instrumented = model as ChatModelWithStreaming & {
         [INSTRUMENTED_CHAT_MODEL]?: true;
@@ -55,7 +66,7 @@ export function instrumentChatModel(
 
     const complete = model.complete.bind(model);
     model.complete = async (...args) => {
-        const state = startLlmCall(info, false);
+        const state = startLlmCall(info, false, structuredLogger);
         const signal = args[4];
         args[1] = captureUsage(args[1], state);
         try {
@@ -76,7 +87,7 @@ export function instrumentChatModel(
 
     const completeStream = model.completeStream.bind(model);
     model.completeStream = async (...args) => {
-        const state = startLlmCall(info, true);
+        const state = startLlmCall(info, true, structuredLogger);
         const signal = args[4];
         args[1] = captureUsage(args[1], state);
         try {
@@ -108,6 +119,7 @@ export function instrumentChatModel(
 function startLlmCall(
     info: ChatModelTelemetryInfo,
     streaming: boolean,
+    structuredLogger: Logger,
 ): LlmCallState {
     const tracer = trace.getTracer(
         otel.INSTRUMENTATION_SCOPE_NAME,
@@ -129,22 +141,21 @@ function startLlmCall(
         span,
         activeContext,
         startedAt: Date.now(),
-        ...(inherited?.requestId === undefined
-            ? {}
-            : { requestId: inherited.requestId }),
+        correlation: getLlmCorrelation(inherited),
+        logger: structuredLogger,
         ended: false,
     };
-    context.with(activeContext, () =>
-        logger.logEvent("llm:started", {
-            provider: info.provider,
-            ...(info.model === undefined ? {} : { model: info.model }),
-            operation: "chat",
-            streaming,
-            ...(inherited?.requestId === undefined
-                ? {}
-                : { requestId: inherited.requestId }),
-        }),
-    );
+    if (otel.isStructuredLoggingEnabled()) {
+        context.with(activeContext, () =>
+            structuredLogger.logEvent("llm:started", {
+                provider: info.provider,
+                ...(info.model === undefined ? {} : { model: info.model }),
+                operation: "chat",
+                streaming,
+                ...state.correlation,
+            }),
+        );
+    }
     return state;
 }
 
@@ -252,16 +263,17 @@ function emitCompleted(
     success: boolean,
     status: "succeeded" | "failed" | "cancelled",
 ): void {
+    if (!otel.isStructuredLoggingEnabled()) {
+        return;
+    }
     context.with(state.activeContext, () =>
-        logger.logEvent(
+        state.logger.logEvent(
             "llm:completed",
             {
                 provider: info.provider,
                 ...(info.model === undefined ? {} : { model: info.model }),
                 operation: "chat",
-                ...(state.requestId === undefined
-                    ? {}
-                    : { requestId: state.requestId }),
+                ...state.correlation,
                 success,
                 status,
                 elapsedMs: Date.now() - state.startedAt,
@@ -281,4 +293,26 @@ function emitCompleted(
             success ? "info" : status === "cancelled" ? "warning" : "error",
         ),
     );
+}
+
+function getLlmCorrelation(
+    attributes: otel.TypeAgentSpanAttributes | undefined,
+): LlmCorrelation {
+    if (attributes === undefined) {
+        return {};
+    }
+    const correlation: LlmCorrelation = {};
+    if (attributes.sessionId !== undefined) {
+        correlation.sessionId = attributes.sessionId;
+    }
+    if (attributes.activationId !== undefined) {
+        correlation.activationId = attributes.activationId;
+    }
+    if (attributes.requestId !== undefined) {
+        correlation.requestId = attributes.requestId;
+    }
+    if (attributes.traceId !== undefined) {
+        correlation.traceId = attributes.traceId;
+    }
+    return correlation;
 }

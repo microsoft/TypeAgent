@@ -106,10 +106,10 @@ const ACTIVE_TYPEAGENT_ATTRIBUTES = createContextKey(
     "typeagent.active-span-attributes",
 );
 
-export function getActiveTypeAgentSpanAttributes():
-    | TypeAgentSpanAttributes
-    | undefined {
-    return context.active().getValue(ACTIVE_TYPEAGENT_ATTRIBUTES) as
+export function getActiveTypeAgentSpanAttributes(
+    activeContext: Context = context.active(),
+): TypeAgentSpanAttributes | undefined {
+    return activeContext.getValue(ACTIVE_TYPEAGENT_ATTRIBUTES) as
         | TypeAgentSpanAttributes
         | undefined;
 }

@@ -841,6 +841,9 @@ export class RequestCommandHandler implements CommandHandler {
                     requestId,
                     strategy: "translate",
                     success: false,
+                    cancelled:
+                        e?.name === "AbortError" ||
+                        systemContext.currentAbortSignal?.aborted === true,
                     actions: [],
                 });
                 debugRequest(`Request translation failed: ${e.message}`);

@@ -22,6 +22,7 @@ import type {
     QueueSnapshot,
     DisplayLogEntry,
 } from "@typeagent/dispatcher-types";
+import { ServerStoppingError } from "@typeagent/dispatcher-types";
 import {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
@@ -711,17 +712,18 @@ export async function createSharedDispatcher(
                             success ? "info" : cancelled ? "warning" : "error",
                         );
                     },
-                    () => {
+                    (error) => {
+                        const cancelled = error instanceof ServerStoppingError;
                         context.logger?.logEvent(
                             "server:responseReady",
                             {
                                 requestId: result.entry.requestId,
                                 connectionId,
                                 success: false,
-                                cancelled: false,
-                                status: "failed",
+                                cancelled,
+                                status: cancelled ? "cancelled" : "failed",
                             },
-                            "error",
+                            cancelled ? "warning" : "error",
                         );
                     },
                 );

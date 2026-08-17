@@ -1,10 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { context } from "@opentelemetry/api";
 import {
     createInMemorySpanManager,
     type InMemorySpanManager,
 } from "@typeagent/telemetry/testing/inMemorySpanManager";
+import { otel } from "@typeagent/telemetry";
+import type { Logger } from "@typeagent/telemetry";
 import { error, success } from "typechat";
 import type { ChatModelWithStreaming } from "../src/models.js";
 import { instrumentChatModel } from "../src/otelChatModel.js";
@@ -40,9 +43,11 @@ describe("instrumentChatModel", () => {
 
     beforeEach(() => {
         spans = createInMemorySpanManager();
+        otel.setStructuredLoggingEnabled(false);
     });
 
     afterEach(async () => {
+        otel.setStructuredLoggingEnabled(false);
         await spans.shutdown();
     });
 
@@ -140,5 +145,67 @@ describe("instrumentChatModel", () => {
                 message: "cancelled",
             },
         );
+    });
+
+    it("gates lifecycle logs and preserves inherited correlation", async () => {
+        const events: Array<{
+            name: string;
+            data: Record<string, unknown>;
+        }> = [];
+        const logger: Logger = {
+            logEvent(name, data) {
+                events.push({ name, data });
+            },
+        };
+
+        await instrumentChatModel(
+            createModel(),
+            {
+                provider: "disabled-provider",
+            },
+            logger,
+        ).complete("private prompt");
+        expect(events).toHaveLength(0);
+
+        otel.setStructuredLoggingEnabled(true);
+        const activeContext = otel.setActiveTypeAgentSpanAttributes(
+            context.active(),
+            {
+                sessionId: "session",
+                activationId: "activation",
+                requestId: "request",
+                traceId: "legacy-trace",
+            },
+        );
+        await context.with(activeContext, () =>
+            instrumentChatModel(
+                createModel(),
+                {
+                    provider: "enabled-provider",
+                },
+                logger,
+            ).complete("private prompt"),
+        );
+
+        expect(events).toEqual([
+            {
+                name: "llm:started",
+                data: expect.objectContaining({
+                    sessionId: "session",
+                    activationId: "activation",
+                    requestId: "request",
+                    traceId: "legacy-trace",
+                }),
+            },
+            {
+                name: "llm:completed",
+                data: expect.objectContaining({
+                    sessionId: "session",
+                    activationId: "activation",
+                    requestId: "request",
+                    traceId: "legacy-trace",
+                }),
+            },
+        ]);
     });
 });

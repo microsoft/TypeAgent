@@ -110,7 +110,8 @@ TypeAgent-owned Node composition roots attach `OtelLoggerSink` alongside the
 existing debug and database sinks when `telemetry.structuredLogs` is enabled.
 The setting defaults to false so embedded dispatcher consumers do not export
 event payloads merely because another component installed a global OTel logs
-provider. The environment override is
+provider. Central chat-model instrumentation uses the same process-level gate
+for LLM lifecycle logs; LLM spans remain available independently. The environment override is
 `TYPEAGENT_OTEL_STRUCTURED_LOGS=true`. Hosts also pass each process's `debug`
 module instance to `initTelemetry()` so the optional bridge can preserve
 existing output while copying eligible records into OTel.
@@ -404,9 +405,10 @@ Get-Content -Wait C:\Users\<user>\.typeagent\logs\typeagent-dispatcher-12345.jso
 ```
 
 The file contains OTel **log records only**: Structured Logger events and, when
-enabled, bridged debug records. Each line is one valid JSON object with
-timestamp, severity, body, resource, event or namespace, trace/span IDs, and
-TypeAgent correlation. Traces and metrics still require OTLP.
+enabled, bridged debug records. Each line uses the reduced local envelope with
+timestamp, severity, message, body, event or namespace, trace/span IDs, and
+TypeAgent correlation. Repeated SDK resource metadata is omitted locally but
+remains available in full OTLP records. Traces and metrics still require OTLP.
 
 The path is implemented as an OTel `LogRecordExporter` behind a bounded
 `BatchLogRecordProcessor`:
@@ -540,6 +542,21 @@ Only enabled `DEBUG` namespaces are bridged. Existing terminal debug output is
 unchanged. Structured logging must be enabled explicitly because dispatcher
 events can originate from user requests.
 
+Local JSONL starts in the `focused` profile with debug-copy off. It therefore
+contains the structured lifecycle by default, even when the debug bridge is
+configured. Use `@trace` to select terminal debug namespaces, then opt those
+already-enabled records into the local file only when needed:
+
+```text
+@log status
+@trace --preset request
+@log debug-copy on
+```
+
+`@log profile off` disables only the local JSONL sink. It does not change
+`DEBUG`, `@trace`, or OTLP export. `@log clear` restores
+`profile=focused, debug-copy=off`.
+
 ### 3. Generate Telemetry
 
 In another terminal, connect the CLI:
@@ -569,7 +586,9 @@ Get-Content $log.FullName -Wait
 Each line uses a reduced local envelope intended for direct inspection:
 `timestamp`, `severity`, `event`, `message`, `body`, and, when available,
 `requestId`, `traceId`, `spanId`, `sessionId`, `activationId`, `namespace`,
-and remaining `attributes`. The `message` is a payload-free lifecycle summary,
+`correlationId`, and remaining `attributes`. `traceId` is the canonical OTel
+trace identifier; `correlationId` preserves a caller-supplied legacy trace
+identifier when present. The `message` is a payload-free lifecycle summary,
 such as `Request accepted and queued` or `Translation succeeded via grammar`.
 Use opt-in debug records for detailed diagnostics behind that lifecycle step.
 Correlation fields are elevated once rather than repeated in the body, and the

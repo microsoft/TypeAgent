@@ -76,6 +76,7 @@ import {
     getTypeAgentSourceVersion,
     type TypeAgentSourceVersion,
 } from "./sourceVersion.js";
+import { setStructuredLoggingEnabled } from "./structuredLogging.js";
 
 export type TelemetrySignal = "traces" | "metrics" | "logs";
 
@@ -420,20 +421,20 @@ async function createDefaultTelemetryResource(
 const processTelemetry = createTelemetryCoordinator();
 let processLocalStateInitialized = false;
 
-export function initTelemetry(
+export async function initTelemetry(
     options: InitTelemetryOptions = {},
 ): Promise<void> {
-    if (processLocalStateInitialized) {
-        return processTelemetry.init(options);
-    }
     const config =
         options.config ?? resolveTelemetryConfig(options.configOptions);
+    if (processLocalStateInitialized) {
+        await processTelemetry.init({ ...options, config });
+        setStructuredLoggingEnabled(config.structuredLogs === true);
+        return;
+    }
     setLocalTelemetryState(
         createLocalTelemetryState({
             initialProfile: "focused",
-            initialDebugCopy:
-                config.debugBridge === true &&
-                config.logs?.logFile !== undefined,
+            initialDebugCopy: false,
             debugBridgeAvailable:
                 config.debugBridge === true &&
                 options.debugModules !== undefined &&
@@ -442,7 +443,8 @@ export function initTelemetry(
         }),
     );
     processLocalStateInitialized = true;
-    return processTelemetry.init({ ...options, config });
+    await processTelemetry.init({ ...options, config });
+    setStructuredLoggingEnabled(config.structuredLogs === true);
 }
 
 export function shutdownTelemetry(): Promise<void> {

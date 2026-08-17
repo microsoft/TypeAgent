@@ -483,6 +483,9 @@ export async function executeAction(
             logActionCompleted(systemContext.logger, {
                 ...eventData,
                 success: false,
+                cancelled:
+                    (error as { name?: unknown })?.name === "AbortError" ||
+                    systemContext.currentAbortSignal?.aborted === true,
             });
             throw error;
         }

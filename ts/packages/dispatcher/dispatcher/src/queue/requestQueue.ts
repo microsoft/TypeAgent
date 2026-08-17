@@ -617,6 +617,9 @@ export class RequestQueue {
                         if (entry.error === undefined) {
                             entry.error = `cancelled:${entry.cancelReason ?? "user"}`;
                         }
+                    } else if (result?.disposition?.status === "failed") {
+                        entry.state = "failed";
+                        entry.error = "command failed";
                     } else {
                         entry.state = "succeeded";
                     }

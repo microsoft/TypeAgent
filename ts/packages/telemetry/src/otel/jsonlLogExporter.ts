@@ -336,7 +336,10 @@ function serializeLogRecord(record: ReadableLogRecord): string {
         attributes,
         TYPEAGENT_SPAN_ATTRIBUTES.REQUEST_ID,
     );
-    takeStringAttribute(attributes, TYPEAGENT_SPAN_ATTRIBUTES.TRACE_ID);
+    const correlationId = takeStringAttribute(
+        attributes,
+        TYPEAGENT_SPAN_ATTRIBUTES.TRACE_ID,
+    );
     const namespace = takeStringAttribute(attributes, "debug.namespace");
     const spanContext = record.spanContext;
     const { body, message } = takeBodyMessage(record.body);
@@ -349,6 +352,7 @@ function serializeLogRecord(record: ReadableLogRecord): string {
         ...(sessionId === undefined ? {} : { sessionId }),
         ...(activationId === undefined ? {} : { activationId }),
         ...(requestId === undefined ? {} : { requestId }),
+        ...(correlationId === undefined ? {} : { correlationId }),
         ...(spanContext === undefined
             ? {}
             : {

@@ -154,6 +154,7 @@ describe("JsonlLogExporter", () => {
                 "typeagent.session.id": "session",
                 "typeagent.activation.id": "activation",
                 "typeagent.request.id": "request",
+                "typeagent.trace.id": "legacy-trace",
                 custom: "value",
             },
             spanContext: {
@@ -176,6 +177,7 @@ describe("JsonlLogExporter", () => {
             sessionId: "session",
             activationId: "activation",
             requestId: "request",
+            correlationId: "legacy-trace",
             traceId: "1".repeat(32),
             spanId: "2".repeat(16),
             message: "Request completed: handled",
@@ -188,6 +190,32 @@ describe("JsonlLogExporter", () => {
         expect(parsed).not.toHaveProperty("severityNumber");
         expect(parsed).not.toHaveProperty("traceFlags");
         expect(parsed).not.toHaveProperty("droppedAttributesCount");
+    });
+
+    it("preserves legacy correlation without an active span", async () => {
+        const dir = makeTempDir();
+        tempDirs.push(dir);
+        const exporter = new JsonlLogExporter({
+            filePath: path.join(dir, "correlation-{pid}.jsonl"),
+            serviceName: "test",
+            pid: 1009,
+            diagnostic: () => undefined,
+        });
+        const record: ReadableLogRecord = {
+            ...createRecord("logs only", "custom:event"),
+            attributes: {
+                "typeagent.trace.id": "legacy-trace",
+            },
+        };
+
+        await exportRecords(exporter, [record]);
+        await exporter.shutdown();
+
+        const parsed = JSON.parse(
+            fs.readFileSync(exporter.filePath, "utf8").trimEnd(),
+        );
+        expect(parsed.correlationId).toBe("legacy-trace");
+        expect(parsed).not.toHaveProperty("traceId");
     });
 
     it("exports every record admitted by its local processor", async () => {

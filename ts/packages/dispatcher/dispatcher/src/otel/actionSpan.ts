@@ -75,11 +75,15 @@ export async function wrapActionSpan<T>(
     return tracer.startActiveSpan(
         otel.TYPEAGENT_SPAN_NAMES.ACTION,
         async (span) => {
-            otel.setTypeAgentSpanAttributes(span, attributes);
+            const effectiveAttributes = {
+                ...otel.getActiveTypeAgentSpanAttributes(),
+                ...attributes,
+            };
+            otel.setTypeAgentSpanAttributes(span, effectiveAttributes);
             return context.with(
                 otel.setActiveTypeAgentSpanAttributes(
                     context.active(),
-                    attributes,
+                    effectiveAttributes,
                 ),
                 async () => {
                     try {

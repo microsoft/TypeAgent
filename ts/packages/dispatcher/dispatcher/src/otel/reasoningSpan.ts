@@ -80,15 +80,20 @@ export async function wrapReasoningSpan<T>(
     return tracer.startActiveSpan(
         otel.TYPEAGENT_SPAN_NAMES.REASONING,
         async (span) => {
-            otel.setTypeAgentSpanAttributes(span, attributes);
+            const effectiveAttributes = {
+                ...otel.getActiveTypeAgentSpanAttributes(),
+                ...attributes,
+            };
+            otel.setTypeAgentSpanAttributes(span, effectiveAttributes);
             const state: ReasoningSpanState = {
                 span,
                 ended: false,
                 overflowEventEmitted: false,
             };
-            const spanContext: Context = context
-                .active()
-                .setValue(REASONING_STATE_KEY, state);
+            const spanContext: Context = otel.setActiveTypeAgentSpanAttributes(
+                context.active().setValue(REASONING_STATE_KEY, state),
+                effectiveAttributes,
+            );
             try {
                 return await context.with(spanContext, () => body(span));
             } catch (error) {
