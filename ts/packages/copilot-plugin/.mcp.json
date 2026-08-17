@@ -4,6 +4,11 @@
       "command": "node",
       "args": ["${PLUGIN_ROOT}/dist/mcp/server.js"],
       "tools": ["*"]
+    },
+    "typeagent-workspace": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/dist/mcp/server.js", "--workspace"],
+      "tools": ["read", "glob", "grep", "fetch"]
     }
   }
 }

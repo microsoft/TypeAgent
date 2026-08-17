@@ -12,6 +12,7 @@ import {
     withEnhancedConsoleClientIO,
     applyQueueSnapshot,
     clearRecentSubmissions,
+    confirmYesNo,
     setPendingExitMessage,
 } from "../enhancedConsole.js";
 import {
@@ -385,6 +386,7 @@ export default class Connect extends Command {
                 convCtx = {
                     connection: conn,
                     clientIO,
+                    confirmYesNo,
                     getCurrentConversationId: () => activeConversationId,
                     getCurrentConversationName: () => activeName,
                     onSwitched: rebindAfterSwitch,
