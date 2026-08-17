@@ -85,11 +85,12 @@ describe("JsonlLogExporter", () => {
             "agent/server",
             1234,
             "agent-player",
+            new Date("2026-08-17T08:38:59.123Z"),
         );
         expect(resolved).toBe(
             path.resolve(
                 "logs",
-                "typeagent-agent_server-agent-player-1234.jsonl",
+                "typeagent-agent_server-agent-player-20260817T083859-123Z-1234.jsonl",
             ),
         );
     });
@@ -100,11 +101,31 @@ describe("JsonlLogExporter", () => {
             "typeagent-local",
             1234,
             "agent-server",
+            new Date("2026-08-17T08:38:59.123Z"),
         );
         expect(resolved).toBe(
             path.resolve(
                 "logs",
-                "typeagent-typeagent-local-agent-server-1234.jsonl",
+                "typeagent-typeagent-local-agent-server-20260817T083859-123Z-1234.jsonl",
+            ),
+        );
+    });
+
+    it("supports an explicit process-start timestamp placeholder", () => {
+        const resolved = resolveJsonlLogPath(
+            path.join(
+                "logs",
+                "typeagent-{service}-{process}-{timestamp}-{pid}.jsonl",
+            ),
+            "typeagent-local",
+            1234,
+            "agent-server",
+            new Date("2026-08-17T08:38:59.123Z"),
+        );
+        expect(resolved).toBe(
+            path.resolve(
+                "logs",
+                "typeagent-typeagent-local-agent-server-20260817T083859-123Z-1234.jsonl",
             ),
         );
     });

@@ -16,6 +16,7 @@ export interface JsonlLogExporterOptions {
     readonly serviceName: string;
     readonly processName?: string;
     readonly pid?: number;
+    readonly startedAt?: Date;
     readonly maxPendingRecords?: number;
     readonly diagnostic?: (message: string, error?: unknown) => void;
 }
@@ -41,6 +42,7 @@ export class JsonlLogExporter implements LogRecordExporter {
             options.serviceName,
             options.pid,
             options.processName,
+            options.startedAt,
         );
         this.maxPendingRecords =
             options.maxPendingRecords ?? DEFAULT_MAX_PENDING_RECORDS;
@@ -289,29 +291,48 @@ export function resolveJsonlLogPath(
     serviceName: string,
     pid = process.pid,
     processName = "process",
+    startedAt = new Date(),
 ): string {
     if (!Number.isInteger(pid) || pid <= 0) {
         throw new Error("JSONL pid must be a positive integer.");
     }
+    if (Number.isNaN(startedAt.getTime())) {
+        throw new Error("JSONL start timestamp must be a valid date.");
+    }
     const service = sanitizePathSegment(serviceName);
     const processRole = sanitizePathSegment(processName);
+    const timestamp = formatFileTimestamp(startedAt);
     const hadPidPlaceholder = template.includes("{pid}");
     const hadProcessPlaceholder = template.includes("{process}");
+    let hadTimestampPlaceholder = template.includes("{timestamp}");
     if (!hadProcessPlaceholder && hadPidPlaceholder) {
-        template = template.replaceAll("{pid}", "{process}-{pid}");
+        template = template.replaceAll(
+            "{pid}",
+            `{process}${hadTimestampPlaceholder ? "" : "-{timestamp}"}-{pid}`,
+        );
+        hadTimestampPlaceholder = true;
     }
     let resolved = template
         .replaceAll("{service}", service)
         .replaceAll("{process}", processRole)
+        .replaceAll("{timestamp}", timestamp)
         .replaceAll("{pid}", String(pid));
-    if (!hadPidPlaceholder) {
+    if (!hadPidPlaceholder || !hadTimestampPlaceholder) {
         const parsed = path.parse(resolved);
         resolved = path.join(
             parsed.dir,
-            `${parsed.name}${hadProcessPlaceholder ? "" : `-${processRole}`}-${pid}${parsed.ext || ".jsonl"}`,
+            `${parsed.name}${hadProcessPlaceholder ? "" : `-${processRole}`}${hadTimestampPlaceholder ? "" : `-${timestamp}`}${hadPidPlaceholder ? "" : `-${pid}`}${parsed.ext || ".jsonl"}`,
         );
     }
     return path.resolve(resolved);
+}
+
+function formatFileTimestamp(value: Date): string {
+    return value
+        .toISOString()
+        .replaceAll("-", "")
+        .replaceAll(":", "")
+        .replace(".", "-");
 }
 
 function sanitizePathSegment(value: string): string {

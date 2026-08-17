@@ -361,7 +361,7 @@ TypeAgent-owned processes support:
 ```yaml
 telemetry:
   otlpEndpoint: http://localhost:4318
-  logFile: ~/.typeagent/logs/typeagent-{service}-{process}-{pid}.jsonl
+  logFile: ~/.typeagent/logs/typeagent-{service}-{process}-{timestamp}-{pid}.jsonl
   debugBridge: true
   tracesSampler: always_on
 ```
@@ -389,19 +389,23 @@ Set `TYPEAGENT_OTEL_LOG_FILE` or YAML `telemetry.logFile` to write OTel logs
 directly, without OTLP, a collector, or a backend:
 
 ```powershell
-$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\typeagent-{service}-{process}-{pid}.jsonl"
+$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\typeagent-{service}-{process}-{timestamp}-{pid}.jsonl"
 ```
 
-For dispatcher PID 12345, the resolved path may be:
+For an agent-server process started at `2026-08-17T08:38:59.123Z` with PID
+12345, the resolved path may be:
 
 ```text
-C:\Users\<user>\.typeagent\logs\typeagent-dispatcher-12345.jsonl
+C:\Users\<user>\.typeagent\logs\typeagent-typeagent-local-agent-server-20260817T083859-123Z-12345.jsonl
 ```
 
-Read or tail it with normal tools:
+Find and tail the latest run with normal tools:
 
 ```powershell
-Get-Content -Wait C:\Users\<user>\.typeagent\logs\typeagent-dispatcher-12345.jsonl
+$log = Get-ChildItem "$HOME\.typeagent\logs\typeagent-*.jsonl" |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+Get-Content $log.FullName -Wait
 ```
 
 The file contains OTel **log records only**: Structured Logger events and, when
@@ -419,11 +423,13 @@ The path is implemented as an OTel `LogRecordExporter` behind a bounded
 - Rate-limit diagnostics and disable or retry under a documented policy.
 - Apply redaction before enqueueing records.
 
-Expand `~` before `path.resolve()`. Sanitize `{service}`, `{process}`, and
-`{pid}`. TypeAgent-owned hosts identify their process role as `agent-server`,
-`api-server`, `shell`, `cli`, or `agent-<name>`. If `{process}` or `{pid}` is
-absent, insert it before the extension so filenames remain identifiable and
-processes never share a writer. Create parent directories and report the
+Expand `~` before `path.resolve()`. Sanitize `{service}`, `{process}`,
+`{timestamp}`, and `{pid}`. The timestamp is the UTC process-start time and
+changes once per telemetry initialization, not per record. TypeAgent-owned
+hosts identify their process role as `agent-server`, `api-server`, `shell`,
+`cli`, or `agent-<name>`. Insert missing process, timestamp, and PID components
+before the extension so filenames remain identifiable and concurrent processes
+never share a writer. Create parent directories and report the
 resolved path once through a status or diagnostic path that cannot recurse into
 the exporter.
 
@@ -518,7 +524,7 @@ pnpm run build agent-server
 $env:OTEL_SERVICE_NAME = "typeagent-local"
 $env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
 $env:OTEL_TRACES_SAMPLER = "always_on"
-$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\typeagent-{service}-{process}-{pid}.jsonl"
+$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\typeagent-{service}-{process}-{timestamp}-{pid}.jsonl"
 $env:TYPEAGENT_OTEL_DEBUG_BRIDGE = "true"
 $env:TYPEAGENT_OTEL_STRUCTURED_LOGS = "true"
 $env:DEBUG = "typeagent:*,agent-server:*"
