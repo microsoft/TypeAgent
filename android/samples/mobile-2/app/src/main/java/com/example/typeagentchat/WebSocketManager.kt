@@ -507,20 +507,13 @@ class WebSocketManager {
     }
 
     /**
-     * Handles the server rejecting a registration because `androidDevice` is
-     * already registered for this conversation.
+     * Accepts the server's report that `androidDevice` is already registered
+     * for this conversation instead of failing the connection: refusing every
+     * action until the app restarts is the worse outcome.
      *
-     * The registration is accepted as it stands rather than retried. The cause
-     * is a registration that outlived its socket, and the server only drops
-     * those when its own keepalive gives up on the dead connection - tens of
-     * seconds at least, so no delay short enough to sit inside a connect is
-     * worth waiting. Claiming the agent is registered is still better than the
-     * alternative, which is refusing every action until the app is restarted.
-     *
-     * It gets its own status text because the guarantee is weaker: the app is
-     * trusting a registration it did not make, and until the server drops the
-     * old connection it may keep routing invokes there, in which case actions
-     * silently do nothing. That must not look like a clean registration.
+     * Uses its own status text because the guarantee is weaker - this
+     * registration belongs to a connection that is gone, so actions may do
+     * nothing until the server drops it.
      */
     private fun handleRegistrationCollision(joinedConversationId: String) {
         markClientAgentRegistered(
@@ -1630,21 +1623,13 @@ internal fun isConversationNotFoundError(error: String?): Boolean =
  * registered for the conversation being joined.
  *
  * The server keys client agents by conversation rather than by connection, and
- * it does not always drop the registration when a socket dies abruptly. A
- * reconnect that resumes the same conversation then collides with the orphaned
- * entry, and the app refuses every executeAction while
- * `isClientAgentRegistered` is false, so left unhandled a single unclean
- * disconnect makes the device actions permanently unavailable.
+ * does not always drop the registration when a socket dies abruptly, so a
+ * reconnect collides with the orphaned entry. Left unhandled, the app then
+ * refuses every executeAction until it is restarted.
  *
- * Matches the whole `App agent '<name>' already exists` phrase rather than
- * searching for the agent name anywhere in the text. A bare substring test
- * would also fire on a collision reported for an agent whose name merely starts
- * with this one, and on any unrelated error that happens to mention both.
- * Deliberately strict, because the caller reacts by claiming the agent is
- * registered: a missed match degrades to the visible pre-existing failure,
- * whereas a false match hides it. The quoting around the name is the one part
- * left loose, since it carries no meaning and is the likeliest thing to change
- * on the server.
+ * Matches the whole `App agent '<name>' already exists` phrase, not the agent
+ * name alone, because the caller reacts by claiming the agent is registered: a
+ * missed match degrades to the pre-existing failure, a false match hides it.
  */
 internal fun isAgentAlreadyRegisteredError(error: String?, agentName: String): Boolean {
     val text = error?.trim().orEmpty()
