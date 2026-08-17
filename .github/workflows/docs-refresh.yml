@@ -94,7 +94,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # Full history so the --since baseline (last README.AUTOGEN.md
           # commit) resolves and the diff against it is complete.
@@ -202,7 +202,7 @@ jobs:
       - name: Generate TypeAgent-Bot token
         id: app-token
         if: ${{ steps.detect.outputs.changes == 'true' }}
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ vars.DEPENDABOT_APP_ID }}
           private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}

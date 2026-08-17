@@ -106,7 +106,6 @@ const SENT_STATUS_TIMEOUT_MS = 1500;
  * via `ChatPanel.setAvatarMap`.
  */
 export const DEFAULT_AVATAR_MAP: Readonly<Record<string, string>> = {
-    androidmobile: "📱",
     browser: "🌐",
     calendar: "📅",
     chat: "💬",

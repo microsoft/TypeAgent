@@ -30,6 +30,10 @@ export {
     type McpAuditSink,
 } from "./mcp/mcpAudit.js";
 export type { McpOAuthInteraction } from "./mcp/mcpOAuth.js";
+export {
+    McpReplayHost,
+    type McpReplayHostOptions,
+} from "./mcp/mcpReplayHost.js";
 export type { McpHostServices } from "./mcp/mcpServerProvider.js";
 export {
     createOnboardingOnlyDispatcher,
