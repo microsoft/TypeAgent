@@ -189,6 +189,10 @@ processable telemetry record.**
   debug messages into span events.
 - Use manual LLM spans in v1. Do not enable HTTP or `undici`
   auto-instrumentation.
+- Classify each LLM operation explicitly at the high-level call site. The
+  central model wrapper records `typeagent.llm.phase`,
+  `typeagent.llm.purpose`, and `typeagent.llm.scope`; it never infers purpose
+  from prompt text, model output, timing, or token counts.
 
 ### Logs
 
@@ -414,6 +418,16 @@ timestamp, severity, message, body, event or namespace, trace/span IDs, and
 TypeAgent correlation. Repeated SDK resource metadata is omitted locally but
 remains available in full OTLP records. Traces and metrics still require OTLP.
 
+LLM lifecycle messages identify the operation, for example
+`LLM started: translation.schema-selection` or
+`LLM succeeded: translation.action-generation in 2659 ms`. The classification
+is assigned by the translation, reasoning, action, or cache operation that
+initiated the call. The default `focused` profile omits successful background
+LLM starts and completions, but keeps foreground calls and background failures.
+Use `@log profile diagnostic` or `@log profile verbose` to retain all local LLM
+events. OTLP export always receives the full event stream regardless of the
+local profile.
+
 The path is implemented as an OTel `LogRecordExporter` behind a bounded
 `BatchLogRecordProcessor`:
 
@@ -597,6 +611,9 @@ trace identifier; `correlationId` preserves a caller-supplied legacy trace
 identifier when present. The `message` is a payload-free lifecycle summary,
 such as `Request accepted and queued` or `Translation succeeded via grammar`.
 Use opt-in debug records for detailed diagnostics behind that lifecycle step.
+LLM messages include their explicit phase and purpose so parallel schema
+selection, action generation, and background cache generation are
+distinguishable without inspecting private model content.
 Correlation fields are elevated once rather than repeated in the body, and the
 redundant legacy `dispatcher:command` record is omitted from local JSONL.
 Repeated SDK metadata such as the observed timestamp, resource,
@@ -649,6 +666,10 @@ In Grafana **Explore**, choose the **Tempo** data source and search for service
 name `typeagent-local`. A log emitted inside an active span contains `traceId`
 and `spanId`; use the trace ID from either Loki or the JSONL record to open the
 corresponding request trace in Tempo.
+
+The VS Code client also shows the canonical request trace ID in the request
+metrics hover, immediately below Action Tokens. This provides a direct lookup
+key when several client requests are in flight at the same time.
 
 This demonstrates the tangible improvement over terminal-only debug output:
 structured application events and familiar debug records are searchable in one

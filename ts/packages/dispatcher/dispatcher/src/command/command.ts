@@ -13,6 +13,7 @@ import {
 } from "../context/commandHandlerContext.js";
 import {
     context as otelContext,
+    isSpanContextValid,
     SpanStatusCode,
     trace,
     type Context,
@@ -516,7 +517,7 @@ export async function processCommand(
             : undefined);
     return await wrapRootRequestSpan(
         rootAttributes,
-        async () => {
+        async (span) => {
             logRequestReceived(context.logger, {
                 requestId: requestId.requestId,
                 ...(requestId.connectionId === undefined
@@ -539,6 +540,10 @@ export async function processCommand(
                         options,
                         abortController.signal,
                     );
+                    const rootSpanContext = span.spanContext();
+                    const rootTraceId = isSpanContextValid(rootSpanContext)
+                        ? rootSpanContext.traceId
+                        : undefined;
                     context.clientIO.setUserRequest(requestId, originalInput);
                     try {
                         await processCommandNoLock(
@@ -567,6 +572,9 @@ export async function processCommand(
                         context.activeRequests.delete(requestIdStr);
                         context.currentOptions = undefined;
                         const result = endProcessCommand(requestId, context);
+                        if (result !== undefined && rootTraceId !== undefined) {
+                            result.traceId = rootTraceId;
+                        }
                         logRequestCompleted(
                             context.logger,
                             requestId.requestId,

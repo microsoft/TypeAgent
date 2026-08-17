@@ -14,11 +14,11 @@
  *
  * Profiles
  * --------
- * The `focused` (default), `diagnostic`, and `verbose` profiles all enable the
- * local OTel logger export; they are placeholders for future span policy and do
- * NOT differ in Phase 1 behavior beyond that. The `off` profile disables the
- * local OTel logger sink (and, when easily gated, the JSONL log exporter).
- * Profiles never modify DEBUG or `@trace` patterns.
+ * The `focused` (default) profile omits successful background LLM lifecycle
+ * records while retaining foreground work and background failures.
+ * `diagnostic` and `verbose` retain every structured event. The `off` profile
+ * disables the local OTel logger sink. Profiles never modify DEBUG or `@trace`
+ * patterns.
  *
  * Debug copy
  * ----------

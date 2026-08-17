@@ -50,8 +50,13 @@ describe("getStructuredLogMessage", () => {
                 provider: "azure",
                 model: "GPT_4_1",
                 streaming: true,
+                phase: "translation",
+                purpose: "schema-selection",
+                scope: "foreground",
             }),
-        ).toBe("LLM call started (azure/GPT_4_1) (streaming)");
+        ).toBe(
+            "LLM started: translation.schema-selection (azure/GPT_4_1) (streaming)",
+        );
         expect(
             getStructuredLogMessage("aiclient:llm:completed", {
                 provider: "azure",
@@ -59,8 +64,13 @@ describe("getStructuredLogMessage", () => {
                 status: "succeeded",
                 elapsedMs: 1234,
                 totalTokens: 456,
+                phase: "background",
+                purpose: "cache-generation",
+                scope: "background",
             }),
-        ).toBe("LLM call succeeded (azure/GPT_4_1) in 1234 ms (456 tokens)");
+        ).toBe(
+            "LLM succeeded: background.cache-generation [background] (azure/GPT_4_1) in 1234 ms (456 tokens)",
+        );
     });
 
     it("does not invent messages for diagnostic events", () => {

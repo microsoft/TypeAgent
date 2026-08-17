@@ -8,6 +8,7 @@ import {
     type Span,
     type Tracer,
 } from "@opentelemetry/api";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 import { otel } from "@typeagent/telemetry";
 
 export const ACTION_SPAN_EVENTS = Object.freeze({
@@ -86,21 +87,38 @@ export async function wrapActionSpan<T>(
                     effectiveAttributes,
                 ),
                 async () => {
-                    try {
-                        return await body(span);
-                    } catch (error) {
-                        const isAbort =
-                            error !== null &&
-                            typeof error === "object" &&
-                            (error as { name?: unknown }).name === "AbortError";
-                        const name = isAbort ? "AbortError" : "ActionError";
-                        const message = isAbort ? "cancelled" : "action failed";
-                        span.recordException({ name, message });
-                        span.setStatus({ code: SpanStatusCode.ERROR, message });
-                        throw error;
-                    } finally {
-                        span.end();
-                    }
+                    return withChatModelTelemetryContext(
+                        {
+                            phase: "action",
+                            purpose: "action",
+                            scope: "foreground",
+                        },
+                        async () => {
+                            try {
+                                return await body(span);
+                            } catch (error) {
+                                const isAbort =
+                                    error !== null &&
+                                    typeof error === "object" &&
+                                    (error as { name?: unknown }).name ===
+                                        "AbortError";
+                                const name = isAbort
+                                    ? "AbortError"
+                                    : "ActionError";
+                                const message = isAbort
+                                    ? "cancelled"
+                                    : "action failed";
+                                span.recordException({ name, message });
+                                span.setStatus({
+                                    code: SpanStatusCode.ERROR,
+                                    message,
+                                });
+                                throw error;
+                            } finally {
+                                span.end();
+                            }
+                        },
+                    );
                 },
             );
         },

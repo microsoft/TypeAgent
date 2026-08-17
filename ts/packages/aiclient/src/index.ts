@@ -7,6 +7,14 @@ export {
     instrumentChatModel,
     type ChatModelTelemetryInfo,
 } from "./otelChatModel.js";
+export {
+    getChatModelTelemetryContext,
+    withChatModelTelemetryContext,
+    type ChatModelTelemetryContext,
+    type ChatModelTelemetryPhase,
+    type ChatModelTelemetryPurpose,
+    type ChatModelTelemetryScope,
+} from "./chatModelTelemetryContext.js";
 export * as openai from "./openai.js";
 export * as bing from "./bing.js";
 export * from "./restClient.js";

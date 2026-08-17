@@ -21,6 +21,10 @@ import type {
     ChatModelWithStreaming,
     CompleteUsageStatsCallback,
 } from "./models.js";
+import {
+    getChatModelTelemetryContext,
+    type ChatModelTelemetryContext,
+} from "./chatModelTelemetryContext.js";
 
 const logger = new ChildLogger(
     new MultiSinkLogger([createOtelLoggerSink()]),
@@ -37,6 +41,7 @@ type LlmCallState = {
     readonly activeContext: Context;
     readonly startedAt: number;
     readonly correlation: LlmCorrelation;
+    readonly classification: ChatModelTelemetryContext;
     readonly logger: Logger;
     usage?: CompletionUsageStats;
     ended: boolean;
@@ -127,10 +132,14 @@ function startLlmCall(
     );
     const span = tracer.startSpan(otel.TYPEAGENT_SPAN_NAMES.LLM);
     const inherited = otel.getActiveTypeAgentSpanAttributes();
+    const classification = getChatModelTelemetryContext();
     const attributes = {
         ...inherited,
         genAiSystem: info.provider,
         ...(info.model === undefined ? {} : { genAiRequestModel: info.model }),
+        llmPhase: classification.phase,
+        llmPurpose: classification.purpose,
+        llmScope: classification.scope,
     };
     otel.setTypeAgentSpanAttributes(span, attributes);
     const activeContext = otel.setActiveTypeAgentSpanAttributes(
@@ -142,6 +151,7 @@ function startLlmCall(
         activeContext,
         startedAt: Date.now(),
         correlation: getLlmCorrelation(inherited),
+        classification,
         logger: structuredLogger,
         ended: false,
     };
@@ -152,6 +162,7 @@ function startLlmCall(
                 ...(info.model === undefined ? {} : { model: info.model }),
                 operation: "chat",
                 streaming,
+                ...classification,
                 ...state.correlation,
             }),
         );
@@ -273,6 +284,7 @@ function emitCompleted(
                 provider: info.provider,
                 ...(info.model === undefined ? {} : { model: info.model }),
                 operation: "chat",
+                ...state.classification,
                 ...state.correlation,
                 success,
                 status,

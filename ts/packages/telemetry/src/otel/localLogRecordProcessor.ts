@@ -19,7 +19,7 @@ export class LocalLogRecordProcessor implements LogRecordProcessor {
     public constructor(private readonly delegate: LogRecordProcessor) {}
 
     public onEmit(logRecord: SdkLogRecord, context?: Context): void {
-        if (shouldEmitLocalRecord(logRecord.eventName)) {
+        if (shouldEmitLocalRecord(logRecord.eventName, logRecord.body)) {
             this.delegate.onEmit(logRecord, context);
         }
     }
@@ -45,11 +45,41 @@ export class LocalLogRecordProcessor implements LogRecordProcessor {
     }
 }
 
-function shouldEmitLocalRecord(eventName: string | undefined): boolean {
+function shouldEmitLocalRecord(
+    eventName: string | undefined,
+    body?: unknown,
+): boolean {
     const snapshot = getLocalTelemetryState().getSnapshot();
     return (
         snapshot.profile !== "off" &&
         eventName !== "dispatcher:command" &&
-        (eventName !== "debug" || snapshot.debugCopy)
+        (eventName !== "debug" || snapshot.debugCopy) &&
+        !shouldSuppressFocusedBackgroundLlmEvent(
+            snapshot.profile,
+            eventName,
+            body,
+        )
+    );
+}
+
+function shouldSuppressFocusedBackgroundLlmEvent(
+    profile: string,
+    eventName: string | undefined,
+    body: unknown,
+): boolean {
+    if (
+        profile !== "focused" ||
+        (eventName !== "aiclient:llm:started" &&
+            eventName !== "aiclient:llm:completed")
+    ) {
+        return false;
+    }
+    if (body === null || typeof body !== "object" || Array.isArray(body)) {
+        return false;
+    }
+    const data = body as Record<string, unknown>;
+    return (
+        data.scope === "background" &&
+        (eventName === "aiclient:llm:started" || data.success === true)
     );
 }

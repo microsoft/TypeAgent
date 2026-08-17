@@ -68,6 +68,7 @@ import {
     logTranslationCompleted,
     logTranslationStarted,
 } from "../../../otel/structuredEvents.js";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 
 type ReasoningFallbackContext = {
     failedSchema: string;
@@ -670,10 +671,22 @@ async function requestExplain(
         return;
     }
 
-    const processRequestActionP = context.agentCache.processRequestAction(
-        requestAction,
-        true,
-        options,
+    const processRequestActionP = withChatModelTelemetryContext(
+        {
+            phase: context.explanationAsynchronousMode
+                ? "background"
+                : "translation",
+            purpose: "cache-generation",
+            scope: context.explanationAsynchronousMode
+                ? "background"
+                : "foreground",
+        },
+        () =>
+            context.agentCache.processRequestAction(
+                requestAction,
+                true,
+                options,
+            ),
     );
 
     if (context.explanationAsynchronousMode) {

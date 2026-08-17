@@ -44,6 +44,9 @@ describe("trace contract span-name and attribute-key constants", () => {
             ACTIVATION_ID: "typeagent.activation.id",
             REQUEST_ID: "typeagent.request.id",
             TRACE_ID: "typeagent.trace.id",
+            LLM_PHASE: "typeagent.llm.phase",
+            LLM_PURPOSE: "typeagent.llm.purpose",
+            LLM_SCOPE: "typeagent.llm.scope",
         });
         expect(Object.isFrozen(TYPEAGENT_SPAN_ATTRIBUTES)).toBe(true);
     });

@@ -1400,6 +1400,7 @@ export async function initializeCommandHandlerContext(
                         result?.metrics,
                         result?.tokenUsage,
                         result?.actionTokenUsage,
+                        result?.traceId,
                     );
                     context.displayLog.saveQueued();
                 } catch {

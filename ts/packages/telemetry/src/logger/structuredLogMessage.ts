@@ -42,7 +42,7 @@ export function getStructuredLogMessage(
         case "dispatcher:request:completed":
             return `Request completed: ${stringValue(data, "status", "completed")}`;
         case "aiclient:llm:started":
-            return `LLM call started${formatModel(data)}${booleanValue(data, "streaming") ? " (streaming)" : ""}`;
+            return `LLM started: ${formatLlmOperation(data)}${formatScope(data)}${formatModel(data)}${booleanValue(data, "streaming") ? " (streaming)" : ""}`;
         case "aiclient:llm:completed":
             return formatLlmCompleted(data);
         default:
@@ -63,9 +63,19 @@ function formatLlmCompleted(data: Record<string, unknown>): string {
     const status = stringValue(data, "status", "completed");
     const elapsedMs = numberValue(data, "elapsedMs", 0);
     const totalTokens = data.totalTokens;
-    return `LLM call ${status}${formatModel(data)} in ${elapsedMs} ms${
+    return `LLM ${status}: ${formatLlmOperation(data)}${formatScope(data)}${formatModel(data)} in ${elapsedMs} ms${
         typeof totalTokens === "number" ? ` (${totalTokens} tokens)` : ""
     }`;
+}
+
+function formatLlmOperation(data: Record<string, unknown>): string {
+    const phase = stringValue(data, "phase", "unknown");
+    const purpose = stringValue(data, "purpose", "unknown");
+    return phase === purpose ? phase : `${phase}.${purpose}`;
+}
+
+function formatScope(data: Record<string, unknown>): string {
+    return data.scope === "background" ? " [background]" : "";
 }
 
 function formatModel(data: Record<string, unknown>): string {

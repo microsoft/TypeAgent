@@ -11,6 +11,7 @@ import type { Logger } from "@typeagent/telemetry";
 import { error, success } from "typechat";
 import type { ChatModelWithStreaming } from "../src/models.js";
 import { instrumentChatModel } from "../src/otelChatModel.js";
+import { withChatModelTelemetryContext } from "../src/chatModelTelemetryContext.js";
 
 function createModel(): ChatModelWithStreaming {
     return {
@@ -65,6 +66,9 @@ describe("instrumentChatModel", () => {
         expect(span?.attributes).toMatchObject({
             "gen_ai.system": "test-provider",
             "gen_ai.request.model": "test-model",
+            "typeagent.llm.phase": "unknown",
+            "typeagent.llm.purpose": "unknown",
+            "typeagent.llm.scope": "foreground",
         });
         expect(span?.status.code).toBe(0);
     });
@@ -206,6 +210,53 @@ describe("instrumentChatModel", () => {
                     traceId: "legacy-trace",
                 }),
             },
+        ]);
+    });
+
+    it("records explicit lifecycle classification on spans and events", async () => {
+        otel.setStructuredLoggingEnabled(true);
+        const events: Array<{
+            name: string;
+            data: Record<string, unknown>;
+        }> = [];
+        const logger: Logger = {
+            logEvent(name, data) {
+                events.push({ name, data });
+            },
+        };
+        const model = instrumentChatModel(
+            createModel(),
+            { provider: "test-provider" },
+            logger,
+        );
+
+        await withChatModelTelemetryContext(
+            {
+                phase: "background",
+                purpose: "cache-generation",
+                scope: "background",
+            },
+            () => model.complete("private prompt"),
+        );
+
+        expect(
+            spans.findSpansByName("typeagent.llm")[0]?.attributes,
+        ).toMatchObject({
+            "typeagent.llm.phase": "background",
+            "typeagent.llm.purpose": "cache-generation",
+            "typeagent.llm.scope": "background",
+        });
+        expect(events.map(({ data }) => data)).toEqual([
+            expect.objectContaining({
+                phase: "background",
+                purpose: "cache-generation",
+                scope: "background",
+            }),
+            expect.objectContaining({
+                phase: "background",
+                purpose: "cache-generation",
+                scope: "background",
+            }),
         ]);
     });
 });

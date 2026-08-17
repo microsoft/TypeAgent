@@ -11,6 +11,7 @@ import {
     type Tracer,
 } from "@opentelemetry/api";
 import type { ActionContext } from "@typeagent/agent-sdk";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 import { otel } from "@typeagent/telemetry";
 import type { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { getSessionName } from "../context/session.js";
@@ -160,7 +161,16 @@ export async function wrapTranslationSpan<T>(
                 effectiveAttributes,
             );
             try {
-                return await context.with(spanContext, () => body(span));
+                return await context.with(spanContext, () =>
+                    withChatModelTelemetryContext(
+                        {
+                            phase: "translation",
+                            purpose: "action-generation",
+                            scope: "foreground",
+                        },
+                        () => body(span),
+                    ),
+                );
             } catch (error) {
                 const isAbort =
                     error !== null &&

@@ -414,6 +414,18 @@ describe("debug bridge", () => {
             body: "legacy-command",
         });
         logger.emit({ eventName: "debug", body: "debug-hidden" });
+        logger.emit({
+            eventName: "aiclient:llm:started",
+            body: { scope: "background" },
+        });
+        logger.emit({
+            eventName: "aiclient:llm:completed",
+            body: { scope: "background", success: true },
+        });
+        logger.emit({
+            eventName: "aiclient:llm:completed",
+            body: { scope: "background", success: false },
+        });
         state.setDebugCopy(true);
         logger.emit({ eventName: "debug", body: "debug-visible" });
         state.setProfile("off");
@@ -425,8 +437,36 @@ describe("debug bridge", () => {
                 .map((record) => [record.eventName, record.body]),
         ).toEqual([
             ["structured-one", "structured-one"],
+            ["aiclient:llm:completed", { scope: "background", success: false }],
             ["debug", "debug-visible"],
         ]);
+    });
+
+    it("retains successful background LLM events outside focused mode", () => {
+        const exporter = new InMemoryLogRecordExporter();
+        provider = new LoggerProvider({
+            processors: [
+                new LocalLogRecordProcessor(
+                    new SimpleLogRecordProcessor({ exporter }),
+                ),
+            ],
+        });
+        logs.setGlobalLoggerProvider(provider);
+        const state = createLocalTelemetryState();
+        state.setProfile("diagnostic");
+        setLocalTelemetryState(state);
+        const logger = logs.getLogger("local-policy-diagnostic");
+
+        logger.emit({
+            eventName: "aiclient:llm:started",
+            body: { scope: "background" },
+        });
+        logger.emit({
+            eventName: "aiclient:llm:completed",
+            body: { scope: "background", success: true },
+        });
+
+        expect(exporter.getFinishedLogRecords()).toHaveLength(2);
     });
 
     it("tees distinct debug modules exactly once and restores prior output", () => {
