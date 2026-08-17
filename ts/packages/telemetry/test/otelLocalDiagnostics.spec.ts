@@ -329,10 +329,15 @@ describe("JsonlLogExporter", () => {
         const blockingFile = path.join(dir, "not-a-directory");
         fs.writeFileSync(blockingFile, "x");
         const template = path.join(blockingFile, "logs-{pid}.jsonl");
+        // Pin startedAt so the injected {timestamp} placeholder resolves to the
+        // same path across constructions; otherwise each new Date() can cross a
+        // millisecond boundary and the ownership conflict would not be detected.
+        const startedAt = new Date("2026-08-17T08:38:59.123Z");
         const exporter = new JsonlLogExporter({
             filePath: template,
             serviceName: "test",
             pid: 1003,
+            startedAt,
             diagnostic: () => undefined,
         });
         expect(
@@ -341,6 +346,7 @@ describe("JsonlLogExporter", () => {
                     filePath: template,
                     serviceName: "test",
                     pid: 1003,
+                    startedAt,
                     diagnostic: () => undefined,
                 }),
         ).toThrow(/already owns/);
@@ -355,6 +361,7 @@ describe("JsonlLogExporter", () => {
             filePath: template,
             serviceName: "test",
             pid: 1003,
+            startedAt,
             diagnostic: () => undefined,
         });
         await replacement.shutdown();
@@ -364,10 +371,12 @@ describe("JsonlLogExporter", () => {
         const dir = makeTempDir();
         tempDirs.push(dir);
         const template = path.join(dir, "diagnostic-{pid}.jsonl");
+        const startedAt = new Date("2026-08-17T08:38:59.123Z");
         const exporter = new JsonlLogExporter({
             filePath: template,
             serviceName: "test",
             pid: 1004,
+            startedAt,
             diagnostic: () => {
                 throw new Error("diagnostic failed");
             },
@@ -378,6 +387,7 @@ describe("JsonlLogExporter", () => {
             filePath: template,
             serviceName: "test",
             pid: 1004,
+            startedAt,
             diagnostic: () => undefined,
         });
         await replacement.shutdown();
