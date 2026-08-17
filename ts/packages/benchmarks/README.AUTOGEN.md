@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d90f01503aa167c441eaf2d3c2a5086314545f404a3eea19a573fdcc3c423963 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d478d5102c935385f637d4c77501bf03d55cfdb48f74690c7dcb6a04ea624606 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -45,17 +45,17 @@ _None._
 - [./src/index.ts](./src/index.ts)
 - [./src/translationBench/index.ts](./src/translationBench/index.ts)
 - [./src/translationBench/policy/index.ts](./src/translationBench/policy/index.ts)
+- [./src/translationBench/synthesizer/catalogGenerator/index.ts](./src/translationBench/synthesizer/catalogGenerator/index.ts)
+- [./src/translationBench/synthesizer/goldSchema.ts](./src/translationBench/synthesizer/goldSchema.ts)
 - [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
 - [./src/core/model-prices.generated.json](./src/core/model-prices.generated.json)
 - [./src/core/paths.ts](./src/core/paths.ts)
 - [./src/core/prices.ts](./src/core/prices.ts)
 - [./src/core/rateLimiter.ts](./src/core/rateLimiter.ts)
-- [./src/core/tokenEstimate.ts](./src/core/tokenEstimate.ts)
-- [./src/core/types.ts](./src/core/types.ts)
-- _…and 44 more under `./src/`._
+- _…and 52 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `cb113126e39f7f4c5ebb1ec3603a78ecf5241572` on `2026-08-11T01:06:02.321Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `6d275c2f6f0816307879d1bc186dd6300fc2fbbc` on `2026-08-17T23:00:15.707Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
