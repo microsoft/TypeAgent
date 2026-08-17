@@ -16,15 +16,36 @@ function macro(): CopilotToolMacro {
         description: "",
         state: "approved",
         executionClass: "replayable",
-        inputs: [],
+        inputs: [
+            {
+                name: "path",
+                description: "File to read",
+                required: true,
+                secret: false,
+                valueType: "string",
+            },
+        ],
         steps: [
             {
                 id: "step-1",
                 toolName: "read",
                 mcpServerName: "typeagent-workspace",
-                arguments: { kind: "input", name: "path" },
+                arguments: {
+                    kind: "template",
+                    value: { path: "captured.json", encoding: "utf8" },
+                    bindings: [
+                        {
+                            path: ["path"],
+                            expression: { kind: "input", name: "path" },
+                        },
+                    ],
+                },
                 executionClass: "replayable",
                 sourceToolCallId: "call-1",
+                postconditions: [
+                    { kind: "resultType", valueType: "object" },
+                    { kind: "resultPathExists", path: ["query"] },
+                ],
             },
             {
                 id: "step-2",
@@ -76,7 +97,13 @@ describe("deterministic macro replay", () => {
         expect(run.status).toBe("completed");
         expect(run.result).toEqual({ matches: 1 });
         expect(replayHost.calls).toEqual([
-            { toolName: "read", argumentsValue: "package.json" },
+            {
+                toolName: "read",
+                argumentsValue: {
+                    path: "package.json",
+                    encoding: "utf8",
+                },
+            },
             { toolName: "grep", argumentsValue: "needle" },
         ]);
     });
@@ -117,6 +144,41 @@ describe("deterministic macro replay", () => {
             ),
         ).rejects.toMatchObject({ code: "missingInput" });
         expect(replayHost.calls).toEqual([]);
+    });
+
+    it("rejects incorrectly typed inputs before executing step one", async () => {
+        const replayHost = host();
+
+        await expect(
+            replayMacro(
+                macro(),
+                "run-1",
+                { path: 42 },
+                replayHost.value,
+                new AbortController().signal,
+            ),
+        ).rejects.toMatchObject({ code: "invalidInputType" });
+        expect(replayHost.calls).toEqual([]);
+    });
+
+    it("fails a step whose result no longer satisfies its postconditions", async () => {
+        const replayHost = host({
+            callTool: async () => ({ changed: true }),
+        });
+
+        const run = await replayMacro(
+            macro(),
+            "run-1",
+            { path: "package.json" },
+            replayHost.value,
+            new AbortController().signal,
+        );
+
+        expect(run).toMatchObject({
+            status: "failed",
+            steps: [{ stepId: "step-1", status: "failed" }],
+            error: { code: "postconditionFailed" },
+        });
     });
 
     it("records cancellation without starting later steps", async () => {

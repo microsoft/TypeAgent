@@ -9,6 +9,11 @@
       "command": "node",
       "args": ["${PLUGIN_ROOT}/dist/mcp/server.js", "--workspace"],
       "tools": ["read", "glob", "grep", "fetch"]
+    },
+    "typeagent-macros": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/dist/mcp/server.js", "--macros"],
+      "tools": ["*"]
     }
   }
 }

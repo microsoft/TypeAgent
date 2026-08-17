@@ -5,7 +5,9 @@ import type {
     CopilotToolMacro,
     MacroExecutionClass,
     MacroInput,
+    MacroPostcondition,
     MacroStep,
+    MacroValueType,
     MacroValidationIssue,
     MacroValidationReport,
     RecordedInteractionTrace,
@@ -19,30 +21,121 @@ function classifyTool(
     return mcpServerName ? "replayable" : "agentRequired";
 }
 
+function getValueType(value: unknown): MacroValueType {
+    if (value === null) return "null";
+    if (Array.isArray(value)) return "array";
+    return typeof value as Exclude<MacroValueType, "null" | "array">;
+}
+
+function getInputName(stepId: string, path: string[]): string {
+    const suffix = path
+        .map((segment) => segment.replace(/[^a-zA-Z0-9]+/g, "_"))
+        .filter(Boolean)
+        .join("_");
+    return `${stepId.replace(/-/g, "_")}_${suffix || "value"}`;
+}
+
+function findValuePath(root: unknown, target: unknown): string[] | undefined {
+    if (Object.is(root, target)) return [];
+    if (root === null || typeof root !== "object") return undefined;
+    for (const [key, child] of Object.entries(root)) {
+        const nested = findValuePath(child, target);
+        if (nested !== undefined) return [key, ...nested];
+    }
+    return undefined;
+}
+
+function collectLeafPaths(value: unknown, path: string[] = []): string[][] {
+    if (value === null || typeof value !== "object") return [path];
+    return Object.entries(value).flatMap(([key, child]) =>
+        collectLeafPaths(child, [...path, key]),
+    );
+}
+
+function inferPostconditions(result: unknown): MacroPostcondition[] {
+    const postconditions: MacroPostcondition[] = [
+        { kind: "resultType", valueType: getValueType(result) },
+    ];
+    if (result !== null && typeof result === "object") {
+        for (const path of collectLeafPaths(result).slice(0, 50)) {
+            if (path.length > 0) {
+                postconditions.push({ kind: "resultPathExists", path });
+            }
+        }
+    }
+    return postconditions;
+}
+
 function convertArguments(
     value: unknown,
     stepId: string,
+    prompt: string,
+    priorSteps: MacroStep[],
+    priorCalls: RecordedInteractionTrace["toolCalls"],
     inputs: MacroInput[],
     warnings: string[],
 ): ValueExpression {
     if (value === undefined) {
         return { kind: "literal", value: {} };
     }
-    const serialized = JSON.stringify(value);
-    if (serialized?.includes("[REDACTED]")) {
-        const inputName = `${stepId}_secret`;
-        inputs.push({
-            name: inputName,
-            description: `Secret value required by ${stepId}`,
-            required: true,
-            secret: true,
-        });
-        warnings.push(
-            `${stepId} contains a redacted value and requires review of the generated secret input.`,
-        );
-        return { kind: "input", name: inputName };
+    const bindings: Extract<ValueExpression, { kind: "template" }>["bindings"] =
+        [];
+    for (const path of collectLeafPaths(value)) {
+        let leaf: unknown = value;
+        for (const segment of path) {
+            leaf = (leaf as Record<string, unknown>)[segment];
+        }
+        let expression:
+            | Exclude<ValueExpression, { kind: "template" }>
+            | undefined;
+        if (
+            typeof leaf === "string" &&
+            leaf !== "[REDACTED]" &&
+            leaf.length >= 3
+        ) {
+            for (let index = priorCalls.length - 1; index >= 0; index--) {
+                const resultPath = findValuePath(
+                    priorCalls[index].result,
+                    leaf,
+                );
+                if (resultPath !== undefined) {
+                    expression = {
+                        kind: "stepResult",
+                        stepId: priorSteps[index].id,
+                        ...(resultPath.length > 0 ? { path: resultPath } : {}),
+                    };
+                    break;
+                }
+            }
+        }
+        const redacted = leaf === "[REDACTED]";
+        const mentionedInPrompt =
+            typeof leaf === "string" &&
+            leaf.length >= 3 &&
+            prompt.toLowerCase().includes(leaf.toLowerCase());
+        if (!expression && (redacted || mentionedInPrompt)) {
+            const name = getInputName(stepId, path);
+            inputs.push({
+                name,
+                description: redacted
+                    ? `Secret value required by ${stepId} at ${path.join(".") || "arguments"}`
+                    : `Value captured from the request for ${stepId} at ${path.join(".") || "arguments"}`,
+                required: true,
+                secret: redacted,
+                ...(redacted ? {} : { valueType: getValueType(leaf) }),
+            });
+            expression = { kind: "input", name };
+            if (redacted) {
+                warnings.push(
+                    `${stepId} contains a redacted value and requires review of the generated secret input.`,
+                );
+            }
+        }
+        if (expression) bindings.push({ path, expression });
     }
-    return { kind: "literal", value };
+    return bindings.length === 0
+        ? { kind: "literal", value }
+        : { kind: "template", value, bindings };
 }
 
 export function induceMacroFromTrace(
@@ -55,7 +148,8 @@ export function induceMacroFromTrace(
 ): CopilotToolMacro {
     const warnings: string[] = [];
     const inputs: MacroInput[] = [];
-    const steps: MacroStep[] = trace.toolCalls.map((call, index) => {
+    const steps: MacroStep[] = [];
+    trace.toolCalls.forEach((call, index) => {
         const id = `step-${index + 1}`;
         const executionClass = classifyTool(call.name, call.mcpServerName);
         if (executionClass === "agentRequired") {
@@ -68,16 +162,27 @@ export function induceMacroFromTrace(
                 `${id} was captured with status ${call.status} and requires review.`,
             );
         }
-        return {
+        steps.push({
             id,
             toolName: call.name,
             ...(call.mcpServerName
                 ? { mcpServerName: call.mcpServerName }
                 : {}),
-            arguments: convertArguments(call.arguments, id, inputs, warnings),
+            arguments: convertArguments(
+                call.arguments,
+                id,
+                trace.prompt,
+                steps,
+                trace.toolCalls.slice(0, index),
+                inputs,
+                warnings,
+            ),
             executionClass,
             sourceToolCallId: call.toolCallId,
-        };
+            ...(call.result === undefined
+                ? {}
+                : { postconditions: inferPostconditions(call.result) }),
+        });
     });
 
     return {
@@ -105,6 +210,34 @@ function validateExpression(
     macro: CopilotToolMacro,
     stepIndex: number,
 ): string | undefined {
+    if (expression.kind === "template") {
+        if (expression.bindings.length === 0) {
+            return "A template expression requires at least one binding.";
+        }
+        for (const binding of expression.bindings) {
+            if (binding.path.length === 0) {
+                return "A template binding requires a non-empty path.";
+            }
+            let target = expression.value;
+            for (const segment of binding.path) {
+                if (
+                    target === null ||
+                    typeof target !== "object" ||
+                    !Object.prototype.hasOwnProperty.call(target, segment)
+                ) {
+                    return `Template binding path is unavailable: ${binding.path.join(".")}`;
+                }
+                target = (target as Record<string, unknown>)[segment];
+            }
+            const error = validateExpression(
+                binding.expression,
+                macro,
+                stepIndex,
+            );
+            if (error) return error;
+        }
+        return undefined;
+    }
     if (expression.kind === "input") {
         return macro.inputs.some((input) => input.name === expression.name)
             ? undefined
@@ -162,6 +295,21 @@ export function validateMacro(
                 severity: "error",
                 code: "invalidExpression",
                 message: expressionError,
+                stepId: step.id,
+            });
+        }
+        if (
+            step.postconditions?.some(
+                (condition) =>
+                    condition.kind === "resultPathExists" &&
+                    condition.path.length === 0,
+            )
+        ) {
+            issues.push({
+                severity: "error",
+                code: "invalidPostcondition",
+                message:
+                    "A result path postcondition requires a non-empty path.",
                 stepId: step.id,
             });
         }

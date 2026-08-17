@@ -8,6 +8,7 @@ import type {
     ReplayToolDescriptor,
     ReplayToolContext,
     ReplayToolHost,
+    MacroValueType,
     ValueExpression,
 } from "./contracts.js";
 
@@ -26,6 +27,28 @@ function resolveExpression(
     results: ReadonlyMap<string, unknown>,
 ): unknown {
     if (expression.kind === "literal") return expression.value;
+    if (expression.kind === "template") {
+        const value = structuredClone(expression.value);
+        for (const binding of expression.bindings) {
+            let parent = value as Record<string, unknown>;
+            for (const segment of binding.path.slice(0, -1)) {
+                const child = parent[segment];
+                if (child === null || typeof child !== "object") {
+                    throw new ReplayValidationError(
+                        "invalidTemplatePath",
+                        `Template path is unavailable: ${binding.path.join(".")}`,
+                    );
+                }
+                parent = child as Record<string, unknown>;
+            }
+            parent[binding.path.at(-1)!] = resolveExpression(
+                binding.expression,
+                inputs,
+                results,
+            );
+        }
+        return value;
+    }
     if (expression.kind === "input") {
         if (!Object.prototype.hasOwnProperty.call(inputs, expression.name)) {
             throw new ReplayValidationError(
@@ -59,6 +82,52 @@ function resolveExpression(
         value = record[segment];
     }
     return value;
+}
+
+function getValueType(value: unknown): MacroValueType {
+    if (value === null) return "null";
+    if (Array.isArray(value)) return "array";
+    return typeof value as Exclude<MacroValueType, "null" | "array">;
+}
+
+function referencedInputs(expression: ValueExpression): string[] {
+    if (expression.kind === "input") return [expression.name];
+    if (expression.kind !== "template") return [];
+    return expression.bindings.flatMap((binding) =>
+        referencedInputs(binding.expression),
+    );
+}
+
+function validatePostconditions(
+    stepId: string,
+    result: unknown,
+    postconditions: CopilotToolMacro["steps"][number]["postconditions"] = [],
+): void {
+    for (const postcondition of postconditions) {
+        if (postcondition.kind === "resultType") {
+            if (getValueType(result) !== postcondition.valueType) {
+                throw new ReplayValidationError(
+                    "postconditionFailed",
+                    `${stepId} returned ${getValueType(result)}; expected ${postcondition.valueType}.`,
+                );
+            }
+            continue;
+        }
+        let value = result;
+        for (const segment of postcondition.path) {
+            if (
+                value === null ||
+                typeof value !== "object" ||
+                !Object.prototype.hasOwnProperty.call(value, segment)
+            ) {
+                throw new ReplayValidationError(
+                    "postconditionFailed",
+                    `${stepId} result is missing required path ${postcondition.path.join(".")}.`,
+                );
+            }
+            value = (value as Record<string, unknown>)[segment];
+        }
+    }
 }
 
 function isAbort(error: unknown, signal: AbortSignal): boolean {
@@ -96,6 +165,16 @@ export async function inspectReplayTools(
                 `Required macro input is missing: ${input.name}`,
             );
         }
+        if (
+            Object.prototype.hasOwnProperty.call(inputs, input.name) &&
+            input.valueType !== undefined &&
+            getValueType(inputs[input.name]) !== input.valueType
+        ) {
+            throw new ReplayValidationError(
+                "invalidInputType",
+                `Macro input '${input.name}' must be ${input.valueType}.`,
+            );
+        }
     }
     const descriptors = new Map<string, ReplayToolDescriptor>();
     for (const step of macro.steps) {
@@ -105,14 +184,13 @@ export async function inspectReplayTools(
                 `Step requires agent-guided execution: ${step.id}`,
             );
         }
-        if (
-            step.arguments.kind === "input" &&
-            !Object.prototype.hasOwnProperty.call(inputs, step.arguments.name)
-        ) {
-            throw new ReplayValidationError(
-                "missingInput",
-                `Required macro input is missing: ${step.arguments.name}`,
-            );
+        for (const inputName of referencedInputs(step.arguments)) {
+            if (!Object.prototype.hasOwnProperty.call(inputs, inputName)) {
+                throw new ReplayValidationError(
+                    "missingInput",
+                    `Required macro input is missing: ${inputName}`,
+                );
+            }
         }
         const descriptor = await host.inspectTool(
             step.mcpServerName,
@@ -168,6 +246,7 @@ export async function replayMacro(
                 signal,
                 context,
             );
+            validatePostconditions(step.id, result, step.postconditions);
             results.set(step.id, result);
             steps.push({
                 stepId: step.id,
