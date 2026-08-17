@@ -491,6 +491,16 @@ export function createDefaultInstalledAgentSource(
         return provider;
     }
 
+    // Records in `agents.json` whose source could not re-resolve them at startup
+    // (name -> reason), e.g. a catalog entry deleted after the install. Seeding
+    // one must not fail the whole source construction - that makes the host
+    // unstartable over a single stale record - so the name is not vended.
+    //
+    // The record is NOT dropped: unresolvability can be transient (an unreadable
+    // catalog resolves nothing), so it resolves again once its source is fixed;
+    // `@package uninstall` removes it when it is gone for good.
+    const unresolvedRecords = new Map<string, string>();
+
     // Seed active entries from agents.json. One single-agent,
     // single-root provider per record; shared (the same instance) across every
     // connected session.
@@ -499,10 +509,21 @@ export function createDefaultInstalledAgentSource(
         options?.configName,
     );
     for (const [name, record] of Object.entries(installedRecords)) {
-        entries.set(name, {
-            status: "active",
-            provider: buildAgentProvider(name, record),
-        });
+        let provider: AppAgentProvider;
+        try {
+            provider = buildAgentProvider(name, record);
+        } catch (e) {
+            const reason = e instanceof Error ? e.message : String(e);
+            unresolvedRecords.set(name, reason);
+            // Warn on the console, not just the debug trace: this is the only
+            // notice that an installed agent silently went missing.
+            console.warn(
+                `Installed agent '${name}' is not available: ${reason} ` +
+                    `Run '@package uninstall ${name}' to remove it.`,
+            );
+            continue;
+        }
+        entries.set(name, { status: "active", provider });
     }
 
     // Startup orphan sweep: keep only each installed agent's
@@ -999,12 +1020,25 @@ export function createDefaultInstalledAgentSource(
                 }
                 const uninstalledRoot = deletedRecord.installRoot;
 
+                // A record its source could not re-resolve at startup was never
+                // seeded, so nothing is loaded in any session and the barrier
+                // below has no provider to drain. Drop the record directly.
+                if (unresolvedRecords.has(name)) {
+                    mutateAgentsJson((agents) => {
+                        delete agents[name];
+                    });
+                    unresolvedRecords.delete(name);
+                    pruneRootIfUnreferenced(uninstalledRoot, name);
+                    onOutcome?.("uninstalled");
+                    return;
+                }
+
                 // Invariant: a recorded name is `active` in this source (a name
                 // mid-teardown — `removing` — was already rejected by
-                // `assertNameFree` above, and every record is seeded active at
-                // construction). Reaching here with no active entry means
-                // `agents.json` and this source's live set disagree, which can
-                // only come from an OUT-OF-BAND mutation of the store: the
+                // `assertNameFree` above, and every resolvable record is seeded
+                // active at construction). Reaching here with no active entry
+                // means `agents.json` and this source's live set disagree, which
+                // can only come from an OUT-OF-BAND mutation of the store: the
                 // instance-dir lock keeps one process per `agents.json`, and both
                 // multi-dispatcher hosts (agent server + web API) run a single
                 // shared source per process, so no concurrent sibling source can
@@ -1118,6 +1152,16 @@ export function createDefaultInstalledAgentSource(
                     throw new Error(`Agent '${name}' not found`);
                 }
                 const oldEntry = entries.get(name);
+                // An unresolvable record has no live version to swap out. Report
+                // that instead of the out-of-band store mutation below, which is
+                // a different problem.
+                const unresolvedReason = unresolvedRecords.get(name);
+                if (unresolvedReason !== undefined) {
+                    throw new Error(
+                        `Agent '${name}' could not be loaded from its install source: ${unresolvedReason} ` +
+                            `Fix the source and restart, or run '@package uninstall ${name}' and install it again.`,
+                    );
+                }
                 if (oldEntry?.status !== "active") {
                     throw new Error(
                         `Agent '${name}' is recorded but not active in this source; the install store may have been modified out of band.`,
