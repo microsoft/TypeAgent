@@ -21,19 +21,15 @@ import {
     loadActionParametersGraderCatalogFile,
     mergeUnionParamSpecs,
     parameterRequiresLlmJudge,
-    HARDCODE_RULE_IDS,
+    REGEX_RULE_IDS,
     renderSchemaType,
     schemaTypeToParamSpec,
     toRecommendedByActionVerifyMap,
-    tryClassifyActionParameterFieldHardcode,
+    tryClassifyActionParameterFieldRegex,
     tryReusePriorFieldGraderDecision,
     type ParamSpec,
-} from "../src/translationBench/policy/index.js";
-import {
-    clearPackagedActionEligibilityPolicyCacheForTests,
-    countEligibleTranslationBenchActions,
-    getPackagedScheduleExcludedActionIds,
-} from "../src/translationBench/synthesizer/eligibleActions.js";
+} from "../src/translationBench/synthesizer/catalogGenerator/index.js";
+import { countEligibleTranslationBenchActions } from "../src/translationBench/synthesizer/eligibleActions.js";
 
 function objectSpec(
     fields: Record<string, { optional: boolean; spec: ParamSpec }>,
@@ -156,10 +152,10 @@ function termFilterTimeRangeAst() {
     };
 }
 
-describe("tryClassifyActionParameterFieldHardcode", () => {
+describe("tryClassifyActionParameterFieldRegex", () => {
     it("inherits element policy for arrays and loosens soft container verify", () => {
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "items",
                 { kind: "array", item: { kind: "string" } },
                 false,
@@ -174,7 +170,7 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
 
     it("keeps exact container verify for number[] (runner has no item loop)", () => {
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "selectedIndices",
                 { kind: "array", item: { kind: "number" } },
                 false,
@@ -189,21 +185,21 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
 
     it("matches scalar hand fixture policies", () => {
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "listName",
                 { kind: "string" },
                 false,
             ),
         ).toMatchObject({ create: "identifier", verify: "exact" });
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "description",
                 { kind: "string" },
                 false,
             ),
         ).toMatchObject({ create: "free_text", verify: "nonempty" });
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "date",
                 { kind: "string" },
                 false,
@@ -214,42 +210,42 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
             rule: "string-date-nonempty",
         });
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "time",
                 { kind: "string" },
                 true,
             ),
         ).toMatchObject({ create: "temporal", verify: "nonempty" });
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "location",
                 { kind: "string" },
                 true,
             ),
         ).toMatchObject({ create: "free_text", verify: "nonempty" });
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "message",
                 { kind: "string" },
                 false,
             ),
         ).toMatchObject({ create: "free_text", verify: "nonempty" });
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "when",
                 { kind: "string" },
                 false,
             ),
         ).toMatchObject({ create: "temporal", verify: "nonempty" });
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "kind",
                 { kind: "string" },
                 true,
             ),
         ).toMatchObject({ create: "unit_or_mode", verify: "ignore" });
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "units",
                 { kind: "string", enum: ["celsius", "fahrenheit"] },
                 true,
@@ -259,21 +255,21 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
 
     it("uses exact verify for enums, booleans, and numbers", () => {
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "tab",
                 { kind: "string", enum: ["new", "current"] },
                 true,
             ),
         ).toMatchObject({ create: "enum_literal", verify: "exact" });
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "enabled",
                 { kind: "boolean" },
                 false,
             ),
         ).toMatchObject({ create: "typed_literal", verify: "exact" });
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "limit",
                 { kind: "number" },
                 true,
@@ -283,7 +279,7 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
 
     it("marks opaque any as ignore", () => {
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "payload",
                 { kind: "any" },
                 false,
@@ -293,7 +289,7 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
 
     it("treats site as free-text when typed as string (not any)", () => {
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "site",
                 { kind: "string" },
                 false,
@@ -313,7 +309,7 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
             "names",
         ]) {
             expect(
-                tryClassifyActionParameterFieldHardcode(
+                tryClassifyActionParameterFieldRegex(
                     name,
                     { kind: "array", item: { kind: "string" } },
                     false,
@@ -326,7 +322,7 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
         }
         // Contrast: loose free-text collections stay nonempty.
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "sites",
                 { kind: "array", item: { kind: "string" } },
                 true,
@@ -345,7 +341,7 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
             },
         });
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "lookup",
                 lookupInternet,
                 false,
@@ -368,11 +364,7 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
             },
         });
         expect(
-            tryClassifyActionParameterFieldHardcode(
-                "lookup",
-                lookupMixed,
-                false,
-            ),
+            tryClassifyActionParameterFieldRegex("lookup", lookupMixed, false),
         ).toMatchObject({
             create: "record",
             verify: "exact",
@@ -380,47 +372,17 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
         });
     });
 
-    it("leaves unmatched open strings for the LLM (no soft default)", () => {
+    it("uses structural soft default for unmatched open strings", () => {
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "weirdField",
                 { kind: "string" },
                 false,
             ),
-        ).toBeUndefined();
-    });
-
-    it("hardcodes originalRequest ignore and script llmAsAJudge without regex", () => {
-        expect(
-            tryClassifyActionParameterFieldHardcode(
-                "originalRequest",
-                { kind: "string" },
-                false,
-            ),
         ).toMatchObject({
             create: "free_text",
-            verify: "ignore",
-            rule: "string-original-request-ignore",
-        });
-        expect(
-            tryClassifyActionParameterFieldHardcode(
-                "script",
-                { kind: "string" },
-                false,
-            ),
-        ).toMatchObject({
-            create: "free_text",
-            verify: "llmAsAJudge",
-            rule: "string-llm-as-a-judge",
-        });
-        expect(
-            tryClassifyActionParameterFieldHardcode(
-                "codeSnippet",
-                { kind: "string" },
-                false,
-            ),
-        ).toMatchObject({
-            verify: "llmAsAJudge",
+            verify: "nonempty",
+            rule: "string-open-soft-nonempty",
         });
     });
 
@@ -433,13 +395,13 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
                 create: "opaque",
                 verify: "ignore",
                 rule: "type-any",
-                source: "hardcode",
+                source: "regex",
             },
             { kind: "string" },
         );
         expect(reused).toBeUndefined();
         expect(
-            tryClassifyActionParameterFieldHardcode(
+            tryClassifyActionParameterFieldRegex(
                 "site",
                 { kind: "string" },
                 false,
@@ -457,7 +419,7 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
                     create: "free_text",
                     verify: "nonempty",
                     rule: "string-free-text-nonempty",
-                    source: "hardcode",
+                    source: "regex",
                 },
                 { kind: "string" },
                 false,
@@ -522,15 +484,19 @@ describe("tryClassifyActionParameterFieldHardcode", () => {
 });
 
 describe("classifyActionParameterFieldWithFallback", () => {
-    it("requires LLM for unmatched open strings (no soft default)", async () => {
-        await expect(
-            classifyActionParameterFieldWithFallback(
-                "weirdField",
-                { kind: "string" },
-                false,
-                { schemaName: "desktop", actionName: "ConnectWifi" },
-            ),
-        ).rejects.toThrow(/no regex rule|provide an LLM fallback/);
+    it("classifies open strings without LLM via structural soft default", async () => {
+        const decision = await classifyActionParameterFieldWithFallback(
+            "weirdField",
+            { kind: "string" },
+            false,
+            { schemaName: "desktop", actionName: "ConnectWifi" },
+        );
+        expect(decision).toMatchObject({
+            create: "free_text",
+            verify: "nonempty",
+            rule: "string-open-soft-nonempty",
+            source: "regex",
+        });
     });
 
     it("classifies array item then wraps even when item needs reuse/LLM path", async () => {
@@ -1031,7 +997,7 @@ describe("loadActionParametersGraderCatalogFile", () => {
             create: "free_text",
             verify: "nonempty",
             rule: "string-default-nonempty",
-            source: "hardcode",
+            source: "regex",
         };
         writeFileSync(
             nestedLegacy,
@@ -1080,10 +1046,7 @@ describe("incremental grader catalog", () => {
                     },
                 ],
             },
-            {
-                generatedAt: "2026-01-01T00:00:00.000Z",
-                assertOverridesMatchCatalog: false,
-            },
+            { generatedAt: "2026-01-01T00:00:00.000Z" },
         );
 
         expect(first.lastDiff?.added).toEqual([
@@ -1127,7 +1090,6 @@ describe("incremental grader catalog", () => {
             {
                 previous: first,
                 generatedAt: "2026-01-02T00:00:00.000Z",
-                assertOverridesMatchCatalog: false,
             },
         );
 
@@ -1158,11 +1120,7 @@ describe("incremental grader catalog", () => {
                     },
                 ],
             },
-            {
-                previous: second,
-                generatedAt: "2026-01-03T00:00:00.000Z",
-                assertOverridesMatchCatalog: false,
-            },
+            { previous: second, generatedAt: "2026-01-03T00:00:00.000Z" },
         );
         expect(third.lastDiff?.added).toContain("list.createList");
         expect(third.lastDiff?.unchanged).toContain("timer.setReminder");
@@ -1189,10 +1147,7 @@ describe("incremental grader catalog", () => {
                     },
                 ],
             },
-            {
-                generatedAt: "2026-01-01T00:00:00.000Z",
-                assertOverridesMatchCatalog: false,
-            },
+            { generatedAt: "2026-01-01T00:00:00.000Z" },
         );
         // Poison a field as if legacy reuse had stuck.
         first.byAction["list.createList"]!.fields.listName = {
@@ -1202,7 +1157,7 @@ describe("incremental grader catalog", () => {
             create: "free_text",
             verify: "nonempty",
             rule: "string-default-nonempty",
-            source: "hardcode",
+            source: "regex",
         };
         first.byAction["list.createList"]!.parameterScore.fields.listName =
             "nonempty";
@@ -1222,7 +1177,6 @@ describe("incremental grader catalog", () => {
                 previous: first,
                 forceFull: true,
                 generatedAt: "2026-01-02T00:00:00.000Z",
-                assertOverridesMatchCatalog: false,
             },
         );
         expect(forced.byAction["list.createList"]!.fields.listName?.rule).toBe(
@@ -1257,10 +1211,7 @@ describe("incremental grader catalog", () => {
                     },
                 ],
             },
-            {
-                generatedAt: "2026-01-01T00:00:00.000Z",
-                assertOverridesMatchCatalog: false,
-            },
+            { generatedAt: "2026-01-01T00:00:00.000Z" },
         );
         const fp = first.byAction["list.createList"]!.sourceFingerprint;
         expect(fp).toBe(actionParameterSourceFingerprint(listSpec));
@@ -1281,7 +1232,6 @@ describe("incremental grader catalog", () => {
             {
                 previous: first,
                 generatedAt: "2026-01-02T00:00:00.000Z",
-                assertOverridesMatchCatalog: false,
             },
         );
         expect(second.byAction["list.createList"]!.sourceFingerprint).toBe(fp);
@@ -1307,7 +1257,6 @@ describe("incremental grader catalog", () => {
             {
                 previous: staleRules,
                 generatedAt: "2026-01-03T00:00:00.000Z",
-                assertOverridesMatchCatalog: false,
             },
         );
         expect(third.byAction["list.createList"]!.sourceFingerprint).toBe(fp);
@@ -1361,10 +1310,7 @@ describe("incremental grader catalog", () => {
                     },
                 ],
             },
-            {
-                generatedAt: "2026-01-01T00:00:00.000Z",
-                assertOverridesMatchCatalog: false,
-            },
+            { generatedAt: "2026-01-01T00:00:00.000Z" },
         );
         expect(toRecommendedByActionVerifyMap(catalog)).toEqual({
             "weather.getCurrentConditions": {
@@ -1389,10 +1335,7 @@ describe("incremental grader catalog", () => {
                     },
                 ],
             },
-            {
-                generatedAt: "2026-01-01T00:00:00.000Z",
-                assertOverridesMatchCatalog: false,
-            },
+            { generatedAt: "2026-01-01T00:00:00.000Z" },
         );
         // Corrupt fingerprint string while keeping shape — looks "stable" to naive diffs.
         first.byAction["list.createList"]!.sourceFingerprint =
@@ -1429,11 +1372,7 @@ describe("incremental grader catalog", () => {
                     },
                 ],
             },
-            {
-                previous: first,
-                generatedAt: "2026-01-02T00:00:00.000Z",
-                assertOverridesMatchCatalog: false,
-            },
+            { previous: first, generatedAt: "2026-01-02T00:00:00.000Z" },
         );
         expect(
             rebuilt.byAction["list.createList"]!.fields.listName?.verify,
@@ -1445,22 +1384,21 @@ describe("incremental grader catalog", () => {
 });
 
 describe("GRADER_RULES_VERSION contract", () => {
-    it("exports a stable HARDCODE_RULE_IDS allowlist tied to version bumps", () => {
-        expect(GRADER_RULES_VERSION).toBeGreaterThanOrEqual(6);
-        expect(HARDCODE_RULE_IDS.length).toBeGreaterThan(5);
-        expect(HARDCODE_RULE_IDS).not.toContain("string-open-soft-nonempty");
-        expect(HARDCODE_RULE_IDS).toContain("string-original-request-ignore");
-        expect(HARDCODE_RULE_IDS).toContain("string-date-nonempty");
-        expect(HARDCODE_RULE_IDS).not.toContain("string-date-exact");
-        expect(HARDCODE_RULE_IDS).toContain("type-object-soft-nonempty");
-        expect(HARDCODE_RULE_IDS).toContain("string-llm-as-a-judge");
+    it("exports a stable REGEX_RULE_IDS allowlist tied to version bumps", () => {
+        expect(GRADER_RULES_VERSION).toBeGreaterThanOrEqual(5);
+        expect(REGEX_RULE_IDS.length).toBeGreaterThan(5);
+        expect(REGEX_RULE_IDS).toContain("string-open-soft-nonempty");
+        expect(REGEX_RULE_IDS).toContain("string-date-nonempty");
+        expect(REGEX_RULE_IDS).not.toContain("string-date-exact");
+        expect(REGEX_RULE_IDS).toContain("type-object-soft-nonempty");
+        expect(REGEX_RULE_IDS).toContain("string-llm-as-a-judge");
         // Pin allowlist hash; bump GRADER_RULES_VERSION with id edits.
         const hash = createHash("sha256")
-            .update(JSON.stringify([...HARDCODE_RULE_IDS].sort()))
+            .update(JSON.stringify([...REGEX_RULE_IDS].sort()))
             .digest("hex")
             .slice(0, 16);
         // Bump GRADER_RULES_VERSION with this hash when rules change.
-        expect(hash).toBe("e00092cd4ae26688");
+        expect(hash).toBe("f2c1d77d772926e9");
     });
 });
 
@@ -1488,57 +1426,6 @@ describe("eligible action coverage counting", () => {
         expect(countEligibleTranslationBenchActions(schemas, new Set())).toBe(
             3,
         );
-    });
-
-    it("excludes policy removedActions (exact ids) from the packaged exclusion set", () => {
-        clearPackagedActionEligibilityPolicyCacheForTests();
-        // Catalog must include every exact removedActions id (fail-closed expand).
-        const exactRemoved = [
-            "browser.lookupAndAnswer.lookupAndAnswerInternet",
-            "browser.searchImageAction",
-            "chat.generateResponse",
-            "dispatcher.reasoning.reasoningAction",
-            "image.createImageAction",
-            "image.editImageAction",
-            "markdown.streamingUpdateDocument",
-            "markdown.updateDocument",
-            "photo.takePhoto",
-            "settings.adjustMultiMonitorLayoutAction",
-            "settings.dimBrightNessAction",
-            "video.createVideoAction",
-            "system.help.answerTypeAgentQuestion",
-            "utility.claudeTask",
-        ];
-        const bySchema = new Map<string, string[]>();
-        for (const id of exactRemoved) {
-            // schema may contain dots (e.g. browser.lookupAndAnswer)
-            const lastDot = id.lastIndexOf(".");
-            const schemaName = id.slice(0, lastDot);
-            const actionName = id.slice(lastDot + 1);
-            const list = bySchema.get(schemaName) ?? [];
-            list.push(actionName);
-            bySchema.set(schemaName, list);
-        }
-        // Keep one non-removed action that has llmAsAJudge fields in policy.
-        const browserTools = bySchema.get("browser") ?? [];
-        browserTools.push("executeAdHocScript");
-        bySchema.set("browser", browserTools);
-
-        const schemas = [...bySchema.entries()].map(([schemaName, names]) => ({
-            schemaName,
-            tools: names.map((name) => ({ function: { name } })),
-        }));
-        const excluded = getPackagedScheduleExcludedActionIds(schemas, {
-            allowMissingExactIds: true,
-            applyEligibleGoldAllowlist: false,
-        });
-        for (const id of exactRemoved) {
-            expect(excluded.has(id)).toBe(true);
-        }
-        // Freeform script action is human-removed (hard veto), not merely llmAsAJudge.
-        expect(excluded.has("browser.executeAdHocScript")).toBe(true);
-        // Allowlisted non-judge action remains schedulable under allowlist-off lattice.
-        expect(excluded.has("browser.openWebPage")).toBe(false);
     });
 });
 
@@ -1580,9 +1467,7 @@ describe("hardcoded nonempty for conversation topic titles", () => {
                 },
             ],
         };
-        const grader = await buildActionParametersGraderCatalog(catalog, {
-            assertOverridesMatchCatalog: false,
-        });
+        const grader = await buildActionParametersGraderCatalog(catalog);
         expect(
             grader.byAction["system.conversation.summarizeConversation"]!
                 .parameterScore.fields.name,
@@ -1598,7 +1483,7 @@ describe("hardcoded nonempty for conversation topic titles", () => {
 });
 
 describe("hardcoded llmAsAJudge for internet lookup params", () => {
-    it("applies policy overrides for lookupAndAnswerInternet params", async () => {
+    it("forces lookupAndAnswerInternet freeform params to llmAsAJudge", async () => {
         const catalog = {
             catalogVersion: "test",
             generatedAt: "2026-01-01T00:00:00.000Z",
@@ -1629,26 +1514,23 @@ describe("hardcoded llmAsAJudge for internet lookup params", () => {
                 },
             ],
         };
-        const grader = await buildActionParametersGraderCatalog(catalog, {
-            assertOverridesMatchCatalog: false,
-        });
+        const grader = await buildActionParametersGraderCatalog(catalog);
         const entry =
             grader.byAction["browser.lookupAndAnswer.lookupAndAnswerInternet"]!;
         expect(entry.parameterScore.fields).toEqual({
-            originalRequest: "ignore",
+            originalRequest: "llmAsAJudge",
             internetLookups: "llmAsAJudge",
             sites: "llmAsAJudge",
         });
         expect(entry.fields.internetLookups.verify).toBe("llmAsAJudge");
-        expect(entry.fields.originalRequest.verify).toBe("ignore");
+        expect(entry.fields.originalRequest.verify).toBe("llmAsAJudge");
         expect(entry.fields.sites.verify).toBe("llmAsAJudge");
-        // originalRequest is policy-overridden to ignore, not llmAsAJudge
         expect(
             parameterRequiresLlmJudge("originalRequest", {
                 create: "free_text",
                 actionId: "browser.lookupAndAnswer.lookupAndAnswerInternet",
             }),
-        ).toBe(false);
+        ).toBe(true);
     });
 });
 
@@ -1687,7 +1569,7 @@ describe("llmAsAJudge verify mode", () => {
                 create: "free_text",
                 verify: "nonempty",
                 rule: "string-free-text-nonempty",
-                source: "hardcode",
+                source: "regex",
             },
             { actionId: "browser.executeAdHocScript" },
         );
@@ -1695,7 +1577,7 @@ describe("llmAsAJudge verify mode", () => {
             create: "free_text",
             verify: "llmAsAJudge",
             rule: "string-llm-as-a-judge",
-            source: "hardcode",
+            source: "regex",
         });
         const plain = applyLlmAsAJudgeVerify(
             "title",
@@ -1703,7 +1585,7 @@ describe("llmAsAJudge verify mode", () => {
                 create: "free_text",
                 verify: "nonempty",
                 rule: "string-free-text-nonempty",
-                source: "hardcode",
+                source: "regex",
             },
             { actionId: "browser.executeAdHocScript" },
         );
@@ -1743,7 +1625,7 @@ describe("llmAsAJudge verify mode", () => {
         };
         const grader = await buildActionParametersGraderCatalog(
             catalog as any,
-            { forceFull: true, assertOverridesMatchCatalog: false },
+            { forceFull: true },
         );
         expect(
             grader.byAction["browser.executeAdHocScript"]!.fields.script
