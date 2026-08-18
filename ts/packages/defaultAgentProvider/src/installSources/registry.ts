@@ -7,6 +7,7 @@ import {
     InstallSourceInfo,
     InstallSourceUpdateResult,
     InstalledAgentRecord,
+    McpInstallCandidate,
     ResolveResult,
     ResolvedCandidate,
     AvailableInstallRow,
@@ -16,6 +17,8 @@ import {
 import { createPathSource } from "./pathSource.js";
 import { createCatalogSource } from "./catalogSource.js";
 import { createFeedSource } from "./feedSource.js";
+import { createMcpConfigSource } from "./mcpConfigSource.js";
+import { createMcpRegistrySource } from "./mcpRegistrySource.js";
 import { readPackageMeta, isLegalAgentName } from "./packageMeta.js";
 import { createLimiter, Limiter } from "@typeagent/common-utils";
 
@@ -100,6 +103,15 @@ export interface DefaultInstallSourceRegistry {
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
     ): Promise<PreviewResult | undefined>;
+    // Resolve every MCP artifact matching `ref` in source order. Callers use
+    // the full set to reject ambiguous names rather than silently taking the
+    // first source.
+    resolveMcp(
+        ref: string,
+        sourceName?: string,
+        onWarn?: SourceWarning,
+        onStatus?: SourceStatus,
+    ): Promise<McpInstallCandidate[]>;
     // Refresh cache-backed source metadata (feed descriptor caches). When
     // `sourceName` is given, only that source is refreshed. A fetch failure
     // throws (the prior cache is left intact) so `--refresh` fails the command.
@@ -183,6 +195,12 @@ function buildSource(
             return createFeedSource(config, {
                 installDir: deps.installDir,
             });
+        case "mcp-config":
+            return createMcpConfigSource(config);
+        case "registry":
+            return createMcpRegistrySource(config, {
+                installDir: deps.installDir,
+            });
         default: {
             const exhaustive: never = config;
             throw new Error(
@@ -230,8 +248,16 @@ export function createInstallSourceRegistry(
     // access path - resolve, where, get()->listAgents - gets the server-log
     // dedup. Optional methods are only re-wrapped when the source provides them.
     function build(config: InstallSourceConfig): InstallSource {
-        const { find, findName, update, load, listAgents, refresh, ...rest } =
-            sourceFactory(config);
+        const {
+            find,
+            findMcp,
+            findName,
+            update,
+            load,
+            listAgents,
+            refresh,
+            ...rest
+        } = sourceFactory(config);
         const wrapped: InstallSource = {
             ...rest,
             find: (ref, onWarn) => find(ref, composeWarn(onWarn)),
@@ -239,6 +265,10 @@ export function createInstallSourceRegistry(
         if (findName !== undefined) {
             wrapped.findName = (name, onWarn) =>
                 findName(name, composeWarn(onWarn));
+        }
+        if (findMcp !== undefined) {
+            wrapped.findMcp = (ref, onWarn) =>
+                findMcp(ref, composeWarn(onWarn));
         }
         if (update !== undefined) {
             wrapped.update = (record, opts, onWarn) =>
@@ -581,6 +611,25 @@ export function createInstallSourceRegistry(
                     abortSignal,
                 ),
             );
+        },
+        async resolveMcp(
+            ref: string,
+            sourceName?: string,
+            onWarn?: SourceWarning,
+            onStatus?: SourceStatus,
+        ): Promise<McpInstallCandidate[]> {
+            const matches: McpInstallCandidate[] = [];
+            for (const source of sourcesFor(sourceName)) {
+                if (source.findMcp === undefined) {
+                    continue;
+                }
+                onStatus?.(`Trying ${describeSource(source.name)}...`);
+                const candidate = await source.findMcp(ref, onWarn);
+                if (candidate !== undefined) {
+                    matches.push(candidate);
+                }
+            }
+            return matches;
         },
         async update(
             record: InstalledAgentRecord,

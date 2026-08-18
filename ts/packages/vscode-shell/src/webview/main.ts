@@ -15,6 +15,7 @@ import {
     handleClipboardShortcut,
     STATUS_NOTICE_EVENT,
     parseStatusNotice,
+    fileLinkToPath,
     type ConnectionStatus,
 } from "@typeagent/chat-ui";
 import type {
@@ -183,6 +184,11 @@ const chatPanel = new ChatPanel(rootEl, {
         // Open links via the extension host — webviews can't call window.open
         // for arbitrary URLs in a useful way.
         handleLinkClick: (href: string, _target: string | null) => {
+            const filePath = fileLinkToPath(href);
+            if (filePath !== undefined) {
+                vscode.postMessage({ type: "openFile", path: filePath });
+                return;
+            }
             vscode.postMessage({ type: "openExternal", href });
         },
         // Open the message in a new VS Code editor panel (movable / snappable)

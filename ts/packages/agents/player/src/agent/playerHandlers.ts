@@ -26,6 +26,13 @@ import {
     displaySuccess,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
+import {
+    configKeyNames,
+    configPathForEnvVar,
+    configSetupHint,
+    getConfigProblems,
+    reloadConfigKeysSync,
+} from "@typeagent/config";
 import { searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
 import { getPlayerCommandInterface } from "./playerCommands.js";
@@ -47,6 +54,14 @@ import {
 } from "../userData.js";
 
 const debugSpotify = registerDebug("typeagent:spotify");
+const debugError = registerDebug("typeagent:spotify:error");
+// Completion results cross the agent RPC boundary on every keystroke.
+const MAX_PLAYER_COMPLETIONS = 100;
+const SPOTIFY_CONFIG_KEYS = [
+    "SPOTIFY_APP_CLI",
+    "SPOTIFY_APP_CLISEC",
+    "SPOTIFY_APP_PORT",
+] as const;
 
 export function instantiate(): AppAgent {
     return {
@@ -62,15 +77,40 @@ export function instantiate(): AppAgent {
     };
 }
 
-// Cheap probe for the env vars the token provider requires. Spotify
-// integration is impossible without these, so we surface the missing
-// configuration up front instead of letting the user discover it on the
-// first action. No `setup` hook — this is a manual-config case (edit
-// .env, restart the agent server); the dispatcher's setup-required
-// error points the user at @config agent refresh once they've fixed it.
+// Cheap probe for the Spotify settings the token provider requires
+// (read from process.env, which the config loader populates from
+// config.local.yaml). Spotify integration is impossible without these,
+// so we surface the missing configuration up front instead of letting
+// the user discover it on the first action. No `setup` hook — this is a
+// manual-config case (edit config.local.yaml, then run
+// `@config agent refresh player`).
+//
+// The probe re-reads the config files first. This agent usually runs in
+// a forked child process whose `process.env` was snapshotted when it was
+// spawned, so without the reload every refresh would re-report the state
+// the user just fixed and the only way out would be restarting the
+// server — which is exactly what the setup hint promises it isn't.
 //
 // Exported for unit tests.
 export async function checkPlayerReadiness(): Promise<ReadinessReport> {
+    try {
+        reloadConfigKeysSync(SPOTIFY_CONFIG_KEYS);
+    } catch (e) {
+        // Best-effort: a malformed config file shouldn't turn the probe
+        // into a hard failure — fall through and report what's missing.
+        debugError(`Failed to reload config during readiness check: ${e}`);
+    }
+    const problem = getConfigProblems().find((p) => p.section === "spotify");
+    if (problem !== undefined) {
+        return {
+            state: "setup-required",
+            message: `Spotify configuration is invalid and was ignored: ${problem.message}`,
+            details: configSetupHint(
+                SPOTIFY_CONFIG_KEYS,
+                "Replace any placeholder with a real value, then run `@config agent refresh player`.",
+            ),
+        };
+    }
     const missing: string[] = [];
     if (!process.env.SPOTIFY_APP_CLI) missing.push("SPOTIFY_APP_CLI");
     if (!process.env.SPOTIFY_APP_CLISEC) missing.push("SPOTIFY_APP_CLISEC");
@@ -80,17 +120,25 @@ export async function checkPlayerReadiness(): Promise<ReadinessReport> {
     } else if (parseInt(port).toString() !== port) {
         return {
             state: "setup-required",
-            message: `SPOTIFY_APP_PORT has invalid port number "${port}".`,
-            details:
-                "Set SPOTIFY_APP_PORT to an integer in ts/.env (the redirect port your Spotify app is registered with).",
+            message: `Spotify ${configPathForEnvVar("SPOTIFY_APP_PORT")} has invalid port number "${port}".`,
+            details: configSetupHint(
+                [{ envVar: "SPOTIFY_APP_PORT", placeholder: "9999" }],
+                "It must be an integer — the redirect port your Spotify app is registered with.",
+            ),
         };
     }
     if (missing.length === 0) return { state: "ready" };
+    // The settings can also be "missing" because the whole `spotify:`
+    // section was rejected — a leftover `<value>` placeholder, a port
+    // that isn't a number. Say so, otherwise the user is told to add
+    // settings they can plainly see in the file.
     return {
         state: "setup-required",
-        message: `Spotify env vars not set: ${missing.join(", ")}.`,
-        details:
-            "Set them in ts/.env. SPOTIFY_APP_CLI and SPOTIFY_APP_CLISEC come from the Spotify developer dashboard for your app; SPOTIFY_APP_PORT is the redirect port you registered there.",
+        message: `Spotify is not configured. Missing: ${configKeyNames(missing).join(", ")}.`,
+        details: configSetupHint(
+            missing,
+            "`clientId` and `clientSecret` come from the Spotify developer dashboard for your app; `port` is the redirect port you registered there. Then run `@config agent refresh player`.",
+        ),
     };
 }
 
@@ -198,8 +246,20 @@ export async function runLoadSpotifyUserData(
     }
 
     context.actionIO.setDisplay("Loading Spotify user data...");
-    await load(sessionContext.instanceStorage, file, clientContext);
-    context.actionIO.setDisplay("Spotify user data loaded.");
+    const result = await load(
+        sessionContext.instanceStorage,
+        file,
+        clientContext,
+    );
+    const skipped =
+        result.skipped.length !== 0
+            ? `\n\nSkipped ${result.skipped.length} file(s) that aren't Spotify streaming history: ${result.skipped
+                  .map((f) => f.replace(/^.*[\\/]/, ""))
+                  .join(", ")}.`
+            : "";
+    context.actionIO.setDisplay(
+        `Spotify user data loaded: ${result.records} track play(s) from ${result.loaded.length} file(s).${skipped}`,
+    );
     return undefined;
 }
 
@@ -517,7 +577,7 @@ async function getPlayerDynamicDisplay(
     throw new Error(`Invalid displayId ${displayId}`);
 }
 
-async function getPlayerActionCompletion(
+export async function getPlayerActionCompletion(
     context: SessionContext<PlayerActionContext>,
     action: AppAction,
     propertyName: string,
@@ -533,6 +593,7 @@ async function getPlayerActionCompletion(
     if (userData === undefined) {
         return result;
     }
+    const partialValue = getPartialPropertyValue(action, propertyName);
 
     let track = false;
     let artist = false;
@@ -580,7 +641,7 @@ async function getPlayerActionCompletion(
                     const names = userData.data.playlists
                         .map((pl) => pl.name)
                         .sort();
-                    result.push(...names);
+                    result.push(...filterCompletions(names, partialValue));
                 }
             }
             return result;
@@ -589,9 +650,12 @@ async function getPlayerActionCompletion(
                 const devices = await getUserDevices(clientContext.service);
                 if (devices !== undefined) {
                     result.push(
-                        ...devices.devices
-                            .filter((device) => device.id !== null)
-                            .map((device) => device.name),
+                        ...filterCompletions(
+                            devices.devices
+                                .filter((device) => device.id !== null)
+                                .map((device) => device.name),
+                            partialValue,
+                        ),
                     );
                 }
             }
@@ -605,7 +669,43 @@ async function getPlayerActionCompletion(
             artist,
             album,
             playlist,
+            partialValue,
+            MAX_PLAYER_COMPLETIONS,
         ),
     );
     return result;
+}
+
+function filterCompletions(
+    names: string[],
+    partialValue: string | undefined,
+): string[] {
+    if (partialValue === undefined) {
+        return names;
+    }
+    const query = partialValue.trim().toLocaleLowerCase();
+    return names
+        .filter(
+            (name) =>
+                query.length === 0 || name.toLocaleLowerCase().includes(query),
+        )
+        .slice(0, MAX_PLAYER_COMPLETIONS);
+}
+
+function getPartialPropertyValue(
+    action: AppAction,
+    propertyName: string,
+): string | undefined {
+    let value: unknown = action;
+    for (const segment of propertyName.split(".")) {
+        if (
+            typeof value !== "object" ||
+            value === null ||
+            !(segment in value)
+        ) {
+            return undefined;
+        }
+        value = (value as Record<string, unknown>)[segment];
+    }
+    return typeof value === "string" ? value : undefined;
 }

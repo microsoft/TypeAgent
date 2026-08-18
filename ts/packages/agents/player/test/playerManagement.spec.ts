@@ -149,6 +149,7 @@ describe("player Spotify management actions", () => {
             "history.json",
             async (...args: any[]) => {
                 calls.push(args);
+                return { records: 3, loaded: ["history.json"], skipped: [] };
             },
         );
 

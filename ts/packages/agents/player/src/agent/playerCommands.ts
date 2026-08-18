@@ -21,7 +21,8 @@ import {
 const loadHandlerParameters = {
     args: {
         file: {
-            description: "File to load",
+            description:
+                "File or directory to load (a directory loads all Spotify streaming history .json files in it)",
         },
     },
 } as const;

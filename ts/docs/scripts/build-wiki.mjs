@@ -115,6 +115,11 @@ const ARCH_GROUPS = [
         files: ["browserAgent.md", "browserRpc.md", "browserScenarios.md"],
     },
     {
+        dir: "telemetry",
+        name: "Telemetry",
+        files: ["opentelemetry.md"],
+    },
+    {
         dir: "workflows",
         name: "Workflow system",
         designTree: true, // directory mirrors a full tree (folded-in Design)

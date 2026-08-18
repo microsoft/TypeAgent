@@ -12,6 +12,7 @@ import {
     DispatcherOptions,
 } from "agent-dispatcher";
 import {
+    ExtensionKind,
     InstallSourceConfig,
     InstalledAgentRecord,
     SourceStatus,
@@ -21,9 +22,11 @@ import {
     InstallPreview,
     InstallPreviewMatch,
     InstallResult,
+    McpInstallCandidate,
     UpdateResult,
     deriveMatchKind,
 } from "./installSources/config.js";
+import { cleanupOwnedMcpPaths } from "./installSources/mcpRegistryMaterializer.js";
 import {
     createPackageAppAgentProvider,
     AgentSourceGroup,
@@ -31,6 +34,8 @@ import {
     InstalledAgentInfo,
     InstalledAgentSourceApi,
 } from "./installSources/packageAgent.js";
+import type { McpServerSourceApi } from "./mcp/mcpAppAgentSource.js";
+import type { NormalizedMcpServerConfig } from "./mcp/mcpServerConfig.js";
 
 import fs from "node:fs";
 import path from "node:path";
@@ -374,6 +379,8 @@ export function createDefaultInstalledAgentSource(
     sourceFactory?: InstallSourceFactory,
     /** @internal Test-only store writer for exercising commit failures. */
     storeWriter: typeof writeAgentsJson = writeAgentsJson,
+    /** MCP runtime API shared with this source's per-session @package agent. */
+    mcpSource?: McpServerSourceApi,
 ): InstalledAgentSourceForTest {
     const instanceConfigs = getInstanceConfigProvider(instanceDir);
     const installDir = getInstallDir(instanceConfigs);
@@ -484,6 +491,16 @@ export function createDefaultInstalledAgentSource(
         return provider;
     }
 
+    // Records in `agents.json` whose source could not re-resolve them at startup
+    // (name -> reason), e.g. a catalog entry deleted after the install. Seeding
+    // one must not fail the whole source construction - that makes the host
+    // unstartable over a single stale record - so the name is not vended.
+    //
+    // The record is NOT dropped: unresolvability can be transient (an unreadable
+    // catalog resolves nothing), so it resolves again once its source is fixed;
+    // `@package uninstall` removes it when it is gone for good.
+    const unresolvedRecords = new Map<string, string>();
+
     // Seed active entries from agents.json. One single-agent,
     // single-root provider per record; shared (the same instance) across every
     // connected session.
@@ -492,10 +509,21 @@ export function createDefaultInstalledAgentSource(
         options?.configName,
     );
     for (const [name, record] of Object.entries(installedRecords)) {
-        entries.set(name, {
-            status: "active",
-            provider: buildAgentProvider(name, record),
-        });
+        let provider: AppAgentProvider;
+        try {
+            provider = buildAgentProvider(name, record);
+        } catch (e) {
+            const reason = e instanceof Error ? e.message : String(e);
+            unresolvedRecords.set(name, reason);
+            // Warn on the console, not just the debug trace: this is the only
+            // notice that an installed agent silently went missing.
+            console.warn(
+                `Installed agent '${name}' is not available: ${reason} ` +
+                    `Run '@package uninstall ${name}' to remove it.`,
+            );
+            continue;
+        }
+        entries.set(name, { status: "active", provider });
     }
 
     // Startup orphan sweep: keep only each installed agent's
@@ -992,12 +1020,25 @@ export function createDefaultInstalledAgentSource(
                 }
                 const uninstalledRoot = deletedRecord.installRoot;
 
+                // A record its source could not re-resolve at startup was never
+                // seeded, so nothing is loaded in any session and the barrier
+                // below has no provider to drain. Drop the record directly.
+                if (unresolvedRecords.has(name)) {
+                    mutateAgentsJson((agents) => {
+                        delete agents[name];
+                    });
+                    unresolvedRecords.delete(name);
+                    pruneRootIfUnreferenced(uninstalledRoot, name);
+                    onOutcome?.("uninstalled");
+                    return;
+                }
+
                 // Invariant: a recorded name is `active` in this source (a name
                 // mid-teardown — `removing` — was already rejected by
-                // `assertNameFree` above, and every record is seeded active at
-                // construction). Reaching here with no active entry means
-                // `agents.json` and this source's live set disagree, which can
-                // only come from an OUT-OF-BAND mutation of the store: the
+                // `assertNameFree` above, and every resolvable record is seeded
+                // active at construction). Reaching here with no active entry
+                // means `agents.json` and this source's live set disagree, which
+                // can only come from an OUT-OF-BAND mutation of the store: the
                 // instance-dir lock keeps one process per `agents.json`, and both
                 // multi-dispatcher hosts (agent server + web API) run a single
                 // shared source per process, so no concurrent sibling source can
@@ -1111,6 +1152,16 @@ export function createDefaultInstalledAgentSource(
                     throw new Error(`Agent '${name}' not found`);
                 }
                 const oldEntry = entries.get(name);
+                // An unresolvable record has no live version to swap out. Report
+                // that instead of the out-of-band store mutation below, which is
+                // a different problem.
+                const unresolvedReason = unresolvedRecords.get(name);
+                if (unresolvedReason !== undefined) {
+                    throw new Error(
+                        `Agent '${name}' could not be loaded from its install source: ${unresolvedReason} ` +
+                            `Fix the source and restart, or run '@package uninstall ${name}' and install it again.`,
+                    );
+                }
                 if (oldEntry?.status !== "active") {
                     throw new Error(
                         `Agent '${name}' is recorded but not active in this source; the install store may have been modified out of band.`,
@@ -1264,9 +1315,18 @@ export function createDefaultInstalledAgentSource(
                 registry,
                 recordsUsingSource: (sourceName: string) => {
                     const agents = readAgentsJson(instanceDir)?.agents ?? {};
-                    return Object.values(agents)
+                    const agentNames = Object.values(agents)
                         .filter((record) => record.source === sourceName)
                         .map((record) => record.name);
+                    const mcpNames =
+                        mcpSource
+                            ?.listServers()
+                            .filter(
+                                (config) =>
+                                    config.provenance.source === sourceName,
+                            )
+                            .map((config) => config.name) ?? [];
+                    return [...agentNames, ...mcpNames];
                 },
             });
         },
@@ -1323,6 +1383,7 @@ export function createDefaultInstalledAgentSource(
         },
         async listAvailableAgents(opts?: {
             sourceName?: string;
+            type?: ExtensionKind;
         }): Promise<AgentSourceGroup<AvailableAgentInfo>[]> {
             // Source groups for `@package available` and filtered completion in
             // `@package install`.
@@ -1339,25 +1400,39 @@ export function createDefaultInstalledAgentSource(
                     continue;
                 }
                 try {
-                    const sourceAgents = (await src.listAgents()).map(
-                        ({
-                            ref,
-                            defaultAgentName,
-                            packageName,
-                            description,
-                        }) => ({
-                            ref,
-                            ...(defaultAgentName !== undefined
-                                ? { defaultAgentName }
-                                : {}),
-                            ...(packageName !== undefined
-                                ? { packageName }
-                                : {}),
-                            ...(description !== undefined
-                                ? { description }
-                                : {}),
-                        }),
-                    );
+                    const sourceAgents = (await src.listAgents())
+                        // A row with no extensionKind is a native agent (the
+                        // historical default); the `--type` filter compares
+                        // against that default so agent-only sources still match
+                        // `--type agent`.
+                        .filter(
+                            (row) =>
+                                opts?.type === undefined ||
+                                (row.extensionKind ?? "agent") === opts.type,
+                        )
+                        .map(
+                            ({
+                                ref,
+                                defaultAgentName,
+                                packageName,
+                                description,
+                                extensionKind,
+                            }) => ({
+                                ref,
+                                ...(defaultAgentName !== undefined
+                                    ? { defaultAgentName }
+                                    : {}),
+                                ...(packageName !== undefined
+                                    ? { packageName }
+                                    : {}),
+                                ...(description !== undefined
+                                    ? { description }
+                                    : {}),
+                                ...(extensionKind !== undefined
+                                    ? { extensionKind }
+                                    : {}),
+                            }),
+                        );
                     if (sourceAgents.length > 0) {
                         groups.push({
                             source: info.name,
@@ -1426,6 +1501,36 @@ export function createDefaultInstalledAgentSource(
                 matches: result.matches.map(toMatch),
             };
         },
+        async resolveMcp(
+            ref: string,
+            sourceName?: string,
+            onStatus?: SourceStatus,
+        ): Promise<McpInstallCandidate[]> {
+            return registry.resolveMcp(ref, sourceName, undefined, onStatus);
+        },
+        async materializeMcp(
+            candidate: McpInstallCandidate,
+            abortSignal?: AbortSignal,
+        ): Promise<NormalizedMcpServerConfig> {
+            return candidate.materialize === undefined
+                ? candidate.config
+                : candidate.materialize(abortSignal);
+        },
+        cleanupMcp(config: NormalizedMcpServerConfig): void {
+            const referencedPaths = new Set(
+                mcpSource
+                    ?.listServers()
+                    .filter((other) => other.id !== config.id)
+                    .flatMap((other) => other.provenance.ownedPaths ?? []) ??
+                    [],
+            );
+            cleanupOwnedMcpPaths(
+                resolvedInstallDir,
+                config.provenance.ownedPaths?.filter(
+                    (ownedPath) => !referencedPaths.has(ownedPath),
+                ),
+            );
+        },
         async refresh(sourceName?: string): Promise<void> {
             // Refresh cache-backed source metadata; a fetch failure propagates
             // so the `--refresh` command fails rather than acting on stale data.
@@ -1444,6 +1549,7 @@ export function createDefaultInstalledAgentSource(
             const packageProvider = createPackageAppAgentProvider({
                 appAgentProviderSetController: controller,
                 source,
+                ...(mcpSource === undefined ? {} : { mcpSource }),
             });
             // Torn down before the initial set resolved: a connection disposed
             // while still parked on an in-flight barrier must NOT join the
@@ -1535,7 +1641,11 @@ export function createDefaultInstalledAgentSource(
         // groups into installable summaries the reasoning engine can offer. Never
         // installs; the concrete install path stays behind the `@package` agent.
         async listAvailableAgents(): Promise<InstallableAgentSummary[]> {
-            const groups = await source.listAvailableAgents();
+            // Only native agents are installable through the `@package install`
+            // path today; MCP servers surfaced by an `mcp-config` source route
+            // through the separate MCP store, so exclude them from reasoning's
+            // install suggestions to avoid offering a command that cannot run.
+            const groups = await source.listAvailableAgents({ type: "agent" });
             const summaries: InstallableAgentSummary[] = [];
             for (const group of groups) {
                 for (const agent of group.agents) {

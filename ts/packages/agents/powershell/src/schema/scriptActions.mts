@@ -54,7 +54,7 @@ export type CreatePowerShellFlow = {
         // Script parameters
         scriptParameters: {
             name: string;
-            type: "string" | "number" | "boolean" | "path";
+            type: "string" | "number" | "boolean" | "path" | "executable";
             required: boolean;
             description: string;
             default?: string;
@@ -74,6 +74,81 @@ export type CreatePowerShellFlow = {
     };
 };
 
+// Create a reusable flow transactionally and execute the requested operation once
+export type CreateAndExecutePowerShellFlow = {
+    actionName: "createAndExecutePowerShellFlow";
+    parameters: {
+        // camelCase identifier for the new flow
+        actionName: string;
+        // What this script does
+        description: string;
+        // Human-readable name
+        displayName: string;
+        // PowerShell script body (should include param() block)
+        script: string;
+        // Script parameters
+        scriptParameters: {
+            name: string;
+            type: "string" | "number" | "boolean" | "path" | "executable";
+            required: boolean;
+            description: string;
+            default?: string;
+        }[];
+        // Grammar patterns for matching future requests
+        grammarPatterns: {
+            pattern: string;
+            isAlias: boolean;
+        }[];
+        // PowerShell cmdlets the script uses
+        allowedCmdlets: string[];
+        // PowerShell modules required by the allowed cmdlets
+        allowedModules?: string[];
+        // JSON string of named parameters for this one execution
+        executionParametersJson?: string;
+        // Whether the script needs network access
+        networkAccess?: boolean;
+    };
+};
+
+// Add validated phrases to an existing flow without creating a duplicate
+export type AddPowerShellFlowPatterns = {
+    actionName: "addPowerShellFlowPatterns";
+    parameters: {
+        flowName: string;
+        grammarPatterns: {
+            pattern: string;
+            isAlias: boolean;
+        }[];
+    };
+};
+
+// Report the machine-readable result of PowerShell capability reasoning
+export type ReportPowerShellCapabilityOutcome = {
+    actionName: "reportPowerShellCapabilityOutcome";
+    parameters: {
+        status: "handledExisting" | "created" | "notSuitable" | "failed";
+        schema?: string;
+        actionName?: string;
+        flowName?: string;
+        reasonCode?: string;
+        phase?: "classify" | "discover" | "validate" | "execute" | "persist";
+        mayHaveSideEffects?: boolean;
+        reason?: string;
+    };
+};
+
+// Test a script without registering it
+export type TestPowerShellFlow = {
+    actionName: "testPowerShellFlow";
+    parameters: {
+        script: string;
+        allowedCmdlets: string[];
+        allowedModules?: string[];
+        networkAccess?: boolean;
+        testParameters?: string;
+    };
+};
+
 // Edit an existing PowerShell flow's script body (preserves grammar patterns and parameters)
 export type EditPowerShellFlow = {
     actionName: "editPowerShellFlow";
@@ -86,6 +161,23 @@ export type EditPowerShellFlow = {
         allowedCmdlets: string[];
         // Updated list of PowerShell modules to import (optional; preserved if omitted)
         allowedModules?: string[];
+    };
+};
+
+// Repair an existing flow and retry the requested operation once
+export type RepairAndExecutePowerShellFlow = {
+    actionName: "repairAndExecutePowerShellFlow";
+    parameters: {
+        // Existing flow to repair
+        flowName: string;
+        // Replacement script body
+        script: string;
+        // Updated cmdlet whitelist
+        allowedCmdlets: string[];
+        // Updated module whitelist
+        allowedModules?: string[];
+        // JSON string of named parameters for the retry
+        executionParametersJson?: string;
     };
 };
 
@@ -105,6 +197,11 @@ export type PowerShellActions =
     | ShowPowerShellFlow
     | DeletePowerShellFlow
     | ExecutePowerShellFlow
+    | TestPowerShellFlow
     | CreatePowerShellFlow
+    | CreateAndExecutePowerShellFlow
+    | AddPowerShellFlowPatterns
+    | ReportPowerShellCapabilityOutcome
     | EditPowerShellFlow
+    | RepairAndExecutePowerShellFlow
     | ImportPowerShellFlow;

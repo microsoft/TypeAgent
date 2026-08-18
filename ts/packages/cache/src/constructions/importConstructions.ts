@@ -21,7 +21,7 @@ import registerDebug from "debug";
 import { ExplainerFactory } from "../cache/factory.js";
 import { printTransformNamespaces } from "../utils/print.js";
 import { ConstructionCache } from "./constructionCache.js";
-import { getSchemaNamespaceKeys } from "../cache/cache.js";
+import { getSchemaNamespaceKeys } from "../cache/schemaNamespace.js";
 
 const debugConstCreate = registerDebug("typeagent:const:create");
 const debugConstMerge = registerDebug("typeagent:const:merge");

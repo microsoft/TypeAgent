@@ -1,9 +1,0 @@
-{
-  "emojiChar": "📱",
-  "description": "Agent to perform actions on mobile Android devices.",
-  "schema": {
-    "description": "Android mobile agent that performs actions on device.",
-    "schemaFile": "./androidMobileSchema.ts",
-    "schemaType": "AndroidMobileAction"
-  }
-}

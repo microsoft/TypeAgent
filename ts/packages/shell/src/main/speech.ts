@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { dialog, globalShortcut, ipcMain } from "electron";
+import { CONFIG_LOCAL_FILE } from "@typeagent/config";
 import { AzureSpeech } from "./azureSpeech.js";
 import { isLocalWhisperEnabled } from "./localWhisperCommandHandler.js";
 
@@ -27,7 +28,7 @@ async function getSpeechToken(silent: boolean) {
         if (!silent) {
             dialog.showErrorBox(
                 "Azure Speech Service: Missing configuration",
-                "Environment variable SPEECH_SDK_KEY or SPEECH_SDK_REGION is missing.  Switch to local whisper or provide the configuration and restart.",
+                `The \`speech\` section of \`${CONFIG_LOCAL_FILE}\` is missing \`auth\` or \`region\`. Switch to local whisper or provide the configuration and restart.`,
             );
         }
         return undefined;

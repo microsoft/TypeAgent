@@ -1,11 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { describe, it } from "node:test";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import {
     compileGrammarToNFA,
     loadGrammarRulesNoThrow,
@@ -15,24 +13,14 @@ import type {
     CommandDescriptor,
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
-import type {
-    PowerShellFlowDefinition,
-    PowerShellStore as PowerShellStoreType,
+import { instantiate } from "../src/actionHandler.mjs";
+import { formatPowerShellFlowDetails } from "../src/flowDetails.mjs";
+import {
+    PowerShellStore,
+    type PowerShellFlowDefinition,
 } from "../src/store/powerShellStore.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const packageRoot = path.resolve(here, "..", "..");
-const { instantiate } = await import(
-    pathToFileURL(path.join(packageRoot, "dist", "actionHandler.mjs")).href
-);
-const { formatPowerShellFlowDetails } = await import(
-    pathToFileURL(path.join(packageRoot, "dist", "flowDetails.mjs")).href
-);
-const { PowerShellStore } = await import(
-    pathToFileURL(
-        path.join(packageRoot, "dist", "store", "powerShellStore.mjs"),
-    ).href
-);
 const grammarPath = path.resolve(
     here,
     "..",
@@ -99,7 +87,7 @@ describe("showPowerShellFlow", () => {
     it("matches an anchored natural-language request", () => {
         const match = makeMatcher();
 
-        assert.deepEqual(match("show powershell flow cleanup"), {
+        expect(match("show powershell flow cleanup")).toEqual({
             actionName: "showPowerShellFlow",
             parameters: { flowName: "cleanup" },
         });
@@ -112,21 +100,23 @@ describe("showPowerShellFlow", () => {
             4,
         );
 
-        assert.match(text, /Flow: cleanup/);
-        assert.match(text, /Usage Count: 4/);
-        assert.match(text, /path \(path, required\).*\[default: \$env:TEMP\]/);
-        assert.match(text, /"clean temporary files" \(alias\)/);
-        assert.match(text, /Cmdlets: Get-ChildItem, Remove-Item/);
-        assert.match(text, /```powershell\nparam\(\$path\)/);
+        expect(text).toMatch(/Flow: cleanup/);
+        expect(text).toMatch(/Usage Count: 4/);
+        expect(text).toMatch(
+            /path \(path, required\).*\[default: \$env:TEMP\]/,
+        );
+        expect(text).toMatch(/"clean temporary files" \(alias\)/);
+        expect(text).toMatch(/Cmdlets: Get-ChildItem, Remove-Item/);
+        expect(text).toMatch(/```powershell\nparam\(\$path\)/);
     });
 
     it("links the show command to the action", async () => {
         const descriptors = (await instantiate().getCommands!({} as any)) as
             | CommandDescriptor
             | CommandDescriptorTable;
-        assert.ok("commands" in descriptors);
-        assert.equal(
-            (descriptors.commands.show as CommandDescriptor).action,
+        expect("commands" in descriptors).toBe(true);
+        const table = descriptors as CommandDescriptorTable;
+        expect((table.commands.show as CommandDescriptor).action).toBe(
             "showPowerShellFlow",
         );
     });
@@ -134,15 +124,14 @@ describe("showPowerShellFlow", () => {
     it("keeps show and execute actions in the runtime-generated schema", () => {
         const store = Object.create(
             PowerShellStore.prototype,
-        ) as PowerShellStoreType;
+        ) as PowerShellStore;
         (store as any).index = { flows: {} };
 
         const schema = store.generateDynamicSchemaText();
 
-        assert.match(schema, /export type ShowPowerShellFlow/);
-        assert.match(schema, /export type ExecutePowerShellFlow/);
-        assert.match(
-            schema,
+        expect(schema).toMatch(/export type ShowPowerShellFlow/);
+        expect(schema).toMatch(/export type ExecutePowerShellFlow/);
+        expect(schema).toMatch(
             /PowerShellActions[\s\S]*ShowPowerShellFlow[\s\S]*ExecutePowerShellFlow/,
         );
     });

@@ -7,9 +7,8 @@ import type { Prices } from "./types.js";
 const require = createRequire(import.meta.url);
 
 export interface PriceTable {
-    source: string;
-    version: string;
     unit?: string;
+    provider?: string;
     rates: Record<string, Prices>;
 }
 

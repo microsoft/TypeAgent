@@ -11,8 +11,9 @@ import {
     claimSilentRestoreAnnouncement,
     evaluateGraphReadiness,
     GoogleEmailClient,
+    graphProviderSetupError,
     parseDayRange,
-    probeGraphConfig,
+    probeCurrentGraphConfig,
 } from "@typeagent/graph-utils";
 import chalk from "chalk";
 import {
@@ -344,7 +345,7 @@ function emailTs(): string {
 async function checkEmailReadiness(
     context: SessionContext<EmailActionContext>,
 ): Promise<ReadinessReport> {
-    const config = probeGraphConfig(process.env);
+    const config = probeCurrentGraphConfig();
     let provider = context.agentContext?.emailProvider;
     if (!provider && (config.msGraphConfigured || config.googleConfigured)) {
         provider = createEmailProviderFromConfig();
@@ -363,11 +364,12 @@ async function setupEmail(
     actionContext: ActionContext<EmailActionContext>,
 ): Promise<ActionResult> {
     const ctx = actionContext.sessionContext.agentContext;
-    const config = probeGraphConfig(process.env);
+    const config = probeCurrentGraphConfig();
     if (!config.msGraphConfigured && !config.googleConfigured) {
-        return createActionResultFromError(
-            "No email provider configured. Set MSGRAPH_APP_CLIENTID + MSGRAPH_APP_TENANTID or GOOGLE_CALENDAR_CLIENT_ID + GOOGLE_CALENDAR_CLIENT_SECRET in `ts/.env`, then run `@config agent refresh email`.",
-        );
+        // Thrown rather than returned: the dispatcher only attaches
+        // `errorDisplayContent` on the throw path, and without it the hint's
+        // markdown renders as literal text.
+        throw graphProviderSetupError("email");
     }
     if (!ctx.emailProvider) {
         ctx.emailProvider = createEmailProviderFromConfig();
@@ -379,7 +381,7 @@ async function setupEmail(
     const provider = ctx.emailProvider;
     if (!provider) {
         return createActionResultFromError(
-            "Email env vars are set but the provider could not be created. Check `ts/.env` and restart the agent server.",
+            "Email settings are present but the provider could not be created. Check the `msGraph` / `googleCalendar` section of `ts/config.local.yaml` and restart the agent server.",
         );
     }
     if (provider.isAuthenticated()) {

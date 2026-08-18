@@ -11,6 +11,7 @@ import {
     QueueFullError,
     ServerStoppingError,
 } from "@typeagent/dispatcher-types";
+import { context, createContextKey, type Context } from "@opentelemetry/api";
 
 import {
     RequestQueue,
@@ -66,6 +67,7 @@ class ControllableDispatcher {
         command: string;
         clientRequestId: unknown;
         requestId: string | undefined;
+        traceContext: Context | undefined;
         resolve: (r: CommandResult | undefined) => void;
         reject: (e: unknown) => void;
         promise: Promise<CommandResult | undefined>;
@@ -77,6 +79,7 @@ class ControllableDispatcher {
         _attachments?: string[],
         _options?: any,
         requestId?: string,
+        traceContext?: Context,
     ): Promise<CommandResult | undefined> => {
         let resolve!: (r: CommandResult | undefined) => void;
         let reject!: (e: unknown) => void;
@@ -88,6 +91,7 @@ class ControllableDispatcher {
             command,
             clientRequestId,
             requestId,
+            traceContext,
             resolve,
             reject,
             promise,
@@ -106,6 +110,7 @@ function makeQueue(dispatcher: ControllableDispatcher) {
                 ctx.attachments,
                 ctx.options,
                 ctx.requestId,
+                ctx.traceContext,
             ),
         broadcaster,
     );
@@ -178,6 +183,28 @@ describe("RequestQueue", () => {
 
         dispatcher.calls[2].resolve({});
         await c.completion;
+    });
+
+    it("preserves each request's captured trace context without broadcasting it", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { queue, events } = makeQueue(dispatcher);
+        const key = createContextKey("requestQueue.traceContext");
+        const traceContext = context.active().setValue(key, "host-request");
+
+        const entry = queue.submit({
+            text: "hello",
+            originatorConnectionId: "c1",
+            traceContext,
+        });
+
+        await flush();
+        expect(dispatcher.calls[0].traceContext).toBe(traceContext);
+        const queuedEvent = events.find((event) => event.type === "queued");
+        expect(queuedEvent).toBeDefined();
+        expect(queuedEvent).not.toHaveProperty("entry.traceContext");
+
+        dispatcher.calls[0].resolve({});
+        await entry.completion;
     });
 
     it("cancelQueued removes the entry and broadcasts requestCancelled", async () => {
@@ -355,6 +382,43 @@ describe("RequestQueue", () => {
         expect(names).toContain("requestQueue:submit");
         expect(names).toContain("requestQueue:start");
         expect(names).toContain("requestQueue:complete");
+    });
+
+    it("logs failed requests with error severity", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { broadcaster } = makeRecorder();
+        const logged: Array<{
+            name: string;
+            severity: string | undefined;
+        }> = [];
+        const queue = new RequestQueue(
+            (ctx) =>
+                dispatcher.processCommand(
+                    ctx.text,
+                    ctx.clientRequestId,
+                    ctx.attachments,
+                    ctx.options,
+                    ctx.requestId,
+                ),
+            broadcaster,
+            {
+                logEvent: (name, _data, severity) =>
+                    logged.push({ name, severity }),
+            },
+        );
+
+        const entry = queue.submit({
+            text: "x",
+            originatorConnectionId: "c1",
+        });
+        await flush();
+        dispatcher.calls[0].reject(new Error("failed"));
+        await expect(entry.completion).rejects.toThrow("failed");
+
+        expect(logged).toContainEqual({
+            name: "requestQueue:complete",
+            severity: "error",
+        });
     });
 
     it("drainAndStop resolves after queue drains", async () => {

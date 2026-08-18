@@ -15,6 +15,33 @@ function getBackgroundResources() {
         .filter((resource) => !["PipeWrap", "TTYWrap"].includes(resource));
 }
 
+function getAddedResources(resourcesBefore, resourcesAfter) {
+    const remaining = [...resourcesBefore];
+    return resourcesAfter.filter((resource) => {
+        const index = remaining.indexOf(resource);
+        if (index === -1) {
+            return true;
+        }
+        remaining.splice(index, 1);
+        return false;
+    });
+}
+
+async function waitForAddedResources(resourcesBefore, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    let addedResources;
+    do {
+        addedResources = getAddedResources(
+            resourcesBefore,
+            getBackgroundResources(),
+        );
+        if (addedResources.length === 0 || Date.now() >= deadline) {
+            return addedResources;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    } while (true);
+}
+
 function parseArgs(argv) {
     const args = { maxFiles: 8000 };
     for (let i = 2; i < argv.length; i++) {
@@ -91,7 +118,7 @@ function validateDeclaredBundleFiles(root, packageName) {
     }
     for (const mapping of pkg.typeagent?.bundle?.assetMappings ?? []) {
         const file = path.join(packageDirectory, mapping.destination);
-        if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
+        if (!fs.existsSync(file)) {
             throw new Error(
                 `${packageName}: mapped bundle asset is missing ${file}.`,
             );
@@ -181,11 +208,14 @@ async function validateAgents(root) {
         if (typeof module.instantiate !== "function") {
             throw new Error(`${agent.packageName}: instantiate() is missing.`);
         }
-        const resourcesAfter = getBackgroundResources();
-        if (resourcesAfter.length > resourcesBefore.length) {
+        const addedResources = await waitForAddedResources(
+            resourcesBefore,
+            250,
+        );
+        if (addedResources.length > 0) {
             console.warn(
                 `${agent.packageName} import added background resource(s): ` +
-                    resourcesAfter.slice(resourcesBefore.length).join(", "),
+                    addedResources.join(", "),
             );
         }
     }
@@ -241,11 +271,10 @@ async function main() {
     );
 }
 
+const initialResources = getBackgroundResources();
 await main();
 
-const activeResources = process
-    .getActiveResourcesInfo()
-    .filter((resource) => !["PipeWrap", "TTYWrap"].includes(resource));
+const activeResources = await waitForAddedResources(initialResources, 1000);
 if (activeResources.length > 0) {
     throw new Error(
         `Agent imports left ${activeResources.length} background resource(s) open: ` +

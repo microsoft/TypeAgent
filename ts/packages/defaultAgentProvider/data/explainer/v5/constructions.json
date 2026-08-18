@@ -145,7 +145,7 @@
   ],
   "constructionNamespaces": [
     {
-      "name": "player,kB4Ogob+UuGl3wZjGe1RRFI7o9aqISNeZoAIiCh0io8=,",
+      "name": "player,q17vir5bvUtULvhlqc2dq3KkOCusaWxekl/G7VobtTY=,",
       "constructions": [
         {
           "parts": [
@@ -227,7 +227,6 @@
             },
             {
               "matchSet": "M:artist name_7",
-              "optional": true,
               "wildcardMode": 2,
               "transformInfos": [
                 {

@@ -11,6 +11,7 @@ import {
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { awaitCommand } from "@typeagent/dispatcher-types";
 import { readFileSync, existsSync } from "fs";
+import { exitCli } from "../../telemetry.js";
 
 const CLI_CONVERSATION_NAME = "CLI";
 
@@ -101,7 +102,7 @@ export default class RequestCommand extends Command {
         }
 
         // Some background network (like mongo) might keep the process live, exit explicitly.
-        process.exit(0);
+        exitCli(0);
     }
 
     loadAttachment(fileName: string | undefined): string[] | undefined {
