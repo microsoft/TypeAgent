@@ -99,7 +99,12 @@ function openDatabase(dbPath: string): DatabaseSync {
                 Math.floor(Math.random() * OPEN_RETRY_JITTER_MS);
             // Yield the event loop instead of a tight spin-wait.
             const sab = new SharedArrayBuffer(4);
-            Atomics.wait(new Int32Array(sab), 0, 0, Math.max(1, until - Date.now()));
+            Atomics.wait(
+                new Int32Array(sab),
+                0,
+                0,
+                Math.max(1, until - Date.now()),
+            );
         }
     }
     throw lastError;
