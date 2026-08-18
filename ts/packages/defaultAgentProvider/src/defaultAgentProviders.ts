@@ -265,6 +265,13 @@ export type DefaultAppAgentSourceOptions = InstallSourcesResolveOptions & {
     configName?: string | undefined;
     // Tunables for the coordinated update/uninstall barrier.
     updateCoordination?: UpdateCoordinationOptions | undefined;
+    mcpDiscovery?:
+        | {
+              workspacePath?: string | undefined;
+              repositoryRoot?: string | undefined;
+              isFolderTrusted?: ((folderPath: string) => boolean) | undefined;
+          }
+        | undefined;
 };
 
 type InstalledAgentSourceForTest = AppAgentSource & {

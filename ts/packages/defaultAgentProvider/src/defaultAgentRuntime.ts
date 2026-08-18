@@ -14,6 +14,7 @@ import type { McpHostServices } from "./mcp/mcpServerProvider.js";
 import { SessionMcpCredentialStore } from "./mcp/mcpCredentialStore.js";
 import { defaultMcpPolicy } from "./mcp/mcpPolicy.js";
 import { JsonlMcpAuditSink } from "./mcp/mcpAudit.js";
+import { McpConfigDiscovery } from "./mcp/mcpConfigDiscovery.js";
 
 export interface DefaultAgentRuntime {
     readonly appAgentSources: [AppAgentSource, AppAgentSource];
@@ -35,9 +36,18 @@ export function createDefaultAgentRuntime(
             ? {}
             : { oauthInteraction: mcpServices.oauthInteraction }),
     };
+    const workspacePath = options?.mcpDiscovery?.workspacePath ?? process.cwd();
+    const discovery = new McpConfigDiscovery().discover({
+        workspacePath,
+        ...(options?.mcpDiscovery?.repositoryRoot === undefined
+            ? {}
+            : { repositoryRoot: options.mcpDiscovery.repositoryRoot }),
+        isFolderTrusted: options?.mcpDiscovery?.isFolderTrusted ?? (() => true),
+    });
     const mcp = createMcpAppAgentSourceForInstance(
         getInstanceConfigProvider(instanceDir),
         services,
+        discovery,
     );
     const installed = createDefaultInstalledAgentSource(
         instanceDir,

@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { mkdtemp, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { AppAgentProviderSetController } from "agent-dispatcher";
 import {
     buildPackageCommandTable,
@@ -286,7 +289,14 @@ function getHandler(
 
 function getMcpHandler(
     source: InstalledAgentSourceApi,
-    name: "inspect" | "test" | "trust" | "untrust" | "enable" | "disable",
+    name:
+        | "import"
+        | "inspect"
+        | "test"
+        | "trust"
+        | "untrust"
+        | "enable"
+        | "disable",
 ): CommandHandler {
     const table = buildPackageCommandTable(source.sourceCommands());
     return (table.commands.mcp as any).commands[name] as CommandHandler;
@@ -564,6 +574,7 @@ describe("@package command table", () => {
             "credentials",
             "disable",
             "enable",
+            "import",
             "inspect",
             "policy",
             "status",
@@ -1082,6 +1093,50 @@ describe("@package install one-argument, dry-run, and refresh", () => {
 });
 
 describe("@package MCP management", () => {
+    it("previews and imports Copilot workspace configs disabled and untrusted", async () => {
+        const workspace = await mkdtemp(
+            path.join(os.tmpdir(), "mcp-package-import-"),
+        );
+        await writeFile(
+            path.join(workspace, ".mcp.json"),
+            JSON.stringify({
+                mcpServers: {
+                    discoveredEcho: { command: "node", args: ["echo.js"] },
+                },
+            }),
+        );
+        const { api } = makeSource();
+        const mcp = makeMcpSource();
+        const capture = mcpActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            mcpSource: mcp.api,
+        });
+
+        await getMcpHandler(api, "import").run(capture.context, {
+            flags: {
+                from: "copilot",
+                workspace,
+                "dry-run": false,
+            },
+        } as any);
+
+        const imported = [...mcp.servers.values()].find(
+            (config) => config.name === "discoveredEcho",
+        );
+        expect(capture.questions).toHaveLength(2);
+        expect(imported).toMatchObject({
+            enabled: false,
+            trust: "untrusted",
+            transport: { command: "node", args: ["echo.js"] },
+            provenance: {
+                source: path.join(workspace, ".mcp.json"),
+                sourceKind: "workspace-mcp",
+            },
+        });
+        expect(capture.output()).toContain("Imported");
+    });
+
     it("rejects an implicit install when native and MCP candidates share a name", async () => {
         const { api } = makeSource({
             resolveMcp: async () => [makeMcpCandidate("echo")],
