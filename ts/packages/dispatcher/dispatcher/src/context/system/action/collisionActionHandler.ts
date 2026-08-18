@@ -4,7 +4,6 @@
 import {
     ActionContext,
     ActionResult,
-    ParsedCommandParams,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
@@ -13,7 +12,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { CollisionAction } from "../schema/collisionActionSchema.js";
-import { opt } from "./actionParams.js";
+import { CommandParams, ActionParams, opt } from "./actionParams.js";
 
 function csv(values: string[] | undefined): string | undefined {
     return values?.join(",");
@@ -21,7 +20,7 @@ function csv(values: string[] | undefined): string | undefined {
 
 type Executor = (
     commands: string[],
-    params?: ParsedCommandParams<any>,
+    params?: CommandParams,
 ) => Promise<ActionResult | undefined>;
 
 // ---------------------------------------------------------------------------
@@ -73,7 +72,7 @@ const PREFERENCES_ACTIONS = new Set([
 
 function executeCollisionCorpusGenAction(
     actionName: string,
-    p: any,
+    p: ActionParams,
     execute: Executor,
 ): Promise<ActionResult | undefined> {
     switch (actionName) {
@@ -134,7 +133,7 @@ function executeCollisionCorpusGenAction(
 
 function executeCollisionCorpusVizAction(
     actionName: string,
-    p: any,
+    p: ActionParams,
     execute: Executor,
 ): Promise<ActionResult | undefined> {
     switch (actionName) {
@@ -196,7 +195,7 @@ function executeCollisionCorpusVizAction(
 
 function executeCollisionKeywordsAction(
     actionName: string,
-    p: any,
+    p: ActionParams,
     execute: Executor,
 ): Promise<ActionResult | undefined> {
     switch (actionName) {
@@ -217,7 +216,7 @@ function executeCollisionKeywordsAction(
                     tokens: [p.target, operation, ...(p.keywords ?? [])],
                 },
                 flags: {},
-            } as unknown as ParsedCommandParams<any>);
+            } as unknown as CommandParams);
         }
         case "backfillCollisionKeywords":
             return execute(["keywords", "backfill"], {
@@ -226,7 +225,7 @@ function executeCollisionKeywordsAction(
                     llm: p.useLlm ?? false,
                     force: p.force ?? false,
                 },
-            } as unknown as ParsedCommandParams<any>);
+            } as unknown as CommandParams);
         case "buildCollisionNeighborhoods":
             return execute(["neighborhoods"], {
                 args: {},
@@ -247,7 +246,7 @@ function executeCollisionKeywordsAction(
 
 function executeCollisionOptimizeCoreAction(
     actionName: string,
-    p: any,
+    p: ActionParams,
     execute: Executor,
 ): Promise<ActionResult | undefined> {
     switch (actionName) {
@@ -305,7 +304,7 @@ function executeCollisionOptimizeCoreAction(
 
 function executeCollisionOptimizePipelineAction(
     actionName: string,
-    p: any,
+    p: ActionParams,
     execute: Executor,
 ): Promise<ActionResult | undefined> {
     switch (actionName) {
@@ -348,7 +347,7 @@ function executeCollisionOptimizePipelineAction(
 
 function executeCollisionPreferencesAction(
     actionName: string,
-    p: any,
+    p: ActionParams,
     execute: Executor,
 ): Promise<ActionResult | undefined> {
     switch (actionName) {
@@ -386,7 +385,7 @@ export function executeCollisionAction(
 ): Promise<ActionResult | undefined> {
     const execute: Executor = (commands, params) =>
         commandExecutor(handlers, commands, params, context);
-    const p: any = "parameters" in action ? action.parameters : {};
+    const p: ActionParams = "parameters" in action ? action.parameters : {};
 
     if (CORPUS_GEN_ACTIONS.has(action.actionName)) {
         return executeCollisionCorpusGenAction(action.actionName, p, execute);

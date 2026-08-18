@@ -12,14 +12,14 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { FeedbackAction } from "../schema/feedbackActionSchema.js";
-import { actionParams, opt } from "./actionParams.js";
+import { CommandParams, actionParams, opt } from "./actionParams.js";
 
 export function executeFeedbackAction(
     action: TypeAgentAction<FeedbackAction, "system.feedback">,
     context: ActionContext<CommandHandlerContext>,
     handlers: CommandHandlerTable,
 ): Promise<ActionResult | undefined> {
-    const execute = (commands: string[], params?: any) =>
+    const execute = (commands: string[], params?: CommandParams) =>
         executeCommandFromHandlers(handlers, commands, params, context);
     const p = actionParams(action);
 

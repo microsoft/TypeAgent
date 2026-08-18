@@ -8,11 +8,17 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../commandHandlerContext.js";
 import { DispatcherDiagnosticsActions } from "./schema/diagnosticsActionSchema.js";
+import { ActionParams } from "../system/action/actionParams.js";
 
 type DiagnosticsCommandHandler = {
     run(
         context: ActionContext<CommandHandlerContext>,
-        params: any,
+        params:
+            | {
+                  args?: ActionParams | undefined;
+                  flags?: ActionParams | undefined;
+              }
+            | undefined,
     ): Promise<ActionResult | undefined | void>;
 };
 

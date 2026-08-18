@@ -4,7 +4,6 @@
 import {
     ActionContext,
     ActionResult,
-    ParsedCommandParams,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
@@ -13,7 +12,12 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { ConstructionAction } from "../schema/constructionActionSchema.js";
-import { actionParams, opt } from "./actionParams.js";
+import {
+    CommandParams,
+    ActionParams,
+    actionParams,
+    opt,
+} from "./actionParams.js";
 
 const STORE_CMDS: Record<string, string> = {
     newConstructionStore: "new",
@@ -23,10 +27,10 @@ const STORE_CMDS: Record<string, string> = {
 
 function executeConstructionStoreAction(
     actionName: string,
-    p: any,
+    p: ActionParams,
     execute: (
         commands: string[],
-        params?: ParsedCommandParams<any>,
+        params?: CommandParams,
     ) => Promise<ActionResult | undefined>,
 ): Promise<ActionResult | undefined> {
     return execute([STORE_CMDS[actionName]], {
@@ -40,7 +44,7 @@ export function executeConstructionAction(
     context: ActionContext<CommandHandlerContext>,
     handlers: CommandHandlerTable,
 ): Promise<ActionResult | undefined> {
-    const execute = (commands: string[], params?: ParsedCommandParams<any>) =>
+    const execute = (commands: string[], params?: CommandParams) =>
         executeCommandFromHandlers(handlers, commands, params, context);
     const toggle = (commands: string[], enabled: boolean) =>
         execute([...commands, enabled ? "on" : "off"]);
@@ -68,12 +72,12 @@ export function executeConstructionAction(
                     ...opt(p.part, "part"),
                     ...opt(p.ids, "id"),
                 },
-            } as unknown as ParsedCommandParams<any>);
+            } as unknown as CommandParams);
         case "importConstructions":
             return execute(["import"], {
                 args: { ...opt(p.files, "file") },
                 flags: { extended: p.extended ?? false },
-            } as unknown as ParsedCommandParams<any>);
+            } as unknown as CommandParams);
         case "pruneConstructions":
             return execute(["prune"]);
         case "deleteConstruction":

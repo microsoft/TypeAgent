@@ -3,6 +3,7 @@
 
 import {
     ActionContext,
+    ParameterDefinitions,
     ActionResult,
     ParsedCommandParams,
     TypeAgentAction,
@@ -17,7 +18,7 @@ import { BrowserConfigActions } from "./configActionSchema.mjs";
 type CommandExecutor = (
     handlers: CommandHandlerTable,
     commands: string[],
-    params: ParsedCommandParams<any> | undefined,
+    params: ParsedCommandParams<ParameterDefinitions> | undefined,
     context: ActionContext<BrowserActionContext>,
 ) => Promise<ActionResult | undefined>;
 
@@ -82,7 +83,7 @@ export async function executeBrowserConfigAction(
                             action.parameters?.provider?.trim() || undefined,
                     },
                     flags: undefined,
-                },
+                } as unknown as ParsedCommandParams<ParameterDefinitions>,
                 context,
             );
         case "addSearchProvider":

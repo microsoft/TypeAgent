@@ -1196,10 +1196,10 @@ async function handlePowerShellFlowAction(
             if (flowParamsJson) {
                 try {
                     namedParams = JSON.parse(flowParamsJson);
-                } catch (e: any) {
+                } catch (e) {
                     return createPowerShellFailure(
                         "invalidParameters",
-                        `Invalid JSON in flowParametersJson: ${e.message}`,
+                        `Invalid JSON in flowParametersJson: ${e instanceof Error ? e.message : String(e)}`,
                     );
                 }
             }

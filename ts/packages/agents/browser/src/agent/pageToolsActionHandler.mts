@@ -3,6 +3,7 @@
 
 import {
     ActionContext,
+    ParameterDefinitions,
     ActionResult,
     ParsedCommandParams,
     TypeAgentAction,
@@ -17,7 +18,7 @@ import { BrowserPageToolsActions } from "./pageToolsActionSchema.mjs";
 type CommandExecutor = (
     handlers: CommandHandlerTable,
     commands: string[],
-    params: ParsedCommandParams<any> | undefined,
+    params: ParsedCommandParams<ParameterDefinitions> | undefined,
     context: ActionContext<BrowserActionContext>,
 ) => Promise<ActionResult | undefined>;
 
@@ -57,7 +58,7 @@ export function executeBrowserPageToolsAction(
                 {
                     args: { description: action.parameters?.description },
                     flags: undefined,
-                },
+                } as unknown as ParsedCommandParams<ParameterDefinitions>,
                 context,
             );
     }

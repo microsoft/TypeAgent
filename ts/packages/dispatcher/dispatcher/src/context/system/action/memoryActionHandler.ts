@@ -4,7 +4,6 @@
 import {
     ActionContext,
     ActionResult,
-    ParsedCommandParams,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
@@ -16,6 +15,7 @@ import {
     MemoryAction,
     MemoryQuestionParameters,
 } from "../schema/memoryActionSchema.js";
+import { CommandParams } from "./actionParams.js";
 
 function questionFlags(parameters: MemoryQuestionParameters) {
     return {
@@ -53,7 +53,7 @@ export function executeMemoryAction(
                         count: action.parameters.count ?? 25,
                         distinct: action.parameters.distinct ?? false,
                     },
-                } as unknown as ParsedCommandParams<any>,
+                } as unknown as CommandParams,
                 context,
             );
         case "searchMemory":

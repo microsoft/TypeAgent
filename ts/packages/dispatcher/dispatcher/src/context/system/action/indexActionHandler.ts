@@ -4,7 +4,6 @@
 import {
     ActionContext,
     ActionResult,
-    ParsedCommandParams,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
@@ -14,11 +13,12 @@ import {
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { indexCommandHandlers } from "../handlers/indexCommandHandler.js";
 import { IndexAction } from "../schema/indexActionSchema.js";
+import { CommandParams } from "./actionParams.js";
 
 type CommandExecutor = (
     handlers: CommandHandlerTable,
     commands: string[],
-    params: ParsedCommandParams<any> | undefined,
+    params: CommandParams | undefined,
     context: ActionContext<CommandHandlerContext>,
 ) => Promise<ActionResult | undefined>;
 

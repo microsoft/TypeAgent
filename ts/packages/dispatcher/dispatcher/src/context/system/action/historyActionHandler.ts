@@ -10,6 +10,7 @@ import {
 } from "../schema/historyActionSchema.js";
 import { executeCommandFromHandlers } from "@typeagent/agent-sdk/helpers/command";
 import { historyCommandHandlers } from "../handlers/historyCommandHandler.js";
+import { CommandParams } from "./actionParams.js";
 
 export async function executeHistoryAction(
     action: AppAction,
@@ -58,7 +59,7 @@ export async function executeHistoryAction(
                         ),
                     },
                     flags: undefined,
-                } as any,
+                } as unknown as CommandParams,
                 context,
             );
             break;

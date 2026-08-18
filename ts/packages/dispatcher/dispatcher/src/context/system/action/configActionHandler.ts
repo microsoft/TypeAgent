@@ -7,7 +7,7 @@ import {
     AppAction,
     ActionContext,
     ActionResult,
-    ParsedCommandParams,
+    FlagDefinitions,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandlerTable,
@@ -15,6 +15,7 @@ import {
     getCommandHandler,
     getFlagType,
 } from "@typeagent/agent-sdk/helpers/command";
+import { CommandParams } from "./actionParams.js";
 
 type RunConfigCommandAction = ConfigAction & {
     actionName: "runConfigCommand";
@@ -125,7 +126,7 @@ function parseConfigFlags(
     const parsedFlags: Record<string, unknown> = {};
     for (const [name, definition] of Object.entries(flagDefs)) {
         const value = suppliedFlags[name];
-        const type = getFlagType(definition as any) as
+        const type = getFlagType(definition as FlagDefinitions[string]) as
             | "string"
             | "number"
             | "boolean"
@@ -140,7 +141,7 @@ function parseConfigFlags(
             if (!Array.isArray(value)) {
                 throw new Error(`Config flag '${name}' expects an array.`);
             }
-            parsedFlags[name] = value.map((item: any) =>
+            parsedFlags[name] = value.map((item: string | boolean) =>
                 parseConfigValue(item, type, name),
             );
         } else {
@@ -160,7 +161,7 @@ function parseConfigFlags(
 function getConfigCommandParams(
     action: RunConfigCommandAction,
     handlers: CommandHandlerTable,
-): ParsedCommandParams<any> | undefined {
+): CommandParams | undefined {
     const { command, arguments: args = [], flags } = action.parameters;
     const handler = getCommandHandler(handlers, command.split(" "));
     if (handler.parameters === undefined || handler.parameters === false) {
@@ -193,7 +194,7 @@ function getConfigCommandParams(
     return {
         args: handler.parameters.args === undefined ? undefined : parsedArgs,
         flags: handler.parameters.flags === undefined ? undefined : parsedFlags,
-    } as ParsedCommandParams<any>;
+    } as CommandParams;
 }
 
 function getCommandParams(
@@ -201,7 +202,7 @@ function getCommandParams(
     commands: string[],
     args: Record<string, unknown>,
     flags: Record<string, unknown>,
-): ParsedCommandParams<any> | undefined {
+): CommandParams | undefined {
     const handler = getCommandHandler(handlers, commands);
     if (handler.parameters === undefined || handler.parameters === false) {
         return undefined;
@@ -209,7 +210,7 @@ function getCommandParams(
     return {
         args: handler.parameters.args === undefined ? undefined : args,
         flags: handler.parameters.flags === undefined ? undefined : flags,
-    } as ParsedCommandParams<any>;
+    } as CommandParams;
 }
 
 export async function executeConfigAction(

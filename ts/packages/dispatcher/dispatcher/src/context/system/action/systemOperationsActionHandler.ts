@@ -4,7 +4,6 @@
 import {
     ActionContext,
     ActionResult,
-    ParsedCommandParams,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
@@ -13,14 +12,14 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { SystemOperationsAction } from "../schema/systemOperationsActionSchema.js";
-import { actionParams, opt } from "./actionParams.js";
+import { CommandParams, actionParams, opt } from "./actionParams.js";
 
 export function executeSystemOperationsAction(
     action: TypeAgentAction<SystemOperationsAction, "system.operations">,
     context: ActionContext<CommandHandlerContext>,
     systemHandlers: CommandHandlerTable,
 ): Promise<ActionResult | undefined> {
-    const execute = (commands: string[], params?: ParsedCommandParams<any>) =>
+    const execute = (commands: string[], params?: CommandParams) =>
         executeCommandFromHandlers(systemHandlers, commands, params, context);
     const p = actionParams(action);
 
@@ -39,7 +38,7 @@ export function executeSystemOperationsAction(
                     ...opt(actionParameters, "parameters"),
                     ...opt(p.naturalLanguage, "naturalLanguage"),
                 },
-            } as unknown as ParsedCommandParams<any>);
+            } as unknown as CommandParams);
         }
         case "clearConsole":
             return execute(["clear"]);
@@ -60,7 +59,7 @@ export function executeSystemOperationsAction(
                     type: p.type ?? "text",
                     inline: p.inline ?? false,
                 },
-            } as unknown as ParsedCommandParams<any>);
+            } as unknown as CommandParams);
         case "exitTypeAgent":
             return execute(["exit"]);
         case "showCommandHelp":
@@ -88,7 +87,7 @@ export function executeSystemOperationsAction(
             return execute(["trace"], {
                 args: { ...opt(p.namespaces, "namespaces") },
                 flags: { clear: p.clear ?? false },
-            } as unknown as ParsedCommandParams<any>);
+            } as unknown as CommandParams);
         default:
             throw new Error(
                 `Unknown system operations action: ${(action as SystemOperationsAction).actionName}`,
