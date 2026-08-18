@@ -31,11 +31,11 @@
     "pick-eligible-actions": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/pickEligibleActions.js --model ${TB_PICKER_MODEL:-azure/gpt-5.6-sol} && node ./scripts/copyAssets.mjs",
     "prettier": "prettier --check package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
+    "tb-eval": "node ./dist/translationBench/scripts/tbEval.js",
+    "tb-generate": "node ./dist/translationBench/scripts/tbGenerate.js",
     "test": "npm run test:local",
     "test:local": "pnpm run build && pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
-    "tsc": "tsc -b",
-    "tb-eval": "node ./dist/translationBench/scripts/tbEval.js",
-    "tb-generate": "node ./dist/translationBench/scripts/tbGenerate.js"
+    "tsc": "tsc -b"
   },
   "dependencies": {
     "@typeagent/action-schema": "workspace:*",
