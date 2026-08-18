@@ -1413,17 +1413,17 @@ async function executeBuiltInPowerShellAction(
     action: { actionName: string; parameters?: Record<string, unknown> },
     context: ActionContext<PowerShellAgentContext>,
 ): Promise<ActionResult> {
-    (context as any).__store =
+    (context as { __store?: PowerShellStore | undefined }).__store =
         context.sessionContext.agentContext.store ?? _agentStore;
     const result = await handlePowerShellFlowAction(action, context);
     // Only the natural-language request pipeline retries with reasoning, and
     // the dispatcher skips error display when fallbackToReasoning is set. This
     // is the command path, so leaving the flag on makes failures silent.
     if ("fallbackToReasoning" in result && result.fallbackToReasoning) {
-        const { fallbackToReasoning, ...rest } = result as ActionResult & {
-            fallbackToReasoning?: boolean;
-        };
-        return rest;
+        const stripped = { ...result };
+        delete (stripped as { fallbackToReasoning?: boolean })
+            .fallbackToReasoning;
+        return stripped;
     }
     return result;
 }
