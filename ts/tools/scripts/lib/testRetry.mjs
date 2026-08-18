@@ -6,6 +6,8 @@
 
 import path from "node:path";
 
+export const MAX_TEST_RETRIES = 2;
+
 // Convert a possibly-file:// path into a plain filesystem path. Done manually
 // (rather than url.fileURLToPath) because on Windows fileURLToPath throws for a
 // driveless URL like file:///repo/..., and reporters run on all three OSes.
@@ -90,12 +92,12 @@ export function findPackageDir(testFilePath, workspaceRoot, isPackageDir) {
     }
 }
 
-// Compare the two rounds and bucket every failure.
-//   confirmed      - failed round 1 and again on the isolated retry (real bug)
-//   flakyRecovered - failed round 1, passed on retry (flaky, not fatal)
-//   newOnRetry     - passed round 1, failed on retry (unstable and fatal)
-//   unretriable    - round 1 failure with no owning package to rerun (fatal)
-// first entries carry a `package` field (string) or undefined when unretriable.
+// Compare all failures observed before the final attempt with the final attempt.
+//   confirmed      - failed before and again on the final retry (real bug)
+//   flakyRecovered - failed before, passed on the final retry (flaky, not fatal)
+//   newOnRetry     - first failed on the final retry (unstable and fatal)
+//   unretriable    - initial failure with no owning package to rerun (fatal)
+// `first` entries carry a `package` field or undefined when unretriable.
 // retryTrusted is false when the retry process itself crashed without emitting
 // results; in that case round 1 failures cannot be cleared as flaky.
 export function classifyRetryResults({
@@ -200,7 +202,7 @@ export function buildSummaryLines(classification) {
 
     if (flakyRecovered.length > 0) {
         lines.push(
-            `\n${RULE}\nFLAKY TESTS (${flakyRecovered.length}) - failed initially, passed on retry\n${RULE}`,
+            `\n${RULE}\nFLAKY TESTS (${flakyRecovered.length}) - failed before the final attempt, then passed\n${RULE}`,
         );
         for (const failure of flakyRecovered) {
             lines.push(...formatFailure(failure));

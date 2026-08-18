@@ -16,9 +16,14 @@ import {
     buildSummaryLines,
     buildGithubAnnotations,
     buildStepSummaryMarkdown,
+    MAX_TEST_RETRIES,
 } from "../lib/testRetry.mjs";
 
 const cwd = "/repo/ts";
+
+test("allows two retries for three total attempts", () => {
+    assert.equal(MAX_TEST_RETRIES, 2);
+});
 
 function failure(file, name, message = "boom") {
     return {
