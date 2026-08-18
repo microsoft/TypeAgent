@@ -375,6 +375,7 @@ TypeAgent-owned processes support:
 telemetry:
   otlpEndpoint: https://telemetry.example.com
   logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
+  logRetentionBytes: 524288000
   debugBridge: true
   tracesSampler: always_on
   local:
@@ -392,6 +393,7 @@ Standard `OTEL_*` variables override YAML. Relevant settings include:
 - `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`
 - `TYPEAGENT_OTEL_LOG_FILE`
 - `TYPEAGENT_OTEL_DEBUG_BRIDGE`
+- `TYPEAGENT_OTEL_LOG_RETENTION_BYTES`
 
 TypeAgent resolves configuration and passes explicit, signal-specific
 components to the SDKs. It does not accept defaults that create exporters for
@@ -468,8 +470,21 @@ never share a writer. Create parent directories and report the
 resolved path once through a status or diagnostic path that cannot recurse into
 the exporter.
 
-The OS or external tools manage rotation and retention. JSONL and OTLP are
-additive. A JSONL-only configuration creates only the logs provider.
+Rotation is left to the OS or external tools. Retention is managed by
+TypeAgent for its own JSONL directory: on telemetry startup, an asynchronous
+cleanup enumerates `.jsonl` files in the log file's parent directory
+(non-recursive), and — if the total size exceeds `telemetry.logRetentionBytes`
+(default 500 MiB, env `TYPEAGENT_OTEL_LOG_RETENTION_BYTES`) — deletes the
+oldest inactive files first until the total is at or below the cap. The
+active log file and any path currently owned by another live
+`JsonlLogExporter` in the same process are never deleted. Cleanup runs in
+the background, does not delay provider initialization or request
+handling, reports every filesystem failure through a non-recursive
+diagnostic, and never fails telemetry startup. `logRetentionBytes: 0`
+disables cleanup. Retention scoping is intentionally narrow: it never
+touches subdirectories, non-`.jsonl` files, or the backend Grafana LGTM
+data. JSONL and OTLP are additive. A JSONL-only configuration creates only
+the logs provider.
 
 ## Local End-to-End Validation with Grafana
 

@@ -15,6 +15,14 @@
 import * as os from "node:os";
 import { loadConfigSync } from "@typeagent/config";
 
+/**
+ * Default retention cap for local JSONL telemetry logs, in bytes
+ * (500 MiB = 500 * 1024 * 1024). Applied only when a log file is configured
+ * and neither the standard nor local YAML nor the
+ * `TYPEAGENT_OTEL_LOG_RETENTION_BYTES` env override sets a value.
+ */
+export const DEFAULT_LOG_RETENTION_BYTES = 524_288_000;
+
 /* -------------------------------------------------------------------------- */
 /* Public configuration types                                                 */
 /* -------------------------------------------------------------------------- */
@@ -90,6 +98,17 @@ export interface LogConfig {
      * `~/`, or `~\` is expanded to the user's home directory.
      */
     readonly logFile?: string;
+    /**
+     * Total-size cap for local JSONL telemetry log retention, in bytes.
+     * Only present when {@link logFile} is configured. When positive, a
+     * background cleanup on telemetry startup enumerates `.jsonl` files in
+     * the log file's parent directory, and deletes the oldest inactive
+     * files first until the total size is at or below the cap. `0` disables
+     * cleanup. Defaults to `524288000` (500 MiB) when a log file is
+     * configured and neither the standard nor local YAML nor the
+     * `TYPEAGENT_OTEL_LOG_RETENTION_BYTES` env override sets a value.
+     */
+    readonly retentionBytes?: number;
 }
 
 /**
@@ -203,6 +222,10 @@ export function resolveTelemetryConfig(
         yaml.TELEMETRY_LOGFILE,
         "telemetry.logFile",
     );
+    const yamlLogRetentionBytes = parseNonNegativeInteger(
+        yaml.TELEMETRY_LOGRETENTIONBYTES,
+        "telemetry.logRetentionBytes",
+    );
     const yamlSampler = requireNonEmpty(
         yaml.TELEMETRY_TRACESSAMPLER,
         "telemetry.tracesSampler",
@@ -241,6 +264,10 @@ export function resolveTelemetryConfig(
         yaml.TELEMETRY_LOCAL_LOGFILE,
         "telemetry.local.logFile",
     );
+    const yamlLocalLogRetentionBytes = parseNonNegativeInteger(
+        yaml.TELEMETRY_LOCAL_LOGRETENTIONBYTES,
+        "telemetry.local.logRetentionBytes",
+    );
     const yamlLocalDebugBridge = parseBoolean(
         yaml.TELEMETRY_LOCAL_DEBUGBRIDGE,
         "telemetry.local.debugBridge",
@@ -258,6 +285,13 @@ export function resolveTelemetryConfig(
     const localLogFileRaw = yamlLocalEnabled
         ? (yamlLocalLogFile ??
           "~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl")
+        : undefined;
+    // Local block default for retention only participates when the local
+    // sink is enabled AND the operator has not explicitly set a value.
+    // The 500 MiB default itself is applied later, only when a log file is
+    // actually configured.
+    const localLogRetentionBytes = yamlLocalEnabled
+        ? yamlLocalLogRetentionBytes
         : undefined;
     const localDebugBridge = yamlLocalEnabled
         ? (yamlLocalDebugBridge ?? true)
@@ -283,6 +317,10 @@ export function resolveTelemetryConfig(
     const envLogFile = requireNonEmpty(
         env.TYPEAGENT_OTEL_LOG_FILE,
         "TYPEAGENT_OTEL_LOG_FILE",
+    );
+    const envLogRetentionBytes = parseNonNegativeInteger(
+        env.TYPEAGENT_OTEL_LOG_RETENTION_BYTES,
+        "TYPEAGENT_OTEL_LOG_RETENTION_BYTES",
     );
     const envDebugBridge = parseBoolean(
         env.TYPEAGENT_OTEL_DEBUG_BRIDGE,
@@ -453,6 +491,7 @@ export function resolveTelemetryConfig(
             otlp?: OtlpExporterConfig;
             additionalOtlp?: readonly OtlpExporterConfig[];
             logFile?: string;
+            retentionBytes?: number;
         } = {};
         if (logsPrimaryAndAdditional.primary !== undefined) {
             logs.otlp = logsPrimaryAndAdditional.primary;
@@ -462,6 +501,17 @@ export function resolveTelemetryConfig(
         }
         if (logFile !== undefined) {
             logs.logFile = logFile;
+            // Retention only applies to the local JSONL file. Precedence:
+            //   env TYPEAGENT_OTEL_LOG_RETENTION_BYTES
+            //     > YAML telemetry.logRetentionBytes
+            //     > YAML telemetry.local.logRetentionBytes (local-enabled only)
+            //     > default 500 MiB.
+            // `0` is a legitimate explicit "cleanup disabled" value.
+            logs.retentionBytes =
+                envLogRetentionBytes ??
+                yamlLogRetentionBytes ??
+                localLogRetentionBytes ??
+                DEFAULT_LOG_RETENTION_BYTES;
         }
         result.logs = logs;
     }
@@ -581,6 +631,38 @@ function parseBoolean(
                 `${name}="${value}" is invalid; expected true/false, on/off, or 1/0.`,
             );
     }
+}
+
+/**
+ * Parse a non-negative safe-integer configuration value (bytes, counts,
+ * etc.). `undefined` and the empty string are treated as unset. Any other
+ * value that is not a base-10 non-negative integer within
+ * `Number.MAX_SAFE_INTEGER` — including negative numbers, floats,
+ * `NaN`/`Infinity`, or trailing garbage — throws a descriptive error.
+ */
+function parseNonNegativeInteger(
+    value: string | undefined,
+    name: string,
+): number | undefined {
+    if (value === undefined || value === "") {
+        return undefined;
+    }
+    const trimmed = value.trim();
+    // Require a strict base-10 integer with no sign; forbid `1e6`, `0x10`,
+    // `1_000`, whitespace, or trailing units so misconfigurations surface
+    // as errors rather than silently producing a surprising cap.
+    if (!/^\d+$/.test(trimmed)) {
+        throw new Error(
+            `${name}="${value}" is invalid; expected a non-negative integer number of bytes.`,
+        );
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isSafeInteger(parsed) || parsed < 0) {
+        throw new Error(
+            `${name}="${value}" is out of range; must be a non-negative safe integer.`,
+        );
+    }
+    return parsed;
 }
 
 /**

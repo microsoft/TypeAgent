@@ -238,11 +238,35 @@ pnpm run telemetry:grafana --stop
 `--stop` also flips `telemetry.local.enabled` to `"false"` in
 `config.local.yaml` (custom local values are preserved for the next start).
 
-## Manual Log Cleanup
+## Log Retention and Manual Cleanup
 
-TypeAgent does not automatically delete local JSONL files. To remove old logs,
-stop TypeAgent first, review the files, and delete only the files you no longer
-need:
+TypeAgent runs a **best-effort** retention cleanup once at telemetry
+startup. It enumerates `.jsonl` files in the log file's parent directory
+(non-recursive) and, when the total exceeds `telemetry.logRetentionBytes`,
+deletes the oldest inactive files first until the total is at or below
+the cap.
+
+- Default cap: **524288000 bytes (500 MiB)**.
+- Set `telemetry.logRetentionBytes` (or `telemetry.local.logRetentionBytes`
+  in the local block) in `config.local.yaml` to change the cap.
+- Env override: `TYPEAGENT_OTEL_LOG_RETENTION_BYTES`.
+- Set the value to `0` to disable automatic cleanup.
+- The active log file and any file currently open by another
+  `JsonlLogExporter` in **this** process are always protected.
+- Files open in **other** processes are not tracked directly. Cleanup
+  simply calls `unlink`; on Windows the OS typically refuses to delete a
+  file another process still has open, and that failure is reported to
+  stderr and skipped. On POSIX, `unlink` usually succeeds even against a
+  peer's open handle (the peer keeps writing until it closes the file).
+  This is best-effort — there is no cross-process lock — so a peer's log
+  may occasionally be reclaimed on POSIX if it happens to be the oldest
+  inactive file.
+- Any unlink failure (Windows lock, permission error, etc.) is reported
+  once to stderr and never fails telemetry startup. Whatever remains
+  above the cap is surfaced in the final diagnostic so an operator can
+  raise the limit, close peer processes, or delete files by hand.
+
+To review the files yourself:
 
 ```powershell
 Get-ChildItem "$HOME\.typeagent\logs\*.jsonl" |

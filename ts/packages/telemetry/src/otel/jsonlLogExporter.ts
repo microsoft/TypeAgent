@@ -25,6 +25,37 @@ const activePaths = new Set<string>();
 const DEFAULT_MAX_PENDING_RECORDS = 2_048;
 const DIAGNOSTIC_INTERVAL_MS = 60_000;
 
+/**
+ * Return the stable identity used for in-process JSONL path ownership.
+ * Windows paths are case-insensitive, so ownership checks must be as well.
+ */
+export function getJsonlLogPathIdentity(
+    filePath: string,
+    caseInsensitive = process.platform === "win32",
+): string {
+    const resolved = path.resolve(filePath);
+    return caseInsensitive ? resolved.toLowerCase() : resolved;
+}
+
+/**
+ * Read-only view of every normalized file-path identity currently owned by a live
+ * {@link JsonlLogExporter} in this process. Cleanup (`logRetention.ts`)
+ * uses this to protect concurrently-open exporter files from deletion.
+ * The set is snapshotted by the caller — do not mutate it.
+ *
+ * `activePaths` protects against *in-process* re-ownership only. Cross-
+ * process protection is best-effort: retention runs `unlink` and treats
+ * an `EBUSY`/`EPERM`/other failure as a diagnostic-and-skip. On Windows
+ * the filesystem itself typically refuses to delete a file another
+ * process still has open, so peer processes' live logs are normally
+ * left in place; on POSIX the peer's fd stays valid after unlink and
+ * the file is only reaped when every handle is closed. Neither offers
+ * a hard cross-process guarantee.
+ */
+export function getActiveJsonlLogPaths(): ReadonlySet<string> {
+    return activePaths;
+}
+
 export class JsonlLogExporter implements LogRecordExporter {
     public readonly filePath: string;
     private readonly maxPendingRecords: number;
@@ -54,13 +85,14 @@ export class JsonlLogExporter implements LogRecordExporter {
                 "JSONL maxPendingRecords must be a positive integer.",
             );
         }
-        if (activePaths.has(this.filePath)) {
+        const pathIdentity = getJsonlLogPathIdentity(this.filePath);
+        if (activePaths.has(pathIdentity)) {
             throw new Error(
                 `A JSONL log exporter already owns "${this.filePath}" in this process.`,
             );
         }
-        activePaths.add(this.filePath);
         this.diagnostic = options.diagnostic ?? writeDiagnostic;
+        activePaths.add(pathIdentity);
         this.reportDiagnostic(`OpenTelemetry JSONL logs: ${this.filePath}`);
     }
 
@@ -152,7 +184,7 @@ export class JsonlLogExporter implements LogRecordExporter {
                 const file = await this.destination?.catch(() => undefined);
                 await file?.close();
             } finally {
-                activePaths.delete(this.filePath);
+                activePaths.delete(getJsonlLogPathIdentity(this.filePath));
             }
         }
     }

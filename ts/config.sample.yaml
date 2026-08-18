@@ -403,6 +403,14 @@ typeagent:
 #                        `~`/`~/`/`~\` expands to your home dir. Supports
 #                        `{service}`, `{process}`, `{timestamp}`, and `{pid}`
 #                        placeholders.
+#   - logRetentionBytes  total-size cap in bytes for local JSONL logs in
+#                        the log file's parent directory. On telemetry
+#                        startup, an asynchronous cleanup deletes the
+#                        oldest inactive `.jsonl` files first until the
+#                        total is at or below the cap. Applies only when
+#                        `logFile` is set. Defaults to 524288000
+#                        (500 MiB). Set to 0 to disable cleanup. Env
+#                        override: TYPEAGENT_OTEL_LOG_RETENTION_BYTES.
 #   - debugBridge        copy enabled typeagent:* debug output to OTel logs
 #   - structuredLogs     export privacy-filtered dispatcher lifecycle events
 #   - tracesSampler      one of always_on, always_off, traceidratio,
@@ -413,6 +421,7 @@ typeagent:
 # telemetry:
 #   otlpEndpoint: http://localhost:4318
 #   logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
+#   logRetentionBytes: 524288000
 #   debugBridge: true
 #   structuredLogs: true
 #   tracesSampler: parentbased_traceidratio
@@ -434,5 +443,6 @@ typeagent:
 #     enabled: "true"
 #     otlpEndpoint: http://localhost:4318
 #     logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
+#     logRetentionBytes: 524288000
 #     debugBridge: "true"
 #     structuredLogs: "true"

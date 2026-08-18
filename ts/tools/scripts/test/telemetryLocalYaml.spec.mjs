@@ -38,6 +38,7 @@ test("enable creates a fresh block when the file does not exist", () => {
         enabled: "true",
         otlpEndpoint: LOCAL_DEFAULTS.otlpEndpoint,
         logFile: LOCAL_DEFAULTS.logFile,
+        logRetentionBytes: LOCAL_DEFAULTS.logRetentionBytes,
         debugBridge: "true",
         structuredLogs: "true",
     });
@@ -203,6 +204,40 @@ test("enable preserves unrelated custom local keys", () => {
 
     const parsed = yaml.load(fs.readFileSync(file, "utf8"));
     assert.equal(parsed.telemetry.local.customExperimental, "hello");
+});
+
+test("enable preserves a custom logRetentionBytes value instead of overwriting it", () => {
+    const initial = [
+        "telemetry:",
+        "  local:",
+        '    enabled: "false"',
+        "    logRetentionBytes: 12345",
+        "",
+    ].join("\n");
+    const file = makeTempFile(initial);
+
+    enableTelemetryLocal(file);
+
+    const parsed = yaml.load(fs.readFileSync(file, "utf8"));
+    // Custom retention value kept — this is a value key, not a toggle.
+    assert.equal(parsed.telemetry.local.logRetentionBytes, 12345);
+    assert.equal(parsed.telemetry.local.enabled, "true");
+});
+
+test("enable inserts the default logRetentionBytes as an unquoted YAML number", () => {
+    const file = makeTempFile("");
+    enableTelemetryLocal(file);
+    const written = fs.readFileSync(file, "utf8");
+    // The resolver's parseNonNegativeInteger rejects quoted numbers except
+    // as plain decimal digits, but YAML numbers must not be quoted for
+    // js-yaml to round-trip them as `number`.
+    assert.ok(
+        /logRetentionBytes:\s*524288000\s*$/m.test(written),
+        `Expected unquoted logRetentionBytes: 524288000 in:\n${written}`,
+    );
+    const parsed = yaml.load(written);
+    assert.equal(typeof parsed.telemetry.local.logRetentionBytes, "number");
+    assert.equal(parsed.telemetry.local.logRetentionBytes, 524288000);
 });
 
 test("toggle preserves local comments and comments before the next sibling", () => {

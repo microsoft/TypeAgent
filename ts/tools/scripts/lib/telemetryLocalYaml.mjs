@@ -29,6 +29,11 @@ import yaml from "js-yaml";
 export const LOCAL_DEFAULTS = Object.freeze({
     otlpEndpoint: "http://localhost:4318",
     logFile: "~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl",
+    // 500 MiB. Keep in sync with `DEFAULT_LOG_RETENTION_BYTES` in
+    // `packages/telemetry/src/otel/config.ts`. Written as a YAML number so
+    // the resolver parses it via `parseNonNegativeInteger`; `0` disables
+    // cleanup.
+    logRetentionBytes: 524_288_000,
     debugBridge: "true",
     structuredLogs: "true",
 });
@@ -303,6 +308,7 @@ function editExistingLocalBlock(lines, indent, desiredLocal) {
         "enabled",
         "otlpEndpoint",
         "logFile",
+        "logRetentionBytes",
         "debugBridge",
         "structuredLogs",
     ];
@@ -447,6 +453,7 @@ function renderTelemetryLocalBody(desiredLocal, indent, eol) {
         "enabled",
         "otlpEndpoint",
         "logFile",
+        "logRetentionBytes",
         "debugBridge",
         "structuredLogs",
     ];

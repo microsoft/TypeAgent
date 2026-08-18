@@ -68,8 +68,13 @@ import {
     type DebugBridgeOptions,
     type DebugModule,
 } from "./debugBridge.js";
-import { JsonlLogExporter } from "./jsonlLogExporter.js";
+import {
+    JsonlLogExporter,
+    getActiveJsonlLogPaths,
+    getJsonlLogPathIdentity,
+} from "./jsonlLogExporter.js";
 import { LocalLogRecordProcessor } from "./localLogRecordProcessor.js";
+import { runLogRetentionCleanup } from "./logRetention.js";
 import {
     createLocalTelemetryState,
     setLocalTelemetryState,
@@ -209,6 +214,7 @@ const DEFAULT_FACTORIES: TelemetryProviderFactories = {
 
     createLogProvider(config, resource) {
         const processors = [];
+        const components: TelemetryOwnedComponent[] = [];
         // One BatchLogRecordProcessor per configured OTLP exporter.
         for (const otlp of getAllOtlpExporters(config)) {
             processors.push(
@@ -232,14 +238,21 @@ const DEFAULT_FACTORIES: TelemetryProviderFactories = {
                 configuredProcessName.length > 0
                     ? configuredProcessName
                     : "process";
+            // Construct the JsonlLogExporter first so that its resolved
+            // absolute path is claimed in the process-wide active-paths
+            // registry before the retention scan enumerates the directory.
+            // JsonlLogExporter's constructor is synchronous with respect to
+            // the registry — the retention scan (kicked off below) cannot
+            // race with our own file being visible-but-unprotected.
+            const jsonlExporter = new JsonlLogExporter({
+                filePath: config.logFile,
+                serviceName,
+                processName,
+            });
             processors.push(
                 new LocalLogRecordProcessor(
                     new BatchLogRecordProcessor({
-                        exporter: new JsonlLogExporter({
-                            filePath: config.logFile,
-                            serviceName,
-                            processName,
-                        }),
+                        exporter: jsonlExporter,
                         maxQueueSize: 2_048,
                         maxExportBatchSize: 256,
                         scheduledDelayMillis: 250,
@@ -248,9 +261,17 @@ const DEFAULT_FACTORIES: TelemetryProviderFactories = {
                     }),
                 ),
             );
+            const retention = createLogRetentionComponent(
+                jsonlExporter.filePath,
+                config.retentionBytes,
+            );
+            if (retention !== undefined) {
+                components.push(retention);
+            }
         }
         return {
             provider: new LoggerProvider({ resource, processors }),
+            ...(components.length > 0 ? { components } : {}),
         };
     },
 };
@@ -650,4 +671,62 @@ function createSampler(
         default:
             return new AlwaysOnSampler();
     }
+}
+
+/**
+ * Build the {@link TelemetryOwnedComponent} that runs the JSONL retention
+ * cleanup once, asynchronously, on telemetry startup. Returns `undefined`
+ * when retention is disabled (`retentionBytes === 0`) or unset — the
+ * telemetry pipeline then behaves exactly as before.
+ *
+ * Design notes
+ * ------------
+ * * The task is started from the current turn but scheduled through
+ *   `Promise.resolve().then(...)` so provider registration and request
+ *   handling are never blocked by disk I/O.
+ * * All non-fatal filesystem errors are reported through the exporter's
+ *   `writeDiagnostic` sink (via `logRetention`'s diagnostic callback);
+ *   the returned promise never rejects.
+ * * `shutdown()` awaits the cleanup so a fast-exit process still lets the
+ *   lifecycle bound the wait; `forceFlush()` is intentionally the same
+ *   await because a manual `forceFlush` before shutdown should not lose
+ *   the retention diagnostics.
+ * * The protection predicate consults the live registry every time so it
+ *   correctly protects any exporter registered later in the same process.
+ */
+function createLogRetentionComponent(
+    activeFilePath: string,
+    retentionBytes: number | undefined,
+): TelemetryOwnedComponent | undefined {
+    if (retentionBytes === undefined || retentionBytes === 0) {
+        return undefined;
+    }
+    const started = Promise.resolve().then(() =>
+        runLogRetentionCleanup({
+            logFile: activeFilePath,
+            retentionBytes,
+            isProtected: (candidate: string): boolean =>
+                getActiveJsonlLogPaths().has(
+                    getJsonlLogPathIdentity(candidate),
+                ),
+            diagnostic: (message, error) => {
+                const suffix =
+                    error === undefined
+                        ? ""
+                        : ` ${error instanceof Error ? error.message : String(error)}`;
+                process.stderr.write(
+                    `[typeagent:telemetry] ${message}${suffix}\n`,
+                );
+            },
+        }),
+    );
+    // A background task must never surface as an unhandled rejection: the
+    // helper already routes every error through `diagnostic`, but a bug in
+    // the helper itself would otherwise take down the host process.
+    void started.catch(() => undefined);
+    return {
+        name: "JSONL log retention cleanup",
+        shutdown: () => started.catch(() => undefined),
+        forceFlush: () => started.catch(() => undefined),
+    };
 }
