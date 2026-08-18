@@ -5,6 +5,10 @@ import type {
     ParameterDefinitions,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
+import {
+    CommandHandlerTable,
+    getCommandHandler,
+} from "@typeagent/agent-sdk/helpers/command";
 
 // Parameters for a command resolved at action-dispatch time. The action
 // handlers pick the command by name, so its parameter definitions aren't known
@@ -23,6 +27,25 @@ export type ActionParams = Record<string, any>;
 /** Returns `{ [key]: value }` when value is defined, `{}` otherwise. */
 export function opt<T>(value: T | undefined, key: string): Record<string, T> {
     return value !== undefined ? { [key]: value } : {};
+}
+
+// Builds params for a command resolved by name, matching the shape its handler
+// declares: a CommandHandlerNoParams must get `undefined`, and a handler that
+// declares only `args` must not be handed a `flags` object.
+export function getCommandParams(
+    handlers: CommandHandlerTable,
+    commands: string[],
+    args: Record<string, unknown> = {},
+    flags: Record<string, unknown> = {},
+): CommandParams | undefined {
+    const handler = getCommandHandler(handlers, commands);
+    if (handler.parameters === undefined || handler.parameters === false) {
+        return undefined;
+    }
+    return {
+        args: handler.parameters.args === undefined ? undefined : args,
+        flags: handler.parameters.flags === undefined ? undefined : flags,
+    } as unknown as CommandParams;
 }
 
 // Reads `parameters` off an action union. Action schemas mix members that have

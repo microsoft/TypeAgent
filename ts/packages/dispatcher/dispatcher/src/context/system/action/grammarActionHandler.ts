@@ -15,7 +15,7 @@ import {
     createActionResultFromHtmlDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import { StoredGrammarRule } from "@typeagent/action-grammar";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import {
     GrammarAction,
     ScanGrammarCollisionsAction,

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { processCommandNoLock } from "../../../command/command.js";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { ConversationAction } from "../schema/conversationActionSchema.js";
 import { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
 

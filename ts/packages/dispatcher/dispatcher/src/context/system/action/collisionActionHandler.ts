@@ -10,7 +10,7 @@ import {
     CommandHandlerTable,
     executeCommandFromHandlers,
 } from "@typeagent/agent-sdk/helpers/command";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { CollisionAction } from "../schema/collisionActionSchema.js";
 import { CommandParams, ActionParams, opt } from "./actionParams.js";
 

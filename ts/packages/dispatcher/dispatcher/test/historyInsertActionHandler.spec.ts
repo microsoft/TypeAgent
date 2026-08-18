@@ -3,6 +3,7 @@
 
 import { expect, it, jest } from "@jest/globals";
 import { executeHistoryAction } from "../src/context/system/action/historyActionHandler.js";
+import { historyCommandHandlers } from "../src/context/system/handlers/historyCommandHandler.js";
 
 it("inserts the complete saved-history JSON shape", async () => {
     const imported: unknown[] = [];
@@ -55,6 +56,7 @@ it("inserts the complete saved-history JSON shape", async () => {
             parameters: { messagesJson: JSON.stringify(input) },
         },
         context,
+        historyCommandHandlers,
     );
 
     expect(imported).toEqual([input]);

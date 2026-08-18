@@ -10,8 +10,7 @@ import {
     CommandHandlerTable,
     executeCommandFromHandlers,
 } from "@typeagent/agent-sdk/helpers/command";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { indexCommandHandlers } from "../handlers/indexCommandHandler.js";
+import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { IndexAction } from "../schema/indexActionSchema.js";
 import { CommandParams } from "./actionParams.js";
 
@@ -25,7 +24,7 @@ type CommandExecutor = (
 export function executeIndexAction(
     action: TypeAgentAction<IndexAction, "system.index">,
     context: ActionContext<CommandHandlerContext>,
-    handlers: CommandHandlerTable = indexCommandHandlers,
+    handlers: CommandHandlerTable,
     execute: CommandExecutor = executeCommandFromHandlers,
 ): Promise<ActionResult | undefined> {
     switch (action.actionName) {

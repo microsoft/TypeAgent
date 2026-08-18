@@ -10,7 +10,7 @@ import {
     CommandHandlerTable,
     executeCommandFromHandlers,
 } from "@typeagent/agent-sdk/helpers/command";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { SessionAction } from "../schema/sessionActionSchema.js";
 
 export function executeSessionAction(

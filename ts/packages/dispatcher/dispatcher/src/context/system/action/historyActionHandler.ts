@@ -1,89 +1,72 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext, AppAction } from "@typeagent/agent-sdk";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { processCommandNoLock } from "../../../command/command.js";
+import { ActionContext, ActionResult, AppAction } from "@typeagent/agent-sdk";
+import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import {
     DeleteHistoryAction,
     HistoryAction,
 } from "../schema/historyActionSchema.js";
-import { executeCommandFromHandlers } from "@typeagent/agent-sdk/helpers/command";
-import { historyCommandHandlers } from "../handlers/historyCommandHandler.js";
+import {
+    CommandHandlerTable,
+    executeCommandFromHandlers,
+} from "@typeagent/agent-sdk/helpers/command";
 import { CommandParams } from "./actionParams.js";
 
+// The command table is passed in rather than imported: importing it here would
+// make this module depend on the command tree, which depends back on the system
+// agent that dispatches these actions.
 export async function executeHistoryAction(
     action: AppAction,
     context: ActionContext<CommandHandlerContext>,
-) {
+    handlers: CommandHandlerTable,
+): Promise<ActionResult | undefined> {
     const historyAction = action as HistoryAction;
+    const execute = (commands: string[], params?: CommandParams) =>
+        executeCommandFromHandlers(handlers, commands, params, context);
+
     switch (historyAction.actionName) {
-        case "deleteHistory":
+        case "deleteHistory": {
             const deleteAction = historyAction as DeleteHistoryAction;
-            await processCommandNoLock(
-                `@history delete ${deleteAction.parameters.messageNumber}`,
-                context.sessionContext.agentContext,
-            );
-            break;
+            return execute(["delete"], {
+                args: { messageNumber: deleteAction.parameters.messageNumber },
+                flags: undefined,
+            } as unknown as CommandParams);
+        }
         case "clearHistory":
-            await processCommandNoLock(
-                `@history clear`,
-                context.sessionContext.agentContext,
-            );
-            break;
+            return execute(["clear"]);
         case "listHistory":
-            await processCommandNoLock(
-                `@history list`,
-                context.sessionContext.agentContext,
-            );
-            break;
+            return execute(["list"]);
         case "saveHistory":
-            await executeCommandFromHandlers(
-                historyCommandHandlers,
-                ["save"],
-                {
-                    args: { file: historyAction.parameters.file },
-                    flags: undefined,
-                },
-                context,
-            );
-            break;
-        case "insertHistory":
-            await executeCommandFromHandlers(
-                historyCommandHandlers,
-                ["insert"],
-                {
-                    args: {
-                        messages: JSON.parse(
-                            historyAction.parameters.messagesJson,
-                        ),
-                    },
-                    flags: undefined,
-                } as unknown as CommandParams,
-                context,
-            );
-            break;
+            return execute(["save"], {
+                args: { file: historyAction.parameters.file },
+                flags: undefined,
+            } as unknown as CommandParams);
+        case "insertHistory": {
+            let messages: unknown;
+            try {
+                messages = JSON.parse(historyAction.parameters.messagesJson);
+            } catch (e) {
+                throw new Error(
+                    `Invalid chat history JSON in messagesJson: ${e instanceof Error ? e.message : String(e)}`,
+                );
+            }
+            return execute(["insert"], {
+                args: { messages },
+                flags: undefined,
+            } as unknown as CommandParams);
+        }
         case "listHistoryEntities":
-            await executeCommandFromHandlers(
-                historyCommandHandlers,
-                ["entities", "list"],
-                { args: {}, flags: undefined },
-                context,
-            );
-            break;
+            return execute(["entities", "list"], {
+                args: {},
+                flags: undefined,
+            } as unknown as CommandParams);
         case "deleteHistoryEntity":
-            await executeCommandFromHandlers(
-                historyCommandHandlers,
-                ["entities", "delete"],
-                {
-                    args: { entityId: historyAction.parameters.entityId },
-                    flags: undefined,
-                },
-                context,
-            );
-            break;
+            return execute(["entities", "delete"], {
+                args: { entityId: historyAction.parameters.entityId },
+                flags: undefined,
+            } as unknown as CommandParams);
         default:
             throw new Error(`Invalid action name: ${action.actionName}`);
     }
-    return undefined;
 }

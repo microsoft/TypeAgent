@@ -17,6 +17,7 @@ import {
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import { DispatcherName } from "../../dispatcher/dispatcherUtils.js";
+import { STATUS_NOTICE_DEFAULT_MESSAGE } from "../notificationDefaults.js";
 
 class NotifyInfoCommandHandler implements CommandHandlerNoParams {
     description: string = "Shows the number of notifications available";
@@ -100,8 +101,7 @@ const NOTIFY_TEST_MODES = {
 
 type NotifyTestMode = keyof typeof NOTIFY_TEST_MODES;
 
-export const STATUS_NOTICE_DEFAULT_MESSAGE =
-    "Dismissing this collapses it to the notification bell; click the bell to re-expand.";
+export { STATUS_NOTICE_DEFAULT_MESSAGE } from "../notificationDefaults.js";
 
 class NotifyTestCommandHandler implements CommandHandler {
     public readonly description =

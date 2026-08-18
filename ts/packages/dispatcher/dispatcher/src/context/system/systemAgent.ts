@@ -261,19 +261,35 @@ function executeSystemAction(
                     .config as CommandHandlerTable,
             });
         case "system.notify":
-            return executeNotificationAction(action, context);
+            return executeNotificationAction(
+                action,
+                context,
+                getSystemHandlers().commands.notify as CommandHandlerTable,
+            );
         case "system.history":
-            return executeHistoryAction(action, context);
+            return executeHistoryAction(
+                action,
+                context,
+                getSystemHandlers().commands.history as CommandHandlerTable,
+            );
         case "system.grammar":
             return executeGrammarAction(action, context, getSystemHandlers());
         case "system.settings":
-            return executeSettingsAction(action, context);
+            return executeSettingsAction(
+                action,
+                context,
+                getSystemHandlers().commands.settings as CommandHandlerTable,
+            );
         case "system.log":
             return executeLogAction(action, context);
         case "system.help":
             return executeHelpAction(action, context);
         case "system.index":
-            return executeIndexAction(action, context);
+            return executeIndexAction(
+                action,
+                context,
+                getSystemHandlers().commands.index as CommandHandlerTable,
+            );
         case "system.diagnostics":
             return executeSystemDiagnosticsAction(
                 action,
