@@ -6,8 +6,8 @@
 //  1. Run the whole suite once, capturing individual failures via the reporter
 //     that writes to TYPEAGENT_TEST_FAILURES_DIR.
 //  2. If anything failed, rerun ONLY the packages that owned a failing test,
-//     serially, into a fresh failures directory (option #2, "rerun-only-
-//     failed").
+//     serially, with a fresh Jest cache and failures directory (option #2,
+//     "rerun-only-failed").
 //  3. Classify each round-1 failure as flaky (passed on retry) or confirmed
 //     (failed again), print a summary, and emit GitHub annotations / a step
 //     summary so flaky tests are tracked instead of silently masked (option
@@ -110,6 +110,7 @@ function handleFailures(firstFailures) {
                 "test:local",
             ],
             secondDirectory,
+            true,
         );
 
         second = dedupeFailures(readFailures(secondDirectory), workspaceRoot);
@@ -151,7 +152,7 @@ function makeFailuresDirectory(label) {
     );
 }
 
-function runPnpm(pnpmArguments, failuresDirectory) {
+function runPnpm(pnpmArguments, failuresDirectory, disableJestCache = false) {
     const [command, commandArguments] = isWindows
         ? [
               process.env.ComSpec ?? "cmd.exe",
@@ -163,6 +164,7 @@ function runPnpm(pnpmArguments, failuresDirectory) {
         env: {
             ...process.env,
             TYPEAGENT_TEST_FAILURES_DIR: failuresDirectory,
+            ...(disableJestCache ? { TYPEAGENT_JEST_NO_CACHE: "true" } : {}),
         },
         stdio: "inherit",
     });

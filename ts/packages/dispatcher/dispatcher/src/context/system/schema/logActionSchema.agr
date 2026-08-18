@@ -1,0 +1,98 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+//
+// Natural-language patterns for local OpenTelemetry log controls. Every rule
+// is anchored on "local" plus a logging or telemetry noun so these commands do
+// not capture general requests to enable, disable, show, or clear logs.
+
+<Polite> = (can you | could you | please | would you | i want to | i need to)?;
+<LocalLogNoun> = (local log | local logs | local logging | local telemetry | local otel | local jsonl logs | local jsonl logging);
+
+<ShowLogStatus> =
+  <Polite> (show | display | check) (me)? (the)? <LocalLogNoun> (status | settings | configuration) -> {
+    actionName: "showLogStatus"
+  }
+  | <Polite> (what is | what\'s) (the)? <LocalLogNoun> (status | profile | configuration) -> {
+    actionName: "showLogStatus"
+  };
+
+<SetFocusedProfile> =
+  <Polite> (set | change | switch) (the)? <LocalLogNoun> profile to focused -> {
+    actionName: "setLogProfile",
+    parameters: { profile: "focused" }
+  }
+  | <Polite> use (the)? focused profile for <LocalLogNoun> -> {
+    actionName: "setLogProfile",
+    parameters: { profile: "focused" }
+  }
+  | <Polite> (turn on | enable) <LocalLogNoun> -> {
+    actionName: "setLogProfile",
+    parameters: { profile: "focused" }
+  };
+
+<SetDiagnosticProfile> =
+  <Polite> (set | change | switch) (the)? <LocalLogNoun> profile to diagnostic -> {
+    actionName: "setLogProfile",
+    parameters: { profile: "diagnostic" }
+  }
+  | <Polite> use (the)? diagnostic profile for <LocalLogNoun> -> {
+    actionName: "setLogProfile",
+    parameters: { profile: "diagnostic" }
+  };
+
+<SetVerboseProfile> =
+  <Polite> (set | change | switch) (the)? <LocalLogNoun> profile to verbose -> {
+    actionName: "setLogProfile",
+    parameters: { profile: "verbose" }
+  }
+  | <Polite> use (the)? verbose profile for <LocalLogNoun> -> {
+    actionName: "setLogProfile",
+    parameters: { profile: "verbose" }
+  };
+
+<SetOffProfile> =
+  <Polite> (set | change | switch) (the)? <LocalLogNoun> profile to off -> {
+    actionName: "setLogProfile",
+    parameters: { profile: "off" }
+  }
+  | <Polite> (turn off | disable) <LocalLogNoun> -> {
+    actionName: "setLogProfile",
+    parameters: { profile: "off" }
+  };
+
+<EnableDebugCopy> =
+  <Polite> (turn on | enable) (local)? debug (copy | copying) -> {
+    actionName: "setLogDebugCopy",
+    parameters: { enabled: true }
+  }
+  | <Polite> (include | copy | capture) (enabled)? debug (output | logs | messages) (in | into | to) (the)? (local logs | local jsonl logs) -> {
+    actionName: "setLogDebugCopy",
+    parameters: { enabled: true }
+  };
+
+<DisableDebugCopy> =
+  <Polite> (turn off | disable) (local)? debug (copy | copying) -> {
+    actionName: "setLogDebugCopy",
+    parameters: { enabled: false }
+  }
+  | <Polite> (stop | quit) copying debug (output | logs | messages) (in | into | to) (the)? (local logs | local jsonl logs) -> {
+    actionName: "setLogDebugCopy",
+    parameters: { enabled: false }
+  };
+
+<ClearLogSettings> =
+  <Polite> (reset | clear) (the)? <LocalLogNoun> (settings | configuration)? -> {
+    actionName: "clearLogSettings"
+  }
+  | <Polite> restore (the)? <LocalLogNoun> defaults -> {
+    actionName: "clearLogSettings"
+  };
+
+<Start> = <ShowLogStatus>
+  | <SetFocusedProfile>
+  | <SetDiagnosticProfile>
+  | <SetVerboseProfile>
+  | <SetOffProfile>
+  | <EnableDebugCopy>
+  | <DisableDebugCopy>
+  | <ClearLogSettings>;

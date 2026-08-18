@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import path from "node:path";
 import {
     ActionContext,
     AppAgent,
@@ -32,6 +33,7 @@ import type {
 } from "../mcp/mcpServerConfig.js";
 import chalk from "chalk";
 import { enforceMcpPolicy } from "../mcp/mcpPolicy.js";
+import { McpConfigDiscovery } from "../mcp/mcpConfigDiscovery.js";
 import {
     ExtensionKind,
     InstallMatchKind,
@@ -1457,6 +1459,131 @@ class McpStateCommandHandler implements CommandHandler {
     }
 }
 
+class McpImportCommandHandler implements CommandHandler {
+    public readonly description =
+        "Discover and import MCP servers from Copilot configuration";
+    public readonly parameters = {
+        flags: {
+            from: {
+                description: "Configuration family to import (copilot)",
+                type: "string",
+                default: "copilot",
+            },
+            workspace: {
+                description: "Workspace path used for repository traversal",
+                type: "string",
+                optional: true,
+            },
+            "dry-run": {
+                description: "Preview discovered servers without importing",
+                type: "boolean",
+                default: false,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: PackageActionContext,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        if (params.flags.from !== "copilot") {
+            throw new Error(
+                `Unsupported MCP import source '${params.flags.from}'. Expected 'copilot'.`,
+            );
+        }
+        const workspacePath = path.resolve(
+            params.flags.workspace ?? process.cwd(),
+        );
+        const trustChoice = await context.sessionContext.popupQuestion(
+            `Allow MCP config discovery from '${workspacePath}' through its repository root? Files are previewed only; imported servers remain disabled and untrusted.`,
+            ["Allow discovery", "Cancel"],
+            1,
+        );
+        if (trustChoice !== 0) {
+            displayResult("MCP config import cancelled.", context);
+            return;
+        }
+        const result = new McpConfigDiscovery().discover({
+            workspacePath,
+            isFolderTrusted: () => true,
+        });
+        for (const diagnostic of result.diagnostics) {
+            displayWarn(diagnostic.message, context);
+        }
+        if (result.configs.length === 0) {
+            displayResult("No MCP servers were discovered.", context);
+            return;
+        }
+        for (const discovered of result.configs) {
+            displayResult(describeMcpConfig(discovered.config), context);
+        }
+        if (params.flags["dry-run"]) {
+            displayResult(
+                `${result.configs.length} MCP server(s) discovered; no changes were made.`,
+                context,
+            );
+            return;
+        }
+        const importChoice = await context.sessionContext.popupQuestion(
+            `Import ${result.configs.length} discovered MCP server(s) disabled and untrusted?`,
+            ["Import", "Cancel"],
+            1,
+        );
+        if (importChoice !== 0) {
+            displayResult("MCP config import cancelled.", context);
+            return;
+        }
+        const source = requireMcpSource(context.sessionContext);
+        const controller =
+            context.sessionContext.agentContext.appAgentProviderSetController;
+        let imported = 0;
+        for (const discovered of result.configs) {
+            const existing = source
+                .listServers()
+                .find((config) => config.name === discovered.config.name);
+            if (
+                existing !== undefined &&
+                !existing.provenance.sourceKind?.startsWith("workspace-") &&
+                existing.provenance.sourceKind !== "copilot-user"
+            ) {
+                displayWarn(
+                    `Skipped '${discovered.config.name}': a managed MCP server with that name already exists.`,
+                    context,
+                );
+                continue;
+            }
+            await source.addServer(
+                existing === undefined
+                    ? discovered.config
+                    : {
+                          ...discovered.config,
+                          id: existing.id,
+                          trust: existing.trust,
+                          enabled: existing.enabled,
+                      },
+                controller,
+            );
+            imported++;
+        }
+        displayResult(
+            `Imported ${imported} MCP server(s); newly discovered servers are disabled and untrusted.`,
+            context,
+        );
+    }
+
+    public async getCompletion(
+        _context: PackageSessionContext,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<{ groups: CompletionGroup[] }> {
+        return {
+            groups: names
+                .filter((name) => name === "--from")
+                .map((name) => ({ name, completions: ["copilot"] })),
+        };
+    }
+}
+
 class McpInspectCommandHandler implements CommandHandler {
     public readonly description: string = "Inspect an MCP server config";
     public readonly parameters = {
@@ -1625,6 +1752,7 @@ function buildMcpCommandTable(): CommandHandlerTable {
         description: "Manage installed MCP servers",
         defaultSubCommand: "inspect",
         commands: {
+            import: new McpImportCommandHandler(),
             inspect: new McpInspectCommandHandler(),
             status: new McpStatusCommandHandler(),
             test: new McpTestCommandHandler(),

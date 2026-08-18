@@ -66,7 +66,11 @@ export const TYPEAGENT_SPAN_ATTRIBUTES = Object.freeze({
     GEN_AI_REQUEST_MODEL: "gen_ai.request.model",
     SESSION_ID: "typeagent.session.id",
     ACTIVATION_ID: "typeagent.activation.id",
+    REQUEST_ID: "typeagent.request.id",
     TRACE_ID: "typeagent.trace.id",
+    LLM_PHASE: "typeagent.llm.phase",
+    LLM_PURPOSE: "typeagent.llm.purpose",
+    LLM_SCOPE: "typeagent.llm.scope",
 } as const);
 
 /** Type of a well-known TypeAgent attribute-key value. */
@@ -92,21 +96,29 @@ export interface TypeAgentSpanAttributes {
     readonly sessionId?: string;
     /** `typeagent.activation.id` - dispatcher activation id (not per request). */
     readonly activationId?: string;
+    /** `typeagent.request.id` - dispatcher request identifier. */
+    readonly requestId?: string;
     /**
      * `typeagent.trace.id` - the caller's pre-OTel trace id (preserved for
      * log correlation). OTel owns the canonical trace id.
      */
     readonly traceId?: string;
+    /** Stable lifecycle phase containing this LLM operation. */
+    readonly llmPhase?: string;
+    /** Stable purpose assigned by the high-level caller. */
+    readonly llmPurpose?: string;
+    /** Whether the LLM operation is foreground or background work. */
+    readonly llmScope?: string;
 }
 
 const ACTIVE_TYPEAGENT_ATTRIBUTES = createContextKey(
     "typeagent.active-span-attributes",
 );
 
-export function getActiveTypeAgentSpanAttributes():
-    | TypeAgentSpanAttributes
-    | undefined {
-    return context.active().getValue(ACTIVE_TYPEAGENT_ATTRIBUTES) as
+export function getActiveTypeAgentSpanAttributes(
+    activeContext: Context = context.active(),
+): TypeAgentSpanAttributes | undefined {
+    return activeContext.getValue(ACTIVE_TYPEAGENT_ATTRIBUTES) as
         | TypeAgentSpanAttributes
         | undefined;
 }
@@ -115,7 +127,13 @@ export function setActiveTypeAgentSpanAttributes(
     activeContext: Context,
     attributes: TypeAgentSpanAttributes,
 ): Context {
-    return activeContext.setValue(ACTIVE_TYPEAGENT_ATTRIBUTES, attributes);
+    const current = activeContext.getValue(ACTIVE_TYPEAGENT_ATTRIBUTES) as
+        | TypeAgentSpanAttributes
+        | undefined;
+    return activeContext.setValue(ACTIVE_TYPEAGENT_ATTRIBUTES, {
+        ...current,
+        ...attributes,
+    });
 }
 
 const ATTRIBUTE_KEY_FOR_FIELD: {
@@ -127,7 +145,11 @@ const ATTRIBUTE_KEY_FOR_FIELD: {
     genAiRequestModel: TYPEAGENT_SPAN_ATTRIBUTES.GEN_AI_REQUEST_MODEL,
     sessionId: TYPEAGENT_SPAN_ATTRIBUTES.SESSION_ID,
     activationId: TYPEAGENT_SPAN_ATTRIBUTES.ACTIVATION_ID,
+    requestId: TYPEAGENT_SPAN_ATTRIBUTES.REQUEST_ID,
     traceId: TYPEAGENT_SPAN_ATTRIBUTES.TRACE_ID,
+    llmPhase: TYPEAGENT_SPAN_ATTRIBUTES.LLM_PHASE,
+    llmPurpose: TYPEAGENT_SPAN_ATTRIBUTES.LLM_PURPOSE,
+    llmScope: TYPEAGENT_SPAN_ATTRIBUTES.LLM_SCOPE,
 };
 
 /**

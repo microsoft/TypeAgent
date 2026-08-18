@@ -208,6 +208,7 @@ export type BridgeToWebviewMessage =
               metrics?: any;
               tokenUsage?: any;
               actionTokenUsage?: any;
+              traceId?: string;
               // notify (persisted "explained")
               event?: string;
               data?: unknown;
