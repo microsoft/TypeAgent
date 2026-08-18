@@ -404,6 +404,7 @@ typeagent:
 #                        `{service}`, `{process}`, `{timestamp}`, and `{pid}`
 #                        placeholders.
 #   - debugBridge        copy enabled typeagent:* debug output to OTel logs
+#   - structuredLogs     export privacy-filtered dispatcher lifecycle events
 #   - tracesSampler      one of always_on, always_off, traceidratio,
 #                        parentbased_always_on, parentbased_always_off,
 #                        parentbased_traceidratio
@@ -411,8 +412,27 @@ typeagent:
 
 # telemetry:
 #   otlpEndpoint: http://localhost:4318
-#   logFile: ~/.typeagent/logs/typeagent-{service}-{process}-{timestamp}-{pid}.jsonl
+#   logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
 #   debugBridge: true
 #   structuredLogs: true
 #   tracesSampler: parentbased_traceidratio
 #   tracesSamplerArg: 0.1
+#
+# Local Grafana LGTM sink (managed by `pnpm run telemetry:grafana`).
+#
+# You normally do not edit this section — `pnpm run telemetry:grafana` sets
+# `enabled: "true"` once Grafana is healthy and preserves any custom values
+# you have added. When enabled it runs alongside any standard backend above
+# (deduplicated when they resolve to the same URL); it becomes the primary
+# exporter when no standard backend is configured.
+#
+# `enabled` is a STRING because the flat env layer drops YAML booleans whose
+# value is `false` — a plain boolean would silently "stick" once enabled.
+
+# telemetry:
+#   local:
+#     enabled: "true"
+#     otlpEndpoint: http://localhost:4318
+#     logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
+#     debugBridge: "true"
+#     structuredLogs: "true"

@@ -44,6 +44,8 @@ import {
 
 import {
     resolveTelemetryConfig,
+    getAllOtlpExporters,
+    type OtlpExporterConfig,
     type LogConfig,
     type MetricConfig,
     type ResolveTelemetryConfigOptions,
@@ -173,14 +175,14 @@ export class TelemetryProviderOwnershipError extends Error {
 
 const DEFAULT_FACTORIES: TelemetryProviderFactories = {
     createTraceProvider(config, resource) {
-        const spanProcessors =
-            config.otlp === undefined
-                ? []
-                : [
-                      new BatchSpanProcessor(
-                          new OTLPTraceExporter(toExporterOptions(config.otlp)),
-                      ),
-                  ];
+        // One BatchSpanProcessor per configured OTLP exporter (primary +
+        // any additional sinks such as the local Grafana LGTM stack).
+        const spanProcessors = getAllOtlpExporters(config).map(
+            (otlp) =>
+                new BatchSpanProcessor(
+                    new OTLPTraceExporter(toExporterOptions(otlp)),
+                ),
+        );
         const provider = new NodeTracerProvider({
             resource,
             sampler: createSampler(config.sampler, config.samplerArg),
@@ -190,16 +192,13 @@ const DEFAULT_FACTORIES: TelemetryProviderFactories = {
     },
 
     createMetricProvider(config, resource) {
-        const readers =
-            config.otlp === undefined
-                ? []
-                : [
-                      new PeriodicExportingMetricReader({
-                          exporter: new OTLPMetricExporter(
-                              toExporterOptions(config.otlp),
-                          ),
-                      }),
-                  ];
+        // One PeriodicExportingMetricReader per configured OTLP exporter.
+        const readers = getAllOtlpExporters(config).map(
+            (otlp) =>
+                new PeriodicExportingMetricReader({
+                    exporter: new OTLPMetricExporter(toExporterOptions(otlp)),
+                }),
+        );
         return {
             provider: new MeterProvider({
                 resource,
@@ -210,12 +209,11 @@ const DEFAULT_FACTORIES: TelemetryProviderFactories = {
 
     createLogProvider(config, resource) {
         const processors = [];
-        if (config.otlp !== undefined) {
+        // One BatchLogRecordProcessor per configured OTLP exporter.
+        for (const otlp of getAllOtlpExporters(config)) {
             processors.push(
                 new BatchLogRecordProcessor({
-                    exporter: new OTLPLogExporter(
-                        toExporterOptions(config.otlp),
-                    ),
+                    exporter: new OTLPLogExporter(toExporterOptions(otlp)),
                     selfObsMeterProvider: metrics.getMeterProvider(),
                 }),
             );
@@ -615,10 +613,10 @@ async function waitForInitializationAndLifecycle(
     }
 }
 
-function toExporterOptions(config: {
-    readonly endpoint: string;
-    readonly headers?: Readonly<Record<string, string>>;
-}): { url: string; headers?: Record<string, string> } {
+function toExporterOptions(config: OtlpExporterConfig): {
+    url: string;
+    headers?: Record<string, string>;
+} {
     return {
         url: config.endpoint,
         ...(config.headers === undefined

@@ -90,7 +90,7 @@ describe("JsonlLogExporter", () => {
         expect(resolved).toBe(
             path.resolve(
                 "logs",
-                "typeagent-agent_server-agent-player-20260817T083859-123Z-1234.jsonl",
+                "typeagent-agent_server-agent-player-20260817T083859Z-1234.jsonl",
             ),
         );
     });
@@ -106,27 +106,21 @@ describe("JsonlLogExporter", () => {
         expect(resolved).toBe(
             path.resolve(
                 "logs",
-                "typeagent-typeagent-local-agent-server-20260817T083859-123Z-1234.jsonl",
+                "typeagent-typeagent-local-agent-server-20260817T083859Z-1234.jsonl",
             ),
         );
     });
 
-    it("supports an explicit process-start timestamp placeholder", () => {
+    it("supports the process-first default template", () => {
         const resolved = resolveJsonlLogPath(
-            path.join(
-                "logs",
-                "typeagent-{service}-{process}-{timestamp}-{pid}.jsonl",
-            ),
+            path.join("logs", "{process}-{timestamp}-p{pid}.jsonl"),
             "typeagent-local",
             1234,
             "agent-server",
             new Date("2026-08-17T08:38:59.123Z"),
         );
         expect(resolved).toBe(
-            path.resolve(
-                "logs",
-                "typeagent-typeagent-local-agent-server-20260817T083859-123Z-1234.jsonl",
-            ),
+            path.resolve("logs", "agent-server-20260817T083859Z-p1234.jsonl"),
         );
     });
 
@@ -331,7 +325,7 @@ describe("JsonlLogExporter", () => {
         const template = path.join(blockingFile, "logs-{pid}.jsonl");
         // Pin startedAt so the injected {timestamp} placeholder resolves to the
         // same path across constructions; otherwise each new Date() can cross a
-        // millisecond boundary and the ownership conflict would not be detected.
+        // second boundary and the ownership conflict would not be detected.
         const startedAt = new Date("2026-08-17T08:38:59.123Z");
         const exporter = new JsonlLogExporter({
             filePath: template,

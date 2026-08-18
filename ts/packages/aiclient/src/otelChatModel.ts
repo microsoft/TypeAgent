@@ -41,11 +41,19 @@ type LlmCallState = {
     readonly activeContext: Context;
     readonly startedAt: number;
     readonly correlation: LlmCorrelation;
-    readonly classification: ChatModelTelemetryContext;
+    readonly classification: LlmClassification;
     readonly logger: Logger;
     usage?: CompletionUsageStats;
     ended: boolean;
 };
+
+type LlmClassification =
+    | ChatModelTelemetryContext
+    | {
+          readonly phase: "unclassified";
+          readonly purpose: "unclassified";
+          readonly scope: "unclassified";
+      };
 
 type LlmCorrelation = {
     -readonly [Key in
@@ -132,7 +140,12 @@ function startLlmCall(
     );
     const span = tracer.startSpan(otel.TYPEAGENT_SPAN_NAMES.LLM);
     const inherited = otel.getActiveTypeAgentSpanAttributes();
-    const classification = getChatModelTelemetryContext();
+    const classification: LlmClassification =
+        getChatModelTelemetryContext() ?? {
+            phase: "unclassified",
+            purpose: "unclassified",
+            scope: "unclassified",
+        };
     const attributes = {
         ...inherited,
         genAiSystem: info.provider,
@@ -142,6 +155,9 @@ function startLlmCall(
         llmScope: classification.scope,
     };
     otel.setTypeAgentSpanAttributes(span, attributes);
+    if (classification.phase === "unclassified") {
+        span.addEvent("typeagent.llm.classification.missing");
+    }
     const activeContext = otel.setActiveTypeAgentSpanAttributes(
         trace.setSpan(context.active(), span),
         attributes,

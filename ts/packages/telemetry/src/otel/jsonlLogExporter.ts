@@ -332,7 +332,7 @@ function formatFileTimestamp(value: Date): string {
         .toISOString()
         .replaceAll("-", "")
         .replaceAll(":", "")
-        .replace(".", "-");
+        .replace(/\.\d{3}Z$/, "Z");
 }
 
 function sanitizePathSegment(value: string): string {

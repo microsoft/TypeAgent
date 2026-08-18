@@ -4,12 +4,21 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
+import {
+    disableTelemetryLocal,
+    enableTelemetryLocal,
+    resolveLocalConfigPath,
+} from "./lib/telemetryLocalYaml.mjs";
 
 const containerName = "typeagent-otel";
 const imageName = "grafana/otel-lgtm:latest";
 const dockerReadyTimeoutMs = 120_000;
 const grafanaReadyTimeoutMs = 120_000;
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const workspaceTsRoot = path.resolve(scriptDir, "../..");
 
 const args = new Set(process.argv.slice(2));
 if (args.has("--help") || args.has("-h")) {
@@ -20,6 +29,20 @@ Grafana LGTM OpenTelemetry stack with loopback-only ports:
   Grafana:   http://localhost:3000
   OTLP/gRPC: http://localhost:4317
   OTLP/HTTP: http://localhost:4318
+
+On success this script also toggles the local telemetry sink in
+config.local.yaml (path resolved with the same precedence as getKeys):
+  TYPEAGENT_CONFIG_LOCAL > TYPEAGENT_CONFIG_DIR/config.local.yaml >
+  ts/config.local.yaml
+
+Starting sets telemetry.local.enabled to the string "true" only AFTER
+Grafana reports healthy. Stopping sets it to "false" after the container
+is confirmed stopped (or already not running). Existing standard telemetry
+settings and any custom local endpoint/logFile/debugBridge/structuredLogs
+values are preserved.
+
+TypeAgent reads config.local.yaml at process startup, so RESTART TypeAgent
+after each toggle for the change to take effect.
 
 Options:
   --install  Install Docker Desktop when it is missing, then start Grafana.
@@ -227,19 +250,27 @@ async function waitForGrafana() {
 
 async function stop() {
     if (!isDockerInstalled()) {
-        throw new Error(
-            "Docker CLI was not found. Install Docker Desktop before using this command.",
-        );
+        console.log("[telemetry:grafana] Docker CLI was not found.");
+        toggleTelemetryLocal(false);
+        return;
     }
     if (!isDockerReady()) {
         console.log("[telemetry:grafana] Docker is not running.");
+        // Container is definitely not exporting; safe to flip the sink off.
+        toggleTelemetryLocal(false);
         return;
     }
     if (getContainerId(true) === "") {
         console.log("[telemetry:grafana] Grafana LGTM is not running.");
+        toggleTelemetryLocal(false);
         return;
     }
+    // Only flip the sink off after `docker stop` succeeds. If it fails, we
+    // leave config.local.yaml alone: TypeAgent may still be exporting to a
+    // partially-alive container, and a stale "enabled: false" would be
+    // misleading on the next start attempt.
     runDocker(["stop", containerName]);
+    toggleTelemetryLocal(false);
 }
 
 async function start() {
@@ -270,6 +301,13 @@ async function start() {
             "[telemetry:grafana] Grafana LGTM is already running at http://localhost:3000",
         );
         await waitForGrafana();
+        // Ensure the sink is enabled even when the container was already
+        // running from a previous session — the user's config may still be
+        // in the disabled state if they last ran `--stop`.
+        toggleTelemetryLocal(true);
+        console.log(
+            "[telemetry:grafana] Restart TypeAgent so it picks up the new telemetry config.",
+        );
         return;
     }
 
@@ -297,9 +335,32 @@ async function start() {
     }
 
     await waitForGrafana();
+    // Grafana is healthy — safe to advertise the local sink to TypeAgent.
+    // We intentionally toggle AFTER health passes so a failed startup does
+    // not leave the config claiming a working sink is available.
+    toggleTelemetryLocal(true);
     console.log("[telemetry:grafana] Grafana:   http://localhost:3000");
     console.log("[telemetry:grafana] OTLP/HTTP: http://localhost:4318");
     console.log("[telemetry:grafana] OTLP/gRPC: http://localhost:4317");
+    console.log(
+        "[telemetry:grafana] Restart TypeAgent so it picks up the new telemetry config.",
+    );
+}
+
+function toggleTelemetryLocal(enable) {
+    const filePath = resolveLocalConfigPath(workspaceTsRoot);
+    const result = enable
+        ? enableTelemetryLocal(filePath)
+        : disableTelemetryLocal(filePath);
+    if (result.changed) {
+        console.log(
+            `[telemetry:grafana] ${enable ? "Enabled" : "Disabled"} telemetry.local in ${result.path}. Restart TypeAgent for the change to take effect.`,
+        );
+    } else {
+        console.log(
+            `[telemetry:grafana] telemetry.local already ${enable ? "enabled" : "disabled"} in ${result.path}; no change.`,
+        );
+    }
 }
 
 try {

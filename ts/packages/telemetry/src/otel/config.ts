@@ -45,6 +45,12 @@ export type TraceSampler =
 export interface TraceConfig {
     /** OTLP exporter used for trace export. */
     readonly otlp?: OtlpExporterConfig;
+    /**
+     * Additional OTLP exporters run in parallel with {@link otlp} (for example
+     * a local Grafana LGTM sink alongside the standard backend). Never
+     * contains a duplicate of {@link otlp}.
+     */
+    readonly additionalOtlp?: readonly OtlpExporterConfig[];
     /** Sampler name. Defaults to `always_on` when trace export is enabled. */
     readonly sampler?: TraceSampler;
     /** Ratio argument for ratio-based samplers (`0.0` - `1.0`). */
@@ -55,6 +61,12 @@ export interface TraceConfig {
 export interface MetricConfig {
     /** OTLP exporter used for metric export. */
     readonly otlp?: OtlpExporterConfig;
+    /**
+     * Additional OTLP exporters run in parallel with {@link otlp} (for example
+     * a local Grafana LGTM sink alongside the standard backend). Never
+     * contains a duplicate of {@link otlp}.
+     */
+    readonly additionalOtlp?: readonly OtlpExporterConfig[];
 }
 
 /**
@@ -65,8 +77,14 @@ export interface LogConfig {
     /** OTLP exporter used for log export. */
     readonly otlp?: OtlpExporterConfig;
     /**
+     * Additional OTLP exporters run in parallel with {@link otlp} (for example
+     * a local Grafana LGTM sink alongside the standard backend). Never
+     * contains a duplicate of {@link otlp}.
+     */
+    readonly additionalOtlp?: readonly OtlpExporterConfig[];
+    /**
      * Local file path for OTel log records, e.g.
-     * `"~/.typeagent/logs/typeagent-{service}-{process}-{timestamp}-{pid}.jsonl"`.
+     * `"~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl"`.
      * Template placeholders such as `{service}`, `{process}`, `{timestamp}`,
      * and `{pid}` are preserved verbatim by the resolver; only a leading `~`,
      * `~/`, or `~\` is expanded to the user's home directory.
@@ -133,6 +151,17 @@ export interface ResolveTelemetryConfigOptions {
  * `telemetry.logFile`) independently requests the logs signal — it does not
  * require an OTLP endpoint and is not disabled by `OTEL_LOGS_EXPORTER=none`.
  *
+ * The YAML `telemetry.local` block toggles an additional local Grafana LGTM
+ * sink. When `telemetry.local.enabled` is the string `"true"`, the local
+ * exporter runs alongside the standard backend for every signal that has one
+ * (deduplicated when the endpoints resolve to the same URL); when no standard
+ * backend is configured for a signal, the local exporter becomes that
+ * signal's primary. Local defaults for `logFile`, `debugBridge`, and
+ * `structuredLogs` only apply when the standard YAML/env values are unset.
+ * `enabled` is intentionally a string because the flat env layer drops YAML
+ * booleans whose value is `false`, which would silently "stick" once turned
+ * on.
+ *
  * This function performs pure configuration resolution: it initializes no
  * providers, no exporters, and no instrumentation, and never mutates
  * `process.env`.
@@ -190,6 +219,52 @@ export function resolveTelemetryConfig(
         yaml.TELEMETRY_STRUCTUREDLOGS,
         "telemetry.structuredLogs",
     );
+
+    // ---- Local (Grafana LGTM) sink. Configured under `telemetry.local` and
+    // provisioned by `pnpm run telemetry:grafana`. When enabled it is
+    // *additive*: the standard backend continues to export unchanged; the
+    // local sink is attached alongside it (or promoted to the primary
+    // exporter when no standard backend is configured). `enabled` is a
+    // string ("true"/"false") because the flat env layer drops YAML false
+    // booleans — a plain YAML boolean would silently "stick" once enabled.
+    const yamlLocalEnabledRaw = normalizeEnv(yaml.TELEMETRY_LOCAL_ENABLED);
+    const yamlLocalEnabled =
+        yamlLocalEnabledRaw === undefined
+            ? false
+            : parseBoolean(yamlLocalEnabledRaw, "telemetry.local.enabled") ===
+              true;
+    const yamlLocalEndpoint = requireNonEmpty(
+        yaml.TELEMETRY_LOCAL_OTLPENDPOINT,
+        "telemetry.local.otlpEndpoint",
+    );
+    const yamlLocalLogFile = requireNonEmpty(
+        yaml.TELEMETRY_LOCAL_LOGFILE,
+        "telemetry.local.logFile",
+    );
+    const yamlLocalDebugBridge = parseBoolean(
+        yaml.TELEMETRY_LOCAL_DEBUGBRIDGE,
+        "telemetry.local.debugBridge",
+    );
+    const yamlLocalStructuredLogs = parseBoolean(
+        yaml.TELEMETRY_LOCAL_STRUCTUREDLOGS,
+        "telemetry.local.structuredLogs",
+    );
+    // Only take effect when explicitly enabled. Fall back to the same
+    // defaults the `startLocalTelemetry.mjs` script writes so a fresh enable
+    // works without extra YAML edits.
+    const localEndpoint = yamlLocalEnabled
+        ? (yamlLocalEndpoint ?? "http://localhost:4318")
+        : undefined;
+    const localLogFileRaw = yamlLocalEnabled
+        ? (yamlLocalLogFile ??
+          "~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl")
+        : undefined;
+    const localDebugBridge = yamlLocalEnabled
+        ? (yamlLocalDebugBridge ?? true)
+        : undefined;
+    const localStructuredLogs = yamlLocalEnabled
+        ? (yamlLocalStructuredLogs ?? true)
+        : undefined;
 
     // ---- Env values.
     const envGlobalEndpoint = requireNonEmpty(
@@ -291,8 +366,35 @@ export function resolveTelemetryConfig(
         "OTEL_EXPORTER_OTLP_LOGS_HEADERS",
     );
 
+    // ---- Local sink exporters. Local export is skipped for a signal whose
+    // exporter selector is `none` — an operator that explicitly opts out of
+    // OTLP for that signal should not be silently re-enabled by the local
+    // sink. When only the local sink is configured it becomes the primary
+    // OTLP exporter for the signal; when both a standard backend and the
+    // local sink are configured the local sink is additive and deduplicated
+    // against the primary endpoint.
+    const tracesPrimaryAndAdditional = combinePrimaryAndLocal(
+        tracesOtlp,
+        localEndpoint,
+        exporters.traces,
+        "traces",
+    );
+    const metricsPrimaryAndAdditional = combinePrimaryAndLocal(
+        metricsOtlp,
+        localEndpoint,
+        exporters.metrics,
+        "metrics",
+    );
+    const logsPrimaryAndAdditional = combinePrimaryAndLocal(
+        logsOtlp,
+        localEndpoint,
+        exporters.logs,
+        "logs",
+    );
+
     // ---- Log file: env overrides YAML; expanded independent of OTLP.
-    const rawLogFile = envLogFile ?? yamlLogFile;
+    // Local's logFile only applies when no standard log file is configured.
+    const rawLogFile = envLogFile ?? yamlLogFile ?? localLogFileRaw;
     const logFile =
         rawLogFile !== undefined ? expandTilde(rawLogFile) : undefined;
 
@@ -314,43 +416,95 @@ export function resolveTelemetryConfig(
         structuredLogs?: boolean;
     } = {};
 
-    if (tracesOtlp !== undefined) {
+    if (tracesPrimaryAndAdditional.primary !== undefined) {
         const sampler: TraceSampler = rawSampler ?? "always_on";
         const traces: {
             otlp: OtlpExporterConfig;
+            additionalOtlp?: readonly OtlpExporterConfig[];
             sampler: TraceSampler;
             samplerArg?: number;
-        } = { otlp: tracesOtlp, sampler };
+        } = { otlp: tracesPrimaryAndAdditional.primary, sampler };
+        if (tracesPrimaryAndAdditional.additional.length > 0) {
+            traces.additionalOtlp = tracesPrimaryAndAdditional.additional;
+        }
         if (samplerArg !== undefined) {
             traces.samplerArg = samplerArg;
         }
         result.traces = traces;
     }
 
-    if (metricsOtlp !== undefined) {
-        result.metrics = { otlp: metricsOtlp };
+    if (metricsPrimaryAndAdditional.primary !== undefined) {
+        const metricsConfig: {
+            otlp: OtlpExporterConfig;
+            additionalOtlp?: readonly OtlpExporterConfig[];
+        } = { otlp: metricsPrimaryAndAdditional.primary };
+        if (metricsPrimaryAndAdditional.additional.length > 0) {
+            metricsConfig.additionalOtlp =
+                metricsPrimaryAndAdditional.additional;
+        }
+        result.metrics = metricsConfig;
     }
 
-    if (logsOtlp !== undefined || logFile !== undefined) {
-        const logs: { otlp?: OtlpExporterConfig; logFile?: string } = {};
-        if (logsOtlp !== undefined) {
-            logs.otlp = logsOtlp;
+    if (
+        logsPrimaryAndAdditional.primary !== undefined ||
+        logFile !== undefined
+    ) {
+        const logs: {
+            otlp?: OtlpExporterConfig;
+            additionalOtlp?: readonly OtlpExporterConfig[];
+            logFile?: string;
+        } = {};
+        if (logsPrimaryAndAdditional.primary !== undefined) {
+            logs.otlp = logsPrimaryAndAdditional.primary;
+        }
+        if (logsPrimaryAndAdditional.additional.length > 0) {
+            logs.additionalOtlp = logsPrimaryAndAdditional.additional;
         }
         if (logFile !== undefined) {
             logs.logFile = logFile;
         }
         result.logs = logs;
     }
-    const debugBridge = envDebugBridge ?? yamlDebugBridge;
+    // Standard env/YAML for debugBridge and structuredLogs retain precedence
+    // over the local sink defaults; the local sink only supplies a default
+    // when no explicit value was set at the standard level.
+    const debugBridge = envDebugBridge ?? yamlDebugBridge ?? localDebugBridge;
     if (debugBridge !== undefined) {
         result.debugBridge = debugBridge;
     }
-    const structuredLogs = envStructuredLogs ?? yamlStructuredLogs;
+    const structuredLogs =
+        envStructuredLogs ?? yamlStructuredLogs ?? localStructuredLogs;
     if (structuredLogs !== undefined) {
         result.structuredLogs = structuredLogs;
     }
 
     return result;
+}
+
+/**
+ * Return all OTLP exporters requested for one signal — the primary followed
+ * by any additional exporters. Callers use this to build one exporter per
+ * entry (e.g., one `BatchSpanProcessor` per exporter).
+ */
+export function getAllOtlpExporters(
+    signal:
+        | {
+              otlp?: OtlpExporterConfig;
+              additionalOtlp?: readonly OtlpExporterConfig[];
+          }
+        | undefined,
+): readonly OtlpExporterConfig[] {
+    if (signal === undefined) {
+        return [];
+    }
+    const list: OtlpExporterConfig[] = [];
+    if (signal.otlp !== undefined) {
+        list.push(signal.otlp);
+    }
+    if (signal.additionalOtlp !== undefined) {
+        list.push(...signal.additionalOtlp);
+    }
+    return list;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -491,6 +645,60 @@ function buildOtlp(
         otlp.headers = headers;
     }
     return otlp;
+}
+
+/**
+ * Combine a signal's standard (primary) OTLP exporter and the local sink's
+ * exporter into a `(primary, additional[])` pair with any duplicate endpoint
+ * removed. When only the local sink is configured for the signal, it becomes
+ * the primary; the caller therefore only needs to iterate primary + additional
+ * to build one exporter per entry. Never adds a local exporter for a signal
+ * whose exporter selector is explicitly `none`.
+ */
+function combinePrimaryAndLocal(
+    primary: OtlpExporterConfig | undefined,
+    localBaseEndpoint: string | undefined,
+    exporter: ExporterSelector | undefined,
+    signal: Signal,
+): {
+    primary: OtlpExporterConfig | undefined;
+    additional: readonly OtlpExporterConfig[];
+} {
+    if (exporter === "none" || localBaseEndpoint === undefined) {
+        return { primary, additional: [] };
+    }
+    const localEndpoint = appendSignalPath(localBaseEndpoint, signal);
+    const localOtlp: OtlpExporterConfig = { endpoint: localEndpoint };
+    if (primary === undefined) {
+        return { primary: localOtlp, additional: [] };
+    }
+    if (endpointsMatch(primary.endpoint, localEndpoint)) {
+        return { primary, additional: [] };
+    }
+    return { primary, additional: [localOtlp] };
+}
+
+/**
+ * Compare two OTLP endpoint URLs for the purpose of deduplicating the local
+ * sink against the standard backend. Normalizes trivial URL differences
+ * (trailing slash, default port) and falls back to a string comparison when
+ * either value is not a well-formed URL.
+ */
+function endpointsMatch(a: string, b: string): boolean {
+    if (a === b) {
+        return true;
+    }
+    try {
+        const parsedA = new URL(a);
+        const parsedB = new URL(b);
+        const normalize = (u: URL): string => {
+            u.pathname = u.pathname.replace(/\/+$/, "") || "/";
+            return u.toString();
+        };
+        return normalize(parsedA) === normalize(parsedB);
+    } catch {
+        return false;
+    }
 }
 
 /**

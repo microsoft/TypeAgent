@@ -3,6 +3,7 @@
 
 export {
     resolveTelemetryConfig,
+    getAllOtlpExporters,
     type OtlpExporterConfig,
     type TraceSampler,
     type TraceConfig,

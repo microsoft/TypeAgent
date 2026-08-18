@@ -9,6 +9,9 @@
 
 **Scope:** Node-hosted traces, logs, metrics, context propagation, and local telemetry files
 
+For setup commands and a step-by-step debugging workflow, see
+[Local Telemetry Debugging](./local-telemetry-debugging.md).
+
 ## Value Proposition
 
 OpenTelemetry gives TypeAgent one structured view of a request across
@@ -193,6 +196,12 @@ processable telemetry record.**
   central model wrapper records `typeagent.llm.phase`,
   `typeagent.llm.purpose`, and `typeagent.llm.scope`; it never infers purpose
   from prompt text, model output, timing, or token counts.
+- High-level classification contexts are complete. Nested operations may
+  override only the purpose while retaining their phase and scope.
+- A model call outside a classified operation records `unclassified` for all
+  three attributes and adds a `typeagent.llm.classification.missing` span
+  event. This makes missing instrumentation visible without failing the model
+  request.
 
 ### Logs
 
@@ -364,10 +373,15 @@ TypeAgent-owned processes support:
 
 ```yaml
 telemetry:
-  otlpEndpoint: http://localhost:4318
-  logFile: ~/.typeagent/logs/typeagent-{service}-{process}-{timestamp}-{pid}.jsonl
+  otlpEndpoint: https://telemetry.example.com
+  logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
   debugBridge: true
   tracesSampler: always_on
+  local:
+    enabled: "true"
+    otlpEndpoint: http://localhost:4318
+    debugBridge: "true"
+    structuredLogs: "true"
 ```
 
 Standard `OTEL_*` variables override YAML. Relevant settings include:
@@ -384,6 +398,13 @@ components to the SDKs. It does not accept defaults that create exporters for
 unspecified signals. Signal-specific `OTEL_*_EXPORTER=none` settings are honored.
 Partner libraries use host configuration and do not read TypeAgent YAML.
 
+`pnpm run telemetry:grafana` manages `telemetry.local` in
+`config.local.yaml`. When enabled, the local OTLP exporter runs in parallel
+with the standard exporter; it does not replace or rewrite the backend
+endpoint. Identical resolved endpoints are deduplicated. TypeAgent reads this
+configuration at process startup, so processes must restart after the script
+changes it.
+
 Local development samples all traces by default when trace export is enabled.
 Deployments may configure standard OTel sampling. Partner hosts own sampling.
 
@@ -393,20 +414,20 @@ Set `TYPEAGENT_OTEL_LOG_FILE` or YAML `telemetry.logFile` to write OTel logs
 directly, without OTLP, a collector, or a backend:
 
 ```powershell
-$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\typeagent-{service}-{process}-{timestamp}-{pid}.jsonl"
+$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\{process}-{timestamp}-p{pid}.jsonl"
 ```
 
 For an agent-server process started at `2026-08-17T08:38:59.123Z` with PID
 12345, the resolved path may be:
 
 ```text
-C:\Users\<user>\.typeagent\logs\typeagent-typeagent-local-agent-server-20260817T083859-123Z-12345.jsonl
+C:\Users\<user>\.typeagent\logs\agent-server-20260817T083859Z-p12345.jsonl
 ```
 
 Find and tail the latest run with normal tools:
 
 ```powershell
-$log = Get-ChildItem "$HOME\.typeagent\logs\typeagent-*.jsonl" |
+$log = Get-ChildItem "$HOME\.typeagent\logs\agent-server-*.jsonl" |
   Sort-Object LastWriteTime -Descending |
   Select-Object -First 1
 Get-Content $log.FullName -Wait
@@ -451,6 +472,10 @@ The OS or external tools manage rotation and retention. JSONL and OTLP are
 additive. A JSONL-only configuration creates only the logs provider.
 
 ## Local End-to-End Validation with Grafana
+
+This section summarizes the architecture validation path. Developers should use
+the shorter [Local Telemetry Debugging](./local-telemetry-debugging.md) guide
+for setup, day-to-day investigation, current limitations, and troubleshooting.
 
 This procedure runs the Grafana LGTM development stack locally, sends TypeAgent
 telemetry to it over OTLP/HTTP, and writes the same OTel logs to JSONL. It
@@ -538,7 +563,7 @@ pnpm run build agent-server
 $env:OTEL_SERVICE_NAME = "typeagent-local"
 $env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
 $env:OTEL_TRACES_SAMPLER = "always_on"
-$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\typeagent-{service}-{process}-{timestamp}-{pid}.jsonl"
+$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\{process}-{timestamp}-p{pid}.jsonl"
 $env:TYPEAGENT_OTEL_DEBUG_BRIDGE = "true"
 $env:TYPEAGENT_OTEL_STRUCTURED_LOGS = "true"
 $env:DEBUG = "typeagent:*,agent-server:*"
@@ -595,7 +620,7 @@ telemetry.
 Find the most recently written process log:
 
 ```powershell
-$log = Get-ChildItem "$HOME\.typeagent\logs\typeagent-local-*.jsonl" |
+$log = Get-ChildItem "$HOME\.typeagent\logs\agent-server-*.jsonl" |
   Sort-Object LastWriteTime -Descending |
   Select-Object -First 1
 

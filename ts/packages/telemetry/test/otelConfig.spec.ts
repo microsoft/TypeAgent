@@ -789,4 +789,257 @@ describe("resolveTelemetryConfig", () => {
             expect(cfg.traces?.sampler).toBe("always_on");
         });
     });
+
+    /* ------------------------------------------------------------------ */
+    /* Local (Grafana LGTM) sink                                          */
+    /* ------------------------------------------------------------------ */
+
+    it("promotes the local sink to primary when only telemetry.local is configured", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  local:",
+                    '    enabled: "true"',
+                    "    otlpEndpoint: http://localhost:4318",
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg.traces?.otlp?.endpoint).toBe(
+                "http://localhost:4318/v1/traces",
+            );
+            expect(cfg.metrics?.otlp?.endpoint).toBe(
+                "http://localhost:4318/v1/metrics",
+            );
+            expect(cfg.logs?.otlp?.endpoint).toBe(
+                "http://localhost:4318/v1/logs",
+            );
+            expect(cfg.traces?.additionalOtlp).toBeUndefined();
+            expect(cfg.metrics?.additionalOtlp).toBeUndefined();
+            expect(cfg.logs?.additionalOtlp).toBeUndefined();
+        });
+    });
+
+    it("supplies default local otlpEndpoint / logFile / debugBridge / structuredLogs when enabled", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                ["telemetry:", "  local:", '    enabled: "true"', ""].join(
+                    "\n",
+                ),
+            );
+            const cfg = resolve(root);
+            expect(cfg.traces?.otlp?.endpoint).toBe(
+                "http://localhost:4318/v1/traces",
+            );
+            expect(cfg.logs?.logFile).toContain(
+                "/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl",
+            );
+            expect(cfg.debugBridge).toBe(true);
+            expect(cfg.structuredLogs).toBe(true);
+        });
+    });
+
+    it("keeps the standard backend as primary and adds the local sink as additional when both are configured", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  otlpEndpoint: http://backend.example:4318",
+                    "  local:",
+                    '    enabled: "true"',
+                    "    otlpEndpoint: http://localhost:4318",
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg.traces?.otlp?.endpoint).toBe(
+                "http://backend.example:4318/v1/traces",
+            );
+            expect(cfg.traces?.additionalOtlp).toEqual([
+                { endpoint: "http://localhost:4318/v1/traces" },
+            ]);
+            expect(cfg.metrics?.additionalOtlp).toEqual([
+                { endpoint: "http://localhost:4318/v1/metrics" },
+            ]);
+            expect(cfg.logs?.additionalOtlp).toEqual([
+                { endpoint: "http://localhost:4318/v1/logs" },
+            ]);
+        });
+    });
+
+    it("deduplicates the local sink when its endpoint matches the standard backend", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  otlpEndpoint: http://localhost:4318",
+                    "  local:",
+                    '    enabled: "true"',
+                    "    otlpEndpoint: http://localhost:4318",
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg.traces?.additionalOtlp).toBeUndefined();
+            expect(cfg.metrics?.additionalOtlp).toBeUndefined();
+            expect(cfg.logs?.additionalOtlp).toBeUndefined();
+            expect(cfg.traces?.otlp?.endpoint).toBe(
+                "http://localhost:4318/v1/traces",
+            );
+        });
+    });
+
+    it('has no effect when telemetry.local.enabled is "false"', () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  otlpEndpoint: http://backend.example:4318",
+                    "  local:",
+                    '    enabled: "false"',
+                    "    otlpEndpoint: http://localhost:4318",
+                    "    debugBridge: true",
+                    "    structuredLogs: true",
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg.traces?.otlp?.endpoint).toBe(
+                "http://backend.example:4318/v1/traces",
+            );
+            expect(cfg.traces?.additionalOtlp).toBeUndefined();
+            expect(cfg.debugBridge).toBeUndefined();
+            expect(cfg.structuredLogs).toBeUndefined();
+            expect(cfg.logs?.logFile).toBeUndefined();
+        });
+    });
+
+    it("has no effect when telemetry.local block is present but enabled is missing", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  local:",
+                    "    otlpEndpoint: http://localhost:4318",
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg).toEqual({});
+        });
+    });
+
+    it("does not override an explicit standard debugBridge / structuredLogs setting", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                ["telemetry:", "  local:", '    enabled: "true"', ""].join(
+                    "\n",
+                ),
+            );
+            // Environment overrides must win over the local sink's defaults.
+            const cfg = resolve(root, {
+                env: {
+                    TYPEAGENT_OTEL_DEBUG_BRIDGE: "off",
+                    TYPEAGENT_OTEL_STRUCTURED_LOGS: "off",
+                },
+            });
+            expect(cfg.debugBridge).toBe(false);
+            expect(cfg.structuredLogs).toBe(false);
+        });
+    });
+
+    it("does not override explicit standard YAML false values", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  debugBridge: false",
+                    "  structuredLogs: false",
+                    "  local:",
+                    '    enabled: "true"',
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg.debugBridge).toBe(false);
+            expect(cfg.structuredLogs).toBe(false);
+        });
+    });
+
+    it("does not override an explicit standard logFile when local is enabled", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  logFile: /tmp/standard.jsonl",
+                    "  local:",
+                    '    enabled: "true"',
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg.logs?.logFile).toBe("/tmp/standard.jsonl");
+        });
+    });
+
+    it("OTEL_TRACES_EXPORTER=none disables the entire traces signal even when local is enabled", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  otlpEndpoint: http://backend.example:4318",
+                    "  local:",
+                    '    enabled: "true"',
+                    "    otlpEndpoint: http://localhost:4318",
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root, {
+                env: { OTEL_TRACES_EXPORTER: "none" },
+            });
+            expect(cfg.traces).toBeUndefined();
+            expect(cfg.metrics?.otlp?.endpoint).toBe(
+                "http://backend.example:4318/v1/metrics",
+            );
+            expect(cfg.metrics?.additionalOtlp).toEqual([
+                { endpoint: "http://localhost:4318/v1/metrics" },
+            ]);
+        });
+    });
+
+    it("rejects an unrecognized telemetry.local.enabled value", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                ["telemetry:", "  local:", "    enabled: sometimes", ""].join(
+                    "\n",
+                ),
+            );
+            expect(() => resolve(root)).toThrow(
+                /telemetry.local.enabled.*expected true\/false/,
+            );
+        });
+    });
 });
