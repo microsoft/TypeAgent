@@ -12,11 +12,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { FeedbackAction } from "../schema/feedbackActionSchema.js";
-
-/** Returns `{ [key]: value }` when value is defined, `{}` otherwise. */
-function opt(value: unknown, key: string): Record<string, unknown> {
-    return value !== undefined ? { [key]: value } : {};
-}
+import { actionParams, opt } from "./actionParams.js";
 
 export function executeFeedbackAction(
     action: TypeAgentAction<FeedbackAction, "system.feedback">,
@@ -25,7 +21,7 @@ export function executeFeedbackAction(
 ): Promise<ActionResult | undefined> {
     const execute = (commands: string[], params?: any) =>
         executeCommandFromHandlers(handlers, commands, params, context);
-    const p: any = action.parameters;
+    const p = actionParams(action);
 
     switch (action.actionName) {
         case "listFeedback":
@@ -64,6 +60,8 @@ export function executeFeedbackAction(
         case "countFeedback":
             return execute(["count"], undefined);
         default:
-            throw new Error(`Unknown feedback action: ${action.actionName}`);
+            throw new Error(
+                `Unknown feedback action: ${(action as FeedbackAction).actionName}`,
+            );
     }
 }

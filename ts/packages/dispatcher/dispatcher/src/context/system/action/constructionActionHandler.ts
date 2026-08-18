@@ -13,11 +13,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { ConstructionAction } from "../schema/constructionActionSchema.js";
-
-/** Returns `{ [key]: value }` when value is defined, `{}` otherwise. */
-function opt(value: unknown, key: string): Record<string, unknown> {
-    return value !== undefined ? { [key]: value } : {};
-}
+import { actionParams, opt } from "./actionParams.js";
 
 const STORE_CMDS: Record<string, string> = {
     newConstructionStore: "new",
@@ -48,7 +44,7 @@ export function executeConstructionAction(
         executeCommandFromHandlers(handlers, commands, params, context);
     const toggle = (commands: string[], enabled: boolean) =>
         execute([...commands, enabled ? "on" : "off"]);
-    const p: any = action.parameters;
+    const p = actionParams(action);
 
     if (action.actionName in STORE_CMDS) {
         return executeConstructionStoreAction(action.actionName, p, execute);
@@ -95,7 +91,7 @@ export function executeConstructionAction(
             return toggle(["wildcard", "entity"], p.enabled);
         default:
             throw new Error(
-                `Unknown construction action: ${action.actionName}`,
+                `Unknown construction action: ${(action as ConstructionAction).actionName}`,
             );
     }
 }

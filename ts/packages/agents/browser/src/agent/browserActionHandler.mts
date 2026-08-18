@@ -2398,14 +2398,14 @@ Select actions to create as WebFlows:`;
                 schemaName,
             );
         } catch (ex: any) {
-            if (ex instanceof Error) {
-                console.error(ex);
-            } else {
-                console.error(JSON.stringify(ex));
-            }
+            const message =
+                ex instanceof Error ? ex.message : JSON.stringify(ex);
+            return createActionResultFromError(
+                `Browser action '${action.actionName}' failed: ${message}`,
+            );
         }
     } else {
-        console.error("No browser control available.");
+        return createActionResultFromError("No browser control available.");
     }
     return undefined;
 }
@@ -3305,8 +3305,7 @@ class LearnHandler implements CommandHandler {
             goal: {
                 description:
                     "The goal to accomplish (what the action should do)",
-                type: "string" as const,
-                required: true,
+                implicitQuotes: true,
             },
         },
     };

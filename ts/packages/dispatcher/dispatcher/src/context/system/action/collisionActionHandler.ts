@@ -13,14 +13,10 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { CollisionAction } from "../schema/collisionActionSchema.js";
+import { opt } from "./actionParams.js";
 
 function csv(values: string[] | undefined): string | undefined {
     return values?.join(",");
-}
-
-/** Returns `{ [key]: value }` when value is defined, `{}` otherwise. */
-function opt(value: unknown, key: string): Record<string, unknown> {
-    return value !== undefined ? { [key]: value } : {};
 }
 
 type Executor = (

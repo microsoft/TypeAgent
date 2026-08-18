@@ -120,6 +120,12 @@ export interface GenericGreeting {
 `;
 
 /**
+ * Deterministic greeting used by `@greeting --mock`. Kept out of the action
+ * schema so the translator can't select it in place of a real greeting.
+ */
+export const MOCK_GREETING = "Hello.  How can I help you today?";
+
+/**
  * Implements the @greeting command.
  */
 export class GreetingCommandHandler implements CommandHandler {
@@ -146,18 +152,9 @@ export class GreetingCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ): Promise<ActionResult | undefined> {
         if (params.flags.mock) {
-            const result = (await executeGreetingAction(
-                {
-                    schemaName: "greeting",
-                    actionName: "personalizedGreetingAction",
-                    parameters: {
-                        mock: true,
-                        originalRequest: "@greeting --mock",
-                        possibleGreetings: [],
-                    },
-                },
-                context,
-            )) as ActionResultSuccess;
+            const result = createActionResult(
+                MOCK_GREETING,
+            ) as ActionResultSuccess;
             return {
                 ...result,
                 tokenUsage: {
@@ -326,10 +323,6 @@ async function handlePersonalizedGreetingAction(
     greetingAction: PersonalizedGreetingAction,
     context: ActionContext<GreetingAgentContext>,
 ): Promise<ActionResult> {
-    if (greetingAction.parameters.mock === true) {
-        return createActionResult("Hello.  How can I help you today?");
-    }
-
     let result = createActionResult("Hi!", true, undefined);
     if (greetingAction.parameters !== undefined) {
         const count = greetingAction.parameters.possibleGreetings.length;
@@ -351,10 +344,14 @@ async function handlePersonalizedGreetingAction(
         //     }
 
         // } else if (index == 0) {
-        result = createActionResult(
-            greetingAction.parameters.possibleGreetings[randomInt(0, count)]
-                .generatedGreeting,
-        );
+        // randomInt throws when max === min, so an empty list keeps the "Hi!"
+        // fallback above.
+        if (count > 0) {
+            result = createActionResult(
+                greetingAction.parameters.possibleGreetings[randomInt(0, count)]
+                    .generatedGreeting,
+            );
+        }
         // } else {
         //     result = createActionResult(
         //         greetingAction.parameters.possibleGreetings[randomInt(0, count)]

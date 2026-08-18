@@ -16,15 +16,14 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 import { StoredGrammarRule } from "@typeagent/action-grammar";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { GrammarAction } from "../schema/grammarActionSchema.js";
-
-/** Returns `{ [key]: value }` when value is defined, `{}` otherwise. */
-function opt(value: unknown, key: string): Record<string, unknown> {
-    return value !== undefined ? { [key]: value } : {};
-}
+import {
+    GrammarAction,
+    ScanGrammarCollisionsAction,
+} from "../schema/grammarActionSchema.js";
+import { opt } from "./actionParams.js";
 
 function executeScanGrammarCollisionsAction(
-    action: TypeAgentAction<GrammarAction>,
+    action: TypeAgentAction<ScanGrammarCollisionsAction>,
     context: ActionContext<CommandHandlerContext>,
     systemHandlers: CommandHandlerTable,
 ): Promise<ActionResult | undefined> {

@@ -13,11 +13,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { SystemOperationsAction } from "../schema/systemOperationsActionSchema.js";
-
-/** Returns `{ [key]: value }` when value is defined, `{}` otherwise. */
-function opt(value: unknown, key: string): Record<string, unknown> {
-    return value !== undefined ? { [key]: value } : {};
-}
+import { actionParams, opt } from "./actionParams.js";
 
 export function executeSystemOperationsAction(
     action: TypeAgentAction<SystemOperationsAction, "system.operations">,
@@ -26,7 +22,7 @@ export function executeSystemOperationsAction(
 ): Promise<ActionResult | undefined> {
     const execute = (commands: string[], params?: ParsedCommandParams<any>) =>
         executeCommandFromHandlers(systemHandlers, commands, params, context);
-    const p: any = action.parameters;
+    const p = actionParams(action);
 
     switch (action.actionName) {
         case "executeTypedAction": {
@@ -95,7 +91,7 @@ export function executeSystemOperationsAction(
             } as unknown as ParsedCommandParams<any>);
         default:
             throw new Error(
-                `Unknown system operations action: ${action.actionName}`,
+                `Unknown system operations action: ${(action as SystemOperationsAction).actionName}`,
             );
     }
 }

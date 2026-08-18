@@ -212,17 +212,21 @@ export async function executeConfigAction(
                 context.sessionContext.agentContext,
             );
             break;
-        case "toggleAgent":
-            const cmdParam: string = configAction.parameters.enable
-                ? ``
-                : `--off`;
+        case "toggleAgent": {
+            const { enable, agentNames } = configAction.parameters;
+            // `off` is a multi-valued flag, but the parser consumes exactly one
+            // token per occurrence, so it has to be repeated per agent name.
+            // Passing `--off a b` would disable `a` and *enable* `b`.
+            const agentArgs = enable
+                ? agentNames.join(" ")
+                : agentNames.map((name) => `--off ${name}`).join(" ");
 
             await processCommand(
-                `@config agent ${cmdParam} ${configAction.parameters.agentNames.join(" ")}`,
+                `@config agent ${agentArgs}`,
                 context.sessionContext.agentContext,
             );
             break;
-
+        }
         case "toggleExplanation":
             await processCommand(
                 `@config explainer ${configAction.parameters.enable ? "on" : "off"}`,

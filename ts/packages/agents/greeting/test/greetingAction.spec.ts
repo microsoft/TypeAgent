@@ -12,19 +12,20 @@ import type {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(here, "..", "..");
-const { instantiate } = await import(
+const { instantiate, MOCK_GREETING } = await import(
     pathToFileURL(path.join(packageRoot, "dist", "greetingCommandHandler.js"))
         .href
 );
 
-function mockAction() {
+function greetingAction(greetings: string[]) {
     return {
         schemaName: "greeting",
         actionName: "personalizedGreetingAction",
         parameters: {
-            mock: true,
             originalRequest: "hello",
-            possibleGreetings: [],
+            possibleGreetings: greetings.map((generatedGreeting) => ({
+                generatedGreeting,
+            })),
         },
     } as any;
 }
@@ -34,11 +35,21 @@ describe("greeting action parity", () => {
         const agent = instantiate();
 
         assert.equal(typeof agent.executeAction, "function");
-        const result = await agent.executeAction!(mockAction(), {} as any);
-        assert.equal(
-            (result as any).displayContent,
-            "Hello.  How can I help you today?",
+        const result = await agent.executeAction!(
+            greetingAction(["Top of the morning!"]),
+            {} as any,
         );
+        assert.equal((result as any).displayContent, "Top of the morning!");
+    });
+
+    it("falls back instead of throwing when no greetings were generated", async () => {
+        const agent = instantiate();
+
+        const result = await agent.executeAction!(
+            greetingAction([]),
+            {} as any,
+        );
+        assert.equal((result as any).displayContent.content, "Hi!");
     });
 
     it("links the bare command default to personalizedGreetingAction", async () => {
@@ -66,10 +77,7 @@ describe("greeting action parity", () => {
             flags: { mock: true },
         });
 
-        assert.equal(
-            result.displayContent,
-            "Hello.  How can I help you today?",
-        );
+        assert.equal(result.displayContent, MOCK_GREETING);
         assert.deepEqual(result.tokenUsage, {
             prompt_tokens: 0,
             completion_tokens: 0,

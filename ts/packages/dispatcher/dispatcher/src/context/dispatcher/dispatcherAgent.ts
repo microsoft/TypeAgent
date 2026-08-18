@@ -568,7 +568,12 @@ export const dispatcherManifest: AppAgentManifest = {
                 schemaFile:
                     "./src/context/dispatcher/schema/diagnosticsActionSchema.ts",
                 schemaType: "DispatcherDiagnosticsActions",
-                injected: true,
+                // Not injected: these are explicit diagnostics reached by
+                // schema switching. Injecting them puts the open-ended
+                // dispatchRequest action in every translation prompt, where it
+                // competes with real agent actions and can re-enter the
+                // dispatcher pipeline on itself.
+                injected: false,
                 cached: false,
             },
         },

@@ -1196,9 +1196,10 @@ async function handlePowerShellFlowAction(
             if (flowParamsJson) {
                 try {
                     namedParams = JSON.parse(flowParamsJson);
-                } catch {
-                    debug(
-                        `Failed to parse flowParametersJson: ${flowParamsJson}`,
+                } catch (e: any) {
+                    return createPowerShellFailure(
+                        "invalidParameters",
+                        `Invalid JSON in flowParametersJson: ${e.message}`,
                     );
                 }
             }
@@ -1408,12 +1409,23 @@ async function handlePowerShellFlowAction(
 
 let _agentStore: PowerShellStore | undefined;
 
-function executeBuiltInPowerShellAction(
+async function executeBuiltInPowerShellAction(
     action: { actionName: string; parameters?: Record<string, unknown> },
     context: ActionContext<PowerShellAgentContext>,
 ): Promise<ActionResult> {
-    (context as any).__store = _agentStore;
-    return handlePowerShellFlowAction(action, context);
+    (context as any).__store =
+        context.sessionContext.agentContext.store ?? _agentStore;
+    const result = await handlePowerShellFlowAction(action, context);
+    // Only the natural-language request pipeline retries with reasoning, and
+    // the dispatcher skips error display when fallbackToReasoning is set. This
+    // is the command path, so leaving the flag on makes failures silent.
+    if ("fallbackToReasoning" in result && result.fallbackToReasoning) {
+        const { fallbackToReasoning, ...rest } = result as ActionResult & {
+            fallbackToReasoning?: boolean;
+        };
+        return rest;
+    }
+    return result;
 }
 
 class ImportScriptHandler implements CommandHandler {
