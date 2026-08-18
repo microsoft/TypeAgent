@@ -29,7 +29,9 @@ import { PowerShellFilesActions } from "./filesActionsSchema.mts";
       -> { actionName: "listFiles", parameters: { path } };
 
 <ReadFile> =
-    (read|show|display|cat|type) (the)? (contents of|file)? $(path:wildcard)
+    (read|cat|type) (the)? (contents of|file)? $(path:wildcard)
+      -> { actionName: "readFile", parameters: { path } }
+  | (show|display) (the)? (contents of|file) $(path:wildcard)
       -> { actionName: "readFile", parameters: { path } }
   | (show|get) (the)? (last|tail) $(tail:number) lines (of|from|in) $(path:wildcard)
       -> { actionName: "readFile", parameters: { path, tail } }

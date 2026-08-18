@@ -7,13 +7,20 @@ import {
     TypeAgentAction,
     DisplayAppendMode,
 } from "@typeagent/agent-sdk";
-import { CommandHandlerContext } from "../context/commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    ensureCommandResult,
+} from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import {
     CopilotClient,
     RuntimeConnection,
     defineTool,
-    approveAll,
+    type AssistantMessageEvent,
+    type CopilotSession,
+    type PermissionHandler,
+    type PermissionRequest,
+    type PermissionRequestResult,
     type SessionConfig,
 } from "@github/copilot-sdk";
 import registerDebug from "debug";
@@ -64,6 +71,10 @@ import {
     findInstallableAgents,
     formatInstallableAgents,
 } from "./installableAgents.js";
+import {
+    emitReasoningToolCall,
+    runInReasoningSpan,
+} from "../otel/reasoningSpan.js";
 import { getReasoningProfileGuidance } from "./reasoningProfile.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
@@ -88,6 +99,52 @@ function withAbortSignal<T>(
             },
         );
     });
+}
+
+export async function sendAndWaitWithCancellation(
+    session: CopilotSession,
+    prompt: string,
+    signal: AbortSignal | undefined,
+): Promise<AssistantMessageEvent | undefined> {
+    const timeoutMs = resolveReasoningTimeoutMs();
+    const timeoutController = new AbortController();
+    const timeout =
+        timeoutMs < MAX_SETTIMEOUT_MS
+            ? setTimeout(
+                  () =>
+                      timeoutController.abort(
+                          new DOMException("Reasoning timed out", "AbortError"),
+                      ),
+                  timeoutMs,
+              )
+            : undefined;
+    const waitPromise = session.sendAndWait({ prompt }, MAX_SETTIMEOUT_MS);
+    try {
+        return await withAbortSignal(
+            withAbortSignal(waitPromise, signal),
+            timeoutController.signal,
+        );
+    } catch (error) {
+        try {
+            await session.abort();
+        } catch (abortError) {
+            debug("Failed to abort Copilot reasoning session:", abortError);
+            try {
+                await session.disconnect();
+            } catch (disconnectError) {
+                debug(
+                    "Failed to disconnect Copilot reasoning session:",
+                    disconnectError,
+                );
+            }
+            throw error;
+        }
+        throw error;
+    } finally {
+        if (timeout !== undefined) {
+            clearTimeout(timeout);
+        }
+    }
 }
 
 const FALLBACK_MODEL = "claude-opus-4.8";
@@ -630,6 +687,53 @@ async function copilotSubagentResult(
     }
 }
 
+export function getCopilotPermissionDefault(
+    request: PermissionRequest,
+): PermissionRequestResult | undefined {
+    if (request.kind === "read" && request.requestSandboxBypass !== true) {
+        return { kind: "approve-once" };
+    }
+    if (request.kind === "mcp" && request.readOnly === true) {
+        return { kind: "approve-once" };
+    }
+    if (
+        request.kind === "shell" &&
+        request.requestSandboxBypass !== true &&
+        request.hasWriteFileRedirection === false &&
+        request.commands.length > 0 &&
+        request.commands.every((command) => command.readOnly)
+    ) {
+        return { kind: "approve-once" };
+    }
+    return undefined;
+}
+
+function createCopilotPermissionHandler(
+    context: ActionContext<CommandHandlerContext>,
+): PermissionHandler {
+    return async (request) => {
+        const safe = getCopilotPermissionDefault(request);
+        if (safe !== undefined) {
+            return safe;
+        }
+        const identity =
+            request.kind === "mcp"
+                ? `MCP tool '${request.serverName}/${request.toolName}'`
+                : `Copilot ${request.kind} operation`;
+        const choice = await context.sessionContext.popupQuestion(
+            `${identity} requests sensitive permission. Allow this request once?`,
+            ["Allow once", "Deny"],
+            1,
+        );
+        return choice === 0
+            ? { kind: "approve-once" }
+            : {
+                  kind: "reject",
+                  feedback: "Denied by the TypeAgent host permission policy.",
+              };
+    };
+}
+
 /**
  * Get Copilot SDK session configuration with TypeAgent tools
  * (Mirrors getClaudeOptions from claude.ts)
@@ -813,6 +917,17 @@ function getCopilotSessionConfig(
                         context,
                         actionIndex++,
                     );
+                    if (actionResult.error === undefined) {
+                        const commandResult =
+                            ensureCommandResult(systemContext);
+                        commandResult.actions = [
+                            ...(commandResult.actions ?? []),
+                            {
+                                schemaName,
+                                ...actionJson,
+                            } as TypeAgentAction,
+                        ];
+                    }
                     systemContext.clientIO = savedClientIO;
 
                     // Surface the action's history text (its full, model-facing
@@ -1447,7 +1562,7 @@ function getCopilotSessionConfig(
             "shell",
         ],
         workingDirectory: getRepoRoot(),
-        onPermissionRequest: approveAll,
+        onPermissionRequest: createCopilotPermissionHandler(context),
         systemMessage: {
             mode: "append" as const,
             content: [
@@ -1597,6 +1712,10 @@ async function executeReasoningWithoutPlanning(
             ),
         formatToolCallDisplay,
     );
+    // 1-based counter for reasoning.tool_loop.iteration events. Emitted
+    // per tool.execution_start below. Bounded by
+    // REASONING_TOOL_LOOP_ITERATION_CAP inside the wrapper.
+    let copilotToolLoopIteration = 0;
 
     const client = await getCopilotClient(context.sessionContext.agentContext);
     const config = getCopilotSessionConfig(context);
@@ -1747,6 +1866,11 @@ async function executeReasoningWithoutPlanning(
                 event.data?.parameters ||
                 {};
             debug(`Tool execution started: ${toolName}`);
+            // Emit one reasoning tool-loop iteration event per tool
+            // execution start. Only the enumerated counter reaches the
+            // span; tool name / arguments / results NEVER do.
+            copilotToolLoopIteration++;
+            emitReasoningToolCall(copilotToolLoopIteration);
             toolFolder.tool(toolName, parameters);
         },
     );
@@ -1813,8 +1937,9 @@ async function executeReasoningWithoutPlanning(
             throw new Error("Prompt is undefined or empty");
         }
 
-        const response: any = await withAbortSignal(
-            session.sendAndWait({ prompt }, resolveReasoningTimeoutMs()),
+        const response: any = await sendAndWaitWithCancellation(
+            session,
+            prompt,
             context.abortSignal,
         );
         debug("Received response from Copilot");
@@ -1940,6 +2065,10 @@ async function executeReasoningWithTracing(
                 ),
             formatToolCallDisplay,
         );
+        // 1-based counter for reasoning.tool_loop.iteration events in the
+        // tracing path. Bounded by REASONING_TOOL_LOOP_ITERATION_CAP in
+        // the wrapper.
+        let copilotToolLoopIteration = 0;
 
         const client = await getCopilotClient(
             context.sessionContext.agentContext,
@@ -2097,6 +2226,13 @@ async function executeReasoningWithTracing(
                     {};
                 debug(`Tool execution started: ${toolName}`);
 
+                // Emit one reasoning tool-loop iteration event per
+                // tool execution start. Only the enumerated counter
+                // reaches the span; tool name / arguments / results
+                // NEVER do.
+                copilotToolLoopIteration++;
+                emitReasoningToolCall(copilotToolLoopIteration);
+
                 // Record tool call for trace
                 tracer.recordToolCall(toolName, parameters);
 
@@ -2162,8 +2298,9 @@ async function executeReasoningWithTracing(
             const prompt = buildPromptWithContext(originalRequest, context);
             debug(`Sending prompt: ${prompt.substring(0, 100)}...`);
 
-            const response: any = await withAbortSignal(
-                session.sendAndWait({ prompt }, resolveReasoningTimeoutMs()),
+            const response: any = await sendAndWaitWithCancellation(
+                session,
+                prompt,
                 context.abortSignal,
             );
             debug("Received response from Copilot");
@@ -2454,11 +2591,19 @@ export async function executeReasoning(
 
     const planReuseEnabled = options?.planReuseEnabled ?? false;
 
-    if (!planReuseEnabled) {
-        // Standard reasoning without planning
-        return executeReasoningWithoutPlanning(request, context);
-    }
-
-    // Trace capture + auto recipe generation
-    return executeReasoningWithTracing(request, context);
+    return runInReasoningSpan(
+        context,
+        () => {
+            if (!planReuseEnabled) {
+                // Standard reasoning without planning
+                return executeReasoningWithoutPlanning(request, context);
+            }
+            // Trace capture + auto recipe generation
+            return executeReasoningWithTracing(request, context);
+        },
+        {
+            genAiSystem: "github_copilot",
+            genAiRequestModel: resolveModel(context),
+        },
+    );
 }

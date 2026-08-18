@@ -18,6 +18,11 @@ Ask the user which integration mode they'd like:
 
 1. **direct** (default) - Hook handles requests directly, bypassing the LLM. Fastest response time (~2-3s) but no streaming.
 2. **mcp** - Hook redirects to MCP tool, allowing the LLM to call TypeAgent. Adds ~1-2s for LLM overhead but enables streaming and LLM formatting.
+3. **dev** - Hook tries registered PowerShell development actions first and lets Copilot handle misses.
+4. **bypass** - Disable TypeAgent routing and reject TypeAgent MCP calls.
+
+The `typeagent-workspace` read/glob/grep/fetch tools are available in direct,
+mcp, and dev modes. They do not require a separate macro mode.
 
 Also ask for:
 
@@ -39,6 +44,6 @@ Write the configuration to `${PLUGIN_DATA}/config.json`:
 Tell the user to restart Copilot CLI for changes to take effect.
 They can also override temporarily with environment variables:
 
-- `TYPEAGENT_MODE=mcp` or `TYPEAGENT_MODE=direct`
+- `TYPEAGENT_MODE=direct`, `mcp`, `dev`, or `bypass`
 - `TYPEAGENT_HOST=hostname`
 - `TYPEAGENT_PORT=port`
