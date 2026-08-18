@@ -94,6 +94,15 @@ export async function collectCommandsFromContext(
     const agents = context.agents;
     for (const host of agents.getAppAgentNames()) {
         if (!agents.isCommandEnabled(host)) {
+            // getCommandEnabledState returns null when the agent genuinely has
+            // no command interface, and undefined when it never loaded. Without
+            // this check a failed agent is dropped from the enumeration and the
+            // coverage gate still reports full coverage over what is left.
+            if (strict && agents.getCommandEnabledState(host) === undefined) {
+                throw new Error(
+                    `Agent "${host}" did not load, so its commands cannot be collected. Coverage would be reported against an incomplete command set.`,
+                );
+            }
             continue;
         }
         const appAgent = agents.getAppAgent(host);

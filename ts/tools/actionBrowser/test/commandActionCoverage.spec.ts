@@ -13,10 +13,38 @@ const workspaceRoot = path.resolve(here, "..", "..", "..", "..");
 
 let catalog: Catalog;
 
+// Hosts that ship command surfaces today. The coverage assertions below are all
+// "the set of gaps is empty", which stays true if a host disappears from the
+// enumeration entirely, so pin the hosts and a lower bound on the endpoint
+// count as well. Both are floors: adding agents or endpoints won't fail here.
+const EXPECTED_HOSTS = [
+    "browser",
+    "calendar",
+    "dispatcher",
+    "email",
+    "greeting",
+    "localPlayer",
+    "osNotifications",
+    "player",
+    "powershell",
+    "system",
+];
+const MIN_COMMAND_ENDPOINTS = 388;
+
 describe("command action coverage", () => {
     beforeAll(async () => {
         catalog = await collectCatalog({ strict: true });
-    }, 30_000);
+    }, 90_000);
+
+    it("enumerates every command host", () => {
+        const hosts = [...new Set(catalog.commands.map((c) => c.host))];
+        expect(hosts.sort()).toEqual(
+            expect.arrayContaining(EXPECTED_HOSTS.slice().sort()),
+        );
+        expect(catalog.counts.commandEndpoints).toBeGreaterThanOrEqual(
+            MIN_COMMAND_ENDPOINTS,
+        );
+    });
 
     it("links every bundled executable command to a valid action", () => {
         expect(catalog.commandActionLinkIssues).toEqual([]);
