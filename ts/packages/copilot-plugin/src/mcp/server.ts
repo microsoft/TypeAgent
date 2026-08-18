@@ -28,6 +28,8 @@ import {
 } from "../shared/typeagent-client.js";
 import { extractMessageText } from "../shared/message-formatter.js";
 import { getMode } from "../shared/plugin-config.js";
+import { TypeAgentMacroMcpServer } from "./macroServer.js";
+import { selectMcpServer } from "./serverSelector.js";
 import { TypeAgentWorkspaceMcpServer } from "./workspaceServer.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -361,9 +363,13 @@ class TypeAgentMcpServer {
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
-const server = process.argv.includes("--workspace")
-    ? new TypeAgentWorkspaceMcpServer()
-    : new TypeAgentMcpServer();
+const serverKind = selectMcpServer(process.argv.slice(2));
+const server =
+    serverKind === "workspace"
+        ? new TypeAgentWorkspaceMcpServer()
+        : serverKind === "macros"
+          ? new TypeAgentMacroMcpServer()
+          : new TypeAgentMcpServer();
 server.start().catch((error) => {
     log(`Fatal error: ${error}`);
     process.exit(1);

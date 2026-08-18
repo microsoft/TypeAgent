@@ -66,7 +66,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # For fork PRs, analyze the PR head commit so results map to the PR.
           # Otherwise use the default ref (merge ref for internal PRs, branch tip
@@ -100,7 +100,7 @@ jobs:
 
       - name: Stage SARIF for fork PR upload
         if: ${{ env.IS_FORK_PR == 'true' }}
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codeql-sarif-${{ matrix.language }}
           path: sarif-results

@@ -274,7 +274,7 @@ const macroRefSchema = {
     version: z.number().int().positive().optional(),
 };
 
-const valueExpressionSchema = z.discriminatedUnion("kind", [
+const boundValueExpressionSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("literal"), value: z.unknown() }),
     z.object({ kind: z.literal("input"), name: z.string().min(1) }),
     z.object({
@@ -284,12 +284,49 @@ const valueExpressionSchema = z.discriminatedUnion("kind", [
     }),
 ]);
 
+const valueExpressionSchema = z.discriminatedUnion("kind", [
+    ...boundValueExpressionSchema.options,
+    z.object({
+        kind: z.literal("template"),
+        value: z.unknown(),
+        bindings: z
+            .array(
+                z.object({
+                    path: z.array(z.string()).min(1),
+                    expression: boundValueExpressionSchema,
+                }),
+            )
+            .min(1),
+    }),
+]);
+
+const macroValueTypeSchema = z.enum([
+    "null",
+    "array",
+    "object",
+    "string",
+    "number",
+    "boolean",
+]);
+
 const macroInputSchema = z.object({
     name: z.string().min(1),
     description: z.string(),
     required: z.boolean(),
     secret: z.boolean(),
+    valueType: macroValueTypeSchema.optional(),
 });
+
+const macroPostconditionSchema = z.discriminatedUnion("kind", [
+    z.object({
+        kind: z.literal("resultType"),
+        valueType: macroValueTypeSchema,
+    }),
+    z.object({
+        kind: z.literal("resultPathExists"),
+        path: z.array(z.string()).min(1),
+    }),
+]);
 
 const macroStepSchema = z.object({
     id: z.string().min(1),
@@ -299,6 +336,7 @@ const macroStepSchema = z.object({
     executionClass: z.enum(["replayable", "agentRequired"]),
     sourceToolCallId: z.string().min(1),
     schemaFingerprint: z.string().optional(),
+    postconditions: z.array(macroPostconditionSchema).max(100).optional(),
 });
 
 export class TypeAgentMacroMcpServer {
@@ -431,7 +469,15 @@ export class TypeAgentMacroMcpServer {
                     sourceVersion: request.sourceVersion,
                     handoffRunId: request.handoffRunId,
                     reason: request.reason,
-                    inputs: request.inputs,
+                    inputs: request.inputs.map((input) => ({
+                        name: input.name,
+                        description: input.description,
+                        required: input.required,
+                        secret: input.secret,
+                        ...(input.valueType !== undefined
+                            ? { valueType: input.valueType }
+                            : {}),
+                    })),
                     executionEvidence: request.executionEvidence,
                     steps: request.steps.map((step) => ({
                         id: step.id,
@@ -444,6 +490,9 @@ export class TypeAgentMacroMcpServer {
                         sourceToolCallId: step.sourceToolCallId,
                         ...(step.schemaFingerprint !== undefined
                             ? { schemaFingerprint: step.schemaFingerprint }
+                            : {}),
+                        ...(step.postconditions !== undefined
+                            ? { postconditions: step.postconditions }
                             : {}),
                     })),
                     ...(request.name !== undefined
