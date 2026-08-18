@@ -50,11 +50,8 @@ describe("calendar auth actions", () => {
         expect(match("sign out of google calendar")).toEqual({
             actionName: "calendarLogout",
         });
-        expect(
-            match("complete google calendar authorization with code 4/abc123"),
-        ).toEqual({
+        expect(match("finish google calendar authorization")).toEqual({
             actionName: "calendarGoogleAuth",
-            parameters: { code: "4/abc123" },
         });
     });
 
@@ -178,10 +175,9 @@ describe("calendar auth actions", () => {
         expect(JSON.stringify(displays)).toMatch(/ada@example\.com/);
     });
 
-    it("forwards the Google authorization code unchanged", async () => {
+    it("never routes the Google authorization code through the action path", async () => {
         const agent = instantiate();
         const codes: string[] = [];
-        const displays: unknown[] = [];
         const context = {
             sessionContext: {
                 agentContext: {
@@ -195,20 +191,22 @@ describe("calendar auth actions", () => {
                 },
             },
             actionIO: {
-                setDisplay: (value: unknown) => displays.push(value),
-                appendDisplay: (value: unknown) => displays.push(value),
+                setDisplay: () => {},
+                appendDisplay: () => {},
             },
         } as any;
 
-        await agent.executeAction!(
+        const result = await agent.executeAction!(
             {
                 schemaName: "calendar",
                 actionName: "calendarGoogleAuth",
-                parameters: { code: "4/AbC-123_exact" },
             } as any,
             context,
         );
 
-        expect(codes).toEqual(["4/AbC-123_exact"]);
+        // The code is single-use and must not be model-authored, so the action
+        // only points at the command instead of completing the exchange.
+        expect(codes).toEqual([]);
+        expect(JSON.stringify(result)).toMatch(/@calendar google-auth/);
     });
 });

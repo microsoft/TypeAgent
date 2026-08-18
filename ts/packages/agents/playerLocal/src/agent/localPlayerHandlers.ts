@@ -255,7 +255,13 @@ async function handlePlay(service: LocalPlayerService, fileName?: string) {
         return handleResume(service);
     }
     if (state.queue.length > 0) {
-        return handlePlayFromQueue(service, state.currentIndex + 1);
+        // playFromQueue is 1-based, but currentIndex is 0-based and stays at
+        // -1 until something plays, so a queue built with addToQueue would ask
+        // for track 0 and fail.
+        return handlePlayFromQueue(
+            service,
+            Math.max(state.currentIndex, 0) + 1,
+        );
     }
     return handlePlayFolder(service);
 }

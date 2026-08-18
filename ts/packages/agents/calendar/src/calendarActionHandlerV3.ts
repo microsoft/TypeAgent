@@ -573,11 +573,12 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 await calendarLogoutHandler.run(context);
                 return undefined;
             case "calendarGoogleAuth":
-                await googleAuthHandler.run(context, {
-                    args: { code: calendarAction.parameters.code },
-                    flags: undefined,
-                });
-                return undefined;
+                // The command path does the real work. The action only points
+                // the user at it so the single-use authorization code is never
+                // produced by the translator.
+                return createActionResultFromTextDisplay(
+                    "To finish Google Calendar authorization, run `@calendar google-auth <code>` with the code Google gave you. The code is single-use, so it has to be entered directly rather than through a natural-language request.",
+                );
         }
 
         if (!provider) {

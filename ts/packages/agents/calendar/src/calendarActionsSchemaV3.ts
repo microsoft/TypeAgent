@@ -40,15 +40,15 @@ export type CalendarLogoutAction = {
     actionName: "calendarLogout";
 };
 
-// user: complete Google Calendar authorization with code 4/abc123
-// agent: { "actionName": "calendarGoogleAuth", "parameters": { "code": "4/abc123" } }
-// Complete Google Calendar authorization with the exact authorization code.
+// user: finish setting up my Google Calendar
+// agent: { "actionName": "calendarGoogleAuth" }
+// Explain how to finish Google Calendar authorization. This action deliberately
+// takes no parameters: the authorization code is a single-use credential, so it
+// must be typed into the `@calendar google-auth <code>` command rather than
+// routed through translation, where the model could truncate or rewrite it and
+// where it would be sent to the model provider.
 export type CalendarGoogleAuthAction = {
     actionName: "calendarGoogleAuth";
-    parameters: {
-        // The unmodified authorization code returned by Google.
-        code: string;
-    };
 };
 
 // Schedule a new event on the calendar

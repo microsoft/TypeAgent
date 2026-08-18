@@ -36,6 +36,10 @@ describe("localPlayer command action links", () => {
             );
         }
 
-        expect(Object.keys(expected)).toHaveLength(15);
+        // Compare against the live table, not the literal above, so a command
+        // added or removed without a matching action link fails here.
+        expect(Object.keys(table.commands).sort()).toEqual(
+            Object.keys(expected).sort(),
+        );
     });
 });

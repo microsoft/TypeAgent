@@ -27,6 +27,15 @@ A command is covered only when:
 4. Both paths invoke the same command pipeline or typed helper.
 5. Translation and command/action parity are tested.
 
+**Only condition 1 is machine-enforced.** `commandActionCoverage.spec.ts` checks
+that every executable endpoint declares an action name resolving to exactly one
+registered action, and that `ConfigCommandPath` stays in sync with the live
+config tree. Conditions 2, 3, and 5 are per-host work verified by hand and by
+whatever unit tests each host happens to have; no gate can currently detect a
+command and its action drifting apart. Treat a green gate as "every endpoint is
+linked", not "every endpoint is equivalent", and check STATUS.md for the hosts
+where parity is known to be partial.
+
 `CommandDescriptor.action` is metadata only. Adding a link never creates
 natural-language support and does not count as completion by itself.
 
@@ -128,8 +137,8 @@ paths use a shared typed helper.
 3. **Complete agent-host actions.** Add the known localPlayer and browser gaps,
    auth/OAuth actions, browser configuration, and dispatcher diagnostics.
    PowerShell `show` and email indexing were completed in the second
-   implementation slice. This phase is complete: no agent-host command remains
-   uncovered.
+   implementation slice. Every agent-host command endpoint is now linked to an
+   action; parity beyond linkage is per-host and tracked in STATUS.md.
 4. **Complete existing system families.** Finish `system.config`,
    `system.conversation`, `system.help`, `system.grammar`, `system.history`,
    `system.notify`, and `system.settings`.
