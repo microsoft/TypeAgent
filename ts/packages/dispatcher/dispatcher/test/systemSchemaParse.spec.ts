@@ -39,6 +39,7 @@ const ENTRY_TYPES: Record<string, string> = {
     "helpActionSchema.ts": "HelpAction",
     "historyActionSchema.ts": "HistoryAction",
     "indexActionSchema.ts": "IndexAction",
+    "logActionSchema.ts": "LogAction",
     "memoryActionSchema.ts": "MemoryAction",
     "notificationActionSchema.ts": "NotificationAction",
     "sessionActionSchema.ts": "SessionAction",

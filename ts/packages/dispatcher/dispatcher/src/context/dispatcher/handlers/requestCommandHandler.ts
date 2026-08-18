@@ -64,6 +64,11 @@ import {
     getPowerShellCapabilityDisposition,
     getPowerShellCapabilityOutcome,
 } from "../../../reasoning/powershellCapabilityOutcome.js";
+import {
+    logTranslationCompleted,
+    logTranslationStarted,
+} from "../../../otel/structuredEvents.js";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 
 type ReasoningFallbackContext = {
     failedSchema: string;
@@ -666,10 +671,22 @@ async function requestExplain(
         return;
     }
 
-    const processRequestActionP = context.agentCache.processRequestAction(
-        requestAction,
-        true,
-        options,
+    const processRequestActionP = withChatModelTelemetryContext(
+        {
+            phase: context.explanationAsynchronousMode
+                ? "background"
+                : "translation",
+            purpose: "cache-generation",
+            scope: context.explanationAsynchronousMode
+                ? "background"
+                : "foreground",
+        },
+        () =>
+            context.agentCache.processRequestAction(
+                requestAction,
+                true,
+                options,
+            ),
     );
 
     if (context.explanationAsynchronousMode) {
@@ -811,6 +828,11 @@ export class RequestCommandHandler implements CommandHandler {
                 addRequestToMemory(systemContext, request);
             }
             let interpretResult: InterpretResult;
+            const requestId = getRequestId(systemContext).requestId;
+            logTranslationStarted(systemContext.logger, {
+                requestId,
+                schemaNames: activeSchemaScope.schemaNames,
+            });
             try {
                 interpretResult = await interpretRequest(
                     context,
@@ -832,19 +854,28 @@ export class RequestCommandHandler implements CommandHandler {
                         DispatcherName,
                     );
                 }
-                systemContext?.logger?.logEvent(
-                    "request:exception",
-                    {
-                        request,
-                        message: e.message,
-                        stack: e.stack,
-                    },
-                    "error",
-                );
+                logTranslationCompleted(systemContext.logger, {
+                    requestId,
+                    strategy: "translate",
+                    success: false,
+                    cancelled:
+                        e?.name === "AbortError" ||
+                        systemContext.currentAbortSignal?.aborted === true,
+                    actions: [],
+                });
+                debugRequest(`Request translation failed: ${e.message}`);
                 throw e;
             }
 
             const { requestAction, tokenUsage } = interpretResult;
+            logTranslationCompleted(systemContext.logger, {
+                requestId,
+                strategy: interpretResult.fromUser
+                    ? "user"
+                    : interpretResult.fromCache || "translate",
+                success: true,
+                actions: requestAction.actions,
+            });
 
             if (tokenUsage) {
                 ensureCommandResult(systemContext).tokenUsage = tokenUsage;

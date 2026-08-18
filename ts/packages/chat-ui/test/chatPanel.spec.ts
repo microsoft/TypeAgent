@@ -426,6 +426,71 @@ describe("agent running rail", () => {
         expect(root.textContent).toContain("~100");
         expect(root.textContent).toContain("(60+40)");
     });
+
+    it("renders the Trace ID line immediately below Action Tokens when provided", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            "response",
+            "dispatcher",
+            undefined,
+            "step",
+            "req-1",
+        );
+
+        panel.completeRequest("req-1", {
+            totalDuration: 1500,
+            actionTokenUsage: {
+                prompt_tokens: 10,
+                completion_tokens: 2,
+                total_tokens: 12,
+            },
+            traceId: "abcd1234abcd1234abcd1234abcd1234",
+        });
+
+        // The canonical OTel trace id lives in the agent-bubble metrics hover,
+        // rendered right after Action Tokens so users can copy it out.
+        expect(root.textContent).toContain("Trace ID:");
+        expect(root.textContent).toContain("abcd1234abcd1234abcd1234abcd1234");
+
+        // Assert ordering: Trace ID appears after Action Tokens and before
+        // Thinking Tokens / phase marks would (if any).
+        const agentMetrics = root.querySelector(
+            ".chat-message-agent .metrics-details",
+        );
+        expect(agentMetrics).not.toBeNull();
+        const html = (agentMetrics as HTMLElement).innerHTML;
+        const actionIdx = html.indexOf("Action Tokens:");
+        const traceIdx = html.indexOf("Trace ID:");
+        expect(actionIdx).toBeGreaterThanOrEqual(0);
+        expect(traceIdx).toBeGreaterThan(actionIdx);
+    });
+
+    it("omits the Trace ID line when no traceId is provided", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            "response",
+            "dispatcher",
+            undefined,
+            "step",
+            "req-1",
+        );
+
+        panel.completeRequest("req-1", {
+            totalDuration: 1500,
+            actionTokenUsage: {
+                prompt_tokens: 10,
+                completion_tokens: 2,
+                total_tokens: 12,
+            },
+        });
+
+        expect(root.textContent).toContain("Action Tokens:");
+        expect(root.textContent).not.toContain("Trace ID:");
+    });
 });
 
 describe("reasoning UI", () => {
