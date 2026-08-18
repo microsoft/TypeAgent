@@ -11,8 +11,10 @@ export interface BenchmarkScenario {
         | "llm-translation"
         | "execution"
         | "fallback-chain"
-        | "end-to-end";
+        | "end-to-end"
+        | "dev-actions-routing";
     description: string;
+    required?: boolean;
     setup: {
         requiredFlows?: string[];
         requiredSchemas?: string[];
@@ -26,6 +28,7 @@ export interface BenchmarkScenario {
 
 export interface TestUtterance {
     text: string;
+    options?: BenchmarkCommandOptions;
     expected: {
         routedTo: "grammar" | "llm-translation" | "reasoning";
         matchedFlow?: string | null;
@@ -42,8 +45,43 @@ export interface TestUtterance {
             fallbackReason?: string;
             reasoningShouldFix?: boolean;
         };
+        disposition?: {
+            status: "handled" | "notHandled" | "failed";
+            path?: "action" | "reasoning" | "command";
+            reason?:
+                | "unknown"
+                | "clarification"
+                | "noActiveSchema"
+                | "notPowerShellCapable";
+            schemas?: string[];
+            mayHaveSideEffects?: boolean;
+        };
+        capabilityOutcome?: {
+            status: "handledExisting" | "created" | "notSuitable" | "failed";
+            schema?: string;
+            actionName?: string;
+            flowName?: string;
+            reasonCode?: string;
+            phase?:
+                | "classify"
+                | "discover"
+                | "validate"
+                | "execute"
+                | "persist";
+            mayHaveSideEffects?: boolean;
+        };
         llmJudge?: { question: string; context?: string };
     };
+}
+
+export interface BenchmarkCommandOptions {
+    noReasoning?: boolean;
+    activeSchemas?: string[];
+    activeSchemaFamilies?: string[];
+    reasoningProfile?:
+        | "default"
+        | "powershellFlowRecording"
+        | "powershellCapabilityFallback";
 }
 
 export interface PipelineTrace {
@@ -74,6 +112,8 @@ export interface EvaluationResult {
         | "parameters"
         | "execution"
         | "fallback"
+        | "disposition"
+        | "capability-outcome"
         | "llm-judge";
     expected: unknown;
     actual: unknown;
@@ -85,6 +125,7 @@ export interface ScenarioResult {
     category: string;
     description: string;
     utterance: string;
+    required: boolean;
     passed: boolean;
     evaluations: EvaluationResult[];
     trace: PipelineTrace;

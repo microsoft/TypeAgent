@@ -282,6 +282,7 @@ export class DisplayLog {
         metrics?: RequestMetrics,
         tokenUsage?: import("@typeagent/dispatcher-types").CompletionUsageStats,
         actionTokenUsage?: import("@typeagent/dispatcher-types").CompletionUsageStats,
+        traceId?: string,
     ): number {
         const seq = this.nextSeq++;
         const entry: import("@typeagent/dispatcher-types").CommandResultEntry =
@@ -299,6 +300,9 @@ export class DisplayLog {
         }
         if (actionTokenUsage !== undefined) {
             entry.actionTokenUsage = { ...actionTokenUsage };
+        }
+        if (traceId !== undefined) {
+            entry.traceId = traceId;
         }
         this.entries.push(entry);
         this.dirty = true;

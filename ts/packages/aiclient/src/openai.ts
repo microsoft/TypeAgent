@@ -66,6 +66,7 @@ import {
 import { getProviderChatModel } from "./providerChatModelRegistry.js";
 import type { WireApi } from "@typeagent/config";
 import { getActiveModelProvider, resolveTarget } from "./providerMode.js";
+import { instrumentChatModel } from "./otelChatModel.js";
 
 export { azureApiSettingsFromEnv, openAIApiSettingsFromEnv };
 
@@ -416,29 +417,37 @@ export function createChatModel(
         completionSettings.temperature ??= 1;
     }
 
+    let model: ChatModelWithStreaming;
     if (settings.provider === "ollama") {
-        return createOllamaChatModel(
+        model = createOllamaChatModel(
             settings,
             completionSettings,
             completionCallback,
             tags,
         );
+    } else {
+        const providerFactory = getProviderChatModel(settings.provider);
+        model =
+            providerFactory !== undefined
+                ? providerFactory(
+                      settings,
+                      completionSettings,
+                      completionCallback,
+                      tags,
+                  )
+                : createAzureOpenAIChatModel(
+                      pool,
+                      completionSettings,
+                      completionCallback,
+                      tags,
+                  );
     }
-    const providerFactory = getProviderChatModel(settings.provider);
-    if (providerFactory !== undefined) {
-        return providerFactory(
-            settings,
-            completionSettings,
-            completionCallback,
-            tags,
-        );
-    }
-    return createAzureOpenAIChatModel(
-        pool,
-        completionSettings,
-        completionCallback,
-        tags,
-    );
+    return instrumentChatModel(model, {
+        provider: settings.provider,
+        ...("modelName" in settings && settings.modelName !== undefined
+            ? { model: settings.modelName }
+            : {}),
+    });
 }
 
 function createAzureOpenAIChatModel(

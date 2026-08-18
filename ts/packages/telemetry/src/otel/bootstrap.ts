@@ -57,7 +57,26 @@ import {
     type TelemetryLifecycle,
     type TelemetryLifecycleOptions,
 } from "./lifecycle.js";
-import { createProcessResource } from "./resources.js";
+import {
+    createProcessResource,
+    TYPEAGENT_PROCESS_NAME_ATTRIBUTE,
+} from "./resources.js";
+import {
+    installDebugBridge,
+    type DebugBridgeOptions,
+    type DebugModule,
+} from "./debugBridge.js";
+import { JsonlLogExporter } from "./jsonlLogExporter.js";
+import { LocalLogRecordProcessor } from "./localLogRecordProcessor.js";
+import {
+    createLocalTelemetryState,
+    setLocalTelemetryState,
+} from "./localTelemetryState.js";
+import {
+    getTypeAgentSourceVersion,
+    type TypeAgentSourceVersion,
+} from "./sourceVersion.js";
+import { setStructuredLoggingEnabled } from "./structuredLogging.js";
 
 export type TelemetrySignal = "traces" | "metrics" | "logs";
 
@@ -114,13 +133,20 @@ export interface InitTelemetryOptions {
     /** Shared resource supplied to every requested signal provider. */
     readonly resource?: Resource;
     readonly serviceName?: string;
+    /** Stable process role used in resource metadata and local log filenames. */
+    readonly processName?: string;
     readonly serviceVersion?: string;
     readonly serviceInstanceId?: string;
     readonly deploymentEnvironment?: string;
+    /** Source versions to attach to the process resource. Auto-detected when omitted. */
+    readonly sourceVersion?: TypeAgentSourceVersion;
     readonly resourceAttributes?: Readonly<Record<string, AttributeValue>>;
     /** Provider factories for tests or host-specific pipelines. */
     readonly factories?: Partial<TelemetryProviderFactories>;
     readonly lifecycle?: TelemetryLifecycleOptions;
+    /** Distinct debug module instances owned by this host. */
+    readonly debugModules?: readonly DebugModule[];
+    readonly debugBridge?: DebugBridgeOptions;
 }
 
 export interface TelemetryCoordinator {
@@ -183,21 +209,48 @@ const DEFAULT_FACTORIES: TelemetryProviderFactories = {
     },
 
     createLogProvider(config, resource) {
-        if (config.logFile !== undefined) {
-            throw new Error(
-                "Local OpenTelemetry JSONL output is not implemented by the default log provider. Supply a createLogProvider factory with a writer component.",
+        const processors = [];
+        if (config.otlp !== undefined) {
+            processors.push(
+                new BatchLogRecordProcessor({
+                    exporter: new OTLPLogExporter(
+                        toExporterOptions(config.otlp),
+                    ),
+                    selfObsMeterProvider: metrics.getMeterProvider(),
+                }),
             );
         }
-        const processors =
-            config.otlp === undefined
-                ? []
-                : [
-                      new BatchLogRecordProcessor({
-                          exporter: new OTLPLogExporter(
-                              toExporterOptions(config.otlp),
-                          ),
-                      }),
-                  ];
+        if (config.logFile !== undefined) {
+            const configuredServiceName = resource.attributes["service.name"];
+            const serviceName =
+                typeof configuredServiceName === "string" &&
+                configuredServiceName.length > 0
+                    ? configuredServiceName
+                    : "typeagent";
+            const configuredProcessName =
+                resource.attributes[TYPEAGENT_PROCESS_NAME_ATTRIBUTE];
+            const processName =
+                typeof configuredProcessName === "string" &&
+                configuredProcessName.length > 0
+                    ? configuredProcessName
+                    : "process";
+            processors.push(
+                new LocalLogRecordProcessor(
+                    new BatchLogRecordProcessor({
+                        exporter: new JsonlLogExporter({
+                            filePath: config.logFile,
+                            serviceName,
+                            processName,
+                        }),
+                        maxQueueSize: 2_048,
+                        maxExportBatchSize: 256,
+                        scheduledDelayMillis: 250,
+                        exportTimeoutMillis: 5_000,
+                        selfObsMeterProvider: metrics.getMeterProvider(),
+                    }),
+                ),
+            );
+        }
         return {
             provider: new LoggerProvider({ resource, processors }),
         };
@@ -230,28 +283,7 @@ export function createTelemetryCoordinator(): TelemetryCoordinator {
 
         lifecycle = createTelemetryLifecycle(options.lifecycle);
         const resource =
-            options.resource ??
-            createProcessResource({
-                serviceName:
-                    options.serviceName ??
-                    (options.configOptions?.env ?? process.env)
-                        .OTEL_SERVICE_NAME ??
-                    "typeagent",
-                ...(options.serviceVersion === undefined
-                    ? {}
-                    : { serviceVersion: options.serviceVersion }),
-                ...(options.serviceInstanceId === undefined
-                    ? {}
-                    : { serviceInstanceId: options.serviceInstanceId }),
-                ...(options.deploymentEnvironment === undefined
-                    ? {}
-                    : {
-                          deploymentEnvironment: options.deploymentEnvironment,
-                      }),
-                ...(options.resourceAttributes === undefined
-                    ? {}
-                    : { attributes: options.resourceAttributes }),
-            });
+            options.resource ?? (await createDefaultTelemetryResource(options));
         const factories = {
             ...DEFAULT_FACTORIES,
             ...options.factories,
@@ -295,6 +327,17 @@ export function createTelemetryCoordinator(): TelemetryCoordinator {
                 retainBundle(lifecycle, "logs", bundle);
                 registerLogProvider(bundle.provider);
                 installedGlobals.logs = true;
+            }
+            if (
+                config.debugBridge === true &&
+                options.debugModules !== undefined &&
+                options.debugModules.length > 0
+            ) {
+                const bridge = installDebugBridge(
+                    options.debugModules,
+                    options.debugBridge,
+                );
+                lifecycle.register("debug bridge", () => bridge.shutdown());
             }
         } catch (error) {
             rollbackGlobals(installedGlobals);
@@ -341,12 +384,67 @@ export function createTelemetryCoordinator(): TelemetryCoordinator {
     };
 }
 
-const processTelemetry = createTelemetryCoordinator();
+async function createDefaultTelemetryResource(
+    options: InitTelemetryOptions,
+): Promise<Resource> {
+    const sourceVersion =
+        options.sourceVersion ?? (await getTypeAgentSourceVersion());
+    return createProcessResource({
+        serviceName:
+            options.serviceName ??
+            (options.configOptions?.env ?? process.env).OTEL_SERVICE_NAME ??
+            "typeagent",
+        ...(options.processName === undefined
+            ? {}
+            : { processName: options.processName }),
+        ...(options.serviceVersion === undefined
+            ? {}
+            : { serviceVersion: options.serviceVersion }),
+        ...(options.serviceInstanceId === undefined
+            ? {}
+            : { serviceInstanceId: options.serviceInstanceId }),
+        ...(options.deploymentEnvironment === undefined
+            ? {}
+            : { deploymentEnvironment: options.deploymentEnvironment }),
+        ...(sourceVersion.headRevision === undefined
+            ? {}
+            : { headRevision: sourceVersion.headRevision }),
+        ...(sourceVersion.baseRevision === undefined
+            ? {}
+            : { baseRevision: sourceVersion.baseRevision }),
+        ...(options.resourceAttributes === undefined
+            ? {}
+            : { attributes: options.resourceAttributes }),
+    });
+}
 
-export function initTelemetry(
+const processTelemetry = createTelemetryCoordinator();
+let processLocalStateInitialized = false;
+
+export async function initTelemetry(
     options: InitTelemetryOptions = {},
 ): Promise<void> {
-    return processTelemetry.init(options);
+    const config =
+        options.config ?? resolveTelemetryConfig(options.configOptions);
+    if (processLocalStateInitialized) {
+        await processTelemetry.init({ ...options, config });
+        setStructuredLoggingEnabled(config.structuredLogs === true);
+        return;
+    }
+    setLocalTelemetryState(
+        createLocalTelemetryState({
+            initialProfile: "focused",
+            initialDebugCopy: false,
+            debugBridgeAvailable:
+                config.debugBridge === true &&
+                options.debugModules !== undefined &&
+                options.debugModules.length > 0,
+            localLogAvailable: config.logs?.logFile !== undefined,
+        }),
+    );
+    processLocalStateInitialized = true;
+    await processTelemetry.init({ ...options, config });
+    setStructuredLoggingEnabled(config.structuredLogs === true);
 }
 
 export function shutdownTelemetry(): Promise<void> {
@@ -357,7 +455,8 @@ function isConfigured(config: TelemetryConfig): boolean {
     return (
         config.traces !== undefined ||
         config.metrics !== undefined ||
-        config.logs !== undefined
+        config.logs !== undefined ||
+        config.debugBridge === true
     );
 }
 

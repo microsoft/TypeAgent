@@ -102,6 +102,104 @@ describe("translation bench confusable siblings", () => {
             ]),
         );
     });
+
+    it("finds curated github-cli.browseIssue ↔ browser.openWebPage pair", () => {
+        const catalog: TranslationBenchBenchmarkSchema[] = [
+            ...browserCatalog(),
+            {
+                schemaName: "github-cli",
+                description: "github cli",
+                tools: [
+                    {
+                        type: "function",
+                        function: {
+                            name: "browseIssue",
+                            description: "Browse a GitHub issue",
+                            parameters: {
+                                type: "object",
+                                properties: { number: { type: "number" } },
+                            },
+                        },
+                    },
+                ],
+                typeAgent: {
+                    sourceHash: `github-${HASH}`,
+                    schemaType: "GithubAction",
+                    parsedActionSchema: toJSONParsedActionSchema(
+                        parseToolsJsonSchema([
+                            {
+                                name: "browseIssue",
+                                description: "Browse a GitHub issue",
+                                inputSchema: {
+                                    type: "object",
+                                    properties: {
+                                        number: { type: "number" },
+                                    },
+                                    additionalProperties: false,
+                                },
+                            },
+                        ]),
+                    ),
+                },
+            },
+        ];
+        const siblings = findTranslationBenchConfusableSiblings(
+            { schemaName: "github-cli", actionName: "browseIssue" },
+            catalog,
+        );
+        expect(siblings.map((s) => `${s.schemaName}.${s.actionName}`)).toEqual(
+            expect.arrayContaining(["browser.openWebPage"]),
+        );
+    });
+
+    it("finds curated browser.external.openTab ↔ browser.openWebPage pair", () => {
+        const catalog: TranslationBenchBenchmarkSchema[] = [
+            ...browserCatalog(),
+            {
+                schemaName: "browser.external",
+                description: "external browser",
+                tools: [
+                    {
+                        type: "function",
+                        function: {
+                            name: "openTab",
+                            description: "Open external browser tab",
+                            parameters: {
+                                type: "object",
+                                properties: { url: { type: "string" } },
+                            },
+                        },
+                    },
+                ],
+                typeAgent: {
+                    sourceHash: `external-${HASH}`,
+                    schemaType: "ExternalAction",
+                    parsedActionSchema: toJSONParsedActionSchema(
+                        parseToolsJsonSchema([
+                            {
+                                name: "openTab",
+                                description: "Open external browser tab",
+                                inputSchema: {
+                                    type: "object",
+                                    properties: {
+                                        url: { type: "string" },
+                                    },
+                                    additionalProperties: false,
+                                },
+                            },
+                        ]),
+                    ),
+                },
+            },
+        ];
+        const siblings = findTranslationBenchConfusableSiblings(
+            { schemaName: "browser.external", actionName: "openTab" },
+            catalog,
+        );
+        expect(siblings.map((s) => `${s.schemaName}.${s.actionName}`)).toEqual(
+            expect.arrayContaining(["browser.openWebPage"]),
+        );
+    });
 });
 
 describe("translation bench utterance disambiguation", () => {

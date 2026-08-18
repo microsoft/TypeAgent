@@ -39,6 +39,12 @@ const handlers = {
                     run: async () => {},
                 },
             },
+            throws: {
+                description: "Throwing test command",
+                run: async () => {
+                    throw new Error("handler boom");
+                },
+            },
         },
     },
 } as const;
@@ -234,6 +240,14 @@ describe("Command", () => {
             expect(result!.lastError).toContain(
                 "Command '@test nested nested' does not accept parameters.",
             );
+        });
+        it("reports unexpected command handler failures", async () => {
+            const result = await awaitCommand(dispatcher, "@test throws");
+            expect(result?.disposition).toEqual({
+                status: "failed",
+                path: "command",
+                mayHaveSideEffects: false,
+            });
         });
         it("does not resolve command with extra param error", async () => {
             const result = await awaitCommand(

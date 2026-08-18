@@ -384,6 +384,43 @@ describe("RequestQueue", () => {
         expect(names).toContain("requestQueue:complete");
     });
 
+    it("logs failed requests with error severity", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { broadcaster } = makeRecorder();
+        const logged: Array<{
+            name: string;
+            severity: string | undefined;
+        }> = [];
+        const queue = new RequestQueue(
+            (ctx) =>
+                dispatcher.processCommand(
+                    ctx.text,
+                    ctx.clientRequestId,
+                    ctx.attachments,
+                    ctx.options,
+                    ctx.requestId,
+                ),
+            broadcaster,
+            {
+                logEvent: (name, _data, severity) =>
+                    logged.push({ name, severity }),
+            },
+        );
+
+        const entry = queue.submit({
+            text: "x",
+            originatorConnectionId: "c1",
+        });
+        await flush();
+        dispatcher.calls[0].reject(new Error("failed"));
+        await expect(entry.completion).rejects.toThrow("failed");
+
+        expect(logged).toContainEqual({
+            name: "requestQueue:complete",
+            severity: "error",
+        });
+    });
+
     it("drainAndStop resolves after queue drains", async () => {
         const dispatcher = new ControllableDispatcher();
         const { queue } = makeQueue(dispatcher);
@@ -509,6 +546,29 @@ describe("RequestQueue", () => {
         await expect(a.completion).rejects.toThrow("sync boom");
         await expect(b.completion).resolves.toBeDefined();
         expect(callCount).toBe(2);
+    });
+
+    it("marks a failed command result as a failed queue entry", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { queue } = makeQueue(dispatcher);
+        const entry = queue.submit({
+            text: "a",
+            originatorConnectionId: "c1",
+        });
+        await flush();
+        dispatcher.calls[0].resolve({
+            disposition: {
+                status: "failed",
+                path: "command",
+                mayHaveSideEffects: false,
+            },
+        });
+
+        await expect(entry.completion).resolves.toMatchObject({
+            disposition: { status: "failed" },
+        });
+        expect(entry.state).toBe("failed");
+        expect(entry.error).toBe("command failed");
     });
 
     // T3

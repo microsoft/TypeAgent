@@ -36,6 +36,6 @@ describe("AppAgentProvider", () => {
                 agents: enabledAgentNames,
             });
             await dispatcher.close();
-        }, 120000); // take longer time to start up on CI's small machines.
+        }, 120000); // Startup is slower on small CI machines.
     });
 });
