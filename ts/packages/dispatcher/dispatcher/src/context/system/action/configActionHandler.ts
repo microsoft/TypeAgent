@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { processCommandNoLock } from "../../../command/command.js";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { ConfigAction } from "../schema/configActionSchema.js";
 import {
@@ -22,7 +21,6 @@ type RunConfigCommandAction = ConfigAction & {
 };
 
 type ConfigActionDependencies = {
-    processCommand?: typeof processCommandNoLock;
     handlers?: CommandHandlerTable;
     executeCommand?: typeof executeCommandFromHandlers;
 };
@@ -198,76 +196,90 @@ function getConfigCommandParams(
     } as ParsedCommandParams<any>;
 }
 
+function getCommandParams(
+    handlers: CommandHandlerTable,
+    commands: string[],
+    args: Record<string, unknown>,
+    flags: Record<string, unknown>,
+): ParsedCommandParams<any> | undefined {
+    const handler = getCommandHandler(handlers, commands);
+    if (handler.parameters === undefined || handler.parameters === false) {
+        return undefined;
+    }
+    return {
+        args: handler.parameters.args === undefined ? undefined : args,
+        flags: handler.parameters.flags === undefined ? undefined : flags,
+    } as ParsedCommandParams<any>;
+}
+
 export async function executeConfigAction(
     action: AppAction,
     context: ActionContext<CommandHandlerContext>,
     dependencies: ConfigActionDependencies = {},
 ): Promise<ActionResult | undefined> {
-    const processCommand = dependencies.processCommand ?? processCommandNoLock;
     const configAction = action as unknown as ConfigAction;
+    const handlers = dependencies.handlers;
+    if (handlers === undefined) {
+        throw new Error("Config command handlers are unavailable.");
+    }
+    const execute = dependencies.executeCommand ?? executeCommandFromHandlers;
+    // Agent names come from the translator, so they are passed as structured
+    // parameters and never interpolated into a command string. The string form
+    // is re-tokenized by the command parser, so a name like "calendar --reset"
+    // would resolve as the real --reset flag and wipe the user's agent
+    // configuration. Going through the handler table also lets failures
+    // propagate to the action caller, which processCommandNoLock swallows.
+    const run = (
+        commands: string[],
+        args: Record<string, unknown> = {},
+        flags: Record<string, unknown> = {},
+    ) =>
+        execute(
+            handlers,
+            commands,
+            getCommandParams(handlers, commands, args, flags),
+            context,
+        );
+
     switch (configAction.actionName) {
         case "listAgents":
-            await processCommand(
-                `@config agent`,
-                context.sessionContext.agentContext,
-            );
-            break;
+            return run(["agent"]);
+
         case "toggleAgent": {
             const { enable, agentNames } = configAction.parameters;
-            // `off` is a multi-valued flag, but the parser consumes exactly one
-            // token per occurrence, so it has to be repeated per agent name.
-            // Passing `--off a b` would disable `a` and *enable* `b`.
-            const agentArgs = enable
-                ? agentNames.join(" ")
-                : agentNames.map((name) => `--off ${name}`).join(" ");
-
-            await processCommand(
-                `@config agent ${agentArgs}`,
-                context.sessionContext.agentContext,
-            );
-            break;
+            return enable
+                ? run(["agent"], { agentNames })
+                : run(["agent"], {}, { off: agentNames });
         }
+
         case "toggleExplanation":
-            await processCommand(
-                `@config explainer ${configAction.parameters.enable ? "on" : "off"}`,
-                context.sessionContext.agentContext,
-            );
-            break;
+            return run([
+                "explainer",
+                configAction.parameters.enable ? "on" : "off",
+            ]);
 
         case "toggleDeveloperMode":
-            await processCommand(
-                `@config dev ${configAction.parameters.enable ? "on" : "off"}`,
-                context.sessionContext.agentContext,
-            );
-            break;
+            return run(["dev", configAction.parameters.enable ? "on" : "off"]);
 
         case "enterAgentPriorityMode":
-            await processCommand(
-                `@config agent --priority ${configAction.parameters.agentName}`,
-                context.sessionContext.agentContext,
+            return run(
+                ["agent"],
+                {},
+                { priority: [configAction.parameters.agentName] },
             );
-            break;
 
         case "exitAgentPriorityMode":
-            await processCommand(
-                `@config agent --reset`,
-                context.sessionContext.agentContext,
-            );
-            break;
+            return run(["agent"], {}, { reset: true });
 
         case "runConfigCommand":
-            if (dependencies.handlers === undefined) {
-                throw new Error("Config command handlers are unavailable.");
-            }
-            return (dependencies.executeCommand ?? executeCommandFromHandlers)(
-                dependencies.handlers,
+            return execute(
+                handlers,
                 configAction.parameters.command.split(" "),
-                getConfigCommandParams(configAction, dependencies.handlers),
+                getConfigCommandParams(configAction, handlers),
                 context,
             );
 
         default:
             throw new Error(`Invalid action name: ${action.actionName}`);
     }
-    return undefined;
 }

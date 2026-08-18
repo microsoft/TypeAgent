@@ -9,18 +9,16 @@ const agentContext = { id: "agent-context" } as any;
 const context = { sessionContext: { agentContext } } as any;
 
 async function run(action: any) {
-    const processCommand = jest.fn(async () => undefined);
     const executeCommand = jest.fn(async () => undefined);
     await executeConfigAction(
         { schemaName: "system.config", ...action },
         context,
         {
-            processCommand,
             handlers: configCommandHandlers,
             executeCommand: executeCommand as any,
         },
     );
-    return { executeCommand, processCommand };
+    return { executeCommand };
 }
 
 describe("config actions", () => {
@@ -108,15 +106,62 @@ describe("config actions", () => {
         );
     });
 
+    it("passes agent names as structured arguments, not command text", async () => {
+        const { executeCommand } = await run({
+            actionName: "toggleAgent",
+            parameters: { enable: true, agentNames: ["calendar", "email"] },
+        });
+
+        expect(executeCommand).toHaveBeenCalledWith(
+            configCommandHandlers,
+            ["agent"],
+            { args: { agentNames: ["calendar", "email"] }, flags: {} },
+            context,
+        );
+    });
+
+    it("disables every requested agent instead of enabling all but the first", async () => {
+        const { executeCommand } = await run({
+            actionName: "toggleAgent",
+            parameters: { enable: false, agentNames: ["player", "email"] },
+        });
+
+        expect(executeCommand).toHaveBeenCalledWith(
+            configCommandHandlers,
+            ["agent"],
+            { args: {}, flags: { off: ["player", "email"] } },
+            context,
+        );
+    });
+
+    it("does not let a flag-shaped agent name become a flag", async () => {
+        const { executeCommand } = await run({
+            actionName: "enterAgentPriorityMode",
+            parameters: { agentName: "calendar --reset" },
+        });
+
+        // The name stays a single value. Interpolating it into a command
+        // string would re-tokenize --reset into the real flag and clear the
+        // user's whole agent configuration.
+        expect(executeCommand).toHaveBeenCalledWith(
+            configCommandHandlers,
+            ["agent"],
+            { args: {}, flags: { priority: ["calendar --reset"] } },
+            context,
+        );
+    });
+
     it("keeps the existing developer-mode action behavior", async () => {
-        const { processCommand } = await run({
+        const { executeCommand } = await run({
             actionName: "toggleDeveloperMode",
             parameters: { enable: false },
         });
 
-        expect(processCommand).toHaveBeenCalledWith(
-            "@config dev off",
-            agentContext,
+        expect(executeCommand).toHaveBeenCalledWith(
+            configCommandHandlers,
+            ["dev", "off"],
+            undefined,
+            context,
         );
     });
 });

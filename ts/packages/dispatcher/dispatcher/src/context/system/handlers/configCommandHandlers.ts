@@ -50,7 +50,6 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { alwaysEnabledAgents } from "../../appAgentManager.js";
 import { getCacheFactory } from "../../../utils/cacheFactory.js";
-import { resolveCommand } from "../../../command/command.js";
 import { toggleActivityContext } from "../../../execute/activityContext.js";
 import registerDebug from "debug";
 const debugReasoning = registerDebug("typeagent:dispatcher:reasoning:config");
@@ -1498,6 +1497,11 @@ async function checkRequestHandler(
     systemContext: CommandHandlerContext,
     throwIfFailed: boolean = true,
 ) {
+    // Imported lazily to break a module cycle: command.js pulls in
+    // systemAgent.js, whose module-level systemHandlers calls
+    // getConfigCommandHandlers() from this file. A static import makes that a
+    // temporal dead zone error whenever this module is loaded first.
+    const { resolveCommand } = await import("../../../command/command.js");
     const result = await resolveCommand(
         `${appAgentName} request`,
         systemContext,
