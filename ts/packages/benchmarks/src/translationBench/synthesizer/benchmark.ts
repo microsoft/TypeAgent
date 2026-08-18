@@ -11,7 +11,6 @@ import {
     type ParsedActionSchema,
     type ParsedActionSchemaJSON,
 } from "@typeagent/action-schema";
-import { validateTranslationBenchGoldAction } from "./actionValidation.js";
 import type { SchemaTypeNames } from "@typeagent/agent-sdk";
 import { z } from "zod";
 
@@ -36,6 +35,8 @@ import {
     getPackagedEligibleGoldActionIds,
     getPackagedScheduleExcludedActionIds,
 } from "./eligibleActions.js";
+import { validateTranslationBenchGoldAction } from "./actionValidation.js";
+
 export type TranslationBenchOrder = "strict" | "any";
 // Closed transform set: source import (1) vs generated/canonical (2).
 export type TranslationBenchTransformVersion = 1 | 2;

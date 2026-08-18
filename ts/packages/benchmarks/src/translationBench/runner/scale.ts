@@ -59,7 +59,9 @@ export interface TranslationBenchMergeResult<T = unknown> {
 }
 
 export type TranslationBenchTranslationCheckpointRow =
-    TranslationBenchCheckpointRow<TranslationBenchRow> & { phase: "translation" };
+    TranslationBenchCheckpointRow<TranslationBenchRow> & {
+        phase: "translation";
+    };
 
 export type TranslationBenchExplainerCheckpointRow =
     TranslationBenchCheckpointRow<TranslationBenchExplainerCaseResult> & {
@@ -167,12 +169,17 @@ function requireNonEmpty(
 
 function requireShardCount(shardCount: number): void {
     if (!Number.isInteger(shardCount) || shardCount <= 0) {
-        throw new Error("Translation bench shard count must be a positive integer");
+        throw new Error(
+            "Translation bench shard count must be a positive integer",
+        );
     }
 }
 
 function validateHeader(header: TranslationBenchCheckpointHeader): void {
-    if (header?.kind !== "translation-bench-checkpoint" || header.version !== 1) {
+    if (
+        header?.kind !== "translation-bench-checkpoint" ||
+        header.version !== 1
+    ) {
         throw new Error("Invalid translation bench checkpoint header");
     }
     requireNonEmpty(header.runFingerprint, "Translation bench run fingerprint");
@@ -229,7 +236,9 @@ function assertCompatibleHeaders(
         );
     }
     if (!settingsEqual(actual.settings, expected.settings)) {
-        throw new Error("Translation bench checkpoint settings are incompatible");
+        throw new Error(
+            "Translation bench checkpoint settings are incompatible",
+        );
     }
     if (
         actual.shardIndex !== expected.shardIndex ||
@@ -241,11 +250,15 @@ function assertCompatibleHeaders(
     }
 }
 
-export function createTranslationBenchRunFingerprint(runInputs: unknown): string {
+export function createTranslationBenchRunFingerprint(
+    runInputs: unknown,
+): string {
     return sha256(canonicalJson(runInputs));
 }
 
-export function translationBenchResumeKey(identity: TranslationBenchWorkIdentity): string {
+export function translationBenchResumeKey(
+    identity: TranslationBenchWorkIdentity,
+): string {
     requireNonEmpty(identity.phase, "Translation bench phase");
     requireNonEmpty(identity.model, "Translation bench model");
     requireNonEmpty(identity.scenario, "Translation bench scenario");
@@ -283,7 +296,9 @@ export function validateTranslationBenchCheckpointWork(
     for (const row of rows) {
         const key = translationBenchResumeKey(row);
         if (!expectedKeys.has(key)) {
-            throw new Error(`Unexpected translation bench checkpoint work '${key}'`);
+            throw new Error(
+                `Unexpected translation bench checkpoint work '${key}'`,
+            );
         }
         if (actualKeys.has(key)) {
             throw new Error(`Duplicate translation bench resume key '${key}'`);
@@ -473,7 +488,9 @@ function requireRecord(
 }
 
 function validateExecutionCheckpointRow(
-    row: TranslationBenchCheckpointRow<TranslationBenchRow | TranslationBenchExplainerCaseResult>,
+    row: TranslationBenchCheckpointRow<
+        TranslationBenchRow | TranslationBenchExplainerCaseResult
+    >,
 ): asserts row is TranslationBenchExecutionCheckpointRow {
     requireRecord(row.value, "Translation bench checkpoint row value");
     const value = row.value;
@@ -505,7 +522,9 @@ function validateExecutionCheckpointRow(
         }
         return;
     }
-    throw new Error(`Unsupported translation bench checkpoint phase '${row.phase}'`);
+    throw new Error(
+        `Unsupported translation bench checkpoint phase '${row.phase}'`,
+    );
 }
 
 export function createTranslationBenchTranslationCheckpointRow(
@@ -659,7 +678,9 @@ export function mergeTranslationBenchCheckpoints<T = unknown>(
             validateRow(row);
             const key = translationBenchResumeKey(row);
             if (localKeys.has(key)) {
-                throw new Error(`Duplicate translation bench resume key '${key}'`);
+                throw new Error(
+                    `Duplicate translation bench resume key '${key}'`,
+                );
             }
             localKeys.add(key);
         }
@@ -675,7 +696,9 @@ export function mergeTranslationBenchCheckpoints<T = unknown>(
             );
         }
         if (!settingsEqual(current.settings, first.settings)) {
-            throw new Error("Translation bench checkpoint settings are incompatible");
+            throw new Error(
+                "Translation bench checkpoint settings are incompatible",
+            );
         }
         if (current.shardCount !== first.shardCount) {
             throw new Error(
@@ -705,7 +728,9 @@ export function mergeTranslationBenchCheckpoints<T = unknown>(
         for (const row of checkpoint.rows) {
             const key = translationBenchResumeKey(row);
             if (resumeKeys.has(key)) {
-                throw new Error(`Duplicate translation bench resume key '${key}'`);
+                throw new Error(
+                    `Duplicate translation bench resume key '${key}'`,
+                );
             }
             resumeKeys.add(key);
             rows.push(row);
@@ -717,7 +742,10 @@ export function mergeTranslationBenchCheckpoints<T = unknown>(
         }
     }
     rows.sort((left, right) =>
-        compareText(translationBenchResumeKey(left), translationBenchResumeKey(right)),
+        compareText(
+            translationBenchResumeKey(left),
+            translationBenchResumeKey(right),
+        ),
     );
 
     return {
@@ -743,7 +771,10 @@ export function getTranslationBenchCatalogCensus(
     const schemaNames = new Set<string>();
     const actionKeys = new Set<string>();
     const normalizedSchemas = schemas.map((schema) => {
-        requireNonEmpty(schema?.schemaName, "Translation bench catalog schema name");
+        requireNonEmpty(
+            schema?.schemaName,
+            "Translation bench catalog schema name",
+        );
         if (schemaNames.has(schema.schemaName)) {
             throw new Error(
                 `Duplicate translation bench catalog schema '${schema.schemaName}'`,
