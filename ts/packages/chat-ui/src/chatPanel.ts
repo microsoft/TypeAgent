@@ -206,6 +206,7 @@ export type HistoryEntry =
           actionTokenUsage?: CompletionUsageStats;
           parsePhase?: PhaseTiming;
           firstMessageMs?: number;
+          traceId?: string;
       }
     | { kind: "explained"; requestId: string; data: NotifyExplainedData }
     | { kind: "system"; text: string };
@@ -3892,6 +3893,7 @@ export class ChatPanel {
                         tokenUsage: entry.tokenUsage,
                         actionTokenUsage: entry.actionTokenUsage,
                         parsePhase: entry.parsePhase,
+                        traceId: entry.traceId,
                     });
                 }
                 break;
@@ -4549,6 +4551,7 @@ export class ChatPanel {
             actionTokenUsage?: CompletionUsageStats;
             parsePhase?: PhaseTiming;
             cancelled?: boolean;
+            traceId?: string;
         },
     ) {
         if (this.statusContainer) {
@@ -4638,6 +4641,7 @@ export class ChatPanel {
                 result.totalDuration,
                 result.actionTokenUsage,
                 firstMessageMs,
+                result.traceId,
             );
         }
         // Request is finalized; future updates for this id should start with
@@ -6889,6 +6893,7 @@ class AgentMessageContainer {
         totalDuration?: number,
         tokenUsage?: CompletionUsageStats,
         firstMessageMs?: number,
+        traceId?: string,
     ) {
         // Layout: .metrics-details flex row with three columns
         //   left   — "First Message" + Tokens + phase.marks (one line each)
@@ -6931,6 +6936,9 @@ class AgentMessageContainer {
             );
         } else {
             leftLines.push(`${actionLabel} Tokens: <b>not reported</b>`);
+        }
+        if (traceId !== undefined && traceId.length > 0) {
+            leftLines.push(`Trace ID: <b>${escapeHtml(traceId)}</b>`);
         }
         // Thinking (reasoning) tokens: the subset of completion tokens the
         // model spent on chain-of-thought, tabulated per reasoning block. Shown

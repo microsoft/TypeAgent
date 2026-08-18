@@ -670,6 +670,7 @@ function mapResult(result: any):
           actionTokenUsage?: any;
           parsePhase?: any;
           cancelled?: boolean;
+          traceId?: string;
       }
     | undefined {
     if (!result) return undefined;
@@ -684,6 +685,8 @@ function mapResult(result: any):
         actionTokenUsage: result.actionTokenUsage,
         parsePhase: metrics?.parse,
         cancelled: result.cancelled === true,
+        traceId:
+            typeof result.traceId === "string" ? result.traceId : undefined,
     };
 }
 
@@ -791,6 +794,8 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
                     firstMessageMs: e.requestId
                         ? firstMessageMsByRequestId.get(e.requestId)
                         : undefined,
+                    traceId:
+                        typeof e.traceId === "string" ? e.traceId : undefined,
                 });
                 break;
             }

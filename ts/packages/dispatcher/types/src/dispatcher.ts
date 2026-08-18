@@ -152,6 +152,8 @@ export type CommandResult = {
     // reported usage (unknown). A present all-zero value => actions ran but
     // made no LLM call.
     actionTokenUsage?: CompletionUsageStats;
+    // Canonical OpenTelemetry trace id of the root request span.
+    traceId?: string;
 };
 
 // Architecture: docs/architecture/core/completion.md — Data flow / Key types

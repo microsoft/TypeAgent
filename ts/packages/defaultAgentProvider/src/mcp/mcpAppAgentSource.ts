@@ -27,6 +27,10 @@ import type { McpPolicy } from "./mcpPolicy.js";
 import { McpOAuthProvider, getMcpAuthState } from "./mcpOAuth.js";
 import { SessionMcpCredentialStore } from "./mcpCredentialStore.js";
 import { nullMcpAuditSink } from "./mcpAudit.js";
+import type {
+    McpConfigDiscoveryResult,
+    McpDiscoveryDiagnostic,
+} from "./mcpConfigDiscovery.js";
 
 const debug = registerDebug("typeagent:mcp:source");
 
@@ -91,6 +95,7 @@ export interface McpServerSourceApi {
     ): Promise<void>;
     getAuthState?(id: string): Promise<string>;
     getPolicy?(): McpPolicy;
+    getDiscoveryDiagnostics?(): readonly McpDiscoveryDiagnostic[];
 }
 
 export type McpAppAgentSourceForTest = AppAgentSource & {
@@ -151,6 +156,7 @@ export function createMcpAppAgentSource(
         policy: defaultMcpPolicy,
         audit: nullMcpAuditSink,
     },
+    discovery?: McpConfigDiscoveryResult,
 ): McpAppAgentSourceForTest {
     // One shared provider per active config id (seed + store).
     const providers = new Map<string, AppAgentProvider>();
@@ -423,6 +429,7 @@ export function createMcpAppAgentSource(
             return getMcpAuthState(config, services.credentialStore);
         },
         getPolicy: () => structuredClone(services.policy),
+        getDiscoveryDiagnostics: () => discovery?.diagnostics ?? [],
     };
 
     const source: McpAppAgentSourceForTest = {
