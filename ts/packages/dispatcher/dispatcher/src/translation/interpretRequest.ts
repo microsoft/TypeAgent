@@ -11,11 +11,7 @@ import {
     matchRequest,
 } from "./matchRequest.js";
 import { translateRequest } from "./translateRequest.js";
-import {
-    CommandHandlerContext,
-    getRequestId,
-    requestIdToString,
-} from "../context/commandHandlerContext.js";
+import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { CachedImageWithDetails } from "@typeagent/typechat-utils";
 import { unicodeChar } from "../command/command.js";
@@ -25,7 +21,6 @@ import {
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
 import registerDebug from "debug";
-import { ProfileNames } from "../utils/profileNames.js";
 import {
     emitTranslationCacheBypass,
     emitTranslationMatchResult,
@@ -314,25 +309,6 @@ export async function interpretRequest(
         translateResult.requestAction,
         context,
     );
-
-    if (!systemContext.batchMode) {
-        systemContext.logger?.logEvent(translateResult.type, {
-            elapsedMs: translateResult.elapsedMs,
-            request,
-            history,
-            actions: translateResult.requestAction.actions,
-            replacedAction,
-            schemaNames: requestActiveSchemaNames,
-            developerMode: systemContext.developerMode,
-            config: translateResult.config,
-            metrics: systemContext.metricsManager?.getMeasures(
-                requestIdToString(getRequestId(systemContext)),
-                ProfileNames.translate,
-            ),
-            allMatches: translateResult.allMatches,
-            tokenUsage,
-        });
-    }
 
     // Developer-mode capture: persist the history + complete translation
     // prompt(s) for this request so it can be inspected/reconstructed later.

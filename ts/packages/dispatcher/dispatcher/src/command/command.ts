@@ -13,6 +13,7 @@ import {
 } from "../context/commandHandlerContext.js";
 import {
     context as otelContext,
+    isSpanContextValid,
     SpanStatusCode,
     trace,
     type Context,
@@ -39,6 +40,10 @@ import {
 } from "@typeagent/dispatcher-types";
 import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 import { getAppAgentName } from "../internal.js";
+import {
+    logRequestCompleted,
+    logRequestReceived,
+} from "../otel/structuredEvents.js";
 
 const debugCommand = registerDebug("typeagent:dispatcher:command");
 const debugCommandError = registerDebug("typeagent:dispatcher:command:error");
@@ -392,6 +397,11 @@ export async function processCommandNoLock(
         );
         debugCommandError(e.stack);
 
+        ensureCommandResult(context).disposition = {
+            status: "failed",
+            path: "command",
+            mayHaveSideEffects: false,
+        };
         context?.logger?.logEvent(
             "command:exception",
             {
@@ -493,6 +503,7 @@ export async function processCommand(
     if (sessionId !== undefined) rootAttributes.sessionId = sessionId;
     if (context.activationId !== undefined)
         rootAttributes.activationId = context.activationId;
+    rootAttributes.requestId = requestId.requestId;
     if (context.traceId !== undefined) rootAttributes.traceId = context.traceId;
     // wrapRootRequestSpan opens `typeagent.request` and applies the
     // correlation attributes; the callback body preserves the original
@@ -506,7 +517,17 @@ export async function processCommand(
             : undefined);
     return await wrapRootRequestSpan(
         rootAttributes,
-        async () => {
+        async (span) => {
+            logRequestReceived(context.logger, {
+                requestId: requestId.requestId,
+                ...(requestId.connectionId === undefined
+                    ? {}
+                    : { connectionId: requestId.connectionId }),
+                kind: originalInput.trimStart().startsWith("@")
+                    ? "command"
+                    : "request",
+                attachmentCount: attachments?.length ?? 0,
+            });
             try {
                 // Process one command at a time.
                 return await context.commandLock(async () => {
@@ -519,6 +540,10 @@ export async function processCommand(
                         options,
                         abortController.signal,
                     );
+                    const rootSpanContext = span.spanContext();
+                    const rootTraceId = isSpanContextValid(rootSpanContext)
+                        ? rootSpanContext.traceId
+                        : undefined;
                     context.clientIO.setUserRequest(requestId, originalInput);
                     try {
                         await processCommandNoLock(
@@ -546,7 +571,16 @@ export async function processCommand(
                     } finally {
                         context.activeRequests.delete(requestIdStr);
                         context.currentOptions = undefined;
-                        return endProcessCommand(requestId, context);
+                        const result = endProcessCommand(requestId, context);
+                        if (result !== undefined && rootTraceId !== undefined) {
+                            result.traceId = rootTraceId;
+                        }
+                        logRequestCompleted(
+                            context.logger,
+                            requestId.requestId,
+                            result,
+                        );
+                        return result;
                     }
                 });
             } finally {

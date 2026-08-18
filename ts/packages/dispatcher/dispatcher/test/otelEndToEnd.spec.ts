@@ -18,6 +18,10 @@ const ATTRIBUTES = {
     activationId: "activation-e2e",
     traceId: "legacy-trace-e2e",
 };
+const REQUEST_ATTRIBUTES = {
+    ...ATTRIBUTES,
+    requestId: "request-e2e",
+};
 
 function getOnlySpan(manager: InMemorySpanManager, name: string): CapturedSpan {
     const spans = manager.findSpansByName(name);
@@ -65,7 +69,7 @@ describe("one-process OTel request trace", () => {
 
         await hostTracer.startActiveSpan("host.request", async (hostSpan) => {
             await wrapRootRequestSpan(
-                ATTRIBUTES,
+                REQUEST_ATTRIBUTES,
                 async () => {
                     await wrapTranslationSpan(ATTRIBUTES, async () => {
                         await runRepresentativeLlmCall(() => undefined);
@@ -104,6 +108,9 @@ describe("one-process OTel request trace", () => {
         manager.assertParentChild(reasoningSpan, actionSpan);
 
         const requestTraceId = requestSpan.spanContext().traceId;
+        for (const span of [translationSpan, reasoningSpan, actionSpan]) {
+            expect(span.attributes["typeagent.request.id"]).toBe("request-e2e");
+        }
         expect(
             manager
                 .getFinishedSpans()

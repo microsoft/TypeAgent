@@ -26,17 +26,23 @@ import {
     JsonlLogExporter,
     resolveJsonlLogPath,
 } from "../src/otel/jsonlLogExporter.js";
+import {
+    createLocalTelemetryState,
+    setLocalTelemetryState,
+} from "../src/otel/localTelemetryState.js";
+import { LocalLogRecordProcessor } from "../src/otel/localLogRecordProcessor.js";
 
 function makeTempDir(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), "typeagent-otel-local-"));
 }
 
-function createRecord(body: string): ReadableLogRecord {
+function createRecord(body: string, eventName?: string): ReadableLogRecord {
     return {
         hrTime: [1_700_000_000, 0],
         hrTimeObserved: [1_700_000_001, 0],
         severityText: "INFO",
         body,
+        ...(eventName === undefined ? {} : { eventName }),
         resource: resourceFromAttributes({ "service.name": "test" }),
         instrumentationScope: { name: "test", version: "1" },
         attributes: {},
@@ -67,6 +73,7 @@ describe("JsonlLogExporter", () => {
     const tempDirs: string[] = [];
 
     afterEach(() => {
+        setLocalTelemetryState(undefined);
         for (const dir of tempDirs.splice(0)) {
             fs.rmSync(dir, { recursive: true, force: true });
         }
@@ -78,11 +85,12 @@ describe("JsonlLogExporter", () => {
             "agent/server",
             1234,
             "agent-player",
+            new Date("2026-08-17T08:38:59.123Z"),
         );
         expect(resolved).toBe(
             path.resolve(
                 "logs",
-                "typeagent-agent_server-agent-player-1234.jsonl",
+                "typeagent-agent_server-agent-player-20260817T083859-123Z-1234.jsonl",
             ),
         );
     });
@@ -93,11 +101,31 @@ describe("JsonlLogExporter", () => {
             "typeagent-local",
             1234,
             "agent-server",
+            new Date("2026-08-17T08:38:59.123Z"),
         );
         expect(resolved).toBe(
             path.resolve(
                 "logs",
-                "typeagent-typeagent-local-agent-server-1234.jsonl",
+                "typeagent-typeagent-local-agent-server-20260817T083859-123Z-1234.jsonl",
+            ),
+        );
+    });
+
+    it("supports an explicit process-start timestamp placeholder", () => {
+        const resolved = resolveJsonlLogPath(
+            path.join(
+                "logs",
+                "typeagent-{service}-{process}-{timestamp}-{pid}.jsonl",
+            ),
+            "typeagent-local",
+            1234,
+            "agent-server",
+            new Date("2026-08-17T08:38:59.123Z"),
+        );
+        expect(resolved).toBe(
+            path.resolve(
+                "logs",
+                "typeagent-typeagent-local-agent-server-20260817T083859-123Z-1234.jsonl",
             ),
         );
     });
@@ -126,6 +154,117 @@ describe("JsonlLogExporter", () => {
             .split("\n")
             .map((line) => JSON.parse(line) as { body: string });
         expect(lines.map((line) => line.body)).toEqual(["first", "second"]);
+    });
+
+    it("writes the reduced local envelope", async () => {
+        const dir = makeTempDir();
+        tempDirs.push(dir);
+        const exporter = new JsonlLogExporter({
+            filePath: path.join(dir, "compact-{pid}.jsonl"),
+            serviceName: "test",
+            pid: 1008,
+            diagnostic: () => undefined,
+        });
+        const record: ReadableLogRecord = {
+            ...createRecord("compact", "dispatcher:request:completed"),
+            body: {
+                message: "Request completed: handled",
+                status: "handled",
+            },
+            attributes: {
+                "typeagent.session.id": "session",
+                "typeagent.activation.id": "activation",
+                "typeagent.request.id": "request",
+                "typeagent.trace.id": "legacy-trace",
+                custom: "value",
+            },
+            spanContext: {
+                traceId: "1".repeat(32),
+                spanId: "2".repeat(16),
+                traceFlags: 1,
+            },
+        };
+
+        await exportRecords(exporter, [record]);
+        await exporter.shutdown();
+
+        const parsed = JSON.parse(
+            fs.readFileSync(exporter.filePath, "utf8").trimEnd(),
+        );
+        expect(parsed).toEqual({
+            timestamp: "2023-11-14T22:13:20.000Z",
+            severity: "INFO",
+            event: "dispatcher:request:completed",
+            sessionId: "session",
+            activationId: "activation",
+            requestId: "request",
+            correlationId: "legacy-trace",
+            traceId: "1".repeat(32),
+            spanId: "2".repeat(16),
+            message: "Request completed: handled",
+            body: { status: "handled" },
+            attributes: { custom: "value" },
+        });
+        expect(parsed).not.toHaveProperty("observedTimestamp");
+        expect(parsed).not.toHaveProperty("resource");
+        expect(parsed).not.toHaveProperty("instrumentationScope");
+        expect(parsed).not.toHaveProperty("severityNumber");
+        expect(parsed).not.toHaveProperty("traceFlags");
+        expect(parsed).not.toHaveProperty("droppedAttributesCount");
+    });
+
+    it("preserves legacy correlation without an active span", async () => {
+        const dir = makeTempDir();
+        tempDirs.push(dir);
+        const exporter = new JsonlLogExporter({
+            filePath: path.join(dir, "correlation-{pid}.jsonl"),
+            serviceName: "test",
+            pid: 1009,
+            diagnostic: () => undefined,
+        });
+        const record: ReadableLogRecord = {
+            ...createRecord("logs only", "custom:event"),
+            attributes: {
+                "typeagent.trace.id": "legacy-trace",
+            },
+        };
+
+        await exportRecords(exporter, [record]);
+        await exporter.shutdown();
+
+        const parsed = JSON.parse(
+            fs.readFileSync(exporter.filePath, "utf8").trimEnd(),
+        );
+        expect(parsed.correlationId).toBe("legacy-trace");
+        expect(parsed).not.toHaveProperty("traceId");
+    });
+
+    it("exports every record admitted by its local processor", async () => {
+        const dir = makeTempDir();
+        tempDirs.push(dir);
+        const exporter = new JsonlLogExporter({
+            filePath: path.join(dir, "filtered-{pid}.jsonl"),
+            serviceName: "test",
+            pid: 1007,
+            diagnostic: () => undefined,
+        });
+        expect(
+            await exportRecords(exporter, [
+                createRecord("structured-one", "request.received"),
+                createRecord("debug-one", "debug"),
+            ]),
+        ).toBe(ExportResultCode.SUCCESS);
+        await exporter.shutdown();
+
+        const records = fs
+            .readFileSync(exporter.filePath, "utf8")
+            .trimEnd()
+            .split("\n")
+            .map((line) => JSON.parse(line) as { body: string });
+        expect(records.map((record) => record.body)).toEqual([
+            "structured-one",
+            "debug-one",
+        ]);
     });
 
     it("creates private directories and files", async () => {
@@ -190,10 +329,15 @@ describe("JsonlLogExporter", () => {
         const blockingFile = path.join(dir, "not-a-directory");
         fs.writeFileSync(blockingFile, "x");
         const template = path.join(blockingFile, "logs-{pid}.jsonl");
+        // Pin startedAt so the injected {timestamp} placeholder resolves to the
+        // same path across constructions; otherwise each new Date() can cross a
+        // millisecond boundary and the ownership conflict would not be detected.
+        const startedAt = new Date("2026-08-17T08:38:59.123Z");
         const exporter = new JsonlLogExporter({
             filePath: template,
             serviceName: "test",
             pid: 1003,
+            startedAt,
             diagnostic: () => undefined,
         });
         expect(
@@ -202,6 +346,7 @@ describe("JsonlLogExporter", () => {
                     filePath: template,
                     serviceName: "test",
                     pid: 1003,
+                    startedAt,
                     diagnostic: () => undefined,
                 }),
         ).toThrow(/already owns/);
@@ -216,6 +361,7 @@ describe("JsonlLogExporter", () => {
             filePath: template,
             serviceName: "test",
             pid: 1003,
+            startedAt,
             diagnostic: () => undefined,
         });
         await replacement.shutdown();
@@ -225,10 +371,12 @@ describe("JsonlLogExporter", () => {
         const dir = makeTempDir();
         tempDirs.push(dir);
         const template = path.join(dir, "diagnostic-{pid}.jsonl");
+        const startedAt = new Date("2026-08-17T08:38:59.123Z");
         const exporter = new JsonlLogExporter({
             filePath: template,
             serviceName: "test",
             pid: 1004,
+            startedAt,
             diagnostic: () => {
                 throw new Error("diagnostic failed");
             },
@@ -239,6 +387,7 @@ describe("JsonlLogExporter", () => {
             filePath: template,
             serviceName: "test",
             pid: 1004,
+            startedAt,
             diagnostic: () => undefined,
         });
         await replacement.shutdown();
@@ -252,6 +401,82 @@ describe("debug bridge", () => {
         await provider?.shutdown();
         provider = undefined;
         logs.disable();
+        setLocalTelemetryState(undefined);
+    });
+
+    it("applies local policy when each record is emitted", () => {
+        const exporter = new InMemoryLogRecordExporter();
+        provider = new LoggerProvider({
+            processors: [
+                new LocalLogRecordProcessor(
+                    new SimpleLogRecordProcessor({ exporter }),
+                ),
+            ],
+        });
+        logs.setGlobalLoggerProvider(provider);
+        const state = createLocalTelemetryState();
+        setLocalTelemetryState(state);
+        const logger = logs.getLogger("local-policy");
+
+        logger.emit({ eventName: "structured-one", body: "structured-one" });
+        logger.emit({
+            eventName: "dispatcher:command",
+            body: "legacy-command",
+        });
+        logger.emit({ eventName: "debug", body: "debug-hidden" });
+        logger.emit({
+            eventName: "aiclient:llm:started",
+            body: { scope: "background" },
+        });
+        logger.emit({
+            eventName: "aiclient:llm:completed",
+            body: { scope: "background", success: true },
+        });
+        logger.emit({
+            eventName: "aiclient:llm:completed",
+            body: { scope: "background", success: false },
+        });
+        state.setDebugCopy(true);
+        logger.emit({ eventName: "debug", body: "debug-visible" });
+        state.setProfile("off");
+        logger.emit({ eventName: "structured-hidden", body: "hidden" });
+
+        expect(
+            exporter
+                .getFinishedLogRecords()
+                .map((record) => [record.eventName, record.body]),
+        ).toEqual([
+            ["structured-one", "structured-one"],
+            ["aiclient:llm:completed", { scope: "background", success: false }],
+            ["debug", "debug-visible"],
+        ]);
+    });
+
+    it("retains successful background LLM events outside focused mode", () => {
+        const exporter = new InMemoryLogRecordExporter();
+        provider = new LoggerProvider({
+            processors: [
+                new LocalLogRecordProcessor(
+                    new SimpleLogRecordProcessor({ exporter }),
+                ),
+            ],
+        });
+        logs.setGlobalLoggerProvider(provider);
+        const state = createLocalTelemetryState();
+        state.setProfile("diagnostic");
+        setLocalTelemetryState(state);
+        const logger = logs.getLogger("local-policy-diagnostic");
+
+        logger.emit({
+            eventName: "aiclient:llm:started",
+            body: { scope: "background" },
+        });
+        logger.emit({
+            eventName: "aiclient:llm:completed",
+            body: { scope: "background", success: true },
+        });
+
+        expect(exporter.getFinishedLogRecords()).toHaveLength(2);
     });
 
     it("tees distinct debug modules exactly once and restores prior output", () => {
@@ -439,6 +664,9 @@ describe("debug bridge", () => {
 
 describe("local diagnostics correlation", () => {
     it("writes structured and debug records with the same active span", async () => {
+        setLocalTelemetryState(
+            createLocalTelemetryState({ initialDebugCopy: true }),
+        );
         const dir = makeTempDir();
         const jsonlExporter = new JsonlLogExporter({
             filePath: path.join(dir, "correlated-{pid}.jsonl"),
@@ -489,12 +717,12 @@ describe("local diagnostics correlation", () => {
                 .map(
                     (line) =>
                         JSON.parse(line) as {
-                            eventName: string;
+                            event: string;
                             traceId: string;
                             spanId: string;
                         },
                 );
-            expect(records.map((record) => record.eventName)).toEqual([
+            expect(records.map((record) => record.event)).toEqual([
                 "structured",
                 "debug",
             ]);
@@ -511,6 +739,7 @@ describe("local diagnostics correlation", () => {
             logs.disable();
             trace.disable();
             context.disable();
+            setLocalTelemetryState(undefined);
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });

@@ -12,6 +12,7 @@ import { createJsonTranslatorWithValidator } from "@typeagent/typechat-utils";
 import { FullAction } from "@typeagent/agent-cache";
 import registerDebug from "debug";
 import { Entity } from "@typeagent/agent-sdk";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 const debugActionEntities = registerDebug(
     "typeagent:dispatcher:actions:entities",
 );
@@ -94,20 +95,24 @@ export async function filterEntitySelection(
     );
 
     // REVIEW: do we need to specify the parameter name and not just the value?
-    const selectionResult = await translator.translate(
-        [
-            `Select the '${type.toLowerCase()}' entities that '${name}' in the user requested action could refer to.`,
-            "The user request is",
-            JSON.stringify(action, undefined, 2),
-            `The following possible '${type}' entities:`,
-            JSON.stringify(
-                result.entities.map((entity, index) => {
-                    return { index, name: entity.name };
-                }),
-                undefined,
-                2,
+    const selectionResult = await withChatModelTelemetryContext(
+        { purpose: "entity-resolution" },
+        () =>
+            translator.translate(
+                [
+                    `Select the '${type.toLowerCase()}' entities that '${name}' in the user requested action could refer to.`,
+                    "The user request is",
+                    JSON.stringify(action, undefined, 2),
+                    `The following possible '${type}' entities:`,
+                    JSON.stringify(
+                        result.entities.map((entity, index) => {
+                            return { index, name: entity.name };
+                        }),
+                        undefined,
+                        2,
+                    ),
+                ].join("\n"),
             ),
-        ].join("\n"),
     );
 
     if (
