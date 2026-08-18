@@ -313,6 +313,11 @@ function significantTokens(name: string): Set<string> {
     return out;
 }
 
+function significantTokensFromText(text: string | undefined): Set<string> {
+    if (text === undefined) return new Set();
+    return significantTokens(text);
+}
+
 function jaccard(a: Set<string>, b: Set<string>): number {
     if (a.size === 0 || b.size === 0) return 0;
     let inter = 0;
@@ -387,6 +392,30 @@ export function findTranslationBenchConfusableSiblings(
                 `same-schema action-name overlap (${overlap.toFixed(2)})`,
             );
         }
+    }
+
+    const targetDescription = significantTokensFromText(
+        byKey.get(keyOf(target))?.description,
+    );
+    for (const action of all) {
+        if (action.schemaName === target.schemaName) continue;
+        if (sameAction(action, target)) continue;
+        const nameOverlap = jaccard(
+            targetTokens,
+            significantTokens(action.actionName),
+        );
+        if (nameOverlap < 0.5) continue;
+        const descriptionOverlap = jaccard(
+            targetDescription,
+            significantTokensFromText(action.description),
+        );
+        if (descriptionOverlap < 0.34) continue;
+        add(
+            action,
+            `cross-schema overlap (name ${nameOverlap.toFixed(
+                2,
+            )}, description ${descriptionOverlap.toFixed(2)})`,
+        );
     }
 
     return [...found.values()].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));
