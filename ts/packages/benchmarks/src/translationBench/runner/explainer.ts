@@ -191,7 +191,9 @@ export interface TranslationBenchExplainerAggregate {
     rubricScoreSum: number;
     rubricScore: number | undefined;
     rubricCriterionSums: Omit<TranslationBenchRuleRubricInput, "rationale">;
-    rubricCriteria: Omit<TranslationBenchRuleRubricInput, "rationale"> | undefined;
+    rubricCriteria:
+        | Omit<TranslationBenchRuleRubricInput, "rationale">
+        | undefined;
     diagnostics: TranslationBenchDiagnosticCounts;
     avgExplanationLatencyMs: number;
     avgCacheReplayLatencyMs: number;
@@ -438,7 +440,9 @@ function replayProbe(
     }
 }
 
-function seedAsProbe(evalCase: TranslationBenchCase): TranslationBenchExplainerProbe {
+function seedAsProbe(
+    evalCase: TranslationBenchCase,
+): TranslationBenchExplainerProbe {
     return {
         id: `${evalCase.id}:seed-replay`,
         role: "positive",
@@ -480,7 +484,10 @@ export async function runTranslationBenchExplainerCase(
         { mergeMatchSets: false, cacheConflicts: false },
     );
     cache.model = options.model;
-    const namespaceKeys = getTranslationBenchExplainerNamespaceKeys(cache, evalCase);
+    const namespaceKeys = getTranslationBenchExplainerNamespaceKeys(
+        cache,
+        evalCase,
+    );
     let ruleCreated = false;
     let ruleText: string | undefined;
     let ruleJson: unknown;
@@ -624,7 +631,9 @@ export async function runTranslationBenchExplainerCase(
     return result;
 }
 
-function parseRubricResponse(response: string): TranslationBenchRuleRubricInput {
+function parseRubricResponse(
+    response: string,
+): TranslationBenchRuleRubricInput {
     const start = response.indexOf("{");
     const end = response.lastIndexOf("}");
     if (start < 0 || end <= start) {
@@ -651,7 +660,9 @@ export function formatTranslationBenchRuleJudgePrompt(
     ];
 }
 
-export function createTranslationBenchRuleJudge(model: string): TranslationBenchRuleJudge {
+export function createTranslationBenchRuleJudge(
+    model: string,
+): TranslationBenchRuleJudge {
     if (!model.trim()) throw new Error("Rule judge model is required");
     let chatModel: ChatModelWithStreaming | undefined;
     return {

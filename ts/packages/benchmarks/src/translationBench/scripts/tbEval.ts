@@ -128,7 +128,11 @@ async function main(): Promise<void> {
         .option("--batch <name>", "named batch profile", "eval")
         .option("--models <ids>", "comma-separated model override")
         .option("--headroom <n>", "TPM headroom override", Number)
-        .option("--concurrency <n>", "default per-model case concurrency", Number)
+        .option(
+            "--concurrency <n>",
+            "default per-model case concurrency",
+            Number,
+        )
         .option(
             "--model-concurrency <n>",
             "models evaluated in parallel",
@@ -191,8 +195,9 @@ async function main(): Promise<void> {
             path.join(path.dirname(outPath), "eval-checkpoint.jsonl"),
     );
 
-    const configArgs: { config?: string; batch?: string; headroom?: number } =
-        { batch: opts.batch };
+    const configArgs: { config?: string; batch?: string; headroom?: number } = {
+        batch: opts.batch,
+    };
     if (opts.config !== undefined) configArgs.config = opts.config;
     if (opts.headroom !== undefined) configArgs.headroom = opts.headroom;
     const { resolved } = loadResolvedConfig(configArgs);
@@ -277,9 +282,7 @@ async function main(): Promise<void> {
 
     if (fs.existsSync(checkpointPath) && fs.statSync(checkpointPath).size > 0) {
         const loaded =
-            readTranslationBenchCheckpoint<TranslationBenchRow>(
-                checkpointPath,
-            );
+            readTranslationBenchCheckpoint<TranslationBenchRow>(checkpointPath);
         if (loaded.header.runFingerprint !== checkpointHeader.runFingerprint) {
             throw new Error(
                 `Checkpoint fingerprint mismatch at ${checkpointPath}. ` +
@@ -339,8 +342,7 @@ async function main(): Promise<void> {
                 }),
             ),
         onRowComplete: async (row) => {
-            const ckptRow =
-                createTranslationBenchTranslationCheckpointRow(row);
+            const ckptRow = createTranslationBenchTranslationCheckpointRow(row);
             checkpointState = appendTranslationBenchCheckpointRows(
                 checkpointPath,
                 checkpointHeader,

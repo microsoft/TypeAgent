@@ -46,7 +46,8 @@ function sourcePinFromBenchmark(
         // Full-file pin is recorded on construction as sourceManifestHash
         // (hash of the operator manifest). Surface it here for operators.
         sourceFileHash:
-            benchmark.metadata.construction.sourceManifestHash ?? "0".repeat(64),
+            benchmark.metadata.construction.sourceManifestHash ??
+            "0".repeat(64),
     };
 }
 
@@ -159,18 +160,21 @@ export function createTranslationBenchReport(
             ? {
                   explainer: {
                       summary:
-                          aggregateTranslationBenchExplainerResults(explainerRows),
+                          aggregateTranslationBenchExplainerResults(
+                              explainerRows,
+                          ),
                       byModel: [
                           ...new Set(explainerRows.map((row) => row.model)),
                       ]
                           .sort()
                           .map((model) => ({
                               key: model,
-                              summary: aggregateTranslationBenchExplainerResults(
-                                  explainerRows.filter(
-                                      (row) => row.model === model,
+                              summary:
+                                  aggregateTranslationBenchExplainerResults(
+                                      explainerRows.filter(
+                                          (row) => row.model === model,
+                                      ),
                                   ),
-                              ),
                           })),
                       rows: explainerRows,
                   },
@@ -335,8 +339,7 @@ function diagnosticCells(
         diagnostics.invalidJsonOrTranslationFailure,
     ]
         .map((value) => {
-            const rate =
-                totalCases === 0 ? 0 : value / Math.max(totalCases, 1);
+            const rate = totalCases === 0 ? 0 : value / Math.max(totalCases, 1);
             return `<td>${esc(value)} <span class="diag-rate">(${esc(percent(rate))})</span></td>`;
         })
         .join("");
@@ -794,7 +797,9 @@ apply();
 })();</script>`;
 }
 
-function explainerSummaryCells(summary: TranslationBenchExplainerAggregate): string {
+function explainerSummaryCells(
+    summary: TranslationBenchExplainerAggregate,
+): string {
     return [
         `${summary.ruleCreatedCases}/${summary.totalCases}`,
         `${summary.seedReplayPassedCases}/${summary.totalCases}`,
@@ -859,7 +864,9 @@ function explainerRowsTable(report: TranslationBenchReport): string {
     return `<table><thead><tr><th>Result</th><th>Model</th><th>Case</th><th>Rule created</th><th>Positive pass</th><th>FPR</th><th>Explain ms</th><th>Replay ms</th><th>Rule and deterministic probes</th><th>Optional rubric</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-export function renderTranslationBenchHtml(report: TranslationBenchReport): string {
+export function renderTranslationBenchHtml(
+    report: TranslationBenchReport,
+): string {
     return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(report.suiteName)} translation benchuation</title>

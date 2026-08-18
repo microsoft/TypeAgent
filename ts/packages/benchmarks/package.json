@@ -14,7 +14,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./translationBench": "./dist/translationBench/index.js",
-    "./internal": "./dist/index.js"
+    "./internal": "./dist/index.js",
+    "./translationBench/runner": "./dist/translationBench/runner/index.js"
   },
   "files": [
     "dist",
@@ -23,17 +24,22 @@
   "scripts": {
     "build": "tsc -b && node ./scripts/copyAssets.mjs",
     "clean": "node ./scripts/clean.mjs",
-    "gen-action-parameters-grader": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genActionParametersGrader.js",
-    "gen-catalog": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genCatalog.js && node --max-old-space-size=4096 dist/translationBench/scripts/genActionParametersGrader.js",
+    "gen-action-parameters-grader": "pnpm run gen-policy",
+    "gen-catalog": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genCatalog.js && node --max-old-space-size=4096 dist/translationBench/scripts/genPolicy.js && node --max-old-space-size=4096 dist/translationBench/scripts/pickEligibleActions.js --model ${TB_PICKER_MODEL:-azure/gpt-5.6-sol} && node ./scripts/copyAssets.mjs",
+    "gen-policy": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genPolicy.js && node ./scripts/copyAssets.mjs",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "pick-eligible-actions": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/pickEligibleActions.js --model ${TB_PICKER_MODEL:-azure/gpt-5.6-sol} && node ./scripts/copyAssets.mjs",
     "prettier": "prettier --check package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
     "test": "npm run test:local",
     "test:local": "pnpm run build && pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
-    "tsc": "tsc -b"
+    "tsc": "tsc -b",
+    "tb-eval": "node ./dist/translationBench/scripts/tbEval.js",
+    "tb-generate": "node ./dist/translationBench/scripts/tbGenerate.js"
   },
   "dependencies": {
     "@typeagent/action-schema": "workspace:*",
+    "@typeagent/agent-cache": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "agent-dispatcher": "workspace:*",

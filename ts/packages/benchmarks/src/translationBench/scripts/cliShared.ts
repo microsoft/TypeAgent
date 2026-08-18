@@ -61,14 +61,14 @@ export function loadResolvedConfig(options: {
 }): { configPath: string | undefined; resolved: ResolvedRunConfig } {
     const configPath =
         options.config !== undefined ? path.resolve(options.config) : undefined;
-    const file =
-        configPath !== undefined ? loadRunConfigFile(configPath) : {};
+    const file = configPath !== undefined ? loadRunConfigFile(configPath) : {};
     const resolveOptions: {
         batch?: string;
         headroom?: number;
     } = {};
     if (options.batch !== undefined) resolveOptions.batch = options.batch;
-    if (options.headroom !== undefined) resolveOptions.headroom = options.headroom;
+    if (options.headroom !== undefined)
+        resolveOptions.headroom = options.headroom;
     return {
         configPath,
         resolved: resolveRunConfig(file, resolveOptions),
