@@ -3,18 +3,11 @@
   "sourceCases": 932,
   "sourceUniquePositive": 905,
   "sourceUniqueNegative": 905,
-  "sourceModels": [
-    "azure/gpt-5.4-nano",
-    "azure/gpt-4.1",
-    "azure/gpt-4.1-mini"
-  ],
+  "sourceModels": ["azure/gpt-5.4-nano", "azure/gpt-4.1", "azure/gpt-4.1-mini"],
   "addedCases": 50,
   "addedPositive": 50,
   "addedNegative": 50,
-  "issues": [
-    "F1-list-conjunction-drop",
-    "F2-list-quantity-expansion"
-  ],
+  "issues": ["F1-list-conjunction-drop", "F2-list-quantity-expansion"],
   "sourceContract": "agents/list/src/listSchema.ts AddItemsAction (items:string[]; no quantity/cardinality contract)",
   "evidence": "500-fpr-repro/artifacts/value-probes/ (ladder + reproduction, both azure models, emptyHistoryProven)",
   "sha256": "9bced517157a3c6eee1ed59e59c491e5fa18c1195b1b6a63b3097407124ade81"

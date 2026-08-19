@@ -64,7 +64,9 @@ function toExplainerProbe(
     };
 }
 
-export function translationBenchBenchmarkToSuite(benchmark: TranslationBenchBenchmark): {
+export function translationBenchBenchmarkToSuite(
+    benchmark: TranslationBenchBenchmark,
+): {
     suite: TranslationBenchSuite;
     sourceManifest: TranslationBenchSuiteSourceIndex;
 } {

@@ -20,7 +20,10 @@ import type {
 import { getChatModelNames, openai as ai } from "@typeagent/aiclient";
 import { equalNormalizedObject } from "@typeagent/agent-cache";
 import { ActionSchemaFileCache } from "agent-dispatcher/internal";
-import { type ActionConfig, convertToActionConfig } from "agent-dispatcher/internal";
+import {
+    type ActionConfig,
+    convertToActionConfig,
+} from "agent-dispatcher/internal";
 import type {
     ActionConfigProvider,
     ActionSchemaFile,
@@ -348,10 +351,7 @@ export interface TranslationBenchRunnerOptions {
      * Token estimate for rate-limiter pre-reservation. Defaults to
      * `estimatePromptTokens(utterance)` when omitted.
      */
-    estimateTokens?: (input: {
-        model: string;
-        utterance: string;
-    }) => number;
+    estimateTokens?: (input: { model: string; utterance: string }) => number;
     /**
      * Retry transient translate failures (route 404, throttle, fetch blips).
      * Permanent model/content errors are not retried.
@@ -802,16 +802,19 @@ export function diagnoseTranslationBench(
     return counts;
 }
 
-const TRANSLATION_BENCH_PARAM_FIELD_MODES = new Set<TranslationBenchParamFieldMode>([
-    "exact",
-    "exists",
-    "nonempty",
-    "ignore",
-]);
+const TRANSLATION_BENCH_PARAM_FIELD_MODES =
+    new Set<TranslationBenchParamFieldMode>([
+        "exact",
+        "exists",
+        "nonempty",
+        "ignore",
+    ]);
 
 function validateParameterScoreSpecs(
     evalCase: TranslationBenchCase,
-    parameterScore: Array<TranslationBenchParameterScoreSpec | undefined> | undefined,
+    parameterScore:
+        | Array<TranslationBenchParameterScoreSpec | undefined>
+        | undefined,
 ): void {
     if (parameterScore === undefined) return;
     if (!Array.isArray(parameterScore)) {
@@ -1054,8 +1057,7 @@ export function aggregateTranslationBenchRows(
         errors: rows.filter((row) => row.error !== undefined).length,
         passRate: rows.length === 0 ? 0 : passedCases / rows.length,
         exactPassRate: rows.length === 0 ? 0 : exactPassedCases / rows.length,
-        schemaValidRate:
-            rows.length === 0 ? 0 : schemaValidCases / rows.length,
+        schemaValidRate: rows.length === 0 ? 0 : schemaValidCases / rows.length,
         toolScore: expectedCount === 0 ? undefined : routed / expectedCount,
         paramScore: routed === 0 ? undefined : paramMatches / routed,
         falseNegativeRate:
@@ -1162,8 +1164,7 @@ export function createTranslationBenchUsageAccumulator() {
                 // refuse to invent a cost.
                 (knownCached !== undefined ? cachedValid : true);
             const estimatedCostUsd = canPrice
-                ? ((promptTokens - cachedForCost) *
-                      pricing!.inputUsdPerMToken +
+                ? ((promptTokens - cachedForCost) * pricing!.inputUsdPerMToken +
                       cachedForCost * pricing!.cachedInputUsdPerMToken +
                       completionTokens * pricing!.outputUsdPerMToken) /
                   1_000_000
@@ -1266,7 +1267,9 @@ function sourceManifestMap(manifest: TranslationBenchSuiteSourceIndex) {
     for (const source of manifest.sources) {
         const key = lineageKey(source);
         if (sources.has(key)) {
-            throw new Error(`Duplicate translation bench source '${source.rowId}'`);
+            throw new Error(
+                `Duplicate translation bench source '${source.rowId}'`,
+            );
         }
         sources.set(key, source);
     }
@@ -1401,7 +1404,10 @@ export function validateTranslationBenchSuite(
     );
     const caseIds = new Set<string>();
     const caseSources = new Set<string>();
-    const translationNegativeSources = new Map<string, TranslationBenchLineage>();
+    const translationNegativeSources = new Map<
+        string,
+        TranslationBenchLineage
+    >();
     const explainerNegativeSources = new Map<string, TranslationBenchLineage>();
     for (const evalCase of suite.cases) {
         if (!evalCase.id.trim() || caseIds.has(evalCase.id)) {
@@ -1771,7 +1777,9 @@ export function resolveTranslationBenchConcurrency(
     caseCount: number,
 ): number {
     if (!Number.isSafeInteger(requested) || requested < 1) {
-        throw new Error("Translation bench concurrency must be a positive integer");
+        throw new Error(
+            "Translation bench concurrency must be a positive integer",
+        );
     }
     return Math.min(requested, Math.max(1, caseCount));
 }
@@ -1856,7 +1864,8 @@ export function isNonEvalTranslationBenchAction(action: {
  * refusal on empty-gold, not a translation failure.
  */
 export function isUnknownActionSchemaMatchError(error: unknown): boolean {
-    const message = error instanceof Error ? error.message : String(error ?? "");
+    const message =
+        error instanceof Error ? error.message : String(error ?? "");
     return /Unable to match schema name for action ['"]?unknown['"]?\b/i.test(
         message,
     );
@@ -1957,13 +1966,10 @@ export function scoreTranslationBenchTranslationOutcome(
         outcome.error instanceof Error
             ? outcome.error.message
             : String(outcome.error);
-    const score = scoreTranslationBench(
-        expectedActions,
-        [],
-        order,
-        0,
-        { ...scoreOptions, schemaValid: false },
-    );
+    const score = scoreTranslationBench(expectedActions, [], order, 0, {
+        ...scoreOptions,
+        schemaValid: false,
+    });
     score.passed = false;
     score.exactPassed = false;
     score.schemaValid = false;
@@ -1982,7 +1988,10 @@ export function scoreTranslationBenchTranslationOutcome(
     };
 }
 
-export function compareTranslationBenchKeys(left: string, right: string): number {
+export function compareTranslationBenchKeys(
+    left: string,
+    right: string,
+): number {
     return left < right ? -1 : left > right ? 1 : 0;
 }
 
@@ -2278,7 +2287,6 @@ function createTranslationBenchContext(
     };
 }
 
-
 const DEFAULT_TRANSLATE_RETRY_ATTEMPTS = 4;
 const DEFAULT_TRANSLATE_RETRY_BASE_MS = 400;
 const DEFAULT_TRANSLATE_RETRY_MAX_MS = 8_000;
@@ -2290,16 +2298,30 @@ function defaultIsRetryableTranslateError(error: unknown): boolean {
             : String(error);
     const lower = message.toLowerCase();
     // Route/load-balancer blips and shared-account throttles.
-    if (/\b404\b/.test(message) && /not found|resource|deployment|route/i.test(message)) {
+    if (
+        /\b404\b/.test(message) &&
+        /not found|resource|deployment|route/i.test(message)
+    ) {
         return true;
     }
-    if (/\b429\b/.test(message) || /rate limit|too many requests|throttl/i.test(lower)) {
+    if (
+        /\b429\b/.test(message) ||
+        /rate limit|too many requests|throttl/i.test(lower)
+    ) {
         return true;
     }
-    if (/fetch failed|network|econnreset|etimedout|socket hang up|no response/i.test(lower)) {
+    if (
+        /fetch failed|network|econnreset|etimedout|socket hang up|no response/i.test(
+            lower,
+        )
+    ) {
         return true;
     }
-    if (/temporarily unavailable|service unavailable|\b503\b|\b502\b|\b504\b/i.test(lower)) {
+    if (
+        /temporarily unavailable|service unavailable|\b503\b|\b502\b|\b504\b/i.test(
+            lower,
+        )
+    ) {
         return true;
     }
     return false;
@@ -2319,7 +2341,10 @@ async function withTranslateRetry<T>(
     run: () => Promise<T>,
     retry: TranslationBenchRunnerOptions["translateRetry"] | undefined,
 ): Promise<T> {
-    const maxAttempts = Math.max(1, retry?.maxAttempts ?? DEFAULT_TRANSLATE_RETRY_ATTEMPTS);
+    const maxAttempts = Math.max(
+        1,
+        retry?.maxAttempts ?? DEFAULT_TRANSLATE_RETRY_ATTEMPTS,
+    );
     const baseDelayMs = retry?.baseDelayMs ?? DEFAULT_TRANSLATE_RETRY_BASE_MS;
     const maxDelayMs = retry?.maxDelayMs ?? DEFAULT_TRANSLATE_RETRY_MAX_MS;
     const isRetryable = retry?.isRetryable ?? defaultIsRetryableTranslateError;
@@ -2577,10 +2602,8 @@ export async function runTranslationBench(
 
     // Models may run in parallel (modelConcurrency); each keeps its own
     // case-level pool (concurrencyByModel / concurrency).
-    const modelResults = await pmap(
-        options.models,
-        modelConcurrency,
-        (model) => runModel(model),
+    const modelResults = await pmap(options.models, modelConcurrency, (model) =>
+        runModel(model),
     );
     for (const modelRows of modelResults) {
         rows.push(...modelRows);
