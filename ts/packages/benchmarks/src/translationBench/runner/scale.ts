@@ -94,7 +94,6 @@ export interface TranslationBenchCatalogCensus {
     qualifiedActionKeys: string[];
     catalogDigest: string;
 }
-
 function sha256(value: string): string {
     return createHash("sha256").update(value).digest("hex");
 }
@@ -167,12 +166,19 @@ function requireNonEmpty(
 
 function requireShardCount(shardCount: number): void {
     if (!Number.isInteger(shardCount) || shardCount <= 0) {
-        throw new Error("Translation bench shard count must be a positive integer");
+        throw new Error(
+            "Translation bench shard count must be a positive integer",
+        );
     }
 }
 
-function validateHeader(header: TranslationBenchCheckpointHeader): void {
-    if (header?.kind !== "translation-bench-checkpoint" || header.version !== 1) {
+export function validateTranslationBenchCheckpointHeader(
+    header: TranslationBenchCheckpointHeader,
+): void {
+    if (
+        header?.kind !== "translation-bench-checkpoint" ||
+        header.version !== 1
+    ) {
         throw new Error("Invalid translation bench checkpoint header");
     }
     requireNonEmpty(header.runFingerprint, "Translation bench run fingerprint");
@@ -189,7 +195,9 @@ function validateHeader(header: TranslationBenchCheckpointHeader): void {
     }
 }
 
-function validateRow<T>(row: TranslationBenchCheckpointRow<T>): void {
+export function validateTranslationBenchCheckpointRow<T>(
+    row: TranslationBenchCheckpointRow<T>,
+): void {
     if (row?.kind !== "translation-bench-row") {
         throw new Error("Invalid translation bench checkpoint row");
     }
@@ -200,7 +208,10 @@ function validateRow<T>(row: TranslationBenchCheckpointRow<T>): void {
     canonicalJson(row.value);
 }
 
-function validateRowShard<T>(
+const validateHeader = validateTranslationBenchCheckpointHeader;
+const validateRow = validateTranslationBenchCheckpointRow;
+
+export function validateTranslationBenchCheckpointRowShard<T>(
     row: TranslationBenchCheckpointRow<T>,
     header: TranslationBenchCheckpointHeader,
 ): void {
@@ -215,11 +226,16 @@ function validateRowShard<T>(
     }
 }
 
-function settingsEqual(left: unknown, right: unknown): boolean {
+const validateRowShard = validateTranslationBenchCheckpointRowShard;
+
+export function translationBenchCheckpointSettingsEqual(
+    left: unknown,
+    right: unknown,
+): boolean {
     return canonicalJson(left) === canonicalJson(right);
 }
 
-function assertCompatibleHeaders(
+export function assertTranslationBenchCheckpointHeadersCompatible(
     actual: TranslationBenchCheckpointHeader,
     expected: TranslationBenchCheckpointHeader,
 ): void {
@@ -228,8 +244,15 @@ function assertCompatibleHeaders(
             "Translation bench checkpoint run fingerprint is incompatible",
         );
     }
-    if (!settingsEqual(actual.settings, expected.settings)) {
-        throw new Error("Translation bench checkpoint settings are incompatible");
+    if (
+        !translationBenchCheckpointSettingsEqual(
+            actual.settings,
+            expected.settings,
+        )
+    ) {
+        throw new Error(
+            "Translation bench checkpoint settings are incompatible",
+        );
     }
     if (
         actual.shardIndex !== expected.shardIndex ||
@@ -241,11 +264,19 @@ function assertCompatibleHeaders(
     }
 }
 
-export function createTranslationBenchRunFingerprint(runInputs: unknown): string {
+const settingsEqual = translationBenchCheckpointSettingsEqual;
+const assertCompatibleHeaders =
+    assertTranslationBenchCheckpointHeadersCompatible;
+
+export function createTranslationBenchRunFingerprint(
+    runInputs: unknown,
+): string {
     return sha256(canonicalJson(runInputs));
 }
 
-export function translationBenchResumeKey(identity: TranslationBenchWorkIdentity): string {
+export function translationBenchResumeKey(
+    identity: TranslationBenchWorkIdentity,
+): string {
     requireNonEmpty(identity.phase, "Translation bench phase");
     requireNonEmpty(identity.model, "Translation bench model");
     requireNonEmpty(identity.scenario, "Translation bench scenario");
@@ -283,7 +314,9 @@ export function validateTranslationBenchCheckpointWork(
     for (const row of rows) {
         const key = translationBenchResumeKey(row);
         if (!expectedKeys.has(key)) {
-            throw new Error(`Unexpected translation bench checkpoint work '${key}'`);
+            throw new Error(
+                `Unexpected translation bench checkpoint work '${key}'`,
+            );
         }
         if (actualKeys.has(key)) {
             throw new Error(`Duplicate translation bench resume key '${key}'`);
@@ -300,9 +333,8 @@ export function validateTranslationBenchCheckpointWork(
 }
 
 /**
- * Split checkpoint JSONL into logical lines.
- * If the file was truncated mid-write (crash during append), drop only the
- * final incomplete line so prior complete trajectory rows remain resumable.
+ * Split checkpoint JSONL into logical lines. A crash during append can leave
+ * the final line incomplete; prior complete rows remain resumable.
  */
 export function splitTranslationBenchCheckpointLines(text: string): string[] {
     if (text.length === 0) {

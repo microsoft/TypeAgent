@@ -22,6 +22,7 @@ import type {
     QueueSnapshot,
     DisplayLogEntry,
 } from "@typeagent/dispatcher-types";
+import { ServerStoppingError } from "@typeagent/dispatcher-types";
 import {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
@@ -652,12 +653,81 @@ export async function createSharedDispatcher(
             // new request queues behind a request that only unblocks on the
             // (up to 20 min) interaction / reasoning-loop timeout.
             const baseSubmitCommand = dispatcher.submitCommand.bind(dispatcher);
-            dispatcher.submitCommand = async (...args) => {
+            dispatcher.submitCommand = async (
+                command,
+                attachments,
+                submitOptions,
+                clientRequestId,
+                requestedId,
+            ) => {
                 supersedeStalledInteraction(
                     "user",
                     "Superseded by a new request",
                 );
-                return baseSubmitCommand(...args);
+                const requestId = requestedId ?? randomUUID();
+                context.logger?.logEvent("server:requestReceived", {
+                    requestId,
+                    connectionId,
+                    attachmentCount: attachments?.length ?? 0,
+                });
+                const result = await baseSubmitCommand(
+                    command,
+                    attachments,
+                    submitOptions,
+                    clientRequestId,
+                    requestId,
+                );
+                if (!result.ok) {
+                    context.logger?.logEvent(
+                        "server:requestRejected",
+                        {
+                            requestId,
+                            connectionId,
+                            reason: result.error,
+                        },
+                        "warning",
+                    );
+                    return result;
+                }
+
+                void result.entry.completion.then(
+                    (commandResult) => {
+                        const cancelled = commandResult?.cancelled === true;
+                        const status = cancelled
+                            ? "cancelled"
+                            : (commandResult?.disposition?.status ??
+                              "completed");
+                        const success =
+                            !cancelled &&
+                            commandResult?.disposition?.status !== "failed";
+                        context.logger?.logEvent(
+                            "server:responseReady",
+                            {
+                                requestId: result.entry.requestId,
+                                connectionId,
+                                success,
+                                cancelled,
+                                status,
+                            },
+                            success ? "info" : cancelled ? "warning" : "error",
+                        );
+                    },
+                    (error) => {
+                        const cancelled = error instanceof ServerStoppingError;
+                        context.logger?.logEvent(
+                            "server:responseReady",
+                            {
+                                requestId: result.entry.requestId,
+                                connectionId,
+                                success: false,
+                                cancelled,
+                                status: cancelled ? "cancelled" : "failed",
+                            },
+                            cancelled ? "warning" : "error",
+                        );
+                    },
+                );
+                return result;
             };
 
             return dispatcher;

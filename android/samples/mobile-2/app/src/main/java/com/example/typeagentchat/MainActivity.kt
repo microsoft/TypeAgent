@@ -2,10 +2,12 @@ package com.example.typeagentchat
 
 import android.Manifest
 import android.app.Activity
+import android.app.SearchManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.AlarmClock
 import android.speech.RecognizerIntent
@@ -17,6 +19,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,6 +28,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,6 +39,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -68,53 +73,137 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.withStateAtLeast
 import com.example.typeagentchat.ui.theme.TypeAgentChatTheme
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class MainActivity : ComponentActivity() {
 
-    private val webSocketManager = WebSocketManager()
+    private val viewModel: ChatViewModel by viewModels()
     private val tunnelUrl = BuildConfig.TYPEAGENT_SERVER_URL.trim()
     private val tunnelToken = BuildConfig.TYPEAGENT_TUNNEL_TOKEN.trim().ifBlank { null }
+    private val agentSchemaContent by lazy {
+        assets.open(AndroidDeviceAgent.SCHEMA_ASSET)
+            .bufferedReader()
+            .use { it.readText() }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        webSocketManager.setClientActionHandler(object : WebSocketManager.ClientActionHandler {
-            override fun onSetAlarm(action: SetAlarmAction) {
-                runOnUiThread { launchSetAlarmIntent(action) }
-            }
-
-            override fun onSetTimer(action: SetTimerAction) {
-                runOnUiThread { launchSetTimerIntent(action) }
-            }
-
-            override fun onSearchNearby(action: SearchNearbyAction) {
-                runOnUiThread { launchSearchNearbyIntent(action) }
-            }
-        })
-        webSocketManager.connect(
+        viewModel.connectIfNeeded(
             url = tunnelUrl,
-            tunnelToken = tunnelToken
+            tunnelToken = tunnelToken,
+            schemaContent = agentSchemaContent
         )
+
+        // Collected for the Activity's whole lifetime rather than only while
+        // RESUMED. An agent-driven action has an `executeAction` RPC waiting on
+        // its completion, so it must be answered promptly even when the app is
+        // backgrounded - launchExternalIntent does the foreground check itself
+        // and reports the refusal. Gating collection on RESUMED would instead
+        // leave the action queued, and the server's call hanging, until the
+        // user happened to come back.
+        lifecycleScope.launch {
+            viewModel.clientActions.collect { action ->
+                try {
+                    awaitResumedOrGiveUp()
+                    when (action) {
+                        is ClientAction.Alarm ->
+                            launchSetAlarmIntent(action.action, action.completion)
+                        is ClientAction.Timer ->
+                            launchSetTimerIntent(action.action, action.completion)
+                        is ClientAction.SearchNearby ->
+                            launchSearchNearbyIntent(action.action, action.completion)
+                        is ClientAction.ShowAlarms ->
+                            launchShowAlarmsIntent(action.completion)
+                        is ClientAction.ShowTimers ->
+                            launchShowTimersIntent(action.completion)
+                        is ClientAction.ShowLocation ->
+                            launchShowLocationIntent(action.action, action.completion)
+                        is ClientAction.DialPhoneNumber ->
+                            launchDialPhoneNumberIntent(action.action, action.completion)
+                        is ClientAction.ComposeSms ->
+                            launchComposeSmsIntent(action.action, action.completion)
+                        is ClientAction.WebSearch ->
+                            launchWebSearchIntent(action.action, action.completion)
+                        is ClientAction.OpenWebPage ->
+                            launchOpenWebPageIntent(action.action, action.completion)
+                    }
+                } catch (cancellation: CancellationException) {
+                    // The action was already taken off the channel, so no other
+                    // Activity will ever see it. Answer the waiting RPC before
+                    // unwinding rather than leaving the agent blocked.
+                    action.failWith(ACTIVITY_GONE_MESSAGE)
+                    throw cancellation
+                }
+            }
+        }
 
         setContent {
             TypeAgentChatTheme {
                 ChatApp(
-                    webSocketManager = webSocketManager,
+                    viewModel = viewModel,
                     tunnelUrl = tunnelUrl,
-                    tunnelToken = tunnelToken
+                    tunnelToken = tunnelToken,
+                    schemaContent = agentSchemaContent
                 )
             }
         }
     }
 
-    override fun onDestroy() {
-        webSocketManager.setClientActionHandler(null)
-        webSocketManager.disconnect()
-        super.onDestroy()
+    // No onDestroy teardown: the socket is owned by ChatViewModel and released
+    // in its onCleared. Disconnecting here would tear the connection down on
+    // every rotation, theme or locale change.
+
+    /**
+     * Waits a short while for the Activity to reach RESUMED, giving up quietly
+     * if it does not.
+     *
+     * `lifecycleScope` dispatches with `Dispatchers.Main.immediate`, so the
+     * collector above starts running inline inside `onCreate` and an action
+     * buffered across a configuration change is picked up while the new
+     * Activity is still CREATED. Dispatching it right then would hit
+     * [launchExternalIntent]'s foreground guard and refuse a perfectly valid
+     * action, blaming a backgrounded app that is in fact mid-recreation.
+     * onResume follows within a frame or two, so a brief wait lets it through.
+     *
+     * The wait is bounded so a genuinely backgrounded app still fails fast and
+     * releases the agent's `executeAction` call instead of holding it until the
+     * user returns.
+     */
+    private suspend fun awaitResumedOrGiveUp() {
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            return
+        }
+        withTimeoutOrNull(RESUME_GRACE_MILLIS) {
+            lifecycle.withStateAtLeast(Lifecycle.State.RESUMED) { }
+        }
     }
 
-    private fun launchSetAlarmIntent(action: SetAlarmAction) {
+    private fun ClientAction.failWith(message: String) {
+        val result = AndroidDeviceExecutionResult.Failure(message)
+        when (this) {
+            is ClientAction.Alarm -> completion(result)
+            is ClientAction.Timer -> completion(result)
+            is ClientAction.SearchNearby -> completion(result)
+            is ClientAction.ShowAlarms -> completion(result)
+            is ClientAction.ShowTimers -> completion(result)
+            is ClientAction.ShowLocation -> completion(result)
+            is ClientAction.DialPhoneNumber -> completion(result)
+            is ClientAction.ComposeSms -> completion(result)
+            is ClientAction.WebSearch -> completion(result)
+            is ClientAction.OpenWebPage -> completion(result)
+        }
+    }
+
+    private fun launchSetAlarmIntent(
+        action: SetAlarmAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
         val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
             putExtra(AlarmClock.EXTRA_HOUR, action.hour)
             putExtra(AlarmClock.EXTRA_MINUTES, action.minute)
@@ -122,20 +211,33 @@ class MainActivity : ComponentActivity() {
             if (action.originalRequest.isNotBlank()) {
                 putExtra(AlarmClock.EXTRA_MESSAGE, action.originalRequest)
             }
+            if (action.days.isNotEmpty()) {
+                // Documented as an ArrayList<Integer> of Calendar day constants,
+                // and it is read as exactly that - a plain IntArray is ignored.
+                putExtra(AlarmClock.EXTRA_DAYS, ArrayList(action.days))
+            }
         }
         launchExternalIntent(
             intent = intent,
             actionName = "set-alarm",
-            detail = "hour=${action.hour} minute=${action.minute}",
-            successMessage = "Alarm set for %02d:%02d".format(action.hour, action.minute),
+            detail = "hour=${action.hour} minute=${action.minute} days=${action.days}",
+            successMessage = buildString {
+                append("Alarm request sent for %02d:%02d".format(action.hour, action.minute))
+                if (action.days.isNotEmpty()) {
+                    append(" every ")
+                    append(formatAlarmDays(action.days))
+                }
+            },
             missingAppMessage = "No alarm app is available on this device.",
             deniedMessage = "This app is not allowed to set alarms.",
-            backgroundMessage = "Could not set the alarm while the app was in the background."
+            backgroundMessage = "Could not set the alarm while the app was in the background.",
+            completion = completion
         )
     }
 
     /**
-     * Handles `takeAction("set-timer", ...)` from the androidMobile agent.
+     * Handles the `setTimer` action of the registered `androidDevice` client
+     * agent.
      *
      * `EXTRA_SKIP_UI` is true so the clock app starts the countdown in the
      * background instead of coming to the foreground. The reference
@@ -145,7 +247,10 @@ class MainActivity : ComponentActivity() {
      * the only in-app feedback, so it is not optional - and it must not claim
      * success when the launch was refused. See [launchExternalIntent].
      */
-    private fun launchSetTimerIntent(action: SetTimerAction) {
+    private fun launchSetTimerIntent(
+        action: SetTimerAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
         val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
             putExtra(AlarmClock.EXTRA_LENGTH, action.durationInSeconds)
             putExtra(AlarmClock.EXTRA_SKIP_UI, true)
@@ -157,20 +262,32 @@ class MainActivity : ComponentActivity() {
             intent = intent,
             actionName = "set-timer",
             detail = "durationInSeconds=${action.durationInSeconds}",
-            successMessage = "Timer set for ${formatTimerDuration(action.durationInSeconds)}",
+            successMessage =
+                "Timer request sent for ${formatTimerDuration(action.durationInSeconds)}",
             missingAppMessage = "No timer app is available on this device.",
             deniedMessage = "This app is not allowed to set timers.",
-            backgroundMessage = "Could not set the timer while the app was in the background."
+            backgroundMessage = "Could not set the timer while the app was in the background.",
+            completion = completion
         )
     }
 
     /**
-     * Opens the device maps app on a local search. The intent is left implicit
-     * rather than pinned to `com.google.android.apps.maps` as TypeAgent's
+     * Handles the `searchNearby` action of the registered `androidDevice`
+     * client agent by opening the device maps app on a local search.
+     *
+     * Unlike the clock intents there is no `EXTRA_SKIP_UI` equivalent, so maps
+     * necessarily comes to the foreground; that makes the RESUMED guard in
+     * [launchExternalIntent] load-bearing.
+     *
+     * The intent is left implicit rather than pinned to
+     * `com.google.android.apps.maps` as TypeAgent's
      * `JavaScriptInterface.searchNearby` does, so it still resolves on devices
      * without Google Maps.
      */
-    private fun launchSearchNearbyIntent(action: SearchNearbyAction) {
+    private fun launchSearchNearbyIntent(
+        action: SearchNearbyAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(buildGeoSearchUri(action.searchTerm)))
         launchExternalIntent(
             intent = intent,
@@ -179,7 +296,187 @@ class MainActivity : ComponentActivity() {
             successMessage = "Searching nearby for ${action.searchTerm}",
             missingAppMessage = "No maps app is available on this device.",
             deniedMessage = "This app is not allowed to open the maps app.",
-            backgroundMessage = "Could not open maps while the app was in the background."
+            backgroundMessage = "Could not open maps while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `showAlarms` action by opening the clock app's alarm list.
+     *
+     * Takes no parameters and changes nothing - the user is simply shown the
+     * alarms they already have.
+     */
+    private fun launchShowAlarmsIntent(completion: (AndroidDeviceExecutionResult) -> Unit) {
+        launchExternalIntent(
+            intent = Intent(AlarmClock.ACTION_SHOW_ALARMS),
+            actionName = "show-alarms",
+            detail = "",
+            successMessage = "Opening your alarms",
+            missingAppMessage = "No alarm app is available on this device.",
+            deniedMessage = "This app is not allowed to open the alarm list.",
+            backgroundMessage = "Could not open the alarms while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `showTimers` action by opening the clock app's timer list.
+     *
+     * `ACTION_SHOW_TIMERS` only exists from API 26 and `minSdk` is 24, so older
+     * devices are told the action is unavailable rather than being handed an
+     * intent whose action string nothing can resolve.
+     */
+    private fun launchShowTimersIntent(completion: (AndroidDeviceExecutionResult) -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            val message = "Showing timers needs Android 8.0 or later."
+            Log.w(TAG, "Skipping show-timers intent: API ${Build.VERSION.SDK_INT} < 26")
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Failure(message))
+            return
+        }
+        launchExternalIntent(
+            intent = Intent(AlarmClock.ACTION_SHOW_TIMERS),
+            actionName = "show-timers",
+            detail = "",
+            successMessage = "Opening your timers",
+            missingAppMessage = "No timer app is available on this device.",
+            deniedMessage = "This app is not allowed to open the timer list.",
+            backgroundMessage = "Could not open the timers while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `showLocation` action by opening the maps app on one place.
+     *
+     * Uses the same `geo:0,0?q=` URI as [launchSearchNearbyIntent]; the
+     * difference is intent, not mechanics - a named place rather than a category
+     * of place nearby - so the existing `VIEW` + `geo` `<queries>` entry already
+     * covers it.
+     */
+    private fun launchShowLocationIntent(
+        action: ShowLocationAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(buildGeoSearchUri(action.location)))
+        launchExternalIntent(
+            intent = intent,
+            actionName = "show-location",
+            detail = "location=${action.location}",
+            successMessage = "Showing ${action.location} on the map",
+            missingAppMessage = "No maps app is available on this device.",
+            deniedMessage = "This app is not allowed to open the maps app.",
+            backgroundMessage = "Could not open maps while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `dialPhoneNumber` action by opening the dialer pre-filled.
+     *
+     * `ACTION_DIAL`, never `ACTION_CALL`: the user still has to press the call
+     * button, so no `CALL_PHONE` permission is required and a mistranslated
+     * number cannot place a call on its own.
+     */
+    private fun launchDialPhoneNumberIntent(
+        action: DialPhoneNumberAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val intent = Intent(Intent.ACTION_DIAL, Uri.parse(buildTelUri(action.phoneNumber)))
+        launchExternalIntent(
+            intent = intent,
+            actionName = "dial-phone-number",
+            detail = "phoneNumber=${action.phoneNumber}",
+            successMessage = "Dialer opened for ${action.phoneNumber}",
+            missingAppMessage = "No dialer app is available on this device.",
+            deniedMessage = "This app is not allowed to open the dialer.",
+            backgroundMessage = "Could not open the dialer while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `composeSms` action by opening a pre-filled message draft.
+     *
+     * `ACTION_SENDTO` with an `smsto:` URI, never the `SEND_SMS` permission: the
+     * user still has to press send, so nothing goes out unseen.
+     */
+    private fun launchComposeSmsIntent(
+        action: ComposeSmsAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val intent = Intent(
+            Intent.ACTION_SENDTO,
+            Uri.parse(buildSmsToUri(action.phoneNumber))
+        ).apply {
+            // The de facto standard extra name every messaging app reads; there
+            // is no platform constant for it.
+            putExtra("sms_body", action.message)
+        }
+        val recipient = action.phoneNumber ?: "a new message"
+        launchExternalIntent(
+            intent = intent,
+            actionName = "compose-sms",
+            detail = "phoneNumber=${action.phoneNumber ?: "none"} messageChars=${
+                action.message.length
+            }",
+            successMessage = "Message draft opened for $recipient",
+            missingAppMessage = "No messaging app is available on this device.",
+            deniedMessage = "This app is not allowed to open the messaging app.",
+            backgroundMessage =
+                "Could not open the messaging app while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `webSearch` action by running a search in the device's own
+     * browser or search app.
+     *
+     * The query rides as an extra rather than in a URL, so no search engine is
+     * hard-coded and the user's default handles it.
+     */
+    private fun launchWebSearchIntent(
+        action: WebSearchAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val intent = Intent(Intent.ACTION_WEB_SEARCH).apply {
+            putExtra(SearchManager.QUERY, action.query)
+        }
+        launchExternalIntent(
+            intent = intent,
+            actionName = "web-search",
+            detail = "query=${action.query}",
+            successMessage = "Searching the web for ${action.query}",
+            missingAppMessage = "No browser or search app is available on this device.",
+            deniedMessage = "This app is not allowed to run a web search.",
+            backgroundMessage = "Could not search the web while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `openWebPage` action by opening a URL in the browser.
+     *
+     * The scheme allowlist lives in [parseOpenWebPageActionPayload] and has
+     * already rejected anything that is not `http`/`https` by the time this
+     * runs, so no arbitrary deep link can reach `startActivity`.
+     */
+    private fun launchOpenWebPageIntent(
+        action: OpenWebPageAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(action.url))
+        launchExternalIntent(
+            intent = intent,
+            actionName = "open-web-page",
+            detail = "url=${action.url}",
+            successMessage = "Opening ${action.url}",
+            missingAppMessage = "No browser is available on this device.",
+            deniedMessage = "This app is not allowed to open web pages.",
+            backgroundMessage = "Could not open the page while the app was in the background.",
+            completion = completion
         )
     }
 
@@ -208,7 +505,8 @@ class MainActivity : ComponentActivity() {
         successMessage: String,
         missingAppMessage: String,
         deniedMessage: String,
-        backgroundMessage: String
+        backgroundMessage: String,
+        completion: (AndroidDeviceExecutionResult) -> Unit
     ) {
         val target = intent.resolveActivity(packageManager)
         Log.d(
@@ -218,6 +516,7 @@ class MainActivity : ComponentActivity() {
         if (target == null) {
             Log.e(TAG, "No app available to handle $actionName intent")
             Toast.makeText(this, missingAppMessage, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Failure(missingAppMessage))
             return
         }
         if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
@@ -227,56 +526,69 @@ class MainActivity : ComponentActivity() {
                     "background activity starts are refused without an exception"
             )
             Toast.makeText(this, backgroundMessage, Toast.LENGTH_LONG).show()
+            completion(AndroidDeviceExecutionResult.Failure(backgroundMessage))
             return
         }
         try {
             startActivity(intent)
             Log.d(TAG, "$actionName intent dispatched")
             Toast.makeText(this, successMessage, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Success(successMessage))
         } catch (_: ActivityNotFoundException) {
             Log.e(TAG, "No app available to handle $actionName intent")
             Toast.makeText(this, missingAppMessage, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Failure(missingAppMessage))
         } catch (error: SecurityException) {
             Log.e(TAG, "Missing permission for $actionName", error)
             Toast.makeText(this, deniedMessage, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Failure(deniedMessage))
         }
     }
 
     private companion object {
         private const val TAG = "MainActivity"
+
+        /**
+         * How long a client action waits for the Activity to resume before it
+         * is treated as arriving while the app is backgrounded. Long enough to
+         * cover an Activity recreation, short enough that the agent is not left
+         * waiting on a user who has switched away.
+         */
+        private const val RESUME_GRACE_MILLIS = 2_000L
+
+        private const val ACTIVITY_GONE_MESSAGE =
+            "The Android app closed the chat screen before the action could run."
     }
 }
 
 @Composable
 private fun ChatApp(
-    webSocketManager: WebSocketManager,
+    viewModel: ChatViewModel,
     tunnelUrl: String,
-    tunnelToken: String?
+    tunnelToken: String?,
+    schemaContent: String
 ) {
-    val messages by webSocketManager.messages.collectAsState()
-    val connectionStatus by webSocketManager.connectionStatus.collectAsState()
-    val pendingYesNoPrompt by webSocketManager.pendingYesNoPrompt.collectAsState()
-    var inputText by remember { mutableStateOf("") }
+    val messages by viewModel.messages.collectAsState()
+    val connectionStatus by viewModel.connectionStatus.collectAsState()
+    val pendingYesNoPrompt by viewModel.pendingYesNoPrompt.collectAsState()
+    val inputText by viewModel.inputText.collectAsState()
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
-    val canSend = connectionStatus.state == ConnectionStatus.State.CONNECTED && inputText.isNotBlank()
+    val isConnected = connectionStatus.state == ConnectionStatus.State.CONNECTED
+    val canSend = isConnected && inputText.isNotBlank()
+
     val voiceInput = rememberVoiceInputController(
         onRecognizedText = { recognizedText ->
-            inputText = mergeSpeechInputText(
-                currentText = inputText,
-                recognizedText = recognizedText
-            )
+            if (viewModel.onRecognizedText(recognizedText)) {
+                focusManager.clearFocus()
+            }
         }
     )
 
     fun submitMessage() {
-        if (!canSend) {
-            return
+        if (viewModel.submitMessage()) {
+            focusManager.clearFocus()
         }
-        val message = inputText.trim()
-        webSocketManager.sendMessage(message)
-        inputText = ""
-        focusManager.clearFocus()
     }
 
     LaunchedEffect(messages.size) {
@@ -290,16 +602,21 @@ private fun ChatApp(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp),
+                .padding(16.dp)
+                .imePadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            ChatHeader()
+            ChatHeader(
+                canClearChat = messages.isNotEmpty(),
+                onClearChat = { viewModel.clearChatHistory() }
+            )
             ConnectionStatusIndicator(
                 status = connectionStatus,
                 onReconnect = {
-                    webSocketManager.connect(
+                    viewModel.reconnect(
                         url = tunnelUrl,
-                        tunnelToken = tunnelToken
+                        tunnelToken = tunnelToken,
+                        schemaContent = schemaContent
                     )
                 }
             )
@@ -342,15 +659,15 @@ private fun ChatApp(
 
             ChatInputBar(
                 inputText = inputText,
-                onInputTextChange = { inputText = it },
-                isConnected = connectionStatus.state == ConnectionStatus.State.CONNECTED,
+                onInputTextChange = { viewModel.onInputTextChange(it) },
+                isConnected = isConnected,
                 canSend = canSend,
                 onSend = { submitMessage() },
                 isVoiceInputAvailable = voiceInput.isAvailable,
                 onVoiceInputClick = voiceInput.onStartRequested,
                 pendingYesNoPrompt = pendingYesNoPrompt,
-                onConfirmYes = { webSocketManager.respondToPendingYesNo(true) },
-                onConfirmNo = { webSocketManager.respondToPendingYesNo(false) }
+                onConfirmYes = { viewModel.respondToPendingYesNo(true) },
+                onConfirmNo = { viewModel.respondToPendingYesNo(false) }
             )
         }
     }
@@ -447,17 +764,6 @@ private fun rememberVoiceInputController(
                 }
             }
         )
-    }
-}
-
-private fun mergeSpeechInputText(
-    currentText: String,
-    recognizedText: String
-): String {
-    return if (currentText.isBlank()) {
-        recognizedText
-    } else {
-        "$currentText $recognizedText"
     }
 }
 
@@ -568,27 +874,75 @@ private fun ChatInputBar(
 }
 
 @Composable
-private fun ChatHeader() {
+private fun ChatHeader(
+    canClearChat: Boolean,
+    onClearChat: () -> Unit
+) {
+    var showConfirmation by remember { mutableStateOf(false) }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         tonalElevation = 3.dp
     ) {
-        Column(
+        Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "TypeAgent Chat",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "A simple local chat client for your TypeAgent server.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "TypeAgent Chat",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "A simple local chat client for your TypeAgent server.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            TextButton(
+                onClick = { showConfirmation = true },
+                enabled = canClearChat
+            ) {
+                Text("Clear chat")
+            }
         }
+    }
+
+    // Clearing deletes the only copy of the transcript, so it is confirmed
+    // rather than fired on a single stray tap.
+    if (showConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showConfirmation = false },
+            title = { Text("Clear this chat?") },
+            text = {
+                Text(
+                    "This deletes the messages on this device and cannot be undone. " +
+                        "The conversation itself is not affected - the agent keeps its " +
+                        "own memory of it."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showConfirmation = false
+                        onClearChat()
+                    }
+                ) {
+                    Text("Clear chat")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

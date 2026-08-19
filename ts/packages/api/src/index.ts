@@ -4,6 +4,7 @@
 import { TypeAgentServer } from "./typeAgentServer.js";
 import { loadConfig } from "@typeagent/config";
 import { otel } from "@typeagent/telemetry";
+import registerDebug from "debug";
 
 let typeAgentServer: TypeAgentServer | undefined;
 let shutdownPromise: Promise<void> | undefined;
@@ -40,14 +41,22 @@ process.once("SIGTERM", () => {
 async function main(): Promise<void> {
     // Load config from YAML layers + Key Vault (replacing legacy dotenv).
     await loadConfig({ keyVault: {}, strict: false });
-    await otel.initTelemetry();
+    const telemetryConfig = otel.resolveTelemetryConfig();
+    await otel.initTelemetry({
+        config: telemetryConfig,
+        processName: "api-server",
+        debugModules: [registerDebug],
+        debugBridge: {
+            includedNamespacePrefixes: ["typeagent:", "agent-server:"],
+        },
+    });
     if (shutdownRequested) {
         return;
     }
 
     typeAgentServer = new TypeAgentServer((exitCode) => {
         void shutdownHost(exitCode);
-    });
+    }, telemetryConfig.structuredLogs === true);
 
     await typeAgentServer.start();
 }

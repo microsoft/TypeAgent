@@ -51,6 +51,7 @@ import {
     ensureDirectory,
     lockInstanceDir,
 } from "../utils/fsUtils.js";
+import { createDispatcherOtelLoggerSink } from "../otel/structuredLogSink.js";
 import {
     ActionContext,
     AppAgentEvent,
@@ -599,6 +600,11 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
          * Default false: each request starts a new trace.
          */
         joinActiveTrace?: boolean;
+        /**
+         * Export structured dispatcher events through the global OTel logs
+         * provider. Default false because event payloads may contain user data.
+         */
+        structuredLogs?: boolean;
     };
 
     // Additional integration options
@@ -727,7 +733,11 @@ function getCosmosFactories(): PromptLoggerOptions {
     return result;
 }
 
-function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
+function getLoggerSink(
+    isDbEnabled: () => boolean,
+    clientIO: ClientIO,
+    structuredLogs: boolean,
+) {
     const debugLoggerSink = createDebugLoggerSink();
     let dbLoggerSink: LoggerSink | undefined;
 
@@ -759,11 +769,14 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
         );
     }
 
-    return new MultiSinkLogger(
+    const sinks =
         dbLoggerSink === undefined
             ? [debugLoggerSink]
-            : [debugLoggerSink, dbLoggerSink],
-    );
+            : [debugLoggerSink, dbLoggerSink];
+    if (structuredLogs) {
+        sinks.push(createDispatcherOtelLoggerSink());
+    }
+    return new MultiSinkLogger(sinks);
 }
 
 async function lockEmbeddingCacheDir(context: CommandHandlerContext) {
@@ -1206,7 +1219,11 @@ export async function initializeCommandHandlerContext(
         const sessionDirPath = session.getSessionDirPath();
         debug(`Session directory: ${sessionDirPath}`);
         const clientIO = options?.clientIO ?? nullClientIO;
-        const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
+        const loggerSink = getLoggerSink(
+            () => context.dblogging,
+            clientIO,
+            options?.telemetry?.structuredLogs === true,
+        );
         const activationId = randomUUID();
         const traceId = options?.traceId;
         const logger = new ChildLogger(loggerSink, DispatcherName, {
@@ -1217,6 +1234,7 @@ export async function initializeCommandHandlerContext(
                     ? getSessionName(context.session.sessionDirPath)
                     : undefined,
             activationId,
+            requestId: () => context.currentRequestId?.requestId,
         });
 
         const cacheDir = persistDir ? ensureCacheDir(persistDir) : undefined;
@@ -1382,6 +1400,7 @@ export async function initializeCommandHandlerContext(
                         result?.metrics,
                         result?.tokenUsage,
                         result?.actionTokenUsage,
+                        result?.traceId,
                     );
                     context.displayLog.saveQueued();
                 } catch {
@@ -1415,8 +1434,8 @@ export async function initializeCommandHandlerContext(
             },
             context.logger
                 ? {
-                      logEvent: (name, data) =>
-                          context.logger?.logEvent(name, data as any),
+                      logEvent: (name, data, severity) =>
+                          context.logger?.logEvent(name, data as any, severity),
                   }
                 : undefined,
         );

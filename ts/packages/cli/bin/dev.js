@@ -4,6 +4,7 @@
 
 import { loadConfigSync } from "@typeagent/config";
 import { otel } from "@typeagent/telemetry";
+import registerDebug from "debug";
 import { registerEarlyTelemetrySignalHandlers } from "../src/telemetry.ts";
 loadConfigSync();
 
@@ -15,7 +16,10 @@ async function main() {
     process.env.NODE_ENV = "development";
     settings.debug = true;
     try {
-        await otel.initTelemetry();
+        await otel.initTelemetry({
+            processName: "cli",
+            debugModules: [registerDebug],
+        });
         await run(process.argv.slice(2), import.meta.url);
         await flush();
         await otel.shutdownTelemetry();

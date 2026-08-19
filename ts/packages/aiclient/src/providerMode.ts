@@ -17,6 +17,8 @@
  * `copilot.defaultModel`).
  */
 
+import { DEFAULT_COPILOT_MODEL } from "./copilotModelDefaults.js";
+
 export type ProviderMode = "azure" | "openai" | "ollama" | "copilot";
 
 export const PROVIDER_MODES: readonly ProviderMode[] = [
@@ -57,6 +59,11 @@ function isCanonicalName(s: string): s is CanonicalName {
     return (CANONICAL_NAMES as readonly string[]).includes(s);
 }
 
+export function usesProviderDefault(canonical: string): boolean {
+    const key = canonical.toUpperCase();
+    return key === "DEFAULT" || !isCanonicalName(key);
+}
+
 /**
  * Built-in name maps per non-Azure mode. Azure mode is identity — the
  * canonical names already are Azure deployment names, so no rewriting.
@@ -64,13 +71,13 @@ function isCanonicalName(s: string): s is CanonicalName {
  * names; the `openai:LOCAL` form is the explicit escape).
  */
 const COPILOT_MAP: Record<CanonicalName, string> = {
-    DEFAULT: "claude-sonnet-4.5",
-    GPT_35_TURBO: "claude-haiku-4.5",
-    GPT_4_O: "gpt-4o",
-    GPT_5: "claude-sonnet-4.5",
-    GPT_5_MINI: "gpt-4o-mini",
-    GPT_5_NANO: "gpt-4o-mini",
-    GPT_V: "gpt-4o",
+    DEFAULT: DEFAULT_COPILOT_MODEL,
+    GPT_35_TURBO: "gpt-5-mini",
+    GPT_4_O: "gpt-5.4",
+    GPT_5: DEFAULT_COPILOT_MODEL,
+    GPT_5_MINI: "gpt-5-mini",
+    GPT_5_NANO: "gpt-5-mini",
+    GPT_V: "gpt-5.4",
 };
 
 const OLLAMA_MAP: Record<CanonicalName, string> = {

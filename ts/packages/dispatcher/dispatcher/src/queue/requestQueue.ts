@@ -44,7 +44,11 @@ export interface QueueBroadcaster {
 
 /** Optional telemetry sink. */
 export interface QueueLogger {
-    logEvent(name: string, data: unknown): void;
+    logEvent(
+        name: string,
+        data: unknown,
+        severity?: "info" | "warning" | "error",
+    ): void;
 }
 
 /**
@@ -523,11 +527,18 @@ export class RequestQueue {
         return out;
     }
 
-    private log(name: string, data: unknown): void {
+    private log(
+        name: string,
+        data: unknown,
+        severity: "info" | "warning" | "error" = "info",
+    ): void {
         try {
-            debug(name, data);
-            debugInternal(name, data);
-            this.logger?.logEvent(name, data);
+            if (this.logger !== undefined) {
+                this.logger.logEvent(name, data, severity);
+            } else {
+                debug(name, data);
+                debugInternal(name, data);
+            }
         } catch {
             // best-effort telemetry
         }
@@ -606,6 +617,9 @@ export class RequestQueue {
                         if (entry.error === undefined) {
                             entry.error = `cancelled:${entry.cancelReason ?? "user"}`;
                         }
+                    } else if (result?.disposition?.status === "failed") {
+                        entry.state = "failed";
+                        entry.error = "command failed";
                     } else {
                         entry.state = "succeeded";
                     }
@@ -635,13 +649,17 @@ export class RequestQueue {
                 this.head = null;
                 ++this.snapshotVersion;
 
-                this.log("requestQueue:complete", {
-                    requestId: entry.requestId,
-                    connectionId: entry.originatorConnectionId,
-                    state: entry.state,
-                    runMs: (entry.finishedAt ?? 0) - (entry.startedAt ?? 0),
-                    totalMs: (entry.finishedAt ?? 0) - entry.submittedAt,
-                });
+                this.log(
+                    "requestQueue:complete",
+                    {
+                        requestId: entry.requestId,
+                        connectionId: entry.originatorConnectionId,
+                        state: entry.state,
+                        runMs: (entry.finishedAt ?? 0) - (entry.startedAt ?? 0),
+                        totalMs: (entry.finishedAt ?? 0) - entry.submittedAt,
+                    },
+                    entry.state === "failed" ? "error" : "info",
+                );
                 this.safeBroadcast("queueStateChanged", () =>
                     this.broadcast.queueStateChanged(this.getSnapshot()),
                 );
