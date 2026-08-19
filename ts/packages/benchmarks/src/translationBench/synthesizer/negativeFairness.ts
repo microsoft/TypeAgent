@@ -10,6 +10,7 @@ import type {
     TranslationBenchReviewIssue,
     TranslationBenchReviewerDecision,
 } from "./generationCandidate.js";
+import { assessEmptyGoldUtterance } from "./emptyGoldUtterance.js";
 import { parseWithZod } from "./zodJson.js";
 
 export const TRANSLATION_BENCH_NEGATIVE_KINDS = [
@@ -38,15 +39,15 @@ export const TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE =
     "Empty-gold negatives must be zero-action-safe under the FULL loaded tool " +
     "catalog (not merely “not the target”): a careful translator must emit no " +
     "actions at all — including chat.generateResponse, system.help.*, history, " +
-    "lookup, or any other tool. ALLOWED fair kind: pure_refusal only — a hard " +
-    "abstain of the target (don't / do not / never / leave-alone / hands-off / " +
-    "do-nothing / refrain-from / avoid-doing), with no alternate task, no " +
-    "question, and no request for explanation. Bare stop/cancel/sibling " +
-    "imperatives and “do X but don't Y” partial constraints are NOT fair empty " +
-    "gold. FORBIDDEN: definition/meta/status/how-to questions; missing_info " +
-    "that invites tools; soft solicits; capability questions; contrastive " +
-    "adjacent/sibling commands; refuse-then-alternate; any imperative a " +
-    "correct translator would map to any loaded tool.";
+    "lookup, or any other tool. ALLOWED fair kind: pure_refusal only — the " +
+    "utterance MUST OPEN with don't/do not/never/leave-alone/hands-off/do-nothing/" +
+    "refrain-from/avoid-doing of the target, with no alternate task, no question, " +
+    "and no request for explanation. Bare stop/cancel/sibling imperatives and " +
+    "“do X but don't Y” partial constraints are NOT fair empty gold. FORBIDDEN: " +
+    "definition/meta/status/how-to questions; missing_info that invites tools; " +
+    "soft solicits; capability questions; contrastive adjacent/sibling commands; " +
+    "refuse-then-alternate; any imperative a correct translator would map to any " +
+    "loaded tool.";
 
 const FIX =
     "Rewrite as a hard-abstain empty-gold negative that OPENS with don't/do not/" +
@@ -61,8 +62,6 @@ const assessmentSchema = z
         kind: z.enum(TRANSLATION_BENCH_NEGATIVE_KINDS),
         fairEmptyGold: z.boolean(),
         reason: z.string().trim().min(1),
-        // Atomic LLM flags — judged independently, then checked for consistency
-        // with fairEmptyGold. Replaces the former utterance regex shape gate.
         opensAsHardAbstain: z.boolean(),
         hasAlternateOrSiblingTask: z.boolean(),
         hasQuestionOrExplanationRequest: z.boolean(),
@@ -81,43 +80,14 @@ export interface TranslationBenchNegativeFairnessResult {
     kind: TranslationBenchNegativeKind;
     path: string;
     utterance: string;
-    /** Present when the LLM flags are not a consistent fair empty-gold. */
+    /** Present when the deterministic utterance shape gate fails. */
+    utteranceReason?: string;
+    /** Kept for callers that consume the legacy assessment failure detail. */
     reason?: string;
 }
 
 function bad(path: string, message: string): TranslationBenchReviewIssue {
     return { code: "BAD_NEGATIVE", path, message, suggestedFix: FIX };
-}
-
-export function translationBenchNegativeAssessmentPath(index: number): string {
-    return `$.genCases[${index}].utterance`;
-}
-
-export function translationBenchNegativeAssessmentPaths(
-    candidate: TranslationBenchGeneratedCandidate,
-): string[] {
-    const paths: string[] = [];
-    for (const [index, genCase] of candidate.genCases.entries()) {
-        if (genCase.role === "negative") {
-            paths.push(translationBenchNegativeAssessmentPath(index));
-        }
-    }
-    return paths;
-}
-
-/** Mechanical path-syntax aliases → `$.genCases[N].utterance`. */
-export function canonicalizeTranslationBenchNegativeAssessmentPath(
-    path: string,
-): string {
-    const trimmed = path.trim();
-    const match =
-        /^(?:\$\.)?genCases\[(\d+)\](?:\.utterance)?$/.exec(trimmed) ??
-        /^(?:\$\.)?genCases\.(\d+)(?:\.utterance)?$/.exec(trimmed) ??
-        /^\/genCases\/(\d+)(?:\/utterance)?$/.exec(trimmed);
-    if (match === null) {
-        return trimmed;
-    }
-    return translationBenchNegativeAssessmentPath(Number(match[1]));
 }
 
 function negativeByPath(
@@ -126,79 +96,19 @@ function negativeByPath(
     const byPath = new Map<string, TranslationBenchGeneratedCase>();
     for (const [index, genCase] of candidate.genCases.entries()) {
         if (genCase.role === "negative") {
-            byPath.set(translationBenchNegativeAssessmentPath(index), genCase);
+            byPath.set(`$.genCases[${index}].utterance`, genCase);
         }
     }
     return byPath;
 }
 
-/** True when the four atomic flags describe a hard abstain with no toolable follow-on. */
-export function decomposedFlagsAreFair(
-    assessment: TranslationBenchNegativeFairnessAssessment,
-): boolean {
-    return (
-        assessment.opensAsHardAbstain &&
-        !assessment.hasAlternateOrSiblingTask &&
-        !assessment.hasQuestionOrExplanationRequest &&
-        !assessment.mapsToAnyLoadedTool
-    );
-}
-
-function inconsistentFairFlagsMessage(
-    assessment: TranslationBenchNegativeFairnessAssessment,
-): string {
-    const parts = [
-        `opensAsHardAbstain=${String(assessment.opensAsHardAbstain)}`,
-        `hasAlternateOrSiblingTask=${String(assessment.hasAlternateOrSiblingTask)}`,
-        `hasQuestionOrExplanationRequest=${String(assessment.hasQuestionOrExplanationRequest)}`,
-        `mapsToAnyLoadedTool=${String(assessment.mapsToAnyLoadedTool)}`,
-    ];
-    return `empty-gold flags inconsistent with fairEmptyGold=true (${parts.join(", ")})`;
-}
-
-export function translationBenchNegativeAssessmentsJsonSchema(
-    requiredPaths?: readonly string[],
-): Record<string, unknown> {
-    const pathSchema =
-        requiredPaths !== undefined && requiredPaths.length > 0
-            ? { type: "string", enum: [...requiredPaths] }
-            : { type: "string", minLength: 1 };
-    return {
-        type: "array",
-        ...(requiredPaths !== undefined
-            ? {
-                  minItems: requiredPaths.length,
-                  maxItems: requiredPaths.length,
-              }
-            : {}),
-        items: {
-            type: "object",
-            additionalProperties: false,
-            required: [
-                "path",
-                "kind",
-                "fairEmptyGold",
-                "reason",
-                "opensAsHardAbstain",
-                "hasAlternateOrSiblingTask",
-                "hasQuestionOrExplanationRequest",
-                "mapsToAnyLoadedTool",
-            ],
-            properties: {
-                path: pathSchema,
-                kind: {
-                    type: "string",
-                    enum: [...TRANSLATION_BENCH_NEGATIVE_KINDS],
-                },
-                fairEmptyGold: { type: "boolean" },
-                reason: { type: "string", minLength: 1 },
-                opensAsHardAbstain: { type: "boolean" },
-                hasAlternateOrSiblingTask: { type: "boolean" },
-                hasQuestionOrExplanationRequest: { type: "boolean" },
-                mapsToAnyLoadedTool: { type: "boolean" },
-            },
-        },
-    };
+export function translationBenchNegativeAssessmentsJsonSchema(): Record<
+    string,
+    unknown
+> {
+    const schema = z.toJSONSchema(assessmentsSchema) as Record<string, unknown>;
+    delete schema.$schema;
+    return schema;
 }
 
 export function parseTranslationBenchNegativeFairnessAssessments(
@@ -217,6 +127,28 @@ export function isFairEmptyGoldAssessment(
     );
 }
 
+export function decomposedFlagsAreFair(
+    assessment: TranslationBenchNegativeFairnessAssessment,
+): boolean {
+    return (
+        assessment.opensAsHardAbstain &&
+        !assessment.hasAlternateOrSiblingTask &&
+        !assessment.hasQuestionOrExplanationRequest &&
+        !assessment.mapsToAnyLoadedTool
+    );
+}
+
+function inconsistentFairFlagsMessage(
+    assessment: TranslationBenchNegativeFairnessAssessment,
+): string {
+    return [
+        `opensAsHardAbstain=${String(assessment.opensAsHardAbstain)}`,
+        `hasAlternateOrSiblingTask=${String(assessment.hasAlternateOrSiblingTask)}`,
+        `hasQuestionOrExplanationRequest=${String(assessment.hasQuestionOrExplanationRequest)}`,
+        `mapsToAnyLoadedTool=${String(assessment.mapsToAnyLoadedTool)}`,
+    ].join(", ");
+}
+
 export function checkTranslationBenchNegativeFairnessAssessment(
     assessment: TranslationBenchNegativeFairnessAssessment,
     utterance: string,
@@ -224,23 +156,24 @@ export function checkTranslationBenchNegativeFairnessAssessment(
 ): TranslationBenchNegativeFairnessResult {
     void _target;
     if (!isFairEmptyGoldAssessment(assessment)) {
-        const reason =
-            assessment.fairEmptyGold && FAIR_KINDS.has(assessment.kind)
-                ? inconsistentFairFlagsMessage(assessment)
-                : assessment.reason;
         return {
             ok: false,
             kind: assessment.kind,
             path: assessment.path,
             utterance,
-            reason,
+            reason:
+                assessment.fairEmptyGold && FAIR_KINDS.has(assessment.kind)
+                    ? `inconsistent fair empty-gold flags: ${inconsistentFairFlagsMessage(assessment)}`
+                    : assessment.reason,
         };
     }
+    const shape = assessEmptyGoldUtterance(utterance);
     return {
-        ok: true,
+        ok: shape.fair,
         kind: assessment.kind,
         path: assessment.path,
         utterance,
+        ...(shape.fair ? {} : { utteranceReason: shape.reason }),
     };
 }
 
@@ -264,19 +197,21 @@ export function checkTranslationBenchCandidateNegativeFairness(
     const seen = new Set<string>();
     const issues: TranslationBenchReviewIssue[] = [];
     for (const a of assessments) {
-        const path = canonicalizeTranslationBenchNegativeAssessmentPath(a.path);
-        const genCase = negatives.get(path);
-        if (!genCase || seen.has(path)) {
+        const genCase = negatives.get(a.path);
+        if (!genCase || seen.has(a.path)) {
             return [bad("$.negativeAssessments", PATH_MSG)];
         }
-        seen.add(path);
+        seen.add(a.path);
 
         if (!isFairEmptyGoldAssessment(a)) {
-            const message =
-                a.fairEmptyGold && FAIR_KINDS.has(a.kind)
-                    ? inconsistentFairFlagsMessage(a)
-                    : a.reason;
-            issues.push(bad(path, message));
+            issues.push(
+                bad(
+                    a.path,
+                    a.fairEmptyGold && FAIR_KINDS.has(a.kind)
+                        ? `inconsistent fair empty-gold flags: ${inconsistentFairFlagsMessage(a)}`
+                        : a.reason,
+                ),
+            );
             continue;
         }
 
@@ -284,8 +219,19 @@ export function checkTranslationBenchCandidateNegativeFairness(
         if (dimKind !== a.kind) {
             issues.push(
                 bad(
-                    path,
+                    a.path,
                     `dimensions.negativeKind=${String(dimKind)} must equal the accepted empty-gold kind '${a.kind}' (pure_refusal only)`,
+                ),
+            );
+            continue;
+        }
+
+        const shape = assessEmptyGoldUtterance(genCase.utterance);
+        if (!shape.fair) {
+            issues.push(
+                bad(
+                    a.path,
+                    `empty-gold utterance failed pure-refusal shape gate: ${shape.reason}`,
                 ),
             );
         }
