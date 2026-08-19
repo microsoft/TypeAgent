@@ -39,6 +39,16 @@ internal object AndroidDeviceAgent {
             .put("agentInterface", JSONArray().put("executeAction"))
     }
 
+    /**
+     * Params for `unregisterClientAgent`, which removes the agent from the
+     * conversation whichever connection registered it.
+     */
+    fun createUnregistrationParams(conversationId: String): JSONObject {
+        return JSONObject()
+            .put("name", NAME)
+            .put("conversationId", conversationId)
+    }
+
     fun parseExecuteAction(args: JSONArray): AndroidDeviceActionParseResult {
         val invocation = args.optJSONObject(0)
             ?: return AndroidDeviceActionParseResult.ProtocolError(
