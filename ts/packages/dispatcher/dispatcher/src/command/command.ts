@@ -45,8 +45,7 @@ import {
     logRequestReceived,
 } from "../otel/structuredEvents.js";
 
-const debugCommand = registerDebug("typeagent:dispatcher:command");
-const debugCommandError = registerDebug("typeagent:dispatcher:command:error");
+const debugCommandInfo = registerDebug("typeagent:dispatcher:command:info");
 
 export type ResolveCommandResult = {
     // the app agent name parsed from the input.
@@ -246,9 +245,12 @@ export async function resolveCommand(
         matched,
     };
 
-    if (debugCommand.enabled) {
-        debugCommand(`Resolved command:`, {
-            ...result,
+    if (debugCommandInfo.enabled) {
+        debugCommandInfo(`Resolved command:`, {
+            parsedAppAgentName: result.parsedAppAgentName,
+            actualAppAgentName: result.actualAppAgentName,
+            commands: result.commands,
+            matched: result.matched,
             table: result.table !== undefined,
             descriptor: result.descriptor !== undefined,
         });
@@ -395,7 +397,6 @@ export async function processCommandNoLock(
             ),
             "block",
         );
-        debugCommandError(e.stack);
 
         ensureCommandResult(context).disposition = {
             status: "failed",
@@ -405,7 +406,9 @@ export async function processCommandNoLock(
         context?.logger?.logEvent(
             "command:exception",
             {
+                requestId: requestIdToString(getRequestId(context)),
                 request: originalInput,
+                name: e.name,
                 message: e.message,
                 stack: e.stack,
             },

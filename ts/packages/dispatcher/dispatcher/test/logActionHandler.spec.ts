@@ -5,14 +5,12 @@ import { jest } from "@jest/globals";
 
 const mockShowLogStatus = jest.fn();
 const mockSetLogProfile = jest.fn();
-const mockSetLogDebugCopy = jest.fn();
 const mockClearLogSettings = jest.fn();
 jest.unstable_mockModule(
     "../src/context/system/handlers/logCommandHandler.js",
     () => ({
         showLogStatus: mockShowLogStatus,
         setLogProfile: mockSetLogProfile,
-        setLogDebugCopy: mockSetLogDebugCopy,
         clearLogSettings: mockClearLogSettings,
     }),
 );
@@ -40,22 +38,6 @@ describe("executeLogAction delegates to shared log controls", () => {
             },
             mockSetLogProfile,
             ["diagnostic"],
-        ],
-        [
-            {
-                actionName: "setLogDebugCopy",
-                parameters: { enabled: true },
-            },
-            mockSetLogDebugCopy,
-            ["on"],
-        ],
-        [
-            {
-                actionName: "setLogDebugCopy",
-                parameters: { enabled: false },
-            },
-            mockSetLogDebugCopy,
-            ["off"],
         ],
         [{ actionName: "clearLogSettings" }, mockClearLogSettings, []],
     ])("maps %j to the shared control", async (action, handler, args) => {

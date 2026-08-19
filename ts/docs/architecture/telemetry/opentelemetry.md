@@ -562,20 +562,30 @@ Only enabled `DEBUG` namespaces are bridged. Existing terminal debug output is
 unchanged. Structured logging must be enabled explicitly because dispatcher
 events can originate from user requests.
 
-Local JSONL starts in the `focused` profile with debug-copy off. It therefore
-contains the structured lifecycle by default, even when the debug bridge is
-configured. Use `@trace` to select terminal debug namespaces, then opt those
-already-enabled records into the local file only when needed:
+Local JSONL starts in the `focused` profile. It therefore contains the
+structured lifecycle by default, even when the debug bridge is configured.
+Bridged debug records are surfaced by class: each bridged `debug` namespace
+carries a class (`error`, `warn`, `info`, or `verbose`) derived from its
+trailing `:`-delimited segment, and each profile admits a subset of those
+classes. Use `@trace` to select which terminal debug namespaces are produced,
+then raise the local profile to admit their classes into the file:
 
 ```text
 @log status
 @trace --preset request
-@log debug-copy on
+@log profile diagnostic
 ```
 
+Profiles filter bridged debug records by class (structured events are always
+emitted and are not governed by class):
+
+- `off` - local JSONL sink disabled.
+- `focused` - structured events only; no debug records.
+- `diagnostic` - structured events plus `error`, `warn`, and `info` debug.
+- `verbose` - structured events plus every debug class.
+
 `@log profile off` disables only the local JSONL sink. It does not change
-`DEBUG`, `@trace`, or OTLP export. `@log clear` restores
-`profile=focused, debug-copy=off`.
+`DEBUG`, `@trace`, or OTLP export. `@log clear` restores `profile=focused`.
 
 ### 3. Generate Telemetry
 

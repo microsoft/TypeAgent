@@ -436,7 +436,7 @@ describe("debug bridge", () => {
             eventName: "aiclient:llm:completed",
             body: { scope: "background", success: false },
         });
-        state.setDebugCopy(true);
+        state.setProfile("verbose");
         logger.emit({ eventName: "debug", body: "debug-visible" });
         state.setProfile("off");
         logger.emit({ eventName: "structured-hidden", body: "hidden" });
@@ -450,6 +450,62 @@ describe("debug bridge", () => {
             ["aiclient:llm:completed", { scope: "background", success: false }],
             ["debug", "debug-visible"],
         ]);
+    });
+
+    it("classifies bridged debug records and filters them by profile", () => {
+        const exporter = new InMemoryLogRecordExporter();
+        provider = new LoggerProvider({
+            processors: [
+                new LocalLogRecordProcessor(
+                    new SimpleLogRecordProcessor({ exporter }),
+                ),
+            ],
+        });
+        logs.setGlobalLoggerProvider(provider);
+        const state = createLocalTelemetryState();
+        setLocalTelemetryState(state);
+        const output: Array<{
+            namespace: string | undefined;
+            args: unknown[];
+        }> = [];
+        const debugModule = createDebugModule(output);
+        const bridge = installDebugBridge([debugModule]);
+
+        state.setProfile("diagnostic");
+        debugModule.log.call({ namespace: "typeagent:test:error" }, "error");
+        debugModule.log.call({ namespace: "typeagent:test:warn" }, "warn");
+        debugModule.log.call({ namespace: "typeagent:test:info" }, "info");
+        debugModule.log.call(
+            { namespace: "typeagent:test:details" },
+            "diagnostic-hidden",
+        );
+
+        state.setProfile("verbose");
+        debugModule.log.call(
+            { namespace: "typeagent:test:details" },
+            "verbose-visible",
+        );
+
+        const records = exporter.getFinishedLogRecords();
+        expect(records.map((record) => record.body)).toEqual([
+            "error",
+            "warn",
+            "info",
+            "verbose-visible",
+        ]);
+        expect(
+            records.map((record) => record.attributes["debug.class"]),
+        ).toEqual(["error", "warn", "info", "verbose"]);
+        expect(
+            records.map((record) => record.attributes["debug.namespace"]),
+        ).toEqual([
+            "typeagent:test:error",
+            "typeagent:test:warn",
+            "typeagent:test:info",
+            "typeagent:test:details",
+        ]);
+
+        bridge.shutdown();
     });
 
     it("retains successful background LLM events outside focused mode", () => {
@@ -665,7 +721,7 @@ describe("debug bridge", () => {
 describe("local diagnostics correlation", () => {
     it("writes structured and debug records with the same active span", async () => {
         setLocalTelemetryState(
-            createLocalTelemetryState({ initialDebugCopy: true }),
+            createLocalTelemetryState({ initialProfile: "verbose" }),
         );
         const dir = makeTempDir();
         const jsonlExporter = new JsonlLogExporter({
