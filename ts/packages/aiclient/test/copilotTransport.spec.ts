@@ -6,7 +6,9 @@ import {
     CopilotEndpoint,
     CopilotEndpointProvider,
     CopilotEndpointUnavailableError,
+    selectCopilotModel,
 } from "../src/copilotModels.js";
+import type { ModelInfo } from "@github/copilot-sdk";
 import { CopilotApiSettings } from "../src/copilotSettings.js";
 import { ModelType } from "../src/openai.js";
 import { PromptSection } from "typechat";
@@ -18,6 +20,7 @@ function makeSettings(): CopilotApiSettings {
         endpoint: "copilot-cli",
         modelName: "claude-haiku-4.5",
         disableInfiniteSessions: true,
+        fallbackModels: ["gpt-5-mini", "gpt-5.4-mini"],
         maxRetryAttempts: 0,
         retryPauseMs: 1,
         timeout: 5_000,
@@ -33,6 +36,29 @@ function makeEndpoint(overrides?: Partial<CopilotEndpoint>): CopilotEndpoint {
             "Copilot-Integration-Id": "copilot-developer-cli",
         },
         ...overrides,
+    };
+}
+
+function makeModel(
+    id: string,
+    options?: {
+        reasoning?: boolean;
+        policy?: "enabled" | "disabled" | "unconfigured";
+    },
+): ModelInfo {
+    return {
+        id,
+        name: id,
+        capabilities: {
+            supports: {
+                vision: false,
+                reasoningEffort: options?.reasoning ?? false,
+            },
+            limits: { max_context_window_tokens: 128_000 },
+        },
+        ...(options?.policy !== undefined
+            ? { policy: { state: options.policy, terms: "" } }
+            : {}),
     };
 }
 
@@ -111,6 +137,88 @@ const CAPI_OK = {
     choices: [{ message: { content: '{"action":"getTime"}' } }],
     usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
 };
+
+describe("selectCopilotModel", () => {
+    test("uses the requested model when it is available", () => {
+        const selected = selectCopilotModel(
+            "claude-haiku-4.5",
+            ["gpt-5-mini"],
+            [makeModel("gpt-5-mini"), makeModel("claude-haiku-4.5")],
+        );
+        expect(selected?.id).toBe("claude-haiku-4.5");
+    });
+
+    test("uses the first configured concrete fallback", () => {
+        const selected = selectCopilotModel(
+            "claude-haiku-4.5",
+            ["auto", "gpt-5-mini", "gpt-5.4-mini"],
+            [
+                makeModel("auto"),
+                makeModel("gpt-5-mini"),
+                makeModel("gpt-5.4-mini"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5-mini");
+    });
+
+    test("skips disabled fallback models", () => {
+        const selected = selectCopilotModel(
+            "claude-haiku-4.5",
+            ["gpt-5-mini", "gpt-5.4-mini"],
+            [
+                makeModel("gpt-5-mini", { policy: "disabled" }),
+                makeModel("gpt-5.4-mini"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.4-mini");
+    });
+
+    test("allows fallback models without an explicit policy decision", () => {
+        const selected = selectCopilotModel(
+            "claude-haiku-4.5",
+            ["gpt-5-mini", "gpt-5.4-mini"],
+            [
+                makeModel("gpt-5-mini", { policy: "unconfigured" }),
+                makeModel("gpt-5.4-mini"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5-mini");
+    });
+
+    test("uses the newest available model in the requested family", () => {
+        const selected = selectCopilotModel(
+            "claude-sonnet-5",
+            [],
+            [
+                makeModel("claude-sonnet-4.6"),
+                makeModel("claude-sonnet-6"),
+                makeModel("claude-sonnet-5.2"),
+            ],
+        );
+        expect(selected?.id).toBe("claude-sonnet-6");
+    });
+
+    test("uses a deterministic concrete model as the final fallback", () => {
+        const selected = selectCopilotModel(
+            "missing-model",
+            [],
+            [makeModel("z-model"), makeModel("auto"), makeModel("a-model")],
+        );
+        expect(selected?.id).toBe("a-model");
+    });
+
+    test("returns undefined when no concrete model is enabled", () => {
+        const selected = selectCopilotModel(
+            "claude-haiku-4.5",
+            ["gpt-5-mini"],
+            [
+                makeModel("auto"),
+                makeModel("gpt-5-mini", { policy: "disabled" }),
+            ],
+        );
+        expect(selected).toBeUndefined();
+    });
+});
 
 describe("createCopilotTransportModel", () => {
     const origFetch = globalThis.fetch;
