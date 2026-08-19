@@ -50,6 +50,13 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions {
+        unitTests {
+            // WebSocketManager logs through android.util.Log, whose unit-test
+            // stub throws unless the stubs return defaults.
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
