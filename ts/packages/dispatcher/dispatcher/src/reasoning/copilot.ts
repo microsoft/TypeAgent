@@ -942,19 +942,16 @@ function subscribeCodingSession(
             events.taskComplete = event.data;
         },
     );
-    const unsubscribeToolStart = session.on(
-        "tool.execution_start",
-        (event: any) => {
-            const toolName = event.data?.toolName ?? event.toolName ?? "tool";
-            context.actionIO.appendDisplay(
-                { type: "text", content: `Running ${toolName}...` },
-                "temporary",
-            );
-        },
-    );
+    const unsubscribeToolStart = session.on("tool.execution_start", (event) => {
+        const toolName = event.data.toolName;
+        context.actionIO.appendDisplay(
+            { type: "text", content: `Running ${toolName}...` },
+            "temporary",
+        );
+    });
     const unsubscribeToolComplete = session.on(
         "tool.execution_complete",
-        (event: any) => {
+        (event) => {
             const { content, isError } = copilotToolResultDisplay(event);
             if (content) {
                 context.actionIO.appendDisplay(
