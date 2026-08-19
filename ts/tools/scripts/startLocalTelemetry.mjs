@@ -143,39 +143,39 @@ function installDockerDesktop() {
         );
     }
 
-    async function promptToInstallDockerDesktop() {
-        if (!process.stdin.isTTY || !process.stdout.isTTY) {
-            throw new Error(
-                "Docker Desktop is not installed. Run this command in an interactive terminal to install it, or install it manually from https://docs.docker.com/desktop/.",
-            );
-        }
-
-        const stdio = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-        });
-        try {
-            const answer = await stdio.question(
-                "[telemetry:grafana] Docker Desktop is not installed. Install it now? (y/N) ",
-            );
-            if (answer.trim().toLowerCase() !== "y") {
-                throw new Error(
-                    "Docker Desktop is required. Install it from https://docs.docker.com/desktop/, then run this command again.",
-                );
-            }
-        } finally {
-            stdio.close();
-        }
-
-        installDockerDesktop();
-    }
-
     dockerExecutable = findDockerExecutable();
     if (dockerExecutable === undefined) {
         throw new Error(
             "Docker Desktop was installed, but the Docker CLI is not available. Restart the terminal and run `pnpm run telemetry:grafana`.",
         );
     }
+}
+
+async function promptToInstallDockerDesktop() {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        throw new Error(
+            "Docker Desktop is not installed. Run this command in an interactive terminal to install it, or install it manually from https://docs.docker.com/desktop/.",
+        );
+    }
+
+    const stdio = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+    try {
+        const answer = await stdio.question(
+            "[telemetry:grafana] Docker Desktop is not installed. Install it now? (y/N) ",
+        );
+        if (answer.trim().toLowerCase() !== "y") {
+            throw new Error(
+                "Docker Desktop is required. Install it from https://docs.docker.com/desktop/, then run this command again.",
+            );
+        }
+    } finally {
+        stdio.close();
+    }
+
+    installDockerDesktop();
 }
 
 function startDockerDesktop() {
@@ -416,6 +416,10 @@ async function start() {
     const otlpEndpoint = `http://127.0.0.1:${otlpHttpPort}`;
     toggleTelemetryLocal(true, otlpEndpoint);
     console.log("[telemetry:grafana] Grafana:   http://localhost:3000");
+    console.log(`[telemetry:grafana] OTLP/HTTP: ${otlpEndpoint}`);
+    console.log(
+        `[telemetry:grafana] OTLP/gRPC: http://127.0.0.1:${otlpGrpcPort}`,
+    );
     console.log(
         "[telemetry:grafana] Restart TypeAgent so it picks up the new telemetry config.",
     );
