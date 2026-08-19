@@ -193,7 +193,6 @@ function optionalMaxCases(
     }
     return maxCases;
 }
-
 export function resolveRunConfig(
     file: RunConfigFile,
     options: ResolveOptions = {},
