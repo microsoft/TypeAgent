@@ -21,6 +21,7 @@ import type {
     QueueCancelReason,
     QueueSnapshot,
     DisplayLogEntry,
+    ProcessCommandOptions,
 } from "@typeagent/dispatcher-types";
 import { ServerStoppingError } from "@typeagent/dispatcher-types";
 import {
@@ -31,6 +32,10 @@ import {
 } from "agent-dispatcher/internal";
 import { PendingInteractionManager } from "agent-dispatcher/internal";
 import { supersedeStalledInteraction as supersedeStalledInteractionCore } from "./supersedeInteraction.js";
+import {
+    loadWorkingDirectoryPolicy,
+    resolveWorkingDirectory,
+} from "./workingDirectoryPolicy.js";
 
 import registerDebug from "debug";
 const debugConnect = registerDebug("agent-server:connect");
@@ -53,6 +58,7 @@ export async function createSharedDispatcher(
         );
     }
     let nextConnectionId = 0;
+    const workingDirectoryPolicy = loadWorkingDirectoryPolicy();
     const clients = new Map<string, ClientRecord>();
     const pendingInteractions = new PendingInteractionManager();
 
@@ -670,10 +676,39 @@ export async function createSharedDispatcher(
                     connectionId,
                     attachmentCount: attachments?.length ?? 0,
                 });
+                const workingDirectory = resolveWorkingDirectory(
+                    submitOptions?.workingDirectory,
+                    workingDirectoryPolicy,
+                );
+                if (workingDirectory.rejectedRequested) {
+                    debugCommand(
+                        `Rejected client working directory for ${connectionId}; ` +
+                            (workingDirectory.source === "default"
+                                ? "using server default"
+                                : "coding root unavailable"),
+                    );
+                }
+                const {
+                    workingDirectory: _clientWorkingDirectory,
+                    ...optionsWithoutWorkingDirectory
+                } = submitOptions ?? {};
+                void _clientWorkingDirectory;
+                const hasOtherOptions =
+                    Object.keys(optionsWithoutWorkingDirectory).length > 0;
+                const normalizedOptions: ProcessCommandOptions | undefined =
+                    workingDirectory.workingDirectory !== undefined
+                        ? {
+                              ...optionsWithoutWorkingDirectory,
+                              workingDirectory:
+                                  workingDirectory.workingDirectory,
+                          }
+                        : hasOtherOptions
+                          ? optionsWithoutWorkingDirectory
+                          : undefined;
                 const result = await baseSubmitCommand(
                     command,
                     attachments,
-                    submitOptions,
+                    normalizedOptions,
                     clientRequestId,
                     requestId,
                 );
