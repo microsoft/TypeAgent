@@ -362,7 +362,7 @@ describe("runLogRetentionCleanup — isProtected recheck", () => {
         // and the immediate-pre-unlink recheck. Guard: the second
         // predicate call skips the unlink.
         const { fs, unlinked } = makeFs(dir, {
-            "target.jsonl": { size: 60, mtimeMs: 1, isFile: true },
+            "target.jsonl": { size: 61, mtimeMs: 1, isFile: true },
             "old.jsonl": { size: 60, mtimeMs: 2, isFile: true },
         });
         let peerLive = false;
