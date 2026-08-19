@@ -11,7 +11,6 @@ import {
     type ParsedActionSchema,
     type ParsedActionSchemaJSON,
 } from "@typeagent/action-schema";
-import { validateTranslationBenchGoldAction } from "./actionValidation.js";
 import type { SchemaTypeNames } from "@typeagent/agent-sdk";
 import { z } from "zod";
 

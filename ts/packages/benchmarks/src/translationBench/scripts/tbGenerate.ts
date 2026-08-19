@@ -185,7 +185,10 @@ function createAmbiguityProbeTranslator(
     // Serialize model swaps on the shared session — parallel probes must not
     // clobber each other's translation.model or leave a residual config.
     let modelGate: Promise<void> = Promise.resolve();
-    const withModel = async <T>(model: string, fn: () => Promise<T>): Promise<T> => {
+    const withModel = async <T>(
+        model: string,
+        fn: () => Promise<T>,
+    ): Promise<T> => {
         const prior = modelGate;
         let release!: () => void;
         modelGate = new Promise<void>((resolve) => {
@@ -365,9 +368,9 @@ async function main(): Promise<void> {
 
     const generatorModel = opts.generatorModel ?? resolved.generatorModel;
     const reviewerModel = opts.reviewerModel ?? resolved.reviewerModel;
-    const probeModels =
-        parseCsvList(opts.probeModels) ??
-        [...TRANSLATION_BENCH_DEFAULT_AMBIGUITY_PROBE_MODELS];
+    const probeModels = parseCsvList(opts.probeModels) ?? [
+        ...TRANSLATION_BENCH_DEFAULT_AMBIGUITY_PROBE_MODELS,
+    ];
 
     const limiterArgs: { dbPath?: string; disabled?: boolean } = {
         disabled: opts.rateLimit === false,

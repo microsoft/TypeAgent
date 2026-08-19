@@ -36,16 +36,12 @@ describe("translationBench runner scoring fairness (E + C)", () => {
 
     it("treats unknown schema-match throw as zero-action PASS on empty gold", () => {
         const { chosenActions, score, error, rawChosenActions } =
-            scoreTranslationBenchTranslationOutcome(
-                [],
-                "any",
-                {
-                    ok: false,
-                    error: new Error(
-                        "Internal Error: Unable to match schema name for action unknown",
-                    ),
-                },
-            );
+            scoreTranslationBenchTranslationOutcome([], "any", {
+                ok: false,
+                error: new Error(
+                    "Internal Error: Unable to match schema name for action unknown",
+                ),
+            });
         expect(error).toBeUndefined();
         expect(chosenActions).toEqual([]);
         expect(rawChosenActions).toEqual([
@@ -137,9 +133,7 @@ describe("translationBench runner scoring fairness (E + C)", () => {
     });
 
     it("filters unknown abstention from successful translations", () => {
-        const actions = [
-            { actionName: "unknown" } as AppAction,
-        ];
+        const actions = [{ actionName: "unknown" } as AppAction];
         const { chosenActions, abstentionCount, rawChosenActions } =
             toScoredTranslationBenchActions(actions);
         expect(abstentionCount).toBe(1);
@@ -166,20 +160,16 @@ describe("translationBench runner scoring fairness (E + C)", () => {
         // Empty-gold must be zero-action under the full catalog — chat acks
         // are fires, matching generation pure_refusal fairness.
         const { chosenActions, score, error } =
-            scoreTranslationBenchTranslationOutcome(
-                [],
-                "any",
-                {
-                    ok: true,
-                    actions: [
-                        {
-                            schemaName: "chat",
-                            actionName: "generateResponse",
-                            parameters: { text: "ok" },
-                        } as AppAction,
-                    ],
-                },
-            );
+            scoreTranslationBenchTranslationOutcome([], "any", {
+                ok: true,
+                actions: [
+                    {
+                        schemaName: "chat",
+                        actionName: "generateResponse",
+                        parameters: { text: "ok" },
+                    } as AppAction,
+                ],
+            });
         expect(error).toBeUndefined();
         expect(chosenActions).toEqual([
             {
@@ -201,10 +191,8 @@ describe("translationBench runner scoring fairness (E + C)", () => {
                 parameters: {},
             },
         ];
-        const { chosenActions, score } = scoreTranslationBenchTranslationOutcome(
-            gold,
-            "any",
-            {
+        const { chosenActions, score } =
+            scoreTranslationBenchTranslationOutcome(gold, "any", {
                 ok: true,
                 actions: [
                     {
@@ -218,8 +206,7 @@ describe("translationBench runner scoring fairness (E + C)", () => {
                         parameters: { text: "ok" },
                     } as AppAction,
                 ],
-            },
-        );
+            });
         expect(chosenActions).toEqual([
             { schemaName: "browser", actionName: "goBack", parameters: {} },
         ]);
@@ -228,20 +215,16 @@ describe("translationBench runner scoring fairness (E + C)", () => {
 
     it("still counts real tool fires on empty gold as FAIL", () => {
         const { chosenActions, score } =
-            scoreTranslationBenchTranslationOutcome(
-                [],
-                "any",
-                {
-                    ok: true,
-                    actions: [
-                        {
-                            schemaName: "browser",
-                            actionName: "closeWebPage",
-                            parameters: {},
-                        } as AppAction,
-                    ],
-                },
-            );
+            scoreTranslationBenchTranslationOutcome([], "any", {
+                ok: true,
+                actions: [
+                    {
+                        schemaName: "browser",
+                        actionName: "closeWebPage",
+                        parameters: {},
+                    } as AppAction,
+                ],
+            });
         expect(chosenActions).toHaveLength(1);
         expect(score.passed).toBe(false);
         expect(score.firedOnNegative).toBe(true);
