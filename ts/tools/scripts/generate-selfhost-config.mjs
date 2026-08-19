@@ -54,6 +54,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_OLLAMA_HOST = "http://localhost:11434";
 const DEFAULT_OLLAMA_CHAT_MODEL = "llama3.2";
 const DEFAULT_COPILOT_MODEL = "claude-haiku-4.5";
+const DEFAULT_COPILOT_FALLBACK_MODELS = ["gpt-5-mini", "gpt-5.4-mini"];
 const DEFAULT_LOCAL_EMBEDDING_MODEL = "Xenova/all-MiniLM-L6-v2";
 const DEFAULT_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text";
 
@@ -166,6 +167,7 @@ function buildConfigTree(options) {
     if (provider === "copilot") {
         tree.copilot = {
             defaultModel: copilotModel || DEFAULT_COPILOT_MODEL,
+            fallbackModels: DEFAULT_COPILOT_FALLBACK_MODELS,
         };
     }
 

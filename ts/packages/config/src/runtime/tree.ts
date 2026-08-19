@@ -480,6 +480,8 @@ export function configToTree(config: Config): ConfigTree {
         const c: ConfigTree = {};
         if (config.copilot.defaultModel !== undefined)
             c.defaultModel = config.copilot.defaultModel;
+        if (config.copilot.fallbackModels !== undefined)
+            c.fallbackModels = [...config.copilot.fallbackModels];
         if (config.copilot.cliPath !== undefined)
             c.cliPath = config.copilot.cliPath;
         if (config.copilot.cliUrl !== undefined)
@@ -561,6 +563,16 @@ function asObject(node: unknown, where: string): Record<string, unknown> {
 function asString(node: unknown, where: string): string {
     if (typeof node !== "string") {
         throw new Error(`Expected a string at '${where}', got ${typeof node}.`);
+    }
+    return node;
+}
+
+function asStringArray(node: unknown, where: string): string[] {
+    if (
+        !Array.isArray(node) ||
+        node.some((value) => typeof value !== "string")
+    ) {
+        throw new Error(`Expected a string array at '${where}'.`);
     }
     return node;
 }
@@ -1034,6 +1046,10 @@ function emitCopilot(node: unknown, out: FlatEnv): void {
         out.COPILOT_DEFAULT_MODEL = asString(
             c.defaultModel,
             "copilot.defaultModel",
+        );
+    if (c.fallbackModels !== undefined)
+        out.COPILOT_FALLBACK_MODELS = JSON.stringify(
+            asStringArray(c.fallbackModels, "copilot.fallbackModels"),
         );
     if (c.cliPath !== undefined)
         out.COPILOT_CLI_PATH = asString(c.cliPath, "copilot.cliPath");

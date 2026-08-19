@@ -5,13 +5,13 @@
 //
 //  1. Run the whole suite once, capturing individual failures via the reporter
 //     that writes to TYPEAGENT_TEST_FAILURES_DIR.
-//  2. If anything failed, rerun ONLY the packages that owned a failing test,
-//     serially, with a fresh Jest cache and failures directory (option #2,
-//     "rerun-only-failed").
-//  3. Classify each round-1 failure as flaky (passed on retry) or confirmed
-//     (failed again), print a summary, and emit GitHub annotations / a step
-//     summary so flaky tests are tracked instead of silently masked (option
-//     #3). The build fails unless the retry command completes successfully.
+//  2. If anything failed, rerun ONLY the packages that owned a failing test up
+//     to two times, serially, with a fresh Jest cache and failures directory,
+//     stopping as soon as the package suite passes.
+//  3. Classify every observed failure as flaky (absent from the final attempt)
+//     or build-blocking (present in the final attempt), then print a summary and
+//     emit GitHub annotations / a step summary. The build fails unless a retry
+//     command completes successfully.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -27,6 +27,7 @@ import {
     buildGithubAnnotations,
     buildStepSummaryMarkdown,
     toFsPath,
+    MAX_TEST_RETRIES,
 } from "./lib/testRetry.mjs";
 
 // build-ts runs this from the `ts` directory, which is the pnpm workspace root.
@@ -35,7 +36,7 @@ const isWindows = process.platform === "win32";
 const inGithubActions = process.env.GITHUB_ACTIONS === "true";
 
 const firstDirectory = makeFailuresDirectory("run1");
-let secondDirectory;
+const failureDirectories = [firstDirectory];
 try {
     const firstResult = runPnpm(["run", "test:local"], firstDirectory);
 
@@ -64,18 +65,13 @@ try {
         process.exitCode = handleFailures(firstFailures);
     }
 } finally {
-    fs.rmSync(firstDirectory, { recursive: true, force: true });
-    if (secondDirectory !== undefined) {
-        fs.rmSync(secondDirectory, { recursive: true, force: true });
+    for (const directory of failureDirectories) {
+        fs.rmSync(directory, { recursive: true, force: true });
     }
 }
 
 function handleFailures(firstFailures) {
-    // Attach the owning package (for the retry) to each round-1 failure.
-    const annotated = firstFailures.map((failure) => ({
-        ...failure,
-        package: resolvePackageName(failure.testFilePath),
-    }));
+    const annotated = annotatePackages(firstFailures);
 
     const packages = [
         ...new Set(
@@ -85,7 +81,8 @@ function handleFailures(firstFailures) {
         ),
     ];
 
-    let second = [];
+    let priorFailures = annotated;
+    let finalFailures = [];
     let retryTrusted = true;
     let retryFailed = false;
     if (packages.length > 0) {
@@ -93,50 +90,84 @@ function handleFailures(firstFailures) {
             (failure) => failure.package !== undefined,
         ).length;
         console.error(
-            `\n${"=".repeat(80)}\nRETRYING ${retriableCount} failed test(s) across ${packages.length} package(s) to detect flakiness\n${"=".repeat(80)}`,
+            `\n${"=".repeat(80)}\nRETRYING ${retriableCount} failed test(s) across ${packages.length} package(s) up to ${MAX_TEST_RETRIES} times\n${"=".repeat(80)}`,
         );
 
-        secondDirectory = makeFailuresDirectory("run2");
-        const retryResult = runPnpm(
-            [
-                ...packages.flatMap((name) => ["--filter", name]),
-                // Serial rerun of only the affected packages: isolates genuine
-                // failures from parallelism/resource-contention flakiness.
-                "--workspace-concurrency=1",
-                "--no-sort",
-                "--stream",
-                "--no-bail",
-                "run",
-                "test:local",
-            ],
-            secondDirectory,
-            true,
-        );
+        for (let attempt = 1; attempt <= MAX_TEST_RETRIES; attempt++) {
+            console.error(`\nRetry ${attempt} of ${MAX_TEST_RETRIES}`);
+            const retryDirectory = makeFailuresDirectory(`retry${attempt}`);
+            failureDirectories.push(retryDirectory);
+            const retryResult = runPnpm(
+                [
+                    ...packages.flatMap((name) => ["--filter", name]),
+                    // Serial rerun of only the affected packages isolates
+                    // genuine failures from resource-contention flakiness.
+                    "--workspace-concurrency=1",
+                    "--no-sort",
+                    "--stream",
+                    "--no-bail",
+                    "run",
+                    "test:local",
+                ],
+                retryDirectory,
+                true,
+            );
 
-        second = dedupeFailures(readFailures(secondDirectory), workspaceRoot);
-        retryFailed =
-            retryResult.error !== undefined ||
-            retryResult.signal !== null ||
-            (retryResult.status ?? 1) !== 0;
+            finalFailures = dedupeFailures(
+                readFailures(retryDirectory),
+                workspaceRoot,
+            );
+            retryFailed =
+                retryResult.error !== undefined ||
+                retryResult.signal !== null ||
+                (retryResult.status ?? 1) !== 0;
 
-        // If the retry itself crashed without producing any results, we cannot
-        // trust an empty second round as "everything recovered".
-        const retryCrashed =
-            retryResult.error !== undefined ||
-            retryResult.signal !== null ||
-            ((retryResult.status ?? 1) !== 0 && second.length === 0);
-        retryTrusted = !retryCrashed;
+            // A failed command with no captured failures cannot safely be
+            // classified or cleared by another retry.
+            const retryCrashed =
+                retryResult.error !== undefined ||
+                retryResult.signal !== null ||
+                (retryFailed && finalFailures.length === 0);
+            if (retryCrashed) {
+                retryTrusted = false;
+                break;
+            }
+            if (!retryFailed) {
+                break;
+            }
+            if (attempt < MAX_TEST_RETRIES) {
+                priorFailures = mergeFailures(
+                    priorFailures,
+                    annotatePackages(finalFailures),
+                );
+            }
+        }
     }
 
     const classification = classifyRetryResults({
-        first: annotated,
-        second,
+        first: priorFailures,
+        second: finalFailures,
         retryTrusted,
         retryFailed,
     });
 
     for (const line of buildSummaryLines(classification)) {
         console.error(line);
+    }
+
+    function annotatePackages(failures) {
+        return failures.map((failure) => ({
+            ...failure,
+            package: resolvePackageName(failure.testFilePath),
+        }));
+    }
+
+    function mergeFailures(...groups) {
+        return [
+            ...new Map(
+                groups.flat().map((failure) => [failure.key, failure]),
+            ).values(),
+        ];
     }
 
     if (inGithubActions) {

@@ -7,6 +7,7 @@ const path = require("node:path");
 module.exports = {
     testMatch: ["**/dist/test/**/*.(spec|test).js?(x)"],
     testEnvironment: "node",
+    setupFiles: [path.join(__dirname, "tools/scripts/jestSetupSignalExit.cjs")],
     moduleNameMapper: {
         "^../src/(.*)$": "<rootDir>/dist/$1",
     },

@@ -54,6 +54,29 @@ describe("authModeFromString", () => {
     });
 });
 
+describe("buildConfig: Copilot", () => {
+    test("parses fallback models from the flattened JSON array", () => {
+        const config = buildConfig({
+            COPILOT_DEFAULT_MODEL: "claude-haiku-4.5",
+            COPILOT_FALLBACK_MODELS: '["gpt-5-mini","gpt-5.4-mini"]',
+        });
+        expect(config.copilot).toEqual({
+            defaultModel: "claude-haiku-4.5",
+            fallbackModels: ["gpt-5-mini", "gpt-5.4-mini"],
+        });
+    });
+
+    test("accepts comma-separated fallback models from the environment", () => {
+        const config = buildConfig({
+            COPILOT_FALLBACK_MODELS: "gpt-5-mini, gpt-5.4-mini",
+        });
+        expect(config.copilot?.fallbackModels).toEqual([
+            "gpt-5-mini",
+            "gpt-5.4-mini",
+        ]);
+    });
+});
+
 describe("buildConfig: Azure OpenAI defaults", () => {
     test("default tuning knobs come from constants when env is empty", () => {
         const config = buildConfig({});
