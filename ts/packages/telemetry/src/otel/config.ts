@@ -188,25 +188,7 @@ export interface ResolveTelemetryConfigOptions {
 export function resolveTelemetryConfig(
     options: ResolveTelemetryConfigOptions = {},
 ): TelemetryConfig {
-    // Layered YAML: never touch process.env. Build the options object
-    // property-by-property so `exactOptionalPropertyTypes` does not reject
-    // `undefined` for optional fields.
-    const loadOptions: {
-        workspaceRoot?: string;
-        defaultsPath?: string;
-        localPath?: string;
-        dotEnvPath?: string;
-        populateProcessEnv: false;
-    } = { populateProcessEnv: false };
-    if (options.workspaceRoot !== undefined)
-        loadOptions.workspaceRoot = options.workspaceRoot;
-    if (options.defaultsPath !== undefined)
-        loadOptions.defaultsPath = options.defaultsPath;
-    if (options.localPath !== undefined)
-        loadOptions.localPath = options.localPath;
-    if (options.dotEnvPath !== undefined)
-        loadOptions.dotEnvPath = options.dotEnvPath;
-    const { env: yaml } = loadConfigSync(loadOptions);
+    const { env: yaml } = loadConfigSync(createLoadOptions(options));
 
     // Env overrides. Default to a snapshot of `process.env`; tests inject an
     // isolated map. The resolver only reads from this map.
@@ -250,55 +232,7 @@ export function resolveTelemetryConfig(
     // exporter when no standard backend is configured). `enabled` is a
     // string ("true"/"false") because the flat env layer drops YAML false
     // booleans — a plain YAML boolean would silently "stick" once enabled.
-    const yamlLocalEnabledRaw = normalizeEnv(yaml.TELEMETRY_LOCAL_ENABLED);
-    const yamlLocalEnabled =
-        yamlLocalEnabledRaw === undefined
-            ? false
-            : parseBoolean(yamlLocalEnabledRaw, "telemetry.local.enabled") ===
-              true;
-    const yamlLocalEndpoint = requireNonEmpty(
-        yaml.TELEMETRY_LOCAL_OTLPENDPOINT,
-        "telemetry.local.otlpEndpoint",
-    );
-    const yamlLocalLogFile = requireNonEmpty(
-        yaml.TELEMETRY_LOCAL_LOGFILE,
-        "telemetry.local.logFile",
-    );
-    const yamlLocalLogRetentionBytes = parseNonNegativeInteger(
-        yaml.TELEMETRY_LOCAL_LOGRETENTIONBYTES,
-        "telemetry.local.logRetentionBytes",
-    );
-    const yamlLocalDebugBridge = parseBoolean(
-        yaml.TELEMETRY_LOCAL_DEBUGBRIDGE,
-        "telemetry.local.debugBridge",
-    );
-    const yamlLocalStructuredLogs = parseBoolean(
-        yaml.TELEMETRY_LOCAL_STRUCTUREDLOGS,
-        "telemetry.local.structuredLogs",
-    );
-    // Only take effect when explicitly enabled. Fall back to the same
-    // defaults the `startLocalTelemetry.mjs` script writes so a fresh enable
-    // works without extra YAML edits.
-    const localEndpoint = yamlLocalEnabled
-        ? (yamlLocalEndpoint ?? "http://localhost:4318")
-        : undefined;
-    const localLogFileRaw = yamlLocalEnabled
-        ? (yamlLocalLogFile ??
-          "~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl")
-        : undefined;
-    // Local block default for retention only participates when the local
-    // sink is enabled AND the operator has not explicitly set a value.
-    // The 500 MiB default itself is applied later, only when a log file is
-    // actually configured.
-    const localLogRetentionBytes = yamlLocalEnabled
-        ? yamlLocalLogRetentionBytes
-        : undefined;
-    const localDebugBridge = yamlLocalEnabled
-        ? (yamlLocalDebugBridge ?? true)
-        : undefined;
-    const localStructuredLogs = yamlLocalEnabled
-        ? (yamlLocalStructuredLogs ?? true)
-        : undefined;
+    const local = resolveLocalSink(yaml);
 
     // ---- Env values.
     const envGlobalEndpoint = requireNonEmpty(
@@ -413,26 +347,26 @@ export function resolveTelemetryConfig(
     // against the primary endpoint.
     const tracesPrimaryAndAdditional = combinePrimaryAndLocal(
         tracesOtlp,
-        localEndpoint,
+        local.endpoint,
         exporters.traces,
         "traces",
     );
     const metricsPrimaryAndAdditional = combinePrimaryAndLocal(
         metricsOtlp,
-        localEndpoint,
+        local.endpoint,
         exporters.metrics,
         "metrics",
     );
     const logsPrimaryAndAdditional = combinePrimaryAndLocal(
         logsOtlp,
-        localEndpoint,
+        local.endpoint,
         exporters.logs,
         "logs",
     );
 
     // ---- Log file: env overrides YAML; expanded independent of OTLP.
     // Local's logFile only applies when no standard log file is configured.
-    const rawLogFile = envLogFile ?? yamlLogFile ?? localLogFileRaw;
+    const rawLogFile = envLogFile ?? yamlLogFile ?? local.logFile;
     const logFile =
         rawLogFile !== undefined ? expandTilde(rawLogFile) : undefined;
 
@@ -443,9 +377,115 @@ export function resolveTelemetryConfig(
         envSamplerArg ?? yamlSamplerArg,
     );
 
-    // ---- Assemble result. Any signal without a reason to be present is
-    // omitted, so JSONL-only setups return `{ logs: { logFile } }` with no
-    // trace or metric providers requested.
+    return assembleTelemetryConfig({
+        traces: tracesPrimaryAndAdditional,
+        metrics: metricsPrimaryAndAdditional,
+        logs: logsPrimaryAndAdditional,
+        rawSampler,
+        samplerArg,
+        logFile,
+        retentionBytes:
+            envLogRetentionBytes ??
+            yamlLogRetentionBytes ??
+            local.logRetentionBytes ??
+            DEFAULT_LOG_RETENTION_BYTES,
+        debugBridge: envDebugBridge ?? yamlDebugBridge ?? local.debugBridge,
+        structuredLogs:
+            envStructuredLogs ?? yamlStructuredLogs ?? local.structuredLogs,
+    });
+}
+
+function createLoadOptions(options: ResolveTelemetryConfigOptions): {
+    workspaceRoot?: string;
+    defaultsPath?: string;
+    localPath?: string;
+    dotEnvPath?: string;
+    populateProcessEnv: false;
+} {
+    const loadOptions: {
+        workspaceRoot?: string;
+        defaultsPath?: string;
+        localPath?: string;
+        dotEnvPath?: string;
+        populateProcessEnv: false;
+    } = { populateProcessEnv: false };
+    if (options.workspaceRoot !== undefined)
+        loadOptions.workspaceRoot = options.workspaceRoot;
+    if (options.defaultsPath !== undefined)
+        loadOptions.defaultsPath = options.defaultsPath;
+    if (options.localPath !== undefined)
+        loadOptions.localPath = options.localPath;
+    if (options.dotEnvPath !== undefined)
+        loadOptions.dotEnvPath = options.dotEnvPath;
+    return loadOptions;
+}
+
+function resolveLocalSink(yaml: Readonly<Record<string, string | undefined>>): {
+    endpoint?: string;
+    logFile?: string;
+    logRetentionBytes?: number;
+    debugBridge?: boolean;
+    structuredLogs?: boolean;
+} {
+    const enabledRaw = normalizeEnv(yaml.TELEMETRY_LOCAL_ENABLED);
+    const enabled =
+        enabledRaw !== undefined &&
+        parseBoolean(enabledRaw, "telemetry.local.enabled") === true;
+    const endpoint = requireNonEmpty(
+        yaml.TELEMETRY_LOCAL_OTLPENDPOINT,
+        "telemetry.local.otlpEndpoint",
+    );
+    const logFile = requireNonEmpty(
+        yaml.TELEMETRY_LOCAL_LOGFILE,
+        "telemetry.local.logFile",
+    );
+    const logRetentionBytes = parseNonNegativeInteger(
+        yaml.TELEMETRY_LOCAL_LOGRETENTIONBYTES,
+        "telemetry.local.logRetentionBytes",
+    );
+    const debugBridge = parseBoolean(
+        yaml.TELEMETRY_LOCAL_DEBUGBRIDGE,
+        "telemetry.local.debugBridge",
+    );
+    const structuredLogs = parseBoolean(
+        yaml.TELEMETRY_LOCAL_STRUCTUREDLOGS,
+        "telemetry.local.structuredLogs",
+    );
+    if (!enabled) {
+        return {};
+    }
+    const result: {
+        endpoint?: string;
+        logFile?: string;
+        logRetentionBytes?: number;
+        debugBridge?: boolean;
+        structuredLogs?: boolean;
+    } = {
+        endpoint: endpoint ?? "http://localhost:4318",
+        logFile:
+            logFile ?? "~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl",
+        debugBridge: debugBridge ?? true,
+        structuredLogs: structuredLogs ?? true,
+    };
+    if (logRetentionBytes !== undefined) {
+        result.logRetentionBytes = logRetentionBytes;
+    }
+    return result;
+}
+
+type PrimaryAndAdditional = ReturnType<typeof combinePrimaryAndLocal>;
+
+function assembleTelemetryConfig(args: {
+    traces: PrimaryAndAdditional;
+    metrics: PrimaryAndAdditional;
+    logs: PrimaryAndAdditional;
+    rawSampler: TraceSampler | undefined;
+    samplerArg: number | undefined;
+    logFile: string | undefined;
+    retentionBytes: number;
+    debugBridge: boolean | undefined;
+    structuredLogs: boolean | undefined;
+}): TelemetryConfig {
     const result: {
         traces?: TraceConfig;
         metrics?: MetricConfig;
@@ -454,80 +494,51 @@ export function resolveTelemetryConfig(
         structuredLogs?: boolean;
     } = {};
 
-    if (tracesPrimaryAndAdditional.primary !== undefined) {
-        const sampler: TraceSampler = rawSampler ?? "always_on";
+    if (args.traces.primary !== undefined) {
         const traces: {
             otlp: OtlpExporterConfig;
             additionalOtlp?: readonly OtlpExporterConfig[];
             sampler: TraceSampler;
             samplerArg?: number;
-        } = { otlp: tracesPrimaryAndAdditional.primary, sampler };
-        if (tracesPrimaryAndAdditional.additional.length > 0) {
-            traces.additionalOtlp = tracesPrimaryAndAdditional.additional;
-        }
-        if (samplerArg !== undefined) {
-            traces.samplerArg = samplerArg;
-        }
+        } = {
+            otlp: args.traces.primary,
+            sampler: args.rawSampler ?? "always_on",
+        };
+        if (args.traces.additional.length > 0)
+            traces.additionalOtlp = args.traces.additional;
+        if (args.samplerArg !== undefined) traces.samplerArg = args.samplerArg;
         result.traces = traces;
     }
 
-    if (metricsPrimaryAndAdditional.primary !== undefined) {
-        const metricsConfig: {
+    if (args.metrics.primary !== undefined) {
+        const metrics: {
             otlp: OtlpExporterConfig;
             additionalOtlp?: readonly OtlpExporterConfig[];
-        } = { otlp: metricsPrimaryAndAdditional.primary };
-        if (metricsPrimaryAndAdditional.additional.length > 0) {
-            metricsConfig.additionalOtlp =
-                metricsPrimaryAndAdditional.additional;
-        }
-        result.metrics = metricsConfig;
+        } = { otlp: args.metrics.primary };
+        if (args.metrics.additional.length > 0)
+            metrics.additionalOtlp = args.metrics.additional;
+        result.metrics = metrics;
     }
 
-    if (
-        logsPrimaryAndAdditional.primary !== undefined ||
-        logFile !== undefined
-    ) {
+    if (args.logs.primary !== undefined || args.logFile !== undefined) {
         const logs: {
             otlp?: OtlpExporterConfig;
             additionalOtlp?: readonly OtlpExporterConfig[];
             logFile?: string;
             retentionBytes?: number;
         } = {};
-        if (logsPrimaryAndAdditional.primary !== undefined) {
-            logs.otlp = logsPrimaryAndAdditional.primary;
-        }
-        if (logsPrimaryAndAdditional.additional.length > 0) {
-            logs.additionalOtlp = logsPrimaryAndAdditional.additional;
-        }
-        if (logFile !== undefined) {
-            logs.logFile = logFile;
-            // Retention only applies to the local JSONL file. Precedence:
-            //   env TYPEAGENT_OTEL_LOG_RETENTION_BYTES
-            //     > YAML telemetry.logRetentionBytes
-            //     > YAML telemetry.local.logRetentionBytes (local-enabled only)
-            //     > default 500 MiB.
-            // `0` is a legitimate explicit "cleanup disabled" value.
-            logs.retentionBytes =
-                envLogRetentionBytes ??
-                yamlLogRetentionBytes ??
-                localLogRetentionBytes ??
-                DEFAULT_LOG_RETENTION_BYTES;
+        if (args.logs.primary !== undefined) logs.otlp = args.logs.primary;
+        if (args.logs.additional.length > 0)
+            logs.additionalOtlp = args.logs.additional;
+        if (args.logFile !== undefined) {
+            logs.logFile = args.logFile;
+            logs.retentionBytes = args.retentionBytes;
         }
         result.logs = logs;
     }
-    // Standard env/YAML for debugBridge and structuredLogs retain precedence
-    // over the local sink defaults; the local sink only supplies a default
-    // when no explicit value was set at the standard level.
-    const debugBridge = envDebugBridge ?? yamlDebugBridge ?? localDebugBridge;
-    if (debugBridge !== undefined) {
-        result.debugBridge = debugBridge;
-    }
-    const structuredLogs =
-        envStructuredLogs ?? yamlStructuredLogs ?? localStructuredLogs;
-    if (structuredLogs !== undefined) {
-        result.structuredLogs = structuredLogs;
-    }
-
+    if (args.debugBridge !== undefined) result.debugBridge = args.debugBridge;
+    if (args.structuredLogs !== undefined)
+        result.structuredLogs = args.structuredLogs;
     return result;
 }
 
