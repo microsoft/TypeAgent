@@ -132,21 +132,38 @@ function generatedCandidate(target = targetAction(), genCaseCount = 20) {
                 role: positive ? ("positive" as const) : ("negative" as const),
                 utterance: positive
                     ? `Look up positive item ${index}`
-                    : `Please clarify negative item ${index}`,
+                    : `Don't run this action right now; leave everything alone (${index}).`,
                 expectedActions: positive
                     ? [expectedAction(target, `positive-${index}`)]
                     : [],
                 order: "any" as const,
-                dimensions: { variation: index },
+                dimensions: positive
+                    ? { variation: index }
+                    : { variation: index, negativeKind: "pure_refusal" },
             };
         }),
     };
+}
+
+function fairNegativeAssessments(genCaseCount = 20) {
+    const positiveCount = genCaseCount / 2;
+    return Array.from({ length: positiveCount }, (_, i) => ({
+        path: `$.genCases[${positiveCount + i}].utterance`,
+        kind: "pure_refusal" as const,
+        fairEmptyGold: true,
+        reason: "hard refusal with no alternate task",
+        opensAsHardAbstain: true,
+        hasAlternateOrSiblingTask: false,
+        hasQuestionOrExplanationRequest: false,
+        mapsToAnyLoadedTool: false,
+    }));
 }
 
 function reviewerDecision(
     candidateHash: string,
     decision: "approve" | "reject",
     feedback = "Make the seed more natural",
+    genCaseCount = 20,
 ) {
     return {
         candidateHash,
@@ -174,7 +191,21 @@ function reviewerDecision(
             decision === "approve"
                 ? "The row is ready"
                 : "The row needs revision",
+        negativeAssessments: fairNegativeAssessments(genCaseCount),
     };
+}
+
+function reviewerDecisionBody(
+    candidateHash: string,
+    decision: "approve" | "reject",
+    feedback = "Make the seed more natural",
+) {
+    const { negativeAssessments: _omit, ...body } = reviewerDecision(
+        candidateHash,
+        decision,
+        feedback,
+    );
+    return body;
 }
 
 function candidateHashFromPrompt(prompt: string): string {
@@ -537,14 +568,14 @@ describe("translation bench reviewer decision validation", () => {
     it("binds approval to the exact candidate hash", () => {
         expect(
             parseTranslationBenchReviewerDecision(
-                reviewerDecision(HASH, "approve"),
+                reviewerDecisionBody(HASH, "approve"),
                 HASH,
             ),
         ).toMatchObject({ decision: "approve", candidateHash: HASH });
 
         expect(() =>
             parseTranslationBenchReviewerDecision(
-                reviewerDecision("b".repeat(64), "approve"),
+                reviewerDecisionBody("b".repeat(64), "approve"),
                 HASH,
             ),
         ).toThrow(/hash/i);
@@ -552,7 +583,7 @@ describe("translation bench reviewer decision validation", () => {
 
     it("keeps structural parse free of score floor; optional threshold is explicit", () => {
         const lowApprove = {
-            ...reviewerDecision(HASH, "approve"),
+            ...reviewerDecisionBody(HASH, "approve"),
             scores: {
                 anchorFidelity: 0.5,
                 groundTruthCorrectness: 1,
@@ -637,6 +668,7 @@ describe("translation bench generation quality loop", () => {
                         reviewerDecision(
                             candidateHashFromPrompt(prompt),
                             "approve",
+                            "Make the seed more natural",
                         ),
                     );
                 },
@@ -727,6 +759,8 @@ describe("translation bench generation quality loop", () => {
                         reviewerDecision(
                             candidateHashFromPrompt(prompt),
                             "approve",
+                            "Make the seed more natural",
+                            2,
                         ),
                     );
                 },
