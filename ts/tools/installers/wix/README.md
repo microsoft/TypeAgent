@@ -7,7 +7,9 @@ Automated build and signing for the TypeAgent headless agent-server MSI installe
 This implementation builds a lightweight Windows Installer (MSI) that:
 
 - Downloads the `agent-server.<rid>` artifact from the ADO feed
-- Bundles it with a launcher (`typeagent-serve.mjs`)
+- Bundles it with the Copilot plugin and TypeAgent VS Code Chat VSIX
+- Installs TypeAgent Chat and creates a desktop shortcut when VS Code 1.133+
+  is present
 - Signs with the TypeAgent development certificate (from Key Vault)
 - Produces a signed `.msi` ready for distribution
 
@@ -24,6 +26,9 @@ ts/tools/installers/wix/
   ├── extract-payload.ps1         # Deferred CA: unpack payload/*.zip at install time
   ├── install-prereqs.ps1         # Deferred CA: npm i -g claude+copilot, warn on Node<22
   └── register-plugin.ps1         # Deferred CA: register/unregister the Copilot CLI plugin
+
+ts/tools/installers/common/
+  └── install-vscode-chat.ps1     # Shared VSIX install + desktop shortcut lifecycle
 
 pipelines/
   └── azure-build-publish-all.yml   # ADO pipeline (build_sign_publish_msi job)
@@ -114,12 +119,16 @@ Copy-Item -Recurse "$plugin/skills"     "$out/skills"
 #### 4. Run the WiX build with local staged artifacts
 
 ```powershell
+pnpm --filter vscode-chat run package
+
 node tools/scripts/build-msi.mjs `
   --skip-download `
   --agent-dir  "$env:TEMP\typeagent-msi-stage\agent-server" `
   --plugin-dir "$env:TEMP\typeagent-msi-stage\copilot-plugin" `
+  --vscode-chat-vsix "packages\vscode-chat\dist-pub\vscode-chat.vsix" `
   --version 0.0.1-local `
   --plugin-version 0.0.1-local `
+  --vscode-chat-version 0.0.1-local `
   --output "$env:TEMP\typeagent-msi-stage\out"
 ```
 
@@ -164,9 +173,10 @@ node build-msi.mjs --rid win32-x64 --version 0.0.1-<buildId> --output ./msi-out
 **What it does:**
 
 1. Downloads `agent-server.win32-x64` from the `typeagent` feed
-2. Extracts to `./msi-out/artifact`
-3. Compiles WiX definition (`.wxs` → `.wixobj`)
-4. Links to create `TypeAgent-<version>-win32-x64.msi`
+2. Downloads `typeagent-copilot-plugin` and `typeagent-vscode-chat`
+3. Extracts/stages the artifacts under `./msi-out/artifact`
+4. Compiles WiX definition (`.wxs` → `.wixobj`)
+5. Links to create `TypeAgent-<version>-win32-x64.msi`
 
 **Output:**
 
@@ -197,6 +207,32 @@ msiexec /i "$env:TEMP\typeagent-msi-stage\out\TypeAgent-0.0.1-local-win32-x64.ms
 # Verify
 Get-Item "$env:LOCALAPPDATA\TypeAgent\agent-server" -ErrorAction SilentlyContinue
 ```
+
+## Native VS Code Chat integration
+
+`VSCODECHAT=1` is enabled by default. During install, the MSI runs the shared
+`install-vscode-chat.ps1` helper as the current user. The helper:
+
+1. Finds user- or system-installed VS Code.
+2. Requires VS Code 1.133.0 or newer.
+3. Installs the bundled `typeagent.vscode-chat` VSIX.
+4. Creates `TypeAgent Chat.lnk` on the current user's desktop with:
+
+   ```text
+   --new-window --enable-proposed-api=typeagent.vscode-chat
+   ```
+
+If compatible VS Code is absent, the step logs a warning and the rest of the
+TypeAgent installation continues. Disable the component for a silent install
+with:
+
+```powershell
+msiexec /i TypeAgent-<version>-win32-x64.msi VSCODECHAT=0
+```
+
+The MSI removes the shortcut on uninstall. It removes the extension only when
+the installed version still matches the version originally installed by
+TypeAgent, so it does not delete an independently upgraded extension.
 
 ## Endpoint provider selection (self-host)
 
