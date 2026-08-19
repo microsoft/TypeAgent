@@ -346,23 +346,27 @@ describe("translation bench generation schedule", () => {
         ).not.toContain("alpha.drop");
     });
 
-    it("excludes cross-schema duplicate action names from targeting", () => {
+    it("keeps same-named actions from different schemas eligible", () => {
         const catalog = [
             catalogSchema("alpha", ["shared", "onlyAlpha"]),
             catalogSchema("beta", ["shared", "onlyBeta"]),
         ];
         const schedule = createTranslationBenchGenerationSchedule(catalog, {
-            caseCount: 2,
+            caseCount: 4,
             requireCompleteCoverage: true,
         });
 
         const targeted = schedule.entries.map(
             (entry) => `${entry.schemaName}.${entry.actionName}`,
         );
-        expect(targeted).not.toContain("alpha.shared");
-        expect(targeted).not.toContain("beta.shared");
+        expect(schedule.coverage.complete).toBe(true);
         expect(new Set(targeted)).toEqual(
-            new Set(["alpha.onlyAlpha", "beta.onlyBeta"]),
+            new Set([
+                "alpha.shared",
+                "alpha.onlyAlpha",
+                "beta.shared",
+                "beta.onlyBeta",
+            ]),
         );
     });
 });
