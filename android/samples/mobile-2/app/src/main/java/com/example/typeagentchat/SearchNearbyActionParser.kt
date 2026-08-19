@@ -8,35 +8,29 @@ internal data class SearchNearbyAction(
 )
 
 /**
- * Keeps intent data well under the ~1 MB binder budget; an oversized value
- * makes `startActivity` throw `TransactionTooLargeException`, so a hostile or
- * buggy server cannot crash the app from the network.
+ * Both fields are echoed into an `Intent` (the search term via the `geo:` URI,
+ * the original request only into logs and the confirmation toast), so both are
+ * capped and sanitized by the shared helpers in `ActionParsing.kt`.
  */
-private const val MAX_ORIGINAL_REQUEST_CHARS = 256
-private const val MAX_SEARCH_TERM_CHARS = 256
-
-private val controlCharRegex = Regex("""\p{Cntrl}""")
-private val whitespaceRunRegex = Regex("""\s+""")
 
 /**
  * Parses the `parameters` of the `searchNearby` action declared by
- * `androidDeviceSchema.ts`: `{ originalRequest: string; searchTerm: string }`.
- * Re-validated here because the values are shaped by an LLM and reach
+ * `androidDeviceSchema.ts`:
+ *
+ * ```ts
+ * parameters: { originalRequest: string; searchTerm: string }
+ * ```
+ *
+ * This client re-validates because the values are shaped by an LLM and reach
  * `startActivity` unmodified.
  */
 internal fun parseSearchNearbyActionPayload(data: Any?): SearchNearbyAction? {
     val payload = data as? JSONObject ?: return null
-    // `opt(...) as? String`, not `optString`: org.json renders a JSON null as
-    // the literal string "null", which would be searched for verbatim.
-    val searchTerm = sanitize((payload.opt("searchTerm") as? String).orEmpty())
-        .take(MAX_SEARCH_TERM_CHARS)
-        .trim()
+    val searchTerm = payload.sanitizedActionText("searchTerm")
     if (searchTerm.isEmpty()) {
         return null
     }
-    val originalRequest = sanitize((payload.opt("originalRequest") as? String).orEmpty())
-        .take(MAX_ORIGINAL_REQUEST_CHARS)
-        .trim()
+    val originalRequest = payload.sanitizedActionText("originalRequest")
 
     return SearchNearbyAction(
         originalRequest = originalRequest,
@@ -45,37 +39,16 @@ internal fun parseSearchNearbyActionPayload(data: Any?): SearchNearbyAction? {
 }
 
 /**
- * Folds control characters and whitespace runs into single spaces so a
- * multi-line term does not become a URI full of `%0A`.
- */
-private fun sanitize(raw: String): String =
-    raw.replace(controlCharRegex, " ")
-        .replace(whitespaceRunRegex, " ")
-        .trim()
-
-/**
- * `geo:0,0?q=<term>` searches without coordinates - `0,0` makes the maps app
- * substitute the device's current location, i.e. the "nearby" semantic.
+ * Builds the maps search URI for [Intent.ACTION_VIEW].
  *
- * The term is percent-encoded rather than interpolated (as TypeAgent's
- * `JavaScriptInterface.searchNearby` does), which would corrupt any term
- * containing `&`, `#` or `?`. Hand-rolled because `Uri.encode` is unavailable
- * in JVM unit tests and `URLEncoder` emits `+` for spaces.
+ * `geo:0,0?q=<term>` is the documented way to ask the maps app for a search
+ * without supplying coordinates - the app substitutes the device's current
+ * location, which is exactly the "nearby" semantic the agent asks for.
+ *
+ * The reference implementation in TypeAgent's `JavaScriptInterface.searchNearby`
+ * interpolates the term straight into the string. That corrupts the query for
+ * any term containing `&`, `#` or `+`, so the term is percent-encoded here
+ * instead.
  */
 internal fun buildGeoSearchUri(searchTerm: String): String =
     "geo:0,0?q=${percentEncode(searchTerm)}"
-
-private fun percentEncode(value: String): String {
-    val builder = StringBuilder()
-    for (byte in value.toByteArray(Charsets.UTF_8)) {
-        val char = (byte.toInt() and 0xFF).toChar()
-        val unreserved = char in 'A'..'Z' || char in 'a'..'z' || char in '0'..'9' ||
-            char == '-' || char == '_' || char == '.' || char == '~'
-        if (unreserved) {
-            builder.append(char)
-        } else {
-            builder.append('%').append("%02X".format(byte))
-        }
-    }
-    return builder.toString()
-}

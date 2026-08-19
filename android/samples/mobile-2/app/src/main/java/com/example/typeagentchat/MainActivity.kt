@@ -2,10 +2,12 @@ package com.example.typeagentchat
 
 import android.Manifest
 import android.app.Activity
+import android.app.SearchManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.AlarmClock
 import android.speech.RecognizerIntent
@@ -92,29 +94,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        webSocketManager.setClientActionHandler(object : WebSocketManager.ClientActionHandler {
-            override fun onSetAlarm(
-                action: SetAlarmAction,
-                completion: (AndroidDeviceExecutionResult) -> Unit
-            ) {
-                runOnUiThread { launchSetAlarmIntent(action, completion) }
-            }
-
-            override fun onSetTimer(
-                action: SetTimerAction,
-                completion: (AndroidDeviceExecutionResult) -> Unit
-            ) {
-                runOnUiThread { launchSetTimerIntent(action, completion) }
-            }
-
-            override fun onSearchNearby(
-                action: SearchNearbyAction,
-                completion: (AndroidDeviceExecutionResult) -> Unit
-            ) {
-                runOnUiThread { launchSearchNearbyIntent(action, completion) }
-            }
-        })
-        webSocketManager.connect(
+        viewModel.connectIfNeeded(
             url = tunnelUrl,
             tunnelToken = tunnelToken,
             schemaContent = agentSchemaContent
@@ -136,7 +116,22 @@ class MainActivity : ComponentActivity() {
                             launchSetAlarmIntent(action.action, action.completion)
                         is ClientAction.Timer ->
                             launchSetTimerIntent(action.action, action.completion)
-                        is ClientAction.SearchNearby -> launchSearchNearbyIntent(action.action)
+                        is ClientAction.SearchNearby ->
+                            launchSearchNearbyIntent(action.action, action.completion)
+                        is ClientAction.ShowAlarms ->
+                            launchShowAlarmsIntent(action.completion)
+                        is ClientAction.ShowTimers ->
+                            launchShowTimersIntent(action.completion)
+                        is ClientAction.ShowLocation ->
+                            launchShowLocationIntent(action.action, action.completion)
+                        is ClientAction.DialPhoneNumber ->
+                            launchDialPhoneNumberIntent(action.action, action.completion)
+                        is ClientAction.ComposeSms ->
+                            launchComposeSmsIntent(action.action, action.completion)
+                        is ClientAction.WebSearch ->
+                            launchWebSearchIntent(action.action, action.completion)
+                        is ClientAction.OpenWebPage ->
+                            launchOpenWebPageIntent(action.action, action.completion)
                     }
                 } catch (cancellation: CancellationException) {
                     // The action was already taken off the channel, so no other
@@ -194,8 +189,14 @@ class MainActivity : ComponentActivity() {
         when (this) {
             is ClientAction.Alarm -> completion(result)
             is ClientAction.Timer -> completion(result)
-            // Nothing is waiting on this one, it is fire and forget.
-            is ClientAction.SearchNearby -> Unit
+            is ClientAction.SearchNearby -> completion(result)
+            is ClientAction.ShowAlarms -> completion(result)
+            is ClientAction.ShowTimers -> completion(result)
+            is ClientAction.ShowLocation -> completion(result)
+            is ClientAction.DialPhoneNumber -> completion(result)
+            is ClientAction.ComposeSms -> completion(result)
+            is ClientAction.WebSearch -> completion(result)
+            is ClientAction.OpenWebPage -> completion(result)
         }
     }
 
@@ -210,15 +211,23 @@ class MainActivity : ComponentActivity() {
             if (action.originalRequest.isNotBlank()) {
                 putExtra(AlarmClock.EXTRA_MESSAGE, action.originalRequest)
             }
+            if (action.days.isNotEmpty()) {
+                // Documented as an ArrayList<Integer> of Calendar day constants,
+                // and it is read as exactly that - a plain IntArray is ignored.
+                putExtra(AlarmClock.EXTRA_DAYS, ArrayList(action.days))
+            }
         }
         launchExternalIntent(
             intent = intent,
             actionName = "set-alarm",
-            detail = "hour=${action.hour} minute=${action.minute}",
-            successMessage = "Alarm request sent for %02d:%02d".format(
-                action.hour,
-                action.minute
-            ),
+            detail = "hour=${action.hour} minute=${action.minute} days=${action.days}",
+            successMessage = buildString {
+                append("Alarm request sent for %02d:%02d".format(action.hour, action.minute))
+                if (action.days.isNotEmpty()) {
+                    append(" every ")
+                    append(formatAlarmDays(action.days))
+                }
+            },
             missingAppMessage = "No alarm app is available on this device.",
             deniedMessage = "This app is not allowed to set alarms.",
             backgroundMessage = "Could not set the alarm while the app was in the background.",
@@ -288,6 +297,185 @@ class MainActivity : ComponentActivity() {
             missingAppMessage = "No maps app is available on this device.",
             deniedMessage = "This app is not allowed to open the maps app.",
             backgroundMessage = "Could not open maps while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `showAlarms` action by opening the clock app's alarm list.
+     *
+     * Takes no parameters and changes nothing - the user is simply shown the
+     * alarms they already have.
+     */
+    private fun launchShowAlarmsIntent(completion: (AndroidDeviceExecutionResult) -> Unit) {
+        launchExternalIntent(
+            intent = Intent(AlarmClock.ACTION_SHOW_ALARMS),
+            actionName = "show-alarms",
+            detail = "",
+            successMessage = "Opening your alarms",
+            missingAppMessage = "No alarm app is available on this device.",
+            deniedMessage = "This app is not allowed to open the alarm list.",
+            backgroundMessage = "Could not open the alarms while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `showTimers` action by opening the clock app's timer list.
+     *
+     * `ACTION_SHOW_TIMERS` only exists from API 26 and `minSdk` is 24, so older
+     * devices are told the action is unavailable rather than being handed an
+     * intent whose action string nothing can resolve.
+     */
+    private fun launchShowTimersIntent(completion: (AndroidDeviceExecutionResult) -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            val message = "Showing timers needs Android 8.0 or later."
+            Log.w(TAG, "Skipping show-timers intent: API ${Build.VERSION.SDK_INT} < 26")
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Failure(message))
+            return
+        }
+        launchExternalIntent(
+            intent = Intent(AlarmClock.ACTION_SHOW_TIMERS),
+            actionName = "show-timers",
+            detail = "",
+            successMessage = "Opening your timers",
+            missingAppMessage = "No timer app is available on this device.",
+            deniedMessage = "This app is not allowed to open the timer list.",
+            backgroundMessage = "Could not open the timers while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `showLocation` action by opening the maps app on one place.
+     *
+     * Uses the same `geo:0,0?q=` URI as [launchSearchNearbyIntent]; the
+     * difference is intent, not mechanics - a named place rather than a category
+     * of place nearby - so the existing `VIEW` + `geo` `<queries>` entry already
+     * covers it.
+     */
+    private fun launchShowLocationIntent(
+        action: ShowLocationAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(buildGeoSearchUri(action.location)))
+        launchExternalIntent(
+            intent = intent,
+            actionName = "show-location",
+            detail = "location=${action.location}",
+            successMessage = "Showing ${action.location} on the map",
+            missingAppMessage = "No maps app is available on this device.",
+            deniedMessage = "This app is not allowed to open the maps app.",
+            backgroundMessage = "Could not open maps while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `dialPhoneNumber` action by opening the dialer pre-filled.
+     *
+     * `ACTION_DIAL`, never `ACTION_CALL`: the user still has to press the call
+     * button, so no `CALL_PHONE` permission is required and a mistranslated
+     * number cannot place a call on its own.
+     */
+    private fun launchDialPhoneNumberIntent(
+        action: DialPhoneNumberAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val intent = Intent(Intent.ACTION_DIAL, Uri.parse(buildTelUri(action.phoneNumber)))
+        launchExternalIntent(
+            intent = intent,
+            actionName = "dial-phone-number",
+            detail = "phoneNumber=${action.phoneNumber}",
+            successMessage = "Dialer opened for ${action.phoneNumber}",
+            missingAppMessage = "No dialer app is available on this device.",
+            deniedMessage = "This app is not allowed to open the dialer.",
+            backgroundMessage = "Could not open the dialer while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `composeSms` action by opening a pre-filled message draft.
+     *
+     * `ACTION_SENDTO` with an `smsto:` URI, never the `SEND_SMS` permission: the
+     * user still has to press send, so nothing goes out unseen.
+     */
+    private fun launchComposeSmsIntent(
+        action: ComposeSmsAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val intent = Intent(
+            Intent.ACTION_SENDTO,
+            Uri.parse(buildSmsToUri(action.phoneNumber))
+        ).apply {
+            // The de facto standard extra name every messaging app reads; there
+            // is no platform constant for it.
+            putExtra("sms_body", action.message)
+        }
+        val recipient = action.phoneNumber ?: "a new message"
+        launchExternalIntent(
+            intent = intent,
+            actionName = "compose-sms",
+            detail = "phoneNumber=${action.phoneNumber ?: "none"} messageChars=${
+                action.message.length
+            }",
+            successMessage = "Message draft opened for $recipient",
+            missingAppMessage = "No messaging app is available on this device.",
+            deniedMessage = "This app is not allowed to open the messaging app.",
+            backgroundMessage =
+                "Could not open the messaging app while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `webSearch` action by running a search in the device's own
+     * browser or search app.
+     *
+     * The query rides as an extra rather than in a URL, so no search engine is
+     * hard-coded and the user's default handles it.
+     */
+    private fun launchWebSearchIntent(
+        action: WebSearchAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val intent = Intent(Intent.ACTION_WEB_SEARCH).apply {
+            putExtra(SearchManager.QUERY, action.query)
+        }
+        launchExternalIntent(
+            intent = intent,
+            actionName = "web-search",
+            detail = "query=${action.query}",
+            successMessage = "Searching the web for ${action.query}",
+            missingAppMessage = "No browser or search app is available on this device.",
+            deniedMessage = "This app is not allowed to run a web search.",
+            backgroundMessage = "Could not search the web while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `openWebPage` action by opening a URL in the browser.
+     *
+     * The scheme allowlist lives in [parseOpenWebPageActionPayload] and has
+     * already rejected anything that is not `http`/`https` by the time this
+     * runs, so no arbitrary deep link can reach `startActivity`.
+     */
+    private fun launchOpenWebPageIntent(
+        action: OpenWebPageAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(action.url))
+        launchExternalIntent(
+            intent = intent,
+            actionName = "open-web-page",
+            detail = "url=${action.url}",
+            successMessage = "Opening ${action.url}",
+            missingAppMessage = "No browser is available on this device.",
+            deniedMessage = "This app is not allowed to open web pages.",
+            backgroundMessage = "Could not open the page while the app was in the background.",
             completion = completion
         )
     }

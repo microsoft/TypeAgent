@@ -670,6 +670,18 @@ class WebSocketManager {
             is AndroidDeviceAction.Timer -> handler.onSetTimer(action.action, completion)
             is AndroidDeviceAction.SearchNearby ->
                 handler.onSearchNearby(action.action, completion)
+            AndroidDeviceAction.ShowAlarms -> handler.onShowAlarms(completion)
+            AndroidDeviceAction.ShowTimers -> handler.onShowTimers(completion)
+            is AndroidDeviceAction.ShowLocation ->
+                handler.onShowLocation(action.action, completion)
+            is AndroidDeviceAction.DialPhoneNumber ->
+                handler.onDialPhoneNumber(action.action, completion)
+            is AndroidDeviceAction.ComposeSms ->
+                handler.onComposeSms(action.action, completion)
+            is AndroidDeviceAction.WebSearch ->
+                handler.onWebSearch(action.action, completion)
+            is AndroidDeviceAction.OpenWebPage ->
+                handler.onOpenWebPage(action.action, completion)
         }
     }
 
@@ -1483,6 +1495,35 @@ class WebSocketManager {
 
         fun onSearchNearby(
             action: SearchNearbyAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onShowAlarms(completion: (AndroidDeviceExecutionResult) -> Unit)
+
+        fun onShowTimers(completion: (AndroidDeviceExecutionResult) -> Unit)
+
+        fun onShowLocation(
+            action: ShowLocationAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onDialPhoneNumber(
+            action: DialPhoneNumberAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onComposeSms(
+            action: ComposeSmsAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onWebSearch(
+            action: WebSearchAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onOpenWebPage(
+            action: OpenWebPageAction,
             completion: (AndroidDeviceExecutionResult) -> Unit
         )
     }

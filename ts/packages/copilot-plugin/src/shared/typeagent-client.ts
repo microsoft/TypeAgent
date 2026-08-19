@@ -6,7 +6,9 @@
  */
 
 import {
+    connectAgentServer,
     connectDispatcher,
+    type AgentServerConnection,
     type ClientIO,
     type Dispatcher,
     type IAgentMessage,
@@ -82,4 +84,8 @@ export async function connectToTypeAgent(
         filter: true,
         clientType: "shell",
     });
+}
+
+export function connectToAgentServer(): Promise<AgentServerConnection> {
+    return connectAgentServer(TYPEAGENT_URL);
 }

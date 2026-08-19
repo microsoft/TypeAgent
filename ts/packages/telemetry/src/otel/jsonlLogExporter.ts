@@ -9,12 +9,14 @@ import type {
     LogRecordExporter,
     ReadableLogRecord,
 } from "@opentelemetry/sdk-logs";
+import { TYPEAGENT_SPAN_ATTRIBUTES } from "./traceContract.js";
 
 export interface JsonlLogExporterOptions {
     readonly filePath: string;
     readonly serviceName: string;
     readonly processName?: string;
     readonly pid?: number;
+    readonly startedAt?: Date;
     readonly maxPendingRecords?: number;
     readonly diagnostic?: (message: string, error?: unknown) => void;
 }
@@ -40,6 +42,7 @@ export class JsonlLogExporter implements LogRecordExporter {
             options.serviceName,
             options.pid,
             options.processName,
+            options.startedAt,
         );
         this.maxPendingRecords =
             options.maxPendingRecords ?? DEFAULT_MAX_PENDING_RECORDS;
@@ -288,29 +291,48 @@ export function resolveJsonlLogPath(
     serviceName: string,
     pid = process.pid,
     processName = "process",
+    startedAt = new Date(),
 ): string {
     if (!Number.isInteger(pid) || pid <= 0) {
         throw new Error("JSONL pid must be a positive integer.");
     }
+    if (Number.isNaN(startedAt.getTime())) {
+        throw new Error("JSONL start timestamp must be a valid date.");
+    }
     const service = sanitizePathSegment(serviceName);
     const processRole = sanitizePathSegment(processName);
+    const timestamp = formatFileTimestamp(startedAt);
     const hadPidPlaceholder = template.includes("{pid}");
     const hadProcessPlaceholder = template.includes("{process}");
+    let hadTimestampPlaceholder = template.includes("{timestamp}");
     if (!hadProcessPlaceholder && hadPidPlaceholder) {
-        template = template.replaceAll("{pid}", "{process}-{pid}");
+        template = template.replaceAll(
+            "{pid}",
+            `{process}${hadTimestampPlaceholder ? "" : "-{timestamp}"}-{pid}`,
+        );
+        hadTimestampPlaceholder = true;
     }
     let resolved = template
         .replaceAll("{service}", service)
         .replaceAll("{process}", processRole)
+        .replaceAll("{timestamp}", timestamp)
         .replaceAll("{pid}", String(pid));
-    if (!hadPidPlaceholder) {
+    if (!hadPidPlaceholder || !hadTimestampPlaceholder) {
         const parsed = path.parse(resolved);
         resolved = path.join(
             parsed.dir,
-            `${parsed.name}${hadProcessPlaceholder ? "" : `-${processRole}`}-${pid}${parsed.ext || ".jsonl"}`,
+            `${parsed.name}${hadProcessPlaceholder ? "" : `-${processRole}`}${hadTimestampPlaceholder ? "" : `-${timestamp}`}${hadPidPlaceholder ? "" : `-${pid}`}${parsed.ext || ".jsonl"}`,
         );
     }
     return path.resolve(resolved);
+}
+
+function formatFileTimestamp(value: Date): string {
+    return value
+        .toISOString()
+        .replaceAll("-", "")
+        .replaceAll(":", "")
+        .replace(".", "-");
 }
 
 function sanitizePathSegment(value: string): string {
@@ -322,26 +344,82 @@ function sanitizePathSegment(value: string): string {
 }
 
 function serializeLogRecord(record: ReadableLogRecord): string {
+    const attributes = { ...record.attributes };
+    const sessionId = takeStringAttribute(
+        attributes,
+        TYPEAGENT_SPAN_ATTRIBUTES.SESSION_ID,
+    );
+    const activationId = takeStringAttribute(
+        attributes,
+        TYPEAGENT_SPAN_ATTRIBUTES.ACTIVATION_ID,
+    );
+    const requestId = takeStringAttribute(
+        attributes,
+        TYPEAGENT_SPAN_ATTRIBUTES.REQUEST_ID,
+    );
+    const correlationId = takeStringAttribute(
+        attributes,
+        TYPEAGENT_SPAN_ATTRIBUTES.TRACE_ID,
+    );
+    const namespace = takeStringAttribute(attributes, "debug.namespace");
+    const spanContext = record.spanContext;
+    const { body, message } = takeBodyMessage(record.body);
     const serialized = JSON.stringify({
         timestamp: hrTimeToIso(record.hrTime),
-        observedTimestamp: hrTimeToIso(record.hrTimeObserved),
-        severityText: record.severityText,
-        severityNumber: record.severityNumber,
-        body: record.body,
-        resource: record.resource.attributes,
-        eventName: record.eventName,
-        traceId: record.spanContext?.traceId,
-        spanId: record.spanContext?.spanId,
-        traceFlags: record.spanContext?.traceFlags,
-        attributes: record.attributes,
-        instrumentationScope: {
-            name: record.instrumentationScope.name,
-            version: record.instrumentationScope.version,
-            attributes: record.instrumentationScope.attributes,
-        },
-        droppedAttributesCount: record.droppedAttributesCount,
+        ...(record.severityText === undefined
+            ? {}
+            : { severity: record.severityText }),
+        ...(record.eventName === undefined ? {} : { event: record.eventName }),
+        ...(sessionId === undefined ? {} : { sessionId }),
+        ...(activationId === undefined ? {} : { activationId }),
+        ...(requestId === undefined ? {} : { requestId }),
+        ...(correlationId === undefined ? {} : { correlationId }),
+        ...(spanContext === undefined
+            ? {}
+            : {
+                  traceId: spanContext.traceId,
+                  spanId: spanContext.spanId,
+              }),
+        ...(namespace === undefined ? {} : { namespace }),
+        ...(message === undefined ? {} : { message }),
+        body,
+        ...(Object.keys(attributes).length === 0 ? {} : { attributes }),
     });
     return `${serialized}\n`;
+}
+
+function takeBodyMessage(body: unknown): {
+    body: unknown;
+    message: string | undefined;
+} {
+    if (body === null || typeof body !== "object" || Array.isArray(body)) {
+        return { body, message: undefined };
+    }
+    const source = body as Record<string, unknown>;
+    if (typeof source.message !== "string") {
+        return { body, message: undefined };
+    }
+    const {
+        message,
+        sessionId: _sessionId,
+        activationId: _activationId,
+        requestId: _requestId,
+        traceId: _traceId,
+        ...rest
+    } = source;
+    return { body: rest, message };
+}
+
+function takeStringAttribute(
+    attributes: Record<string, unknown>,
+    name: string,
+): string | undefined {
+    const value = attributes[name];
+    if (typeof value !== "string") {
+        return undefined;
+    }
+    delete attributes[name];
+    return value;
 }
 
 function hrTimeToIso([seconds, nanos]: readonly [number, number]): string {

@@ -23,7 +23,7 @@
     "compile": "node esbuild.mjs",
     "deploy:local": "npm run package && code --install-extension dist-pub/typeagent-studio.vsix --force",
     "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies --allow-package-secrets npm -o dist-pub/typeagent-studio.vsix",
-    "test:local": "tsx --test src/test/*.spec.ts",
+    "test:local": "tsx --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../tools/scripts/nodeTestFailureReporter.mjs --test-reporter-destination=stdout src/test/*.spec.ts",
     "vscode:prepublish": "npm run compile",
     "watch": "node esbuild.mjs --watch"
   },
@@ -533,7 +533,7 @@
     "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
-    "ws": "^8.21.2"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/debug": "^4.1.0",
@@ -541,7 +541,7 @@
     "@types/ws": "^8.5.10",
     "@vscode/codicons": "^0.0.42",
     "@vscode/vsce": "^3.2.1",
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "mkdirp": "^3.0.1",
     "rimraf": "^6.0.1",
     "tsx": "^4.21.0"

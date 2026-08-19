@@ -15,10 +15,10 @@ import {
 } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
-    getDefaultAppAgentSource,
-    getMcpAppAgentSource,
+    getDefaultAppAgentSources,
     getIndexingServiceRegistry,
     getDefaultConstructionProvider,
+    McpReplayHost,
 } from "default-agent-provider";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
@@ -37,6 +37,7 @@ import os from "node:os";
 import { spawn } from "node:child_process";
 import { DefaultAzureCredential } from "@azure/identity";
 import { otel } from "@typeagent/telemetry";
+import { MacroManager } from "@typeagent/copilot-macros";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
@@ -340,10 +341,9 @@ async function main() {
                     instanceDir,
                     configName,
                 ),
-                appAgentSources: [
-                    getDefaultAppAgentSource(instanceDir, { configName }),
-                    getMcpAppAgentSource(instanceDir),
-                ],
+                appAgentSources: getDefaultAppAgentSources(instanceDir, {
+                    configName,
+                }),
                 persistSession: true,
                 storageProvider: getFsStorageProvider(),
                 metrics: true,
@@ -351,6 +351,7 @@ async function main() {
                 developerMode,
                 traceId,
                 telemetry: {
+                    joinActiveTrace: true,
                     structuredLogs: telemetryConfig.structuredLogs === true,
                 },
                 indexingServiceRegistry: await getIndexingServiceRegistry(
@@ -376,6 +377,10 @@ async function main() {
             },
             instanceDir,
         );
+    const macroManager = new MacroManager(
+        instanceDir,
+        new McpReplayHost(instanceDir),
+    );
 
     debugStartup("conversation manager ready; prewarming default conversation");
     // Pre-initialize the default conversation dispatcher before accepting clients,
@@ -492,6 +497,7 @@ async function main() {
     const { handler: connectionHandler, broadcastStaleNotice } =
         createAgentServerConnectionHandler({
             conversationManager,
+            macroManager,
             shutdown: shutdownServer,
             restart: restartServer,
             isStale: isStaleBuild,

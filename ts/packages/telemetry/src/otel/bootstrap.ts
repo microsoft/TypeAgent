@@ -67,10 +67,16 @@ import {
     type DebugModule,
 } from "./debugBridge.js";
 import { JsonlLogExporter } from "./jsonlLogExporter.js";
+import { LocalLogRecordProcessor } from "./localLogRecordProcessor.js";
+import {
+    createLocalTelemetryState,
+    setLocalTelemetryState,
+} from "./localTelemetryState.js";
 import {
     getTypeAgentSourceVersion,
     type TypeAgentSourceVersion,
 } from "./sourceVersion.js";
+import { setStructuredLoggingEnabled } from "./structuredLogging.js";
 
 export type TelemetrySignal = "traces" | "metrics" | "logs";
 
@@ -229,18 +235,20 @@ const DEFAULT_FACTORIES: TelemetryProviderFactories = {
                     ? configuredProcessName
                     : "process";
             processors.push(
-                new BatchLogRecordProcessor({
-                    exporter: new JsonlLogExporter({
-                        filePath: config.logFile,
-                        serviceName,
-                        processName,
+                new LocalLogRecordProcessor(
+                    new BatchLogRecordProcessor({
+                        exporter: new JsonlLogExporter({
+                            filePath: config.logFile,
+                            serviceName,
+                            processName,
+                        }),
+                        maxQueueSize: 2_048,
+                        maxExportBatchSize: 256,
+                        scheduledDelayMillis: 250,
+                        exportTimeoutMillis: 5_000,
+                        selfObsMeterProvider: metrics.getMeterProvider(),
                     }),
-                    maxQueueSize: 2_048,
-                    maxExportBatchSize: 256,
-                    scheduledDelayMillis: 250,
-                    exportTimeoutMillis: 5_000,
-                    selfObsMeterProvider: metrics.getMeterProvider(),
-                }),
+                ),
             );
         }
         return {
@@ -411,11 +419,32 @@ async function createDefaultTelemetryResource(
 }
 
 const processTelemetry = createTelemetryCoordinator();
+let processLocalStateInitialized = false;
 
-export function initTelemetry(
+export async function initTelemetry(
     options: InitTelemetryOptions = {},
 ): Promise<void> {
-    return processTelemetry.init(options);
+    const config =
+        options.config ?? resolveTelemetryConfig(options.configOptions);
+    if (processLocalStateInitialized) {
+        await processTelemetry.init({ ...options, config });
+        setStructuredLoggingEnabled(config.structuredLogs === true);
+        return;
+    }
+    setLocalTelemetryState(
+        createLocalTelemetryState({
+            initialProfile: "focused",
+            initialDebugCopy: false,
+            debugBridgeAvailable:
+                config.debugBridge === true &&
+                options.debugModules !== undefined &&
+                options.debugModules.length > 0,
+            localLogAvailable: config.logs?.logFile !== undefined,
+        }),
+    );
+    processLocalStateInitialized = true;
+    await processTelemetry.init({ ...options, config });
+    setStructuredLoggingEnabled(config.structuredLogs === true);
 }
 
 export function shutdownTelemetry(): Promise<void> {

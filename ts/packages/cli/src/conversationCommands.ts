@@ -14,11 +14,11 @@ import {
     type ManageConversationContext,
     type ManageConversationPayload,
 } from "@typeagent/agent-server-client/conversation";
-import { confirmYesNo } from "./enhancedConsole.js";
 
 export type ConversationCommandContext = {
     connection: AgentServerConnection;
     clientIO: ClientIO;
+    confirmYesNo: (question: string) => Promise<boolean>;
     getCurrentConversationId: () => string;
     getCurrentConversationName: () => string;
     /** Pre-leave: rebind dispatcher and active id/name only. */
@@ -335,7 +335,7 @@ async function handleNewWithConfirm(
         console.log(chalk.red(`Error: ${e?.message ?? String(e)}`));
         return;
     }
-    const switchNow = await confirmYesNo(`Switch to '${name}' now?`);
+    const switchNow = await ctx.confirmYesNo(`Switch to '${name}' now?`);
     if (!switchNow) {
         console.log(`Created conversation '${chalk.green(name)}'.`);
         return;
@@ -443,7 +443,7 @@ export async function handleConversationCommand(
             ? { onPersistSwitched: ctx.onPersistSwitched }
             : {}),
         confirmDestructive: async (_action, target) =>
-            confirmYesNo(`Delete conversation '${target.name}'?`),
+            ctx.confirmYesNo(`Delete conversation '${target.name}'?`),
     };
 
     const result = await manageConversation(

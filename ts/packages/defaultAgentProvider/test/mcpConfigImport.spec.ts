@@ -40,6 +40,7 @@ describe("importMcpConfig - mcpServers format", () => {
         expect(result.errors).toHaveLength(0);
         expect(result.servers).toHaveLength(1);
         const cfg = result.servers[0].config;
+        expect(cfg.id).toBe("fs");
         expect(cfg.name).toBe("fs");
         expect(cfg.transport).toEqual({
             kind: "stdio",
@@ -49,16 +50,28 @@ describe("importMcpConfig - mcpServers format", () => {
         });
         expect(cfg.scope).toBe("workspace");
         expect(cfg.trust).toBe("untrusted");
+        expect(cfg.enabled).toBe(true);
+        expect(cfg.provenance).toEqual({
+            source: "imported-config",
+            sourceKind: "mcp-config",
+            ref: "fs",
+        });
     });
 
     it("infers http transport from a bare url", () => {
         const result = importMcpConfig({
-            mcpServers: { remote: { url: "https://example.com/mcp" } },
+            mcpServers: {
+                remote: {
+                    url: "https://example.com/mcp",
+                    timeoutMs: 5000,
+                },
+            },
         });
         expect(result.errors).toHaveLength(0);
         expect(result.servers[0].config.transport).toEqual({
             kind: "http",
             url: "https://example.com/mcp",
+            timeoutMs: 5000,
         });
     });
 

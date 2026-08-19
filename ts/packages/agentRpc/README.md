@@ -91,7 +91,9 @@ if (rpc) {
 Every `invoke` creates one `CLIENT` span and one `SERVER` span. One-way `send`
 notifications are not traced. The request may carry a versioned metadata envelope
 with bounded W3C `traceparent`/`tracestate` values and the allowlisted TypeAgent
-`traceId`, `sessionId`, and `activationId` correlation fields.
+`agentName`, `actionName`, `traceId`, `sessionId`, and `activationId` metadata
+fields. Values that fail bounds, character validation, or telemetry secret
+filtering are omitted.
 
 Outbound metadata and inbound trust are separate opt-ins. Enable each only for an
 approved destination or transport:
@@ -115,6 +117,11 @@ These are factory-level primitives. Higher-level RPC factories and their
 composition roots must deliberately thread these options to TypeAgent-owned IPC
 channels; adding the envelope type alone does not activate cross-process
 parenting.
+
+Code shared with browser RPC consumers must import active TypeAgent trace
+metadata from `@typeagent/telemetry/traceContext`. The main
+`@typeagent/telemetry` entry point is Node-only because it includes provider and
+exporter lifecycle support.
 
 Cancellation continues to use each application protocol's existing mechanism.
 For example, agent actions send `cancelAction`, abort the server handler, and

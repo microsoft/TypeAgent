@@ -23,9 +23,16 @@ describe("mcpInfoToNormalized", () => {
             info({ serverUrl: "https://example.com/mcp" }),
         );
         expect(normalized).toEqual({
+            id: "shipped:web",
             name: "web",
             scope: "shipped",
             trust: "trusted",
+            enabled: true,
+            provenance: {
+                source: "shipped",
+                sourceKind: "shipped",
+                ref: "web",
+            },
             description: "a server",
             emojiChar: "🔌",
             transport: { kind: "http", url: "https://example.com/mcp" },

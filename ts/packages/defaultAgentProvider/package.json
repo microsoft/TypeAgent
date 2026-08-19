@@ -51,6 +51,7 @@
     "@typeagent/code-agent": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
+    "@typeagent/copilot-macros": "workspace:*",
     "@typeagent/desktop-automation": "workspace:*",
     "@typeagent/discord-agent": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
@@ -93,7 +94,7 @@
     "typechat": "^0.1.1",
     "windowsclock-agent": "workspace:*",
     "workflow-agent": "workspace:*",
-    "ws": "^8.21.2",
+    "ws": "^8.21.3",
     "zod": "^4.1.13"
   },
   "devDependencies": {

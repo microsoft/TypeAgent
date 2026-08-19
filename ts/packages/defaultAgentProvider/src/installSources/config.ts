@@ -14,6 +14,8 @@
 // core, and lets the host decide how a source is added, listed, ordered,
 // removed, and persisted, including any future auth UI.
 
+import type { NormalizedMcpServerConfig } from "../mcp/mcpServerConfig.js";
+
 /**
  * The result of a source's `find`: which source matched and how the agent
  * should be acquired. If `find` returns a candidate, `materialize` must
@@ -78,6 +80,24 @@ export interface ResolvedCandidate {
  * one `@package` command surface can manage both.
  */
 export type ExtensionKind = "agent" | "mcp";
+
+/**
+ * A normalized MCP artifact resolved by an install source. MCP candidates stay
+ * separate from native {@link ResolvedCandidate} records because they are
+ * persisted by the MCP server store and never pass through native agent
+ * materialization or agents.json.
+ */
+export interface McpInstallCandidate {
+    readonly extensionKind: "mcp";
+    readonly source: string;
+    readonly sourceKind: string;
+    readonly ref: string;
+    readonly config: NormalizedMcpServerConfig;
+    /** Materialize owned local content after user confirmation. */
+    readonly materialize?: (
+        abortSignal?: AbortSignal,
+    ) => Promise<NormalizedMcpServerConfig>;
+}
 
 /**
  * One enumerable install target advertised by a source for `@package available`
@@ -308,7 +328,12 @@ export type UninstallOutcomeStatus = "uninstalled" | "reverted";
  * provider, not an install source (they are never installed/uninstalled/
  * updated). Install sources only resolve user-installed agents.
  */
-export type InstallSourceKind = "path" | "catalog" | "feed" | "mcp-config";
+export type InstallSourceKind =
+    | "path"
+    | "catalog"
+    | "feed"
+    | "mcp-config"
+    | "registry";
 
 /**
  * A `path` source validates a filesystem path the user supplies. `ref` is a
@@ -365,7 +390,8 @@ export type InstallSourceConfig =
     | PathSourceConfig
     | FeedSourceConfig
     | CatalogSourceConfig
-    | McpConfigSourceConfig;
+    | McpConfigSourceConfig
+    | RegistrySourceConfig;
 
 /**
  * An `mcp-config` source enumerates MCP servers declared in a local MCP config
@@ -381,6 +407,16 @@ export interface McpConfigSourceConfig {
     kind: "mcp-config";
     name: string; // e.g. "mcp-config"
     file: string; // local filesystem path to the MCP config JSON
+}
+
+/** A read-only MCP Registry v0.1 discovery and installation source. */
+export interface RegistrySourceConfig {
+    kind: "registry";
+    name: string;
+    baseUrl: string;
+    cachePath?: string;
+    cacheTtlMs?: number;
+    maxPages?: number;
 }
 
 /**
@@ -415,6 +451,14 @@ export interface InstallSource {
         ref: string,
         onWarn?: SourceWarning,
     ): Promise<ResolvedCandidate | undefined>;
+    /**
+     * Resolve an MCP artifact by its source-local ref. Sources that do not
+     * provide MCP artifacts omit this method.
+     */
+    findMcp?(
+        ref: string,
+        onWarn?: SourceWarning,
+    ): Promise<McpInstallCandidate | undefined>;
     /**
      * Optional default-agent-name lookup for one-argument install (phase 1).
      * Matches the package's declared `typeagent.defaultAgentName`. Returning a

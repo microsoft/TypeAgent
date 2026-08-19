@@ -11,9 +11,14 @@ import {
     type Tracer,
 } from "@opentelemetry/api";
 import type { ActionContext } from "@typeagent/agent-sdk";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 import { otel } from "@typeagent/telemetry";
 import type { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { getSessionName } from "../context/session.js";
+import {
+    logReasoningCompleted,
+    logReasoningStarted,
+} from "./structuredEvents.js";
 
 export const REASONING_SPAN_EVENTS = Object.freeze({
     TOOL_CALL: "reasoning.tool_call",
@@ -76,17 +81,31 @@ export async function wrapReasoningSpan<T>(
     return tracer.startActiveSpan(
         otel.TYPEAGENT_SPAN_NAMES.REASONING,
         async (span) => {
-            otel.setTypeAgentSpanAttributes(span, attributes);
+            const effectiveAttributes = {
+                ...otel.getActiveTypeAgentSpanAttributes(),
+                ...attributes,
+            };
+            otel.setTypeAgentSpanAttributes(span, effectiveAttributes);
             const state: ReasoningSpanState = {
                 span,
                 ended: false,
                 overflowEventEmitted: false,
             };
-            const spanContext: Context = context
-                .active()
-                .setValue(REASONING_STATE_KEY, state);
+            const spanContext: Context = otel.setActiveTypeAgentSpanAttributes(
+                context.active().setValue(REASONING_STATE_KEY, state),
+                effectiveAttributes,
+            );
             try {
-                return await context.with(spanContext, () => body(span));
+                return await context.with(spanContext, () =>
+                    withChatModelTelemetryContext(
+                        {
+                            phase: "reasoning",
+                            purpose: "reasoning",
+                            scope: "foreground",
+                        },
+                        () => body(span),
+                    ),
+                );
             } catch (error) {
                 const isAbort = isCancellation(error);
                 const name = isAbort ? "AbortError" : "ReasoningError";
@@ -131,9 +150,56 @@ export function runInReasoningSpan<T>(
         attributes.traceId = systemContext.traceId;
     }
 
+    const requestId = systemContext.currentRequestId?.requestId;
+    const eventModel = {
+        ...(modelAttributes?.genAiSystem === undefined
+            ? {}
+            : { provider: modelAttributes.genAiSystem }),
+        ...(modelAttributes?.genAiRequestModel === undefined
+            ? {}
+            : { model: modelAttributes.genAiRequestModel }),
+    };
     return wrapReasoningSpan(
         attributes,
-        body,
+        async (span) => {
+            const startedAt = Date.now();
+            if (requestId !== undefined) {
+                logReasoningStarted(systemContext.logger, {
+                    requestId,
+                    ...eventModel,
+                });
+            }
+            try {
+                const result = await body(span);
+                if (requestId !== undefined) {
+                    logReasoningCompleted(systemContext.logger, {
+                        requestId,
+                        ...eventModel,
+                        success: true,
+                        cancelled: false,
+                        elapsedMs: Date.now() - startedAt,
+                    });
+                }
+                return result;
+            } catch (error) {
+                const cancelled =
+                    cancellationSignal?.aborted === true ||
+                    context.abortSignal?.aborted === true ||
+                    (error !== null &&
+                        typeof error === "object" &&
+                        (error as { name?: unknown }).name === "AbortError");
+                if (requestId !== undefined) {
+                    logReasoningCompleted(systemContext.logger, {
+                        requestId,
+                        ...eventModel,
+                        success: false,
+                        cancelled,
+                        elapsedMs: Date.now() - startedAt,
+                    });
+                }
+                throw error;
+            }
+        },
         (error) =>
             cancellationSignal?.aborted === true ||
             context.abortSignal?.aborted === true ||

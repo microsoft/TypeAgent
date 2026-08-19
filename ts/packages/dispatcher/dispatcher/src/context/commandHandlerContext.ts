@@ -1234,6 +1234,7 @@ export async function initializeCommandHandlerContext(
                     ? getSessionName(context.session.sessionDirPath)
                     : undefined,
             activationId,
+            requestId: () => context.currentRequestId?.requestId,
         });
 
         const cacheDir = persistDir ? ensureCacheDir(persistDir) : undefined;
@@ -1399,6 +1400,7 @@ export async function initializeCommandHandlerContext(
                         result?.metrics,
                         result?.tokenUsage,
                         result?.actionTokenUsage,
+                        result?.traceId,
                     );
                     context.displayLog.saveQueued();
                 } catch {
