@@ -14,11 +14,19 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
-class WebSocketManager {
+class WebSocketManager internal constructor(
+    /**
+     * Overridden by unit tests with a fake so the connect and registration
+     * handshake can be driven without a server. Production callers use the
+     * no-argument constructor and get [client].
+     */
+    webSocketFactory: WebSocket.Factory? = null
+) {
 
     private val client = OkHttpClient.Builder()
         .pingInterval(30, TimeUnit.SECONDS)
         .build()
+    private val webSocketFactory: WebSocket.Factory = webSocketFactory ?: client
     private val lock = Any()
     private val nextCallId = AtomicInteger(0)
     private val connectionGeneration = AtomicInteger(0)
@@ -32,6 +40,12 @@ class WebSocketManager {
     private var connectionId: String? = null
     private var agentSchemaContent: String? = null
     private var isClientAgentRegistered = false
+    /**
+     * Whether this connection has already tried to evict a stale
+     * `androidDevice` registration. A second collision means the eviction did
+     * not clear it, so retrying would loop.
+     */
+    private var registrationRecoveryAttempted = false
     private var pendingUserInteraction: PendingUserInteraction? = null
     private var clientActionHandler: ClientActionHandler? = null
 
@@ -169,6 +183,7 @@ class WebSocketManager {
             requestedConversationId = resumeConversationId?.takeIf { it.isNotBlank() }
             agentSchemaContent = resolvedSchemaContent
             isClientAgentRegistered = false
+            registrationRecoveryAttempted = false
             displayThreads.clear()
             displayMessageIds.clear()
         }
@@ -186,7 +201,7 @@ class WebSocketManager {
         }
         val request = requestBuilder.build()
 
-        webSocket = client.newWebSocket(request, object : WebSocketListener() {
+        webSocket = webSocketFactory.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (connectionGeneration.get() != generation) return
                 Log.d(TAG, "WebSocket connected")
@@ -507,19 +522,71 @@ class WebSocketManager {
     }
 
     /**
-     * Accepts the server's report that `androidDevice` is already registered
-     * for this conversation instead of failing the connection: refusing every
-     * action until the app restarts is the worse outcome.
+     * Recovers from the server reporting `androidDevice` as already registered
+     * for this conversation.
      *
-     * Uses its own status text because the guarantee is weaker - this
-     * registration belongs to a connection that is gone, so actions may do
-     * nothing until the server drops it.
+     * The stale entry is bound to a socket that is gone, so keeping it leaves
+     * actions routed into a dead channel. `unregisterClientAgent` removes the
+     * entry whichever connection made it, so evicting it and registering again
+     * rebinds the route to this connection.
+     *
+     * Tried once per connection: a second collision means the eviction did not
+     * clear the entry, and retrying would loop.
      */
     private fun handleRegistrationCollision(joinedConversationId: String) {
+        val alreadyAttempted = synchronized(lock) {
+            val attempted = registrationRecoveryAttempted
+            registrationRecoveryAttempted = true
+            attempted
+        }
+        if (alreadyAttempted) {
+            reuseExistingRegistration(joinedConversationId)
+            return
+        }
+
+        val generation = connectionGeneration.get()
+        _connectionStatus.value = ConnectionStatus(
+            text = STATUS_AGENT_REGISTRATION_RECLAIMING,
+            state = ConnectionStatus.State.CONNECTING
+        )
+        sendInvoke(
+            channelName = AGENT_SERVER_CHANNEL,
+            methodName = "unregisterClientAgent",
+            args = listOf(
+                AndroidDeviceAgent.createUnregistrationParams(joinedConversationId)
+            ),
+            onResult = {
+                if (isSupersededConnection(generation, "unregisterClientAgent result")) {
+                    return@sendInvoke
+                }
+                Log.w(
+                    TAG,
+                    "Evicted the stale ${AndroidDeviceAgent.NAME} registration for " +
+                        "conversation $joinedConversationId; registering again"
+                )
+                registerClientAgent(joinedConversationId)
+            },
+            onError = { error ->
+                if (isSupersededConnection(generation, "unregisterClientAgent error: $error")) {
+                    return@sendInvoke
+                }
+                Log.w(TAG, "Could not evict the stale registration: $error")
+                reuseExistingRegistration(joinedConversationId)
+            }
+        )
+    }
+
+    /**
+     * Last resort when the stale registration cannot be evicted. Actions stay
+     * routed at the connection it was made on, so they will not reach this
+     * device until that entry is gone, which only happens once the server drops
+     * the dispatcher for the conversation.
+     */
+    private fun reuseExistingRegistration(joinedConversationId: String) {
         markClientAgentRegistered(
-            logMessage = "Client agent ${AndroidDeviceAgent.NAME} is already registered for " +
-                "conversation $joinedConversationId; reusing that registration. Actions will " +
-                "do nothing until the server drops the connection it was registered on.",
+            logMessage = "Client agent ${AndroidDeviceAgent.NAME} is still registered for " +
+                "conversation $joinedConversationId and could not be reclaimed. Actions will " +
+                "not reach this device until that registration is removed.",
             statusText = STATUS_AGENT_REGISTRATION_REUSED,
             isRecovery = true
         )
@@ -1552,6 +1619,10 @@ class WebSocketManager {
 
         internal const val STATUS_AGENT_REGISTERED = "Connected - Android actions registered"
 
+        /** Shown while the stale registration is being evicted. */
+        internal const val STATUS_AGENT_REGISTRATION_RECLAIMING =
+            "Reclaiming Android registration..."
+
         /**
          * Deliberately distinct from [STATUS_AGENT_REGISTERED]: the app is
          * reusing a registration it did not make, which is a weaker guarantee.
@@ -1624,8 +1695,10 @@ internal fun isConversationNotFoundError(error: String?): Boolean =
  *
  * The server keys client agents by conversation rather than by connection, and
  * does not always drop the registration when a socket dies abruptly, so a
- * reconnect collides with the orphaned entry. Left unhandled, the app then
- * refuses every executeAction until it is restarted.
+ * reconnect collides with the orphaned entry. The entry only disappears on its
+ * own when the conversation's dispatcher closes, which needs every client to
+ * leave, so restarting the app does not clear it while another client is
+ * joined. Left unhandled, the app then refuses every executeAction.
  *
  * Matches the whole `App agent '<name>' already exists` phrase, not the agent
  * name alone, because the caller reacts by claiming the agent is registered: a
