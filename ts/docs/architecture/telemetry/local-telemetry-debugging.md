@@ -34,7 +34,9 @@ You need:
 
 - A configured TypeAgent checkout.
 - Docker Desktop or Docker Engine.
-- Ports `3000`, `4317`, and `4318` available on localhost.
+- Port `3000` available on `localhost` for Grafana. The OTLP/gRPC and
+  OTLP/HTTP receiver ports are assigned dynamically on the loopback
+  interface, so no specific port needs to be free for them.
 
 If this is a fresh checkout, run `pnpm run setup` from `ts`.
 
@@ -51,18 +53,22 @@ Loki, Tempo, Prometheus, and an OpenTelemetry collector.
 
 Once Grafana reports healthy, the command also enables the local sink in
 `config.local.yaml` — no `OTEL_*` / `TYPEAGENT_OTEL_*` environment variables
-are required. The block it writes looks like this (custom values you had are
-preserved):
+are required. The block includes the Docker-assigned endpoint:
 
 ```yaml
 telemetry:
   local:
     enabled: "true"
-    otlpEndpoint: http://localhost:4318
+    otlpEndpoint: http://127.0.0.1:<assigned-port>
     logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
     debugBridge: "true"
     structuredLogs: "true"
 ```
+
+`otlpEndpoint` is owned by `pnpm run telemetry:grafana`: the command discovers
+and writes the current endpoint automatically. Other local settings you have customized
+(`logFile`, `logRetentionBytes`, `debugBridge`, `structuredLogs`) are left
+alone.
 
 The local sink is additive: if you already have a standard OTLP backend
 configured in `telemetry.otlpEndpoint`, TypeAgent exports to both the
@@ -247,7 +253,10 @@ pnpm run telemetry:grafana --stop
 ```
 
 `--stop` also flips `telemetry.local.enabled` to `"false"` in
-`config.local.yaml` (custom local values are preserved for the next start).
+`config.local.yaml`. Other local values (`logFile`, `logRetentionBytes`,
+`debugBridge`, `structuredLogs`) are preserved for the next start;
+`otlpEndpoint` is refreshed automatically the next time you start the stack,
+since Docker may assign a different host port.
 
 ### Log Retention and Manual Cleanup
 

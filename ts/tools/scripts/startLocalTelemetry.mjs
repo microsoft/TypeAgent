@@ -26,21 +26,23 @@ if (args.has("--help") || args.has("-h")) {
     console.log(`Usage: pnpm run telemetry:grafana [--stop]
 
 Starts Docker Desktop when needed on Windows or macOS, then starts the local
-Grafana LGTM OpenTelemetry stack with loopback-only ports:
-  Grafana:   http://localhost:3000
-  OTLP/gRPC: http://localhost:4317
-  OTLP/HTTP: http://localhost:4318
+Grafana LGTM OpenTelemetry stack:
+  Grafana: http://localhost:3000
 
-On success this script also toggles the local telemetry sink in
-config.local.yaml (path resolved with the same precedence as getKeys):
+The collector ports are assigned dynamically on the loopback interface and
+configured automatically in config.local.yaml (path resolved with the same
+precedence as getKeys):
   TYPEAGENT_CONFIG_LOCAL > TYPEAGENT_CONFIG_DIR/config.local.yaml >
   ts/config.local.yaml
 
-Starting sets telemetry.local.enabled to the string "true" only AFTER
-Grafana reports healthy. Stopping sets it to "false" after the container
-is confirmed stopped (or already not running). Existing standard telemetry
-settings and any custom local endpoint/logFile/debugBridge/structuredLogs
-values are preserved.
+Starting sets telemetry.local.enabled to the string "true" and
+telemetry.local.otlpEndpoint to the discovered OTLP/HTTP address, only AFTER
+Grafana reports healthy. This script owns otlpEndpoint: any stale or
+hand-customized value is overwritten on every start, since the assigned
+port can differ from one run to the next. Stopping sets enabled to "false"
+after the container is confirmed stopped (or already not running); other
+local settings (logFile/logRetentionBytes/debugBridge/structuredLogs) are
+left untouched.
 
 TypeAgent reads config.local.yaml at process startup, so RESTART TypeAgent
 after each toggle for the change to take effect.
@@ -243,6 +245,24 @@ function getContainerId(all) {
     return result.stdout.trim();
 }
 
+function isLoopbackBinding(entries) {
+    return (
+        Array.isArray(entries) &&
+        entries.length === 1 &&
+        entries[0]?.HostIp === "127.0.0.1"
+    );
+}
+
+function isDynamicLoopbackBinding(entries) {
+    return isLoopbackBinding(entries) && entries[0].HostPort === "";
+}
+
+// `HostConfig.PortBindings` holds the *requested* binding spec and is
+// available whether the container is running or stopped, but for a
+// dynamically-assigned port (empty host port) it never reflects the actual
+// host port Docker chose. It only tells us the port is bound to loopback,
+// which is what we need to decide whether an existing container is
+// compatible with the current (loopback-only) scheme.
 function hasLoopbackBindings() {
     const result = runDocker(
         [
@@ -254,14 +274,43 @@ function hasLoopbackBindings() {
         { capture: true },
     );
     const bindings = JSON.parse(result.stdout);
-    return ["3000/tcp", "4317/tcp", "4318/tcp"].every((port) => {
-        const entries = bindings[port];
-        return (
-            Array.isArray(entries) &&
-            entries.length === 1 &&
-            entries[0]?.HostIp === "127.0.0.1"
+    return (
+        isLoopbackBinding(bindings["3000/tcp"]) &&
+        bindings["3000/tcp"][0].HostPort === "3000" &&
+        ["4317/tcp", "4318/tcp"].every((port) =>
+            isDynamicLoopbackBinding(bindings[port]),
+        )
+    );
+}
+
+// `NetworkSettings.Ports` reflects the *actual* live port assignment and is
+// only populated while the container is running. Docker picks a fresh
+// ephemeral host port for the OTLP receivers on every start, so this must
+// be re-queried each time rather than cached across runs.
+function getRuntimeOtlpPorts() {
+    const result = runDocker(
+        [
+            "inspect",
+            "--format",
+            "{{json .NetworkSettings.Ports}}",
+            containerName,
+        ],
+        { capture: true },
+    );
+    const bindings = JSON.parse(result.stdout);
+    const otlpHttpPort = getLoopbackHostPort(bindings, 4318);
+    const otlpGrpcPort = getLoopbackHostPort(bindings, 4317);
+    if (otlpHttpPort === undefined || otlpGrpcPort === undefined) {
+        throw new Error(
+            "Docker did not report loopback host ports for the OTLP endpoints.",
         );
-    });
+    }
+    return { otlpHttpPort, otlpGrpcPort };
+}
+
+function getLoopbackHostPort(bindings, containerPort) {
+    const entries = bindings[`${containerPort}/tcp`];
+    return isLoopbackBinding(entries) ? entries[0].HostPort : undefined;
 }
 
 async function waitForGrafana() {
@@ -328,18 +377,7 @@ async function start() {
         console.log(
             "[telemetry:grafana] Grafana LGTM is already running at http://localhost:3000",
         );
-        await waitForGrafana();
-        // Ensure the sink is enabled even when the container was already
-        // running from a previous session — the user's config may still be
-        // in the disabled state if they last ran `--stop`.
-        toggleTelemetryLocal(true);
-        console.log(
-            "[telemetry:grafana] Restart TypeAgent so it picks up the new telemetry config.",
-        );
-        return;
-    }
-
-    if (getContainerId(true) !== "") {
+    } else if (getContainerId(true) !== "") {
         console.log("[telemetry:grafana] Starting the existing container...");
         runDocker(["start", containerName]);
     } else {
@@ -354,31 +392,39 @@ async function start() {
             containerName,
             "-p",
             "127.0.0.1:3000:3000",
+            // Let Docker pick the host port for the OTLP receivers (empty
+            // host port) so they never collide with something else already
+            // listening on 4317/4318. The chosen ports are discovered below
+            // and written into config.local.yaml.
             "-p",
-            "127.0.0.1:4317:4317",
+            "127.0.0.1::4317",
             "-p",
-            "127.0.0.1:4318:4318",
+            "127.0.0.1::4318",
             imageName,
         ]);
     }
 
     await waitForGrafana();
-    // Grafana is healthy — safe to advertise the local sink to TypeAgent.
-    // We intentionally toggle AFTER health passes so a failed startup does
-    // not leave the config claiming a working sink is available.
-    toggleTelemetryLocal(true);
+    // Grafana is healthy: safe to advertise the local sink to TypeAgent.
+    // We intentionally discover ports and toggle AFTER health passes so a
+    // failed startup does not leave the config claiming a working sink is
+    // available. Re-discover the ports even when the container was already
+    // running: Docker may have assigned different ephemeral ports than the
+    // last time this script ran, and this script owns otlpEndpoint, so any
+    // stale/customized value must not survive.
+    const { otlpHttpPort, otlpGrpcPort } = getRuntimeOtlpPorts();
+    const otlpEndpoint = `http://127.0.0.1:${otlpHttpPort}`;
+    toggleTelemetryLocal(true, otlpEndpoint);
     console.log("[telemetry:grafana] Grafana:   http://localhost:3000");
-    console.log("[telemetry:grafana] OTLP/HTTP: http://localhost:4318");
-    console.log("[telemetry:grafana] OTLP/gRPC: http://localhost:4317");
     console.log(
         "[telemetry:grafana] Restart TypeAgent so it picks up the new telemetry config.",
     );
 }
 
-function toggleTelemetryLocal(enable) {
+function toggleTelemetryLocal(enable, otlpEndpoint) {
     const filePath = resolveLocalConfigPath(workspaceTsRoot);
     const result = enable
-        ? enableTelemetryLocal(filePath)
+        ? enableTelemetryLocal(filePath, otlpEndpoint)
         : disableTelemetryLocal(filePath);
     if (result.changed) {
         console.log(

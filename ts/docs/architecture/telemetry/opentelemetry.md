@@ -380,10 +380,15 @@ telemetry:
   tracesSampler: always_on
   local:
     enabled: "true"
-    otlpEndpoint: http://localhost:4318
+    otlpEndpoint: http://127.0.0.1:54321
     debugBridge: "true"
     structuredLogs: "true"
 ```
+
+`telemetry.local.otlpEndpoint` above (`54321` is just an example) is written
+by `pnpm run telemetry:grafana`: Docker assigns the local container's
+OTLP/HTTP host port dynamically on every start, so the script owns this
+value and overwrites it on every run instead of preserving a stale one.
 
 Standard `OTEL_*` variables override YAML. Relevant settings include:
 
@@ -403,9 +408,12 @@ Partner libraries use host configuration and do not read TypeAgent YAML.
 `pnpm run telemetry:grafana` manages `telemetry.local` in
 `config.local.yaml`. When enabled, the local OTLP exporter runs in parallel
 with the standard exporter; it does not replace or rewrite the backend
-endpoint. Identical resolved endpoints are deduplicated. TypeAgent reads this
-configuration at process startup, so processes must restart after the script
-changes it.
+endpoint (`telemetry.otlpEndpoint`). Identical resolved endpoints are
+deduplicated. The script does, however, own `telemetry.local.otlpEndpoint`
+itself: it discovers the container's dynamically-assigned OTLP/HTTP host
+port on every start and overwrites the local endpoint with it, so a stale or
+hand-edited value never lingers. TypeAgent reads this configuration at
+process startup, so processes must restart after the script changes it.
 
 Local development samples all traces by default when trace export is enabled.
 Deployments may configure standard OTel sampling. Partner hosts own sampling.
@@ -554,13 +562,9 @@ The loopback binding keeps the services inaccessible from other machines on
 the network. Do not publish these ports on all interfaces unless remote access
 is intentional and protected separately.
 
-The relevant endpoints are:
-
-| Port | Endpoint                          |
-| ---- | --------------------------------- |
-| 3000 | Grafana UI                        |
-| 4317 | OTel collector OTLP/gRPC          |
-| 4318 | OTel collector OTLP/HTTP/protobuf |
+Grafana always listens on `3000`. Docker assigns the collector ports on the
+loopback interface, and the helper writes the current OTLP/HTTP endpoint into
+`telemetry.local.otlpEndpoint`; no collector-port configuration is needed.
 
 Verify that Grafana is ready:
 
@@ -576,7 +580,10 @@ From `ts/`, build the agent server and configure its process environment:
 pnpm run build agent-server
 
 $env:OTEL_SERVICE_NAME = "typeagent-local"
-$env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
+# Use the OTLP/HTTP address `pnpm run telemetry:grafana` printed (or
+# `docker port typeagent-otel 4318/tcp`): Docker assigns this port
+# dynamically, so it is not always 4318.
+$env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://127.0.0.1:54321"
 $env:OTEL_TRACES_SAMPLER = "always_on"
 $env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\{process}-{timestamp}-p{pid}.jsonl"
 $env:TYPEAGENT_OTEL_DEBUG_BRIDGE = "true"
