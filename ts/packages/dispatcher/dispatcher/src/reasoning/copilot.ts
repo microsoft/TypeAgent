@@ -77,7 +77,10 @@ import {
     runInReasoningSpan,
 } from "../otel/reasoningSpan.js";
 import { getReasoningProfileGuidance } from "./reasoningProfile.js";
-import { createCodingCompletionTracker } from "./codingCompletion.js";
+import {
+    createCodingCompletionTracker,
+    type CodingCompletionTracker,
+} from "./codingCompletion.js";
 import {
     getCodingSessionMaxAgeMs,
     pruneStaleCodingSessions,
@@ -837,20 +840,23 @@ export function getCopilotPermissionScopeViolation(
         : `Access outside the authorized coding root is not allowed: ${outside}`;
 }
 
-/** Run one turn through the SDK's default coding agent for the active mode. */
-export async function executeCodingRequest(
-    originalRequest: string,
-    context: ActionContext<CommandHandlerContext>,
-    attachments?: string[],
-): Promise<void> {
-    const systemContext = context.sessionContext.agentContext;
-    const codingAffinity = systemContext.codingAffinity;
-    if (codingAffinity === undefined) {
-        throw new Error("Coding affinity is not active.");
-    }
+type CodingAffinity = NonNullable<CommandHandlerContext["codingAffinity"]>;
 
-    const client = await getCopilotClient(systemContext);
-    const completionTracker = createCodingCompletionTracker(originalRequest);
+type CodingSessionEvents = {
+    streamedContent: string;
+    finalContent: string;
+    taskComplete?: {
+        success?: boolean;
+        summary?: string;
+        outcome?: string;
+    };
+};
+
+function createCodingSessionConfig(
+    context: ActionContext<CommandHandlerContext>,
+    codingAffinity: CodingAffinity,
+    completionTracker: CodingCompletionTracker,
+): SessionConfig {
     const config: SessionConfig = {
         clientName: "TypeAgent Coding",
         model: resolveModel(context),
@@ -878,7 +884,15 @@ export async function executeCodingRequest(
     if (reasoningEffort !== undefined) {
         config.reasoningEffort = reasoningEffort;
     }
+    return config;
+}
 
+async function getOrCreateCodingSession(
+    client: CopilotClient,
+    config: SessionConfig,
+    codingAffinity: CodingAffinity,
+    context: ActionContext<CommandHandlerContext>,
+): Promise<CopilotSession> {
     let session: CopilotSession | undefined;
     if (codingAffinity.copilotSessionId !== undefined) {
         try {
@@ -901,40 +915,34 @@ export async function executeCodingRequest(
     if (session === undefined) {
         throw new Error("Failed to create the Copilot code-mode session.");
     }
-    const activeSession = session;
-    systemContext.codingSessions.set(codingAffinity.workingDirectory, {
-        sessionId: activeSession.sessionId,
-        lastUsedAt: Date.now(),
-    });
+    return session;
+}
 
-    let streamedContent = "";
-    let finalContent = "";
-    let taskComplete:
-        | { success?: boolean; summary?: string; outcome?: string }
-        | undefined;
-    const unsubscribeDelta = activeSession.on(
-        "assistant.message_delta",
-        (event) => {
-            streamedContent += event.data.deltaContent ?? "";
-            context.actionIO.appendDisplay(
-                { type: "markdown", content: streamedContent },
-                "temporary",
-            );
-        },
-    );
-    const unsubscribeMessage = activeSession.on(
-        "assistant.message",
-        (event) => {
-            finalContent = event.data.content ?? "";
-        },
-    );
-    const unsubscribeTaskComplete = activeSession.on(
+function subscribeCodingSession(
+    session: CopilotSession,
+    context: ActionContext<CommandHandlerContext>,
+): { events: CodingSessionEvents; unsubscribe: () => void } {
+    const events: CodingSessionEvents = {
+        streamedContent: "",
+        finalContent: "",
+    };
+    const unsubscribeDelta = session.on("assistant.message_delta", (event) => {
+        events.streamedContent += event.data.deltaContent ?? "";
+        context.actionIO.appendDisplay(
+            { type: "markdown", content: events.streamedContent },
+            "temporary",
+        );
+    });
+    const unsubscribeMessage = session.on("assistant.message", (event) => {
+        events.finalContent = event.data.content ?? "";
+    });
+    const unsubscribeTaskComplete = session.on(
         "session.task_complete",
         (event) => {
-            taskComplete = event.data;
+            events.taskComplete = event.data;
         },
     );
-    const unsubscribeToolStart = activeSession.on(
+    const unsubscribeToolStart = session.on(
         "tool.execution_start",
         (event: any) => {
             const toolName = event.data?.toolName ?? event.toolName ?? "tool";
@@ -944,7 +952,7 @@ export async function executeCodingRequest(
             );
         },
     );
-    const unsubscribeToolComplete = activeSession.on(
+    const unsubscribeToolComplete = session.on(
         "tool.execution_complete",
         (event: any) => {
             const { content, isError } = copilotToolResultDisplay(event);
@@ -960,59 +968,148 @@ export async function executeCodingRequest(
             }
         },
     );
+    return {
+        events,
+        unsubscribe: () => {
+            unsubscribeDelta();
+            unsubscribeMessage();
+            unsubscribeTaskComplete();
+            unsubscribeToolStart();
+            unsubscribeToolComplete();
+        },
+    };
+}
+
+function buildCodingMessage(
+    originalRequest: string,
+    context: ActionContext<CommandHandlerContext>,
+    codingAffinity: CodingAffinity,
+    attachments: string[] | undefined,
+): MessageOptions {
+    const userContext =
+        context.sessionContext.agentContext.currentOptions?.userContext;
+    const editorContext = formatUserContextForPrompt(userContext);
+    const codingAttachments = getCodingAttachmentPaths(
+        codingAffinity.workingDirectory,
+        attachments,
+        userContext,
+    );
+    return {
+        prompt: editorContext
+            ? `${editorContext}\n\n[Current request]\n${originalRequest}`
+            : originalRequest,
+        ...(codingAttachments === undefined
+            ? {}
+            : {
+                  attachments: codingAttachments.map((attachmentPath) => ({
+                      type: "file" as const,
+                      path: attachmentPath,
+                  })),
+              }),
+    };
+}
+
+function recordCodingOutcome(
+    systemContext: CommandHandlerContext,
+    codingAffinity: CodingAffinity,
+    sessionId: string,
+    completionTracker: CodingCompletionTracker,
+    taskComplete: CodingSessionEvents["taskComplete"],
+): void {
+    const codingOutcome = completionTracker.outcome(sessionId);
+    if (taskComplete?.success !== undefined) {
+        codingOutcome.taskComplete = taskComplete.success;
+    }
+    if (taskComplete?.summary) {
+        codingOutcome.taskCompleteSummary = taskComplete.summary;
+    }
+    ensureCommandResult(systemContext).codingOutcome = codingOutcome;
+    systemContext.codingSessions.set(codingAffinity.workingDirectory, {
+        sessionId,
+        lastUsedAt: Date.now(),
+    });
+}
+
+function recordFailedCodingOutcome(
+    systemContext: CommandHandlerContext,
+    sessionId: string,
+    completionTracker: CodingCompletionTracker,
+    error: unknown,
+    cancelled: boolean,
+): void {
+    const codingOutcome = completionTracker.outcome(sessionId);
+    codingOutcome.status = cancelled ? "cancelled" : "failed";
+    codingOutcome.error =
+        error instanceof Error ? error.message : String(error);
+    ensureCommandResult(systemContext).codingOutcome = codingOutcome;
+}
+
+async function disconnectCodingSession(session: CopilotSession): Promise<void> {
+    try {
+        await session.disconnect();
+    } catch (error) {
+        debug("Failed to disconnect coding session:", error);
+    }
+}
+
+/** Run one turn through the SDK's default coding agent. */
+export async function executeCodingRequest(
+    originalRequest: string,
+    context: ActionContext<CommandHandlerContext>,
+    attachments?: string[],
+): Promise<void> {
+    const systemContext = context.sessionContext.agentContext;
+    const codingAffinity = systemContext.codingAffinity;
+    if (codingAffinity === undefined) {
+        throw new Error("Coding affinity is not active.");
+    }
+
+    const completionTracker = createCodingCompletionTracker(originalRequest);
+    const client = await getCopilotClient(systemContext);
+    const session = await getOrCreateCodingSession(
+        client,
+        createCodingSessionConfig(context, codingAffinity, completionTracker),
+        codingAffinity,
+        context,
+    );
+    systemContext.codingSessions.set(codingAffinity.workingDirectory, {
+        sessionId: session.sessionId,
+        lastUsedAt: Date.now(),
+    });
+    const subscription = subscribeCodingSession(session, context);
 
     try {
-        const editorContext = formatUserContextForPrompt(
-            systemContext.currentOptions?.userContext,
-        );
-        const codingAttachments = getCodingAttachmentPaths(
-            codingAffinity.workingDirectory,
-            attachments,
-            systemContext.currentOptions?.userContext,
-        );
-        const prompt = editorContext
-            ? `${editorContext}\n\n[Current request]\n${originalRequest}`
-            : originalRequest;
         const response = await sendMessageAndWaitWithCancellation(
-            activeSession,
-            {
-                prompt,
-                ...(codingAttachments?.length
-                    ? {
-                          attachments: codingAttachments.map(
-                              (attachmentPath) => ({
-                                  type: "file" as const,
-                                  path: attachmentPath,
-                              }),
-                          ),
-                      }
-                    : {}),
-            },
+            session,
+            buildCodingMessage(
+                originalRequest,
+                context,
+                codingAffinity,
+                attachments,
+            ),
             context.abortSignal,
         );
         const content =
-            response?.data.content || finalContent || streamedContent;
+            response?.data.content ||
+            subscription.events.finalContent ||
+            subscription.events.streamedContent;
         if (content) {
             context.actionIO.appendDisplay(
                 { type: "markdown", content },
                 "block",
             );
         }
-        const codingOutcome = completionTracker.outcome(
-            activeSession.sessionId,
+        recordCodingOutcome(
+            systemContext,
+            codingAffinity,
+            session.sessionId,
+            completionTracker,
+            subscription.events.taskComplete,
         );
-        if (taskComplete?.success !== undefined) {
-            codingOutcome.taskComplete = taskComplete.success;
-        }
-        if (taskComplete?.summary) {
-            codingOutcome.taskCompleteSummary = taskComplete.summary;
-        }
-        ensureCommandResult(systemContext).codingOutcome = codingOutcome;
-        systemContext.codingSessions.set(codingAffinity.workingDirectory, {
-            sessionId: activeSession.sessionId,
-            lastUsedAt: Date.now(),
-        });
-        if (codingOutcome.status === "unvalidated") {
+        if (
+            ensureCommandResult(systemContext).codingOutcome?.status ===
+            "unvalidated"
+        ) {
             context.actionIO.appendDisplay(
                 {
                     type: "text",
@@ -1025,27 +1122,17 @@ export async function executeCodingRequest(
             );
         }
     } catch (error) {
-        const codingOutcome = completionTracker.outcome(
-            activeSession.sessionId,
+        recordFailedCodingOutcome(
+            systemContext,
+            session.sessionId,
+            completionTracker,
+            error,
+            context.abortSignal?.aborted === true,
         );
-        codingOutcome.status = context.abortSignal?.aborted
-            ? "cancelled"
-            : "failed";
-        codingOutcome.error =
-            error instanceof Error ? error.message : String(error);
-        ensureCommandResult(systemContext).codingOutcome = codingOutcome;
         throw error;
     } finally {
-        unsubscribeDelta();
-        unsubscribeMessage();
-        unsubscribeTaskComplete();
-        unsubscribeToolStart();
-        unsubscribeToolComplete();
-        try {
-            await activeSession.disconnect();
-        } catch (error) {
-            debug("Failed to disconnect coding session:", error);
-        }
+        subscription.unsubscribe();
+        await disconnectCodingSession(session);
     }
 }
 
