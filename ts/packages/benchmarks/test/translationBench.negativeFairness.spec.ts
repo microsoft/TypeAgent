@@ -2,88 +2,16 @@
 // Licensed under the MIT License.
 
 import { describe, expect, it } from "@jest/globals";
-import {
-    generateActionActionFunctionJsonSchemas,
-    parseToolsJsonSchema,
-    toJSONParsedActionSchema,
-} from "@typeagent/action-schema";
 
-import type { TranslationBenchBenchmarkSchema } from "../src/translationBench/synthesizer/benchmark.js";
-import {
-    runTranslationBenchFormatChecker,
-    runTranslationBenchSemanticChecker,
-} from "../src/translationBench/synthesizer/dataQualityVerifier.js";
-import type { TranslationBenchGenerationQualityLoopOptions } from "../src/translationBench/synthesizer/datasetGenerator.js";
 import {
     applyTranslationBenchNegativeFairnessIssues,
-    assessEmptyGoldUtterance,
     checkTranslationBenchCandidateNegativeFairness,
     checkTranslationBenchNegativeFairnessAssessment,
+    decomposedFlagsAreFair,
     parseTranslationBenchNegativeFairnessAssessments,
+    type TranslationBenchNegativeFairnessAssessment,
+    type TranslationBenchNegativeKind,
 } from "../src/translationBench/synthesizer/negativeFairness.js";
-import { loadTranslationBenchQualityVerifierPromptPack } from "../src/translationBench/synthesizer/synthesizerPrompts.js";
-
-const HASH = "c".repeat(64);
-
-function browserCatalog(): TranslationBenchBenchmarkSchema[] {
-    const actionNames = [
-        "closeAllWebPages",
-        "closeWebPage",
-        "changeSearchProvider",
-        "openWebPage",
-        "followLinkByText",
-        "captureScreenshot",
-    ];
-    const parsed = parseToolsJsonSchema(
-        actionNames.map((actionName) => ({
-            name: actionName,
-            description: `Run ${actionName}`,
-            inputSchema: {
-                type: "object",
-                properties: {
-                    ...(actionName === "changeSearchProvider"
-                        ? { name: { type: "string" } }
-                        : {}),
-                    ...(actionName === "openWebPage"
-                        ? {
-                              site: { type: "string" },
-                              tab: { type: "string" },
-                          }
-                        : {}),
-                    ...(actionName === "followLinkByText"
-                        ? { keywords: { type: "string" } }
-                        : {}),
-                },
-                additionalProperties: false,
-            },
-        })),
-    );
-    const tools = generateActionActionFunctionJsonSchemas({
-        entry: parsed.entry.action!,
-        actionSchemas: parsed.actionSchemas,
-    }).map((tool) => ({
-        type: "function" as const,
-        function: {
-            name: tool.function.name,
-            ...(tool.function.description !== undefined
-                ? { description: tool.function.description }
-                : {}),
-            parameters: tool.function.parameters as Record<string, unknown>,
-        },
-    }));
-    return [
-        {
-            schemaName: "browser",
-            description: "browser actions",
-            tools,
-            typeAgent: {
-                sourceHash: `browser-${HASH}`,
-                schemaType: "BrowserAction",
-                parsedActionSchema: toJSONParsedActionSchema(parsed),
-            },
-        },
-    ];
-}
 
 const targetOpenWebPage = {
     schemaName: "browser",
@@ -130,148 +58,66 @@ function fairCandidate(negativeUtterance: string) {
     };
 }
 
-function makeLoop(
-    catalog: TranslationBenchBenchmarkSchema[],
-): TranslationBenchGenerationQualityLoopOptions {
+function assess(options: {
+    path: string;
+    kind: TranslationBenchNegativeKind;
+    fairEmptyGold: boolean;
+    reason: string;
+    opensAsHardAbstain?: boolean;
+    hasAlternateOrSiblingTask?: boolean;
+    hasQuestionOrExplanationRequest?: boolean;
+    mapsToAnyLoadedTool?: boolean;
+}): TranslationBenchNegativeFairnessAssessment {
+    const fair = options.fairEmptyGold && options.kind === "pure_refusal";
     return {
-        targetAction: targetOpenWebPage,
-        schema: catalog[0]!,
-        catalogSchemas: catalog,
-        activeSchemas: ["browser"],
-        genCaseCount: 2,
-        maxAttempts: 5,
-        generator: { model: "g", complete: async () => "" },
-        reviewer: { model: "r", complete: async () => "" },
-        anchor: {
-            candidateId: "anchor-1",
-            utterance: "open a site",
-            sourceCalls: [],
-        },
-    } as unknown as TranslationBenchGenerationQualityLoopOptions;
+        path: options.path,
+        kind: options.kind,
+        fairEmptyGold: options.fairEmptyGold,
+        reason: options.reason,
+        opensAsHardAbstain: options.opensAsHardAbstain ?? fair,
+        hasAlternateOrSiblingTask: options.hasAlternateOrSiblingTask ?? !fair,
+        hasQuestionOrExplanationRequest:
+            options.hasQuestionOrExplanationRequest ?? false,
+        mapsToAnyLoadedTool: options.mapsToAnyLoadedTool ?? !fair,
+    };
 }
-
-describe("assessEmptyGoldUtterance deterministic shape gate", () => {
-    it("accepts start-anchored pure refusals and leave-alone forms", () => {
-        const fair = [
-            "Don't take a screenshot of my online banking page.",
-            "Leave my tabs alone.",
-            "Do not open any websites right now.",
-            "Don't enable Game Mode; I need to compare performance with it off.",
-            "Don't pause the audiobook; let it keep playing.",
-            'Don\'t deselect the photos in the "Graduation Ceremony" montage; leave the current selection unchanged.',
-            "Don't reload the concert ticket page; I haven't saved my details yet.",
-            "Don't cancel my passport renewal appointment on November 12.",
-            "Please don't pause the audiobook; let it keep playing.",
-            "Don't resume the podcast yet.",
-            "Don't go forward yet; stay on this checkout page.",
-            "Never open any websites right now.",
-            "Hands off my browser tabs.",
-            "Do nothing with my open tabs.",
-            // Periods in schema.action tags must not false-split clauses.
-            "Don't run browser.openWebPage right now; leave everything alone.",
-            "Don't run foo.bar.baz right now; leave everything alone (0).",
-        ];
-        for (const u of fair) {
-            const r = assessEmptyGoldUtterance(u);
-            expect({ u, ...r }).toEqual({
-                u,
-                fair: true,
-                reason: "pure refusal / leave-alone",
-            });
-        }
-    });
-
-    it("rejects 1k-corpus unfair empties (questions, siblings, partials)", () => {
-        const unfair: Array<{ u: string; reasonSubstr: string }> = [
-            {
-                u: "What keyboard shortcut can I use to take a screenshot of a webpage?",
-                reasonSubstr: "question",
-            },
-            {
-                u: "Search Bing for Microsoft's current stock price.",
-                reasonSubstr: "does not open as pure refusal",
-            },
-            {
-                u: "Close the fourth tab with the weather forecast.",
-                reasonSubstr: "does not open as pure refusal",
-            },
-            {
-                u: "Don't close all tabs; just close this one.",
-                reasonSubstr: "just-alternate",
-            },
-            {
-                u: "Can you open google.com for me?",
-                reasonSubstr: "question",
-            },
-            {
-                u: "Don't open a website—just tell me whether the downtown library is open today.",
-                reasonSubstr: "just-alternate",
-            },
-            {
-                u: "Build the current Visual Studio solution, but don't start debugging it.",
-                reasonSubstr: "does not open as pure refusal",
-            },
-            {
-                u: "Don't change the editor layout; just increase the code font size.",
-                reasonSubstr: "just-alternate",
-            },
-            {
-                u: "Turn on Night Light for this reading session only—don't schedule it.",
-                reasonSubstr: "does not open as pure refusal",
-            },
-            {
-                u: "Don't list the scaffolding patterns; explain what a TypeAgent package manifest does.",
-                reasonSubstr: "explanation",
-            },
-            {
-                u: "Stop reading the current webpage.",
-                reasonSubstr: "does not open as pure refusal",
-            },
-            {
-                u: "Scroll up to the hotel comparison table near the top of the page.",
-                reasonSubstr: "does not open as pure refusal",
-            },
-            {
-                u: "Is Bluetooth currently enabled?",
-                reasonSubstr: "question",
-            },
-            {
-                u: "Keep my email tabs open, but close this webpage.",
-                reasonSubstr: "does not open as pure refusal",
-            },
-        ];
-        for (const { u, reasonSubstr } of unfair) {
-            const r = assessEmptyGoldUtterance(u);
-            expect(r.fair).toBe(false);
-            expect(r.reason.toLowerCase()).toContain(
-                reasonSubstr.toLowerCase(),
-            );
-        }
-    });
-});
 
 describe("translation bench negative fairness LLM assessment parsing", () => {
     it("parses structured assessments", () => {
         const assessments = parseTranslationBenchNegativeFairnessAssessments([
-            {
+            assess({
                 path: "$.genCases[1].utterance",
                 kind: "pure_refusal",
                 fairEmptyGold: true,
                 reason: "explicit don't of the target",
-            },
+            }),
         ]);
         expect(assessments).toHaveLength(1);
         expect(assessments[0]!.kind).toBe("pure_refusal");
+        expect(decomposedFlagsAreFair(assessments[0]!)).toBe(true);
+    });
+
+    it("rejects assessments missing atomic flags", () => {
+        expect(() =>
+            parseTranslationBenchNegativeFairnessAssessments([
+                {
+                    path: "$.genCases[1].utterance",
+                    kind: "pure_refusal",
+                    fairEmptyGold: true,
+                    reason: "missing flags",
+                },
+            ]),
+        ).toThrow(/opensAsHardAbstain|required/i);
     });
 
     it("accepts consistent fair assessments", () => {
         const r = checkTranslationBenchNegativeFairnessAssessment(
-            {
+            assess({
                 path: "$.genCases[0].utterance",
                 kind: "pure_refusal",
                 fairEmptyGold: true,
                 reason: "don't screenshot banking",
-            },
+            }),
             "Don't take a screenshot of my online banking page.",
             { schemaName: "browser", actionName: "captureScreenshot" },
         );
@@ -281,92 +127,96 @@ describe("translation bench negative fairness LLM assessment parsing", () => {
 
     it("rejects unfair assessments and inconsistent fairEmptyGold flags", () => {
         const unfair = checkTranslationBenchNegativeFairnessAssessment(
-            {
+            assess({
                 path: "$.n",
                 kind: "unfair_imperative",
                 fairEmptyGold: false,
                 reason: "still requests close this tab",
-            },
+            }),
             "Close only the current web page.",
             targetOpenWebPage,
         );
         expect(unfair.ok).toBe(false);
 
         const inconsistent = checkTranslationBenchNegativeFairnessAssessment(
-            {
+            assess({
                 path: "$.n",
                 kind: "unfair_contrastive",
                 fairEmptyGold: true,
                 reason: "model lied",
-            },
+            }),
             "Search Bing for MSFT",
             targetOpenWebPage,
         );
         expect(inconsistent.ok).toBe(false);
     });
 
-    it("rejects LLM fairEmptyGold=true when utterance fails shape gate", () => {
+    it("rejects fairEmptyGold=true when atomic flags are not a hard abstain", () => {
         const sibling = checkTranslationBenchNegativeFairnessAssessment(
-            {
+            assess({
                 path: "$.n",
                 kind: "pure_refusal",
                 fairEmptyGold: true,
                 reason: "LLM mislabeled sibling imperative as refusal",
-            },
+                opensAsHardAbstain: false,
+                hasAlternateOrSiblingTask: true,
+                mapsToAnyLoadedTool: true,
+            }),
             "Search Bing for Microsoft's current stock price.",
             targetOpenWebPage,
         );
         expect(sibling.ok).toBe(false);
-        expect(sibling.utteranceReason).toMatch(
-            /does not open as pure refusal/i,
-        );
+        expect(sibling.reason).toMatch(/inconsistent/i);
 
         const question = checkTranslationBenchNegativeFairnessAssessment(
-            {
+            assess({
                 path: "$.n",
                 kind: "pure_refusal",
                 fairEmptyGold: true,
                 reason: "LLM mislabeled how-to as refusal",
-            },
+                opensAsHardAbstain: false,
+                hasQuestionOrExplanationRequest: true,
+                mapsToAnyLoadedTool: true,
+            }),
             "What keyboard shortcut can I use to take a screenshot?",
             targetOpenWebPage,
         );
         expect(question.ok).toBe(false);
-        expect(question.utteranceReason).toMatch(/question/i);
+        expect(question.reason).toMatch(/inconsistent|hasQuestion/i);
     });
 
     it("rejects definition/status questions even when fairEmptyGold is true", () => {
         const definition = checkTranslationBenchNegativeFairnessAssessment(
-            {
+            assess({
                 path: "$.n",
                 kind: "non_action_question",
                 fairEmptyGold: true,
                 reason: "definition only — but invites chat/help under full catalog",
-            },
+            }),
             "What does openWebPage mean?",
             targetOpenWebPage,
         );
         expect(definition.ok).toBe(false);
 
         const status = checkTranslationBenchNegativeFairnessAssessment(
-            {
+            assess({
                 path: "$.n",
                 kind: "non_action_question",
                 fairEmptyGold: true,
                 reason: "status question",
-            },
+            }),
             "Is Bluetooth currently enabled?",
             targetOpenWebPage,
         );
         expect(status.ok).toBe(false);
 
         const missing = checkTranslationBenchNegativeFairnessAssessment(
-            {
+            assess({
                 path: "$.n",
                 kind: "missing_info",
                 fairEmptyGold: true,
                 reason: "underspecified",
-            },
+            }),
             "I'm not sure which tab — please clarify.",
             targetOpenWebPage,
         );
@@ -383,12 +233,12 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             candidate,
             targetOpenWebPage,
             [
-                {
+                assess({
                     path: "$.genCases[1].utterance",
                     kind: "unfair_imperative",
                     fairEmptyGold: false,
                     reason: "Requests followLinkByText; empty gold would FP a correct translator",
-                },
+                }),
             ],
         );
         expect(issues.length).toBeGreaterThan(0);
@@ -404,18 +254,18 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             candidate,
             targetOpenWebPage,
             [
-                {
+                assess({
                     path: "$.genCases[1].utterance",
                     kind: "pure_refusal",
                     fairEmptyGold: true,
                     reason: "leave-alone refusal of opening sites",
-                },
+                }),
             ],
         );
         expect(issues).toEqual([]);
     });
 
-    it("rejects LLM-approved pure_refusal when utterance is a sibling command", () => {
+    it("rejects LLM-approved pure_refusal when atomic flags say sibling command", () => {
         const candidate = fairCandidate(
             "Search Bing for Microsoft's current stock price.",
         );
@@ -423,20 +273,23 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             candidate,
             targetOpenWebPage,
             [
-                {
+                assess({
                     path: "$.genCases[1].utterance",
                     kind: "pure_refusal",
                     fairEmptyGold: true,
                     reason: "LLM wrongly approved contrastive sibling as empty gold",
-                },
+                    opensAsHardAbstain: false,
+                    hasAlternateOrSiblingTask: true,
+                    mapsToAnyLoadedTool: true,
+                }),
             ],
         );
         expect(issues.length).toBeGreaterThan(0);
         expect(issues[0]!.code).toBe("BAD_NEGATIVE");
-        expect(issues[0]!.message).toMatch(/shape gate|pure refusal/i);
+        expect(issues[0]!.message).toMatch(/inconsistent|mapsToAnyLoadedTool/i);
     });
 
-    it("rejects refuse-then-alternate even when labeled pure_refusal", () => {
+    it("rejects refuse-then-alternate when flags mark an alternate task", () => {
         const candidate = fairCandidate(
             "Don't close all tabs; just close this one.",
         );
@@ -444,16 +297,21 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             candidate,
             targetOpenWebPage,
             [
-                {
+                assess({
                     path: "$.genCases[1].utterance",
                     kind: "pure_refusal",
                     fairEmptyGold: true,
                     reason: "LLM missed refuse-then-alternate",
-                },
+                    opensAsHardAbstain: true,
+                    hasAlternateOrSiblingTask: true,
+                    mapsToAnyLoadedTool: true,
+                }),
             ],
         );
         expect(issues.some((i) => i.code === "BAD_NEGATIVE")).toBe(true);
-        expect(issues[0]!.message).toMatch(/just-alternate|shape gate/i);
+        expect(issues[0]!.message).toMatch(
+            /inconsistent|hasAlternateOrSiblingTask/i,
+        );
     });
 
     it("rejects definition question assessments as empty gold", () => {
@@ -465,12 +323,12 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             candidate,
             targetOpenWebPage,
             [
-                {
+                assess({
                     path: "$.genCases[1].utterance",
                     kind: "non_action_question",
                     fairEmptyGold: true,
                     reason: "definition only",
-                },
+                }),
             ],
         );
         expect(issues.length).toBeGreaterThan(0);
@@ -483,12 +341,12 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             fairCandidate("Can you open google.com for me?"),
             targetOpenWebPage,
             [
-                {
+                assess({
                     path: "$.genCases[1].utterance",
                     kind: "unfair_imperative",
                     fairEmptyGold: false,
                     reason: "soft solicit still requests openWebPage",
-                },
+                }),
             ],
         );
         expect(soft.some((i) => i.code === "BAD_NEGATIVE")).toBe(true);
@@ -497,12 +355,12 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             fairCandidate("Don't close all tabs; just close this one."),
             targetOpenWebPage,
             [
-                {
+                assess({
                     path: "$.genCases[1].utterance",
                     kind: "unfair_contrastive",
                     fairEmptyGold: false,
                     reason: "refuse-then-alternate still requests closeWebPage",
-                },
+                }),
             ],
         );
         expect(alternate.some((i) => i.code === "BAD_NEGATIVE")).toBe(true);
@@ -517,12 +375,12 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             candidate,
             targetOpenWebPage,
             [
-                {
+                assess({
                     path: "$.genCases[1].utterance",
                     kind: "pure_refusal",
                     fairEmptyGold: true,
                     reason: "LLM mislabeled a definition question as refusal",
-                },
+                }),
             ],
         );
         expect(issues.length).toBeGreaterThan(0);
@@ -539,12 +397,12 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             candidate,
             targetOpenWebPage,
             [
-                {
+                assess({
                     path: "$.genCases[1].utterance",
                     kind: "pure_refusal",
                     fairEmptyGold: true,
                     reason: "leave-alone refusal but label omitted",
-                },
+                }),
             ],
         );
         expect(issues.length).toBeGreaterThan(0);
@@ -564,6 +422,24 @@ describe("translation bench candidate negative fairness from LLM assessments", (
         );
     });
 
+    it("requires the canonical generated-case path", () => {
+        const candidate = fairCandidate("Leave my tabs alone.");
+        const issues = checkTranslationBenchCandidateNegativeFairness(
+            candidate,
+            targetOpenWebPage,
+            [
+                assess({
+                    path: "genCases[1]",
+                    kind: "pure_refusal",
+                    fairEmptyGold: true,
+                    reason: "leave-alone refusal",
+                }),
+            ],
+        );
+        expect(issues).toHaveLength(1);
+        expect(issues[0]!.path).toBe("$.negativeAssessments");
+    });
+
     it("rejects assessments whose path does not match a negative genCase", () => {
         const candidate = fairCandidate(
             "Don't close all tabs; just close this one.",
@@ -572,12 +448,12 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             candidate,
             targetOpenWebPage,
             [
-                {
+                assess({
                     path: "$.wrong.path",
                     kind: "unfair_contrastive",
                     fairEmptyGold: false,
                     reason: "refuse-then-alternate still requests an action",
-                },
+                }),
             ],
         );
         expect(issues).toHaveLength(1);
@@ -614,18 +490,18 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             candidate,
             targetOpenWebPage,
             [
-                {
+                assess({
                     path: "$.genCases[2].utterance",
                     kind: "unfair_contrastive",
                     fairEmptyGold: false,
                     reason: "refuse-then-alternate still requests closeWebPage",
-                },
-                {
+                }),
+                assess({
                     path: "$.genCases[1].utterance",
                     kind: "pure_refusal",
                     fairEmptyGold: true,
                     reason: "leave-alone pure refusal",
-                },
+                }),
             ],
         );
         expect(issues).toHaveLength(1);
@@ -663,18 +539,18 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             candidate,
             targetOpenWebPage,
             [
-                {
+                assess({
                     path: "$.genCases[2].utterance",
                     kind: "pure_refusal",
                     fairEmptyGold: true,
                     reason: "leave-alone pure refusal",
-                },
-                {
+                }),
+                assess({
                     path: "$.genCases[1].utterance",
                     kind: "unfair_contrastive",
                     fairEmptyGold: false,
                     reason: "refuse-then-alternate still requests closeWebPage",
-                },
+                }),
             ],
         );
         expect(issues).toHaveLength(1);
@@ -709,18 +585,18 @@ describe("translation bench candidate negative fairness from LLM assessments", (
             candidate,
             targetOpenWebPage,
             [
-                {
+                assess({
                     path: "$.genCases[1].utterance",
                     kind: "pure_refusal",
                     fairEmptyGold: true,
                     reason: "fair",
-                },
-                {
+                }),
+                assess({
                     path: "$.genCases[1].utterance",
                     kind: "pure_refusal",
                     fairEmptyGold: true,
                     reason: "duplicate path",
-                },
+                }),
             ],
         );
         expect(issues).toHaveLength(1);
@@ -756,208 +632,5 @@ describe("translation bench candidate negative fairness from LLM assessments", (
         expect(decision.decision).toBe("reject");
         expect(decision.issues).toHaveLength(1);
         expect(decision.scores.negativeQuality).toBeLessThanOrEqual(0.4);
-    });
-});
-
-describe("format checker no longer regex-gates negatives", () => {
-    it("passes structural format even when negative is contrastive", () => {
-        const catalog = browserCatalog();
-        const loop = makeLoop(catalog);
-        const candidate = fairCandidate(
-            'Click the link titled "Museum Opening Hours."',
-        );
-        const result = runTranslationBenchFormatChecker(candidate, loop);
-        expect(result.passed).toBe(true);
-        expect(result.issues.some((i) => i.code === "BAD_NEGATIVE")).toBe(
-            false,
-        );
-    });
-
-    it("still accepts pure-refusal negatives structurally", () => {
-        const catalog = browserCatalog();
-        const loop = makeLoop(catalog);
-        const candidate = fairCandidate(
-            "Don't open any websites right now — leave my browser alone.",
-        );
-        const result = runTranslationBenchFormatChecker(candidate, loop);
-        expect(result.passed).toBe(true);
-    });
-});
-
-describe("semantic checker enforces LLM negativeAssessments", () => {
-    const pack = loadTranslationBenchQualityVerifierPromptPack();
-
-    it("rejects when mock LLM marks negative unfair", async () => {
-        const catalog = browserCatalog();
-        const loop = makeLoop(catalog);
-        const candidate = fairCandidate(
-            "Don't close all tabs; just close this one.",
-        );
-        const candidateHash = "a".repeat(64);
-        const llm = {
-            model: "mock",
-            complete: async () =>
-                JSON.stringify({
-                    candidateHash,
-                    decision: "approve",
-                    scores: {
-                        anchorFidelity: 0.9,
-                        groundTruthCorrectness: 0.9,
-                        naturalness: 0.9,
-                        generalizationDiversity: 0.9,
-                        negativeQuality: 0.9,
-                        historyCoherence: 0.9,
-                    },
-                    issues: [],
-                    summary: "looks fine",
-                    negativeAssessments: [
-                        {
-                            path: "$.genCases[1].utterance",
-                            kind: "unfair_contrastive",
-                            fairEmptyGold: false,
-                            reason: "refuse-then-alternate still requests closeWebPage",
-                        },
-                    ],
-                }),
-        };
-
-        const result = await runTranslationBenchSemanticChecker({
-            pack,
-            loop,
-            candidate,
-            candidateHash,
-            llm,
-        });
-        expect(result.passed).toBe(false);
-        expect(result.decision.decision).toBe("reject");
-        expect(
-            result.decision.issues.some((i) => i.code === "BAD_NEGATIVE"),
-        ).toBe(true);
-    });
-
-    it("approves when mock LLM marks negative fair", async () => {
-        const catalog = browserCatalog();
-        const loop = makeLoop(catalog);
-        const candidate = fairCandidate("Leave my browser tabs alone.");
-        const candidateHash = "b".repeat(64);
-        const llm = {
-            model: "mock",
-            complete: async () =>
-                JSON.stringify({
-                    candidateHash,
-                    decision: "approve",
-                    scores: {
-                        anchorFidelity: 0.9,
-                        groundTruthCorrectness: 0.9,
-                        naturalness: 0.9,
-                        generalizationDiversity: 0.9,
-                        negativeQuality: 0.95,
-                        historyCoherence: 0.9,
-                    },
-                    issues: [],
-                    summary: "fair refusal negative",
-                    negativeAssessments: [
-                        {
-                            path: "$.genCases[1].utterance",
-                            kind: "pure_refusal",
-                            fairEmptyGold: true,
-                            reason: "leave-alone pure refusal",
-                        },
-                    ],
-                }),
-        };
-
-        const result = await runTranslationBenchSemanticChecker({
-            pack,
-            loop,
-            candidate,
-            candidateHash,
-            llm,
-        });
-        expect(result.passed).toBe(true);
-        expect(result.decision.decision).toBe("approve");
-    });
-
-    it("rejects approve when negativeAssessments are missing", async () => {
-        const catalog = browserCatalog();
-        const loop = makeLoop(catalog);
-        const candidate = fairCandidate("Leave my browser alone.");
-        const candidateHash = "d".repeat(64);
-        const llm = {
-            model: "mock",
-            complete: async () =>
-                JSON.stringify({
-                    candidateHash,
-                    decision: "approve",
-                    scores: {
-                        anchorFidelity: 0.9,
-                        groundTruthCorrectness: 0.9,
-                        naturalness: 0.9,
-                        generalizationDiversity: 0.9,
-                        negativeQuality: 0.9,
-                        historyCoherence: 0.9,
-                    },
-                    issues: [],
-                    summary: "forgot assessments",
-                }),
-        };
-
-        const result = await runTranslationBenchSemanticChecker({
-            pack,
-            loop,
-            candidate,
-            candidateHash,
-            llm,
-        });
-        expect(result.passed).toBe(false);
-    });
-
-    it("rejects when mock LLM marks definition question fairEmptyGold", async () => {
-        const catalog = browserCatalog();
-        const loop = makeLoop(catalog);
-        const candidate = fairCandidate("What does openWebPage mean?");
-        candidate.genCases[1]!.dimensions = {
-            negativeKind: "non_action_question",
-        };
-        const candidateHash = "e".repeat(64);
-        const llm = {
-            model: "mock",
-            complete: async () =>
-                JSON.stringify({
-                    candidateHash,
-                    decision: "approve",
-                    scores: {
-                        anchorFidelity: 0.9,
-                        groundTruthCorrectness: 0.9,
-                        naturalness: 0.9,
-                        generalizationDiversity: 0.9,
-                        negativeQuality: 0.95,
-                        historyCoherence: 0.9,
-                    },
-                    issues: [],
-                    summary: "wrongly fair definition Q",
-                    negativeAssessments: [
-                        {
-                            path: "$.genCases[1].utterance",
-                            kind: "non_action_question",
-                            fairEmptyGold: true,
-                            reason: "definition only",
-                        },
-                    ],
-                }),
-        };
-
-        const result = await runTranslationBenchSemanticChecker({
-            pack,
-            loop,
-            candidate,
-            candidateHash,
-            llm,
-        });
-        expect(result.passed).toBe(false);
-        expect(result.decision.decision).toBe("reject");
-        expect(
-            result.decision.issues.some((i) => i.code === "BAD_NEGATIVE"),
-        ).toBe(true);
     });
 });

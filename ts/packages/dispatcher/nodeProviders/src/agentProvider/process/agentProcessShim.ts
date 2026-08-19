@@ -153,7 +153,20 @@ export async function createAgentProcess(
     >("control");
     const agentInterface = await new Promise<AgentInterfaceFunctionName[]>(
         (resolve, reject) => {
+            const onExit = (
+                exitCode: number | null,
+                signal: NodeJS.Signals | null,
+            ) => {
+                reject(
+                    new Error(
+                        `Agent process '${agentName}' exited before startup completed ` +
+                            `(code=${exitCode ?? "null"}, signal=${signal ?? "null"})`,
+                    ),
+                );
+            };
+            agentProcess.once("exit", onExit);
             channel.once("message", (message: any) => {
+                agentProcess.off("exit", onExit);
                 if (Array.isArray(message)) {
                     resolve(message);
                 } else {
@@ -176,6 +189,7 @@ export async function createAgentProcess(
             agentName,
             channelProvider,
             agentInterface,
+            { trustedContextPropagation: true },
         ),
         // `count` is a HOLDER refcount owned by the caller (the npm provider's
         // load/unload). A freshly created process has no holders yet; the

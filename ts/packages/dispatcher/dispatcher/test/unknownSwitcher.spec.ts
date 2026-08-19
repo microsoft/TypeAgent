@@ -113,49 +113,44 @@ describe("selectFromPartitions", () => {
     });
 
     test("all partitions run in parallel", async () => {
-        const startTimes: number[] = [];
-        const delayMs = 100;
-        const makeTimedTranslator = (
+        const started: string[] = [];
+        const pending: Array<() => void> = [];
+        const makeDeferredTranslator = (
+            name: string,
             result: Result<AssistantSelection>,
-            delay: number,
         ) => ({
             translate: (_request: string) => {
-                startTimes.push(Date.now());
-                return new Promise<Result<AssistantSelection>>((resolve) =>
-                    setTimeout(() => resolve(result), delay),
-                );
+                started.push(name);
+                return new Promise<Result<AssistantSelection>>((resolve) => {
+                    pending.push(() => resolve(result));
+                });
             },
         });
 
         const partitions = [
             {
                 names: ["a"],
-                translator: makeTimedTranslator(unknownResult, delayMs),
+                translator: makeDeferredTranslator("a", unknownResult),
             },
             {
                 names: ["b"],
-                translator: makeTimedTranslator(unknownResult, delayMs),
+                translator: makeDeferredTranslator("b", unknownResult),
             },
             {
                 names: ["c"],
-                translator: makeTimedTranslator(unknownResult, delayMs),
+                translator: makeDeferredTranslator("c", unknownResult),
             },
         ];
 
-        const before = Date.now();
-        await selectFromPartitions(partitions, "test");
-        const elapsed = Date.now() - before;
+        const selection = selectFromPartitions(partitions, "test");
 
-        // All three started nearly simultaneously (within 10ms of each other)
-        expect(startTimes).toHaveLength(3);
-        const spread = Math.max(...startTimes) - Math.min(...startTimes);
-        expect(spread).toBeLessThan(10);
-
-        // Parallel: total time should be well under sequential (3 × delayMs).
-        // The 2.5× threshold gives ~150ms of headroom for CI timer jitter
-        // while still catching any accidental sequential execution (which
-        // would take ~300ms and clearly exceed the limit).
-        expect(elapsed).toBeLessThan(delayMs * 2.5);
+        // Every translator must be invoked before any result is allowed to
+        // resolve. A sequential implementation would only have started "a".
+        expect(started).toEqual(["a", "b", "c"]);
+        for (const resolve of pending) {
+            resolve();
+        }
+        await selection;
     });
 
     test("error from a partition is propagated in order", async () => {

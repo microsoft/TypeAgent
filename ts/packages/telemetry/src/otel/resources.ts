@@ -20,9 +20,12 @@ import {
     ATTR_PROCESS_PID,
     ATTR_PROCESS_RUNTIME_NAME,
     ATTR_PROCESS_RUNTIME_VERSION,
+    ATTR_VCS_REF_BASE_REVISION,
+    ATTR_VCS_REF_HEAD_REVISION,
 } from "@opentelemetry/semantic-conventions/incubating";
 
 const PROCESS_INSTANCE_ID = randomUUID();
+export const TYPEAGENT_PROCESS_NAME_ATTRIBUTE = "typeagent.process.name";
 
 /**
  * Constructs the process-level OTel {@link Resource} TypeAgent-owned hosts
@@ -34,8 +37,14 @@ const PROCESS_INSTANCE_ID = randomUUID();
 export interface ProcessResourceOptions {
     /** `service.name`. Required: every TypeAgent-owned process must set it. */
     readonly serviceName: string;
+    /** Stable TypeAgent process role, such as `agent-server` or `shell`. */
+    readonly processName?: string;
     /** `service.version`, when known. */
     readonly serviceVersion?: string;
+    /** VCS revision checked out in the running build. */
+    readonly headRevision?: string;
+    /** VCS revision the running build is based on. */
+    readonly baseRevision?: string;
     /** Unique identity for this running process. Defaults to a UUID. */
     readonly serviceInstanceId?: string;
     /** `deployment.environment.name`, when known. */
@@ -67,12 +76,21 @@ export function createProcessResource(
         options.serviceVersion,
         "serviceVersion",
     );
+    const processName = normalizeOptional(options.processName, "processName");
     const serviceInstanceId =
         normalizeOptional(options.serviceInstanceId, "serviceInstanceId") ??
         PROCESS_INSTANCE_ID;
     const deploymentEnvironment = normalizeOptional(
         options.deploymentEnvironment,
         "deploymentEnvironment",
+    );
+    const headRevision = normalizeOptional(
+        options.headRevision,
+        "headRevision",
+    );
+    const baseRevision = normalizeOptional(
+        options.baseRevision,
+        "baseRevision",
     );
 
     const identity: Record<string, AttributeValue> = {
@@ -87,8 +105,17 @@ export function createProcessResource(
     if (serviceVersion !== undefined) {
         identity[ATTR_SERVICE_VERSION] = serviceVersion;
     }
+    if (processName !== undefined) {
+        identity[TYPEAGENT_PROCESS_NAME_ATTRIBUTE] = processName;
+    }
     if (deploymentEnvironment !== undefined) {
         identity[ATTR_DEPLOYMENT_ENVIRONMENT_NAME] = deploymentEnvironment;
+    }
+    if (headRevision !== undefined) {
+        identity[ATTR_VCS_REF_HEAD_REVISION] = headRevision;
+    }
+    if (baseRevision !== undefined) {
+        identity[ATTR_VCS_REF_BASE_REVISION] = baseRevision;
     }
 
     const attributes = { ...options.attributes };
@@ -102,6 +129,9 @@ export function createProcessResource(
         ATTR_PROCESS_PID,
         ATTR_PROCESS_RUNTIME_NAME,
         ATTR_PROCESS_RUNTIME_VERSION,
+        ATTR_VCS_REF_HEAD_REVISION,
+        ATTR_VCS_REF_BASE_REVISION,
+        TYPEAGENT_PROCESS_NAME_ATTRIBUTE,
     ]) {
         delete attributes[key];
     }

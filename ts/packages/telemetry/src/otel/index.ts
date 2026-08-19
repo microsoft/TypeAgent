@@ -13,6 +13,35 @@ export {
 } from "./config.js";
 
 export {
+    installDebugBridge,
+    type DebugBridge,
+    type DebugBridgeOptions,
+    type DebugModule,
+} from "./debugBridge.js";
+
+export {
+    createLocalTelemetryState,
+    expandTracePresets,
+    getLocalTelemetryState,
+    setLocalTelemetryState,
+    LOCAL_TELEMETRY_PROFILES,
+    TRACE_PRESETS,
+    type CreateLocalTelemetryStateOptions,
+    type LocalTelemetryProfile,
+    type LocalTelemetrySnapshot,
+    type LocalTelemetryState,
+    type TracePresetName,
+} from "./localTelemetryState.js";
+
+export {
+    JsonlLogExporter,
+    resolveJsonlLogPath,
+    type JsonlLogExporterOptions,
+} from "./jsonlLogExporter.js";
+
+export { LocalLogRecordProcessor } from "./localLogRecordProcessor.js";
+
+export {
     createTelemetryLifecycle,
     TelemetryLifecycleClosedError,
     TelemetryShutdownTimeoutError,
@@ -37,8 +66,16 @@ export {
 
 export {
     createProcessResource,
+    TYPEAGENT_PROCESS_NAME_ATTRIBUTE,
     type ProcessResourceOptions,
 } from "./resources.js";
+
+export {
+    getTypeAgentSourceVersion,
+    resolveTypeAgentSourceVersion,
+    type GitVersionReader,
+    type TypeAgentSourceVersion,
+} from "./sourceVersion.js";
 
 export {
     redactText,
@@ -56,8 +93,15 @@ export {
 export {
     TYPEAGENT_SPAN_NAMES,
     TYPEAGENT_SPAN_ATTRIBUTES,
+    getActiveTypeAgentSpanAttributes,
+    setActiveTypeAgentSpanAttributes,
     setTypeAgentSpanAttributes,
     type TypeAgentSpanName,
     type TypeAgentSpanAttributeKey,
     type TypeAgentSpanAttributes,
 } from "./traceContract.js";
+
+export {
+    isStructuredLoggingEnabled,
+    setStructuredLoggingEnabled,
+} from "./structuredLogging.js";

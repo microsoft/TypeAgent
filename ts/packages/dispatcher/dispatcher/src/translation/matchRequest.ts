@@ -217,6 +217,20 @@ export function getActivityNamespaceSuffix(
     return cacheSpec !== "shared" ? activityContext!.activityName : undefined;
 }
 
+export type MatchRequestBypassReason = "reasoning_request" | "cache_disabled";
+
+export function getMatchRequestBypassReason(
+    context: ActionContext<CommandHandlerContext>,
+    request: string,
+): MatchRequestBypassReason | undefined {
+    if (parseRecordingDirective(request) !== undefined) {
+        return "reasoning_request";
+    }
+    return context.sessionContext.agentContext.agentCache.isEnabled()
+        ? undefined
+        : "cache_disabled";
+}
+
 /**
  * Resolve a grammar-collision decision for a set of validated cache matches, all
  * LLM-free: the registry-first tiers, then (on an unresolved topical collision)
@@ -308,19 +322,20 @@ export async function matchRequest(
     activeSchemas?: string[],
     signal?: AbortSignal,
 ): Promise<TranslationResult | undefined> {
-    // Bypass grammar cache for recording/reasoning-directed requests.
-    if (parseRecordingDirective(request) !== undefined) {
+    const bypassReason = getMatchRequestBypassReason(context, request);
+    if (bypassReason === "reasoning_request") {
         return undefined;
     }
 
     // Check abort signal before expensive grammar matching
     signal?.throwIfAborted();
 
-    const systemContext = context.sessionContext.agentContext;
-    const agentCache = systemContext.agentCache;
-    if (!agentCache.isEnabled()) {
+    if (bypassReason === "cache_disabled") {
         return undefined;
     }
+
+    const systemContext = context.sessionContext.agentContext;
+    const agentCache = systemContext.agentCache;
     const startTime = performance.now();
     const config = systemContext.session.getConfig();
     const activityContext = history?.activityContext;

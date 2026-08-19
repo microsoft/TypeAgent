@@ -7,6 +7,7 @@ export {
     ChildLogger,
     MultiSinkLogger,
     LogEvent,
+    LogEventSeverity,
     CosmosContainerClient,
     CosmosContainerClientFactory,
     CosmosPartitionKeyBuilder,
@@ -25,6 +26,11 @@ export {
     DatabaseLoggerSinkOptions,
 } from "./logger/databaseLoggerSink.js";
 export { createDebugLoggerSink } from "./logger/debugLoggerSink.js";
+export {
+    OtelLoggerSink,
+    OtelLoggerSinkOptions,
+    createOtelLoggerSink,
+} from "./logger/otelLoggerSink.js";
 export {
     PromptLogger,
     PromptLoggerOptions,

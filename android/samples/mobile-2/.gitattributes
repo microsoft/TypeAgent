@@ -1,0 +1,6 @@
+# The repository root sets `* text eol=lf`, which rewrites the CRLF bytes inside
+# a jar's compressed entries and shifts its central directory, leaving an
+# archive the JVM rejects with "invalid END header". That is how the committed
+# gradle-wrapper.jar was corrupted, which made `./gradlew` fail with "Invalid or
+# corrupt jarfile" before the wrapper could download anything.
+*.jar -text

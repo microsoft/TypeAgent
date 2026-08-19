@@ -109,6 +109,26 @@ const KNOWN_CONFUSABLE_PAIRS: ReadonlyArray<
         { schemaName: "browser", actionName: "openWebPage" },
         "list flows for domain hostname vs navigate to that hostname",
     ],
+    [
+        { schemaName: "github-cli", actionName: "browseIssue" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "GitHub issue via gh/browseIssue vs generic browser open of a URL/page; prefer 'GitHub issue #N', 'gh browse issue', 'in this repo' — avoid bare 'open in the browser' / 'web page'",
+    ],
+    [
+        { schemaName: "github-cli", actionName: "browsePr" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "GitHub PR via gh/browsePr vs generic browser open; prefer 'pull request #N', 'gh browse pr', 'in this repo'",
+    ],
+    [
+        { schemaName: "github-cli", actionName: "browseRepo" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "GitHub repo via gh/browseRepo vs generic browser open; prefer 'this GitHub repo', 'gh browse', owner/name",
+    ],
+    [
+        { schemaName: "browser.external", actionName: "openTab" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "external/system browser tab vs in-app openWebPage; prefer 'external browser', 'system browser', 'outside the app', 'default browser app' — avoid bare 'new tab' / 'in my browser'",
+    ],
 ];
 
 /**
@@ -293,6 +313,11 @@ function significantTokens(name: string): Set<string> {
     return out;
 }
 
+function significantTokensFromText(text: string | undefined): Set<string> {
+    if (text === undefined) return new Set();
+    return significantTokens(text);
+}
+
 function jaccard(a: Set<string>, b: Set<string>): number {
     if (a.size === 0 || b.size === 0) return 0;
     let inter = 0;
@@ -367,6 +392,30 @@ export function findTranslationBenchConfusableSiblings(
                 `same-schema action-name overlap (${overlap.toFixed(2)})`,
             );
         }
+    }
+
+    const targetDescription = significantTokensFromText(
+        byKey.get(keyOf(target))?.description,
+    );
+    for (const action of all) {
+        if (action.schemaName === target.schemaName) continue;
+        if (sameAction(action, target)) continue;
+        const nameOverlap = jaccard(
+            targetTokens,
+            significantTokens(action.actionName),
+        );
+        if (nameOverlap < 0.5) continue;
+        const descriptionOverlap = jaccard(
+            targetDescription,
+            significantTokensFromText(action.description),
+        );
+        if (descriptionOverlap < 0.34) continue;
+        add(
+            action,
+            `cross-schema overlap (name ${nameOverlap.toFixed(
+                2,
+            )}, description ${descriptionOverlap.toFixed(2)})`,
+        );
     }
 
     return [...found.values()].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));

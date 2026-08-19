@@ -77,17 +77,17 @@ jobs:
       - name: Generate app token
         id: app-token
         if: env.HAS_APP_CREDS == 'true'
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ vars.DEPENDABOT_APP_ID }}
           private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         name: Install pnpm
         with:
           package_json_file: ts/package.json
@@ -102,7 +102,7 @@ jobs:
       # purely on whether another workflow had already cached that lockfile
       # hash.  The store cache gives no benefit to a lockfile-only resolve, so
       # dropping it makes the job deterministic.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
 

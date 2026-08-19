@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { context, metrics, propagation, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import {
@@ -114,6 +117,24 @@ describe("telemetry bootstrap", () => {
         expect(configReads).toBe(1);
     });
 
+    it("installs and restores the configured debug bridge", async () => {
+        const coordinator = createCoordinator();
+        const priorLog = () => undefined;
+        const debugModule = { log: priorLog };
+
+        await coordinator.init({
+            config: { debugBridge: true },
+            debugModules: [debugModule],
+            debugBridge: {
+                includedNamespacePrefixes: ["typeagent:", "agent-server:"],
+            },
+        });
+
+        expect(debugModule.log).not.toBe(priorLog);
+        await coordinator.shutdown();
+        expect(debugModule.log).toBe(priorLog);
+    });
+
     it("creates only requested signals and shares one resource", async () => {
         const coordinator = createCoordinator();
         const resources: Resource[] = [];
@@ -127,9 +148,14 @@ describe("telemetry bootstrap", () => {
                 logs: { logFile: "telemetry.jsonl" },
             },
             serviceName: "bootstrap-test",
+            processName: "agent-server",
             serviceVersion: "1.2.3",
             serviceInstanceId: "bootstrap-instance",
             deploymentEnvironment: "test",
+            sourceVersion: {
+                headRevision: "local-commit",
+                baseRevision: "official-commit",
+            },
             factories: {
                 createTraceProvider(_config, resource) {
                     resources.push(resource);
@@ -150,12 +176,21 @@ describe("telemetry bootstrap", () => {
         expect(resources).toHaveLength(2);
         expect(resources[0]).toBe(resources[1]);
         expect(resources[0].attributes["service.name"]).toBe("bootstrap-test");
+        expect(resources[0].attributes["typeagent.process.name"]).toBe(
+            "agent-server",
+        );
         expect(resources[0].attributes["service.version"]).toBe("1.2.3");
         expect(resources[0].attributes["service.instance.id"]).toBe(
             "bootstrap-instance",
         );
         expect(resources[0].attributes["deployment.environment.name"]).toBe(
             "test",
+        );
+        expect(resources[0].attributes["vcs.ref.head.revision"]).toBe(
+            "local-commit",
+        );
+        expect(resources[0].attributes["vcs.ref.base.revision"]).toBe(
+            "official-commit",
         );
         expect(resources[0].attributes["host.name"]).toBeDefined();
         expect(resources[0].attributes["process.pid"]).toBe(process.pid);
@@ -464,15 +499,33 @@ describe("telemetry bootstrap", () => {
         expect(resource?.attributes["service.name"]).toBe("typeagent");
     });
 
-    it("rejects the unsupported default JSONL writer path", async () => {
+    it("supports the default JSONL-only log provider", async () => {
         const coordinator = createCoordinator();
+        const dir = fs.mkdtempSync(
+            path.join(os.tmpdir(), "typeagent-otel-bootstrap-"),
+        );
+        try {
+            await coordinator.init({
+                config: {
+                    logs: {
+                        logFile: path.join(dir, "telemetry-{pid}.jsonl"),
+                    },
+                },
+                serviceName: "bootstrap-test",
+            });
+            const logger = logs.getLogger("bootstrap-test");
+            logger.emit({ body: "jsonl works" });
+            await coordinator.shutdown();
 
-        await expect(
-            coordinator.init({
-                config: { logs: { logFile: "telemetry.jsonl" } },
-                resource: resourceFromAttributes({}),
-            }),
-        ).rejects.toThrow(/JSONL output is not implemented/);
+            const files = fs.readdirSync(dir);
+            expect(files).toHaveLength(1);
+            const line = fs
+                .readFileSync(path.join(dir, files[0]!), "utf8")
+                .trim();
+            expect(JSON.parse(line).body).toBe("jsonl works");
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     it("refuses trace and log providers installed by other owners", async () => {

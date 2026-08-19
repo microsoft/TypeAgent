@@ -11,6 +11,7 @@ import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class WebSocketManager {
@@ -28,13 +29,33 @@ class WebSocketManager {
     private var webSocket: WebSocket? = null
     private var conversationId: String? = null
     private var connectionId: String? = null
+    private var agentSchemaContent: String? = null
+    private var isClientAgentRegistered = false
     private var pendingUserInteraction: PendingUserInteraction? = null
     private var clientActionHandler: ClientActionHandler? = null
+
+    /**
+     * The conversation this connection asked to resume, if any. Kept separate
+     * from [conversationId] so an in-flight resume is never mistaken for a
+     * conversation that has actually been joined.
+     */
+    private var requestedConversationId: String? = null
+    private var staleConversationHandler: (() -> Unit)? = null
 
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages
     private val _pendingYesNoPrompt = MutableStateFlow<PendingYesNoPrompt?>(null)
     val pendingYesNoPrompt: StateFlow<PendingYesNoPrompt?> = _pendingYesNoPrompt
+
+    /**
+     * The conversation the server handed back on the last successful join.
+     *
+     * Survives a disconnect deliberately: it is persisted alongside the
+     * transcript and passed back into the next [connect] so the client resumes
+     * the same conversation instead of landing on the server's default one.
+     */
+    private val _lastJoinedConversationId = MutableStateFlow<String?>(null)
+    val lastJoinedConversationId: StateFlow<String?> = _lastJoinedConversationId
 
     private val _connectionStatus = MutableStateFlow(
         ConnectionStatus(
@@ -50,13 +71,80 @@ class WebSocketManager {
         }
     }
 
+    /**
+     * Called when a resume was requested for a conversation the server no
+     * longer has. The client fell back to the default conversation, so the
+     * restored transcript belongs to nothing and should be discarded.
+     */
+    internal fun setStaleConversationHandler(handler: (() -> Unit)?) {
+        synchronized(lock) {
+            staleConversationHandler = handler
+        }
+    }
+
+    /**
+     * Seeds the transcript with messages recovered from disk.
+     *
+     * Must be called before [connect]; it deliberately refuses once anything is
+     * already in the list so a late restore can never clobber live messages.
+     */
+    fun restoreMessages(restored: List<Message>) {
+        if (restored.isEmpty()) {
+            return
+        }
+        synchronized(lock) {
+            if (_messages.value.isNotEmpty()) {
+                Log.w(TAG, "Ignoring restore: transcript already has messages")
+                return
+            }
+            _messages.value = restored
+        }
+    }
+
+    /**
+     * Drops the local transcript.
+     *
+     * Used by the client-side "Clear chat" action, and when a resume lands on a
+     * conversation the restored transcript does not belong to.
+     */
+    fun clearMessages() {
+        synchronized(lock) {
+            displayThreads.clear()
+            displayMessageIds.clear()
+            _messages.value = emptyList()
+        }
+    }
+
+    /**
+     * @param resumeConversationId the conversation to resume. When present it
+     *   is passed straight to `joinConversation`, so the client rejoins the
+     *   exact conversation it was last in. When the server no longer has it,
+     *   the join falls back to the default conversation and the
+     *   stale-conversation handler fires. When absent the server joins (or
+     *   creates) the default conversation.
+     */
     fun connect(
         url: String,
-        tunnelToken: String? = null
+        tunnelToken: String? = null,
+        schemaContent: String? = null,
+        resumeConversationId: String? = null
     ) {
         val targetUrl = url.trim()
         if (targetUrl.isBlank()) {
             val errorMessage = "Missing TYPEAGENT_SERVER_URL. Set it before building the app."
+            Log.e(TAG, errorMessage)
+            _connectionStatus.value = ConnectionStatus(
+                text = errorMessage,
+                state = ConnectionStatus.State.ERROR
+            )
+            return
+        }
+        val resolvedSchemaContent = schemaContent
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: synchronized(lock) { agentSchemaContent }
+        if (resolvedSchemaContent.isNullOrBlank()) {
+            val errorMessage = "The Android alarm and timer schema is unavailable."
             Log.e(TAG, errorMessage)
             _connectionStatus.value = ConnectionStatus(
                 text = errorMessage,
@@ -70,6 +158,9 @@ class WebSocketManager {
             pendingUserInteraction = null
             conversationId = null
             connectionId = null
+            requestedConversationId = resumeConversationId?.takeIf { it.isNotBlank() }
+            agentSchemaContent = resolvedSchemaContent
+            isClientAgentRegistered = false
             displayThreads.clear()
             displayMessageIds.clear()
         }
@@ -92,7 +183,7 @@ class WebSocketManager {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (connectionGeneration.get() != generation) return
                 Log.d(TAG, "WebSocket connected")
-                joinConversation()
+                joinConversation(synchronized(lock) { requestedConversationId })
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -112,6 +203,7 @@ class WebSocketManager {
                     pendingUserInteraction = null
                     conversationId = null
                     connectionId = null
+                    isClientAgentRegistered = false
                     finalizeOpenDisplayThreads()
                 }
                 _pendingYesNoPrompt.value = null
@@ -132,6 +224,7 @@ class WebSocketManager {
                 failPendingInvokes(errorMessage)
                 synchronized(lock) {
                     pendingUserInteraction = null
+                    isClientAgentRegistered = false
                     finalizeOpenDisplayThreads()
                 }
                 _pendingYesNoPrompt.value = null
@@ -213,6 +306,7 @@ class WebSocketManager {
         webSocket = null
         synchronized(lock) {
             pendingUserInteraction = null
+            isClientAgentRegistered = false
             finalizeOpenDisplayThreads()
         }
         _pendingYesNoPrompt.value = null
@@ -259,10 +353,19 @@ class WebSocketManager {
         return true
     }
 
-    private fun joinConversation() {
+    /**
+     * Joins [resumeConversationId] when supplied, otherwise the server's
+     * default conversation (which it creates if none exists).
+     *
+     * If the requested conversation is gone the server answers
+     * "Conversation not found", and this retries once against the default. The
+     * retry passes `null`, so it cannot recurse.
+     */
+    private fun joinConversation(resumeConversationId: String?) {
         val options = JSONObject()
             .put("clientType", "extension")
             .put("filter", false)
+            .putOpt("conversationId", resumeConversationId)
 
         sendInvoke(
             channelName = AGENT_SERVER_CHANNEL,
@@ -285,21 +388,96 @@ class WebSocketManager {
                 synchronized(lock) {
                     conversationId = joinedConversationId
                     connectionId = joinedConnectionId
+                    requestedConversationId = null
                 }
+                _lastJoinedConversationId.value = joinedConversationId
 
                 Log.d(
                     TAG,
                     "TypeAgent conversation joined: connectionId=$joinedConnectionId conversationId=$joinedConversationId"
                 )
+                registerClientAgent(joinedConversationId)
+            },
+            onError = { error ->
+                Log.e(TAG, "joinConversation error: $error")
+                if (resumeConversationId != null && isConversationNotFoundError(error)) {
+                    // The saved conversation is gone (server data wiped,
+                    // deleted elsewhere). Fall back to the default conversation
+                    // and tell the client its restored transcript is orphaned.
+                    Log.w(
+                        TAG,
+                        "Conversation $resumeConversationId no longer exists; joining the default"
+                    )
+                    // Read the handler under the lock but invoke it outside, so
+                    // a client callback can never re-enter and deadlock.
+                    val onStale = synchronized(lock) {
+                        requestedConversationId = null
+                        staleConversationHandler
+                    }
+                    // Drop the dead id before handing control to the client.
+                    // It is still the "last joined" one, so a debounced save or
+                    // a teardown flush landing while the fallback join is in
+                    // flight would write the deleted conversation back to disk,
+                    // and a reconnect in that window would try to resume it.
+                    _lastJoinedConversationId.value = null
+                    onStale?.invoke()
+                    joinConversation(null)
+                    return@sendInvoke
+                }
                 _connectionStatus.value = ConnectionStatus(
-                    text = "Connected",
+                    text = "Error: $error",
+                    state = ConnectionStatus.State.ERROR
+                )
+            }
+        )
+    }
+
+    private fun registerClientAgent(joinedConversationId: String) {
+        val schemaContent = synchronized(lock) { agentSchemaContent }
+        if (schemaContent.isNullOrBlank()) {
+            val errorMessage = "The Android alarm and timer schema is unavailable."
+            Log.e(TAG, errorMessage)
+            _connectionStatus.value = ConnectionStatus(
+                text = errorMessage,
+                state = ConnectionStatus.State.ERROR
+            )
+            return
+        }
+
+        _connectionStatus.value = ConnectionStatus(
+            text = "Registering Android actions...",
+            state = ConnectionStatus.State.CONNECTING
+        )
+        sendInvoke(
+            channelName = AGENT_SERVER_CHANNEL,
+            methodName = "registerClientAgent",
+            args = listOf(
+                AndroidDeviceAgent.createRegistrationParams(
+                    conversationId = joinedConversationId,
+                    schemaContent = schemaContent
+                )
+            ),
+            onResult = {
+                synchronized(lock) {
+                    isClientAgentRegistered = true
+                }
+                Log.d(
+                    TAG,
+                    "Registered client agent ${AndroidDeviceAgent.NAME} " +
+                        "for conversation $joinedConversationId"
+                )
+                _connectionStatus.value = ConnectionStatus(
+                    text = "Connected - Android actions registered",
                     state = ConnectionStatus.State.CONNECTED
                 )
             },
             onError = { error ->
-                Log.e(TAG, "joinConversation error: $error")
+                synchronized(lock) {
+                    isClientAgentRegistered = false
+                }
+                Log.e(TAG, "registerClientAgent error: $error")
                 _connectionStatus.value = ConnectionStatus(
-                    text = "Error: $error",
+                    text = "Agent registration failed: $error",
                     state = ConnectionStatus.State.ERROR
                 )
             }
@@ -369,9 +547,6 @@ class WebSocketManager {
             TAG,
             "RPC call channel=$channelName method=$methodName argCount=${args.length()}"
         )
-        if (methodName == "takeAction") {
-            Log.d(TAG, "RPC call raw takeAction args=$args")
-        }
         when {
             channelName.startsWith(CLIENT_IO_CHANNEL_PREFIX) -> handleClientIoCall(methodName, args)
             else -> Log.d(TAG, "Unhandled RPC call channel=$channelName method=$methodName")
@@ -386,6 +561,16 @@ class WebSocketManager {
             TAG,
             "RPC invoke channel=$channelName method=$methodName callId=$callId argCount=${args.length()}"
         )
+        if (channelName == AndroidDeviceAgent.CHANNEL_NAME) {
+            handleAndroidDeviceInvoke(
+                channelName = channelName,
+                methodName = methodName,
+                callId = callId,
+                args = args
+            )
+            return
+        }
+
         val result = when (methodName) {
             "getUserContext" -> JSONObject.NULL
             "question" -> handleQuestionInvoke(args)
@@ -396,6 +581,107 @@ class WebSocketManager {
             sendRpcResult(channelName, callId, result)
         } else {
             sendRpcError(channelName, callId, "Unsupported client RPC method: $methodName")
+        }
+    }
+
+    private fun handleAndroidDeviceInvoke(
+        channelName: String,
+        methodName: String,
+        callId: Int,
+        args: JSONArray
+    ) {
+        if (callId < 0) {
+            Log.e(TAG, "Android agent invocation is missing callId.")
+            return
+        }
+        if (methodName != "executeAction") {
+            sendRpcError(
+                channelName,
+                callId,
+                "Unsupported Android agent RPC method: $methodName"
+            )
+            return
+        }
+        if (!synchronized(lock) { isClientAgentRegistered }) {
+            sendRpcError(channelName, callId, "Android client agent is not registered.")
+            return
+        }
+
+        when (val parsed = AndroidDeviceAgent.parseExecuteAction(args)) {
+            is AndroidDeviceActionParseResult.ProtocolError -> {
+                sendRpcError(channelName, callId, parsed.message)
+            }
+
+            is AndroidDeviceActionParseResult.ActionError -> {
+                sendRpcResult(
+                    channelName,
+                    callId,
+                    AndroidDeviceAgent.createErrorResult(parsed.message)
+                )
+            }
+
+            is AndroidDeviceActionParseResult.Success -> {
+                executeAndroidDeviceAction(
+                    channelName = channelName,
+                    callId = callId,
+                    action = parsed.action
+                )
+            }
+        }
+    }
+
+    private fun executeAndroidDeviceAction(
+        channelName: String,
+        callId: Int,
+        action: AndroidDeviceAction
+    ) {
+        val handler = synchronized(lock) { clientActionHandler }
+        if (handler == null) {
+            sendRpcResult(
+                channelName,
+                callId,
+                AndroidDeviceAgent.createErrorResult(
+                    "The Android activity is not ready to execute actions."
+                )
+            )
+            return
+        }
+
+        val completed = AtomicBoolean(false)
+        val generation = connectionGeneration.get()
+        val completion: (AndroidDeviceExecutionResult) -> Unit = { result ->
+            if (!completed.compareAndSet(false, true)) {
+                Log.w(TAG, "Ignoring duplicate completion for agent callId=$callId")
+            } else if (connectionGeneration.get() != generation) {
+                Log.w(TAG, "Ignoring completion for stale agent callId=$callId")
+            } else {
+                val actionResult = when (result) {
+                    is AndroidDeviceExecutionResult.Success ->
+                        AndroidDeviceAgent.createSuccessResult(result.message)
+                    is AndroidDeviceExecutionResult.Failure ->
+                        AndroidDeviceAgent.createErrorResult(result.message)
+                }
+                sendRpcResult(channelName, callId, actionResult)
+            }
+        }
+
+        when (action) {
+            is AndroidDeviceAction.Alarm -> handler.onSetAlarm(action.action, completion)
+            is AndroidDeviceAction.Timer -> handler.onSetTimer(action.action, completion)
+            is AndroidDeviceAction.SearchNearby ->
+                handler.onSearchNearby(action.action, completion)
+            AndroidDeviceAction.ShowAlarms -> handler.onShowAlarms(completion)
+            AndroidDeviceAction.ShowTimers -> handler.onShowTimers(completion)
+            is AndroidDeviceAction.ShowLocation ->
+                handler.onShowLocation(action.action, completion)
+            is AndroidDeviceAction.DialPhoneNumber ->
+                handler.onDialPhoneNumber(action.action, completion)
+            is AndroidDeviceAction.ComposeSms ->
+                handler.onComposeSms(action.action, completion)
+            is AndroidDeviceAction.WebSearch ->
+                handler.onWebSearch(action.action, completion)
+            is AndroidDeviceAction.OpenWebPage ->
+                handler.onOpenWebPage(action.action, completion)
         }
     }
 
@@ -523,10 +809,6 @@ class WebSocketManager {
                 }
             }
 
-            "takeAction" -> {
-                handleTakeActionCall(args)
-            }
-
             else -> {
                 val requestId = extractRequestId(args.opt(0))
                 logInboundEvent(
@@ -536,101 +818,6 @@ class WebSocketManager {
                 )
             }
         }
-    }
-
-    private fun handleTakeActionCall(args: JSONArray) {
-        val requestId = extractRequestId(args.opt(0))
-        val actionName = args.optString(1).orEmpty()
-        val actionData = args.optNullable(2)
-        logInboundEvent(
-            type = "take-action:$actionName",
-            requestId = requestId,
-            content = stringifyDisplayValue(actionData)
-        )
-        Log.d(
-            TAG,
-            "takeAction received action=$actionName requestId=${requestId.orEmpty()} data=${stringifyDisplayValue(actionData)}"
-        )
-        when (actionName) {
-            "set-alarm" -> handleSetAlarmAction(actionData)
-            "set-timer" -> handleSetTimerAction(actionData)
-            "search-nearby" -> handleSearchNearbyAction(actionData)
-            else -> Log.d(TAG, "takeAction ignored: unsupported action=$actionName")
-        }
-    }
-
-    private fun handleSetAlarmAction(actionData: Any?) {
-        val alarm = parseSetAlarmActionPayload(actionData)
-        if (alarm == null) {
-            Log.e(
-                TAG,
-                "Invalid set-alarm payload: ${stringifyDisplayValue(actionData)}"
-            )
-            return
-        }
-        val handler = requireClientActionHandler(
-            "set-alarm",
-            "hour=${alarm.hour} minute=${alarm.minute}"
-        ) ?: return
-        Log.d(
-            TAG,
-            "Dispatching set-alarm to client handler hour=${alarm.hour} minute=${alarm.minute}"
-        )
-        handler.onSetAlarm(alarm)
-    }
-
-    private fun handleSetTimerAction(actionData: Any?) {
-        val timer = parseSetTimerActionPayload(actionData)
-        if (timer == null) {
-            Log.e(
-                TAG,
-                "Invalid set-timer payload: ${stringifyDisplayValue(actionData)}"
-            )
-            return
-        }
-        val handler = requireClientActionHandler(
-            "set-timer",
-            "durationInSeconds=${timer.durationInSeconds}"
-        ) ?: return
-        Log.d(
-            TAG,
-            "Dispatching set-timer to client handler durationInSeconds=${timer.durationInSeconds}"
-        )
-        handler.onSetTimer(timer)
-    }
-
-    private fun handleSearchNearbyAction(actionData: Any?) {
-        val search = parseSearchNearbyActionPayload(actionData)
-        if (search == null) {
-            Log.e(
-                TAG,
-                "Invalid search-nearby payload: ${stringifyDisplayValue(actionData)}"
-            )
-            return
-        }
-        val handler = requireClientActionHandler(
-            "search-nearby",
-            "searchTerm=${search.searchTerm}"
-        ) ?: return
-        Log.d(
-            TAG,
-            "Dispatching search-nearby to client handler searchTerm=${search.searchTerm}"
-        )
-        handler.onSearchNearby(search)
-    }
-
-    private fun requireClientActionHandler(
-        actionName: String,
-        detail: String
-    ): ClientActionHandler? {
-        val handler = synchronized(lock) { clientActionHandler }
-        if (handler == null) {
-            Log.e(
-                TAG,
-                "$actionName parsed ($detail) but no client action handler is registered"
-            )
-        }
-        return handler
     }
 
     private fun handleDisplayLogEvent(event: JSONObject) {
@@ -1296,11 +1483,62 @@ class WebSocketManager {
     }
 
     internal interface ClientActionHandler {
-        fun onSetAlarm(action: SetAlarmAction)
-        fun onSetTimer(action: SetTimerAction)
-        fun onSearchNearby(action: SearchNearbyAction)
+        fun onSetAlarm(
+            action: SetAlarmAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onSetTimer(
+            action: SetTimerAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onSearchNearby(
+            action: SearchNearbyAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onShowAlarms(completion: (AndroidDeviceExecutionResult) -> Unit)
+
+        fun onShowTimers(completion: (AndroidDeviceExecutionResult) -> Unit)
+
+        fun onShowLocation(
+            action: ShowLocationAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onDialPhoneNumber(
+            action: DialPhoneNumberAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onComposeSms(
+            action: ComposeSmsAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onWebSearch(
+            action: WebSearchAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onOpenWebPage(
+            action: OpenWebPageAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
     }
 }
+
+/**
+ * Recognises the server's "Conversation not found" join failure so a resume of
+ * a conversation that no longer exists can fall back to the default one,
+ * instead of being surfaced as a connection error like a transport or auth
+ * failure would be.
+ *
+ * Mirrors `isConversationNotFoundError` in the agentServer TypeScript client.
+ */
+internal fun isConversationNotFoundError(error: String?): Boolean =
+    error?.trimStart()?.startsWith("Conversation not found", ignoreCase = true) == true
 
 data class ConnectionStatus(
     val text: String,
