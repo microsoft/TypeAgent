@@ -63,6 +63,7 @@ import {
     clearCodingAffinity,
     establishCodingAffinity,
     isCodeAgentRequest,
+    isCodingWorkingDirectorySelection,
     isGenericFallbackCandidate,
 } from "../../../reasoning/codingRouting.js";
 import {
@@ -923,6 +924,18 @@ export class RequestCommandHandler implements CommandHandler {
                             status: "failed",
                             path: "reasoning",
                             mayHaveSideEffects: false,
+                            schemas: ["code.swe"],
+                        });
+                        return;
+                    }
+                    if (isCodingWorkingDirectorySelection(request)) {
+                        displayStatus(
+                            `Coding working directory: ${systemContext.codingAffinity!.workingDirectory}`,
+                            context,
+                        );
+                        setDisposition(systemContext, {
+                            status: "handled",
+                            path: "reasoning",
                             schemas: ["code.swe"],
                         });
                         return;

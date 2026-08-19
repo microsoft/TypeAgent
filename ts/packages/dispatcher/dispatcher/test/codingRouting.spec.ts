@@ -5,6 +5,7 @@ import {
     classifyCodingRequest,
     establishCodingAffinity,
     clearCodingAffinity,
+    isCodingWorkingDirectorySelection,
     isCodeAgentRequest,
     isGenericFallbackCandidate,
 } from "../src/reasoning/codingRouting.js";
@@ -40,6 +41,20 @@ describe("coding request classification", () => {
         expect(classifyCodingRequest("what is the weather", true)).toBe(
             "notCoding",
         );
+    });
+
+    test("recognizes a natural-language working-directory selection", () => {
+        expect(
+            isCodingWorkingDirectorySelection(
+                "Use C:\\work\\project as my coding working directory",
+            ),
+        ).toBe(true);
+        expect(
+            classifyCodingRequest(
+                "Use C:\\work\\project as my coding working directory",
+                false,
+            ),
+        ).toBe("coding");
     });
 });
 

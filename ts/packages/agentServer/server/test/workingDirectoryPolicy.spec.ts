@@ -6,6 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import {
     loadWorkingDirectoryPolicy,
+    inferWorkingDirectoryFromRequest,
+    selectWorkingDirectoryProposal,
     resolveWorkingDirectory,
 } from "../src/workingDirectoryPolicy.js";
 
@@ -66,5 +68,40 @@ describe("agent-server working-directory policy", () => {
             allowedRoots: [fs.realpathSync(root), fs.realpathSync(outside)],
             defaultRoot: fs.realpathSync(child),
         });
+    });
+
+    test("infers the parent directory of a quoted file path", () => {
+        const file = path.join(child, "releaseNotes.ts");
+        fs.writeFileSync(file, "export {};\n");
+        expect(
+            inferWorkingDirectoryFromRequest(
+                `Explain how "${file}" generates Markdown`,
+            ),
+        ).toBe(fs.realpathSync(child));
+    });
+
+    test("defaults to the local agent-server cwd when settings are absent", () => {
+        expect(loadWorkingDirectoryPolicy({})).toEqual({
+            allowedRoots: [],
+            defaultRoot: fs.realpathSync(process.cwd()),
+        });
+    });
+
+    test("retains the selected directory for a follow-up without a path", () => {
+        const file = path.join(child, "releaseNotes.ts");
+        fs.writeFileSync(file, "export {};\n");
+        const selected = selectWorkingDirectoryProposal(
+            undefined,
+            `Explain "${file}"`,
+            undefined,
+        );
+        expect(selected).toBe(fs.realpathSync(child));
+        expect(
+            selectWorkingDirectoryProposal(
+                undefined,
+                "Now fix the failing tests",
+                selected,
+            ),
+        ).toBe(fs.realpathSync(child));
     });
 });

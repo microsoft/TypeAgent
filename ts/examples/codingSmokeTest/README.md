@@ -27,6 +27,14 @@ node ..\..\packages\cli\bin\run.js
 Alternatively, configure agent-server's coding root as shown below. Send the
 prompts as ordinary requests; no mode command is needed.
 
+For a local shell connected to a local agent-server, an absolute file path in a
+prompt selects that file's parent directory automatically. You can also send:
+
+`Use C:\Users\me\Downloads\codingSmokeTest as my coding working directory`
+
+No environment variables are required when the agent-server allowlist is
+unset; any existing local directory is selectable.
+
 1. `Explain how src/releaseNotes.ts transforms changes into Markdown. Identify the likely causes of the failing tests, but do not modify files.`
 
    Expected: coding analysis, no writes, and no validation requirement.

@@ -34,6 +34,7 @@ import { PendingInteractionManager } from "agent-dispatcher/internal";
 import { supersedeStalledInteraction as supersedeStalledInteractionCore } from "./supersedeInteraction.js";
 import {
     loadWorkingDirectoryPolicy,
+    selectWorkingDirectoryProposal,
     resolveWorkingDirectory,
 } from "./workingDirectoryPolicy.js";
 
@@ -580,6 +581,7 @@ export async function createSharedDispatcher(
             // so interactions created before disconnect are unroutable after
             // reconnect. See docs/async-clientio-design.md §Open Questions.
             const connectionId = (nextConnectionId++).toString();
+            let selectedWorkingDirectory: string | undefined;
             const wasEmpty = clients.size === 0;
             clients.set(connectionId, {
                 clientIO,
@@ -677,9 +679,17 @@ export async function createSharedDispatcher(
                     attachmentCount: attachments?.length ?? 0,
                 });
                 const workingDirectory = resolveWorkingDirectory(
-                    submitOptions?.workingDirectory,
+                    selectWorkingDirectoryProposal(
+                        submitOptions?.workingDirectory,
+                        command,
+                        selectedWorkingDirectory,
+                    ),
                     workingDirectoryPolicy,
                 );
+                if (workingDirectory.workingDirectory !== undefined) {
+                    selectedWorkingDirectory =
+                        workingDirectory.workingDirectory;
+                }
                 if (workingDirectory.rejectedRequested) {
                     debugCommand(
                         `Rejected client working directory for ${connectionId}; ` +

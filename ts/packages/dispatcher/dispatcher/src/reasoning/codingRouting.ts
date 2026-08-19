@@ -55,6 +55,12 @@ const CODING_COMMAND_PATTERN =
     /\b(?:npm|pnpm|yarn|bun|deno|node|python|pytest|jest|vitest|cargo|dotnet|go)\s+(?:build|check|lint|run|test)\b/i;
 const AFFINITY_FOLLOWUP_PATTERN =
     /^(?:also|and then|continue|do the same|fix that|next|now|same for|then|try again)\b/i;
+const WORKING_DIRECTORY_SELECTION_PATTERN =
+    /\b(?:set|use|switch|change)\b.*\b(?:coding\s+)?working\s+director(?:y|ies)\b/i;
+
+export function isCodingWorkingDirectorySelection(request: string): boolean {
+    return WORKING_DIRECTORY_SELECTION_PATTERN.test(request);
+}
 
 export function classifyCodingRequest(
     request: string,
@@ -64,6 +70,9 @@ export function classifyCodingRequest(
     const text = request.trim();
     if (!text) {
         return "notCoding";
+    }
+    if (isCodingWorkingDirectorySelection(text)) {
+        return "coding";
     }
     if (CODING_COMMAND_PATTERN.test(text)) {
         return "coding";

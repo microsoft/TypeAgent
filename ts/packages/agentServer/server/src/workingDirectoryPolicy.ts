@@ -15,6 +15,50 @@ export type WorkingDirectoryResolution = {
     rejectedRequested?: boolean;
 };
 
+function canonicalWorkingDirectory(value: string): string | undefined {
+    try {
+        const canonical = fs.realpathSync(path.resolve(value));
+        const stats = fs.statSync(canonical);
+        return stats.isDirectory()
+            ? canonical
+            : stats.isFile()
+              ? path.dirname(canonical)
+              : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+export function inferWorkingDirectoryFromRequest(
+    request: string,
+): string | undefined {
+    const quoted = request.matchAll(/["']([^"']+)["']/g);
+    for (const match of quoted) {
+        const candidate = canonicalWorkingDirectory(match[1]);
+        if (candidate !== undefined) {
+            return candidate;
+        }
+    }
+
+    for (const token of request.split(/\s+/)) {
+        const candidate = canonicalWorkingDirectory(
+            token.replace(/^[,;()\[\]]+|[,;()\[\].]+$/g, ""),
+        );
+        if (candidate !== undefined) {
+            return candidate;
+        }
+    }
+    return undefined;
+}
+
+export function selectWorkingDirectoryProposal(
+    requested: string | undefined,
+    request: string,
+    selected: string | undefined,
+): string | undefined {
+    return requested ?? inferWorkingDirectoryFromRequest(request) ?? selected;
+}
+
 function canonicalDirectory(value: string): string | undefined {
     try {
         const canonical = fs.realpathSync(path.resolve(value));
@@ -41,9 +85,9 @@ export function loadWorkingDirectoryPolicy(
         .filter(Boolean)
         .map(canonicalDirectory)
         .filter((entry): entry is string => entry !== undefined);
-    const defaultRoot = env.TYPEAGENT_CODE_DEFAULT_WORKING_DIRECTORY
-        ? canonicalDirectory(env.TYPEAGENT_CODE_DEFAULT_WORKING_DIRECTORY)
-        : undefined;
+    const defaultRoot = canonicalDirectory(
+        env.TYPEAGENT_CODE_DEFAULT_WORKING_DIRECTORY ?? process.cwd(),
+    );
     return {
         allowedRoots,
         ...(defaultRoot !== undefined ? { defaultRoot } : {}),
