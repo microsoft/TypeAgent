@@ -119,6 +119,17 @@ function forceKillServer(port: number): boolean {
     return true;
 }
 
+/**
+ * Optional identity for a client-hosted agent, used when several clients host
+ * the same agent name on one conversation. `instanceId` must be stable across
+ * reconnects so the server replaces this client's instance rather than adding
+ * another; `displayName` is what the user sees when asked which device to use.
+ */
+export type ClientAgentIdentity = {
+    instanceId?: string;
+    displayName?: string;
+};
+
 export type ConversationDispatcher = {
     dispatcher: Dispatcher;
     conversationId: string;
@@ -220,17 +231,30 @@ export type AgentServerConnection = {
      * rpc proxy that forwards calls back over the connection. Pass
      * `conversationId` to target a specific joined conversation, or omit it when
      * exactly one conversation is joined. Re-registering the same `name` (e.g.
-     * after {@link reconnect}) replaces the previous registration. Rejects if
-     * another client already registered `name` on the target conversation.
+     * after {@link reconnect}) replaces the previous registration.
+     *
+     * Several clients may register the same `name` on one conversation as long
+     * as they carry the same schema; each becomes an instance and the server
+     * routes each action to one of them. Pass a stable `instanceId` so a
+     * reconnect replaces this client's instance instead of adding another, and
+     * a `displayName` so the user can tell instances apart.
      */
     registerClientAgent(
         name: string,
         manifest: AppAgentManifest,
         agent: AppAgent,
         conversationId?: string,
+        identity?: ClientAgentIdentity,
     ): Promise<void>;
-    /** Unregister an agent previously registered via registerClientAgent. */
-    unregisterClientAgent(name: string, conversationId?: string): Promise<void>;
+    /**
+     * Unregister an agent previously registered via registerClientAgent. The
+     * server only removes an instance this connection owns.
+     */
+    unregisterClientAgent(
+        name: string,
+        conversationId?: string,
+        instanceId?: string,
+    ): Promise<void>;
     /**
      * Reopen the underlying transport and rebind the control rpc onto it,
      * reusing this connection object instead of building a new one. Returns
@@ -588,6 +612,7 @@ export function createAgentServerConnection(
             manifest: AppAgentManifest,
             agent: AppAgent,
             conversationId?: string,
+            identity?: ClientAgentIdentity,
         ): Promise<void> {
             // Drop any previous rpc server for this name (e.g. re-registering
             // after a reconnect, where the old server sat on a stale channel).
@@ -605,6 +630,12 @@ export function createAgentServerConnection(
                     manifest,
                     agentInterface,
                     ...(conversationId !== undefined ? { conversationId } : {}),
+                    ...(identity?.instanceId !== undefined
+                        ? { instanceId: identity.instanceId }
+                        : {}),
+                    ...(identity?.displayName !== undefined
+                        ? { displayName: identity.displayName }
+                        : {}),
                 });
             } catch (e) {
                 closeFn();
@@ -616,11 +647,13 @@ export function createAgentServerConnection(
         async unregisterClientAgent(
             name: string,
             conversationId?: string,
+            instanceId?: string,
         ): Promise<void> {
             try {
                 await rpc.invoke("unregisterClientAgent", {
                     name,
                     ...(conversationId !== undefined ? { conversationId } : {}),
+                    ...(instanceId !== undefined ? { instanceId } : {}),
                 });
             } finally {
                 clientAgentServers.get(name)?.();

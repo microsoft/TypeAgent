@@ -15,7 +15,9 @@ internal object AndroidDeviceAgent {
 
     fun createRegistrationParams(
         conversationId: String,
-        schemaContent: String
+        schemaContent: String,
+        instanceId: String,
+        displayName: String
     ): JSONObject {
         val schemaFile = JSONObject()
             .put("format", "ts")
@@ -37,11 +39,19 @@ internal object AndroidDeviceAgent {
             .put("conversationId", conversationId)
             .put("manifest", manifest)
             .put("agentInterface", JSONArray().put("executeAction"))
+            // Identifies this device to the server so several devices can share
+            // one `androidDevice` agent, and so a reconnect replaces this
+            // device's registration instead of adding another.
+            .put("instanceId", instanceId)
+            .put("displayName", displayName)
     }
 
     /**
-     * Params for `unregisterClientAgent`, which removes the agent from the
-     * conversation whichever connection registered it.
+     * Params for `unregisterClientAgent`. Deliberately carries no `instanceId`:
+     * the server resolves the call to the calling connection's own
+     * registration, so this is inert when the connection has none. Naming a
+     * concrete instance here would give the collision shim a way to drop
+     * another device's live registration.
      */
     fun createUnregistrationParams(conversationId: String): JSONObject {
         return JSONObject()

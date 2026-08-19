@@ -9,6 +9,7 @@ import okio.ByteString
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -21,7 +22,7 @@ import org.junit.Test
 class RegistrationCollisionRecoveryTest {
 
     private val transport = FakeTransport()
-    private val manager = WebSocketManager(transport)
+    private val manager = WebSocketManager(FakeDeviceIdentity(), transport)
 
     @Test
     fun `a collision evicts the stale registration and registers again`() {
@@ -136,6 +137,29 @@ class RegistrationCollisionRecoveryTest {
             WebSocketManager.STATUS_AGENT_REGISTERED,
             manager.connectionStatus.value.text
         )
+    }
+
+    @Test
+    fun `registration carries this device's identity`() {
+        connectAndJoin()
+
+        val register = transport.takeInvoke("registerClientAgent")
+        assertEquals("device-under-test", register.firstArg().getString("instanceId"))
+        assertEquals("Test Phone", register.firstArg().getString("displayName"))
+        register.succeed()
+    }
+
+    @Test
+    fun `the eviction call names no instance`() {
+        connectAndJoin()
+
+        transport.takeInvoke("registerClientAgent")
+            .failWith("App agent 'androidDevice' already exists")
+
+        val unregister = transport.takeInvoke("unregisterClientAgent")
+        // Naming an instance would let this shim drop another device's live
+        // registration; against a fixed server the call must stay inert.
+        assertFalse(unregister.firstArg().has("instanceId"))
     }
 
     /** Connects, opens the socket, and answers `joinConversation`. */
@@ -261,6 +285,15 @@ class RegistrationCollisionRecoveryTest {
         override fun close(code: Int, reason: String?): Boolean = true
 
         override fun cancel() = Unit
+    }
+
+    /**
+     * Stands in for [StoredDeviceIdentity], which needs a `Context` these plain
+     * JVM tests do not have.
+     */
+    private class FakeDeviceIdentity : DeviceIdentity {
+        override val instanceId = "device-under-test"
+        override val displayName = "Test Phone"
     }
 
     private companion object {

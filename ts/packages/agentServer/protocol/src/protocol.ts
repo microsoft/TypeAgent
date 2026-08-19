@@ -63,7 +63,7 @@ export type {
 
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
-    clientType?: "shell" | "extension"; // identifies the connecting client type
+    clientType?: "shell" | "extension" | "android"; // identifies the connecting client type
     conversationId?: string; // join a specific conversation by UUID. If omitted, connects to the default conversation.
 };
 
@@ -282,9 +282,10 @@ export type AgentServerInvokeFunctions = {
      *
      * The client must create its agent-rpc server on the `agent:<name>`
      * channel (via createAgentRpcServer over the connection channel provider)
-     * before calling this. Rejects if an agent with `name` is already
-     * registered on the target conversation (e.g. a second client trying to
-     * register the same singleton agent).
+     * before calling this. A second client may register the same agent name on
+     * the same conversation as long as it carries the same schema: the server
+     * keeps one registration with one instance per client and routes each
+     * action to one of them.
      */
     registerClientAgent: (param: RegisterClientAgentParams) => Promise<void>;
     /** Unregister a previously registered client-hosted agent. */
@@ -303,11 +304,27 @@ export type RegisterClientAgentParams = {
      * more than one).
      */
     conversationId?: string;
+    /**
+     * Stable, client-generated id for the device or process hosting this
+     * agent. Re-registering the same `instanceId` replaces that instance's
+     * proxy in place, which is what makes a reconnect after a dropped socket
+     * work. Omit it and the server synthesises one from the connection id, so
+     * the client behaves as a single instance that does not survive reconnect.
+     */
+    instanceId?: string;
+    /** Human readable name for the instance, shown when routing is ambiguous. */
+    displayName?: string;
 };
 
 export type UnregisterClientAgentParams = {
     name: string;
     conversationId?: string;
+    /**
+     * Which instance to remove. Omit it and the server removes the instance
+     * owned by the calling connection, so a client can never unregister
+     * another client's instance by name alone.
+     */
+    instanceId?: string;
 };
 
 /**

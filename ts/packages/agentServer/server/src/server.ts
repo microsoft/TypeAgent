@@ -6,6 +6,7 @@ import {
     createConversationManager,
     ConversationManager,
 } from "./conversationManager.js";
+import { allowMultipleClientAgentInstances } from "./clientAgentRegistry.js";
 import { createAgentServerConnectionHandler } from "./connectionHandler.js";
 import { startStaleBuildWatcher, isStaleBuild } from "./staleBuild.js";
 import { printConfigDriftBanner } from "./banner.js";
@@ -323,6 +324,11 @@ async function main() {
     if (developerMode) {
         debugStartup("developer mode enabled at startup (--dev)");
     }
+    debugStartup(
+        `multiple client agent instances: ${
+            allowMultipleClientAgentInstances() ? "allowed" : "disabled"
+        }`,
+    );
 
     debugStartup("creating conversation manager (will lockInstanceDir)");
     // Single PortRegistrar shared across every conversation in this
