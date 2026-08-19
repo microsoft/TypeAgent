@@ -13,6 +13,16 @@ export type AndroidDeviceAction =
     | WebSearchAction
     | OpenWebPageAction;
 
+// A day of the week an alarm can repeat on.
+export type AlarmRepeatDay =
+    | "monday"
+    | "tuesday"
+    | "wednesday"
+    | "thursday"
+    | "friday"
+    | "saturday"
+    | "sunday";
+
 // Sets an alarm on the Android device.
 // Use when the user asks to create or schedule an alarm for a time of day.
 export type SetAlarmAction = {
@@ -24,15 +34,7 @@ export type SetAlarmAction = {
         time: string;
         // Days the alarm repeats on. Omit for a one-off alarm that rings at the
         // next occurrence of the given time.
-        days?: (
-            | "monday"
-            | "tuesday"
-            | "wednesday"
-            | "thursday"
-            | "friday"
-            | "saturday"
-            | "sunday"
-        )[];
+        days?: AlarmRepeatDay[];
     };
 };
 

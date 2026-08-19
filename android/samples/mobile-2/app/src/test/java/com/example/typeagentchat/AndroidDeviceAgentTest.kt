@@ -32,6 +32,14 @@ class AndroidDeviceAgentTest {
     }
 
     @Test
+    fun unregistrationIdentifiesTheAgentAndConversation() {
+        val unregistration = AndroidDeviceAgent.createUnregistrationParams("conversation-1")
+
+        assertEquals(AndroidDeviceAgent.NAME, unregistration.getString("name"))
+        assertEquals("conversation-1", unregistration.getString("conversationId"))
+    }
+
+    @Test
     fun parsesSetTimerExecuteAction() {
         val parameters = JSONObject()
             .put("originalRequest", "Set a timer for 30 seconds")
