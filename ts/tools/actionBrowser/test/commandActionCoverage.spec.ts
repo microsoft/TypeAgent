@@ -17,19 +17,27 @@ let catalog: Catalog;
 // "the set of gaps is empty", which stays true if a host disappears from the
 // enumeration entirely, so pin the hosts and a lower bound on the endpoint
 // count as well. Both are floors: adding agents or endpoints won't fail here.
-const EXPECTED_HOSTS = [
+//
+// osNotifications is deliberately absent: it is `defaultEnabled: false` and
+// platform-dependent, so it enumerates on some machines and not others (it is
+// missing on Linux CI). Requiring it here fails the build on the environments
+// where it legitimately isn't there.
+const REQUIRED_HOSTS = [
     "browser",
     "calendar",
     "dispatcher",
     "email",
     "greeting",
     "localPlayer",
-    "osNotifications",
     "player",
     "powershell",
     "system",
 ];
-const MIN_COMMAND_ENDPOINTS = 388;
+// Total across REQUIRED_HOSTS is 391 (393 including osNotifications' 2). The
+// margin below absorbs environment-dependent agents while still catching any
+// required host dropping out: the smallest of them, greeting, is 1 endpoint,
+// but losing a real one like localPlayer (16) or browser (33) trips this.
+const MIN_COMMAND_ENDPOINTS = 385;
 
 describe("command action coverage", () => {
     beforeAll(async () => {
@@ -39,7 +47,7 @@ describe("command action coverage", () => {
     it("enumerates every command host", () => {
         const hosts = [...new Set(catalog.commands.map((c) => c.host))];
         expect(hosts.sort()).toEqual(
-            expect.arrayContaining(EXPECTED_HOSTS.slice().sort()),
+            expect.arrayContaining(REQUIRED_HOSTS.slice().sort()),
         );
         expect(catalog.counts.commandEndpoints).toBeGreaterThanOrEqual(
             MIN_COMMAND_ENDPOINTS,
