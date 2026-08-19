@@ -513,6 +513,40 @@ describe("clientAgentRegistry routing", () => {
         expect(a.executed).toHaveLength(0);
     });
 
+    test("a non-user-facing call never asks which device", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        const readinessCalls: string[] = [];
+        const makeReadyDevice = (id: string): AppAgent => ({
+            async executeAction() {
+                return undefined;
+            },
+            async checkReadiness() {
+                readinessCalls.push(id);
+                return { kind: "ready" } as any;
+            },
+        });
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeReadyDevice("a"),
+        });
+        await register(registry, host, {
+            instanceId: "b",
+            connectionId: "conn-b",
+            appAgent: makeReadyDevice("b"),
+        });
+
+        // No requester, no active device, two candidates: a prompt here would
+        // interrupt the user for a check they never asked for.
+        const { context, prompts } = makeSessionContext(undefined);
+        await getMux(registry).checkReadiness!(context);
+
+        expect(prompts).toHaveLength(0);
+        expect(readinessCalls).toHaveLength(1);
+    });
+
     // Case 10
     test("overlapping requests from different connections route to their own devices", async () => {
         const registry = createClientAgentRegistry();

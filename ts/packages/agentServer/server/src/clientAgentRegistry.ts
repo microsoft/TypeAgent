@@ -176,10 +176,16 @@ export function getInstanceChoices(
  * Pick the instance a call goes to. Order matters: the device that asked wins
  * before the remembered active device, so "my phone does what I ask my phone"
  * never needs a prompt.
+ *
+ * `allowPrompt` is false for everything that is not a user-facing invocation
+ * (readiness checks, completions, dynamic schema). Those must not put a "Which
+ * device?" question in front of the user, so they fall back to the most
+ * recently used device instead.
  */
 async function selectInstance(
     group: ClientAgentGroup,
     sessionContext: SessionContext<unknown> | undefined,
+    allowPrompt: boolean,
 ): Promise<ClientAgentInstance> {
     if (group.instances.size === 0) {
         throw new Error(
@@ -221,13 +227,16 @@ async function selectInstance(
         return touch(only);
     }
 
+    if (!allowPrompt || sessionContext?.popupQuestion === undefined) {
+        const fallback = group.instances.get(selectNewActiveInstance(group)!)!;
+        debugRoute(
+            `${group.name}: recent -> ${fallback.instanceId} (${fallback.displayName})`,
+        );
+        return touch(fallback);
+    }
+
     // Rule 5: ask, and remember the answer.
     const choices = getInstanceChoices(group);
-    if (sessionContext?.popupQuestion === undefined) {
-        throw new Error(
-            `Client agent '${group.name}' is hosted by ${group.instances.size} devices and the target is ambiguous`,
-        );
-    }
     const index = await sessionContext.popupQuestion(
         "Which device?",
         choices.map((choice) => choice.label),
@@ -295,6 +304,16 @@ const broadcastMethods = new Set([
     "closeAgentContext",
     "startBackgroundTasks",
     "stopBackgroundTasks",
+]);
+
+// Calls a user made, and so the only ones allowed to ask which device to use.
+// Everything else (readiness checks, completions, dynamic schema) runs on the
+// dispatcher's own schedule and must never put a question in front of the user.
+const promptingMethods = new Set([
+    "executeAction",
+    "executeCommand",
+    "handleChoice",
+    "setup",
 ]);
 
 /**
@@ -424,6 +443,7 @@ function createMux(group: ClientAgentGroup, template: AppAgent): AppAgent {
         const sessionArg = sessionContextArg[method];
         const actionArg = actionContextArg[method];
         const broadcast = broadcastMethods.has(method);
+        const allowPrompt = promptingMethods.has(method);
 
         mux[method] = async (...args: any[]) => {
             const rebind = (instance: ClientAgentInstance) => {
@@ -478,7 +498,7 @@ function createMux(group: ClientAgentGroup, template: AppAgent): AppAgent {
                     : sessionArg !== undefined
                       ? args[sessionArg]
                       : undefined;
-            const instance = await selectInstance(group, context);
+            const instance = await selectInstance(group, context, allowPrompt);
             const fn = (instance.appAgent as any)[method];
             if (fn === undefined) {
                 throw new Error(
