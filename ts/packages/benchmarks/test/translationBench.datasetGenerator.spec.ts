@@ -324,8 +324,8 @@ describe("translation bench generation schedule", () => {
 
     it("treats complete coverage as eligible actions after exclusions", () => {
         const catalog = [
-            catalogSchema("alpha", ["keep", "drop"]),
-            catalogSchema("beta", ["keep"]),
+            catalogSchema("alpha", ["keepAlpha", "drop"]),
+            catalogSchema("beta", ["keepBeta"]),
         ];
         const schedule = createTranslationBenchGenerationSchedule(catalog, {
             caseCount: 2,
@@ -344,6 +344,26 @@ describe("translation bench generation schedule", () => {
                 (entry) => `${entry.schemaName}.${entry.actionName}`,
             ),
         ).not.toContain("alpha.drop");
+    });
+
+    it("excludes cross-schema duplicate action names from targeting", () => {
+        const catalog = [
+            catalogSchema("alpha", ["shared", "onlyAlpha"]),
+            catalogSchema("beta", ["shared", "onlyBeta"]),
+        ];
+        const schedule = createTranslationBenchGenerationSchedule(catalog, {
+            caseCount: 2,
+            requireCompleteCoverage: true,
+        });
+
+        const targeted = schedule.entries.map(
+            (entry) => `${entry.schemaName}.${entry.actionName}`,
+        );
+        expect(targeted).not.toContain("alpha.shared");
+        expect(targeted).not.toContain("beta.shared");
+        expect(new Set(targeted)).toEqual(
+            new Set(["alpha.onlyAlpha", "beta.onlyBeta"]),
+        );
     });
 });
 

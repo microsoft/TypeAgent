@@ -30,6 +30,11 @@ import {
     type ParamSpec,
 } from "../src/translationBench/synthesizer/catalogGenerator/index.js";
 import { countEligibleTranslationBenchActions } from "../src/translationBench/synthesizer/eligibleActions.js";
+import {
+    HARDCODED_NON_EVAL_ACTION_IDS,
+    getPackagedLlmJudgeExcludedActions,
+    clearPackagedLlmJudgeExcludedActionsCacheForTests,
+} from "../src/translationBench/synthesizer/eligibleActions.js";
 
 function objectSpec(
     fields: Record<string, { optional: boolean; spec: ParamSpec }>,
@@ -1425,6 +1430,20 @@ describe("eligible action coverage counting", () => {
         ).toBe(2);
         expect(countEligibleTranslationBenchActions(schemas, new Set())).toBe(
             3,
+        );
+    });
+
+    it("excludes hardcoded non-eval actions from the packaged exclusion set", () => {
+        clearPackagedLlmJudgeExcludedActionsCacheForTests();
+        const excluded = getPackagedLlmJudgeExcludedActions();
+        for (const id of HARDCODED_NON_EVAL_ACTION_IDS) {
+            expect(excluded.has(id)).toBe(true);
+        }
+        expect(HARDCODED_NON_EVAL_ACTION_IDS.has("chat.generateResponse")).toBe(
+            true,
+        );
+        expect(HARDCODED_NON_EVAL_ACTION_IDS.has("utility.claudeTask")).toBe(
+            true,
         );
     });
 });
