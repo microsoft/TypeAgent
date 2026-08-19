@@ -340,79 +340,81 @@ export function createRpc<
         );
     };
 
-    const cb = (message: any) => {
-        if (isCallMessage(message)) {
-            const f = callHandlers?.[message.name];
+    const processCall = (message: CallMessage) => {
+        const f = callHandlers?.[message.name];
 
-            if (f === undefined) {
-                debugWarn("missing call handler", {
-                    channel: name,
-                    method: message.name,
-                    callId: message.callId,
-                });
-            } else {
-                // Call handlers are fire-and-forget (no callId), so any
-                // synchronous throw cannot be reported back to the caller.
-                // Swallow it here to keep the RPC bus alive.
-                try {
-                    f(...message.args);
-                } catch (e: any) {
-                    debugError("call handler threw", {
-                        agent: name,
-                        method: message.name,
-                        errorType: getErrorType(e),
-                        error: getErrorMessage(e),
-                        stack: getErrorStack(e),
-                    });
-                }
-            }
-            return;
-        }
-        if (message?.type === "invoke") {
-            if (!isInvokeMessage(message)) {
-                debugWarn("invalid invoke message", {
-                    channel: name,
-                    type: message?.type,
-                    callId: isValidCallId(message?.callId)
-                        ? message.callId
-                        : undefined,
-                    reason: !isValidCallId(message?.callId)
-                        ? "invalid callId"
-                        : typeof message?.name !== "string"
-                          ? "missing method"
-                          : "invalid args",
-                });
-                if (isValidCallId(message?.callId)) {
-                    sendBestEffort({
-                        type: "invokeError",
-                        callId: message.callId,
-                        error: "Invalid invoke message",
-                    });
-                }
-                return;
-            }
-            if (serverInvokes.has(message.callId)) {
-                debugWarn("duplicate in-flight callId", {
-                    channel: name,
-                    method: message.name,
-                    callId: message.callId,
-                    inFlight: serverInvokes.size,
-                });
-                return;
-            }
-            void processInvoke(message).catch((error) => {
-                debugError("invoke instrumentation failed", {
-                    method: message.name,
-                    callId: message.callId,
-                    error: getErrorMessage(error),
-                    stack: getErrorStack(error),
-                });
+        if (f === undefined) {
+            debugWarn("missing call handler", {
+                channel: name,
+                method: message.name,
+                callId: message.callId,
             });
             return;
         }
-        if (!isInvokeResult(message) && !isInvokeError(message)) {
+
+        // Call handlers are fire-and-forget (no callId), so any synchronous
+        // throw cannot be reported back to the caller. Swallow it here to keep
+        // the RPC bus alive.
+        try {
+            f(...message.args);
+        } catch (error) {
+            debugError("call handler threw", {
+                agent: name,
+                method: message.name,
+                errorType: getErrorType(error),
+                error: getErrorMessage(error),
+                stack: getErrorStack(error),
+            });
+        }
+    };
+
+    const processInvokeMessage = (message: any) => {
+        if (!isInvokeMessage(message)) {
+            debugWarn("invalid invoke message", {
+                channel: name,
+                type: message?.type,
+                callId: isValidCallId(message?.callId)
+                    ? message.callId
+                    : undefined,
+                reason: !isValidCallId(message?.callId)
+                    ? "invalid callId"
+                    : typeof message?.name !== "string"
+                      ? "missing method"
+                      : "invalid args",
+            });
+            if (isValidCallId(message?.callId)) {
+                sendBestEffort({
+                    type: "invokeError",
+                    callId: message.callId,
+                    error: "Invalid invoke message",
+                });
+            }
             return;
         }
+
+        if (serverInvokes.has(message.callId)) {
+            debugWarn("duplicate in-flight callId", {
+                channel: name,
+                method: message.name,
+                callId: message.callId,
+                inFlight: serverInvokes.size,
+            });
+            return;
+        }
+
+        void processInvoke(message).catch((error) => {
+            debugError("invoke instrumentation failed", {
+                method: message.name,
+                callId: message.callId,
+                error: getErrorMessage(error),
+                stack: getErrorStack(error),
+            });
+        });
+    };
+
+    const processInvokeResponse = (
+        message: InvokeResult | InvokeError,
+    ): void => {
         const pendingInvoke = pending.get(message.callId);
         if (pendingInvoke === undefined) {
             debugError("no pending invoke for callId", {
@@ -438,6 +440,20 @@ export function createRpc<
                 error.markdown = message.errorMarkdown;
             }
             pendingInvoke.reject(error);
+        }
+    };
+
+    const cb = (message: any) => {
+        if (isCallMessage(message)) {
+            processCall(message);
+            return;
+        }
+        if (message?.type === "invoke") {
+            processInvokeMessage(message);
+            return;
+        }
+        if (isInvokeResult(message) || isInvokeError(message)) {
+            processInvokeResponse(message);
         }
     };
 
