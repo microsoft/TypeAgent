@@ -128,7 +128,7 @@
     "typescript": "~5.4.5"
   },
   "engines": {
-    "vscode": "^1.95.0"
+    "vscode": "^1.133.0"
   },
   "icon": "media/icons/icon-80.png",
   "enabledApiProposals": [

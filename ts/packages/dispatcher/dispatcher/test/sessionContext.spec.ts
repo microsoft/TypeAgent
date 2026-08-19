@@ -42,6 +42,7 @@ function makeContext(overrides: {
             translatorCache: { clear: () => {} },
             lastActionSchemaName: undefined,
             conversationManager: undefined,
+            currentOptions: undefined,
         } as any,
         calls,
     };

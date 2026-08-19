@@ -293,3 +293,9 @@ describe("code agent shared server + per-session registration", () => {
         }
     });
 });
+
+describe("code agent command surface", () => {
+    test("does not expose a public mode command", () => {
+        expect(instantiate().getCommands).toBeUndefined();
+    });
+});
