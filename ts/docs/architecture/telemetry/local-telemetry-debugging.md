@@ -7,7 +7,28 @@ Use this guide to inspect one TypeAgent request in local JSONL logs and
 Grafana. It covers the current developer workflow. For telemetry design and
 instrumentation contracts, see [OpenTelemetry in TypeAgent](./opentelemetry.md).
 
-## Before You Start
+## Quick Start
+
+This assumes TypeAgent is already running.
+
+From `ts`, run:
+
+```powershell
+pnpm run telemetry:grafana
+```
+
+If Docker Desktop is missing on Windows or macOS, the command asks whether to
+install it. Otherwise, it starts Docker when needed, starts the local Grafana
+stack, and enables local telemetry in `config.local.yaml`.
+
+Restart TypeAgent so it picks up the new configuration, send a request, then
+open [Grafana](http://localhost:3000) to inspect traces and logs.
+
+For setup details, queries, cleanup, and troubleshooting, continue below.
+
+## Detailed Steps
+
+### Before You Start
 
 You need:
 
@@ -15,19 +36,9 @@ You need:
 - Docker Desktop or Docker Engine.
 - Ports `3000`, `4317`, and `4318` available on localhost.
 
-If this is a fresh checkout, run the workspace setup from `ts`:
+If this is a fresh checkout, run `pnpm run setup` from `ts`.
 
-```powershell
-pnpm run setup
-```
-
-Check that Docker is running:
-
-```powershell
-docker version
-```
-
-## 1. Start the Local Telemetry Stack
+### 1. Start the Local Telemetry Stack
 
 From `ts`, run:
 
@@ -72,7 +83,7 @@ Invoke-RestMethod http://localhost:3000/api/health
 
 The response should report that the database is `ok`.
 
-## 2. Start TypeAgent with Telemetry
+### 2. Start TypeAgent with Telemetry
 
 Open another PowerShell terminal in `ts`:
 
@@ -104,7 +115,7 @@ The timestamp is the process start time in UTC. The PID prevents two processes
 started at the same time from using the same file. The OTel records still
 contain `service.name`; it is not repeated in the filename.
 
-## 3. Send a Request
+### 3. Send a Request
 
 Open a third terminal in `ts` and connect the CLI:
 
@@ -115,7 +126,7 @@ pnpm cli
 Send a normal TypeAgent request. Wait a few seconds for telemetry batches to
 reach Grafana.
 
-## 4. Inspect the Local JSONL Log
+### 4. Inspect the Local JSONL Log
 
 Find the latest agent-server log:
 
@@ -140,7 +151,7 @@ Useful fields include:
 
 Press `Ctrl+C` to stop following the file.
 
-## 5. Find the Trace
+### 5. Find the Trace
 
 The easiest lookup key is the trace ID. Copy it from:
 
@@ -157,7 +168,7 @@ In Grafana:
 If you do not have the trace ID, search for service
 `typeagent-local` and narrow the time range to when you sent the request.
 
-## 6. Read the Trace
+### 6. Read the Trace
 
 A request may contain these spans:
 
@@ -171,7 +182,7 @@ A request may contain these spans:
 
 Select a slow or failed span first. Then inspect its attributes and events.
 
-### LLM Classification
+#### LLM Classification
 
 Each supported `typeagent.llm` span has three classification attributes:
 
@@ -190,7 +201,7 @@ Nested operations can change the purpose while keeping the phase and scope
 from their high-level operation. For example, parallel schema selection runs
 inside the foreground translation phase.
 
-## 7. Inspect Logs in Grafana
+### 7. Inspect Logs in Grafana
 
 In Grafana **Explore**, choose **Loki** and use Code mode:
 
@@ -206,7 +217,7 @@ To find logs for one trace, use its trace ID:
 
 Expand a result to inspect its `span_id`, event, severity, and attributes.
 
-### Current "Logs for this span" Limitation
+#### Current "Logs for this span" Limitation
 
 The Tempo **Logs for this span** button may currently generate a query that
 contains only `trace_id`. Such a query shows logs for the entire trace, not
@@ -224,7 +235,7 @@ selected span ID:
 An exact-span query can correctly return no results when that span did not
 emit any logs.
 
-## 8. Stop Everything
+### 8. Stop Everything
 
 Stop the agent server with `Ctrl+C` first. This lets TypeAgent flush pending
 telemetry.
@@ -238,7 +249,7 @@ pnpm run telemetry:grafana --stop
 `--stop` also flips `telemetry.local.enabled` to `"false"` in
 `config.local.yaml` (custom local values are preserved for the next start).
 
-## Log Retention and Manual Cleanup
+### Log Retention and Manual Cleanup
 
 TypeAgent runs a **best-effort** retention cleanup once at telemetry
 startup. It enumerates `.jsonl` files in the log file's parent directory
@@ -282,9 +293,9 @@ Remove-Item "$HOME\.typeagent\logs\agent-server-20260818T194041Z-p14952.jsonl"
 Stopping or recreating the Grafana container does not delete these JSONL
 files.
 
-## Troubleshooting
+### Troubleshooting
 
-### Grafana Does Not Open
+#### Grafana Does Not Open
 
 Run:
 
@@ -295,7 +306,7 @@ Invoke-RestMethod http://localhost:3000/api/health
 
 If Docker is stopped, start it and run `pnpm run telemetry:grafana` again.
 
-### No Traces Appear
+#### No Traces Appear
 
 Check that:
 
@@ -310,7 +321,7 @@ Check that:
   signal even when the local sink is enabled).
 - The Grafana time range covers the request.
 
-### Traces Appear but Logs Do Not
+#### Traces Appear but Logs Do Not
 
 Check that `telemetry.local.structuredLogs` is `true` in `config.local.yaml`
 (this is the default when the local sink is enabled) or that
@@ -323,19 +334,19 @@ agent server. In Loki, start with:
 
 Widen the time range before adding more filters.
 
-### "Logs for this span" Shows Unrelated Logs
+#### "Logs for this span" Shows Unrelated Logs
 
 Inspect the generated query. Add `span_id` as shown in the current limitation
 section when the query filters only by trace ID.
 
-### An LLM Span Is Unclassified
+#### An LLM Span Is Unclassified
 
 Look for the `typeagent.llm.classification.missing` span event. The model was
 called outside a translation, reasoning, action, or explanation telemetry
 context. Fix the high-level caller rather than assigning a guessed
 classification in the model wrapper.
 
-### No JSONL File Appears
+#### No JSONL File Appears
 
 Check that `telemetry.local.logFile` (or the standard `telemetry.logFile` /
 `TYPEAGENT_OTEL_LOG_FILE` when you override it) is set to a path the process
@@ -343,7 +354,7 @@ can write to.
 Also check the startup diagnostics for the resolved path or a file permission
 error.
 
-## Working Setup Checklist
+### Working Setup Checklist
 
 The local flow is working when:
 

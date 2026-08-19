@@ -511,10 +511,10 @@ Install the TypeAgent workspace dependencies with `pnpm run setup` from `ts/`
 if the checkout has not already been provisioned.
 
 Docker Desktop is the only external prerequisite. On Windows and macOS, the
-repository helper can install it explicitly:
+repository helper prompts to install it when it is missing:
 
 ```powershell
-pnpm run telemetry:grafana --install
+pnpm run telemetry:grafana
 ```
 
 This uses `winget` on Windows or Homebrew on macOS and may request elevation or
@@ -541,7 +541,7 @@ pnpm run telemetry:grafana
 
 The helper:
 
-- Optionally installs Docker Desktop when `--install` is specified.
+- Prompts to install Docker Desktop when it is missing on Windows or macOS.
 - Verifies that the Docker CLI is installed.
 - Starts Docker Desktop when needed on Windows or macOS and waits for its
   engine.

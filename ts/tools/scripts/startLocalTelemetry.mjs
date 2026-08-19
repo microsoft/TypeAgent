@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
+import readline from "node:readline/promises";
 import {
     disableTelemetryLocal,
     enableTelemetryLocal,
@@ -22,7 +23,7 @@ const workspaceTsRoot = path.resolve(scriptDir, "../..");
 
 const args = new Set(process.argv.slice(2));
 if (args.has("--help") || args.has("-h")) {
-    console.log(`Usage: pnpm run telemetry:grafana [--install | --stop]
+    console.log(`Usage: pnpm run telemetry:grafana [--stop]
 
 Starts Docker Desktop when needed on Windows or macOS, then starts the local
 Grafana LGTM OpenTelemetry stack with loopback-only ports:
@@ -45,7 +46,6 @@ TypeAgent reads config.local.yaml at process startup, so RESTART TypeAgent
 after each toggle for the change to take effect.
 
 Options:
-  --install  Install Docker Desktop when it is missing, then start Grafana.
   --stop     Stop the local Grafana LGTM container.
   --help     Show this help.`);
     process.exit(0);
@@ -139,6 +139,33 @@ function installDockerDesktop() {
         throw new Error(
             "Automatic Docker installation is supported only on Windows and macOS. Install Docker Engine for this platform, then run the command again.",
         );
+    }
+
+    async function promptToInstallDockerDesktop() {
+        if (!process.stdin.isTTY || !process.stdout.isTTY) {
+            throw new Error(
+                "Docker Desktop is not installed. Run this command in an interactive terminal to install it, or install it manually from https://docs.docker.com/desktop/.",
+            );
+        }
+
+        const stdio = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+        });
+        try {
+            const answer = await stdio.question(
+                "[telemetry:grafana] Docker Desktop is not installed. Install it now? (y/N) ",
+            );
+            if (answer.trim().toLowerCase() !== "y") {
+                throw new Error(
+                    "Docker Desktop is required. Install it from https://docs.docker.com/desktop/, then run this command again.",
+                );
+            }
+        } finally {
+            stdio.close();
+        }
+
+        installDockerDesktop();
     }
 
     dockerExecutable = findDockerExecutable();
@@ -275,12 +302,13 @@ async function stop() {
 
 async function start() {
     if (!isDockerInstalled()) {
-        if (!args.has("--install")) {
+        if (process.platform === "win32" || process.platform === "darwin") {
+            await promptToInstallDockerDesktop();
+        } else {
             throw new Error(
-                "Docker Desktop is not installed. Run `pnpm run telemetry:grafana --install` or install it manually from https://docs.docker.com/desktop/.",
+                "Docker Engine is not installed. Install it using your distribution's supported procedure, then run this command again.",
             );
         }
-        installDockerDesktop();
     }
 
     if (!isDockerReady()) {
@@ -365,12 +393,9 @@ function toggleTelemetryLocal(enable) {
 
 try {
     for (const arg of args) {
-        if (arg !== "--install" && arg !== "--stop") {
+        if (arg !== "--stop") {
             throw new Error(`Unknown argument: ${arg}`);
         }
-    }
-    if (args.has("--install") && args.has("--stop")) {
-        throw new Error("--install and --stop cannot be used together.");
     }
     if (args.has("--stop")) {
         await stop();
