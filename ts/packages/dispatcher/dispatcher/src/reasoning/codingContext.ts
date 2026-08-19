@@ -22,13 +22,14 @@ export function getCodingAttachmentPaths(
     const activeFilePath = userContext?.editor?.activeFilePath;
     if (activeFilePath !== undefined) {
         try {
+            const root = fs.realpathSync(workingDirectory);
             const candidate = fs.realpathSync(
                 path.isAbsolute(activeFilePath)
                     ? activeFilePath
-                    : path.resolve(workingDirectory, activeFilePath),
+                    : path.resolve(root, activeFilePath),
             );
             if (
-                isWithinRoot(candidate, workingDirectory) &&
+                isWithinRoot(candidate, root) &&
                 fs.statSync(candidate).isFile()
             ) {
                 paths.add(candidate);

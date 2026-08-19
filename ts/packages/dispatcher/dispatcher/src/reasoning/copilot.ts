@@ -793,14 +793,6 @@ function isPathWithinRoot(candidatePath: string, root: string): boolean {
     const resolvedCandidate = path.isAbsolute(candidatePath)
         ? path.resolve(candidatePath)
         : path.resolve(resolvedRoot, candidatePath);
-    const relative = path.relative(resolvedRoot, resolvedCandidate);
-    if (
-        relative.startsWith("..") ||
-        (relative !== "" && path.isAbsolute(relative))
-    ) {
-        return false;
-    }
-
     let existing = resolvedCandidate;
     while (!existsSync(existing)) {
         const parent = path.dirname(existing);

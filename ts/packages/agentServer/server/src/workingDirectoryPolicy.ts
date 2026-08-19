@@ -98,9 +98,12 @@ export function resolveWorkingDirectory(
     requested: string | undefined,
     policy: WorkingDirectoryPolicy,
 ): WorkingDirectoryResolution {
+    const allowedRoots = policy.allowedRoots
+        .map(canonicalDirectory)
+        .filter((root): root is string => root !== undefined);
     const allowed = (candidate: string): boolean =>
         policy.allowedRoots.length === 0 ||
-        policy.allowedRoots.some((root) => isWithinRoot(candidate, root));
+        allowedRoots.some((root) => isWithinRoot(candidate, root));
 
     const requestedDirectory = requested
         ? canonicalDirectory(requested)
