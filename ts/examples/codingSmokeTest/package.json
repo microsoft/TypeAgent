@@ -1,0 +1,31 @@
+{
+  "name": "coding-smoke-test",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Deterministic smoke project for TypeAgent automatic coding workflows",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/codingSmokeTest"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "test": "npm run build && node --test dist/releaseNotes.test.js",
+    "tsc": "tsc -p src"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
