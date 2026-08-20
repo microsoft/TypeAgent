@@ -27,6 +27,6 @@ export function pricesFor(model: string): {
     );
     const table: PriceTable = { ...PRICES, rates };
     const lookupModel = model.replace(/^azure\//, "").replace(/\*$/, "");
-    const prices = table.rates[lookupModel];
+    const prices = table.rates[model] ?? table.rates[lookupModel];
     return { prices, table };
 }

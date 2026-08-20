@@ -22,9 +22,13 @@ describe("core prices", () => {
     });
 
     it("returns isolated price records", () => {
-        const first = pricesFor("gpt-5.4").prices!;
-        first.inUsdPer1M = 0;
+        const first = pricesFor("gpt-5.4");
+        first.prices!.inUsdPer1M = 0;
+        first.table.rates["gpt-4.1"].inUsdPer1M = 0;
 
-        expect(pricesFor("gpt-5.4").prices?.inUsdPer1M).toBe(2.5);
+        const second = pricesFor("gpt-5.4");
+
+        expect(second.prices?.inUsdPer1M).toBe(2.5);
+        expect(second.table.rates["gpt-4.1"].inUsdPer1M).toBe(2);
     });
 });
