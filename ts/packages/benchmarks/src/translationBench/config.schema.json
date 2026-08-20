@@ -3,7 +3,6 @@
   "title": "Translation-bench local run config",
   "type": "object",
   "additionalProperties": false,
-  "required": ["models", "base", "batches"],
   "properties": {
     "$schema": { "type": "string" },
     "models": {
@@ -15,14 +14,17 @@
         "properties": {
           "tpmLimit": {
             "type": "number",
+            "minimum": 0,
             "description": "Azure deployment TPM quota."
           },
           "maxConcurrency": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 1,
             "description": "Per-process concurrency cap (safety)."
           },
           "concurrency": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 1,
             "description": "Explicit concurrency; overrides auto-derivation."
           }
         }
@@ -57,13 +59,18 @@
       "properties": {
         "generatorModel": { "type": "string" },
         "reviewerModel": { "type": "string" },
-        "caseCount": { "type": "number", "description": "Rows to synthesize." },
+        "caseCount": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Rows to synthesize."
+        },
         "genCases": {
-          "type": "number",
+          "type": "integer",
+          "minimum": 1,
           "description": "Gen-cases per row (e.g. 2 = 1 pos + 1 neg)."
         },
-        "maxAttempts": { "type": "number" },
-        "concurrency": { "type": "number" },
+        "maxAttempts": { "type": "integer", "minimum": 1 },
+        "concurrency": { "type": "integer", "minimum": 1 },
         "headroom": { "type": "number", "minimum": 0, "maximum": 1 }
       }
     },
@@ -71,13 +78,19 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "models": { "type": "array", "items": { "type": "string" } },
+        "models": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
         "modelConcurrency": {
-          "type": "number",
+          "type": "integer",
+          "minimum": 1,
           "description": "How many eval models run in parallel."
         },
         "maxCases": {
-          "type": ["number", "null"],
+          "type": ["integer", "null"],
+          "minimum": 0,
           "description": "null = all rows."
         },
         "headroom": {

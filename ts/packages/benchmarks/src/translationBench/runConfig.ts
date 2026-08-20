@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { z } from "zod";
 import type { TpmLimits } from "../core/rateLimiter.js";
 
 export const DEFAULT_TOK_PER_MIN_PER_SLOT = 70_000;
@@ -48,6 +49,7 @@ export interface BatchConfig {
 }
 
 export interface RunConfigFile {
+    $schema?: string;
     models?: Record<string, ModelConfig>;
     base?: BatchConfig;
     batches?: Record<string, BatchConfig>;
@@ -84,6 +86,89 @@ const DEFAULT_MAX_ATTEMPTS = 5;
 const DEFAULT_GEN_CONCURRENCY = 20;
 const DEFAULT_EVAL_CONCURRENCY = 10;
 
+const nonEmptyStringSchema = z
+    .string()
+    .min(1)
+    .refine((value) => value.trim() === value, {
+        message: "must not have leading or trailing whitespace",
+    });
+const positiveIntegerSchema = z.number().int().positive();
+const nonNegativeIntegerSchema = z.number().int().nonnegative();
+const modelConfigSchema = z
+    .object({
+        tpmLimit: z.number().finite().nonnegative().optional(),
+        maxConcurrency: positiveIntegerSchema.optional(),
+        concurrency: positiveIntegerSchema.optional(),
+    })
+    .strict();
+const synthesizerConfigSchema = z
+    .object({
+        generatorModel: nonEmptyStringSchema.optional(),
+        reviewerModel: nonEmptyStringSchema.optional(),
+        caseCount: positiveIntegerSchema.optional(),
+        genCases: positiveIntegerSchema.optional(),
+        maxAttempts: positiveIntegerSchema.optional(),
+        concurrency: positiveIntegerSchema.optional(),
+        headroom: z.number().finite().min(0).max(1).optional(),
+    })
+    .strict();
+const evalConfigSchema = z
+    .object({
+        models: z.array(nonEmptyStringSchema).optional(),
+        modelConcurrency: positiveIntegerSchema.optional(),
+        maxCases: nonNegativeIntegerSchema.nullable().optional(),
+        headroom: z.number().finite().min(0).max(1).optional(),
+    })
+    .strict()
+    .superRefine((config, context) => {
+        if (
+            config.models !== undefined &&
+            new Set(config.models).size !== config.models.length
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["models"],
+                message: "must not contain duplicates",
+            });
+        }
+    });
+const batchConfigSchema = z
+    .object({
+        synthesizer: synthesizerConfigSchema.optional(),
+        eval: evalConfigSchema.optional(),
+    })
+    .strict();
+const runConfigFileSchema = z
+    .object({
+        $schema: z.string().optional(),
+        models: z.record(nonEmptyStringSchema, modelConfigSchema).optional(),
+        base: batchConfigSchema.optional(),
+        batches: z.record(nonEmptyStringSchema, batchConfigSchema).optional(),
+    })
+    .strict();
+const resolveOptionsSchema = z
+    .object({
+        batch: nonEmptyStringSchema.optional(),
+        headroom: z.number().finite().min(0).max(1).optional(),
+        tokPerMinPerSlot: z.number().finite().positive().optional(),
+    })
+    .strict();
+
+function parseRunConfig(raw: unknown, source: string): RunConfigFile {
+    const parsed = runConfigFileSchema.safeParse(raw);
+    if (!parsed.success) {
+        const detail = parsed.error.issues
+            .map((issue) => {
+                const path =
+                    issue.path.length === 0 ? "$" : issue.path.join(".");
+                return `${path}: ${issue.message}`;
+            })
+            .join("; ");
+        throw new Error(`runConfig: invalid config at ${source}: ${detail}`);
+    }
+    return parsed.data as RunConfigFile;
+}
+
 function isPositive(value: number | undefined): value is number {
     return value !== undefined && Number.isFinite(value) && value > 0;
 }
@@ -104,20 +189,20 @@ function concurrencyFor(
     if (modelConfig === undefined) {
         return fallback;
     }
+    const cap = isPositive(modelConfig.maxConcurrency)
+        ? modelConfig.maxConcurrency
+        : Number.POSITIVE_INFINITY;
     if (isPositive(modelConfig.concurrency)) {
-        return modelConfig.concurrency;
+        return Math.min(modelConfig.concurrency, cap);
     }
     if (isPositive(modelConfig.tpmLimit)) {
         const derived = Math.max(
             1,
             Math.floor((headroom * modelConfig.tpmLimit) / tokPerMinPerSlot),
         );
-        const cap = isPositive(modelConfig.maxConcurrency)
-            ? modelConfig.maxConcurrency
-            : Number.POSITIVE_INFINITY;
         return Math.min(derived, cap);
     }
-    return fallback;
+    return Math.min(fallback, cap);
 }
 
 export function loadRunConfigFile(filePath: string): RunConfigFile {
@@ -132,13 +217,15 @@ export function loadRunConfigFile(filePath: string): RunConfigFile {
             `runConfig: failed to read ${filePath}: ${String(error)}`,
         );
     }
+    let raw: unknown;
     try {
-        return (JSON.parse(text) as RunConfigFile) ?? {};
+        raw = JSON.parse(text) as unknown;
     } catch (error) {
         throw new Error(
             `runConfig: failed to parse ${filePath}: ${String(error)}`,
         );
     }
+    return parseRunConfig(raw, filePath);
 }
 
 function selectedBatch(
@@ -198,19 +285,21 @@ export function resolveRunConfig(
     file: RunConfigFile,
     options: ResolveOptions = {},
 ): ResolvedRunConfig {
-    const batch = options.batch ?? DEFAULT_BATCH;
+    const validatedFile = parseRunConfig(file, "<memory>");
+    const validatedOptions = resolveOptionsSchema.parse(options);
+    const batch = validatedOptions.batch ?? DEFAULT_BATCH;
     const tokPerMinPerSlot =
-        options.tokPerMinPerSlot ?? DEFAULT_TOK_PER_MIN_PER_SLOT;
+        validatedOptions.tokPerMinPerSlot ?? DEFAULT_TOK_PER_MIN_PER_SLOT;
 
-    const models = file.models ?? {};
-    const base = file.base ?? {};
-    const selected = selectedBatch(file.batches, batch);
+    const models = validatedFile.models ?? {};
+    const base = validatedFile.base ?? {};
+    const selected = selectedBatch(validatedFile.batches, batch);
 
     const synth = mergeSection(base.synthesizer, selected?.synthesizer);
     const evalCfg = mergeSection(base.eval, selected?.eval);
 
     const headroom =
-        options.headroom ??
+        validatedOptions.headroom ??
         evalCfg.headroom ??
         synth.headroom ??
         DEFAULT_HEADROOM;
