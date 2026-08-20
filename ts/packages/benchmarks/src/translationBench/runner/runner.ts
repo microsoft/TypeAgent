@@ -17,7 +17,12 @@ import type {
     AppAgentManifest,
     SchemaTypeNames,
 } from "@typeagent/agent-sdk";
-import { getChatModelNames, openai as ai } from "@typeagent/aiclient";
+import {
+    getChatModelNames,
+    openai as ai,
+    withModelCallSink,
+    type ModelCallRecord,
+} from "@typeagent/aiclient";
 import { equalNormalizedObject } from "@typeagent/agent-cache";
 import { ActionSchemaFileCache } from "agent-dispatcher/internal";
 import {
@@ -311,6 +316,10 @@ export interface TranslationBenchRunResult {
 export interface TranslationBenchRunnerOptions {
     models: string[];
     scenarios?: TranslationBenchScenario[];
+    /** Keep parseable actions even when their parameters violate the schema. */
+    validateActions?: boolean;
+    /** Validate gold actions against candidate schemas. Disable for externally scored corpora. */
+    validateExpectedActions?: boolean;
     /** Default per-model case concurrency when not listed in concurrencyByModel. */
     concurrency?: number;
     /**
@@ -343,6 +352,15 @@ export interface TranslationBenchRunnerOptions {
      */
     onRowComplete?: (row: TranslationBenchRow) => void | Promise<void>;
     /**
+     * Invoked once per newly computed row with the full LLM calls made for it
+     * (prompt in, provider response out, usage). Serialized like onRowComplete.
+     * Not called for seed/resumed rows (their calls were made in a prior run).
+     */
+    onModelCalls?: (
+        work: { model: string; scenarioId: string; caseId: string },
+        calls: readonly ModelCallRecord[],
+    ) => void | Promise<void>;
+    /**
      * Optional cross-process TPM limiter. When set, each translate call is
      * reserved/settled against the shared ledger for `model`.
      */
@@ -373,6 +391,20 @@ export interface TranslationBenchScenario {
     userContext: "none" | "active-schema";
     activityContext: "none";
     schemaOptimization: { enabled: boolean; numInitialActions: number };
+    /**
+     * Reasoning effort for the translation call. Empty/omitted inherits the
+     * gateway/model default (never forced here); an explicit value routes the
+     * same model id through a distinct effort (e.g. "none" vs "low").
+     */
+    reasoningEffort?:
+        | ""
+        | "minimal"
+        | "low"
+        | "medium"
+        | "high"
+        | "none"
+        | "xhigh"
+        | "max";
 }
 
 /**
@@ -468,7 +500,6 @@ export function parametersMatch(
         return equalNormalizedObject(expectedParams, chosenParams);
     }
 
-    const defaultMode = spec.defaultMode ?? "exact";
     for (const key of Object.keys(expectedParams)) {
         const mode = resolveTranslationBenchParamFieldMode(spec, key);
         if (mode === "ignore") continue;
@@ -483,7 +514,8 @@ export function parametersMatch(
             }
             continue;
         }
-        // exact
+        // exact — gold fields are required and must match; only extra chosen
+        // fields absent from gold are treated as optional (see below).
         if (
             !hasKey ||
             !equalNormalizedObject(
@@ -495,19 +527,7 @@ export function parametersMatch(
         }
     }
 
-    // Extraneous chosen keys fail under exact default (legacy behavior),
-    // unless the key is explicitly ignored or only-exists scored.
-    if (defaultMode === "exact") {
-        for (const key of Object.keys(chosenParams)) {
-            const mode = resolveTranslationBenchParamFieldMode(spec, key);
-            if (mode === "ignore" || mode === "exists" || mode === "nonempty") {
-                continue;
-            }
-            if (!Object.prototype.hasOwnProperty.call(expectedParams, key)) {
-                return false;
-            }
-        }
-    }
+    // Extra chosen fields absent from gold are optional — never penalized.
     return true;
 }
 
@@ -732,7 +752,6 @@ function diagnoseParametersWithScoreSpec(
         return;
     }
 
-    const defaultMode = spec.defaultMode ?? "exact";
     const scoredExpected: Record<string, unknown> = {};
     const scoredChosen: Record<string, unknown> = {};
 
@@ -752,21 +771,10 @@ function diagnoseParametersWithScoreSpec(
             }
             continue;
         }
-        // exact — defer to structural diagnose for type/value/missing.
+        // exact — gold fields are diagnosed for type/value/missing; extra
+        // chosen fields absent from gold are optional and not counted.
         scoredExpected[key] = expectedParams[key];
         if (hasKey) scoredChosen[key] = chosenParams[key];
-    }
-
-    if (defaultMode === "exact") {
-        for (const key of Object.keys(chosenParams)) {
-            const mode = resolveTranslationBenchParamFieldMode(spec, key);
-            if (mode === "ignore" || mode === "exists" || mode === "nonempty") {
-                continue;
-            }
-            if (!Object.prototype.hasOwnProperty.call(expectedParams, key)) {
-                scoredChosen[key] = chosenParams[key];
-            }
-        }
     }
 
     diagnoseParameterValue(scoredExpected, scoredChosen, counts);
@@ -1327,6 +1335,7 @@ function requireLineageText(
 export function validateTranslationBenchSuite(
     suite: TranslationBenchSuite,
     sourceManifest: TranslationBenchSuiteSourceIndex,
+    validateExpectedActions = true,
 ): void {
     if (suite.version !== 1) {
         throw new Error(
@@ -1514,14 +1523,16 @@ export function validateTranslationBenchSuite(
                     `Case '${evalCase.id}' expects inactive schema '${action.schemaName}'`,
                 );
             }
-            const parsed = parsedSchemas.get(action.schemaName)!;
-            const definition = parsed.actionSchemas.get(action.actionName);
-            if (!definition) {
-                throw new Error(
-                    `Case '${evalCase.id}' expects unknown action '${action.actionName}' in '${action.schemaName}'`,
-                );
+            if (validateExpectedActions) {
+                const parsed = parsedSchemas.get(action.schemaName)!;
+                const definition = parsed.actionSchemas.get(action.actionName);
+                if (!definition) {
+                    throw new Error(
+                        `Case '${evalCase.id}' expects unknown action '${action.actionName}' in '${action.schemaName}'`,
+                    );
+                }
+                validateAction(definition, action);
             }
-            validateAction(definition, action);
         }
         const actualHash = computeTranslationBenchSourceHash(suite, evalCase);
         if (actualHash !== evalCase.lineage.sourceHash) {
@@ -1669,11 +1680,16 @@ export function validateTranslationBenchSuite(
 export function createTranslationBenchProvider(
     suite: TranslationBenchSuite,
     sourceManifest: TranslationBenchSuiteSourceIndex,
+    validateExpectedActions = true,
 ): {
     provider: ActionConfigProvider;
     schemaHashes: Record<string, string>;
 } {
-    validateTranslationBenchSuite(suite, sourceManifest);
+    validateTranslationBenchSuite(
+        suite,
+        sourceManifest,
+        validateExpectedActions,
+    );
     const configs: Record<string, ActionConfig> = {};
     const schemaFiles = new Map<string, ActionSchemaFile>();
     for (const schema of suite.schemas) {
@@ -2072,12 +2088,16 @@ export function createTranslationBenchConfig(
     sessionConfig: DispatcherConfig,
     model: string,
     scenario: TranslationBenchScenario = getDefaultTranslationBenchScenario(),
+    validateActions = true,
 ): DispatcherConfig {
     validateTranslationBenchScenarios([scenario]);
     const config = structuredClone(sessionConfig);
     config.translation = {
         enabled: true,
         model,
+        // Inherit gateway/model default unless the scenario names an explicit
+        // effort; never force a prompt cache key or effort implicitly.
+        reasoningEffort: scenario.reasoningEffort ?? "",
         stream: false,
         promptConfig: {
             additionalInstructions: scenario.additionalInstructions,
@@ -2101,6 +2121,7 @@ export function createTranslationBenchConfig(
                 jsonSchemaFunction: false,
                 jsonSchemaWithTs: false,
                 jsonSchemaValidate: true,
+                validate: validateActions,
             },
             optimize: structuredClone(scenario.schemaOptimization),
         },
@@ -2125,11 +2146,17 @@ export function createTranslationBenchRunSettings(
     scenarios: TranslationBenchScenario[],
     concurrency: number,
     sourceManifest: TranslationBenchSuiteSourceIndex,
+    validateActions = true,
 ): TranslationBenchRunResult["settings"] {
     validateTranslationBenchScenarios(scenarios);
     const configs = scenarios.map((scenario) => ({
         scenario,
-        config: createTranslationBenchConfig(priorConfig, models[0]!, scenario),
+        config: createTranslationBenchConfig(
+            priorConfig,
+            models[0]!,
+            scenario,
+            validateActions,
+        ),
     }));
     return {
         models: [...models],
@@ -2253,6 +2280,7 @@ export function validateTranslationBenchScenarios(
 function createTranslationBenchContext(
     context: ActionContext<CommandHandlerContext>,
     config: DispatcherConfig,
+    provider: ActionConfigProvider,
     historyInput?: ChatHistoryInput,
 ): ActionContext<CommandHandlerContext> {
     const live = context.sessionContext.agentContext;
@@ -2263,6 +2291,25 @@ function createTranslationBenchContext(
             return typeof value === "function" ? value.bind(target) : value;
         },
     }) as Session;
+    // Eval schemas are never registered as dispatcher app agents, so resolve
+    // their action configs from the suite provider first (the real manager
+    // still answers everything else, e.g. status-label lookups).
+    const agents = new Proxy(live.agents, {
+        get(target, property) {
+            if (property === "getActionConfig") {
+                return (schemaName: string) =>
+                    provider.tryGetActionConfig(schemaName) ??
+                    target.getActionConfig(schemaName);
+            }
+            if (property === "tryGetActionConfig") {
+                return (schemaName: string) =>
+                    provider.tryGetActionConfig(schemaName) ??
+                    target.tryGetActionConfig(schemaName);
+            }
+            const value = Reflect.get(target, property, target);
+            return typeof value === "function" ? value.bind(target) : value;
+        },
+    }) as typeof live.agents;
     // Fresh per-call history + translator cache so concurrent cases cannot
     // race on chatHistory / lastActionSchemaName / pendingTopicalRoute.
     const chatHistory = createChatHistory(true);
@@ -2272,6 +2319,7 @@ function createTranslationBenchContext(
     const isolated: CommandHandlerContext = {
         ...live,
         session,
+        agents,
         chatHistory,
         activityContext: undefined,
         lastActionSchemaName: "",
@@ -2372,6 +2420,7 @@ export async function runTranslationBench(
     const { provider, schemaHashes } = createTranslationBenchProvider(
         suite,
         options.sourceManifest,
+        options.validateExpectedActions ?? true,
     );
     const availableModels =
         options.availableModels ?? (await getChatModelNames());
@@ -2419,6 +2468,24 @@ export async function runTranslationBench(
         );
         await run;
     };
+    let modelCallsChain: Promise<void> = Promise.resolve();
+    const emitModelCalls = async (
+        work: { model: string; scenarioId: string; caseId: string },
+        calls: readonly ModelCallRecord[],
+    ): Promise<void> => {
+        if (options.onModelCalls === undefined) {
+            return;
+        }
+        const run = modelCallsChain.then(
+            () => options.onModelCalls!(work, calls),
+            () => options.onModelCalls!(work, calls),
+        );
+        modelCallsChain = run.then(
+            () => undefined,
+            () => undefined,
+        );
+        await run;
+    };
     const bumpProgress = () => {
         progress++;
         onProgress?.(progress, total);
@@ -2440,6 +2507,7 @@ export async function runTranslationBench(
         const evalContext = createTranslationBenchContext(
             context,
             config,
+            provider,
             effectiveHistory,
         );
         const history =
@@ -2451,6 +2519,7 @@ export async function runTranslationBench(
         let error: string | undefined;
         let score: TranslationBenchScore;
         let elapsedMs: number;
+        const modelCalls: ModelCallRecord[] = [];
         try {
             const invokeTranslate = async () =>
                 translateRequest(
@@ -2478,21 +2547,37 @@ export async function runTranslationBench(
                     DEFAULT_EST_TOKENS_PER_CALL,
                 );
             // Reserve/settle per attempt so retries charge the ledger correctly.
-            const translated = await withTranslateRetry(async () => {
-                if (options.rateLimiter === undefined) {
-                    return invokeTranslate();
-                }
-                return options.rateLimiter.run(model, estimate, async () => {
-                    const result = await invokeTranslate();
-                    const finished = usage.finish(suite.pricing?.[model]);
-                    const actualTokens =
-                        typeof finished.promptTokens === "number" &&
-                        typeof finished.completionTokens === "number"
-                            ? finished.promptTokens + finished.completionTokens
-                            : estimate;
-                    return { result, actualTokens };
-                });
-            }, options.translateRetry);
+            const runTranslate = () =>
+                withTranslateRetry(async () => {
+                    if (options.rateLimiter === undefined) {
+                        return invokeTranslate();
+                    }
+                    return options.rateLimiter.run(
+                        model,
+                        estimate,
+                        async () => {
+                            const result = await invokeTranslate();
+                            const finished = usage.finish(
+                                suite.pricing?.[model],
+                            );
+                            const actualTokens =
+                                typeof finished.promptTokens === "number" &&
+                                typeof finished.completionTokens === "number"
+                                    ? finished.promptTokens +
+                                      finished.completionTokens
+                                    : estimate;
+                            return { result, actualTokens };
+                        },
+                    );
+                }, options.translateRetry);
+            // Collect the full LLM calls this row makes when a sink is wanted.
+            const translated =
+                options.onModelCalls === undefined
+                    ? await runTranslate()
+                    : await withModelCallSink(
+                          (rec) => modelCalls.push(rec),
+                          runTranslate,
+                      );
             elapsedMs = performance.now() - started;
             const raw = translated.requestAction.actions.map(
                 (entry) => entry.action,
@@ -2520,7 +2605,7 @@ export async function runTranslationBench(
             score = scored.score;
             error = scored.error;
         }
-        return {
+        const row: TranslationBenchRow = {
             caseId: evalCase.id,
             scenarioId: scenario.id,
             scenario: structuredClone(scenario),
@@ -2551,6 +2636,11 @@ export async function runTranslationBench(
             usage: usage.finish(suite.pricing?.[model]),
             ...(error ? { error } : {}),
         };
+        await emitModelCalls(
+            { model, scenarioId: scenario.id, caseId: evalCase.id },
+            modelCalls,
+        );
+        return row;
     }
 
     onProgress?.(progress, total);
@@ -2578,6 +2668,7 @@ export async function runTranslationBench(
                 priorConfig,
                 model,
                 scenario,
+                options.validateActions ?? true,
             );
             modelRows.push(
                 ...(await pmap(
@@ -2639,6 +2730,7 @@ export async function runTranslationBench(
             scenarios,
             concurrency,
             options.sourceManifest,
+            options.validateActions ?? true,
         ),
     };
 }

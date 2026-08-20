@@ -30,6 +30,13 @@ export interface TranslationBenchExplainerReport {
     rows: TranslationBenchExplainerCaseResult[];
 }
 
+export interface TranslationBenchMetricTable {
+    title: string;
+    description?: string;
+    columns: { key: string; label: string }[];
+    rows: { key: string; values: Record<string, number | undefined> }[];
+}
+
 function sourcePinFromBenchmark(
     benchmark: TranslationBenchBenchmark,
 ): TranslationBenchSourcePin {
@@ -71,6 +78,7 @@ export interface TranslationBenchReport {
         collision?: Record<string, unknown>;
     };
     schemaHashes: Record<string, string>;
+    schemas?: TranslationBenchSuite["schemas"];
     catalog?: TranslationBenchCatalogCensus;
     pricing: Record<string, TranslationBenchPricing>;
     summary: TranslationBenchSummary;
@@ -81,6 +89,7 @@ export interface TranslationBenchReport {
     byDimension: TranslationBenchBreakdown[];
     byShape: TranslationBenchBreakdown[];
     rows: TranslationBenchRow[];
+    benchmarkMetricTables?: TranslationBenchMetricTable[];
     explainer?: TranslationBenchExplainerReport;
     provenance?: {
         source: TranslationBenchSourcePin;
@@ -113,6 +122,7 @@ export function createTranslationBenchReport(
         suiteName: suite.name,
         settings: result.settings,
         schemaHashes: result.schemaHashes,
+        schemas: suite.schemas,
         ...(benchmark !== undefined
             ? {
                   catalog: getTranslationBenchCatalogCensus(
@@ -250,6 +260,31 @@ function headlineTable(report: TranslationBenchReport): string {
         })
         .join("");
     return summaryTable("Model", rows);
+}
+
+function benchmarkMetricTables(report: TranslationBenchReport): string {
+    return (report.benchmarkMetricTables ?? [])
+        .map((table) => {
+            const headers = table.columns
+                .map((column) => `<th>${esc(column.label)}</th>`)
+                .join("");
+            const rows = table.rows
+                .map(
+                    (row) =>
+                        `<tr><th>${esc(row.key)}</th>${table.columns
+                            .map(
+                                (column) =>
+                                    `<td>${esc(percent(row.values[column.key]))}</td>`,
+                            )
+                            .join("")}</tr>`,
+                )
+                .join("");
+            const description = table.description
+                ? `<p class="diag-note">${esc(table.description)}</p>`
+                : "";
+            return `<h2>${esc(table.title)}</h2>${description}<table><thead><tr><th>Model</th>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+        })
+        .join("");
 }
 
 function actionReliabilityTable(report: TranslationBenchReport): string {
@@ -398,6 +433,118 @@ function diagnosticList(score: TranslationBenchRow["score"]): string {
         .join("")}</ul>`;
 }
 
+function commentLines(value: unknown, indent: string): string[] {
+    if (typeof value !== "string" || value.trim().length === 0) return [];
+    return value
+        .split(/\r?\n/u)
+        .map((line) => `${indent}// ${line.replaceAll("*/", "* /").trim()}`);
+}
+
+function typeScriptPropertyName(name: string): string {
+    return /^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(name)
+        ? name
+        : JSON.stringify(name);
+}
+
+function typeScriptIdentifier(name: string): string {
+    const sanitized = name.replace(/[^A-Za-z0-9_$]/gu, "_");
+    return /^[A-Za-z_$]/u.test(sanitized) ? sanitized : `_${sanitized}`;
+}
+
+function jsonSchemaType(value: unknown, indent: string): string {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        return "unknown";
+    }
+    const schema = value as Record<string, unknown>;
+    if (Array.isArray(schema.enum)) {
+        return schema.enum.length === 0
+            ? "never"
+            : schema.enum.map((item) => JSON.stringify(item)).join(" | ");
+    }
+    const alternatives = Array.isArray(schema.anyOf)
+        ? schema.anyOf
+        : Array.isArray(schema.oneOf)
+          ? schema.oneOf
+          : undefined;
+    if (alternatives !== undefined) {
+        return alternatives
+            .map((item) => jsonSchemaType(item, indent))
+            .join(" | ");
+    }
+    if (schema.type === "array") {
+        return `Array<${jsonSchemaType(schema.items, indent)}>`;
+    }
+    if (schema.type === "object" || schema.properties !== undefined) {
+        const properties =
+            typeof schema.properties === "object" &&
+            schema.properties !== null &&
+            !Array.isArray(schema.properties)
+                ? (schema.properties as Record<string, unknown>)
+                : {};
+        const required = new Set(
+            Array.isArray(schema.required)
+                ? schema.required.filter(
+                      (item): item is string => typeof item === "string",
+                  )
+                : [],
+        );
+        const innerIndent = `${indent}  `;
+        const lines = ["{"];
+        for (const [name, property] of Object.entries(properties)) {
+            const propertySchema =
+                typeof property === "object" &&
+                property !== null &&
+                !Array.isArray(property)
+                    ? (property as Record<string, unknown>)
+                    : {};
+            lines.push(
+                ...commentLines(propertySchema.description, innerIndent),
+            );
+            lines.push(
+                `${innerIndent}${typeScriptPropertyName(name)}${required.has(name) ? "" : "?"}: ${jsonSchemaType(propertySchema, innerIndent)};`,
+            );
+        }
+        lines.push(`${indent}}`);
+        return lines.join("\n");
+    }
+    switch (schema.type) {
+        case "string":
+            return "string";
+        case "number":
+        case "integer":
+            return "number";
+        case "boolean":
+            return "boolean";
+        case "null":
+            return "null";
+        default:
+            return "unknown";
+    }
+}
+
+function formatSchemaAsTypeScript(
+    schema: TranslationBenchSuite["schemas"][number],
+): string {
+    const lines = [
+        ...commentLines(schema.description, ""),
+        `export namespace ${typeScriptIdentifier(schema.schemaName)} {`,
+    ];
+    for (const tool of schema.tools) {
+        const actionName = tool.function.name;
+        lines.push(...commentLines(tool.function.description, "  "));
+        lines.push(
+            `  export type ${typeScriptIdentifier(actionName)}Action = {`,
+            `    actionName: ${JSON.stringify(actionName)};`,
+            `    parameters: ${jsonSchemaType(tool.function.parameters, "    ")};`,
+            "  };",
+            "",
+        );
+    }
+    if (lines.at(-1) === "") lines.pop();
+    lines.push("}");
+    return lines.join("\n");
+}
+
 /** Compact row payload for client-side virtualization (avoids 6k DOM nodes). */
 type CompactTraceRow = {
     status: "PASS" | "FAIL" | "ERROR";
@@ -411,6 +558,7 @@ type CompactTraceRow = {
     error?: string;
     elapsedMs: number;
     activeActionCount: number;
+    activeSchemas: string[];
     shapeKey: string;
     usage: TranslationBenchRow["usage"];
     lineage: {
@@ -419,6 +567,7 @@ type CompactTraceRow = {
         sourceUrl: string;
         sourcePart?: string;
     };
+    trajectory: TranslationBenchRow;
 };
 
 function rowStatus(row: TranslationBenchRow): CompactTraceRow["status"] {
@@ -438,6 +587,7 @@ function compactTraceRow(row: TranslationBenchRow): CompactTraceRow {
         ...(row.error === undefined ? {} : { error: row.error }),
         elapsedMs: row.elapsedMs,
         activeActionCount: row.activeActionCount,
+        activeSchemas: row.activeSchemas,
         shapeKey: row.shape.key,
         usage: row.usage,
         lineage: {
@@ -448,6 +598,7 @@ function compactTraceRow(row: TranslationBenchRow): CompactTraceRow {
                 ? {}
                 : { sourcePart: row.lineage.sourcePart }),
         },
+        trajectory: row,
     };
 }
 
@@ -460,8 +611,15 @@ function embedJson(id: string, data: unknown): string {
 function singleRowTrace(report: TranslationBenchReport): string {
     if (report.rows.length === 0) return "<p>No translation rows.</p>";
     const compact = report.rows.map(compactTraceRow);
+    const schemaCode = Object.fromEntries(
+        (report.schemas ?? []).map((schema) => [
+            schema.schemaName,
+            formatSchemaAsTypeScript(schema),
+        ]),
+    );
     // One host panel; options + detail HTML built client-side from compact JSON.
     return `${embedJson("translation-bench-rows-json", compact)}
+${embedJson("translation-bench-schema-code-json", schemaCode)}
 <div class="row-trace-picker">
 <label for="translation-bench-row-filter">Filter</label>
 <input id="translation-bench-row-filter" type="search" placeholder="PASS/FAIL · model · case id · utterance" style="min-width:min(100%,320px);padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--fg)"/>
@@ -472,6 +630,7 @@ function singleRowTrace(report: TranslationBenchReport): string {
 <div id="translation-bench-row-traces"></div>
 <script>(()=>{
 const rows=JSON.parse(document.getElementById("translation-bench-rows-json").textContent||"[]");
+const schemaCode=JSON.parse(document.getElementById("translation-bench-schema-code-json").textContent||"{}");
 const select=document.getElementById("translation-bench-row-select");
 const filterEl=document.getElementById("translation-bench-row-filter");
 const host=document.getElementById("translation-bench-row-traces");
@@ -490,6 +649,11 @@ const diagList=score=>{
   if(!hits.length)return '<p class="row-trace-empty">No diagnostic flags</p>';
   return '<ul class="row-trace-diagnostics">'+hits.map(([k,l])=>'<li>'+esc(l)+' <strong>'+esc(score.diagnostics[k])+'</strong></li>').join("")+'</ul>';
 };
+const schemaList=names=>{
+    const code=(names||[]).map(name=>schemaCode[name]||('// Schema not recorded: '+name)).join('\\n\\n');
+    return '<details class="row-trace-schema" open><summary><strong>5 · Available schemas and actions</strong> · '+esc((names||[]).length)+' schema(s)</summary><pre>'+esc(code)+'</pre></details>';
+};
+const trajectory=row=>'<details class="row-trace-trajectory"><summary><strong>6 · Full trajectory</strong></summary><pre>'+esc(JSON.stringify(row.trajectory,null,2))+'</pre></details>';
 const render=row=>{
   const st=row.status;
   const lin=row.lineage||{};
@@ -512,7 +676,7 @@ const render=row=>{
     '<div><dt>Routed</dt><dd>'+esc(sc.routed)+'/'+esc(sc.expectedCount)+'</dd></div>'+
     '<div><dt>Parameters</dt><dd>'+esc(sc.paramMatches)+'/'+esc(sc.routed)+' soft · '+esc(sc.exactParamMatches)+'/'+esc(sc.routed)+' exact</dd></div></dl>'+
     diagList(sc)+(row.error?'<p class="row-trace-error">'+esc(row.error)+'</p>':'')+
-    '</section></div>'+
+    '</section></div>'+schemaList(row.activeSchemas)+trajectory(row)+
     '<div class="row-trace-meta">'+esc(row.activeActionCount)+' visible actions · '+esc(row.shapeKey)+' · '+esc(Math.round(row.elapsedMs))+' ms<br>'+esc(usage)+'</div></article>';
 };
 let filtered=rows.map((r,i)=>({r,i}));
@@ -872,7 +1036,7 @@ export function renderTranslationBenchHtml(
 <title>${esc(report.suiteName)} translation benchuation</title>
 <style>
 :root{color-scheme:light dark;--bg:#fff;--fg:#17202a;--muted:#667085;--line:#d0d5dd;--panel:#f8fafc;--good:#067647;--bad:#b42318;--code:#eef2f6} @media(prefers-color-scheme:dark){:root{--bg:#101828;--fg:#f2f4f7;--muted:#98a2b3;--line:#344054;--panel:#1d2939;--good:#6ce9a6;--bad:#fda29b;--code:#344054}}
-body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 system-ui,sans-serif}main{max-width:1500px;margin:auto;padding:28px}h1{font-size:24px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 8px}.meta,.row-trace-meta{color:var(--muted)}table{width:100%;border-collapse:collapse;background:var(--panel)}th,td{border:1px solid var(--line);padding:7px 8px;text-align:right;vertical-align:top}th:first-child,td:first-child{text-align:left}thead th{position:sticky;top:0;background:var(--panel)}tr.pass td:first-child,.row-trace.pass .row-trace-status{color:var(--good)}tr.fail td:first-child,.row-trace.fail .row-trace-status,.row-trace-error{color:var(--bad)}pre{max-width:900px;white-space:pre-wrap;overflow-wrap:anywhere;text-align:left}a{color:inherit}[hidden]{display:none!important}.diag-rate,.diag-note{color:var(--muted)}.diag-note{margin:8px 0 0}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 system-ui,sans-serif}main{max-width:1500px;margin:auto;padding:28px}h1{font-size:24px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 8px}.meta,.row-trace-meta{color:var(--muted)}table{display:block;max-width:100%;overflow-x:auto;width:100%;border-collapse:collapse;background:var(--panel)}th,td{border:1px solid var(--line);padding:7px 8px;text-align:right;vertical-align:top}th:first-child,td:first-child{text-align:left}thead th{position:sticky;top:0;background:var(--panel)}tr.pass td:first-child,.row-trace.pass .row-trace-status{color:var(--good)}tr.fail td:first-child,.row-trace.fail .row-trace-status,.row-trace-error{color:var(--bad)}pre{max-width:900px;white-space:pre-wrap;overflow-wrap:anywhere;text-align:left}code{overflow-wrap:anywhere}a{color:inherit}[hidden]{display:none!important}.diag-rate,.diag-note{color:var(--muted)}.diag-note{margin:8px 0 0}
 .row-trace-picker{display:flex;align-items:center;gap:10px;margin:0 0 12px}.row-trace-picker label,.row-trace-label{font-weight:600}.row-trace-picker select{min-width:min(100%,520px);padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--fg)}.row-trace{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:14px}.row-trace-heading{display:flex;gap:10px;align-items:baseline;margin-bottom:12px}.row-trace-flow{display:grid;grid-template-columns:minmax(0,1.1fr) 22px minmax(0,1fr) 22px minmax(0,1fr) 22px minmax(0,.9fr);align-items:stretch}.row-trace-step{min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:12px}.row-trace-step blockquote{font-size:16px;margin:10px 0}.row-trace-step a{display:block;color:var(--muted);overflow-wrap:anywhere}.row-trace-arrow{display:grid;place-items:center;color:var(--muted);font-size:18px}.row-trace-actions{margin:10px 0 0;padding-left:20px}.row-trace-actions li+li{margin-top:10px}.row-trace-actions pre{max-width:none;margin:6px 0 0;padding:8px;border-radius:6px;background:var(--code)}.row-trace-empty{color:var(--muted);margin:10px 0 0}.row-trace-score dl{margin:10px 0 0}.row-trace-score dl div{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding:5px 0}.row-trace-score dt{color:var(--muted)}.row-trace-score dd{font-weight:600;margin:0}.row-trace-diagnostics{margin:10px 0 0;padding-left:18px}.row-trace-meta{margin-top:10px}.row-trace-error{overflow-wrap:anywhere}
 .case-bank{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:14px;overflow-wrap:anywhere}.case-bank-heading,.case-bank-node-heading{display:flex;justify-content:space-between;gap:12px;align-items:baseline}.case-bank-heading{margin-bottom:12px}.case-bank.pass>.case-bank-heading .case-bank-status,.case-bank-node.pass .case-bank-status{color:var(--good)}.case-bank.fail>.case-bank-heading .case-bank-status,.case-bank-node.fail .case-bank-status{color:var(--bad)}.case-bank-seed-flow{display:grid;grid-template-columns:minmax(0,1fr) 32px minmax(0,.8fr);align-items:stretch}.case-bank-node{min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:12px}.case-bank-node blockquote{font-size:15px;margin:10px 0}.case-bank-source{display:block;color:var(--muted);margin-top:8px;overflow-wrap:anywhere}.case-bank-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}.case-bank-meta{color:var(--muted);margin-top:10px}.case-bank-history{margin-top:8px}.case-bank-history pre{max-width:none;background:var(--code);border-radius:6px;padding:8px}.case-bank-rule code{display:block;background:var(--code);border-radius:6px;margin-top:12px;padding:10px;overflow-wrap:anywhere}.case-bank-arrow{display:grid;place-items:center;color:var(--muted);font-size:18px}.case-bank-branch{text-align:center;color:var(--muted);padding:9px 0}.case-bank-generalizations{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}.case-bank-summary{border-top:1px solid var(--line);color:var(--muted);margin-top:12px;padding-top:10px}
 @media(max-width:1100px){main{padding:18px}.row-trace-flow{grid-template-columns:1fr}.row-trace-arrow{height:24px;transform:rotate(90deg)}}@media(max-width:900px){.case-bank-seed-flow{grid-template-columns:1fr}.case-bank-arrow{height:24px;transform:rotate(90deg)}}@media(max-width:600px){.row-trace-picker{align-items:stretch;flex-direction:column}.row-trace-picker select{width:100%}.row-trace-heading,.case-bank-heading,.case-bank-node-heading{align-items:flex-start;flex-direction:column;gap:2px}.case-bank-actions,.case-bank-generalizations{grid-template-columns:1fr}}
@@ -883,10 +1047,11 @@ details.tb-collapse[open]>summary{margin-bottom:10px}
 pre.tb-scroll{max-height:320px;overflow:auto;background:var(--code);border-radius:8px;padding:10px}
 </style></head><body><main>
 <h1>${esc(report.suiteName)}</h1><div class="meta">Deterministic translation score · strategy ${esc(report.settings.strategy)} · streaming off · heavy sections virtualized</div>
-<h2>Model summary</h2>${headlineTable(report)}
+${benchmarkMetricTables(report)}
+<h2>${report.benchmarkMetricTables?.length ? "TypeAgent strict summary (supplemental)" : "Model summary"}</h2>${headlineTable(report)}
 <h2>Deterministic diagnostic counts</h2>${diagnosticsTable(report)}
-<h2>Single-row translation trace</h2>${singleRowTrace(report)}
-<h2>Cases</h2>${rowTable(report)}
+<h2>${report.benchmarkMetricTables?.length ? "TypeAgent strict single-row diagnostics (supplemental)" : "Single-row translation trace"}</h2>${singleRowTrace(report)}
+<h2>${report.benchmarkMetricTables?.length ? "TypeAgent strict cases (supplemental)" : "Cases"}</h2>${rowTable(report)}
 <h2>Action reliability</h2>${actionReliabilityTable(report)}
 <h2>Model × settings scenario</h2>${scenarioTable(report)}
 <h2>Model × action count (active × expected)</h2>${actionCountTable(report)}

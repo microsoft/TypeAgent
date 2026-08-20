@@ -359,19 +359,54 @@ async function main(): Promise<void> {
         runnerOptions.rateLimiter = rateLimiter;
     }
 
+    // Openai gateway (e.g. LiteLLM): the requested model id is carried by
+    // OPENAI_MODEL, a process-global that runtime-config reads at init, and the
+    // ids are gateway routes rather than typed-config entries. So run each
+    // model sequentially with its own runtime config and trust the requested
+    // name instead of discovery-based validation. The shared checkpoint and TPM
+    // ledger make this transparent; per-model case concurrency still applies.
+    const useGateway =
+        process.env.TYPEAGENT_MODEL_PROVIDER === "openai" &&
+        process.env.OPENAI_ENDPOINT !== undefined;
+
+    const onProgress = (done: number, total: number) => {
+        if (done === total || done % 25 === 0) {
+            console.log(`progress ${done}/${total}`);
+        }
+    };
+
     const started = Date.now();
     let result: TranslationBenchRunResult;
     try {
-        result = await runTranslationBench(
-            suite,
-            actionContext,
-            runnerOptions,
-            (done, total) => {
-                if (done === total || done % 25 === 0) {
-                    console.log(`progress ${done}/${total}`);
-                }
-            },
-        );
+        if (useGateway) {
+            let last: TranslationBenchRunResult | undefined;
+            for (const model of models) {
+                console.log(`=== ${model} ===`);
+                process.env.OPENAI_MODEL = model;
+                initRuntimeConfigFromProcessEnv();
+                last = await runTranslationBench(
+                    suite,
+                    actionContext,
+                    {
+                        ...runnerOptions,
+                        models: [model],
+                        availableModels: [model],
+                        modelConcurrency: 1,
+                    },
+                    onProgress,
+                );
+            }
+            // Every model's rows live in the shared checkpoint; `last` only
+            // supplies schemaHashes/settings for the rebuild below.
+            result = last!;
+        } else {
+            result = await runTranslationBench(
+                suite,
+                actionContext,
+                runnerOptions,
+                onProgress,
+            );
+        }
     } finally {
         rateLimiter?.close();
         await closeCommandHandlerContext(handlerContext);

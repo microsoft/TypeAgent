@@ -15,6 +15,12 @@ export {
     type ChatModelTelemetryPurpose,
     type ChatModelTelemetryScope,
 } from "./chatModelTelemetryContext.js";
+export {
+    getModelCallSink,
+    withModelCallSink,
+    type ModelCallRecord,
+    type ModelCallSink,
+} from "./modelCallCapture.js";
 export * as openai from "./openai.js";
 export * as bing from "./bing.js";
 export * from "./restClient.js";

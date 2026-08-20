@@ -92,8 +92,9 @@ export function createActionSchemaJsonValidator<T extends TranslatedAction>(
           ? generateActionJsonSchema(actionSchemaGroup)
           : undefined;
     const schemaValidate =
-        jsonSchema === undefined ||
-        (generateOptions?.jsonSchemaValidate ?? false);
+        (generateOptions?.validate ?? true) &&
+        (jsonSchema === undefined ||
+            (generateOptions?.jsonSchemaValidate ?? false));
     return {
         getSchemaText: () => schema,
         getTypeName: () => actionSchemaGroup.entry.name,
@@ -122,6 +123,9 @@ export function createActionSchemaJsonValidator<T extends TranslatedAction>(
                     );
                     if (injectedSchemaName !== undefined) {
                         value.schemaName = injectedSchemaName;
+                        return success(value);
+                    }
+                    if (!(generateOptions?.validate ?? true)) {
                         return success(value);
                     }
                     return error(`Unknown action name: ${value.actionName}`);

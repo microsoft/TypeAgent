@@ -33,6 +33,8 @@
     "prettier:fix": "prettier --write package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
     "tb-eval": "node ./dist/translationBench/scripts/tbEval.js",
     "tb-generate": "node ./dist/translationBench/scripts/tbGenerate.js",
+    "seal-eval": "node ./dist/translationBench/public_datasets/Seal-Tools/eval/runEval.js",
+    "seal-eval-smoke": "node ./dist/translationBench/public_datasets/Seal-Tools/eval/test-run.js",
     "test": "npm run test:local",
     "test:local": "pnpm run build && pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b"

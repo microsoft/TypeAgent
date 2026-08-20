@@ -151,6 +151,32 @@ describe("renderTranslationBenchHtml", () => {
                 sourceManifestHash: "manifest-hash",
             },
             schemaHashes: { "source.camera": "abc" },
+            schemas: [
+                {
+                    schemaName: "discord",
+                    description: "Discord profile actions",
+                    tools: [
+                        {
+                            type: "function" as const,
+                            function: {
+                                name: "getUser",
+                                description: "Retrieve a Discord user profile",
+                                parameters: {
+                                    type: "object",
+                                    properties: {
+                                        user_id: {
+                                            type: "string",
+                                            description:
+                                                "The Discord user identifier",
+                                        },
+                                    },
+                                    required: ["user_id"],
+                                },
+                            },
+                        },
+                    ],
+                },
+            ],
             catalog: {
                 schemaCount: 23,
                 actionCount: 578,
@@ -425,6 +451,15 @@ describe("renderTranslationBenchHtml", () => {
         expect(html).toContain("2 · Expected TypeAgent action");
         expect(html).toContain("3 · Chosen action");
         expect(html).toContain("4 · Deterministic score");
+        expect(html).toContain("5 · Available schemas and actions");
+        expect(html).toContain("6 · Full trajectory");
+        expect(html).toContain("// Discord profile actions");
+        expect(html).toContain("// Retrieve a Discord user profile");
+        expect(html).toContain("// The Discord user identifier");
+        expect(html).toContain('actionName: \\"getUser\\"');
+        for (const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
+            expect(() => new Function(match[1])).not.toThrow();
+        }
         // Payload is JSON-embedded (not HTML-escaped entity form inside the script).
         expect(html).toContain("discord.getUser");
         expect(html).toContain("Find <user> 12345");
