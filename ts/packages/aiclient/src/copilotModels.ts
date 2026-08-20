@@ -82,12 +82,6 @@ export class CopilotEndpointUnavailableError
     extends Error
     implements otel.TelemetryClassifiedError
 {
-    /**
-     * Classifies this error for structured telemetry (see
-     * `classifyTelemetryError` in `@typeagent/telemetry`). The endpoint could
-     * not be minted by the provider, and retrying the same request hits the
-     * same tenant/gate configuration.
-     */
     public readonly errorCategory = "provider";
     public readonly retryable = false;
     constructor(message: string) {
@@ -98,17 +92,10 @@ export class CopilotEndpointUnavailableError
 
 /**
  * Turn a thrown value into a failure `Result` that still carries what the
- * throw actually said.
- *
- * The message is a private diagnostic and is never parsed downstream; the
- * attached classification is the bounded part telemetry reports, so a
- * `CopilotEndpointUnavailableError` or a socket error keeps its identity
- * instead of being flattened into an unexplained provider failure. See
- * `attachTelemetryErrorClassification`.
- *
- * A throw with nothing recognizable in it gets no classification at all rather
- * than `internal`: it still came out of a provider call, so the model
- * wrapper's `provider` fallback is the truthful description.
+ * throw said. The message is a private diagnostic never parsed downstream; the
+ * attached classification is the bounded part telemetry reports. An
+ * unrecognized throw gets no classification, leaving the model wrapper's
+ * `provider` fallback as the truthful description.
  */
 function classifiedFailure(message: string, thrown: unknown): Result<never> {
     const classification = otel.classifyTelemetryErrorIfRecognized(thrown);
@@ -119,10 +106,9 @@ function classifiedFailure(message: string, thrown: unknown): Result<never> {
 }
 
 /**
- * The failure `Result` for a call that ended because the caller cancelled.
- * `isAbort` also treats "the caller's signal is aborted" as a cancellation
- * even when the thrown value itself is not shaped like an `AbortError`, so the
- * classification is stated here rather than re-derived from that value.
+ * The failure `Result` for a caller-cancelled call. Stated rather than derived
+ * from the thrown value, because `isAbort` also treats an aborted caller
+ * signal as cancellation when the throw is not shaped like an `AbortError`.
  */
 function cancelledFailure(): Result<never> {
     return otel.attachTelemetryErrorClassification(error("Request aborted"), {

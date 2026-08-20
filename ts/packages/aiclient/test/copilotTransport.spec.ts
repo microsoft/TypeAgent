@@ -324,9 +324,7 @@ describe("createCopilotTransportModel", () => {
         expect(result.success).toBe(false);
         // A single reactive refresh was attempted before giving up.
         expect(forceCalls.filter((f) => f === true)).toHaveLength(1);
-        // The HTTP status survives the flattening into a `Result` message, so
-        // the model wrapper reports an authentication failure rather than an
-        // unexplained provider one.
+        // The HTTP status survives the flattening into a `Result` message.
         expect(otel.readTelemetryErrorClassification(result)).toEqual({
             errorCategory: "authentication",
             httpStatus: 401,
@@ -355,8 +353,8 @@ describe("createCopilotTransportModel", () => {
         expect(result.success).toBe(false);
         // No HTTP call is made when the endpoint can't be minted.
         expect(fetchCalls).toBe(0);
-        // The typed error classifies itself, and that classification survives
-        // being turned into a `Result` failure.
+        // The typed error's own classification survives being turned into a
+        // `Result` failure.
         expect(otel.readTelemetryErrorClassification(result)).toEqual({
             errorCategory: "provider",
             retryable: false,

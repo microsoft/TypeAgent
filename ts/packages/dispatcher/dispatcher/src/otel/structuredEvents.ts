@@ -19,31 +19,19 @@ export const DISPATCHER_STRUCTURED_EVENTS = {
 } as const;
 
 /**
- * Classify a completion once, so every field derived from it agrees.
- *
- * `cancelled` is not simply what the call site guessed: a cancellation is
- * frequently wrapped (an `AbortError` arriving as the `cause` of a translation
- * error, for instance), and a call site that only inspects `error.name` sees a
- * plain failure. `otel.isTelemetryCancellation` walks the chain, so the
- * disposition, the event `status`, the log severity, and whether classification
- * fields are emitted at all are all read off this one result instead of being
- * decided independently and disagreeing. The phase spans record their
- * cancellation from the same function, so a span and the event beside it never
- * describe the same failure differently.
- *
- * `cancelledHint` is what the caller knows from outside the error - typically
- * that the request's abort signal has fired - and stands on its own, because a
- * cancellation can surface as an unrelated-looking failure.
+ * Classify a completion once, so the disposition, event `status`, log
+ * severity, and classification fields cannot disagree. The phase spans record
+ * their cancellation from the same `otel.isTelemetryCancellation`, which walks
+ * the `cause` chain, so a wrapped cancellation is not reported as a plain
+ * failure.
  */
 type CompletionOutcome = {
     readonly status: "succeeded" | "failed" | "cancelled";
     readonly cancelled: boolean;
     /**
-     * Emitted only for a real failure. A cancellation is a disposition, not a
-     * failure to classify, and a failure with no thrown value has nothing to
-     * classify: an agent that reports failure through a typed
-     * `ActionResult.error` never threw, so asserting `internal` would be an
-     * invention.
+     * Emitted only for a real failure with a thrown value: an agent reporting
+     * failure through a typed `ActionResult.error` never threw, so asserting a
+     * category would be an invention.
      */
     readonly classification: otel.TelemetryErrorClassification | undefined;
 };
@@ -53,8 +41,8 @@ function classifyCompletion(
     error: unknown,
     cancelledHint: boolean | undefined,
 ): CompletionOutcome {
-    // A thrown value only describes a failure. Ignoring it on the success path
-    // keeps `status` from contradicting `success`.
+    // Ignoring a thrown value on the success path keeps `status` from
+    // contradicting `success`.
     const failure = success ? undefined : error;
     const classification =
         failure === undefined
@@ -68,7 +56,7 @@ function classifyCompletion(
     };
 }
 
-/** Log severity implied by an outcome, kept in one place for every event. */
+/** Log severity implied by an outcome. */
 function outcomeLevel(
     outcome: CompletionOutcome,
 ): "info" | "warning" | "error" {
@@ -95,15 +83,10 @@ export function logRequestReceived(
 }
 
 /**
- * Record a command that failed with an exception.
- *
- * The event carries two kinds of data with different destinations. The
- * normalized classification (`errorCategory` and friends) is bounded and
- * content-free, so it is allowlisted through to OTel. The raw `request`,
- * `name`, `message`, and `stack` can contain user input and are deliberately
- * *not* allowlisted: they exist for the local debug sink and the opt-in
- * database sinks (`@config log db on`), which are private diagnostics. See
- * `createDispatcherOtelLoggerSink` for the projection that enforces this.
+ * Record a command that failed with an exception. Only the bounded
+ * classification is allowlisted through to OTel; `request`, `name`, `message`,
+ * and `stack` can contain user input and stay in the local debug and opt-in
+ * database sinks (see `createDispatcherOtelLoggerSink`).
  */
 export function logCommandException(
     logger: Logger | undefined,
@@ -129,10 +112,9 @@ export function logCommandException(
 }
 
 /**
- * Read one string property off a thrown value for the private diagnostic
- * fields. A thrown value can be anything, including an object whose getters
- * throw or a proxy that traps every access, so a read that fails contributes
- * nothing instead of turning logging into a second failure.
+ * Read one string property off a thrown value. A thrown value can be anything,
+ * including an object whose getters throw, so a failed read contributes
+ * nothing rather than turning logging into a second failure.
  */
 function stringField(
     source: unknown,
@@ -233,17 +215,15 @@ export function logTranslationCompleted(
         requestId: string;
         strategy: string;
         success: boolean;
-        // What the call site knows from outside the error, typically that the
-        // request's abort signal fired. A cancellation carried inside the
-        // thrown value is detected from the value itself.
+        // What the call site knows from outside the error; a cancellation
+        // carried inside the thrown value is detected from the value itself.
         cancelled?: boolean;
         // Duration of the translation phase measured at the call boundary.
         elapsedMs?: number;
         // Bounded routing decisions captured during translation.
         routing?: TranslationRoutingSummary | undefined;
-        // The thrown value on the failure path, normalized into bounded
-        // classification fields. Omit when the failure did not come from a
-        // thrown value; success ignores it.
+        // The thrown value on the failure path; omitted when the failure did
+        // not come from a throw.
         error?: unknown;
         actions: readonly {
             action: { schemaName: string; actionName: string };
@@ -323,9 +303,8 @@ export function logReasoningCompleted(
         provider?: string;
         model?: string;
         success: boolean;
-        // Whether this completion is a cancellation. The reasoning span
-        // decides it with the same `otel.isTelemetryCancellation` call, so the
-        // span status and this event always agree.
+        // Decided by the reasoning span's same cancellation test, so the span
+        // status and this event always agree.
         cancelled: boolean;
         elapsedMs: number;
     },
@@ -363,16 +342,13 @@ export function logActionCompleted(
         appAgentName: string;
         actionIndex: number;
         success: boolean;
-        // What the call site knows from outside the error, typically that the
-        // request's abort signal fired. A cancellation carried inside the
-        // thrown value is detected from the value itself.
+        // What the call site knows from outside the error; a cancellation
+        // carried inside the thrown value is detected from the value itself.
         cancelled?: boolean;
         // Duration of the action-execution phase measured at the call boundary.
         elapsedMs?: number;
-        // The thrown value on the failure path, normalized into bounded
-        // classification fields. An agent that reports failure through a typed
-        // `ActionResult.error` never threw, so it omits this and the event
-        // carries no classification; success ignores it.
+        // The thrown value on the failure path. An agent that reports failure
+        // through a typed `ActionResult.error` never threw, so it omits this.
         error?: unknown;
     },
 ): void {

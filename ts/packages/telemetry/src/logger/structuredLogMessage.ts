@@ -62,10 +62,8 @@ function formatTranslationCompleted(data: Record<string, unknown>): string {
 }
 
 /**
- * Render the normalized failure classification (`errorCategory` and the
- * optional `errorCode` / `httpStatus` / `retryable`). Only these bounded
- * fields are read - the original message and stack are never part of a
- * rendered message.
+ * Render the bounded classification fields only - the original message and
+ * stack are never part of a rendered message.
  */
 function formatErrorClassification(data: Record<string, unknown>): string {
     const category = stringValue(data, "errorCategory", "internal");
@@ -88,8 +86,7 @@ function formatErrorClassification(data: Record<string, unknown>): string {
 
 /**
  * Append the failure classification to a lifecycle message, but only when the
- * event actually carries one. Successful and cancelled completions have no
- * classification, so they read exactly as before.
+ * event carries one.
  */
 function formatFailureNote(data: Record<string, unknown>): string {
     return typeof data.errorCategory === "string" && data.errorCategory !== ""

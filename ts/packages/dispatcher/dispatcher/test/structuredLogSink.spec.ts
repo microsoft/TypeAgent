@@ -94,9 +94,7 @@ describe("dispatcher structured log projection", () => {
             },
         });
 
-        // Exactly the shape `logCommandException` produces: bounded
-        // classification for OTel, raw error detail for the local debug and
-        // opt-in database sinks only.
+        // Exactly the shape `logCommandException` produces.
         sink.logEvent({
             eventName: "command:exception",
             timestamp: new Date().toISOString(),

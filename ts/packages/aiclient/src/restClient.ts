@@ -314,14 +314,9 @@ async function getErrorMessage(
 }
 
 /**
- * What "the transport produced no `Response` at all" means to telemetry.
- *
- * `callFetch` can report a dropped connection two ways: by throwing, or by
- * resolving to `undefined`. The single-endpoint path turns the second into a
- * throw ({@link noResponseError}) and the pool path handles it inline, so the
- * two would otherwise describe the same event differently. Both build from
- * this one value: a transport-level failure that another attempt may well
- * answer.
+ * Shared by both "no `Response` at all" paths - the single-endpoint path
+ * throws {@link noResponseError}, the pool path uses this value inline - so
+ * they cannot describe the same event differently.
  */
 const NO_RESPONSE_CLASSIFICATION: otel.TelemetryErrorClassification =
     Object.freeze({
@@ -331,9 +326,8 @@ const NO_RESPONSE_CLASSIFICATION: otel.TelemetryErrorClassification =
 
 /**
  * The error the single-endpoint path throws when `callFetch` resolves without
- * a `Response`. It declares its own classification (the opt-in
- * `TelemetryClassifiedError` contract), so the generic catch below classifies
- * it as exactly what the pool path states directly.
+ * a `Response`. It declares its own classification so the generic catch below
+ * classifies it as exactly what the pool path states directly.
  */
 function noResponseError(): Error {
     return Object.assign(new Error("fetch: No response"), {
@@ -346,19 +340,11 @@ function noResponseError(): Error {
 // points at the exact endpoint). The URL carries no secret - the api-key
 // rides in request headers, not the URL.
 //
-// The message itself is a private diagnostic: it quotes the provider's
-// response body, so telemetry must never parse or export it. What telemetry
-// does need - was this auth, throttling, a timeout, the network? - is known
-// exactly here and nowhere upstream, because a `Result` failure has no room
-// for it. `classification` carries those bounded facts alongside the message
-// (invisibly to every existing consumer: see
-// `attachTelemetryErrorClassification`) so the model wrapper can report a real
-// 401/429/timeout instead of a blanket `provider`.
-//
-// `undefined` means "nothing recognizable was known here", and is left off
-// deliberately: the failure still came out of a provider call, and the model
-// wrapper's `provider` fallback describes that better than an `internal` this
-// layer would have had to invent.
+// The message quotes the provider's response body, so telemetry must never
+// parse or export it. `classification` carries the bounded facts instead,
+// since a `Result` failure has no room for them, letting the model wrapper
+// report a real 401/429/timeout instead of a blanket `provider`. `undefined`
+// is left off deliberately so that `provider` fallback still applies.
 function fetchErrorWithEndpoint(
     endpoint: string,
     detail: string,
@@ -579,11 +565,9 @@ async function fetchWithTimeout(
             throw e;
         }
         if (isAbortError(ex)) {
-            // Our own deadline fired, not the caller's cancellation. Name it
-            // `TimeoutError` (the standard DOM name) so it is not mistaken for
-            // a cancellation and so telemetry classifies it as a retryable
-            // timeout rather than an unexplained internal failure. The message
-            // stays the same for existing local diagnostics.
+            // Our own deadline fired, not the caller's cancellation. The
+            // standard `TimeoutError` name keeps it from being reported as a
+            // cancellation.
             const timeout = new Error(`fetch timeout ${timeoutMs}ms`);
             timeout.name = "TimeoutError";
             throw timeout;
@@ -831,8 +815,6 @@ async function fetchWithPool(
             lastError = fetchErrorWithEndpoint(
                 member.settings.endpoint,
                 "No response",
-                // Same event, same classification as the single-endpoint path
-                // (which reaches it by throwing `noResponseError`).
                 NO_RESPONSE_CLASSIFICATION,
             );
             continue;

@@ -136,7 +136,7 @@ describe("getStructuredLogMessage", () => {
                 httpStatus: 429,
                 retryable: true,
                 // Present in the raw event for the private diagnostic sinks;
-                // the rendered message must not reach for any of it.
+                // never rendered.
                 request: "play some private music",
                 name: "Error",
                 message: "secret provider detail",

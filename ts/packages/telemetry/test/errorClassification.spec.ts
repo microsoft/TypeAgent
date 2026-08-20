@@ -16,8 +16,7 @@ import {
 } from "../src/otel/errorClassification.js";
 
 // `Error`'s `cause` option is ES2022; the repo compiles against ES2021 libs,
-// so the tests attach `cause` (and the other structured properties they
-// exercise) explicitly.
+// so the tests attach `cause` explicitly.
 function errorWith<T extends object>(
     message: string,
     properties: T,
@@ -257,9 +256,7 @@ describe("classifyTelemetryError", () => {
         });
     });
 
-    // The reported fields must describe one error, not a mixture: a cause's
-    // code next to its wrapper's HTTP status would read as a coherent failure
-    // that never happened.
+    // The reported fields must describe one error, not a mixture.
     describe("precedence", () => {
         it("prefers a code over a status carried on the same error", () => {
             expect(
@@ -305,7 +302,7 @@ describe("classifyTelemetryError", () => {
 
         it("never mixes fields from different links of the chain", () => {
             // The wrapper's 401 wins, so the cause's ECONNRESET is not
-            // reported alongside it: the two describe different failures.
+            // reported alongside it.
             expect(
                 classifyTelemetryError(
                     errorWith("private message", {
@@ -339,8 +336,8 @@ describe("classifyTelemetryError", () => {
         });
     });
 
-    // A code becomes a log/metric label. Only reviewed constants may leave the
-    // process, so an identifier-shaped value cannot ride out as one.
+    // A code becomes a log/metric label, so only reviewed constants may leave
+    // the process.
     describe("error code bounds", () => {
         it("drops every code outside the reviewed allowlist", () => {
             const rejected = [
@@ -385,8 +382,8 @@ describe("classifyTelemetryError", () => {
         });
 
         it("keeps the allowlist small and shaped like an enum", () => {
-            // The bound is the point: a code is a label dimension, so the
-            // whole vocabulary has to stay reviewable and low-cardinality.
+            // A code is a label dimension, so the vocabulary has to stay
+            // reviewable and low-cardinality.
             expect(TELEMETRY_ERROR_CODES.length).toBeLessThanOrEqual(64);
             expect(new Set(TELEMETRY_ERROR_CODES).size).toBe(
                 TELEMETRY_ERROR_CODES.length,
@@ -459,8 +456,7 @@ describe("classifyTelemetryError", () => {
         });
 
         it("stops walking a chain longer than the depth bound", () => {
-            // The only signal sits past the bound, so it is never reached: the
-            // classification stays honest rather than paying unbounded cost.
+            // The only signal sits past the bound, so it is never reached.
             let error: Error = errorWith("deep", { code: "ECONNREFUSED" });
             for (let index = 0; index < 20; index++) {
                 error = errorWith(`wrapper ${index}`, { cause: error });
@@ -472,7 +468,7 @@ describe("classifyTelemetryError", () => {
     });
 
     // Classification runs on a value the process did not construct, so every
-    // read has to survive a getter that throws or a proxy that traps.
+    // read has to survive a throwing getter or a trapping proxy.
     describe("hostile values", () => {
         it("survives an error whose every property read throws", () => {
             expect(classifyTelemetryError(hostileObject())).toEqual({
@@ -572,8 +568,7 @@ describe("classifyTelemetryError", () => {
 
         it("keeps a link it already classified when the walk cannot continue", () => {
             // `Array.isArray` throws on a revoked proxy rather than returning
-            // false, so an unreadable `errors` must end the walk without
-            // discarding the outer link that already carried the signal.
+            // false, so an unreadable `errors` must not discard the outer link.
             const revocable = Proxy.revocable([new Error("inner")], {});
             revocable.revoke();
             const cancelled = errorWith("aborted by user", {
@@ -635,9 +630,6 @@ describe("classifyTelemetryError", () => {
 });
 
 // The difference between "we recognized nothing" and "this was internal".
-// A caller that attaches a classification to a value with its own truthful
-// default needs the first; a caller that must report a category needs the
-// second.
 describe("classifyTelemetryErrorIfRecognized", () => {
     it("reports nothing for a value carrying no recognized signal", () => {
         for (const value of [
@@ -651,8 +643,6 @@ describe("classifyTelemetryErrorIfRecognized", () => {
             hostileObject(),
         ]) {
             expect(classifyTelemetryErrorIfRecognized(value)).toBeUndefined();
-            // The same value still classifies as `internal` where a category
-            // is required.
             expect(classifyTelemetryError(value)).toEqual({
                 errorCategory: "internal",
             });
@@ -677,8 +667,6 @@ describe("classifyTelemetryErrorIfRecognized", () => {
     });
 
     it("reports an allowlisted code with no category rule as internal, not as unrecognized", () => {
-        // A reviewed code is a signal even when it says nothing about the
-        // category, so it is reported rather than dropped.
         const enoent = errorWith("private path detail", { code: "ENOENT" });
         expect(classifyTelemetryErrorIfRecognized(enoent)).toEqual({
             errorCategory: "internal",
@@ -700,8 +688,7 @@ describe("isTelemetryCancellation", () => {
     });
 
     it("honors a hint the thrown value cannot carry", () => {
-        // Signal-only: the work was torn down, and what surfaced is whatever
-        // the provider was in the middle of.
+        // Signal-only: the thrown value says nothing about the cancellation.
         expect(isTelemetryCancellation(new Error("socket hang up"), true)).toBe(
             true,
         );
@@ -790,11 +777,9 @@ describe("classification carrier", () => {
     });
 });
 
-// The classifier is published on its own as
-// `@typeagent/telemetry/errorClassification` so browser-shared code can use it
-// without pulling in the Node-only telemetry composition root. A Node builtin
-// appearing here would either force a Node-only dependency into a browser
-// bundle or break bundling on an unresolvable `node:*` import.
+// The classifier is published as `@typeagent/telemetry/errorClassification` so
+// browser-shared code can use it; a Node builtin here would force a Node-only
+// dependency into a browser bundle or break bundling outright.
 describe("browser-safe errorClassification boundary", () => {
     const otelSrcDir = path.resolve(
         path.dirname(fileURLToPath(import.meta.url)),
@@ -836,9 +821,8 @@ describe("browser-safe errorClassification boundary", () => {
         );
     }
 
-    // `from "x"`, bare `import "x"`, and `import("x")`. Deliberately crude:
-    // over-matching (a specifier quoted in a comment, say) can only make this
-    // check stricter, never weaker.
+    // `from "x"`, bare `import "x"`, and `import("x")`. Crude on purpose:
+    // over-matching can only make this check stricter, never weaker.
     const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*)["']([^"']+)["']/g;
 
     it("imports no Node builtin and reaches no other module", async () => {
@@ -850,9 +834,8 @@ describe("browser-safe errorClassification boundary", () => {
             ([, specifier]) => specifier!,
         );
         expect(specifiers.filter(isNodeBuiltin)).toEqual([]);
-        // It imports nothing at all today. Asserting that keeps the check
-        // above complete: a relative import would need its own graph walk
-        // before this file could still be called browser-safe.
+        // It imports nothing at all today; a relative import would need its
+        // own graph walk before the check above stayed complete.
         expect(specifiers).toEqual([]);
     });
 });

@@ -66,13 +66,11 @@ export async function wrapRootRequestSpan<
                         }
                         return result;
                     } catch (e) {
-                        // The thrown value is classified rather than
-                        // name-checked: a cancellation is frequently wrapped,
-                        // and `DOMException` is not always `instanceof Error`
-                        // in Node, so nothing here may assume an `Error`. A
-                        // cancellation the request itself observed arrives as
-                        // `result.cancelled` above, not as a throw, so no
-                        // signal is threaded in here.
+                        // Classified rather than name-checked: a cancellation
+                        // is frequently wrapped, and `DOMException` is not
+                        // always `instanceof Error` in Node. A cancellation the
+                        // request itself observed arrives as `result.cancelled`
+                        // above, not as a throw.
                         recordSpanFailure(span, e, REQUEST_FAILURE);
                         throw e;
                     } finally {

@@ -19,13 +19,10 @@ import {
 } from "../src/otel/structuredEvents.js";
 import { wrapTranslationSpan } from "../src/otel/translationSpan.js";
 
-// A phase span and the `*:completed` event recorded next to it describe the
-// same failure, so they have to reach the same verdict about it. The case that
-// broke that is a cancellation the outermost thrown value does not admit to:
-// the phase catches its own error and attaches the abort as the `cause`, or the
-// request was torn down and what surfaced is whatever the provider was in the
-// middle of. The events already classified through the cause chain; the spans
-// compared `error.name` and called those failures.
+// A phase span and the `*:completed` event recorded next to it must reach the
+// same verdict about a cancellation the outermost thrown value does not admit
+// to: the abort arrives as a `cause`, or the work was torn down and what
+// surfaced is whatever the provider was in the middle of.
 
 const ATTRIBUTES = {
     sessionId: "session-abc",
@@ -52,11 +49,7 @@ function createCapture(): { logger: Logger; events: CapturedEvent[] } {
     };
 }
 
-/**
- * What a phase actually throws when the work under it was cancelled: the
- * phase's own error, carrying the abort as its `cause`. Nothing on the outer
- * value says "cancelled".
- */
+/** A phase's own error carrying the abort as its `cause`. */
 function wrappedAbortError(detail: string): Error {
     return Object.assign(new Error(detail), {
         cause: new DOMException("The operation was aborted.", "AbortError"),
@@ -127,8 +120,7 @@ describe("span and structured-event cancellation agree", () => {
                     appAgentName: "player",
                     actionIndex: 0,
                     success: false,
-                    // The call site sees no cancellation from outside: the
-                    // signal never fired, the abort is inside the error.
+                    // The signal never fired; the abort is inside the error.
                     cancelled: false,
                     error,
                 });
@@ -232,8 +224,8 @@ describe("span and structured-event cancellation agree", () => {
     });
 });
 
-// The other half of the cancellation contract: the thrown value says nothing,
-// and the caller knows only because it holds the signal that fired.
+// The thrown value says nothing; the caller knows only because it holds the
+// signal that fired.
 describe("signal-only cancellation", () => {
     let manager: InMemorySpanManager;
 

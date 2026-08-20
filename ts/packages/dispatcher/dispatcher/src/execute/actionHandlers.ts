@@ -508,9 +508,8 @@ export async function executeAction(
                 logActionCompleted(systemContext.logger, {
                     ...eventData,
                     success: false,
-                    // Only what is known from outside the error. A cancellation
-                    // carried by the thrown value - including one wrapped as a
-                    // `cause` - is recognized from `error` itself.
+                    // Only what is known from outside the error; a cancellation
+                    // carried by the thrown value is recognized from `error`.
                     cancelled:
                         systemContext.currentAbortSignal?.aborted === true,
                     elapsedMs: Date.now() - actionStartedAt,
@@ -519,8 +518,8 @@ export async function executeAction(
                 throw error;
             }
         },
-        // The same signal the completion event above uses, so the action span
-        // and `action:completed` classify a cancellation identically.
+        // The same signal the completion event above uses, so the span and
+        // `action:completed` classify a cancellation identically.
         [systemContext.currentAbortSignal],
     );
 }

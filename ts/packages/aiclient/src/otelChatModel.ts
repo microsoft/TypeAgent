@@ -129,10 +129,6 @@ export function instrumentChatModel(
     return model;
 }
 
-/**
- * Run a telemetry side effect that must never disturb the model call it
- * describes. A broken logger or span implementation degrades telemetry only.
- */
 function safely(body: () => void): void {
     try {
         body();
@@ -252,17 +248,10 @@ function cancelLlmCall(
 }
 
 /**
- * Record a call that returned rather than threw.
- *
- * A failure `Result` carries only typechat's message string, which may quote
- * the provider response and is never parsed here. The transport attaches what
- * it actually knew before flattening (see
- * `attachTelemetryErrorClassification`), so a real 401/429/timeout keeps its
- * category; when it recognized nothing it attaches nothing (see
- * `classifyTelemetryErrorIfRecognized`) rather than an `internal` that would
- * overwrite this fallback. Every path that produces a returned failure still
- * originates in the provider call, so `provider` is the truthful fallback and
- * nothing else about the failure is claimed.
+ * Record a call that returned rather than threw. A failure `Result` carries
+ * only typechat's message string, which is never parsed here; the transport
+ * attaches the bounded classification it knew, and `provider` is the fallback
+ * when it recognized nothing.
  */
 function finishLlmCall(
     state: LlmCallState,
@@ -303,11 +292,9 @@ function finishLlmCall(
 }
 
 /**
- * Record a call that threw. The thrown value is classified once, and the
- * span status, the event status, its severity, and whether classification
- * fields are emitted at all are all derived from that single result - so a
- * cancellation wrapped in another error cannot be reported as a failure on one
- * signal and a cancellation on another.
+ * Record a call that threw. Span status, event status, and severity all derive
+ * from one classification, so a wrapped cancellation cannot be reported as a
+ * failure on one signal and a cancellation on another.
  */
 function failLlmCall(
     state: LlmCallState,
@@ -342,10 +329,8 @@ function failLlmCall(
 }
 
 /**
- * End the span exactly once. `state.ended` already guards re-entry, so this
- * only has to survive a span implementation that throws - the span must be
- * ended even when emitting the completion event failed, or a broken logger
- * would leak an unfinished span per call.
+ * End the span even when emitting the completion event failed, so a broken
+ * logger cannot leak an unfinished span per call.
  */
 function endSpan(state: LlmCallState): void {
     safely(() => state.span.end());
@@ -374,8 +359,8 @@ function emitCompleted(
                     success,
                     status,
                     elapsedMs: Date.now() - state.startedAt,
-                    // A cancellation is a disposition, not a failure worth
-                    // classifying, so only real failures carry the fields.
+                    // A cancellation is a disposition, not a failure to
+                    // classify.
                     ...(status === "failed" && classification !== undefined
                         ? classification
                         : {}),

@@ -79,10 +79,9 @@ export function emitReasoningToolCall(toolCallNumber: number): void {
 /**
  * Run a reasoning body inside a `typeagent.reasoning` span.
  *
- * `cancellationSignals` are the signals the caller holds. Reasoning is the
- * phase where the signal matters most: a cancelled or timed-out run usually
- * throws whatever the provider was in the middle of, which says nothing about
- * having been cancelled.
+ * `cancellationSignals` are the signals the caller holds: a cancelled or
+ * timed-out run usually throws whatever the provider was in the middle of,
+ * which says nothing about having been cancelled.
  */
 export async function wrapReasoningSpan<T>(
     attributes: otel.TypeAgentSpanAttributes,
@@ -172,9 +171,8 @@ export function runInReasoningSpan<T>(
             ? {}
             : { model: modelAttributes.genAiRequestModel }),
     };
-    // The reasoning-specific signal (a per-run deadline, say) and the request's
-    // own. Both the span and the `reasoning:completed` event below classify
-    // from this one list, so they cannot disagree.
+    // Both the span and the `reasoning:completed` event below classify from
+    // this one list, so they cannot disagree.
     const cancellationSignals: CancellationSignals = [
         cancellationSignal,
         context.abortSignal,

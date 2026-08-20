@@ -362,8 +362,7 @@ export function runInTranslationSpan<T>(
     }
 
     // The same signal `requestCommandHandler` reads when it emits
-    // `translation:completed`, so the span and that event agree about a
-    // cancellation that surfaced as an ordinary translation failure.
+    // `translation:completed`, so the span and that event agree.
     return wrapTranslationSpan(attributes, body, [
         systemContext.currentAbortSignal,
     ]);

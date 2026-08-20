@@ -74,9 +74,9 @@ export function recordActionFlowException(span: Span): void {
  *
  * Exceptions that escape the body are recorded with stable, privacy-safe
  * classifications matching the request/translation span conventions.
- * `cancellationSignals` are the signals the caller holds, passed so a
- * cancellation that surfaces as an unrelated-looking failure is recorded as a
- * cancellation on the span and on the `action:completed` event alike.
+ * `cancellationSignals` are the signals the caller holds, so a cancellation
+ * that surfaces as an unrelated-looking failure is recorded as a cancellation
+ * on the span and on the `action:completed` event alike.
  */
 export async function wrapActionSpan<T>(
     attributes: otel.TypeAgentSpanAttributes,

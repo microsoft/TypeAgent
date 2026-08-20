@@ -203,8 +203,8 @@ describe("dispatcher failure classification", () => {
         expect(events[0]?.severity).toBe("error");
         expect(events[0]?.data).toMatchObject({
             requestId: "request-4",
-            // Code and status come from the same error, so they describe one
-            // failure; the code table wins the category.
+            // Code and status come from the same error; the code table wins
+            // the category.
             errorCategory: "timeout",
             errorCode: "ETIMEDOUT",
             httpStatus: 429,
@@ -269,7 +269,6 @@ describe("dispatcher failure classification", () => {
             requestId: "request-4c",
             errorCategory: "internal",
         });
-        // Nothing readable, so nothing raw is asserted either.
         expect(events[0]?.data).not.toHaveProperty("name");
         expect(events[0]?.data).not.toHaveProperty("message");
         expect(events[0]?.data).not.toHaveProperty("stack");
@@ -286,8 +285,8 @@ describe("dispatcher failure classification", () => {
             error,
         });
 
-        // These fields exist for the local debug sink and the opt-in database
-        // sinks; `createDispatcherOtelLoggerSink` strips them before OTel.
+        // These fields stay in the local debug and opt-in database sinks;
+        // `createDispatcherOtelLoggerSink` strips them before OTel.
         expect(events[0]?.data).toMatchObject({
             request: "play some private music",
             name: "TypeError",
@@ -346,7 +345,6 @@ describe("dispatcher failure classification", () => {
             cancelled: true,
             error: new DOMException("The operation was aborted.", "AbortError"),
         });
-        // Success never carries classification fields.
         logActionCompleted(logger, {
             requestId: "request-7",
             schemaName: "email",
@@ -369,7 +367,6 @@ describe("dispatcher failure classification", () => {
         });
         expect(events[2]?.data).not.toHaveProperty("errorCategory");
         expect(events[3]?.data).not.toHaveProperty("errorCategory");
-        // The thrown value itself never rides along on these events.
         expect(events[0]?.data).not.toHaveProperty("error");
         expect(events[1]?.data).not.toHaveProperty("error");
         expect(JSON.stringify(events)).not.toContain("secret");
@@ -379,7 +376,7 @@ describe("dispatcher failure classification", () => {
         const { logger, events } = createCapture();
 
         // The common agent failure: a typed `ActionResult.error` with no
-        // exception. There is nothing to classify, so nothing is asserted.
+        // exception, so there is nothing to classify.
         logActionCompleted(logger, {
             requestId: "request-8",
             schemaName: "email",
@@ -401,11 +398,9 @@ describe("dispatcher failure classification", () => {
     });
 });
 
-// `cancelled`, `status`, the log severity, and whether classification fields
-// are emitted all have to describe the same thing. They are derived from one
-// classification of the thrown value rather than decided independently, so a
-// cancellation the call site could not see - one wrapped as a `cause` - is
-// still a cancellation on every one of them.
+// `cancelled`, `status`, severity, and the classification fields all derive
+// from one classification, so a cancellation the call site could not see -
+// one wrapped as a `cause` - is a cancellation on every one of them.
 describe("dispatcher cancellation coherence", () => {
     function wrappedAbort(): Error {
         return Object.assign(new Error("Error translating request"), {
@@ -458,8 +453,7 @@ describe("dispatcher cancellation coherence", () => {
         const { logger, events } = createCapture();
 
         // The abort signal fired while a handler was failing for an unrelated
-        // reason: the disposition is still cancellation, and no failure
-        // category is asserted for it.
+        // reason; the disposition is still cancellation.
         logActionCompleted(logger, {
             requestId: "request-10",
             schemaName: "email",

@@ -393,8 +393,6 @@ describe("instrumentChatModel", () => {
             const completed = events.find(
                 ({ name }) => name === "llm:completed",
             );
-            // The span status, the event status, the severity, and the absence
-            // of classification fields all follow the same classification.
             expect(completed?.data).toMatchObject({
                 status: "cancelled",
                 success: false,
@@ -456,8 +454,8 @@ describe("instrumentChatModel", () => {
             const completed = events.find(
                 ({ name }) => name === "llm:completed",
             );
-            // An unusable carrier falls back to the honest default rather than
-            // exporting whatever it happened to contain.
+            // An unusable carrier falls back to the default rather than
+            // exporting whatever it contained.
             expect(completed?.data).toMatchObject({
                 status: "failed",
                 errorCategory: "provider",
@@ -467,12 +465,9 @@ describe("instrumentChatModel", () => {
         });
 
         it("reports provider for a real transport failure nothing recognized", async () => {
-            // End to end with the actual REST client rather than a hand-built
-            // `Result`: an unexplained `fetch failed` has no signal the
-            // transport could attach, so the wrapper's `provider` fallback has
-            // to survive. If the transport ever attached `internal` for the
-            // unrecognized case, this reads `internal` instead - and every
-            // unexplained provider outage would be counted as our own bug.
+            // End to end with the real REST client: an unexplained
+            // `fetch failed` has no signal to attach, so the wrapper's
+            // `provider` fallback must survive rather than reading `internal`.
             otel.setStructuredLoggingEnabled(true);
             const events: CapturedEvent[] = [];
             const originalFetch = globalThis.fetch;
@@ -527,8 +522,7 @@ describe("instrumentChatModel", () => {
                 ).complete("private prompt"),
             ).rejects.toThrow("provider blew up");
 
-            // A broken sink must not leak an unfinished span or replace the
-            // original failure with a telemetry one.
+            // A broken sink must not leak an unfinished span.
             expect(spans.findSpansByName("typeagent.llm")).toHaveLength(1);
         });
 

@@ -2,61 +2,22 @@
 // Licensed under the MIT License.
 
 /**
- * Shared normalizer that turns an arbitrary thrown value into bounded,
- * low-cardinality structured fields that are safe to export.
+ * Turns an arbitrary thrown value into bounded, low-cardinality fields that
+ * are safe to export.
  *
- * Structured failure events need to answer "what kind of failure was this,
- * and is it worth retrying?" without carrying the original message, stack, or
- * any user content. This module produces exactly that: a closed
- * {@link TelemetryErrorCategory}, plus optional `errorCode`, `httpStatus`, and
- * `retryable` fields that are emitted only when they are actually known.
+ * Free-text messages are never parsed or exported: a message is the part of an
+ * error most likely to contain a prompt, path, or user request. Signals are
+ * only an explicit classification from the thrower, `error.name`,
+ * `error.code` (allowlisted), and an HTTP failure status (400-599).
  *
- * Classification never parses free-text messages. A message is the one part of
- * an error most likely to contain a prompt, a file path, or a user's request,
- * and matching on its wording is both a privacy hazard and fragile across
- * provider/library versions. The only inputs are:
+ * Precedence: the `cause` chain is walked outermost first and the first link
+ * carrying a recognized signal wins, with every reported field read from that
+ * same link, so a cause's `ECONNRESET` is never reported next to its wrapper's
+ * HTTP 401. Within a link: explicit, then name, then code, then status.
  *
- * 1. An explicit `errorCategory` (and optional `errorCode` / `retryable`) that
- *    the thrower attached - the opt-in extension point for a package that owns
- *    a typed error and knows how it should be classified.
- * 2. `error.name`, matched against a closed table of standard platform names
- *    (DOM, Node, undici).
- * 3. `error.code`, matched against {@link TELEMETRY_ERROR_CODES}, a closed
- *    reviewed allowlist. A code outside it is dropped rather than exported.
- * 4. An HTTP *failure* status (400-599) read from a small set of well-known
- *    numeric properties. A 1xx/2xx/3xx value is not evidence of a failure, and
- *    `status` is also used as a non-HTTP enum elsewhere (a `child_process`
- *    exit code, for instance), so those values are ignored rather than
- *    reported.
- *
- * ## Precedence
- *
- * Each error in the `cause` chain is examined in turn, outermost first, so a
- * `fetch` failure (`TypeError` wrapping a `cause` carrying `ECONNREFUSED`)
- * classifies as `network` rather than falling through. The **first link that
- * yields a recognized signal wins, and every reported field comes from that
- * one link**: category, code, status, and retryability then describe the same
- * error instead of being stitched together across links (a cause's
- * `ECONNRESET` must not be reported next to its wrapper's HTTP 401).
- *
- * Within the winning link the order is: an explicit classification from the
- * thrower, then `error.name`, then `error.code`, then an HTTP failure status.
- * A link carrying only an allowlisted code with no category rule still wins:
- * it reports that code with the `internal` category rather than dropping a
- * reviewed, useful code.
- *
- * Anything that yields no signal - a thrown string, a thrown object, or a
- * plain `Error` - becomes `internal` with no fabricated code, status, or
- * retryability. A caller that has its own truthful default for that case uses
- * {@link classifyTelemetryErrorIfRecognized} instead and gets `undefined`.
- *
- * ## Never throws
- *
- * A thrown value is hostile-shaped input: getters can throw, proxies trap
- * every operation, and a proxy can be revoked between two reads. Every
- * property access here is guarded and the entry point has a last-resort
- * fallback, so classifying a hostile error degrades to `internal` instead of
- * replacing the original failure with a telemetry one.
+ * Never throws - a thrown value is hostile-shaped input (throwing getters,
+ * revocable proxies), so classification must not replace the failure it was
+ * asked to describe.
  */
 
 export const TELEMETRY_ERROR_CATEGORIES = [
@@ -71,25 +32,21 @@ export const TELEMETRY_ERROR_CATEGORIES = [
     "internal",
 ] as const;
 
-/**
- * Closed set of failure categories. Low-cardinality by construction, so it is
- * safe as a metric dimension or a log/span attribute.
- */
+/** Closed, low-cardinality set: safe as a metric dimension or span attribute. */
 export type TelemetryErrorCategory =
     (typeof TELEMETRY_ERROR_CATEGORIES)[number];
 
 /**
- * A code that is allowed to leave the process: a member of
- * {@link TELEMETRY_ERROR_CODES}. Kept as a `string` alias rather than a
- * literal union so a package can declare a constant without importing a
- * generated type; the allowlist is the runtime authority either way.
+ * A code allowed to leave the process: a member of
+ * {@link TELEMETRY_ERROR_CODES}. A `string` alias rather than a literal union
+ * so a package can declare a constant without importing a generated type; the
+ * allowlist is the runtime authority either way.
  */
 export type TelemetryErrorCode = string;
 
 /**
- * The normalized, export-safe view of a failure. Only `errorCategory` is
- * always present; the optional fields are omitted rather than guessed when the
- * error carries no evidence for them.
+ * The export-safe view of a failure. Optional fields are omitted rather than
+ * guessed when the error carries no evidence for them.
  */
 export interface TelemetryErrorClassification {
     readonly errorCategory: TelemetryErrorCategory;
@@ -102,10 +59,9 @@ export interface TelemetryErrorClassification {
 }
 
 /**
- * The properties a package sets on its own error type to classify it without
- * this module having to know the type's name. `errorCategory` must be a member
- * of {@link TELEMETRY_ERROR_CATEGORIES} and `errorCode` a member of
- * {@link TELEMETRY_ERROR_CODES}; anything else is ignored.
+ * Properties a package sets on its own error type to classify it. Values
+ * outside {@link TELEMETRY_ERROR_CATEGORIES} / {@link TELEMETRY_ERROR_CODES}
+ * are ignored.
  */
 export interface TelemetryClassifiedError {
     readonly errorCategory: TelemetryErrorCategory;
@@ -120,10 +76,9 @@ type CategoryRule = {
 };
 
 /**
- * Standard platform error names. Deliberately limited to names defined by the
- * DOM, Node, or undici so this table does not become a registry of every
- * TypeAgent error type - a package with its own typed error attaches
- * `errorCategory` to it instead (see {@link TelemetryClassifiedError}).
+ * Standard platform error names (DOM, Node, undici) only. A package with its
+ * own typed error attaches `errorCategory` to it instead (see
+ * {@link TelemetryClassifiedError}).
  */
 const CATEGORY_BY_ERROR_NAME: ReadonlyMap<string, CategoryRule> = new Map([
     ["AbortError", { category: "cancelled", retryable: false }],
@@ -166,10 +121,8 @@ const CATEGORY_BY_ERROR_CODE: ReadonlyMap<string, CategoryRule> = new Map([
 ] as const);
 
 /**
- * Reviewed codes that are safe to export but say nothing about the category on
- * their own. Kept out of {@link CATEGORY_BY_ERROR_CODE} so the category tables
- * stay honest: these are reported as `errorCode` alongside whatever category
- * the rest of the link established, which is `internal` when nothing else did.
+ * Reviewed codes that are safe to export but imply no category on their own;
+ * reported alongside whatever category the rest of the link established.
  */
 const UNCATEGORIZED_ERROR_CODES = [
     "EACCES",
@@ -195,14 +148,11 @@ const UNCATEGORIZED_ERROR_CODES = [
 ] as const;
 
 /**
- * The closed, reviewed set of codes this module will ever export.
- *
- * A code becomes a log/metric label, so a shape check is not enough on its
- * own: a `code` that happens to be an identifier-shaped GUID, account name, or
- * API key passes any pattern and then either blows up label cardinality or
- * carries an identifier off the machine. Exporting only reviewed constants
- * bounds both. A package that needs its own code adds it here (one reviewed
- * line) and declares it through {@link TelemetryClassifiedError}.
+ * The closed set of codes this module will ever export. A code becomes a
+ * log/metric label, so a shape check is not enough: an identifier-shaped
+ * `code` (GUID, account name, key) would pass a pattern and then either blow
+ * up label cardinality or carry an identifier off the machine. Adding a code
+ * is a reviewed change here.
  */
 export const TELEMETRY_ERROR_CODES: readonly TelemetryErrorCode[] =
     Object.freeze([
@@ -223,9 +173,8 @@ const RETRYABLE_HTTP_STATUSES: ReadonlySet<number> = new Set([
 const HTTP_STATUS_PROPERTIES = ["status", "statusCode", "httpStatus"] as const;
 
 /**
- * How far the `cause` chain is walked. Deep enough for the wrapping that
- * `fetch`, undici, and the Azure SDKs actually do, shallow enough that a
- * hostile or accidental chain cannot turn classification into real work.
+ * How far the `cause` chain is walked - deep enough for the wrapping `fetch`,
+ * undici, and the Azure SDKs do, shallow enough to bound a hostile chain.
  */
 const MAX_CAUSE_DEPTH = 8;
 
@@ -234,10 +183,9 @@ const INTERNAL_CLASSIFICATION: TelemetryErrorClassification = Object.freeze({
 });
 
 /**
- * Normalize any thrown value into bounded, export-safe structured fields.
- * Never throws and never returns the original message, stack, or any other
- * free-text content. A value carrying no recognized signal is reported as
- * `internal`.
+ * Normalize any thrown value into bounded, export-safe fields. Never throws
+ * and never returns the message, stack, or any other free-text content. An
+ * unrecognized value is reported as `internal`.
  */
 export function classifyTelemetryError(
     error: unknown,
@@ -246,20 +194,13 @@ export function classifyTelemetryError(
 }
 
 /**
- * The same classification, except that a value carrying no recognized signal
- * yields `undefined` instead of `internal`.
+ * As {@link classifyTelemetryError}, but an unrecognized value yields
+ * `undefined` instead of `internal`.
  *
  * `internal` is a claim, not an absence: it says the failure came from our own
- * code. A caller that already knows something truer about the failure must not
- * have that claim written over its own. The transport turning a provider call
- * into a `Result` failure is the case that matters - `provider` is the honest
- * description of "the model call failed and nothing told us why", and
- * attaching `internal` to it would both mislabel the failure and pre-empt the
- * fallback the reporting layer would otherwise apply.
- *
- * Use this wherever a classification is *attached* to a value that already has
- * a meaningful default; use {@link classifyTelemetryError} where a category is
- * required and `internal` is the honest answer. Never throws.
+ * code. Use this where a classification is attached to a value whose caller
+ * already has a truer default (the transport reporting `provider` for a failed
+ * model call, say). Never throws.
  */
 export function classifyTelemetryErrorIfRecognized(
     error: unknown,
@@ -267,27 +208,19 @@ export function classifyTelemetryErrorIfRecognized(
     try {
         return classifyErrorChain(collectErrorChain(error));
     } catch {
-        // Defense in depth: every read below is already guarded, so reaching
-        // here means an assumption broke. A telemetry helper must still not
-        // replace the failure it was asked to describe.
+        // Every read below is already guarded; a telemetry helper must still
+        // never replace the failure it was asked to describe.
         return undefined;
     }
 }
 
 /**
- * Whether a failure should be reported as a cancellation.
- *
  * The single cancellation test for spans, structured events, and the model
- * wrapper, so a span status and the log record next to it cannot disagree
- * about the same failure. Two things make it a cancellation:
+ * wrapper, so a span status and the log record next to it cannot disagree.
  *
- * - The thrown value classifies as `cancelled`. This walks the `cause` chain,
- *   so an `AbortError` wrapped by a phase-level error still counts - a call
- *   site that only compared `error.name` would report a plain failure.
- * - `cancelledHint`, what the caller knows from outside the error: typically
- *   that the request's abort signal has fired. It stands on its own, because a
- *   cancellation frequently surfaces as an unrelated-looking failure (a
- *   provider socket error, a timeout) once the signal has torn the work down.
+ * `cancelledHint` (typically "the abort signal fired") stands on its own,
+ * because a cancellation often surfaces as an unrelated-looking failure once
+ * the signal has torn the work down.
  */
 export function isTelemetryCancellation(
     error: unknown,
@@ -300,10 +233,9 @@ export function isTelemetryCancellation(
 }
 
 /**
- * Classify an HTTP failure status directly, for a caller that holds the status
- * but no error object - a REST client turning a non-OK response into a typed
- * failure result, for instance. Returns `undefined` for a status that is not a
- * failure so the caller omits the classification rather than inventing one.
+ * Classify an HTTP failure status for a caller that holds a status but no
+ * error object. `undefined` for a non-failure status, so the caller omits the
+ * classification rather than inventing one.
  */
 export function classifyTelemetryHttpStatus(
     status: number,
@@ -320,12 +252,9 @@ export function classifyTelemetryHttpStatus(
 }
 
 /**
- * Where a classification is stashed on a value that is not itself an error.
- *
- * A registered symbol rather than a string key: it cannot collide with a
- * domain property, `JSON.stringify` and `Object.keys` skip it, and
- * `Symbol.for` resolves to the same symbol when two copies of this package are
- * loaded in one process.
+ * Where a classification is stashed on a non-error value. `Symbol.for` so it
+ * cannot collide with a domain property, is skipped by `JSON.stringify` and
+ * `Object.keys`, and resolves identically across two copies of this package.
  */
 const CLASSIFICATION_CARRIER = Symbol.for(
     "typeagent.telemetry.errorClassification",
@@ -334,18 +263,11 @@ const CLASSIFICATION_CARRIER = Symbol.for(
 /**
  * Record a classification on a value that reports failure without throwing.
  *
- * `typechat`'s `Result` failure is `{ success: false, message }` - a string
- * with no room for structure, so by the time a caller sees one, everything
- * that was known at the transport layer (the HTTP status, the socket error)
- * has been flattened into prose that telemetry must not parse. This lets the
- * layer that still has the facts attach them, and
- * {@link readTelemetryErrorClassification} lets the layer that reports
- * telemetry pick them back up.
- *
- * The property is non-enumerable, so it does not change spreads, `Object.keys`,
- * `JSON.stringify`, or deep-equality assertions on existing results. Returns
- * the same object and never throws: a frozen or exotic target simply carries
- * no classification.
+ * `typechat`'s `Result` failure is `{ success: false, message }`, so the facts
+ * known at the transport layer (HTTP status, socket error) are otherwise
+ * flattened into prose that telemetry must not parse. The property is
+ * non-enumerable, so spreads, `Object.keys`, and deep-equality assertions are
+ * unaffected. Returns the same object and never throws.
  */
 export function attachTelemetryErrorClassification<T extends object>(
     target: T,
@@ -366,9 +288,9 @@ export function attachTelemetryErrorClassification<T extends object>(
 
 /**
  * Read back a classification attached by
- * {@link attachTelemetryErrorClassification}. The stored value is re-validated
- * against the same closed vocabularies used for a thrown error, so a stale or
- * forged carrier cannot smuggle an unbounded field into an export.
+ * {@link attachTelemetryErrorClassification}. Re-validated against the same
+ * closed vocabularies, so a stale or forged carrier cannot smuggle an
+ * unbounded field into an export.
  */
 export function readTelemetryErrorClassification(
     value: unknown,
@@ -409,9 +331,8 @@ function sanitizeClassification(
 }
 
 /**
- * Read one property without trusting the object. A getter can throw, and a
- * proxy can trap (or have been revoked since the previous read), so every
- * access degrades to `undefined` instead of propagating.
+ * Read one property without trusting the object: a getter can throw and a
+ * proxy can be revoked between reads.
  */
 function readProperty(node: object, key: string): unknown {
     try {
@@ -428,9 +349,8 @@ function readStringProperty(node: object, key: string): string | undefined {
 
 /**
  * Flatten the `cause` chain (and the first entry of an `AggregateError`) into
- * an ordered list, outermost first. Bounded by {@link MAX_CAUSE_DEPTH} and
- * guarded by a visited set, so a self-referential or mutually-referential
- * chain terminates instead of recursing forever.
+ * an ordered list, outermost first. Bounded by {@link MAX_CAUSE_DEPTH} and a
+ * visited set so a cyclic chain terminates.
  */
 function collectErrorChain(error: unknown): readonly object[] {
     const chain: object[] = [];
@@ -444,9 +364,7 @@ function collectErrorChain(error: unknown): readonly object[] {
     ) {
         visited.add(current);
         chain.push(current);
-        // Stopping the walk must not discard the links already collected: an
-        // outer `AbortError` still classifies the failure even when the value
-        // hanging off it is unreadable.
+        // An unreadable `cause` must not discard the links already collected.
         try {
             current = nextInChain(current);
         } catch {
@@ -461,14 +379,11 @@ function nextInChain(node: object): unknown {
     if (cause !== undefined) {
         return cause;
     }
-    // Only the first aggregated error is followed. Walking all of them would
-    // make the cost unbounded, and the categories of sibling failures are
-    // usually the same anyway.
+    // Only the first aggregated error is followed, to keep the cost bounded.
     const errors = readProperty(node, "errors");
     try {
-        // `Array.isArray` is not a safe predicate: it throws on a revoked
-        // proxy rather than returning false. It and the index read are both
-        // inside the guard so an unreadable `errors` ends the walk instead.
+        // `Array.isArray` throws on a revoked proxy rather than returning
+        // false, so it and the index read are both inside the guard.
         return Array.isArray(errors) ? errors[0] : undefined;
     } catch {
         return undefined;
@@ -476,9 +391,8 @@ function nextInChain(node: object): unknown {
 }
 
 /**
- * Report the first link of the chain that carries a recognized signal, with
- * every field read from that link. See the precedence contract at the top of
- * the module. `undefined` when no link carried anything recognized.
+ * Report the first link carrying a recognized signal, with every field read
+ * from that link (see the precedence contract at the top of the module).
  */
 function classifyErrorChain(
     chain: readonly object[],
@@ -504,8 +418,8 @@ function classifyNode(node: object): TelemetryErrorClassification | undefined {
             : CATEGORY_BY_ERROR_CODE.get(errorCode)) ??
         (httpStatus === undefined ? undefined : ruleForHttpStatus(httpStatus));
     if (rule === undefined && errorCode === undefined) {
-        // Nothing on this link is evidence of anything. Keep walking rather
-        // than reporting an `internal` that a cause could have explained.
+        // Keep walking rather than reporting an `internal` that a cause could
+        // have explained.
         return undefined;
     }
     return {
@@ -538,7 +452,7 @@ type ExplicitClassification = {
 };
 
 /**
- * Read the classification a thrower declared on its own error type. Returns
+ * Read the classification a thrower declared on its own error type.
  * `undefined` when it declared neither a usable category nor an allowlisted
  * code, so the link falls through to the platform signals.
  */
@@ -583,25 +497,16 @@ function categoryForHttpStatus(status: number): TelemetryErrorCategory {
         case 429:
             return "rate_limit";
     }
-    // Only failure statuses reach here (see readOwnHttpStatus). The remaining
-    // 4xx codes all say the request itself was unacceptable; 5xx is the
-    // provider failing to serve an acceptable request.
+    // Only failure statuses reach here: the remaining 4xx say the request was
+    // unacceptable, 5xx is the provider failing an acceptable request.
     return status < 500 ? "validation" : "provider";
 }
 
 /**
- * Read an HTTP failure status off the node itself or off its `response`
- * object (the shape most HTTP clients use). `cause` is deliberately not
- * followed here: the chain walk already visits it as its own link, so
- * following it would let a cause's status pre-empt that same cause's more
+ * Read an HTTP failure status off the node or its `response`. `cause` is
+ * deliberately not followed: the chain walk visits it as its own link, so
+ * following it here would let a cause's status pre-empt that same cause's more
  * specific `name`/`code`.
- *
- * Only a finite integer in the 400-599 range counts. A string `"429"` is
- * ignored rather than coerced, and a 1xx/2xx/3xx value is ignored because it
- * says nothing about a failure - `status` is also used as a non-HTTP enum
- * elsewhere (a `child_process` exit code, for instance), and treating such a
- * value as a signal would both fabricate an `httpStatus` and stop the cause
- * walk before the real signal.
  */
 function readHttpStatus(node: object): number | undefined {
     const own = readOwnHttpStatus(node);
