@@ -26,11 +26,7 @@ export function pricesFor(model: string): {
         ]),
     );
     const table: PriceTable = { ...PRICES, rates };
-    const withoutWildcard = model.replace(/\*$/, "");
-    const withoutProvider = withoutWildcard.replace(/^[^/]+\//, "");
-    const prices =
-        table.rates[model] ??
-        table.rates[withoutWildcard] ??
-        table.rates[withoutProvider];
+    const lookupModel = model.replace(/^azure\//, "").replace(/\*$/, "");
+    const prices = table.rates[lookupModel];
     return { prices, table };
 }
