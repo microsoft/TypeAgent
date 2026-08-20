@@ -5,9 +5,8 @@ translation-bench grader scores them, and the parameter-matching change we made.
 
 ## The Seal-Tools grader
 
-Source: `fairyshine/Seal-Tools`,
-`LLM_Evaluation/src/llm_tools/evaluation/calculate.py`, function
-`calculate_score_ToolLearning`.
+Source: [`fairyshine/Seal-Tools@ce753ecd`](https://github.com/fairyshine/Seal-Tools/blob/ce753ecd60ed08dd376984035de531ab8421f1c6/LLM_Evaluation/src/llm_tools/evaluation/calculate.py),
+function `calculate_score_ToolLearning`.
 
 It reports **corpus-level micro metrics** — there is no per-example pass/fail:
 
@@ -60,6 +59,11 @@ For this test the primary score is a faithful port of
 `eval/sealToolsGrader.ts`): corpus-level format accuracy plus micro-averaged
 tool and parameter precision, recall, and F1, using the same greedy first-match
 routing and the same `str(...)`-style value compare.
+
+The model is prompted with TypeAgent's `{ actionName, parameters }` envelope,
+not Seal's `[{ api, parameters, responses }]` envelope. A protocol adapter
+therefore extracts raw TypeAgent actions before the pinned Seal counters run.
+TypeAgent schema validation does not decide whether a raw prediction is scored.
 
 **The one deviation:** string comparison is **case-insensitive**. API names,
 parameter names, and every nested string value are folded to lower case before

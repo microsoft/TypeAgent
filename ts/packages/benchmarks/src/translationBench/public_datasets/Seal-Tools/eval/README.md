@@ -13,13 +13,13 @@ From `ts/packages/benchmarks`:
 pnpm run build
 
 # Smoke: 20 cases across all models
-pnpm run seal-eval -- --batch eval_smoke
+pnpm run seal-eval --batch eval_smoke
 
 # Smoke: a few cases, one model
-pnpm run seal-eval -- --max-cases 5 --models azure/gpt-4.1-mini
+pnpm run seal-eval --max-cases 5 --models azure/gpt-4.1-mini
 
 # Exact cases
-pnpm run seal-eval -- --case-ids sealtools-dev-easy-0,sealtools-dev-difficult-200
+pnpm run seal-eval --case-ids sealtools-dev-easy-0,sealtools-dev-difficult-200
 
 # Full: 700 cases × all models in base.eval.models
 pnpm run seal-eval
@@ -34,15 +34,31 @@ the primary score: Format ACC, Tool P/R/F1, and Parameter P/R/F1. These are
 corpus-level micro metrics. TypeAgent's stricter row-level pass/fail and failure
 taxonomy remain in the report as supplemental diagnostics.
 
-Reports also include a separate case-insensitive companion score. It folds API
-names, parameter names, and all nested string values. It is intentionally kept
-separate because the creator's official grader is case-sensitive.
+TypeAgent pass excludes any row whose gold actions contain `API_call_*` (28 of
+700 rows in the validation set) and the audited source-quality exclusions in
+`typeAgentOverrides.ts`. Required parameters must be present. Optional
+parameters may be absent from either side; when both sides provide one, its
+value is compared. Values ignore string case and JSON scalar type, including
+numeric formatting such as `"19.0"` versus `19`. Action names, parameter names,
+arrays, and object structure remain significant. The official Seal score still
+uses the untouched source gold for all 700 rows.
+
+After changing only the TypeAgent scoring contract, rescore saved results
+without making provider calls:
+
+```sh
+node dist/translationBench/public_datasets/Seal-Tools/eval/rescoreResults.js \
+  src/translationBench/public_datasets/Seal-Tools/eval/results/full
+```
+
+The primary score is the case-insensitive variant requested for this run. It
+folds API names, parameter names, and all nested string values. The report also
+keeps the creator's official case-sensitive score as a reference.
 
 The implementation preserves the creator's matching behavior, including its
 first-gold match for duplicate tool names and omission of P/R/F1 when any count
-is zero. One transport-level distinction cannot survive TypeAgent's JSON parser:
-JSON numeric lexemes such as `1` and `1.0` both become the same JavaScript
-number, while the Python reference grader compares `str(1)` and `str(1.0)`.
+is zero. Raw model responses preserve numeric lexemes so Python distinctions
+such as `1` versus `1.0` survive TypeAgent's JSON parser.
 
 ## Models and reasoning effort
 
