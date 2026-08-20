@@ -14,6 +14,33 @@ import { HARDCODED_NON_EVAL_ACTION_IDS } from "../src/translationBench/synthesiz
 import type { AppAction } from "@typeagent/agent-sdk";
 
 describe("translationBench runner scoring fairness (E + C)", () => {
+    it("ignores object key order in exact parameter matching", () => {
+        const score = scoreTranslationBench(
+            [
+                {
+                    schemaName: "test",
+                    actionName: "lookup",
+                    parameters: {
+                        outer: { alpha: 1, beta: 2 },
+                        items: [{ first: "A", second: "B" }],
+                    },
+                },
+            ],
+            [
+                {
+                    schemaName: "test",
+                    actionName: "lookup",
+                    parameters: {
+                        items: [{ second: "B", first: "A" }],
+                        outer: { beta: 2, alpha: 1 },
+                    },
+                },
+            ],
+            "any",
+        );
+        expect(score.exactPassed).toBe(true);
+    });
+
     it("recognizes dispatcher unknown schema-match errors", () => {
         expect(
             isUnknownActionSchemaMatchError(
@@ -339,6 +366,26 @@ describe("translationBench runner scoring fairness (E + C)", () => {
         expect(score.paramMatches).toBe(1);
         expect(score.chosenCount).toBe(2);
         expect(score.exactPassed).toBe(false); // length mismatch keeps exact strict
+    });
+
+    it("rejects unrelated extra actions for single-action gold", () => {
+        const action = {
+            schemaName: "sealtools_dev_easy_189",
+            actionName: "getDanceIdentity",
+            parameters: { dance_style: "vZ0xGOxdZcrz" },
+        };
+        const score = scoreTranslationBench(
+            [action],
+            [
+                action,
+                {
+                    ...action,
+                    parameters: { dance_style: "ko5sG2EdYQ" },
+                },
+            ],
+            "any",
+        );
+        expect(score.passed).toBe(false);
     });
 
     it("still fails single-action gold when no chosen action matches params", () => {

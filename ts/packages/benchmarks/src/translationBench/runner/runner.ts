@@ -66,12 +66,16 @@ import { DEFAULT_EST_TOKENS_PER_CALL } from "../runConfig.js";
 /**
  * Per-field parameter scoring modes for deterministic soft matching.
  * - exact: value must equal expected (default)
+ * - normalized: required value compared case- and JSON-scalar-type-insensitively
+ * - optionalNormalized: same comparison, but omission on either side is allowed
  * - exists: key must be present on chosen (value ignored)
  * - nonempty: key must be present and not empty string/array/null/undefined
  * - ignore: field is not scored
  */
 export type TranslationBenchParamFieldMode =
     | "exact"
+    | "normalized"
+    | "optionalNormalized"
     | "exists"
     | "nonempty"
     | "ignore";
@@ -81,6 +85,8 @@ export interface TranslationBenchParameterScoreSpec {
     defaultMode?: TranslationBenchParamFieldMode;
     /** Per top-level parameter field mode. */
     fields?: Record<string, TranslationBenchParamFieldMode>;
+    /** Additional values accepted by normalized field comparison. */
+    acceptedValues?: Record<string, unknown[]>;
 }
 
 export interface TranslationBenchAction {
@@ -457,6 +463,28 @@ export function canonicalizeTranslationBenchAction(
     return action;
 }
 
+function isSplitBrowserActionDiscovery(
+    expected: TranslationBenchAction[],
+    chosen: TranslationBenchAction[],
+): boolean {
+    if (expected.length !== 1 || chosen.length !== 2) return false;
+    const target = canonicalizeTranslationBenchAction(expected[0]!);
+    return (
+        target.schemaName === "browser.actionDiscovery" &&
+        target.actionName === "detectPageActions" &&
+        chosen.some(
+            (action) =>
+                action.schemaName === "browser.actionDiscovery" &&
+                action.actionName === "detectPageActions",
+        ) &&
+        chosen.some(
+            (action) =>
+                action.schemaName === "browser.actionDiscovery" &&
+                action.actionName === "registerPageDynamicAgent",
+        )
+    );
+}
+
 function routeMatches(
     a: TranslationBenchAction,
     b: TranslationBenchAction,
@@ -474,6 +502,73 @@ function isNonemptyParamValue(value: unknown): boolean {
     if (typeof value === "string") return value.trim().length > 0;
     if (Array.isArray(value)) return value.length > 0;
     return true;
+}
+
+function equalTypeAgnosticValue(left: unknown, right: unknown): boolean {
+    if (Array.isArray(left) || Array.isArray(right)) {
+        return (
+            Array.isArray(left) &&
+            Array.isArray(right) &&
+            left.length === right.length &&
+            left.every((item, index) =>
+                equalTypeAgnosticValue(item, right[index]),
+            )
+        );
+    }
+    if (
+        (left !== null && typeof left === "object") ||
+        (right !== null && typeof right === "object")
+    ) {
+        if (
+            left === null ||
+            right === null ||
+            typeof left !== "object" ||
+            typeof right !== "object"
+        ) {
+            return false;
+        }
+        const leftEntries = Object.entries(left).sort(([a], [b]) =>
+            a.localeCompare(b),
+        );
+        const rightEntries = Object.entries(right).sort(([a], [b]) =>
+            a.localeCompare(b),
+        );
+        return (
+            leftEntries.length === rightEntries.length &&
+            leftEntries.every(
+                ([key, value], index) =>
+                    key === rightEntries[index]?.[0] &&
+                    equalTypeAgnosticValue(value, rightEntries[index]?.[1]),
+            )
+        );
+    }
+    if (
+        (typeof left === "number" && typeof right === "string") ||
+        (typeof left === "string" && typeof right === "number")
+    ) {
+        const numericString = String(typeof left === "string" ? left : right);
+        const number = Number(typeof left === "number" ? left : right);
+        const trimmed = numericString.trim();
+        if (trimmed !== "" && Number.isFinite(Number(trimmed))) {
+            return Number(trimmed) === number;
+        }
+    }
+    return (
+        String(left).trim().toLocaleLowerCase("en-US") ===
+        String(right).trim().toLocaleLowerCase("en-US")
+    );
+}
+
+function sortObjectKeys(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(sortObjectKeys);
+    if (value !== null && typeof value === "object") {
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>)
+                .sort(([left], [right]) => left.localeCompare(right))
+                .map(([key, item]) => [key, sortObjectKeys(item)]),
+        );
+    }
+    return value;
 }
 
 export function resolveTranslationBenchParamFieldMode(
@@ -504,12 +599,28 @@ export function parametersMatch(
         const mode = resolveTranslationBenchParamFieldMode(spec, key);
         if (mode === "ignore") continue;
         const hasKey = Object.prototype.hasOwnProperty.call(chosenParams, key);
+        if (mode === "optionalNormalized" && !hasKey) continue;
         if (mode === "exists") {
             if (!hasKey) return false;
             continue;
         }
         if (mode === "nonempty") {
             if (!hasKey || !isNonemptyParamValue(chosenParams[key])) {
+                return false;
+            }
+            continue;
+        }
+        if (mode === "normalized" || mode === "optionalNormalized") {
+            const acceptedValues = [
+                expectedParams[key],
+                ...(spec.acceptedValues?.[key] ?? []),
+            ];
+            if (
+                !hasKey ||
+                !acceptedValues.some((value) =>
+                    equalTypeAgnosticValue(value, chosenParams[key]),
+                )
+            ) {
                 return false;
             }
             continue;
@@ -538,8 +649,8 @@ function parametersMatchExact(
     const canonicalExpected = canonicalizeTranslationBenchAction(expected);
     const canonicalChosen = canonicalizeTranslationBenchAction(chosen);
     return equalNormalizedObject(
-        canonicalExpected.parameters ?? {},
-        canonicalChosen.parameters ?? {},
+        sortObjectKeys(canonicalExpected.parameters ?? {}) as object,
+        sortObjectKeys(canonicalChosen.parameters ?? {}) as object,
     );
 }
 
@@ -759,6 +870,7 @@ function diagnoseParametersWithScoreSpec(
         const mode = resolveTranslationBenchParamFieldMode(spec, key);
         if (mode === "ignore") continue;
         const hasKey = Object.prototype.hasOwnProperty.call(chosenParams, key);
+        if (mode === "optionalNormalized" && !hasKey) continue;
         if (mode === "exists") {
             if (!hasKey) counts.missingRequiredParameter++;
             continue;
@@ -767,6 +879,22 @@ function diagnoseParametersWithScoreSpec(
             if (!hasKey) {
                 counts.missingRequiredParameter++;
             } else if (!isNonemptyParamValue(chosenParams[key])) {
+                counts.wrongValue++;
+            }
+            continue;
+        }
+        if (mode === "normalized" || mode === "optionalNormalized") {
+            const acceptedValues = [
+                expectedParams[key],
+                ...(spec.acceptedValues?.[key] ?? []),
+            ];
+            if (!hasKey) {
+                counts.missingRequiredParameter++;
+            } else if (
+                !acceptedValues.some((value) =>
+                    equalTypeAgnosticValue(value, chosenParams[key]),
+                )
+            ) {
                 counts.wrongValue++;
             }
             continue;
@@ -813,6 +941,8 @@ export function diagnoseTranslationBench(
 const TRANSLATION_BENCH_PARAM_FIELD_MODES =
     new Set<TranslationBenchParamFieldMode>([
         "exact",
+        "normalized",
+        "optionalNormalized",
         "exists",
         "nonempty",
         "ignore",
@@ -872,6 +1002,24 @@ function validateParameterScoreSpecs(
                 }
             }
         }
+        if (spec.acceptedValues !== undefined) {
+            if (
+                spec.acceptedValues === null ||
+                typeof spec.acceptedValues !== "object" ||
+                Array.isArray(spec.acceptedValues)
+            ) {
+                throw new Error(
+                    `Case '${evalCase.id}' seed.parameterScore[${index}].acceptedValues must be an object`,
+                );
+            }
+            for (const [field, values] of Object.entries(spec.acceptedValues)) {
+                if (!field.trim() || !Array.isArray(values)) {
+                    throw new Error(
+                        `Case '${evalCase.id}' seed.parameterScore[${index}].acceptedValues.${field} must be an array`,
+                    );
+                }
+            }
+        }
     });
 }
 
@@ -888,22 +1036,20 @@ export function scoreTranslationBench(
 ): TranslationBenchScore {
     const parameterScore = options?.parameterScore;
     const schemaValid = options?.schemaValid ?? true;
-    // Single-action gold uses any-alignment even when the case order is
-    // "strict": the expected action may appear after an extra sibling
-    // (e.g. detectPageActions{} + registerPageDynamicAgent{name}).
-    const alignOrder =
-        expected.length === 1 && chosen.length > 1 ? "any" : order;
+    const splitBrowserActionDiscovery = isSplitBrowserActionDiscovery(
+        expected,
+        chosen,
+    );
+    // The matching half of a split browser action may appear second even when
+    // the combined gold action is marked strict.
+    const alignOrder = splitBrowserActionDiscovery ? "any" : order;
     const { routed, paramMatches, exactParamMatches } =
         alignOrder === "strict"
             ? alignStrict(expected, chosen, parameterScore)
             : alignAny(expected, chosen, parameterScore);
     const isNegative = expected.length === 0;
-    // Single-action gold: extra chosen actions are OK when the expected action
-    // is present with matching params (models often split detect+register).
-    // Multi-action gold still requires equal length.
     const lengthOk =
-        expected.length === chosen.length ||
-        (expected.length === 1 && chosen.length > 1);
+        expected.length === chosen.length || splitBrowserActionDiscovery;
     const softPassed =
         schemaValid &&
         lengthOk &&
@@ -1834,9 +1980,14 @@ async function pmap<T, R>(
             onProgress?.(done, items.length);
         }
     }
-    await Promise.all(
+    const settled = await Promise.allSettled(
         Array.from({ length: Math.max(1, concurrency) }, () => worker()),
     );
+    const rejected = settled.find(
+        (result): result is PromiseRejectedResult =>
+            result.status === "rejected",
+    );
+    if (rejected !== undefined) throw rejected.reason;
     return results;
 }
 

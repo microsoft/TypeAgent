@@ -69,10 +69,13 @@ export interface TranslationBenchBenchmarkProbePayload {
 export interface TranslationBenchParameterScoreSpec {
     defaultMode: TranslationBenchParamFieldMode;
     fields: Record<string, TranslationBenchParamFieldMode>;
+    acceptedValues?: Record<string, unknown[]>;
 }
 
 export type TranslationBenchParamFieldMode =
     | "exact"
+    | "normalized"
+    | "optionalNormalized"
     | "exists"
     | "nonempty"
     | "ignore";
@@ -438,11 +441,21 @@ const actionSchema = z
         parameters: z.record(z.string(), z.unknown()).optional(),
     })
     .strict();
-const paramFieldModeSchema = z.enum(["exact", "exists", "nonempty", "ignore"]);
+const paramFieldModeSchema = z.enum([
+    "exact",
+    "normalized",
+    "optionalNormalized",
+    "exists",
+    "nonempty",
+    "ignore",
+]);
 const parameterScoreSpecSchema = z
     .object({
         defaultMode: paramFieldModeSchema,
         fields: z.record(z.string(), paramFieldModeSchema),
+        acceptedValues: z
+            .record(z.string().trim().min(1), z.array(z.unknown()))
+            .optional(),
     })
     .strict();
 const probePayloadShape = {
