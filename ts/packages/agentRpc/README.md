@@ -121,7 +121,11 @@ parenting.
 Code shared with browser RPC consumers must import active TypeAgent trace
 metadata from `@typeagent/telemetry/traceContext`. The main
 `@typeagent/telemetry` entry point is Node-only because it includes provider and
-exporter lifecycle support.
+exporter lifecycle support. The subpath itself resolves per runtime: a browser
+gets the contract module, which imports no Node builtin and reads correlation
+from the active OTel context, while Node additionally gets the
+`AsyncLocalStorage`-backed ambient store, so correlation survives in a process
+that exports logs without tracing.
 
 Cancellation continues to use each application protocol's existing mechanism.
 For example, agent actions send `cancelAction`, abort the server handler, and
@@ -135,6 +139,30 @@ RPC spans use enqueue-time completion: a SERVER span ends after its terminal
 response is handed to `RpcChannel.send`. The callback is optional in the channel
 contract, so later transport-delivery failures are debug diagnostics rather than
 changes to an already-ended span.
+
+## Structured lifecycle events
+
+Every `invoke` emits a paired `rpc:started` / `rpc:completed` event on the
+client side and, when the handler runs, on the server side too. The events
+carry only bounded operational fields (`role`, `channel`, `method`, `callId`,
+plus `status`, `elapsedMs`, and normalized failure classification on
+`completed`); arguments, return values, and raw error text are never included.
+
+The events are opt-in via `RpcOptions.logger`. A composition point running in
+Node passes a `ChildLogger` over `createOtelLoggerSink()`; a browser caller
+passes nothing and no events are emitted. The classification fields reuse
+`@typeagent/telemetry`'s shared `classifyTelemetryError`, imported through the
+browser-safe `@typeagent/telemetry/errorClassification` subpath so `rpc.ts`
+stays bundleable into browser extensions and webviews.
+
+Cancellation is derived from the same `isTelemetryCancellation` walk the
+CLIENT/SERVER spans use, so a wrapped `AbortError` is reported as `cancelled`
+on the span and on the event side-by-side. A cancellation carries no
+classification fields: it is a disposition, not a failure to classify.
+
+See `docs/architecture/telemetry/opentelemetry.md` for the full event
+contract, the allowlisted export projection, and the reduced local-message
+format.
 
 ## Trademarks
 

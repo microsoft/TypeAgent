@@ -41,6 +41,7 @@ import {
 import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 import { getAppAgentName } from "../internal.js";
 import {
+    logCommandException,
     logRequestCompleted,
     logRequestReceived,
 } from "../otel/structuredEvents.js";
@@ -426,17 +427,11 @@ export async function processCommandNoLock(
             path: "command",
             mayHaveSideEffects: false,
         };
-        context?.logger?.logEvent(
-            "command:exception",
-            {
-                requestId: requestIdToString(getRequestId(context)),
-                request: originalInput,
-                name: e.name,
-                message: e.message,
-                stack: e.stack,
-            },
-            "error",
-        );
+        logCommandException(context?.logger, {
+            requestId: requestIdToString(getRequestId(context)),
+            request: originalInput,
+            error: e,
+        });
     }
 }
 

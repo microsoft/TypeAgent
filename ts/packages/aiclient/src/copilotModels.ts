@@ -39,6 +39,7 @@ import { readServerEventStream } from "./serverEvents.js";
 import { TokenCounter } from "./tokenCounter.js";
 import { CompletionUsageStats } from "./apiTypes.js";
 import { registerProviderChatModel } from "./providerChatModelRegistry.js";
+import { otel } from "@typeagent/telemetry";
 
 const debug = registerDebug("typeagent:aiclient:copilot");
 // Per-phase latency breakdown (client start / session create / send / total)
@@ -77,11 +78,57 @@ export interface CopilotEndpointProvider {
  * requested model (e.g. the tenant doesn't offer it and only "auto" is left, or
  * the SDK gate is disabled).
  */
-export class CopilotEndpointUnavailableError extends Error {
+export class CopilotEndpointUnavailableError
+    extends Error
+    implements otel.TelemetryClassifiedError
+{
+    /**
+     * Classifies this error for structured telemetry (see
+     * `classifyTelemetryError` in `@typeagent/telemetry`). The endpoint could
+     * not be minted by the provider, and retrying the same request hits the
+     * same tenant/gate configuration.
+     */
+    public readonly errorCategory = "provider";
+    public readonly retryable = false;
     constructor(message: string) {
         super(message);
         this.name = "CopilotEndpointUnavailableError";
     }
+}
+
+/**
+ * Turn a thrown value into a failure `Result` that still carries what the
+ * throw actually said.
+ *
+ * The message is a private diagnostic and is never parsed downstream; the
+ * attached classification is the bounded part telemetry reports, so a
+ * `CopilotEndpointUnavailableError` or a socket error keeps its identity
+ * instead of being flattened into an unexplained provider failure. See
+ * `attachTelemetryErrorClassification`.
+ *
+ * A throw with nothing recognizable in it gets no classification at all rather
+ * than `internal`: it still came out of a provider call, so the model
+ * wrapper's `provider` fallback is the truthful description.
+ */
+function classifiedFailure(message: string, thrown: unknown): Result<never> {
+    const classification = otel.classifyTelemetryErrorIfRecognized(thrown);
+    const result = error(message);
+    return classification === undefined
+        ? result
+        : otel.attachTelemetryErrorClassification(result, classification);
+}
+
+/**
+ * The failure `Result` for a call that ended because the caller cancelled.
+ * `isAbort` also treats "the caller's signal is aborted" as a cancellation
+ * even when the thrown value itself is not shaped like an `AbortError`, so the
+ * classification is stated here rather than re-derived from that value.
+ */
+function cancelledFailure(): Result<never> {
+    return otel.attachTelemetryErrorClassification(error("Request aborted"), {
+        errorCategory: "cancelled",
+        retryable: false,
+    });
 }
 
 type CopilotSdkLogLevel =
@@ -659,10 +706,11 @@ export function createCopilotTransportModel(
             try {
                 ep = await endpointProvider.getEndpoint();
             } catch (err) {
-                return error(
+                return classifiedFailure(
                     `getEndpoint failed: ${
                         err instanceof Error ? err.message : String(err)
                     }`,
+                    err,
                 );
             }
             member.settings.endpoint = ep.url;
@@ -716,10 +764,12 @@ export function createCopilotTransportModel(
         try {
             result = await callJsonApiWithPool(pool, request, options);
         } catch (err) {
-            if (isAbort(err, signal)) {
-                return error("Request aborted");
-            }
-            return error(err instanceof Error ? err.message : String(err));
+            return isAbort(err, signal)
+                ? cancelledFailure()
+                : classifiedFailure(
+                      err instanceof Error ? err.message : String(err),
+                      err,
+                  );
         }
 
         // A returned (non-thrown) error means a non-transient status (e.g.
@@ -733,10 +783,12 @@ export function createCopilotTransportModel(
             try {
                 result = await callJsonApiWithPool(pool, request, options);
             } catch (err) {
-                if (isAbort(err, signal)) {
-                    return error("Request aborted");
-                }
-                return error(err instanceof Error ? err.message : String(err));
+                return isAbort(err, signal)
+                    ? cancelledFailure()
+                    : classifiedFailure(
+                          err instanceof Error ? err.message : String(err),
+                          err,
+                      );
             }
             if (!result.success) {
                 return result;

@@ -406,20 +406,19 @@ export function createDispatcherFromContext(
             return context.requestQueue.promote(requestId);
         },
         cancelCommandByClientId(clientRequestId: unknown) {
-            const controller =
-                context.activeRequestsByClientId.get(clientRequestId);
-            if (controller) {
-                controller.abort();
-                return;
-            }
-            // Entry may still be sitting in the queue (no AbortController yet).
-            // Walk the snapshot to find a matching clientRequestId and cancel
-            // it via the queue. Check the running head too — it's normally
-            // already in activeRequestsByClientId, but cover the race anyway.
+            // Consult the queue first so a running-request cancel emits
+            // `requestQueue:cancel` before the AbortController fires. Only
+            // after the queue has recorded the cancellation do we abort the
+            // controller so the inner command unwinds. A queued entry has no
+            // controller yet, so its cancel path stays queue-only.
             const snap = context.requestQueue.getSnapshot();
             const running = snap.running;
             if (running && running.clientRequestId === clientRequestId) {
                 context.requestQueue.cancelRunning(running.requestId, "user");
+                const controller =
+                    context.activeRequests.get(running.requestId) ??
+                    context.activeRequestsByClientId.get(clientRequestId);
+                controller?.abort();
                 return;
             }
             for (const entry of snap.queued) {
@@ -428,6 +427,13 @@ export function createDispatcherFromContext(
                     return;
                 }
             }
+            // No queue entry matches, but a controller may still exist for a
+            // command that already left the queue (or never got queued -
+            // shouldn't happen in practice, but abort the controller so the
+            // client's intent isn't silently dropped).
+            const controller =
+                context.activeRequestsByClientId.get(clientRequestId);
+            controller?.abort();
         },
         async recordUserHide(
             requestId: RequestId,

@@ -25,8 +25,16 @@ export function getStructuredLogMessage(
             return `Request queue rejected submission: ${stringValue(data, "reason", "unknown reason")}`;
         case "dispatcher:requestQueue:cancel":
             return `Request cancelled while ${stringValue(data, "phase", "queued")}`;
+        case "dispatcher:requestQueue:promote":
+            return "Queued request promoted to next";
+        case "dispatcher:requestQueue:abandoned":
+            return `Request queue abandoned ${numberValue(data, "count", 0)} entr${numberValue(data, "count", 0) === 1 ? "y" : "ies"}: ${stringValue(data, "reason", "unknown reason")}`;
+        case "dispatcher:requestQueue:broadcastFailed":
+            return "Request queue broadcast failed";
         case "dispatcher:request:received":
             return "Dispatcher began processing request";
+        case "dispatcher:command:exception":
+            return `Command failed: ${formatErrorClassification(data)}`;
         case "dispatcher:translation:started":
             return `Translation started with ${numberValue(data, "count", 0)} candidate schemas`;
         case "dispatcher:translation:completed":
@@ -38,13 +46,21 @@ export function getStructuredLogMessage(
         case "dispatcher:action:started":
             return `Action started: ${formatAction(data)}`;
         case "dispatcher:action:completed":
-            return `Action ${stringValue(data, "status", "completed")}: ${formatAction(data)}${formatElapsed(data)}`;
+            return `Action ${stringValue(data, "status", "completed")}: ${formatAction(data)}${formatElapsed(data)}${formatFailureNote(data)}`;
         case "dispatcher:request:completed":
             return `Request completed: ${stringValue(data, "status", "completed")}`;
         case "aiclient:llm:started":
             return `LLM started: ${formatLlmOperation(data)}${formatScope(data)}${formatModel(data)}${booleanValue(data, "streaming") ? " (streaming)" : ""}`;
         case "aiclient:llm:completed":
             return formatLlmCompleted(data);
+        case "aiclient:llm:classification:default":
+            return `${numberValue(data, "count", 0)} foreground LLM call(s) ran with default (unclassified) phase/purpose`;
+        case "rpc:started":
+        case "agentRpc:rpc:started":
+            return `RPC started: ${formatRpcInvocation(data)}`;
+        case "rpc:completed":
+        case "agentRpc:rpc:completed":
+            return `RPC ${stringValue(data, "status", "completed")}: ${formatRpcInvocation(data)}${formatElapsed(data)}${formatFailureNote(data)}`;
         default:
             return undefined;
     }
@@ -56,7 +72,43 @@ function formatTranslationCompleted(data: Record<string, unknown>): string {
     const actions = stringArrayValue(data, "actionNames");
     return `Translation ${status} via ${strategy}${formatRoutingNote(
         data,
-    )}${formatElapsed(data)}${actions.length === 0 ? "" : `: ${actions.join(", ")}`}`;
+    )}${formatElapsed(data)}${formatFailureNote(data)}${actions.length === 0 ? "" : `: ${actions.join(", ")}`}`;
+}
+
+/**
+ * Render the normalized failure classification (`errorCategory` and the
+ * optional `errorCode` / `httpStatus` / `retryable`). Only these bounded
+ * fields are read - the original message and stack are never part of a
+ * rendered message.
+ */
+function formatErrorClassification(data: Record<string, unknown>): string {
+    const category = stringValue(data, "errorCategory", "internal");
+    const details: string[] = [];
+    const code = data.errorCode;
+    if (typeof code === "string" && code.length > 0) {
+        details.push(code);
+    }
+    const httpStatus = data.httpStatus;
+    if (typeof httpStatus === "number" && Number.isFinite(httpStatus)) {
+        details.push(`HTTP ${httpStatus}`);
+    }
+    if (data.retryable === true) {
+        details.push("retryable");
+    }
+    return details.length === 0
+        ? category
+        : `${category} (${details.join(", ")})`;
+}
+
+/**
+ * Append the failure classification to a lifecycle message, but only when the
+ * event actually carries one. Successful and cancelled completions have no
+ * classification, so they read exactly as before.
+ */
+function formatFailureNote(data: Record<string, unknown>): string {
+    return typeof data.errorCategory === "string" && data.errorCategory !== ""
+        ? ` [${formatErrorClassification(data)}]`
+        : "";
 }
 
 // Note only the routing nuance that `strategy` does not already convey: a
@@ -93,13 +145,21 @@ function formatLlmCompleted(data: Record<string, unknown>): string {
     const totalTokens = data.totalTokens;
     return `LLM ${status}: ${formatLlmOperation(data)}${formatScope(data)}${formatModel(data)} in ${elapsedMs} ms${
         typeof totalTokens === "number" ? ` (${totalTokens} tokens)` : ""
-    }`;
+    }${formatFailureNote(data)}`;
 }
 
+/**
+ * Render the phase/purpose pair, marking calls whose classification was never
+ * set by a call site (`classificationSource: "default"`) so an unattributed
+ * call is visible in the human-readable line, not just the JSON fields.
+ */
 function formatLlmOperation(data: Record<string, unknown>): string {
     const phase = stringValue(data, "phase", "unknown");
     const purpose = stringValue(data, "purpose", "unknown");
-    return phase === purpose ? phase : `${phase}.${purpose}`;
+    const operation = phase === purpose ? phase : `${phase}.${purpose}`;
+    return data.classificationSource === "default"
+        ? `${operation} (unclassified)`
+        : operation;
 }
 
 function formatScope(data: Record<string, unknown>): string {
@@ -120,6 +180,22 @@ function formatAction(data: Record<string, unknown>): string {
     const schemaName = stringValue(data, "schemaName", "unknown");
     const actionName = stringValue(data, "actionName", "action");
     return `${schemaName}.${actionName}`;
+}
+
+/**
+ * Render one RPC lifecycle event with its direction, method, and channel
+ * (the caller-owned rpc `name` such as `agent:calendar`). Only these bounded
+ * operational fields appear; args and return values never do.
+ */
+function formatRpcInvocation(data: Record<string, unknown>): string {
+    const role = stringValue(data, "role", "");
+    const method = stringValue(data, "method", "unknown");
+    const channel = stringValue(data, "channel", "");
+    const roleLabel = role === "client" ? "→" : role === "server" ? "←" : "";
+    const suffix = channel === "" ? "" : ` on ${channel}`;
+    return roleLabel === ""
+        ? `${method}${suffix}`
+        : `${roleLabel} ${method}${suffix}`;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

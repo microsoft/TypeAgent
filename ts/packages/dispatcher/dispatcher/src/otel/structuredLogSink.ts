@@ -31,6 +31,23 @@ const SAFE_STRING_FIELDS = [
     "routingReason",
     "matchOutcome",
     "cacheBypassReason",
+    // RPC lifecycle events. `role` is a two-value union (`client`/`server`)
+    // and `channel` is a caller-controlled RPC name (e.g. `agent:calendar`);
+    // both are bounded operational labels and never carry request/user
+    // content. `method` is the RPC method name, already validated on the
+    // producer side against a bounded pattern.
+    "role",
+    "channel",
+    "method",
+    // Normalized failure classification (see
+    // `@typeagent/telemetry` `classifyTelemetryError`). Both values come from
+    // closed vocabularies - `errorCategory` from a fixed union and `errorCode`
+    // from a reviewed allowlist - so neither can add cardinality here. The raw
+    // error `name`, `message`, `stack`, and the original `request` are
+    // deliberately absent from every list here so they never leave the local
+    // debug and opt-in database sinks.
+    "errorCategory",
+    "errorCode",
 ] as const;
 
 const SAFE_NUMBER_FIELDS = [
@@ -50,6 +67,9 @@ const SAFE_NUMBER_FIELDS = [
     "totalTokens",
     "cachedTokens",
     "retryCount",
+    "httpStatus",
+    // RPC message correlation. Bounded 32-bit counter per rpc instance.
+    "callId",
 ] as const;
 
 const SAFE_BOOLEAN_FIELDS = [
@@ -60,6 +80,7 @@ const SAFE_BOOLEAN_FIELDS = [
     "cancelled",
     "streaming",
     "fallback",
+    "retryable",
 ] as const;
 
 const SAFE_STRING_ARRAY_FIELDS = [

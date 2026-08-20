@@ -3,11 +3,20 @@
 
 import { context, propagation, trace, TraceFlags } from "@opentelemetry/api";
 import { createSecretFilter } from "@typeagent/common-utils";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
+    getActiveTypeAgentSpanAttributes,
+    installAmbientTypeAgentAttributeStore,
+    runInTypeAgentTelemetryContext,
+    setActiveTypeAgentSpanAttributes,
     setTypeAgentSpanAttributes,
     TYPEAGENT_SPAN_ATTRIBUTES,
     TYPEAGENT_SPAN_NAMES,
+    type AmbientTypeAgentAttributeStore,
 } from "../src/otel/traceContract.js";
+import { installNodeAmbientTelemetryContext } from "../src/otel/traceContextNode.js";
 import {
     createInMemorySpanManager,
     type CapturedSpan,
@@ -21,6 +30,10 @@ import {
 // `@typeagent/telemetry/testing/inMemorySpanManager` do not silently pick up
 // a stale build.
 import * as managerSubpath from "@typeagent/telemetry/testing/inMemorySpanManager";
+// The subpath browser-shared code imports. Under the `node` condition it
+// resolves to the module that installs the ambient store; see the boundary
+// tests at the bottom of this file.
+import * as traceContextSubpath from "@typeagent/telemetry/traceContext";
 
 describe("trace contract span-name and attribute-key constants", () => {
     it("uses the frozen typeagent.* span-name namespace the design doc calls out", () => {
@@ -47,6 +60,7 @@ describe("trace contract span-name and attribute-key constants", () => {
             LLM_PHASE: "typeagent.llm.phase",
             LLM_PURPOSE: "typeagent.llm.purpose",
             LLM_SCOPE: "typeagent.llm.scope",
+            LLM_CLASSIFICATION_SOURCE: "typeagent.llm.classification_source",
         });
         expect(Object.isFrozen(TYPEAGENT_SPAN_ATTRIBUTES)).toBe(true);
     });
@@ -179,6 +193,84 @@ describe("setTypeAgentSpanAttributes", () => {
         const written = captured.attributes["typeagent.agent.name"];
         expect(typeof written).toBe("string");
         expect(String(written)).not.toContain(knownSecret);
+    });
+});
+
+// The active attributes are the correlation for every log record emitted
+// inside a request. They must survive a logs-only process, which has no global
+// OTel context manager because the bootstrap installs one with the traces
+// signal.
+describe("active TypeAgent span attributes", () => {
+    it("propagates through the OTel context when a context manager is installed", async () => {
+        const manager = createInMemorySpanManager();
+        try {
+            const attributes = { sessionId: "session", requestId: "request" };
+            const observed = await runInTypeAgentTelemetryContext(
+                setActiveTypeAgentSpanAttributes(context.active(), attributes),
+                attributes,
+                async () => {
+                    await Promise.resolve();
+                    return getActiveTypeAgentSpanAttributes();
+                },
+            );
+            expect(observed).toEqual(attributes);
+        } finally {
+            await manager.shutdown();
+        }
+    });
+
+    it("propagates with no context manager at all", async () => {
+        const attributes = { sessionId: "session", requestId: "request" };
+        const observed = await runInTypeAgentTelemetryContext(
+            setActiveTypeAgentSpanAttributes(context.active(), attributes),
+            attributes,
+            async () => {
+                // Across an await, which is where a naive module-level
+                // variable would already have lost the value.
+                await Promise.resolve();
+                return getActiveTypeAgentSpanAttributes();
+            },
+        );
+        expect(observed).toEqual(attributes);
+        // The scope is left exactly as it was found.
+        expect(getActiveTypeAgentSpanAttributes()).toBeUndefined();
+    });
+
+    it("keeps nested scopes independent", () => {
+        const outer = { sessionId: "session", requestId: "outer" };
+        const inner = { requestId: "inner" };
+        runInTypeAgentTelemetryContext(
+            setActiveTypeAgentSpanAttributes(context.active(), outer),
+            outer,
+            () => {
+                runInTypeAgentTelemetryContext(
+                    setActiveTypeAgentSpanAttributes(context.active(), inner),
+                    { ...outer, ...inner },
+                    () => {
+                        expect(getActiveTypeAgentSpanAttributes()).toEqual({
+                            sessionId: "session",
+                            requestId: "inner",
+                        });
+                    },
+                );
+                expect(getActiveTypeAgentSpanAttributes()).toEqual(outer);
+            },
+        );
+    });
+
+    it("does not let the ambient scope leak into an explicit context", () => {
+        // A caller that passes a context is stating what that context carries
+        // - a root request span starting from a detached context, say.
+        const ambient = { sessionId: "ambient" };
+        runInTypeAgentTelemetryContext(context.active(), ambient, () => {
+            const rootContext = setActiveTypeAgentSpanAttributes(
+                context.active(),
+                { requestId: "root" },
+            );
+            expect(getActiveTypeAgentSpanAttributes(rootContext)).toEqual({
+                requestId: "root",
+            });
+        });
     });
 });
 
@@ -385,5 +477,204 @@ describe("published testing subpath export", () => {
             // provider into whichever spec Jest schedules next.
             await manager.shutdown();
         }
+    });
+});
+
+// `@typeagent/telemetry/traceContext` is imported by browser-shared code (the
+// RPC client reads the active correlation from it), so the module behind it
+// must not reach a Node builtin. The ambient `AsyncLocalStorage` store that
+// makes correlation work in a logs-only Node process therefore lives in a
+// separate module, installed through the contract rather than imported by it.
+describe("browser-safe traceContext boundary", () => {
+    const otelSrcDir = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../src/otel",
+    );
+
+    const NODE_BUILTINS: ReadonlySet<string> = new Set([
+        "assert",
+        "async_hooks",
+        "buffer",
+        "child_process",
+        "crypto",
+        "dns",
+        "events",
+        "fs",
+        "http",
+        "https",
+        "module",
+        "net",
+        "os",
+        "path",
+        "perf_hooks",
+        "process",
+        "stream",
+        "timers",
+        "tls",
+        "url",
+        "util",
+        "v8",
+        "vm",
+        "worker_threads",
+        "zlib",
+    ]);
+
+    function isNodeBuiltin(specifier: string): boolean {
+        return (
+            specifier.startsWith("node:") ||
+            NODE_BUILTINS.has(specifier.split("/")[0]!)
+        );
+    }
+
+    // `from "x"`, bare `import "x"`, and `import("x")`. Deliberately crude:
+    // over-matching (a specifier quoted in a comment, say) can only make this
+    // check stricter, never weaker.
+    const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*)["']([^"']+)["']/g;
+
+    /**
+     * Walk the module's imports, following the package's own relative ones, and
+     * return which files were read and which non-relative specifiers they
+     * pulled in. Bare specifiers are reported, not followed: whether another
+     * package is browser-safe is that package's contract, not something this
+     * test can decide.
+     */
+    async function collectImports(entry: string): Promise<{
+        visited: string[];
+        external: string[];
+    }> {
+        const visited: string[] = [];
+        const external: string[] = [];
+        const queue = [entry];
+        while (queue.length > 0) {
+            const file = queue.shift()!;
+            if (visited.includes(file)) {
+                continue;
+            }
+            visited.push(file);
+            const source = await readFile(path.join(otelSrcDir, file), "utf8");
+            for (const [, specifier] of source.matchAll(SPECIFIER)) {
+                if (specifier.startsWith(".")) {
+                    // Compiled output is imported as `.js`; the source is `.ts`.
+                    queue.push(
+                        specifier.replace(/^\.\//, "").replace(/\.js$/, ".ts"),
+                    );
+                } else {
+                    external.push(specifier);
+                }
+            }
+        }
+        return { visited, external };
+    }
+
+    it("imports no Node builtin, directly or through this package's own modules", async () => {
+        const { visited, external } = await collectImports("traceContract.ts");
+        // The walk really followed the relative graph rather than reading one
+        // file and declaring victory.
+        expect(visited).toContain("redaction.ts");
+        expect(external.filter(isNodeBuiltin)).toEqual([]);
+    });
+
+    it("flags the Node-only companion module (control for the check above)", async () => {
+        const { external } = await collectImports("traceContextNode.ts");
+        expect(external.filter(isNodeBuiltin)).toEqual(["node:async_hooks"]);
+    });
+});
+
+describe("ambient attribute store", () => {
+    const attributes = { sessionId: "session", requestId: "request" };
+
+    describe("without one, as in a browser", () => {
+        let previous: AmbientTypeAgentAttributeStore | undefined;
+
+        beforeEach(() => {
+            previous = installAmbientTypeAgentAttributeStore(undefined);
+        });
+
+        afterEach(() => {
+            installAmbientTypeAgentAttributeStore(previous);
+        });
+
+        it("still propagates through the OTel context when a context manager is installed", async () => {
+            const manager = createInMemorySpanManager();
+            try {
+                const observed = await runInTypeAgentTelemetryContext(
+                    setActiveTypeAgentSpanAttributes(
+                        context.active(),
+                        attributes,
+                    ),
+                    attributes,
+                    async () => {
+                        await Promise.resolve();
+                        return getActiveTypeAgentSpanAttributes();
+                    },
+                );
+                expect(observed).toEqual(attributes);
+            } finally {
+                await manager.shutdown();
+            }
+        });
+
+        it("degrades to no correlation, rather than throwing, with no context manager", async () => {
+            // The documented browser fallback: without an ambient store *and*
+            // without a context manager there is nothing left to carry the
+            // attributes, so they are simply absent. The call still runs the
+            // body and returns its value.
+            const observed = await runInTypeAgentTelemetryContext(
+                setActiveTypeAgentSpanAttributes(context.active(), attributes),
+                attributes,
+                async () => {
+                    await Promise.resolve();
+                    return getActiveTypeAgentSpanAttributes();
+                },
+            );
+            expect(observed).toBeUndefined();
+        });
+    });
+
+    it("carries correlation with no context manager once the Node store is installed", async () => {
+        // The logs-only Node process: tracing is off, so nothing propagates the
+        // OTel context, and correlation rides entirely on the ambient store.
+        installNodeAmbientTelemetryContext();
+        const observed = await runInTypeAgentTelemetryContext(
+            setActiveTypeAgentSpanAttributes(context.active(), attributes),
+            attributes,
+            async () => {
+                await Promise.resolve();
+                return getActiveTypeAgentSpanAttributes();
+            },
+        );
+        expect(observed).toEqual(attributes);
+        // Installing twice is a no-op rather than a second, empty store.
+        installNodeAmbientTelemetryContext();
+        expect(
+            runInTypeAgentTelemetryContext(
+                context.active(),
+                attributes,
+                getActiveTypeAgentSpanAttributes,
+            ),
+        ).toEqual(attributes);
+    });
+});
+
+describe("published traceContext subpath", () => {
+    it("gives a Node importer the ambient store", () => {
+        // Resolving under the `node` condition is what installs it; the
+        // browser-safe module has no such export.
+        expect(
+            typeof traceContextSubpath.installNodeAmbientTelemetryContext,
+        ).toBe("function");
+
+        // No context manager here, so observing the attributes across the
+        // subpath's own functions can only come from the ambient store.
+        const attributes = { sessionId: "session", requestId: "request" };
+        const observed = traceContextSubpath.runInTypeAgentTelemetryContext(
+            traceContextSubpath.setActiveTypeAgentSpanAttributes(
+                context.active(),
+                attributes,
+            ),
+            attributes,
+            () => traceContextSubpath.getActiveTypeAgentSpanAttributes(),
+        );
+        expect(observed).toEqual(attributes);
     });
 });

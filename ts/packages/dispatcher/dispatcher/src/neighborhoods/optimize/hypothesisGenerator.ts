@@ -17,6 +17,7 @@ import {
     type LeverPlugin,
     type ProposeContext,
 } from "./registry.js";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 
 export interface GenerateHypothesesOpts {
     caseDesc: CaseDescription;
@@ -49,10 +50,24 @@ export async function generateHypotheses(
     const out: Hypothesis[] = [];
 
     for (const lever of levers) {
-        const proposed = await lever.proposeHypotheses(
-            opts.caseDesc,
-            opts.priorAttempts,
-            opts.ctx,
+        // Every registered lever's propose step is an offline hypothesis
+        // generator: it calls the LLM (sometimes with retries through the
+        // token-cap wrapper) to draft candidate schema edits. Classify at
+        // this single wrap point so all four levers - and any future ones -
+        // report the same explicit background purpose without each having
+        // to opt in on its own.
+        const proposed = await withChatModelTelemetryContext(
+            {
+                phase: "background",
+                purpose: "optimization-hypothesis-generation",
+                scope: "background",
+            },
+            () =>
+                lever.proposeHypotheses(
+                    opts.caseDesc,
+                    opts.priorAttempts,
+                    opts.ctx,
+                ),
         );
         for (const h of proposed) {
             // Levers MAY return IDs (typically of the form

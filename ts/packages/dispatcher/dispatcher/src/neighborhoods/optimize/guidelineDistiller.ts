@@ -25,6 +25,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import type { ChatModel } from "@typeagent/aiclient";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 import type { GuidelineHook, Mechanism } from "./types.js";
 import { parsePatternsJsonl, type PatternRow } from "./patternMiner.js";
 import { extractJSON } from "./util.js";
@@ -269,7 +270,16 @@ async function distillGroup(
     });
 
     const model = createModel("propose");
-    const result = await model.complete(prompt);
+    // Offline pass that reads accumulated winner patterns and asks the LLM to
+    // draft schemaGuideline additions. Explicit background scope.
+    const result = await withChatModelTelemetryContext(
+        {
+            phase: "background",
+            purpose: "optimization-guideline-distillation",
+            scope: "background",
+        },
+        () => model.complete(prompt),
+    );
     if (!result.success) {
         return null;
     }

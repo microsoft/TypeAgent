@@ -21,6 +21,15 @@ import { redactText, type RedactionOptions } from "./redaction.js";
  * The helpers in this module make privacy review tractable. Span attributes
  * are restricted to the allowlisted keys declared here, and exceptions use
  * stable classifications instead of original messages and stacks by default.
+ *
+ * This file is published on its own as `@typeagent/telemetry/traceContext` and
+ * is imported by browser-shared code (the RPC client, for instance), so it
+ * must not import a Node builtin or anything that reaches one. The ambient
+ * storage that keeps correlation working in a logs-only Node process is
+ * therefore not here: it is installed through
+ * {@link installAmbientTypeAgentAttributeStore} by `traceContextNode.ts`,
+ * which the Node composition surface loads. A browser importing this module
+ * gets no ambient store and falls back to the active OTel context.
  */
 
 /**
@@ -71,6 +80,7 @@ export const TYPEAGENT_SPAN_ATTRIBUTES = Object.freeze({
     LLM_PHASE: "typeagent.llm.phase",
     LLM_PURPOSE: "typeagent.llm.purpose",
     LLM_SCOPE: "typeagent.llm.scope",
+    LLM_CLASSIFICATION_SOURCE: "typeagent.llm.classification_source",
 } as const);
 
 /** Type of a well-known TypeAgent attribute-key value. */
@@ -109,24 +119,83 @@ export interface TypeAgentSpanAttributes {
     readonly llmPurpose?: string;
     /** Whether the LLM operation is foreground or background work. */
     readonly llmScope?: string;
+    /**
+     * Whether the phase/purpose/scope above were set by a call site
+     * (`explicit`) or fell back to the default (`default`). Distinguishes a
+     * deliberately-unknown call from an unclassified one.
+     */
+    readonly llmClassificationSource?: string;
 }
 
 const ACTIVE_TYPEAGENT_ATTRIBUTES = createContextKey(
     "typeagent.active-span-attributes",
 );
 
+/**
+ * Ambient carrier for the active attributes, supplied by the host runtime.
+ *
+ * The OTel context only propagates when a global context manager is installed,
+ * and the telemetry bootstrap installs one with the **traces** signal. A
+ * logs-only process therefore has none, and every value written to the OTel
+ * context is silently dropped - which would strip `sessionId`, `requestId`, and
+ * `traceId` off exactly the log records that exist to be correlated.
+ *
+ * Installing an OTel context manager here instead would take global ownership
+ * of a slot the host application may want for its own instrumentation, and
+ * would fail outright if it already had. A separate store avoids competing for
+ * that ownership. Keeping it behind this interface also keeps the storage
+ * mechanism out of this module: `AsyncLocalStorage` is a Node builtin, and
+ * this file has to stay importable in a browser.
+ */
+export interface AmbientTypeAgentAttributeStore {
+    /** The attributes of the enclosing scope, if any. */
+    getActive(): TypeAgentSpanAttributes | undefined;
+    /** Run `body` with `attributes` as the enclosing scope's attributes. */
+    run<T>(attributes: TypeAgentSpanAttributes, body: () => T): T;
+}
+
+let ambientStore: AmbientTypeAgentAttributeStore | undefined;
+
+/**
+ * Install the ambient store (or `undefined` to remove it) and return the one
+ * that was installed before, so a caller can restore it.
+ *
+ * Node processes get this via `traceContextNode.ts`, which the package's Node
+ * entry point loads. Nothing installs one in a browser, where there is no
+ * equivalent of `AsyncLocalStorage`; correlation there comes from the active
+ * OTel context alone.
+ */
+export function installAmbientTypeAgentAttributeStore(
+    store: AmbientTypeAgentAttributeStore | undefined,
+): AmbientTypeAgentAttributeStore | undefined {
+    const previous = ambientStore;
+    ambientStore = store;
+    return previous;
+}
+
+/**
+ * The attributes established by the enclosing scope: the OTel context value
+ * when a context manager is propagating it, otherwise the ambient store when
+ * the runtime has one.
+ */
 export function getActiveTypeAgentSpanAttributes(
     activeContext: Context = context.active(),
 ): TypeAgentSpanAttributes | undefined {
-    return activeContext.getValue(ACTIVE_TYPEAGENT_ATTRIBUTES) as
-        | TypeAgentSpanAttributes
-        | undefined;
+    return (
+        (activeContext.getValue(ACTIVE_TYPEAGENT_ATTRIBUTES) as
+            | TypeAgentSpanAttributes
+            | undefined) ?? ambientStore?.getActive()
+    );
 }
 
 export function setActiveTypeAgentSpanAttributes(
     activeContext: Context,
     attributes: TypeAgentSpanAttributes,
 ): Context {
+    // Merges with the value already on `activeContext` only. The ambient
+    // fallback deliberately does not participate: a caller that passes an
+    // explicit context (a root span starting from `ROOT_CONTEXT`, say) is
+    // stating what that context should carry.
     const current = activeContext.getValue(ACTIVE_TYPEAGENT_ATTRIBUTES) as
         | TypeAgentSpanAttributes
         | undefined;
@@ -134,6 +203,31 @@ export function setActiveTypeAgentSpanAttributes(
         ...current,
         ...attributes,
     });
+}
+
+/**
+ * Run `body` with `activeContext` installed as the OTel context *and*
+ * `attributes` installed as the active TypeAgent attributes.
+ *
+ * Both are needed: the OTel context carries the span (so a child span parents
+ * correctly and W3C propagation works) and only functions when a context
+ * manager is installed, while the ambient store carries correlation for logs
+ * whether or not tracing is enabled. Callers pass the same merged attributes
+ * they wrote onto the context so the two never disagree.
+ *
+ * With no ambient store (a browser), only the OTel context is established;
+ * correlation then depends on the host's context manager, exactly as tracing
+ * does.
+ */
+export function runInTypeAgentTelemetryContext<T>(
+    activeContext: Context,
+    attributes: TypeAgentSpanAttributes,
+    body: () => T,
+): T {
+    const withContext = () => context.with(activeContext, body);
+    return ambientStore === undefined
+        ? withContext()
+        : ambientStore.run(attributes, withContext);
 }
 
 const ATTRIBUTE_KEY_FOR_FIELD: {
@@ -150,6 +244,8 @@ const ATTRIBUTE_KEY_FOR_FIELD: {
     llmPhase: TYPEAGENT_SPAN_ATTRIBUTES.LLM_PHASE,
     llmPurpose: TYPEAGENT_SPAN_ATTRIBUTES.LLM_PURPOSE,
     llmScope: TYPEAGENT_SPAN_ATTRIBUTES.LLM_SCOPE,
+    llmClassificationSource:
+        TYPEAGENT_SPAN_ATTRIBUTES.LLM_CLASSIFICATION_SOURCE,
 };
 
 /**

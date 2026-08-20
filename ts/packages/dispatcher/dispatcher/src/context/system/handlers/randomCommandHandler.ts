@@ -14,6 +14,7 @@ import {
     openai,
 } from "@typeagent/aiclient";
 import { createTypeChat, promptLib } from "@typeagent/agent-runtime";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
 import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
 import {
@@ -149,9 +150,24 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
         userInput: string,
         chat: TypeChatJsonTranslator<UserRequestList>,
     ): Promise<Result<UserRequestList>> {
-        const chatResponse = await chat.translate(
-            userInput,
-            promptLib.dateTimePrompt(), // Always include the current date and time. Makes the bot much smarter
+        // `@random online` asks the model to invent sample user requests, and
+        // the user is waiting on the command that asked for them, so this is
+        // foreground work with a purpose of its own: it is not translating a
+        // request, and reporting it as action generation would misattribute
+        // both the phase and the cost.
+        const chatResponse = await withChatModelTelemetryContext(
+            {
+                phase: "unknown",
+                purpose: "sample-request-generation",
+                scope: "foreground",
+            },
+            () =>
+                chat.translate(
+                    userInput,
+                    // Always include the current date and time. Makes the bot
+                    // much smarter.
+                    promptLib.dateTimePrompt(),
+                ),
         );
 
         return chatResponse;

@@ -103,14 +103,38 @@ export {
     TYPEAGENT_SPAN_NAMES,
     TYPEAGENT_SPAN_ATTRIBUTES,
     getActiveTypeAgentSpanAttributes,
+    installAmbientTypeAgentAttributeStore,
+    runInTypeAgentTelemetryContext,
     setActiveTypeAgentSpanAttributes,
     setTypeAgentSpanAttributes,
+    type AmbientTypeAgentAttributeStore,
     type TypeAgentSpanName,
     type TypeAgentSpanAttributeKey,
     type TypeAgentSpanAttributes,
 } from "./traceContract.js";
 
+// Also loads the Node-only ambient attribute store into the contract module
+// above. This index is the package's Node composition surface (the package
+// entry point is `node`-only), so importing it is what gives a Node process
+// log correlation with no OTel context manager installed.
+export { installNodeAmbientTelemetryContext } from "./traceContextNode.js";
+
 export {
     isStructuredLoggingEnabled,
     setStructuredLoggingEnabled,
 } from "./structuredLogging.js";
+
+export {
+    attachTelemetryErrorClassification,
+    classifyTelemetryError,
+    classifyTelemetryErrorIfRecognized,
+    classifyTelemetryHttpStatus,
+    isTelemetryCancellation,
+    readTelemetryErrorClassification,
+    TELEMETRY_ERROR_CATEGORIES,
+    TELEMETRY_ERROR_CODES,
+    type TelemetryClassifiedError,
+    type TelemetryErrorCategory,
+    type TelemetryErrorClassification,
+    type TelemetryErrorCode,
+} from "./errorClassification.js";

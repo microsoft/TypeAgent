@@ -15,6 +15,11 @@ import {
 } from "@opentelemetry/api";
 import registerDebug from "debug";
 import { filterSecrets } from "@typeagent/common-utils";
+import {
+    classifyTelemetryError,
+    isTelemetryCancellation,
+    type TelemetryErrorClassification,
+} from "@typeagent/telemetry/errorClassification";
 
 import { RpcChannel } from "./common.js";
 
@@ -92,7 +97,38 @@ export type RpcOptions = {
     // intact so the rpc can be reattached to a fresh channel via rebind().
     rebindable?: boolean;
     tracing?: RpcTracingOptions;
+    /**
+     * Optional structured-event logger for RPC lifecycle events
+     * (`rpc:started`, `rpc:completed`). Structural shape so a browser-safe
+     * caller can pass anything conforming (including `@typeagent/telemetry`'s
+     * `Logger`) without pulling the Node-only telemetry root into a browser
+     * bundle. When omitted, events are simply not emitted; the RPC behaves
+     * exactly as before.
+     */
+    logger?: RpcStructuredLogger;
 };
+
+/**
+ * Structural logger shape for `rpc:*` lifecycle events. Matches
+ * `@typeagent/telemetry`'s `Logger` interface; a caller running in Node
+ * typically passes a `ChildLogger` over `createOtelLoggerSink()`, and a
+ * browser caller passes nothing.
+ */
+export interface RpcStructuredLogger {
+    logEvent(
+        eventName: string,
+        entry: Record<string, unknown>,
+        severity?: "info" | "warning" | "error",
+    ): void;
+}
+
+/** Structured-event names emitted by the RPC layer. */
+export const RPC_STRUCTURED_EVENTS = {
+    started: "rpc:started",
+    completed: "rpc:completed",
+} as const;
+
+type RpcRole = "client" | "server";
 
 const RPC_SPAN_NAME = "typeagent.rpc.invoke";
 const RPC_INSTRUMENTATION_SCOPE = "@typeagent/agent-rpc";
@@ -234,6 +270,14 @@ export function createRpc<
             remote.parentContext,
             async (span) => {
                 setCorrelationAttributes(span, remote.correlation);
+                const startedAt = Date.now();
+                emitStructuredStarted(
+                    options?.logger,
+                    "server",
+                    name,
+                    message.name,
+                    message.callId,
+                );
                 let cancelServerInvoke:
                     | ((reason: ServerCancellation) => void)
                     | undefined;
@@ -285,6 +329,14 @@ export function createRpc<
                     ]);
                     if (result.kind === "cancelled") {
                         recordServerCancellation(span);
+                        emitStructuredCompleted(options?.logger, {
+                            role: "server",
+                            channel: name,
+                            method: message.name,
+                            callId: message.callId,
+                            status: "cancelled",
+                            elapsedMs: Date.now() - startedAt,
+                        });
                         return;
                     }
                     serverInvokes.delete(message.callId);
@@ -297,10 +349,24 @@ export function createRpc<
                             },
                             message.name,
                         );
+                        emitStructuredCompleted(options?.logger, {
+                            role: "server",
+                            channel: name,
+                            method: message.name,
+                            callId: message.callId,
+                            status: "succeeded",
+                            elapsedMs: Date.now() - startedAt,
+                        });
                         return;
                     }
 
-                    const cancellationError = isAbortError(result.error);
+                    // Walk the `cause` chain via the shared classifier so a
+                    // wrapped AbortError is still reported as `cancelled` -
+                    // the previous name-only check saw only the outermost
+                    // value and mislabelled those failures.
+                    const cancellationError = isTelemetryCancellation(
+                        result.error,
+                    );
                     recordServerError(span, cancellationError);
                     sendResponse(
                         {
@@ -320,6 +386,17 @@ export function createRpc<
                         },
                         message.name,
                     );
+                    emitStructuredCompleted(options?.logger, {
+                        role: "server",
+                        channel: name,
+                        method: message.name,
+                        callId: message.callId,
+                        status: cancellationError ? "cancelled" : "failed",
+                        elapsedMs: Date.now() - startedAt,
+                        // A cancellation is a disposition, not a failure to
+                        // classify; only real failures carry the fields.
+                        error: cancellationError ? undefined : result.error,
+                    });
                 } catch (error) {
                     recordLocalRpcError(span);
                     debugError("invoke response processing failed", {
@@ -329,6 +406,15 @@ export function createRpc<
                         errorType: getErrorType(error),
                         error: getErrorMessage(error),
                         stack: getErrorStack(error),
+                    });
+                    emitStructuredCompleted(options?.logger, {
+                        role: "server",
+                        channel: name,
+                        method: message.name,
+                        callId: message.callId,
+                        status: "failed",
+                        elapsedMs: Date.now() - startedAt,
+                        error,
                     });
                 } finally {
                     if (serverInvokes.get(message.callId) === serverInvoke) {
@@ -509,6 +595,18 @@ export function createRpc<
                     invocation,
                 );
                 setCorrelationAttributes(span, correlation);
+                const startedAt = Date.now();
+                const callId = nextCallId++;
+                emitStructuredStarted(
+                    options?.logger,
+                    "client",
+                    name,
+                    invocation.method,
+                    callId,
+                );
+                let outcomeError: unknown;
+                let outcomeStatus: "succeeded" | "failed" | "cancelled" =
+                    "succeeded";
                 try {
                     const metadata =
                         options?.tracing?.propagateContext === true
@@ -516,8 +614,8 @@ export function createRpc<
                             : undefined;
                     const message: InvokeMessage = {
                         type: "invoke",
-                        callId: nextCallId++,
-                        name: methodName as string,
+                        callId,
+                        name: invocation.method,
                         args,
                         ...(metadata === undefined ? undefined : { metadata }),
                     };
@@ -546,9 +644,25 @@ export function createRpc<
                         }
                     });
                 } catch (error) {
+                    outcomeError = error;
+                    outcomeStatus = isTelemetryCancellation(error)
+                        ? "cancelled"
+                        : "failed";
                     recordClientError(span, error);
                     throw error;
                 } finally {
+                    emitStructuredCompleted(options?.logger, {
+                        role: "client",
+                        channel: name,
+                        method: invocation.method,
+                        callId,
+                        status: outcomeStatus,
+                        elapsedMs: Date.now() - startedAt,
+                        error:
+                            outcomeStatus === "failed"
+                                ? outcomeError
+                                : undefined,
+                    });
                     span.end();
                 }
             },
@@ -859,7 +973,10 @@ function validateTracestate(value: unknown): value is string {
 
 function recordClientError(span: Span, error: unknown): void {
     const failureKind = (error as RpcFailure | undefined)?.rpcFailureKind;
-    if (failureKind === "cancelled" || isAbortError(error)) {
+    // The shared classifier walks the `cause` chain, so a wrapped AbortError
+    // is still recognized as a cancellation. `failureKind === "cancelled"`
+    // stays as a fast-path for the wire-level flag set on remote failures.
+    if (failureKind === "cancelled" || isTelemetryCancellation(error)) {
         span.recordException({ name: "AbortError", message: "cancelled" });
         span.setStatus({
             code: SpanStatusCode.ERROR,
@@ -888,12 +1005,83 @@ function recordLocalRpcError(span: Span): void {
     span.setStatus({ code: SpanStatusCode.ERROR, message: "rpc failed" });
 }
 
-function isAbortError(error: unknown): boolean {
-    return (
-        error !== null &&
-        typeof error === "object" &&
-        (error as { name?: unknown }).name === "AbortError"
-    );
+/**
+ * Emit `rpc:started` when a logger was provided. Behaviour-safe: an exception
+ * from the logger must not fail the RPC operation.
+ */
+function emitStructuredStarted(
+    logger: RpcStructuredLogger | undefined,
+    role: RpcRole,
+    channel: string,
+    method: string,
+    callId: number,
+): void {
+    if (logger === undefined) {
+        return;
+    }
+    try {
+        logger.logEvent(RPC_STRUCTURED_EVENTS.started, {
+            role,
+            channel,
+            method,
+            callId,
+        });
+    } catch {
+        // A structured-logging failure must not fail the invocation.
+    }
+}
+
+/**
+ * Emit `rpc:completed`. The classification fields (`errorCategory`,
+ * `errorCode`, `httpStatus`, `retryable`) come from the shared telemetry
+ * classifier applied to the thrown value; a cancellation carries none of
+ * them because a cancellation is a disposition, not a failure to classify.
+ */
+function emitStructuredCompleted(
+    logger: RpcStructuredLogger | undefined,
+    data: {
+        role: RpcRole;
+        channel: string;
+        method: string;
+        callId: number;
+        status: "succeeded" | "failed" | "cancelled";
+        elapsedMs: number;
+        error?: unknown;
+    },
+): void {
+    if (logger === undefined) {
+        return;
+    }
+    const classification: TelemetryErrorClassification | undefined =
+        data.status === "failed" && data.error !== undefined
+            ? classifyTelemetryError(data.error)
+            : undefined;
+    const success = data.status === "succeeded";
+    const cancelled = data.status === "cancelled";
+    const severity: "info" | "warning" | "error" = success
+        ? "info"
+        : cancelled
+          ? "warning"
+          : "error";
+    try {
+        logger.logEvent(
+            RPC_STRUCTURED_EVENTS.completed,
+            {
+                role: data.role,
+                channel: data.channel,
+                method: data.method,
+                callId: data.callId,
+                status: data.status,
+                success,
+                ...(cancelled ? { cancelled: true } : {}),
+                elapsedMs: data.elapsedMs,
+                ...(classification ?? {}),
+            },
+            severity,
+        );
+    } catch {
+        // A structured-logging failure must not fail the invocation.
+    }
 }
 
 function getErrorMessage(error: unknown): string {

@@ -22,6 +22,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import type { ChatModel } from "@typeagent/aiclient";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 import type { ActionConfigProvider } from "../../translation/actionConfigProvider.js";
 import { getSchemaContent } from "../../translation/actionConfig.js";
 import type { Neighborhood, NeighborhoodMember } from "../types.js";
@@ -374,7 +375,18 @@ Return JSON only:
 }`;
 
     const model = opts.createModel("classify");
-    const result = await model.complete(prompt);
+    // Offline optimization runs classify each collision case with an LLM before
+    // levers propose fixes. Explicit background scope so the central model
+    // wrapper attributes this as case classification rather than an
+    // unclassified default.
+    const result = await withChatModelTelemetryContext(
+        {
+            phase: "background",
+            purpose: "optimization-case-classification",
+            scope: "background",
+        },
+        () => model.complete(prompt),
+    );
     if (!result.success) {
         throw new Error(`caseAnalyzer LLM failure: ${result.message}`);
     }

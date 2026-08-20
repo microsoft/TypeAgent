@@ -146,6 +146,18 @@ Browser-shared RPC code reads active TypeAgent metadata through the
 `@typeagent/telemetry/traceContext` subpath. It does not import the Node-only
 telemetry composition root.
 
+That subpath is a real boundary, not a convention. `traceContract.ts` behind it
+holds the names, the attribute helpers, and the OTel-context getters and
+setters, and imports no Node builtin, so a browser bundle can take it as it
+stands. The ambient `AsyncLocalStorage` that keeps log correlation alive in a
+process with no OTel context manager lives in `traceContextNode.ts`, which
+installs itself into the contract when it loads. A Node caller loads it either
+way - the package entry point pulls it in, and the subpath resolves to it under
+the `node` export condition - so Node keeps logs-only correlation. A browser
+gets no ambient store and falls back to the active OTel context, which is also
+what tracing itself depends on there. A spec walks the contract module's import
+graph and fails if a Node builtin ever reappears in it.
+
 The trusted dispatcher RPC channel extends the same trace from a client host
 into agent-server request processing:
 
@@ -191,8 +203,9 @@ processable telemetry record.**
   auto-instrumentation.
 - Classify each LLM operation explicitly at the high-level call site. The
   central model wrapper records `typeagent.llm.phase`,
-  `typeagent.llm.purpose`, and `typeagent.llm.scope`; it never infers purpose
-  from prompt text, model output, timing, or token counts.
+  `typeagent.llm.purpose`, `typeagent.llm.scope`, and
+  `typeagent.llm.classification_source`; it never infers purpose from prompt
+  text, model output, timing, or token counts.
 
 ### Logs
 
@@ -241,9 +254,11 @@ have matched. Redaction runs only after this bound and the result must also fit.
 
 The dispatcher places an allowlisted projection in front of `OtelLoggerSink`.
 Only bounded correlation identifiers, agent/schema/action names, state and
-reason fields, durations and counts, booleans, and command/schema-name arrays
-reach OTel. Prompt and response text, history, action parameters, errors and
-stacks, feedback comments and context, and all unknown fields are excluded.
+reason fields, the normalized failure classification
+(`errorCategory`/`errorCode`/`httpStatus`/`retryable`), durations and counts,
+booleans, and command/schema-name arrays reach OTel. Prompt and response text,
+history, action parameters, raw error names, messages and stacks, feedback
+comments and context, and all unknown fields are excluded.
 Other producers that attach `OtelLoggerSink` remain responsible for an
 equivalent source-specific projection. The sink applies known-secret and
 secret-format filtering as defense in depth, covering the promoted correlation
@@ -623,7 +638,8 @@ such as `Request accepted and queued` or `Translation succeeded via grammar`.
 Use opt-in debug records for detailed diagnostics behind that lifecycle step.
 LLM messages include their explicit phase and purpose so parallel schema
 selection, action generation, and background cache generation are
-distinguishable without inspecting private model content.
+distinguishable without inspecting private model content, and mark a call that
+no call site classified as `(unclassified)`.
 Correlation fields are elevated once rather than repeated in the body, and the
 redundant legacy `dispatcher:command` record is omitted from local JSONL.
 Repeated SDK metadata such as the observed timestamp, resource,
@@ -635,6 +651,57 @@ Structured dispatcher records include events such as `command` and
 `requestQueue:start`. Bridged debug records include their debug namespace.
 Prompt text, response text, action parameters, errors, stacks, and unknown
 dispatcher fields are excluded by the dispatcher projection.
+
+### LLM phase and purpose attribution
+
+`llm:started`, `llm:completed`, and the `typeagent.llm` span carry `phase`,
+`purpose`, `scope`, and `classificationSource`. The first three come from the
+`ChatModelTelemetryContext` active when the call starts;
+`classificationSource` says where they came from:
+
+- `explicit` - a call site ran `withChatModelTelemetryContext`. The wrapper
+  sets the source itself, so callers cannot claim it or forget it, and cannot
+  set it directly.
+- `default` - nothing classified the call, and it reports
+  `phase: unknown, purpose: unknown, scope: foreground`.
+
+Without this field an `unknown` phase is ambiguous: it could mean a call site
+looked at the call and genuinely could not place it, or that no call site was
+involved at all. Only the second is an attribution gap.
+
+Fields a wrapper omits keep the enclosing context's value, so an inner wrapper
+refines `purpose` without restating the phase its caller established. The
+request-phase wrappers (`wrapTranslationSpan`, `wrapReasoningSpan`,
+`wrapActionSpan`) set the phase; specific call sites such as capability
+description set only what they know.
+
+The context rides on an `AsyncLocalStorage` the `aiclient` package owns, so it
+propagates through `await` continuations and microtasks. It does **not** cross
+a deliberate detachment: a promise chain whose `.then` is registered after the
+wrapper returned, a worker thread, or a child process each start from the
+ambient store and have to classify themselves at their own entry point.
+
+It deliberately does not ride on the OTel context. That context only propagates
+when a global context manager is installed, and the bootstrap installs one with
+the **traces** signal - so a logs-only process would drop every classification
+and report `default` for every call however carefully call sites wrapped
+themselves, which is exactly where the logs are the only signal. Owning the
+storage here also keeps the package out of the contest for the single global
+context-manager slot the host application may want. The active correlation
+attributes (`sessionId`, `requestId`, `traceId`) use the same arrangement:
+`runInTypeAgentTelemetryContext` installs both the OTel context, which carries
+the span, and the attributes, which carry log correlation with or without
+tracing. The storage behind those attributes is supplied by the runtime rather
+than owned by the contract module (see the browser boundary above), so the same
+call works in a browser with only the OTel context to carry it.
+
+An unattributed **foreground** call is a ratchet signal. Rather than one
+warning per call, the model wrapper emits a rate-limited
+`llm:classification:default` event carrying only `scope`, the number of calls
+the window covered, and the window length - no call-site identity, no model,
+no prompt. It never recurses and never fails the model call it describes, and
+because the classification does not depend on tracing it counts the same thing
+in a logs-only process as it does with tracing enabled.
 
 ### Phase-completion durations and translation routing
 
@@ -684,6 +751,169 @@ event stays truthful without re-deriving state. Reasons are never overstated:
 other fields are present only for decisions the code actually observed. The
 reduced local message appends `+llm` when a cache/grammar strategy still reached
 the model.
+
+### RPC lifecycle events
+
+The `agentRpc` layer emits `rpc:started` and `rpc:completed` on every
+`invoke` boundary - once on the client side (outbound call) and once on the
+server side (inbound handler dispatch). The events carry only bounded
+operational fields; **arguments, return values, and raw error messages are
+never included**.
+
+- `role` - `client` for an outbound invoke, `server` for the handler-side
+  dispatch of the same call.
+- `channel` - the caller-owned rpc `name` passed to `createRpc` (for
+  example, `agent:calendar`), useful for identifying the transport.
+- `method` - the RPC method name, validated against the same bounded
+  pattern the `typeagent.rpc.invoke` span uses.
+- `callId` - the per-rpc-instance monotonic call identifier that pairs the
+  client and server events.
+- `status` (on `rpc:completed`) - `succeeded`, `failed`, or `cancelled`.
+  Derived from the same `isTelemetryCancellation` walk the CLIENT/SERVER
+  spans use, so a wrapped `AbortError` is reported consistently on the span,
+  the event, and the reduced local message.
+- `elapsedMs` (on `rpc:completed`) - the invoke duration measured at the
+  boundary that owns it.
+- Classification fields (`errorCategory`, optional allowlisted `errorCode`,
+  `httpStatus`, `retryable`) are attached to `rpc:completed` **only for a
+  real failure**. A cancellation carries none of them because a cancellation
+  is a disposition, not a failure to classify. The client-side event
+  classifies the received `Error` object; the server-side event classifies
+  the value the handler actually threw, so the server side keeps richer
+  category/code signals that the wire strips.
+
+The RPC layer never carries the args or return value into an event, and the
+error path deliberately drops the thrown value's `message` and `stack` before
+emitting. Local debug logs and span exceptions retain the existing fixed
+strings (`RpcClientError`/`RpcServerError` names, `cancelled`/`rpc failed`
+messages); the structured event uses the classifier's bounded fields
+instead. `agentRpc` imports the classifier via
+`@typeagent/telemetry/errorClassification`, a browser-safe subpath that lets
+the same rpc core ship into web extensions and webviews without pulling the
+Node-only telemetry root into a browser bundle. The logger itself is
+optional on `RpcOptions`; when omitted (the browser default) no events are
+emitted and the rpc behaves exactly as before.
+
+### Failure classification
+
+Structured failure events carry a normalized classification instead of the
+original message and stack, so a failure is actionable without exporting user
+content. `classifyTelemetryError` in `@typeagent/telemetry` is the single
+normalizer; it is applied at `command:exception`, at failed
+`translation:completed` and `action:completed` events, at failed
+`llm:completed` events, and at failed `rpc:completed` events on both the
+client and server invoke boundaries.
+
+- `errorCategory` - a closed union: `authentication`, `authorization`,
+  `rate_limit`, `network`, `timeout`, `validation`, `provider`, `cancelled`,
+  or `internal`.
+- `errorCode` - present only when the error carries a `code` (or an explicit
+  `errorCode`) that is a member of `TELEMETRY_ERROR_CODES`, the closed reviewed
+  allowlist. A shape check is not enough on its own: a `code` that happens to
+  be an identifier-shaped GUID, account name, or API key passes any pattern and
+  then either blows up label cardinality or carries an identifier off the
+  machine, so an unlisted code is dropped rather than exported. A package that
+  needs its own code adds it to that list (one reviewed line) and declares it
+  through `TelemetryClassifiedError`. `error.name` is never used as a code: it
+  is usually just `Error` and can be assigned arbitrary text at runtime.
+- `httpStatus` - present only when the error (or its `response`) carries an
+  integer failure status in the 400-599 range. A string `"429"` is ignored
+  rather than coerced, and a 1xx/2xx/3xx value is ignored because it is not
+  evidence of a failure (`status` doubles as a non-HTTP enum elsewhere, such
+  as a `child_process` exit code).
+- `retryable` - present only when the matched signal actually determines it.
+
+Classification never parses free-text messages: a message is the part of an
+error most likely to contain a prompt, a path, or a user's request, and
+matching on its wording is both a privacy hazard and fragile across provider
+versions. Each link of the `cause` chain (and the first entry of an
+`AggregateError`) is examined in turn, outermost first, bounded in depth and
+guarded against cycles, so a `fetch` failure that wraps `ECONNREFUSED`
+classifies as `network`.
+
+**Precedence.** The first link that carries a recognized signal wins, and every
+reported field is read from that one link, so category, code, status, and
+retryability describe the same error rather than being stitched together across
+links (a cause's `ECONNRESET` must not be reported next to its wrapper's HTTP
+401). Within the winning link the order is: an explicit classification the
+thrower attached, then `error.name` against a closed table of standard platform
+names, then `error.code` against the code table, then an HTTP failure status. A
+link carrying only an allowlisted code with no category rule still wins and
+reports that code with the `internal` category. A thrown string, a thrown
+object, or a plain `Error` becomes `internal` with no invented code, status, or
+retryability.
+
+Classification never throws. A thrown value is hostile-shaped input - getters
+throw, proxies trap every operation, and a proxy can be revoked between two
+reads - so every property access is guarded and the entry point has a
+last-resort fallback. Classifying a hostile error degrades to `internal`
+instead of replacing the original failure with a telemetry one, and the same
+guarding covers the raw `name`/`message`/`stack` the dispatcher keeps for its
+private diagnostics.
+
+A package that owns a typed error opts in by declaring `errorCategory` (and
+optionally `errorCode` / `retryable`) on it - see `TelemetryClassifiedError`
+and `CopilotEndpointUnavailableError`. That keeps domain error names out of the
+shared normalizer.
+
+**Failures that are returned rather than thrown.** `typechat`'s `Result`
+failure is `{ success: false, message }`, so by the time a caller sees one, the
+HTTP status or socket error the transport knew has been flattened into prose
+telemetry must not parse. The REST client and the Copilot transport therefore
+attach the bounded facts where they still have them, through
+`attachTelemetryErrorClassification`: a non-enumerable, symbol-keyed property
+that leaves spreads, `Object.keys`, `JSON.stringify`, and existing equality
+assertions unchanged. `otelChatModel` reads it back with
+`readTelemetryErrorClassification`, which re-validates the payload against the
+same closed vocabularies so a stale or forged carrier cannot smuggle an
+unbounded field into an export. A real 401, 403, 429, timeout, network failure,
+or `CopilotEndpointUnavailableError` therefore keeps its category on
+`llm:completed`; when nothing is attached, the event falls back to `provider`,
+which is truthful because every returned failure originates in the provider
+call.
+
+That fallback is only reachable if the transport declines to guess. `internal`
+is a claim - it says the failure came from our own code - so a layer attaching a
+classification to a value that already has a truthful default uses
+`classifyTelemetryErrorIfRecognized`, which returns nothing when no link of the
+chain carried a recognized signal, rather than `classifyTelemetryError`, which
+answers `internal`. An unexplained `fetch failed` therefore leaves the `Result`
+unclassified and is reported as `provider`, not as our own bug.
+
+The transport also has to describe one event the same way from every code path.
+`callFetch` reports a dropped connection either by throwing or by resolving
+without a `Response`; the single-endpoint path turns the second into a throw and
+the endpoint-pool path handles it inline. Both build from one
+`NO_RESPONSE_CLASSIFICATION` constant (`network`, retryable), so the same outage
+does not read as `network` from a single-endpoint deployment and as nothing from
+a pooled one.
+
+A cancellation is a disposition, not a failure: cancelled completions carry no
+classification fields at all. Cancellation is decided once, by
+`isTelemetryCancellation`, and every signal reads that one result - `cancelled`,
+the event `status`, the log severity, the span status and exception name, and
+the presence of classification fields cannot disagree. It takes two inputs: the
+thrown value, walked through its `cause` chain so an `AbortError` wrapped by a
+phase-level error is still recognized, and what the call site knows from outside
+the error, typically that the request's abort signal fired. The second matters
+on its own, because a cancelled request usually surfaces as whatever the
+provider was in the middle of. The phase spans (`typeagent.request`,
+`typeagent.translation`, `typeagent.reasoning`, `typeagent.action`) and the LLM
+span classify through the same call with the same signals the completion events
+use, so a span and the event beside it always agree. A cancelled span still
+carries `ERROR` status - the operation did not complete - and is distinguished
+by its `AbortError` exception name and `cancelled` message rather than the
+phase's own failure wording. A failure with no thrown value carries no
+classification either: an agent that reports failure through a typed
+`ActionResult.error` never threw, so `action:completed` records the failure
+status without asserting a category.
+
+The raw `request`, `name`, `message`, and `stack` remain on
+`command:exception` for the local debug sink and the opt-in database sinks
+(`@config log db on`). They are not in the dispatcher's OTel allowlist, so they
+never reach OTLP or the local JSONL file; only the classification does. The
+reduced local message renders the classification alone, for example
+`Command failed: rate_limit (HTTP 429, retryable)`.
 
 ### 5. Inspect the Same Logs in Grafana
 
@@ -829,8 +1059,10 @@ to `ActionResult`, it must still record the exception and error status.
 
 Before introducing a new stable `typeagent.*` span name or attribute, add it to
 `packages/telemetry/src/otel/traceContract.ts` and use the exported constant or
-helper at the call site. Do not put prompts, responses, user content, exception
-messages, or stacks on spans.
+helper at the call site. That module is also imported by browser-shared code, so
+it must not gain a Node builtin import (directly or through another module in
+the package); anything Node-only belongs in `traceContextNode.ts`. Do not put
+prompts, responses, user content, exception messages, or stacks on spans.
 
 For a complete implementation example, see
 [PR #2842](https://github.com/microsoft/TypeAgent/pull/2842).
@@ -845,7 +1077,12 @@ await createDispatcher(hostName, {
 ```
 
 Original exception messages and stacks are omitted because they can contain user
-content. Record a stable classification and message at the catch site.
+content. Record a stable classification and message at the catch site. For a
+structured log event, use `classifyTelemetryError` rather than hand-rolling a
+classification; see [Failure classification](#failure-classification). A span
+wrapper records the exception through `recordSpanFailure`, which applies the
+shared cancellation decision so the span cannot call a cancellation a phase
+failure while the completion event calls it a cancellation.
 
 ## Currently Captured Dispatcher Telemetry
 
@@ -903,7 +1140,11 @@ execution order.
 
 Translation spans carry the same available correlation attributes as the root
 request span. Errors record a privacy-safe `TranslationError`, or `AbortError`
-for cancellation, and set a stable error status before rethrowing.
+for cancellation, and set a stable error status before rethrowing. Cancellation
+is the shared decision described under
+[Failure classification](#failure-classification), so an abort carried as the
+`cause` of a translation error, or a request whose abort signal fired, is
+recorded as a cancellation on the span and on `translation:completed` alike.
 
 ### Action span
 
@@ -930,7 +1171,9 @@ Failure modes are recorded distinctly and use bounded, allowlisted values:
   `ActionResult.error` text itself is never stamped.
 - An exception that escapes the wrapper is recorded as `AbortError` /
   `cancelled` for cancellation and `ActionError` / `action failed`
-  otherwise, matching the request and translation span conventions.
+  otherwise, matching the request and translation span conventions. The
+  cancellation decision reads the `cause` chain and the request's abort
+  signal, the same two inputs `action:completed` uses.
 
 Auto-setup replacement results (produced when `setupOnFirstUse` runs setup
 in place of the user's action) leave the span status unset regardless of
@@ -954,8 +1197,32 @@ prompts, responses, and reasoning text are never recorded on the span.
 Timeout and external cancellation are propagated to the underlying SDK
 operation before the span ends. Cancellation records the privacy-safe
 `AbortError` / `cancelled` exception classification and sets error status.
-Other escaping exceptions use `ReasoningError` / `reasoning failed`. Original
-exception messages and stack traces are never exported.
+A reasoning run that is cancelled usually throws whatever the SDK was in the
+middle of rather than an `AbortError`, so the decision also reads the reasoning
+deadline signal and the request's own signal - the same inputs
+`reasoning:completed` uses, so the two never disagree. Other escaping exceptions
+use `ReasoningError` / `reasoning failed`. Original exception messages and stack
+traces are never exported.
+
+### LLM span
+
+Each instrumented model call creates one `typeagent.llm` span. Alongside
+`gen_ai.system` and `gen_ai.request.model` it carries the classification the
+active `ChatModelTelemetryContext` supplied: `typeagent.llm.phase`,
+`typeagent.llm.purpose`, `typeagent.llm.scope`, and
+`typeagent.llm.classification_source`. See
+[LLM phase and purpose attribution](#llm-phase-and-purpose-attribution) for how
+those are established and what `default` means.
+
+A returned failure result sets `ERROR` with `model returned failure`; a thrown
+failure records `ModelError` / `model call failed`, or `AbortError` /
+`cancelled` for a cancellation. Prompts, responses, and provider messages are
+never recorded on the span. The matching `llm:completed` log event carries the
+normalized failure classification.
+
+The span is ended exactly once on every path, including when emitting the
+completion event throws: a broken sink degrades telemetry rather than leaking
+an unfinished span, and it never replaces the failure the call was reporting.
 
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |
