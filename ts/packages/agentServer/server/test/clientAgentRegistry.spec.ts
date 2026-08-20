@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { afterEach, describe, expect, test } from "@jest/globals";
+import { describe, expect, test } from "@jest/globals";
 import type {
     ActionContext,
     AppAgent,
@@ -11,7 +11,6 @@ import type {
 } from "@typeagent/agent-sdk";
 import {
     agentAlreadyExistsMessage,
-    allowMultipleClientAgentInstances,
     createClientAgentRegistry,
     getInstanceLabels,
     getManifestKey,
@@ -124,26 +123,18 @@ async function register(
         appAgent: AppAgent;
         manifest?: AppAgentManifest;
         multiInstance?: boolean;
-        allowMultipleInstances?: boolean;
     },
 ): Promise<void> {
-    await registry.add(
-        host,
-        AGENT_NAME,
-        {
-            instanceId: options.instanceId,
-            displayName: options.displayName ?? options.instanceId,
-            connectionId: options.connectionId,
-            appAgent: options.appAgent,
-            manifest: options.manifest ?? makeManifest(),
-            // Devices opt in; the tests that pin single-host behaviour pass
-            // false explicitly.
-            multiInstance: options.multiInstance ?? true,
-        },
-        options.allowMultipleInstances === undefined
-            ? undefined
-            : { allowMultipleInstances: options.allowMultipleInstances },
-    );
+    await registry.add(host, AGENT_NAME, {
+        instanceId: options.instanceId,
+        displayName: options.displayName ?? options.instanceId,
+        connectionId: options.connectionId,
+        appAgent: options.appAgent,
+        manifest: options.manifest ?? makeManifest(),
+        // Devices opt in; the tests that pin single-host behaviour pass
+        // false explicitly.
+        multiInstance: options.multiInstance ?? true,
+    });
 }
 
 function getMux(registry: ClientAgentRegistry): AppAgent {
@@ -267,40 +258,6 @@ describe("clientAgentRegistry registration", () => {
     });
 
     // Case 12
-    test("with multi-instance off a second device is rejected with the original message", async () => {
-        const registry = createClientAgentRegistry();
-        const host = makeHost();
-        const a = makeDevice();
-
-        await register(registry, host, {
-            instanceId: "a",
-            connectionId: "conn-a",
-            appAgent: a.appAgent,
-            allowMultipleInstances: false,
-        });
-
-        await expect(
-            register(registry, host, {
-                instanceId: "b",
-                connectionId: "conn-b",
-                appAgent: makeDevice().appAgent,
-                allowMultipleInstances: false,
-            }),
-        ).rejects.toThrow(`App agent '${AGENT_NAME}' already exists`);
-
-        // A reconnect of the instance already in the group still works.
-        const reconnected = makeDevice();
-        await register(registry, host, {
-            instanceId: "a",
-            connectionId: "conn-a2",
-            appAgent: reconnected.appAgent,
-            allowMultipleInstances: false,
-        });
-        const group = registry.groups.get(AGENT_NAME)!;
-        expect(group.instances.size).toBe(1);
-        expect(group.instances.get("a")!.connectionId).toBe("conn-a2");
-    });
-
     test("a client that does not opt in stays the only host of its agent", async () => {
         const registry = createClientAgentRegistry();
         const host = makeHost();
@@ -348,72 +305,6 @@ describe("clientAgentRegistry registration", () => {
         });
         expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(1);
         await execute(registry, "conn-1b");
-        expect(reconnected.executed).toHaveLength(1);
-    });
-});
-
-describe("clientAgentRegistry kill switch", () => {
-    const ENV = "TYPEAGENT_ALLOW_MULTIPLE_CLIENT_AGENT_INSTANCES";
-    const original = process.env[ENV];
-
-    afterEach(() => {
-        if (original === undefined) {
-            delete process.env[ENV];
-        } else {
-            process.env[ENV] = original;
-        }
-    });
-
-    // The rest of the suite passes the boolean explicitly, so without this the
-    // environment reader - the thing the rollback plan actually depends on -
-    // would never run. A typo in the variable name would ship silently.
-    test.each([
-        [undefined, true],
-        ["", true],
-        ["1", true],
-        ["true", true],
-        ["yes", true],
-        ["0", false],
-        ["false", false],
-        ["FALSE", false],
-        ["  0  ", false],
-    ])("%s reads as %s", (value, expected) => {
-        if (value === undefined) {
-            delete process.env[ENV];
-        } else {
-            process.env[ENV] = value;
-        }
-        expect(allowMultipleClientAgentInstances()).toBe(expected);
-    });
-
-    test("turning it off rejects a second device even when the client opted in", async () => {
-        process.env[ENV] = "0";
-        const registry = createClientAgentRegistry();
-        const host = makeHost();
-
-        await register(registry, host, {
-            instanceId: "a",
-            connectionId: "conn-a",
-            appAgent: makeDevice().appAgent,
-        });
-        await expect(
-            register(registry, host, {
-                instanceId: "b",
-                connectionId: "conn-b",
-                appAgent: makeDevice().appAgent,
-            }),
-        ).rejects.toThrow(`App agent '${AGENT_NAME}' already exists`);
-
-        // A reconnect still replaces in place, so a device that drops its
-        // socket is not stranded while the switch is off.
-        const reconnected = makeDevice();
-        await register(registry, host, {
-            instanceId: "a",
-            connectionId: "conn-a2",
-            appAgent: reconnected.appAgent,
-        });
-        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(1);
-        await execute(registry, "conn-a2");
         expect(reconnected.executed).toHaveLength(1);
     });
 });

@@ -535,8 +535,7 @@ class WebSocketManager internal constructor(
      *
      * A server that tracks devices by `instanceId` replaces this device in
      * place on reconnect, so this cannot fire. It only runs against an older
-     * server, or one with `TYPEAGENT_ALLOW_MULTIPLE_CLIENT_AGENT_INSTANCES`
-     * turned off.
+     * server.
      *
      * On an older server the stale entry is bound to a dead socket, so
      * evicting it and registering again rebinds the route here. Against a

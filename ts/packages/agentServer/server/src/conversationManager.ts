@@ -46,7 +46,6 @@ import { importCopilotSessions } from "./copilot/mirrorImporter.js";
 import {
     ClientAgentRegistry,
     createClientAgentRegistry,
-    type JoinClientAgentGroupOptions,
 } from "./clientAgentRegistry.js";
 import {
     buildTranscriptTurns,
@@ -266,7 +265,6 @@ export type ConversationManager = {
         displayName: string,
         connectionId: string,
         multiInstance: boolean,
-        options?: JoinClientAgentGroupOptions,
     ): Promise<void>;
     /**
      * Remove one instance added via {@link addClientAgent}. The dynamic agent
@@ -1219,26 +1217,20 @@ export async function createConversationManager(
             displayName: string,
             connectionId: string,
             multiInstance: boolean,
-            options?: JoinClientAgentGroupOptions,
         ): Promise<void> {
             const record = conversations.get(conversationId);
             if (record === undefined) {
                 throw new Error(`Conversation not found: ${conversationId}`);
             }
             const sharedDispatcher = await ensureDispatcher(record);
-            await record.clientAgents.add(
-                sharedDispatcher,
-                name,
-                {
-                    instanceId,
-                    displayName,
-                    connectionId,
-                    appAgent,
-                    manifest,
-                    multiInstance,
-                },
-                options,
-            );
+            await record.clientAgents.add(sharedDispatcher, name, {
+                instanceId,
+                displayName,
+                connectionId,
+                appAgent,
+                manifest,
+                multiInstance,
+            });
             debugConversation(
                 `Client agent "${name}" instance ${instanceId} ("${displayName}") registered on conversation "${record.name}" (${conversationId}), instances: ${
                     record.clientAgents.groups.get(name)?.instances.size ?? 0

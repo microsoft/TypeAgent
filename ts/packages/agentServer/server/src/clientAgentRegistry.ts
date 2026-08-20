@@ -57,22 +57,7 @@ export type ClientAgentRegistration = {
     multiInstance?: boolean;
 };
 
-const MULTI_INSTANCE_ENV = "TYPEAGENT_ALLOW_MULTIPLE_CLIENT_AGENT_INSTANCES";
-
-/**
- * Kill switch. Default on; set the environment variable to `0` or `false` for
- * the old behaviour (one instance per group, second device rejected).
- */
-export function allowMultipleClientAgentInstances(): boolean {
-    const value = process.env[MULTI_INSTANCE_ENV];
-    if (value === undefined) {
-        return true;
-    }
-    const normalized = value.trim().toLowerCase();
-    return normalized !== "0" && normalized !== "false";
-}
-
-/** The message a second, distinct client gets when the switch is off. */
+/** The message a second client gets when the group is not shared. */
 export function agentAlreadyExistsMessage(name: string): string {
     return `App agent '${name}' already exists`;
 }
@@ -529,11 +514,6 @@ export function createClientAgentGroup(
     return group;
 }
 
-export type JoinClientAgentGroupOptions = {
-    /** Defaults to {@link allowMultipleClientAgentInstances}. */
-    allowMultipleInstances?: boolean;
-};
-
 /**
  * Add a device, or replace its proxy if the same `instanceId` is already
  * there. Replacing in place is what makes a reconnect work: the device keeps
@@ -543,7 +523,6 @@ export type JoinClientAgentGroupOptions = {
 export async function joinClientAgentGroup(
     group: ClientAgentGroup,
     registration: ClientAgentRegistration,
-    options?: JoinClientAgentGroupOptions,
 ): Promise<boolean> {
     const manifestKey = getManifestKey(registration.manifest);
     if (manifestKey !== group.manifestKey) {
@@ -562,19 +541,13 @@ export async function joinClientAgentGroup(
         return false;
     }
 
-    // Two independent gates, both of which must allow the join. The group flag
-    // is the client's own opt-in; the environment switch is the operator's
-    // emergency brake. Replacing an instance already in the group passes both,
+    // Sharing is opt-in, and the group's creator decides. A client that opts in
+    // cannot join a group whose creator did not, so no client can widen another
+    // client's agent. Replacing an instance already in the group skips this,
     // since that path fails outright today and so cannot regress anything.
-    const envAllows =
-        options?.allowMultipleInstances ?? allowMultipleClientAgentInstances();
-    if (!group.multiInstance || !envAllows) {
+    if (!group.multiInstance) {
         debugGroup(
-            `${group.name}: rejected instance ${registration.instanceId}; ${
-                group.multiInstance
-                    ? `${MULTI_INSTANCE_ENV} is off`
-                    : "the registration did not opt in to sharing"
-            }`,
+            `${group.name}: rejected instance ${registration.instanceId}; the registration did not opt in to sharing`,
         );
         throw new Error(agentAlreadyExistsMessage(group.name));
     }
@@ -671,7 +644,6 @@ export type ClientAgentRegistry = {
         host: ClientAgentHost,
         name: string,
         registration: ClientAgentRegistration,
-        options?: JoinClientAgentGroupOptions,
     ): Promise<void>;
     remove(
         host: ClientAgentHost | undefined,
@@ -690,11 +662,11 @@ export function createClientAgentRegistry(): ClientAgentRegistry {
     const lock = createLimiter(1);
     return {
         groups,
-        add(host, name, registration, options) {
+        add(host, name, registration) {
             return lock(async () => {
                 const existing = groups.get(name);
                 if (existing !== undefined) {
-                    await joinClientAgentGroup(existing, registration, options);
+                    await joinClientAgentGroup(existing, registration);
                     return;
                 }
                 const group = createClientAgentGroup(name, registration);

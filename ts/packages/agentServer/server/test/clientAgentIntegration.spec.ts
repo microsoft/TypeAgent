@@ -102,21 +102,15 @@ function createTestServer(): TestServer {
             displayName: string,
             connectionId: string,
             multiInstance: boolean,
-            options?: any,
         ) {
-            await registry.add(
-                host,
-                name,
-                {
-                    instanceId,
-                    displayName,
-                    connectionId,
-                    appAgent,
-                    manifest: agentManifest,
-                    multiInstance,
-                },
-                options,
-            );
+            await registry.add(host, name, {
+                instanceId,
+                displayName,
+                connectionId,
+                appAgent,
+                manifest: agentManifest,
+                multiInstance,
+            });
         },
         findClientAgentInstance(
             _conversationId: string,
