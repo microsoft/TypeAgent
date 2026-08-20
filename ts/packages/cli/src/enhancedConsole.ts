@@ -987,7 +987,7 @@ export function createEnhancedClientIO(
         if (terminalLayout?.isActive) {
             terminalLayout.flushInline();
             if (traceId) {
-                process.stdout.write(
+                terminalLayout.writeContent(
                     chalk.dim(`[💬 ${source}] TraceID: ${traceId}\n`),
                 );
             }
