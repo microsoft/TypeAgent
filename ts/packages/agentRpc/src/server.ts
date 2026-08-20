@@ -31,7 +31,7 @@ import {
     ContextParams,
     OptionsFunctionCallBack,
 } from "./types.js";
-import { createRpc } from "./rpc.js";
+import { createRpc, type RpcOptions } from "./rpc.js";
 import { ChannelProvider, RpcChannel } from "./common.js";
 import {
     base64ToUint8Array,
@@ -40,11 +40,38 @@ import {
     setObjectProperty,
 } from "@typeagent/common-utils";
 
-function createOptionsRpc(channelProvider: ChannelProvider, name: string) {
+export type AgentRpcServerOptions = {
+    trustedContextPropagation?: boolean;
+};
+
+function getTrustedRpcOptions(
+    options: AgentRpcServerOptions | undefined,
+): RpcOptions | undefined {
+    return options?.trustedContextPropagation === true
+        ? {
+              tracing: {
+                  propagateContext: true,
+                  trustRemoteContext: true,
+              },
+          }
+        : undefined;
+}
+
+function createOptionsRpc(
+    channelProvider: ChannelProvider,
+    name: string,
+    options?: AgentRpcServerOptions,
+) {
     const optionsChannel: RpcChannel = channelProvider.createChannel(
         `options:${name}`,
     );
-    return createRpc<OptionsFunctionCallBack>(name, optionsChannel);
+    return createRpc<OptionsFunctionCallBack>(
+        name,
+        optionsChannel,
+        undefined,
+        undefined,
+        getTrustedRpcOptions(options),
+    );
 }
 
 function populateOptionsFunctions(
@@ -68,6 +95,7 @@ export function createAgentRpcServer(
     name: string,
     agent: AppAgent,
     channelProvider: ChannelProvider,
+    options?: AgentRpcServerOptions,
 ) {
     const channelName = `agent:${name}`;
     const channel = channelProvider.createChannel(channelName);
@@ -98,7 +126,11 @@ export function createAgentRpcServer(
                     );
                 }
                 if (optionsRpc === undefined) {
-                    optionsRpc = createOptionsRpc(channelProvider, name);
+                    optionsRpc = createOptionsRpc(
+                        channelProvider,
+                        name,
+                        options,
+                    );
                 }
                 populateOptionsFunctions(
                     optionsRpc,
@@ -321,12 +353,13 @@ export function createAgentRpcServer(
         },
     };
 
+    const rpcOptions = getTrustedRpcOptions(options);
     const rpc = createRpc<
         AgentContextInvokeFunctions,
         AgentContextCallFunctions,
         AgentInvokeFunctions,
         AgentCallFunctions
-    >(name, channel, agentInvokeHandlers, agentCallHandlers);
+    >(name, channel, agentInvokeHandlers, agentCallHandlers, rpcOptions);
 
     function getStorage(contextId: number, session: boolean): Storage {
         const tokenCachePersistence: TokenCachePersistence = {
@@ -572,6 +605,7 @@ export function createAgentRpcServer(
                         name,
                         agent,
                         channelProvider,
+                        options,
                     );
                     // Trigger the addDynamicAgent on the client side
                     const p = rpc.invoke("addDynamicAgent", {

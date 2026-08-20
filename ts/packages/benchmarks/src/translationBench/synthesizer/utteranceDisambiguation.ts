@@ -79,6 +79,56 @@ const KNOWN_CONFUSABLE_PAIRS: ReadonlyArray<
         { schemaName: "browser.actionDiscovery", actionName: "inferActions" },
         "flows vs inferred actions",
     ],
+    [
+        {
+            schemaName: "browser.actionDiscovery",
+            actionName: "registerPageDynamicAgent",
+        },
+        {
+            schemaName: "browser.actionDiscovery",
+            actionName: "detectPageActions",
+        },
+        "register page agent vs detect page actions (registerAgent:true)",
+    ],
+    [
+        {
+            schemaName: "browser.actionDiscovery",
+            actionName: "getWebFlowsForDomain",
+        },
+        {
+            schemaName: "browser.actionDiscovery",
+            actionName: "detectPageActions",
+        },
+        "domain web-flows lookup vs inspect/detect page actions",
+    ],
+    [
+        {
+            schemaName: "browser.actionDiscovery",
+            actionName: "getWebFlowsForDomain",
+        },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "list flows for domain hostname vs navigate to that hostname",
+    ],
+    [
+        { schemaName: "github-cli", actionName: "browseIssue" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "GitHub issue via gh/browseIssue vs generic browser open of a URL/page; prefer 'GitHub issue #N', 'gh browse issue', 'in this repo' — avoid bare 'open in the browser' / 'web page'",
+    ],
+    [
+        { schemaName: "github-cli", actionName: "browsePr" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "GitHub PR via gh/browsePr vs generic browser open; prefer 'pull request #N', 'gh browse pr', 'in this repo'",
+    ],
+    [
+        { schemaName: "github-cli", actionName: "browseRepo" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "GitHub repo via gh/browseRepo vs generic browser open; prefer 'this GitHub repo', 'gh browse', owner/name",
+    ],
+    [
+        { schemaName: "browser.external", actionName: "openTab" },
+        { schemaName: "browser", actionName: "openWebPage" },
+        "external/system browser tab vs in-app openWebPage; prefer 'external browser', 'system browser', 'outside the app', 'default browser app' — avoid bare 'new tab' / 'in my browser'",
+    ],
 ];
 
 /**
@@ -163,11 +213,27 @@ const ACTION_DISAMBIGUATION_CUES: Readonly<Record<string, readonly string[]>> =
             "close tab",
         ],
         "browser.actionDiscovery.getAllWebFlows": [
-            "web flow",
-            "web flows",
+            // Avoid bare "web flow(s)" — those also fit getWebFlowsForDomain.
+            "all web flows",
+            "every web flow",
             "flows on this page",
-            "available flows",
-            "list flows",
+            "available flows across",
+            "list all flows",
+            "every saved flow",
+            "all saved web flows",
+        ],
+        "browser.actionDiscovery.getWebFlowsForDomain": [
+            "web flows for",
+            "web flow for",
+            "flows for the domain",
+            "flows for domain",
+            "flows for this domain",
+            "list web flows for",
+            "get web flows for",
+            "web flows on the domain",
+            "domain web flows",
+            "web flows registered for",
+            "saved web flows for",
         ],
         "browser.actionDiscovery.detectPageActions": [
             "detect",
@@ -181,6 +247,15 @@ const ACTION_DISAMBIGUATION_CUES: Readonly<Record<string, readonly string[]>> =
             "inspect",
             "lets me do",
             "what this page",
+            "detect and register",
+            "scan and register",
+            "register agent and find",
+        ],
+        "browser.actionDiscovery.registerPageDynamicAgent": [
+            "register page dynamic agent",
+            "register site schema only",
+            "dynamic agent without scanning",
+            "just register the page agent",
         ],
         "browser.actionDiscovery.inferActions": [
             "infer actions",
@@ -236,6 +311,11 @@ function significantTokens(name: string): Set<string> {
         out.add(token);
     }
     return out;
+}
+
+function significantTokensFromText(text: string | undefined): Set<string> {
+    if (text === undefined) return new Set();
+    return significantTokens(text);
 }
 
 function jaccard(a: Set<string>, b: Set<string>): number {
@@ -312,6 +392,30 @@ export function findTranslationBenchConfusableSiblings(
                 `same-schema action-name overlap (${overlap.toFixed(2)})`,
             );
         }
+    }
+
+    const targetDescription = significantTokensFromText(
+        byKey.get(keyOf(target))?.description,
+    );
+    for (const action of all) {
+        if (action.schemaName === target.schemaName) continue;
+        if (sameAction(action, target)) continue;
+        const nameOverlap = jaccard(
+            targetTokens,
+            significantTokens(action.actionName),
+        );
+        if (nameOverlap < 0.5) continue;
+        const descriptionOverlap = jaccard(
+            targetDescription,
+            significantTokensFromText(action.description),
+        );
+        if (descriptionOverlap < 0.34) continue;
+        add(
+            action,
+            `cross-schema overlap (name ${nameOverlap.toFixed(
+                2,
+            )}, description ${descriptionOverlap.toFixed(2)})`,
+        );
     }
 
     return [...found.values()].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));

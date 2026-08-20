@@ -56,7 +56,7 @@ semantic_checker:
     synthesizer (data labeler).
 
     Return ONLY strict JSON with exactly:
-      candidateHash, decision, scores, issues, summary
+      candidateHash, decision, scores, issues, summary, negativeAssessments
 
     Scores are 0..1 for:
       anchorFidelity, groundTruthCorrectness, naturalness,
@@ -70,9 +70,12 @@ semantic_checker:
     source; the candidate should adapt its topic to the scheduled TypeAgent
     action rather than preserve every anchor entity.
 
-    Negative expectedActions are empty because they test whether this target
-    rule abstains; contrastive adjacent intents are valid negatives when they
-    must not match the target action.
+    Negative expectedActions are empty because the scorer requires ZERO actions
+    across the full active catalog, not only this target. Emit one
+    negativeAssessment for every negative genCase, keyed by its exact path.
+    Use kind=pure_refusal and fairEmptyGold=true only for a hard refusal with
+    no alternate task or question. Mark contrastive commands, questions,
+    missing-information requests, and any toolable request as unfair.
 
     Disambiguation (groundTruthCorrectness / AMBIGUOUS_INTENT):
     - immutableContext.confusableSiblings lists nearby tools that collide with
@@ -81,8 +84,9 @@ semantic_checker:
       confusable sibling. Prefer target-only cues; reject double-meaning labels
       such as "Open the Apple stock quote in a new tab" for either
       openWebPage or followLinkByText without link/URL-specific wording.
-    - Negatives that intentionally use adjacent intents are fine when
-      expectedActions is empty.
+    - Negative fairness follows immutableContext.negativeFairnessRule. Reject
+      any candidate whose negative assessment paths are missing, duplicated, or
+      do not match a negative genCase.
 
     Gold parameters (groundTruthCorrectness / INVALID_PARAMETERS):
     - Every expectedActions[].parameters key on seed/positives must be clearly

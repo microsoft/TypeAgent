@@ -116,13 +116,31 @@
         listName
     }
 }
+  | create (a)? (new)? list (named | called) $(listName:wildcard) -> {
+    actionName: "createList",
+    parameters: {
+        listName
+    }
+}
   | (can you)? make (me)? (a)? (new)? $(listName:wildcard) list -> {
     actionName: "createList",
     parameters: {
         listName
     }
 }
+  | (can you)? make (me)? (a)? (new)? list (named | called) $(listName:wildcard) -> {
+    actionName: "createList",
+    parameters: {
+        listName
+    }
+}
   | start (a)? (new)? $(listName:wildcard) list -> {
+    actionName: "createList",
+    parameters: {
+        listName
+    }
+}
+  | start (a)? (new)? list (named | called) $(listName:wildcard) -> {
     actionName: "createList",
     parameters: {
         listName
@@ -242,6 +260,89 @@
     parameters: {
         listName
     }
+}
+  | clear everything from the $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+}
+  | clear everything from my $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+}
+  | clear all items from the $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+}
+  | clear all items from my $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+};
+
+// deleteList - permanently remove a list itself, not just its items.
+// Distinguished from <ClearList>'s "delete ... from ... list" alternative by
+// the absence of "from": "delete the grocery list" deletes the list, while
+// "delete everything from the grocery list" (has "from") clears it.
+<DeleteList> = (can you)? delete the $(listName:wildcard) list -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | (can you)? delete my $(listName:wildcard) list -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | (can you)? delete (the | my)? list (named | called) $(listName:wildcard) -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | (can you)? remove the $(listName:wildcard) list -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | (can you)? remove my $(listName:wildcard) list -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | (can you)? remove (the | my)? list (named | called) $(listName:wildcard) -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | get rid of the $(listName:wildcard) list -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | get rid of my $(listName:wildcard) list -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | get rid of (the | my)? list (named | called) $(listName:wildcard) -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
 };
 
 // listLists
@@ -250,6 +351,14 @@
     parameters: {}
 }
   | (what | which) lists (do | are)? (i | we | there)? (have)? -> {
+    actionName: "listLists",
+    parameters: {}
+}
+  | is there (a)? list (available)? -> {
+    actionName: "listLists",
+    parameters: {}
+}
+  | do (i | we) have (a | any) (list | lists) -> {
     actionName: "listLists",
     parameters: {}
 };
@@ -262,5 +371,6 @@ import { ListAction } from "./listSchema.ts";
   | <CreateList>
   | <GetList>
   | <ClearList>
+  | <DeleteList>
   | <RemoveItems>
   | <ListLists>;

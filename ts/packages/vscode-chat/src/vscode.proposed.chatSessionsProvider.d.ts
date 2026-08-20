@@ -95,12 +95,36 @@ declare module "vscode" {
 
     export interface ChatSession {
         readonly title?: string;
-        readonly history: ReadonlyArray<ChatRequestTurn | ChatResponseTurn>;
+        readonly history: ReadonlyArray<ChatRequestTurn | ChatResponseTurn2>;
         readonly activeResponseCallback?: (
             stream: ChatResponseStream,
             token: CancellationToken,
         ) => Thenable<void>;
         readonly requestHandler: ChatRequestHandler | undefined;
+    }
+
+    export class ChatResponseTurn2 {
+        readonly id?: string;
+        readonly response: ReadonlyArray<
+            | ChatResponseMarkdownPart
+            | ChatResponseFileTreePart
+            | ChatResponseAnchorPart
+            | ChatResponseCommandButtonPart
+        >;
+        readonly result: ChatResult;
+        readonly participant: string;
+        readonly command?: string;
+
+        constructor(
+            response: ReadonlyArray<
+                | ChatResponseMarkdownPart
+                | ChatResponseFileTreePart
+                | ChatResponseAnchorPart
+                | ChatResponseCommandButtonPart
+            >,
+            result: ChatResult,
+            participant: string,
+        );
     }
 
     export interface ChatSessionContentProvider {

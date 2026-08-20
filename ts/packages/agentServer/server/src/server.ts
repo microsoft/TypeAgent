@@ -15,9 +15,10 @@ import {
 } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
-    getDefaultAppAgentSource,
+    getDefaultAppAgentSources,
     getIndexingServiceRegistry,
     getDefaultConstructionProvider,
+    McpReplayHost,
 } from "default-agent-provider";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
@@ -36,6 +37,7 @@ import os from "node:os";
 import { spawn } from "node:child_process";
 import { DefaultAzureCredential } from "@azure/identity";
 import { otel } from "@typeagent/telemetry";
+import { MacroManager } from "@typeagent/copilot-macros";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
@@ -178,7 +180,15 @@ process.once("message", (message) => {
 // Load config from YAML layers + Key Vault (replacing legacy dotenv).
 // vault.shared is auto-discovered from config.local.yaml / config.defaults.yaml.
 await loadConfig({ keyVault: {}, strict: false });
-const telemetryInit = otel.initTelemetry();
+const telemetryConfig = otel.resolveTelemetryConfig();
+const telemetryInit = otel.initTelemetry({
+    config: telemetryConfig,
+    processName: "agent-server",
+    debugModules: [registerDebug],
+    debugBridge: {
+        includedNamespacePrefixes: ["typeagent:", "agent-server:"],
+    },
+});
 
 // Snapshot whether this server's local config differs from the shared Key
 // Vault, so clients can be warned on connect (same delivery path as the
@@ -331,15 +341,19 @@ async function main() {
                     instanceDir,
                     configName,
                 ),
-                appAgentSources: [
-                    getDefaultAppAgentSource(instanceDir, { configName }),
-                ],
+                appAgentSources: getDefaultAppAgentSources(instanceDir, {
+                    configName,
+                }),
                 persistSession: true,
                 storageProvider: getFsStorageProvider(),
                 metrics: true,
                 dblogging: true,
                 developerMode,
                 traceId,
+                telemetry: {
+                    joinActiveTrace: true,
+                    structuredLogs: telemetryConfig.structuredLogs === true,
+                },
                 indexingServiceRegistry: await getIndexingServiceRegistry(
                     instanceDir,
                     configName,
@@ -363,6 +377,10 @@ async function main() {
             },
             instanceDir,
         );
+    const macroManager = new MacroManager(
+        instanceDir,
+        new McpReplayHost(instanceDir),
+    );
 
     debugStartup("conversation manager ready; prewarming default conversation");
     // Pre-initialize the default conversation dispatcher before accepting clients,
@@ -479,6 +497,7 @@ async function main() {
     const { handler: connectionHandler, broadcastStaleNotice } =
         createAgentServerConnectionHandler({
             conversationManager,
+            macroManager,
             shutdown: shutdownServer,
             restart: restartServer,
             isStale: isStaleBuild,

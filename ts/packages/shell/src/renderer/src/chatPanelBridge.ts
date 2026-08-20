@@ -1282,8 +1282,8 @@ export function createChatPanelClient(
                     );
                     break;
                 default:
-                    // Android-only actions (set-alarm, call-phonenumber, etc.)
-                    // are not supported in the Electron shell.
+                    // Client-agent actions handled by other hosts (e.g. the
+                    // Android sample) are not supported in the Electron shell.
                     break;
             }
         } catch (e) {

@@ -4,6 +4,10 @@
 import { parseRecordingDirective } from "@typeagent/dispatcher-types";
 import { resolveActiveSchemaScope } from "../src/translation/activeSchemaScope.js";
 import { getReasoningProfileGuidance } from "../src/reasoning/reasoningProfile.js";
+import {
+    getPowerShellCapabilityDisposition,
+    getPowerShellCapabilityOutcome,
+} from "../src/reasoning/powershellCapabilityOutcome.js";
 import { createDispatcher } from "../src/dispatcher.js";
 import { awaitCommand, type Dispatcher } from "@typeagent/dispatcher-types";
 
@@ -78,14 +82,133 @@ describe("dev action routing", () => {
                 unavailable: ["powershell"],
             });
         });
+
+        it("selects an active schema family", () => {
+            expect(
+                resolveActiveSchemaScope(
+                    [
+                        "powershell",
+                        "powershell.powershell-network",
+                        "powershell.powershell-processes",
+                        "browser",
+                    ],
+                    undefined,
+                    ["powershell"],
+                ),
+            ).toEqual({
+                schemaNames: [
+                    "powershell",
+                    "powershell.powershell-network",
+                    "powershell.powershell-processes",
+                ],
+                unavailable: [],
+            });
+        });
+
+        it("deduplicates exact schemas that overlap a family", () => {
+            expect(
+                resolveActiveSchemaScope(
+                    ["powershell", "powershell.powershell-network"],
+                    ["powershell.powershell-network"],
+                    ["powershell"],
+                ),
+            ).toEqual({
+                schemaNames: ["powershell.powershell-network", "powershell"],
+                unavailable: [],
+            });
+        });
+
+        it("reports unavailable schema families", () => {
+            expect(
+                resolveActiveSchemaScope(["browser"], undefined, [
+                    "powershell",
+                ]),
+            ).toEqual({
+                schemaNames: [],
+                unavailable: ["powershell"],
+            });
+        });
     });
 
     it("adds focused PowerShell recording guidance", () => {
         const guidance = getReasoningProfileGuidance({
             reasoningProfile: "powershellFlowRecording",
         });
-        expect(guidance).toContain("createPowerShellFlow");
+        expect(guidance).toContain("createAndExecutePowerShellFlow");
         expect(guidance).toContain("Do not create a TaskFlow or WebFlow");
+    });
+
+    it("adds typed PowerShell capability fallback guidance", () => {
+        const guidance = getReasoningProfileGuidance({
+            reasoningProfile: "powershellCapabilityFallback",
+        });
+        expect(guidance).toContain("reportPowerShellCapabilityOutcome");
+        expect(guidance).toContain("addPowerShellFlowPatterns");
+        expect(guidance).toContain("executes the draft once");
+    });
+
+    describe("capability outcomes", () => {
+        it("reads the final typed outcome action", () => {
+            expect(
+                getPowerShellCapabilityOutcome([
+                    {
+                        schemaName: "powershell",
+                        actionName: "reportPowerShellCapabilityOutcome",
+                        parameters: {
+                            status: "created",
+                            flowName: "showPortProcesses",
+                        },
+                    },
+                ]),
+            ).toEqual({
+                status: "created",
+                flowName: "showPortProcesses",
+            });
+        });
+
+        it("rejects malformed outcomes", () => {
+            expect(
+                getPowerShellCapabilityOutcome([
+                    {
+                        schemaName: "powershell",
+                        actionName: "reportPowerShellCapabilityOutcome",
+                        parameters: {
+                            status: "failed",
+                            phase: "execute",
+                            mayHaveSideEffects: "yes",
+                            reason: "failed",
+                        },
+                    },
+                ]),
+            ).toBeUndefined();
+        });
+
+        it("maps notSuitable to clean fallthrough", () => {
+            expect(
+                getPowerShellCapabilityDisposition({
+                    status: "notSuitable",
+                    reasonCode: "not-a-system-task",
+                }),
+            ).toEqual({
+                status: "notHandled",
+                reason: "notPowerShellCapable",
+            });
+        });
+
+        it("preserves side-effect risk for failures", () => {
+            expect(
+                getPowerShellCapabilityDisposition({
+                    status: "failed",
+                    phase: "persist",
+                    mayHaveSideEffects: true,
+                    reason: "schema reload failed",
+                }),
+            ).toEqual({
+                status: "failed",
+                path: "reasoning",
+                mayHaveSideEffects: true,
+            });
+        });
     });
 
     describe("dispatcher disposition", () => {
@@ -115,6 +238,23 @@ describe("dev action routing", () => {
                 undefined,
                 {
                     activeSchemas: ["powershell"],
+                    noReasoning: true,
+                },
+            );
+
+            expect(result?.disposition).toEqual({
+                status: "notHandled",
+                reason: "noActiveSchema",
+            });
+        });
+
+        it("returns notHandled when the requested schema family is inactive", async () => {
+            const result = await awaitCommand(
+                dispatcher,
+                "list large files",
+                undefined,
+                {
+                    activeSchemaFamilies: ["powershell"],
                     noReasoning: true,
                 },
             );

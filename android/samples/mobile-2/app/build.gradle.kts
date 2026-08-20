@@ -50,6 +50,13 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions {
+        unitTests {
+            // WebSocketManager logs through android.util.Log, whose unit-test
+            // stub throws unless the stubs return defaults.
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
@@ -62,6 +69,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.commonmark)
     implementation(libs.squareup.okhttp)
     testImplementation(libs.json)

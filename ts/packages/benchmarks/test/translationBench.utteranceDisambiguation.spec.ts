@@ -76,7 +76,66 @@ function browserCatalog(): TranslationBenchBenchmarkSchema[] {
     ];
 }
 
+function crossSchemaCatalog(): TranslationBenchBenchmarkSchema[] {
+    const makeSchema = (
+        schemaName: string,
+        actions: ReadonlyArray<{ name: string; description: string }>,
+    ): TranslationBenchBenchmarkSchema =>
+        ({
+            schemaName,
+            description: `${schemaName} actions`,
+            tools: actions.map((action) => ({
+                type: "function" as const,
+                function: {
+                    name: action.name,
+                    description: action.description,
+                    parameters: {
+                        type: "object",
+                        properties: {},
+                        additionalProperties: false,
+                    },
+                },
+            })),
+            typeAgent: {
+                sourceHash: `${schemaName}-${HASH}`,
+                schemaType: "X",
+                parsedActionSchema: undefined,
+            },
+        }) as unknown as TranslationBenchBenchmarkSchema;
+    return [
+        makeSchema("code", [
+            {
+                name: "newTextFile",
+                description: "Create a new text file in the editor",
+            },
+        ]),
+        makeSchema("utility", [
+            {
+                name: "writeTextFile",
+                description: "Write a new text file to disk",
+            },
+            {
+                name: "readFile",
+                description: "Read the contents of a file",
+            },
+        ]),
+    ];
+}
+
 describe("translation bench confusable siblings", () => {
+    it("finds cross-schema equivalent actions", () => {
+        const siblings = findTranslationBenchConfusableSiblings(
+            { schemaName: "code", actionName: "newTextFile" },
+            crossSchemaCatalog(),
+        );
+        expect(siblings.map((sibling) => sibling.actionName)).toContain(
+            "writeTextFile",
+        );
+        expect(siblings.map((sibling) => sibling.actionName)).not.toContain(
+            "readFile",
+        );
+    });
+
     it("finds curated openWebPage ↔ followLinkByText pair", () => {
         const catalog = browserCatalog();
         const siblings = findTranslationBenchConfusableSiblings(
@@ -100,6 +159,104 @@ describe("translation bench confusable siblings", () => {
                 "followLinkByPosition",
                 "openSearchResult",
             ]),
+        );
+    });
+
+    it("finds curated github-cli.browseIssue ↔ browser.openWebPage pair", () => {
+        const catalog: TranslationBenchBenchmarkSchema[] = [
+            ...browserCatalog(),
+            {
+                schemaName: "github-cli",
+                description: "github cli",
+                tools: [
+                    {
+                        type: "function",
+                        function: {
+                            name: "browseIssue",
+                            description: "Browse a GitHub issue",
+                            parameters: {
+                                type: "object",
+                                properties: { number: { type: "number" } },
+                            },
+                        },
+                    },
+                ],
+                typeAgent: {
+                    sourceHash: `github-${HASH}`,
+                    schemaType: "GithubAction",
+                    parsedActionSchema: toJSONParsedActionSchema(
+                        parseToolsJsonSchema([
+                            {
+                                name: "browseIssue",
+                                description: "Browse a GitHub issue",
+                                inputSchema: {
+                                    type: "object",
+                                    properties: {
+                                        number: { type: "number" },
+                                    },
+                                    additionalProperties: false,
+                                },
+                            },
+                        ]),
+                    ),
+                },
+            },
+        ];
+        const siblings = findTranslationBenchConfusableSiblings(
+            { schemaName: "github-cli", actionName: "browseIssue" },
+            catalog,
+        );
+        expect(siblings.map((s) => `${s.schemaName}.${s.actionName}`)).toEqual(
+            expect.arrayContaining(["browser.openWebPage"]),
+        );
+    });
+
+    it("finds curated browser.external.openTab ↔ browser.openWebPage pair", () => {
+        const catalog: TranslationBenchBenchmarkSchema[] = [
+            ...browserCatalog(),
+            {
+                schemaName: "browser.external",
+                description: "external browser",
+                tools: [
+                    {
+                        type: "function",
+                        function: {
+                            name: "openTab",
+                            description: "Open external browser tab",
+                            parameters: {
+                                type: "object",
+                                properties: { url: { type: "string" } },
+                            },
+                        },
+                    },
+                ],
+                typeAgent: {
+                    sourceHash: `external-${HASH}`,
+                    schemaType: "ExternalAction",
+                    parsedActionSchema: toJSONParsedActionSchema(
+                        parseToolsJsonSchema([
+                            {
+                                name: "openTab",
+                                description: "Open external browser tab",
+                                inputSchema: {
+                                    type: "object",
+                                    properties: {
+                                        url: { type: "string" },
+                                    },
+                                    additionalProperties: false,
+                                },
+                            },
+                        ]),
+                    ),
+                },
+            },
+        ];
+        const siblings = findTranslationBenchConfusableSiblings(
+            { schemaName: "browser.external", actionName: "openTab" },
+            catalog,
+        );
+        expect(siblings.map((s) => `${s.schemaName}.${s.actionName}`)).toEqual(
+            expect.arrayContaining(["browser.openWebPage"]),
         );
     });
 });
@@ -164,6 +321,98 @@ describe("translation bench utterance disambiguation", () => {
         );
         expect(result.ok).toBe(true);
         expect(result.targetCuesMatched.length).toBeGreaterThan(0);
+    });
+
+    it("rejects getWebFlowsForDomain gold that reads as detectPageActions", () => {
+        // gen1k case generated-000920: "Inspect github.com to discover which
+        // browser actions are supported for that domain" — terra/luna both
+        // chose detectPageActions; utterance never says web flows.
+        const discoveryCatalog: TranslationBenchBenchmarkSchema[] = [
+            {
+                schemaName: "browser.actionDiscovery",
+                description: "discovery",
+                tools: [
+                    {
+                        type: "function",
+                        function: {
+                            name: "getWebFlowsForDomain",
+                            description: "List web flows for a domain",
+                            parameters: {
+                                type: "object",
+                                properties: {
+                                    domain: { type: "string" },
+                                },
+                            },
+                        },
+                    },
+                    {
+                        type: "function",
+                        function: {
+                            name: "detectPageActions",
+                            description: "Detect page actions",
+                            parameters: { type: "object", properties: {} },
+                        },
+                    },
+                ],
+                typeAgent: {
+                    sourceHash: `discovery-${HASH}`,
+                    schemaType: "DiscoveryAction",
+                    parsedActionSchema: toJSONParsedActionSchema(
+                        parseToolsJsonSchema([
+                            {
+                                name: "getWebFlowsForDomain",
+                                description: "List web flows for a domain",
+                                inputSchema: {
+                                    type: "object",
+                                    properties: {
+                                        domain: { type: "string" },
+                                    },
+                                    additionalProperties: false,
+                                },
+                            },
+                            {
+                                name: "detectPageActions",
+                                description: "Detect page actions",
+                                inputSchema: {
+                                    type: "object",
+                                    properties: {},
+                                    additionalProperties: false,
+                                },
+                            },
+                        ]),
+                    ),
+                },
+            },
+            ...catalog,
+        ];
+        const target = {
+            schemaName: "browser.actionDiscovery",
+            actionName: "getWebFlowsForDomain",
+        } as const;
+        const siblings = findTranslationBenchConfusableSiblings(
+            target,
+            discoveryCatalog,
+        );
+        expect(siblings.map((s) => s.actionName)).toEqual(
+            expect.arrayContaining(["detectPageActions", "openWebPage"]),
+        );
+        const ambiguous = checkTranslationBenchUtteranceDisambiguation(
+            "Inspect github.com to discover which browser actions are supported for that domain.",
+            target,
+            siblings,
+            "$.seed.utterance",
+        );
+        expect(ambiguous.ok).toBe(false);
+        expect(ambiguous.message).toMatch(/disambiguat|confusable|cue/i);
+
+        const clear = checkTranslationBenchUtteranceDisambiguation(
+            "List the saved web flows for the domain github.com",
+            target,
+            siblings,
+            "$.seed.utterance",
+        );
+        expect(clear.ok).toBe(true);
+        expect(clear.targetCuesMatched.length).toBeGreaterThan(0);
     });
 
     it("skips negatives in candidate check", () => {

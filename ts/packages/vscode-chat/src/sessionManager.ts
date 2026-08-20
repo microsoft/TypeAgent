@@ -31,7 +31,7 @@ type ChatRequestTurnConstructor = new (
     toolReferences: vscode.ChatLanguageModelToolReference[],
 ) => vscode.ChatRequestTurn;
 
-type ChatResponseTurnConstructor = new (
+type ChatResponseTurn2Constructor = new (
     response: ReadonlyArray<
         | vscode.ChatResponseMarkdownPart
         | vscode.ChatResponseFileTreePart
@@ -40,13 +40,12 @@ type ChatResponseTurnConstructor = new (
     >,
     result: vscode.ChatResult,
     participant: string,
-    command?: string,
-) => vscode.ChatResponseTurn;
+) => vscode.ChatResponseTurn2;
 
 const ChatRequestTurn =
     vscode.ChatRequestTurn as unknown as ChatRequestTurnConstructor;
-const ChatResponseTurn =
-    vscode.ChatResponseTurn as unknown as ChatResponseTurnConstructor;
+const ChatResponseTurn2 =
+    vscode.ChatResponseTurn2 as unknown as ChatResponseTurn2Constructor;
 
 function chatMarkdown(value: string): vscode.MarkdownString {
     const markdown = new vscode.MarkdownString(value);
@@ -326,7 +325,7 @@ export const PARTICIPANT_ID = "typeagent";
 async function buildHistory(
     dispatcher: Dispatcher,
     participantId: string,
-): Promise<(vscode.ChatRequestTurn | vscode.ChatResponseTurn)[]> {
+): Promise<(vscode.ChatRequestTurn | vscode.ChatResponseTurn2)[]> {
     let entries: DisplayLogEntry[];
     try {
         entries = await dispatcher.getDisplayHistory();
@@ -364,7 +363,7 @@ async function buildHistory(
         }
     }
 
-    const history: (vscode.ChatRequestTurn | vscode.ChatResponseTurn)[] = [];
+    const history: (vscode.ChatRequestTurn | vscode.ChatResponseTurn2)[] = [];
     for (const rid of order) {
         const group = groups.get(rid)!;
         if (!group.userText) continue;
@@ -381,7 +380,7 @@ async function buildHistory(
 
         if (group.lines.length > 0) {
             history.push(
-                new ChatResponseTurn(
+                new ChatResponseTurn2(
                     [
                         new vscode.ChatResponseMarkdownPart(
                             chatMarkdown(group.lines.join("\n\n")),
