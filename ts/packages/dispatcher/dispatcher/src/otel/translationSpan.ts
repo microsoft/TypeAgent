@@ -4,7 +4,6 @@
 import {
     context,
     createContextKey,
-    SpanStatusCode,
     trace,
     type Context,
     type Span,
@@ -15,6 +14,16 @@ import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 import { otel } from "@typeagent/telemetry";
 import type { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { getSessionName } from "../context/session.js";
+import {
+    recordSpanFailure,
+    type CancellationSignals,
+    type SpanFailureNames,
+} from "./spanFailure.js";
+
+const TRANSLATION_FAILURE: SpanFailureNames = {
+    errorName: "TranslationError",
+    failureMessage: "translation failed",
+};
 
 export const TRANSLATION_SPAN_EVENTS = Object.freeze({
     GRAMMAR_MATCHED: "translation.grammar.matched",
@@ -254,10 +263,15 @@ export function readTranslationRoutingFromError(
  * Re-entrant calls reuse the current translation span so the outer
  * interpret-request path can include grammar/cache work while direct
  * `translateRequest` callers still receive translation telemetry.
+ *
+ * `cancellationSignals` are the signals the caller holds, so a cancellation
+ * that surfaces as an unrelated-looking failure is recorded as a cancellation
+ * on the span and on the `translation:completed` event alike.
  */
 export async function wrapTranslationSpan<T>(
     attributes: otel.TypeAgentSpanAttributes,
     body: (span: Span) => Promise<T>,
+    cancellationSignals?: CancellationSignals,
 ): Promise<T> {
     const activeState = getTranslationState();
     if (activeState !== undefined && !activeState.ended) {
@@ -311,17 +325,12 @@ export async function wrapTranslationSpan<T>(
                     ),
                 );
             } catch (error) {
-                const isAbort =
-                    error !== null &&
-                    typeof error === "object" &&
-                    (error as { name?: unknown }).name === "AbortError";
-                const name = isAbort ? "AbortError" : "TranslationError";
-                const message = isAbort ? "cancelled" : "translation failed";
-                span.recordException({ name, message });
-                span.setStatus({
-                    code: SpanStatusCode.ERROR,
-                    message,
-                });
+                recordSpanFailure(
+                    span,
+                    error,
+                    TRANSLATION_FAILURE,
+                    cancellationSignals,
+                );
                 throw error;
             } finally {
                 state.ended = true;
@@ -352,5 +361,10 @@ export function runInTranslationSpan<T>(
         attributes.traceId = systemContext.traceId;
     }
 
-    return wrapTranslationSpan(attributes, body);
+    // The same signal `requestCommandHandler` reads when it emits
+    // `translation:completed`, so the span and that event agree about a
+    // cancellation that surfaced as an ordinary translation failure.
+    return wrapTranslationSpan(attributes, body, [
+        systemContext.currentAbortSignal,
+    ]);
 }

@@ -11,6 +11,12 @@ import {
     type Tracer,
 } from "@opentelemetry/api";
 import { otel } from "@typeagent/telemetry";
+import { recordSpanFailure, type SpanFailureNames } from "./spanFailure.js";
+
+const REQUEST_FAILURE: SpanFailureNames = {
+    errorName: "RequestError",
+    failureMessage: "request failed",
+};
 
 /**
  * Result-shaped signal the wrapper uses to detect the caller-visible failure
@@ -60,22 +66,14 @@ export async function wrapRootRequestSpan<
                         }
                         return result;
                     } catch (e) {
-                        // Detect AbortError before wrapping: DOMException is not
-                        // always `instanceof Error` in Node, so we can't rely on
-                        // err.name after the wrapping fallback below.
-                        const isAbort =
-                            e !== null &&
-                            typeof e === "object" &&
-                            (e as { name?: unknown }).name === "AbortError";
-                        const name = isAbort ? "AbortError" : "RequestError";
-                        const message = isAbort
-                            ? "cancelled"
-                            : "request failed";
-                        span.recordException({ name, message });
-                        span.setStatus({
-                            code: SpanStatusCode.ERROR,
-                            message,
-                        });
+                        // The thrown value is classified rather than
+                        // name-checked: a cancellation is frequently wrapped,
+                        // and `DOMException` is not always `instanceof Error`
+                        // in Node, so nothing here may assume an `Error`. A
+                        // cancellation the request itself observed arrives as
+                        // `result.cancelled` above, not as a throw, so no
+                        // signal is threaded in here.
+                        recordSpanFailure(span, e, REQUEST_FAILURE);
                         throw e;
                     } finally {
                         span.end();

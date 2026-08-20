@@ -449,71 +449,80 @@ export async function executeAction(
         actionSpanAttributes.traceId = systemContext.traceId;
     }
 
-    return wrapActionSpan(actionSpanAttributes, async (actionSpan) => {
-        const eventData = {
-            requestId: requestId.requestId,
-            schemaName,
-            actionName: action.actionName,
-            appAgentName,
-            actionIndex,
-        };
-        // Measure the action-execution phase at this call boundary (same
-        // `Date.now()` convention as reasoning/translation) so success,
-        // failure, and cancellation completions all carry a real duration.
-        const actionStartedAt = Date.now();
-        logActionStarted(systemContext.logger, eventData);
-        try {
-            const outcome = await executeForActionSpan(actionSpan, {
-                executableAction,
-                context,
-                actionIndex,
-                systemContext,
-                appAgentName,
-                appAgent,
-                actionContext,
-            });
-            // If the agent ran to completion but a cancel arrived while it was executing,
-            // discard the result and treat this as a cancellation.
-            systemContext.currentAbortSignal?.throwIfAborted();
-            actionContext.profiler?.stop();
-            actionContext.profiler = undefined;
-
-            if (
-                !outcome.failureRecorded &&
-                !outcome.setupReplacementResult &&
-                outcome.result.error !== undefined
-            ) {
-                recordActionResultError(actionSpan);
-            }
-            emitActionResult(
-                outcome.result,
-                actionContext,
-                systemContext,
-                requestId,
-                appAgentName,
-                actionIndex,
+    return wrapActionSpan(
+        actionSpanAttributes,
+        async (actionSpan) => {
+            const eventData = {
+                requestId: requestId.requestId,
                 schemaName,
-            );
+                actionName: action.actionName,
+                appAgentName,
+                actionIndex,
+            };
+            // Measure the action-execution phase at this call boundary (same
+            // `Date.now()` convention as reasoning/translation) so success,
+            // failure, and cancellation completions all carry a real duration.
+            const actionStartedAt = Date.now();
+            logActionStarted(systemContext.logger, eventData);
+            try {
+                const outcome = await executeForActionSpan(actionSpan, {
+                    executableAction,
+                    context,
+                    actionIndex,
+                    systemContext,
+                    appAgentName,
+                    appAgent,
+                    actionContext,
+                });
+                // If the agent ran to completion but a cancel arrived while it was executing,
+                // discard the result and treat this as a cancellation.
+                systemContext.currentAbortSignal?.throwIfAborted();
+                actionContext.profiler?.stop();
+                actionContext.profiler = undefined;
 
-            logActionCompleted(systemContext.logger, {
-                ...eventData,
-                success: outcome.result.error === undefined,
-                elapsedMs: Date.now() - actionStartedAt,
-            });
-            closeActionContext();
-            return outcome.result;
-        } catch (error) {
-            logActionCompleted(systemContext.logger, {
-                ...eventData,
-                success: false,
-                cancelled:
-                    (error as { name?: unknown })?.name === "AbortError" ||
-                    systemContext.currentAbortSignal?.aborted === true,
-                elapsedMs: Date.now() - actionStartedAt,
-            });
-            throw error;
-        }
-    });
+                if (
+                    !outcome.failureRecorded &&
+                    !outcome.setupReplacementResult &&
+                    outcome.result.error !== undefined
+                ) {
+                    recordActionResultError(actionSpan);
+                }
+                emitActionResult(
+                    outcome.result,
+                    actionContext,
+                    systemContext,
+                    requestId,
+                    appAgentName,
+                    actionIndex,
+                    schemaName,
+                );
+
+                logActionCompleted(systemContext.logger, {
+                    ...eventData,
+                    success: outcome.result.error === undefined,
+                    elapsedMs: Date.now() - actionStartedAt,
+                });
+                closeActionContext();
+                return outcome.result;
+            } catch (error) {
+                logActionCompleted(systemContext.logger, {
+                    ...eventData,
+                    success: false,
+                    // Only what is known from outside the error. A cancellation
+                    // carried by the thrown value - including one wrapped as a
+                    // `cause` - is recognized from `error` itself.
+                    cancelled:
+                        systemContext.currentAbortSignal?.aborted === true,
+                    elapsedMs: Date.now() - actionStartedAt,
+                    error,
+                });
+                throw error;
+            }
+        },
+        // The same signal the completion event above uses, so the action span
+        // and `action:completed` classify a cancellation identically.
+        [systemContext.currentAbortSignal],
+    );
 }
 
 // Post-execution processing for an ActionResult: error / displayContent /

@@ -31,6 +31,15 @@ const SAFE_STRING_FIELDS = [
     "routingReason",
     "matchOutcome",
     "cacheBypassReason",
+    // Normalized failure classification (see
+    // `@typeagent/telemetry` `classifyTelemetryError`). Both values come from
+    // closed vocabularies - `errorCategory` from a fixed union and `errorCode`
+    // from a reviewed allowlist - so neither can add cardinality here. The raw
+    // error `name`, `message`, `stack`, and the original `request` are
+    // deliberately absent from every list here so they never leave the local
+    // debug and opt-in database sinks.
+    "errorCategory",
+    "errorCode",
 ] as const;
 
 const SAFE_NUMBER_FIELDS = [
@@ -50,6 +59,7 @@ const SAFE_NUMBER_FIELDS = [
     "totalTokens",
     "cachedTokens",
     "retryCount",
+    "httpStatus",
 ] as const;
 
 const SAFE_BOOLEAN_FIELDS = [
@@ -60,6 +70,7 @@ const SAFE_BOOLEAN_FIELDS = [
     "cancelled",
     "streaming",
     "fallback",
+    "retryable",
 ] as const;
 
 const SAFE_STRING_ARRAY_FIELDS = [

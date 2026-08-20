@@ -129,6 +129,18 @@ export function instrumentChatModel(
     return model;
 }
 
+/**
+ * Run a telemetry side effect that must never disturb the model call it
+ * describes. A broken logger or span implementation degrades telemetry only.
+ */
+function safely(body: () => void): void {
+    try {
+        body();
+    } catch {
+        // Telemetry must not fail the model call it is describing.
+    }
+}
+
 function startLlmCall(
     info: ChatModelTelemetryInfo,
     streaming: boolean,
@@ -226,7 +238,7 @@ async function* instrumentStream(
         throw error;
     } finally {
         if (!state.ended) {
-            failLlmCall(state, info, { name: "AbortError" });
+            cancelLlmCall(state, info);
             await source.return?.();
         }
     }
@@ -239,6 +251,19 @@ function cancelLlmCall(
     failLlmCall(state, info, { name: "AbortError" });
 }
 
+/**
+ * Record a call that returned rather than threw.
+ *
+ * A failure `Result` carries only typechat's message string, which may quote
+ * the provider response and is never parsed here. The transport attaches what
+ * it actually knew before flattening (see
+ * `attachTelemetryErrorClassification`), so a real 401/429/timeout keeps its
+ * category; when it recognized nothing it attaches nothing (see
+ * `classifyTelemetryErrorIfRecognized`) rather than an `internal` that would
+ * overwrite this fallback. Every path that produces a returned failure still
+ * originates in the provider call, so `provider` is the truthful fallback and
+ * nothing else about the failure is claimed.
+ */
 function finishLlmCall(
     state: LlmCallState,
     info: ChatModelTelemetryInfo,
@@ -248,17 +273,42 @@ function finishLlmCall(
         return;
     }
     state.ended = true;
-    const success = result.success;
-    if (!success) {
-        state.span.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: "model returned failure",
-        });
+    try {
+        const success = result.success;
+        const classification = success
+            ? undefined
+            : (otel.readTelemetryErrorClassification(result) ?? {
+                  errorCategory: "provider" as const,
+              });
+        const cancelled = classification?.errorCategory === "cancelled";
+        if (!success) {
+            const message = cancelled ? "cancelled" : "model returned failure";
+            safely(() =>
+                state.span.setStatus({
+                    code: SpanStatusCode.ERROR,
+                    message,
+                }),
+            );
+        }
+        emitCompleted(
+            state,
+            info,
+            success,
+            success ? "succeeded" : cancelled ? "cancelled" : "failed",
+            classification,
+        );
+    } finally {
+        endSpan(state);
     }
-    emitCompleted(state, info, success, success ? "succeeded" : "failed");
-    state.span.end();
 }
 
+/**
+ * Record a call that threw. The thrown value is classified once, and the
+ * span status, the event status, its severity, and whether classification
+ * fields are emitted at all are all derived from that single result - so a
+ * cancellation wrapped in another error cannot be reported as a failure on one
+ * signal and a cancellation on another.
+ */
 function failLlmCall(
     state: LlmCallState,
     info: ChatModelTelemetryInfo,
@@ -268,20 +318,37 @@ function failLlmCall(
         return;
     }
     state.ended = true;
-    const cancelled =
-        error !== null &&
-        typeof error === "object" &&
-        (error as { name?: unknown }).name === "AbortError";
-    state.span.recordException({
-        name: cancelled ? "AbortError" : "ModelError",
-        message: cancelled ? "cancelled" : "model call failed",
-    });
-    state.span.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: cancelled ? "cancelled" : "model call failed",
-    });
-    emitCompleted(state, info, false, cancelled ? "cancelled" : "failed");
-    state.span.end();
+    try {
+        const classification = otel.classifyTelemetryError(error);
+        const cancelled = classification.errorCategory === "cancelled";
+        const message = cancelled ? "cancelled" : "model call failed";
+        safely(() => {
+            state.span.recordException({
+                name: cancelled ? "AbortError" : "ModelError",
+                message,
+            });
+            state.span.setStatus({ code: SpanStatusCode.ERROR, message });
+        });
+        emitCompleted(
+            state,
+            info,
+            false,
+            cancelled ? "cancelled" : "failed",
+            classification,
+        );
+    } finally {
+        endSpan(state);
+    }
+}
+
+/**
+ * End the span exactly once. `state.ended` already guards re-entry, so this
+ * only has to survive a span implementation that throws - the span must be
+ * ended even when emitting the completion event failed, or a broken logger
+ * would leak an unfinished span per call.
+ */
+function endSpan(state: LlmCallState): void {
+    safely(() => state.span.end());
 }
 
 function emitCompleted(
@@ -289,36 +356,44 @@ function emitCompleted(
     info: ChatModelTelemetryInfo,
     success: boolean,
     status: "succeeded" | "failed" | "cancelled",
+    classification: otel.TelemetryErrorClassification | undefined,
 ): void {
     if (!otel.isStructuredLoggingEnabled()) {
         return;
     }
-    context.with(state.activeContext, () =>
-        state.logger.logEvent(
-            "llm:completed",
-            {
-                provider: info.provider,
-                ...(info.model === undefined ? {} : { model: info.model }),
-                operation: "chat",
-                ...state.classification,
-                ...state.correlation,
-                success,
-                status,
-                elapsedMs: Date.now() - state.startedAt,
-                ...(state.usage === undefined
-                    ? {}
-                    : {
-                          inputTokens: state.usage.prompt_tokens,
-                          outputTokens: state.usage.completion_tokens,
-                          totalTokens: state.usage.total_tokens,
-                          ...(state.usage.cached_tokens === undefined
-                              ? {}
-                              : {
-                                    cachedTokens: state.usage.cached_tokens,
-                                }),
-                      }),
-            },
-            success ? "info" : status === "cancelled" ? "warning" : "error",
+    safely(() =>
+        context.with(state.activeContext, () =>
+            state.logger.logEvent(
+                "llm:completed",
+                {
+                    provider: info.provider,
+                    ...(info.model === undefined ? {} : { model: info.model }),
+                    operation: "chat",
+                    ...state.classification,
+                    ...state.correlation,
+                    success,
+                    status,
+                    elapsedMs: Date.now() - state.startedAt,
+                    // A cancellation is a disposition, not a failure worth
+                    // classifying, so only real failures carry the fields.
+                    ...(status === "failed" && classification !== undefined
+                        ? classification
+                        : {}),
+                    ...(state.usage === undefined
+                        ? {}
+                        : {
+                              inputTokens: state.usage.prompt_tokens,
+                              outputTokens: state.usage.completion_tokens,
+                              totalTokens: state.usage.total_tokens,
+                              ...(state.usage.cached_tokens === undefined
+                                  ? {}
+                                  : {
+                                        cachedTokens: state.usage.cached_tokens,
+                                    }),
+                          }),
+                },
+                success ? "info" : status === "cancelled" ? "warning" : "error",
+            ),
         ),
     );
 }

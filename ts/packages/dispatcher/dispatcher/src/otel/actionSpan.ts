@@ -10,6 +10,16 @@ import {
 } from "@opentelemetry/api";
 import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 import { otel } from "@typeagent/telemetry";
+import {
+    recordSpanFailure,
+    type CancellationSignals,
+    type SpanFailureNames,
+} from "./spanFailure.js";
+
+const ACTION_FAILURE: SpanFailureNames = {
+    errorName: "ActionError",
+    failureMessage: "action failed",
+};
 
 export const ACTION_SPAN_EVENTS = Object.freeze({
     RESULT_ERROR: "action.result.error",
@@ -64,10 +74,14 @@ export function recordActionFlowException(span: Span): void {
  *
  * Exceptions that escape the body are recorded with stable, privacy-safe
  * classifications matching the request/translation span conventions.
+ * `cancellationSignals` are the signals the caller holds, passed so a
+ * cancellation that surfaces as an unrelated-looking failure is recorded as a
+ * cancellation on the span and on the `action:completed` event alike.
  */
 export async function wrapActionSpan<T>(
     attributes: otel.TypeAgentSpanAttributes,
     body: (span: Span) => Promise<T>,
+    cancellationSignals?: CancellationSignals,
 ): Promise<T> {
     const tracer: Tracer = trace.getTracer(
         otel.INSTRUMENTATION_SCOPE_NAME,
@@ -97,22 +111,12 @@ export async function wrapActionSpan<T>(
                             try {
                                 return await body(span);
                             } catch (error) {
-                                const isAbort =
-                                    error !== null &&
-                                    typeof error === "object" &&
-                                    (error as { name?: unknown }).name ===
-                                        "AbortError";
-                                const name = isAbort
-                                    ? "AbortError"
-                                    : "ActionError";
-                                const message = isAbort
-                                    ? "cancelled"
-                                    : "action failed";
-                                span.recordException({ name, message });
-                                span.setStatus({
-                                    code: SpanStatusCode.ERROR,
-                                    message,
-                                });
+                                recordSpanFailure(
+                                    span,
+                                    error,
+                                    ACTION_FAILURE,
+                                    cancellationSignals,
+                                );
                                 throw error;
                             } finally {
                                 span.end();
