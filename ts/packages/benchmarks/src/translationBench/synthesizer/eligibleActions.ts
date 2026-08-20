@@ -19,8 +19,8 @@ const require = createRequire(import.meta.url);
  *    false fire.
  *  - `utility.claudeTask` is an internal utility escape hatch, not a targetable
  *    catalog action.
- * Single source of truth for synth scheduling, coverage validation, and the
- * runner scored-chosen filter (C).
+ * Kept as an explicit, hand-maintained list (single source of truth) so both
+ * synth scheduling and coverage validation exclude them from targeting.
  */
 export const HARDCODED_NON_EVAL_ACTION_IDS: ReadonlySet<string> = new Set([
     "chat.generateResponse",

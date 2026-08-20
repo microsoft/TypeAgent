@@ -1057,20 +1057,6 @@ async function finalizeAction(
         currentAction = unknownAction;
     }
 
-    // UnknownAction is a deliberate abstention ("no matching tool"). It is not
-    // registered on translator action maps, so getSchemaName would miss it and
-    // historically threw — wiping any sibling actions already finalized in a
-    // MultipleAction. Return it on the dispatcher schema so callers can filter
-    // via isUnknownAction without losing the rest of the batch.
-    if (isUnknownAction(currentAction)) {
-        return createExecutableAction(
-            DispatcherName,
-            currentAction.actionName,
-            currentAction.parameters,
-            resultEntityId,
-        );
-    }
-
     // A translator may combine actions from multiple schemas (inline, selected actions)
     const currentActionSchemaName = currentTranslator.getSchemaName(
         currentAction.actionName,

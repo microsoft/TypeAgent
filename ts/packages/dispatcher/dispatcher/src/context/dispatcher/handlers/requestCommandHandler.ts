@@ -249,11 +249,9 @@ async function canTranslateWithoutContext(
             } else {
                 newAction = newTranslatedActions;
             }
-            const newSchemaName = isUnknownAction(newAction)
-                ? DispatcherName
-                : usedTranslators
-                      .get(schemaName)!
-                      .getSchemaName(newAction.actionName);
+            const newSchemaName = usedTranslators
+                .get(schemaName)!
+                .getSchemaName(newAction.actionName);
             if (newSchemaName === undefined) {
                 // Should not happen
                 throw new Error(

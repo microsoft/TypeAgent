@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=20fddd41b9af0d867955fee3086c85477b8b6ebb94922c90c2ea70ae7acc596b -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2f5f430dff751fc6958f22c8e7be89fde26c6f13d5fe263e3d186302ef69eeba -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -29,7 +29,6 @@ TypeAgent translation bench: catalog, action-parameters grader, simple-action da
 Workspace:
 
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
-- [@typeagent/agent-cache](../../packages/cache/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
@@ -45,7 +44,6 @@ _None._
 
 - [./src/index.ts](./src/index.ts)
 - [./src/translationBench/index.ts](./src/translationBench/index.ts)
-- [./src/translationBench/runner/index.ts](./src/translationBench/runner/index.ts)
 - [./src/translationBench/synthesizer/catalogGenerator/index.ts](./src/translationBench/synthesizer/catalogGenerator/index.ts)
 - [./src/translationBench/synthesizer/goldSchema.ts](./src/translationBench/synthesizer/goldSchema.ts)
 - [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
@@ -53,10 +51,11 @@ _None._
 - [./src/core/paths.ts](./src/core/paths.ts)
 - [./src/core/prices.ts](./src/core/prices.ts)
 - [./src/core/rateLimiter.ts](./src/core/rateLimiter.ts)
-- _…and 47 more under `./src/`._
+- [./src/core/tokenEstimate.ts](./src/core/tokenEstimate.ts)
+- _…and 44 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `4db2841ef6a35be1db4fdcfc28277d8b362b4835` on `2026-08-20T00:32:05.894Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `95c2a1d9ba80426f522f7ece727da39f8a577d9e` on `2026-08-19T17:31:21.317Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
