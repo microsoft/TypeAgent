@@ -74,7 +74,7 @@ import { DispatcherConfig } from "../context/session.js";
 import {
     openai as ai,
     CompleteUsageStatsCallback,
-    withChatModelTelemetryContext,
+    withChatModelTelemetryPurpose,
 } from "@typeagent/aiclient";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { getHistoryContext } from "./interpretRequest.js";
@@ -841,8 +841,8 @@ async function translateWithTranslator(
               }
             : undefined;
     try {
-        const response = await withChatModelTelemetryContext(
-            { purpose: "action-generation" },
+        const response = await withChatModelTelemetryPurpose(
+            "action-generation",
             () =>
                 translator.translate(
                     request,
@@ -896,13 +896,8 @@ async function findAssistantForRequest(
         systemContext.promptLogger,
     );
 
-    const result = await withChatModelTelemetryContext(
-        { purpose: "schema-selection" },
-        () =>
-            selectTranslator.translate(
-                request,
-                systemContext.currentAbortSignal,
-            ),
+    const result = await withChatModelTelemetryPurpose("schema-selection", () =>
+        selectTranslator.translate(request, systemContext.currentAbortSignal),
     );
     if (!result.success) {
         displayWarn(`Failed to switch assistant: ${result.message}`, context);

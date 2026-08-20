@@ -685,7 +685,7 @@ async function requestExplain(
     const processRequestActionP = withChatModelTelemetryContext(
         {
             phase: context.explanationAsynchronousMode
-                ? "background"
+                ? "explanation"
                 : "translation",
             purpose: "cache-generation",
             scope: context.explanationAsynchronousMode

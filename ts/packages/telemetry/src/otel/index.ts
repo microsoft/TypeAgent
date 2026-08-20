@@ -3,6 +3,8 @@
 
 export {
     resolveTelemetryConfig,
+    getAllOtlpExporters,
+    DEFAULT_LOG_RETENTION_BYTES,
     type OtlpExporterConfig,
     type TraceSampler,
     type TraceConfig,
@@ -36,8 +38,16 @@ export {
 export {
     JsonlLogExporter,
     resolveJsonlLogPath,
+    getJsonlLogPathIdentity,
+    getActiveJsonlLogPaths,
     type JsonlLogExporterOptions,
 } from "./jsonlLogExporter.js";
+
+export {
+    runLogRetentionCleanup,
+    type LogRetentionFs,
+    type RunLogRetentionCleanupOptions,
+} from "./logRetention.js";
 
 export { LocalLogRecordProcessor } from "./localLogRecordProcessor.js";
 

@@ -64,12 +64,12 @@ describe("getStructuredLogMessage", () => {
                 status: "succeeded",
                 elapsedMs: 1234,
                 totalTokens: 456,
-                phase: "background",
+                phase: "explanation",
                 purpose: "cache-generation",
                 scope: "background",
             }),
         ).toBe(
-            "LLM succeeded: background.cache-generation [background] (azure/GPT_4_1) in 1234 ms (456 tokens)",
+            "LLM succeeded: explanation.cache-generation [background] (azure/GPT_4_1) in 1234 ms (456 tokens)",
         );
     });
 
