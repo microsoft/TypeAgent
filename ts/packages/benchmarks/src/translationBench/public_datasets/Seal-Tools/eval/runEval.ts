@@ -19,6 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 
 import { Command } from "commander";
 import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
@@ -63,12 +64,27 @@ import {
     loadResolvedConfig,
     parseCsvList,
 } from "../../../scripts/cliShared.js";
-import { DATASET_NAME, type TypeAgentEvalRow } from "../toTypeAgentSchema.js";
+import {
+    createSealToolsParameterScore,
+    DATASET_NAME,
+    type TypeAgentEvalRow,
+} from "../toTypeAgentSchema.js";
 import { buildSealToolsSuite } from "./buildSuite.js";
 import {
+    restoreSealToolsRawActions,
     scoreSealToolsOfficial,
     type SealToolsOfficialScore,
 } from "./sealToolsGrader.js";
+import {
+    assertSuccessfulTrajectoryCoverage,
+    reconcileSealToolsTrajectories,
+    sealToolsResponseText,
+} from "./trajectoryJournal.js";
+import {
+    rescoreSealToolsTypeAgentRows,
+    summarizeSealToolsTypeAgentRows,
+    type SealToolsTypeAgentFilter,
+} from "./typeAgentGrader.js";
 import type { SealToolsGoldAction } from "../toTypeAgentSchema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -80,6 +96,49 @@ const SEAL_DIR = path.join(
 );
 const DEFAULT_CONFIG = path.join(SEAL_DIR, "eval", "run-config.json");
 const DEFAULT_DATASET = path.join(SEAL_DIR, `${DATASET_NAME}.jsonl`);
+const CHECKPOINT_CONTRACT = "seal-tools-eval-v4";
+
+function hashText(value: string): string {
+    return createHash("sha256").update(value).digest("hex");
+}
+
+function collectJavaScriptFiles(root: string): string[] {
+    const files: string[] = [];
+    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+        const target = path.join(root, entry.name);
+        if (entry.isDirectory()) files.push(...collectJavaScriptFiles(target));
+        else if (entry.isFile() && entry.name.endsWith(".js"))
+            files.push(target);
+    }
+    return files;
+}
+
+function createImplementationDigest(dispatcherOptions: unknown): string {
+    const roots = [
+        path.join(PACKAGE_ROOT, "dist", "translationBench", "runner"),
+        path.join(
+            PACKAGE_ROOT,
+            "dist",
+            "translationBench",
+            "public_datasets",
+            "Seal-Tools",
+        ),
+        path.resolve(PACKAGE_ROOT, "../aiclient/dist"),
+        path.resolve(PACKAGE_ROOT, "../utils/typechatUtils/dist"),
+        path.resolve(PACKAGE_ROOT, "../dispatcher/dispatcher/dist"),
+        path.resolve(PACKAGE_ROOT, "../defaultAgentProvider/dist"),
+    ];
+    const files = roots.flatMap(collectJavaScriptFiles).sort();
+    const hash = createHash("sha256");
+    for (const file of files) {
+        hash.update(path.relative(PACKAGE_ROOT, file));
+        hash.update("\0");
+        hash.update(fs.readFileSync(file));
+        hash.update("\0");
+    }
+    hash.update(JSON.stringify(dispatcherOptions));
+    return hash.digest("hex");
+}
 
 type ReasoningEffort = NonNullable<TranslationBenchScenario["reasoningEffort"]>;
 const VALID_EFFORTS: ReadonlySet<string> = new Set<ReasoningEffort>([
@@ -145,28 +204,32 @@ function readRows(datasetPath: string): TypeAgentEvalRow[] {
         .readFileSync(datasetPath, "utf8")
         .split("\n")
         .filter((line) => line.trim().length > 0)
-        .map((line) => JSON.parse(line) as TypeAgentEvalRow);
+        .map((line) => JSON.parse(line) as TypeAgentEvalRow)
+        .map((row) => ({
+            ...row,
+            parameterScore: createSealToolsParameterScore(
+                row.expectedActions,
+                row.tools,
+            ),
+        }));
 }
 
-async function runOneModel(
+function createModelRunState(
     model: string,
     suite: ReturnType<typeof buildSealToolsSuite>["suite"],
     sourceManifest: ReturnType<typeof buildSealToolsSuite>["sourceManifest"],
-    goldByCaseId: ReadonlyMap<string, readonly SealToolsGoldAction[]>,
-    actionContext: ActionContext<CommandHandlerContext>,
-    resolved: ReturnType<typeof loadResolvedConfig>["resolved"],
+    goldDigest: string,
+    implementationDigest: string,
     outDir: string,
-    opts: { rateLimit?: boolean; rateLimiterDb?: string },
-): Promise<{
-    result: TranslationBenchRunResult;
-    sealToolsOfficial: SealToolsOfficialScore;
-}> {
+): {
+    slug: string;
+    baseId: string;
+    scenarios: TranslationBenchScenario[];
+    checkpointPath: string;
+    header: TranslationBenchCheckpointHeader;
+} {
     const slug = model.replace(/[^A-Za-z0-9_.-]/g, "_");
     const { baseId, effort } = parseModelSpec(model);
-    const checkpointPath = path.join(outDir, `checkpoint-${slug}.jsonl`);
-    const outPath = path.join(outDir, `results-${slug}.json`);
-    const htmlPath = path.join(outDir, `report-${slug}.html`);
-
     const scenarios: TranslationBenchScenario[] =
         effort !== undefined
             ? [
@@ -179,22 +242,85 @@ async function runOneModel(
             : (suite.scenarios ?? [getDefaultTranslationBenchScenario()]);
     const settings = {
         kind: "seal-tools-eval",
+        checkpointContract: CHECKPOINT_CONTRACT,
         models: [baseId],
-        scenarios: scenarios.map((s) => s.id),
+        scenarios,
         suiteCaseCount: suite.cases.length,
         caseIds: suite.cases.map((c) => c.id),
         validateActions: false,
         validateExpectedActions: false,
+        modelProvider: process.env.TYPEAGENT_MODEL_PROVIDER,
+        modelEndpointDigest: hashText(process.env.OPENAI_ENDPOINT ?? ""),
+        modelWireApi: process.env.OPENAI_MODEL_WIRE_API,
+        goldDigest,
+        implementationDigest,
         sourceManifest,
     };
-    const header: TranslationBenchCheckpointHeader = {
-        kind: "translation-bench-checkpoint",
-        version: 1,
-        runFingerprint: createTranslationBenchRunFingerprint({ settings }),
-        settings,
-        shardIndex: 0,
-        shardCount: 1,
+    return {
+        slug,
+        baseId,
+        scenarios,
+        checkpointPath: path.join(outDir, `checkpoint-${slug}.jsonl`),
+        header: {
+            kind: "translation-bench-checkpoint",
+            version: 1,
+            runFingerprint: createTranslationBenchRunFingerprint({ settings }),
+            settings,
+            shardIndex: 0,
+            shardCount: 1,
+        },
     };
+}
+
+function assertCompatibleCheckpoint(
+    checkpointPath: string,
+    header: TranslationBenchCheckpointHeader,
+): void {
+    if (
+        !fs.existsSync(checkpointPath) ||
+        fs.statSync(checkpointPath).size === 0
+    ) {
+        return;
+    }
+    const loaded =
+        readTranslationBenchCheckpoint<TranslationBenchRow>(checkpointPath);
+    if (loaded.header.runFingerprint !== header.runFingerprint) {
+        throw new Error(
+            `Checkpoint '${checkpointPath}' is incompatible with this run; use a fresh --out-dir.`,
+        );
+    }
+}
+
+async function runOneModel(
+    model: string,
+    suite: ReturnType<typeof buildSealToolsSuite>["suite"],
+    sourceManifest: ReturnType<typeof buildSealToolsSuite>["sourceManifest"],
+    goldByCaseId: ReadonlyMap<string, readonly SealToolsGoldAction[]>,
+    goldDigest: string,
+    implementationDigest: string,
+    actionContext: ActionContext<CommandHandlerContext>,
+    resolved: ReturnType<typeof loadResolvedConfig>["resolved"],
+    outDir: string,
+    opts: { rateLimit?: boolean; rateLimiterDb?: string },
+): Promise<{
+    result: TranslationBenchRunResult;
+    sealToolsOfficial: SealToolsOfficialScore;
+    sealToolsCaseInsensitive: SealToolsOfficialScore;
+    typeAgentSupplemental: TranslationBenchRunResult["summary"];
+    typeAgentFilter: SealToolsTypeAgentFilter;
+}> {
+    const { slug, baseId, scenarios, checkpointPath, header } =
+        createModelRunState(
+            model,
+            suite,
+            sourceManifest,
+            goldDigest,
+            implementationDigest,
+            outDir,
+        );
+    const trajectoryPath = path.join(outDir, "trajectories.jsonl");
+    const outPath = path.join(outDir, `results-${slug}.json`);
+    const htmlPath = path.join(outDir, `report-${slug}.html`);
 
     let seedRows: TranslationBenchRow[] = [];
     let checkpointState:
@@ -204,18 +330,33 @@ async function runOneModel(
     if (fs.existsSync(checkpointPath) && fs.statSync(checkpointPath).size > 0) {
         const loaded =
             readTranslationBenchCheckpoint<TranslationBenchRow>(checkpointPath);
-        if (loaded.header.runFingerprint === header.runFingerprint) {
-            checkpointState = loaded;
-            for (const row of loaded.rows) {
-                if (row.phase !== "translation") continue;
-                seedRows.push(row.value);
-                completed.add(translationBenchResumeKey(row));
-            }
-            console.log(
-                `  [${model}] resuming ${seedRows.length} row(s) from checkpoint`,
+        if (loaded.header.runFingerprint !== header.runFingerprint) {
+            throw new Error(
+                `Checkpoint '${checkpointPath}' is incompatible with this run; use a fresh --out-dir.`,
             );
         }
+        checkpointState = loaded;
+        for (const row of loaded.rows) {
+            if (row.phase !== "translation") continue;
+            seedRows.push(row.value);
+            completed.add(translationBenchResumeKey(row));
+        }
+        console.log(
+            `  [${model}] resuming ${seedRows.length} row(s) from checkpoint`,
+        );
     }
+    const completedCaseIds = new Set(seedRows.map((row) => row.caseId));
+    const rawResponsesByCase = reconcileSealToolsTrajectories(
+        trajectoryPath,
+        slug,
+        completedCaseIds,
+    );
+    assertSuccessfulTrajectoryCoverage(
+        seedRows.filter((row) => row.error === undefined),
+        rawResponsesByCase,
+        (row, responses) =>
+            restoreSealToolsRawActions(row, responses) !== undefined,
+    );
 
     // Per-model shared TPM limiter (respects run-config tpmLimit + headroom).
     const rateLimiter = createRunnerRateLimiter(resolved.tpmLimits, {
@@ -249,6 +390,15 @@ async function runOneModel(
                 }),
             ),
         onRowComplete: async (row) => {
+            if (row.error === undefined) {
+                assertSuccessfulTrajectoryCoverage(
+                    [row],
+                    rawResponsesByCase,
+                    (completedRow, responses) =>
+                        restoreSealToolsRawActions(completedRow, responses) !==
+                        undefined,
+                );
+            }
             const ckptRow = createTranslationBenchTranslationCheckpointRow(row);
             checkpointState = appendTranslationBenchCheckpointRows(
                 checkpointPath,
@@ -283,7 +433,20 @@ async function runOneModel(
                         }),
                     )
                     .join("\n") + "\n";
-            fs.appendFileSync(path.join(outDir, "trajectories.jsonl"), lines);
+            const trajectoryFd = fs.openSync(trajectoryPath, "a");
+            try {
+                fs.writeFileSync(trajectoryFd, lines, "utf8");
+                fs.fsyncSync(trajectoryFd);
+            } finally {
+                fs.closeSync(trajectoryFd);
+            }
+            for (const call of calls) {
+                const text = sealToolsResponseText(call.response);
+                if (text === undefined) continue;
+                const responses = rawResponsesByCase.get(work.caseId) ?? [];
+                responses.push(text);
+                rawResponsesByCase.set(work.caseId, responses);
+            }
         },
     };
     if (
@@ -322,28 +485,52 @@ async function runOneModel(
         if (rebuilt.rows.length >= result.rows.length) result = rebuilt;
     }
 
-    const sealToolsOfficial = scoreSealToolsOfficial(result.rows, goldByCaseId);
+    result = rebuildTranslationBenchRunResult(
+        rescoreSealToolsTypeAgentRows(result.rows, suite),
+        { schemaHashes: result.schemaHashes, settings: result.settings },
+    );
+    const typeAgent = summarizeSealToolsTypeAgentRows(result.rows);
+    const typeAgentRows = typeAgent.rows;
+    const typeAgentSupplemental = typeAgent.summary;
+    const typeAgentFilter = typeAgent.filter;
+    const typeAgentResult = rebuildTranslationBenchRunResult(typeAgentRows, {
+        schemaHashes: result.schemaHashes,
+        settings: result.settings,
+    });
+
+    const sealToolsOfficial = scoreSealToolsOfficial(
+        result.rows,
+        goldByCaseId,
+        {
+            rawResponsesByCase,
+        },
+    );
     const sealToolsCaseInsensitive = scoreSealToolsOfficial(
         result.rows,
         goldByCaseId,
-        { ignoreStringCase: true },
+        { ignoreStringCase: true, rawResponsesByCase },
     );
     const outputResult = {
         ...result,
         sealToolsOfficial,
         sealToolsCaseInsensitive,
+        typeAgentSupplemental,
+        typeAgentFilter,
     };
-    const report = createTranslationBenchReport(suite, result);
+    const report = createTranslationBenchReport(suite, typeAgentResult);
     report.benchmarkMetricTables = [
         {
-            title: "Seal-Tools metrics (API only, case-insensitive)",
+            title: "Seal-Tools metrics (case-insensitive)",
             description:
-                "Primary benchmark score for this test. Assesses API-call selection only: corpus-level format accuracy plus micro-averaged tool precision, recall, and F1, with case-insensitive string matching. Parameters are not scored because the dataset seeds required parameter values that the instruction never states (see docs/api-only-scoring.md). TypeAgent pass/fail below is supplemental.",
+                "Primary benchmark score for this test. Matches the official Seal-Tools corpus grader, except string comparisons are case-insensitive. Includes format accuracy and micro-averaged tool and parameter precision, recall, and F1. TypeAgent pass/fail below is supplemental.",
             columns: [
                 { key: "formatAccuracy", label: "Format ACC" },
                 { key: "toolPrecision", label: "Tool P" },
                 { key: "toolRecall", label: "Tool R" },
                 { key: "toolF1", label: "Tool F1" },
+                { key: "parameterPrecision", label: "Parameter P" },
+                { key: "parameterRecall", label: "Parameter R" },
+                { key: "parameterF1", label: "Parameter F1" },
             ],
             rows: [
                 {
@@ -353,6 +540,11 @@ async function runOneModel(
                         toolPrecision: sealToolsCaseInsensitive.tool.precision,
                         toolRecall: sealToolsCaseInsensitive.tool.recall,
                         toolF1: sealToolsCaseInsensitive.tool.f1,
+                        parameterPrecision:
+                            sealToolsCaseInsensitive.parameter.precision,
+                        parameterRecall:
+                            sealToolsCaseInsensitive.parameter.recall,
+                        parameterF1: sealToolsCaseInsensitive.parameter.f1,
                     },
                 },
             ],
@@ -360,7 +552,7 @@ async function runOneModel(
         {
             title: "Official Seal-Tools metrics (case-sensitive, parameters included)",
             description:
-                "Reference only. The creator's exact case-sensitive calculate_score_ToolLearning, including the parameter score we exclude above. Shown so the dropped parameter penalty stays visible.",
+                "Reference implementation of the creator's case-sensitive calculate_score_ToolLearning, including parameter scoring.",
             columns: [
                 { key: "formatAccuracy", label: "Format ACC" },
                 { key: "toolPrecision", label: "Tool P" },
@@ -396,7 +588,13 @@ async function runOneModel(
             `tool F1 ${formatPercent(sealToolsCaseInsensitive.tool.f1)} ` +
             `errors ${result.summary.errors} → ${path.relative(process.cwd(), outPath)}`,
     );
-    return { result, sealToolsOfficial };
+    return {
+        result,
+        sealToolsOfficial,
+        sealToolsCaseInsensitive,
+        typeAgentSupplemental,
+        typeAgentFilter,
+    };
 }
 
 function formatPercent(value: number | undefined): string {
@@ -424,6 +622,12 @@ async function main(): Promise<void> {
         .option("--no-rate-limit", "disable the TPM limiter")
         .parse();
 
+    if (program.args.length > 0) {
+        throw new Error(
+            `Unexpected positional argument(s): ${program.args.join(" ")}`,
+        );
+    }
+
     const opts = program.opts<{
         dataset: string;
         config: string;
@@ -446,6 +650,7 @@ async function main(): Promise<void> {
         ...(opts.envFile ?? []),
     ]);
     initRuntimeConfigFromProcessEnv();
+    const dispatcherOptions = getDefaultDispatcherOptions();
 
     const { resolved } = loadResolvedConfig({
         config: opts.config,
@@ -458,8 +663,29 @@ async function main(): Promise<void> {
         );
     }
 
-    const evalRows = readRows(path.resolve(opts.dataset));
-    let { suite, sourceManifest } = buildSealToolsSuite(evalRows);
+    const datasetPath = path.resolve(opts.dataset);
+    const sourceRows = readRows(datasetPath);
+    const invalidRows = sourceRows.filter(
+        (row) =>
+            (row.order !== "strict" && row.order !== "any") ||
+            JSON.stringify(row.expectedActions).includes("${"),
+    );
+    if (invalidRows.length > 0) {
+        throw new Error(
+            `Dataset contains ${invalidRows.length} row(s) with unsupported order or synthetic placeholder`,
+        );
+    }
+    if (datasetPath === path.resolve(DEFAULT_DATASET)) {
+        const strictCount = sourceRows.filter(
+            (row) => row.order === "strict",
+        ).length;
+        if (sourceRows.length !== 700 || strictCount !== 27) {
+            throw new Error(
+                `Default Seal dataset must contain 700 rows (27 strict); found ${sourceRows.length} (${strictCount} strict)`,
+            );
+        }
+    }
+    let { suite, sourceManifest } = buildSealToolsSuite(sourceRows);
     const caseIds = parseCsvList(opts.caseIds);
     if (caseIds !== undefined) {
         if (new Set(caseIds).size !== caseIds.length) {
@@ -481,15 +707,51 @@ async function main(): Promise<void> {
     }
     const selectedCaseIds = new Set(suite.cases.map((c) => c.id));
     const goldByCaseId = new Map(
-        evalRows
+        sourceRows
             .filter((row) => selectedCaseIds.has(row.id))
             .map((row) => [row.id, row.sealToolsGoldActions] as const),
     );
+    const goldDigest = createHash("sha256")
+        .update(JSON.stringify([...goldByCaseId]))
+        .digest("hex");
+    const implementationDigest = createImplementationDigest(dispatcherOptions);
 
     const outDir = path.resolve(
         opts.outDir ?? path.join(SEAL_DIR, "eval", "results"),
     );
     fs.mkdirSync(outDir, { recursive: true });
+    const trajectoryPath = path.join(outDir, "trajectories.jsonl");
+    for (const model of models) {
+        const { slug, checkpointPath, header } = createModelRunState(
+            model,
+            suite,
+            sourceManifest,
+            goldDigest,
+            implementationDigest,
+            outDir,
+        );
+        assertCompatibleCheckpoint(checkpointPath, header);
+        const completedRows =
+            fs.existsSync(checkpointPath) &&
+            fs.statSync(checkpointPath).size > 0
+                ? readTranslationBenchCheckpoint<TranslationBenchRow>(
+                      checkpointPath,
+                  ).rows.filter((row) => row.phase === "translation")
+                : [];
+        const responsesByCase = reconcileSealToolsTrajectories(
+            trajectoryPath,
+            slug,
+            new Set(completedRows.map((row) => row.caseId)),
+        );
+        assertSuccessfulTrajectoryCoverage(
+            completedRows
+                .filter((row) => row.value.error === undefined)
+                .map((row) => row.value),
+            responsesByCase,
+            (row, responses) =>
+                restoreSealToolsRawActions(row, responses) !== undefined,
+        );
+    }
     fs.mkdirSync(opts.instanceDir, { recursive: true });
 
     console.log(
@@ -500,7 +762,7 @@ async function main(): Promise<void> {
     const handlerContext = await initializeCommandHandlerContext(
         "seal-tools-eval",
         {
-            ...getDefaultDispatcherOptions(),
+            ...dispatcherOptions,
             appAgentProviders: getDefaultAppAgentProviders(opts.instanceDir),
             explanationAsynchronousMode: false,
             persistSession: false,
@@ -516,11 +778,18 @@ async function main(): Promise<void> {
         // case concurrency still comes from concurrencyByModel.
         for (const model of models) {
             console.log(`\n=== ${model} ===`);
-            const { result, sealToolsOfficial } = await runOneModel(
+            const {
+                sealToolsOfficial,
+                sealToolsCaseInsensitive,
+                typeAgentSupplemental,
+                typeAgentFilter,
+            } = await runOneModel(
                 model,
                 suite,
                 sourceManifest,
                 goldByCaseId,
+                goldDigest,
+                implementationDigest,
                 actionContext,
                 resolved,
                 outDir,
@@ -535,12 +804,9 @@ async function main(): Promise<void> {
             );
             summaryByModel[model] = {
                 sealToolsOfficial,
-                sealToolsCaseInsensitive: scoreSealToolsOfficial(
-                    result.rows,
-                    goldByCaseId,
-                    { ignoreStringCase: true },
-                ),
-                typeAgentSupplemental: result.summary,
+                sealToolsCaseInsensitive,
+                typeAgentSupplemental,
+                typeAgentFilter,
             };
         }
     } finally {
