@@ -963,6 +963,7 @@ export function createEnhancedClientIO(
     function completeCommandNotification(
         requestId: RequestId,
         data: any,
+        source: string,
     ): void {
         const completedId =
             typeof requestId === "object" &&
@@ -986,11 +987,15 @@ export function createEnhancedClientIO(
         if (terminalLayout?.isActive) {
             terminalLayout.flushInline();
             if (traceId) {
-                process.stdout.write(chalk.dim(`Trace ID: ${traceId}\n`));
+                process.stdout.write(
+                    chalk.dim(`[💬 ${source}] TraceID: ${traceId}\n`),
+                );
             }
             activePromptRenderer?.redraw();
         } else if (traceId) {
-            process.stdout.write(chalk.dim(`Trace ID: ${traceId}\n`));
+            process.stdout.write(
+                chalk.dim(`[💬 ${source}] TraceID: ${traceId}\n`),
+            );
         }
     }
 
@@ -1189,7 +1194,7 @@ export function createEnhancedClientIO(
                     // defaults to "inline" mode and the non-blocking submit path
                     // has no spinner, so one-shot commands (e.g. @config agent)
                     // would otherwise leave their only message in inlineBuffer.
-                    completeCommandNotification(requestId, data);
+                    completeCommandNotification(requestId, data, source);
                     break;
                 }
 

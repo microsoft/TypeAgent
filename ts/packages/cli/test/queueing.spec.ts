@@ -209,9 +209,9 @@ describe("CLI inline-buffer flush on commandComplete (regression: @config agent)
 
             const output = captured();
             expect(output).toContain(
-                "Trace ID: abcd1234abcd1234abcd1234abcd1234",
+                "[💬 system] TraceID: abcd1234abcd1234abcd1234abcd1234",
             );
-            expect(output.indexOf("Trace ID:")).toBeGreaterThan(
+            expect(output.indexOf("TraceID:")).toBeGreaterThan(
                 output.indexOf("ACTION_COMPLETED"),
             );
         } finally {
