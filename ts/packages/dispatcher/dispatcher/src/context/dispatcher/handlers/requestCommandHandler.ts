@@ -54,7 +54,18 @@ import {
     isUnknownAction,
 } from "../dispatcherUtils.js";
 import { executeReasoning as executeClaudeReasoning } from "../../../reasoning/claude.js";
-import { executeReasoning as executeCopilotReasoning } from "../../../reasoning/copilot.js";
+import {
+    executeCodingRequest,
+    executeReasoning as executeCopilotReasoning,
+} from "../../../reasoning/copilot.js";
+import {
+    classifyCodingRequest,
+    clearCodingAffinity,
+    establishCodingAffinity,
+    isCodeAgentRequest,
+    isCodingWorkingDirectorySelection,
+    isGenericFallbackCandidate,
+} from "../../../reasoning/codingRouting.js";
 import {
     parseRecordingDirective,
     type CommandDisposition,
@@ -894,6 +905,74 @@ export class RequestCommandHandler implements CommandHandler {
                         ...tokenUsage,
                     };
                 }
+            }
+
+            const genericFallback = isGenericFallbackCandidate(requestAction);
+            if (genericFallback) {
+                const codingDecision = classifyCodingRequest(
+                    request,
+                    systemContext.codingAffinity !== undefined,
+                    attachments?.length ?? 0,
+                );
+                if (codingDecision === "coding") {
+                    if (establishCodingAffinity(systemContext) === undefined) {
+                        displayError(
+                            "Coding requires a valid server-side working directory. " +
+                                "Configure TYPEAGENT_CODE_DEFAULT_WORKING_DIRECTORY or " +
+                                "TYPEAGENT_CODE_ALLOWED_ROOTS on agent-server, or submit an authorized workingDirectory.",
+                            context,
+                        );
+                        setDisposition(systemContext, {
+                            status: "failed",
+                            path: "reasoning",
+                            mayHaveSideEffects: false,
+                            schemas: ["code.swe"],
+                        });
+                        return;
+                    }
+                    if (isCodingWorkingDirectorySelection(request)) {
+                        displayStatus(
+                            `Coding working directory: ${systemContext.codingAffinity!.workingDirectory}`,
+                            context,
+                        );
+                        setDisposition(systemContext, {
+                            status: "handled",
+                            path: "reasoning",
+                            schemas: ["code.swe"],
+                        });
+                        return;
+                    }
+                    delete ensureCommandResult(systemContext).actionTokenUsage;
+                    try {
+                        await executeCodingRequest(
+                            request,
+                            context,
+                            attachments,
+                        );
+                        setDisposition(systemContext, {
+                            status: "handled",
+                            path: "reasoning",
+                            schemas: ["code.swe"],
+                        });
+                    } catch (error) {
+                        setDisposition(systemContext, {
+                            status: "failed",
+                            path: "reasoning",
+                            mayHaveSideEffects: true,
+                            schemas: ["code.swe"],
+                        });
+                        throw error;
+                    }
+                    return;
+                }
+                if (systemContext.codingAffinity !== undefined) {
+                    clearCodingAffinity(systemContext);
+                }
+            } else if (
+                systemContext.codingAffinity !== undefined &&
+                !isCodeAgentRequest(requestAction)
+            ) {
+                clearCodingAffinity(systemContext);
             }
 
             // If translation produced unknown or clarification actions,

@@ -2782,7 +2782,7 @@ export async function processCommandsEnhanced<T>(
                         result = await liveDispatcher.submitCommand(
                             request,
                             undefined,
-                            undefined,
+                            { workingDirectory: process.cwd() },
                             clientRequestId,
                         );
                     } catch (err) {
