@@ -282,10 +282,10 @@ export type AgentServerInvokeFunctions = {
      *
      * The client must create its agent-rpc server on the `agent:<name>`
      * channel (via createAgentRpcServer over the connection channel provider)
-     * before calling this. Several clients may register the same agent name on
-     * one conversation as long as they carry the same schema: the server keeps
-     * one registration with an instance per client, and routes each action to
-     * one of them.
+     * before calling this. A client that opts in with `multiInstance` may share
+     * the agent name with other clients carrying the same schema: the server
+     * keeps one registration with an instance per client, and routes each
+     * action to one of them. Without it, a second client is rejected as before.
      */
     registerClientAgent: (param: RegisterClientAgentParams) => Promise<void>;
     /** Unregister a previously registered client-hosted agent. */
@@ -314,6 +314,14 @@ export type RegisterClientAgentParams = {
     instanceId?: string;
     /** Human readable name, used when the server has to name the devices. */
     displayName?: string;
+    /**
+     * Opt in to sharing this agent name with other clients. Off by default, so
+     * a client that expects to be the only host of `name` (the shell) keeps
+     * getting an error when a second one registers. When the client that
+     * creates the registration opts in, later clients carrying the same schema
+     * join it as extra instances instead of being rejected.
+     */
+    multiInstance?: boolean;
 };
 
 export type UnregisterClientAgentParams = {

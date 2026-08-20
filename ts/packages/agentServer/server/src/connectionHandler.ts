@@ -608,6 +608,7 @@ export function createAgentServerConnectionHandler(
                         instanceId,
                         displayName,
                         connectionId,
+                        param.multiInstance === true,
                     );
                 } catch (e) {
                     channelProvider.deleteChannel(`agent:${name}`);

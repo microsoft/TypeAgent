@@ -265,6 +265,7 @@ export type ConversationManager = {
         instanceId: string,
         displayName: string,
         connectionId: string,
+        multiInstance: boolean,
         options?: JoinClientAgentGroupOptions,
     ): Promise<void>;
     /**
@@ -1217,6 +1218,7 @@ export async function createConversationManager(
             instanceId: string,
             displayName: string,
             connectionId: string,
+            multiInstance: boolean,
             options?: JoinClientAgentGroupOptions,
         ): Promise<void> {
             const record = conversations.get(conversationId);
@@ -1233,6 +1235,7 @@ export async function createConversationManager(
                     connectionId,
                     appAgent,
                     manifest,
+                    multiInstance,
                 },
                 options,
             );

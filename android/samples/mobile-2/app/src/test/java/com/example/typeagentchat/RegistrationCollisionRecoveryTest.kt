@@ -146,6 +146,9 @@ class RegistrationCollisionRecoveryTest {
         val register = transport.takeInvoke("registerClientAgent")
         assertEquals("device-under-test", register.firstArg().getString("instanceId"))
         assertEquals("Test Phone", register.firstArg().getString("displayName"))
+        // Without this the server rejects the second device, the same way it
+        // does for a client that expects to be the only host of its agent.
+        assertEquals(true, register.firstArg().getBoolean("multiInstance"))
         register.succeed()
     }
 

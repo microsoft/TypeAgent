@@ -122,6 +122,7 @@ async function register(
         connectionId: string;
         appAgent: AppAgent;
         manifest?: AppAgentManifest;
+        multiInstance?: boolean;
         allowMultipleInstances?: boolean;
     },
 ): Promise<void> {
@@ -134,6 +135,9 @@ async function register(
             connectionId: options.connectionId,
             appAgent: options.appAgent,
             manifest: options.manifest ?? makeManifest(),
+            // Devices opt in; the tests that pin single-host behaviour pass
+            // false explicitly.
+            multiInstance: options.multiInstance ?? true,
         },
         options.allowMultipleInstances === undefined
             ? undefined
@@ -294,6 +298,56 @@ describe("clientAgentRegistry registration", () => {
         const group = registry.groups.get(AGENT_NAME)!;
         expect(group.instances.size).toBe(1);
         expect(group.instances.get("a")!.connectionId).toBe("conn-a2");
+    });
+
+    test("a client that does not opt in stays the only host of its agent", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        const first = makeDevice();
+
+        // This is the shell: it registers without asking to share the name, so
+        // nothing about grouping changes for it.
+        await register(registry, host, {
+            instanceId: "shell-1",
+            connectionId: "conn-1",
+            appAgent: first.appAgent,
+            multiInstance: false,
+        });
+
+        await expect(
+            register(registry, host, {
+                instanceId: "shell-2",
+                connectionId: "conn-2",
+                appAgent: makeDevice().appAgent,
+                multiInstance: false,
+            }),
+        ).rejects.toThrow(`App agent '${AGENT_NAME}' already exists`);
+
+        // Even a client that does opt in cannot join a group whose creator did
+        // not: the creator decides, so no one can widen someone else's agent.
+        await expect(
+            register(registry, host, {
+                instanceId: "other",
+                connectionId: "conn-3",
+                appAgent: makeDevice().appAgent,
+                multiInstance: true,
+            }),
+        ).rejects.toThrow(`App agent '${AGENT_NAME}' already exists`);
+
+        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(1);
+
+        // Reconnecting on a new socket still works, which is the one thing the
+        // old code could not do.
+        const reconnected = makeDevice();
+        await register(registry, host, {
+            instanceId: "shell-1",
+            connectionId: "conn-1b",
+            appAgent: reconnected.appAgent,
+            multiInstance: false,
+        });
+        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(1);
+        await execute(registry, "conn-1b");
+        expect(reconnected.executed).toHaveLength(1);
     });
 });
 

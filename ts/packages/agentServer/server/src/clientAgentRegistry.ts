@@ -36,6 +36,13 @@ export type ClientAgentGroup = {
     manifest: AppAgentManifest;
     /** Hash of the schema source; instances must agree on it. See {@link getManifestKey}. */
     manifestKey: string;
+    /**
+     * Whether the client that created this group opted in to sharing the name.
+     * Off means a second, different client is rejected exactly as it was before
+     * groups existed, so a client that assumes it is the only host of the name
+     * (the shell) is unaffected by this whole mechanism.
+     */
+    multiInstance: boolean;
     instances: Map<string, ClientAgentInstance>;
     mux: AppAgent;
 };
@@ -46,6 +53,8 @@ export type ClientAgentRegistration = {
     connectionId: string;
     appAgent: AppAgent;
     manifest: AppAgentManifest;
+    /** See {@link ClientAgentGroup.multiInstance}. Only read on the first registration. */
+    multiInstance?: boolean;
 };
 
 const MULTI_INSTANCE_ENV = "TYPEAGENT_ALLOW_MULTIPLE_CLIENT_AGENT_INSTANCES";
@@ -504,6 +513,7 @@ export function createClientAgentGroup(
         name,
         manifest: registration.manifest,
         manifestKey: getManifestKey(registration.manifest),
+        multiInstance: registration.multiInstance === true,
         instances: new Map([[instance.instanceId, instance]]),
         mux: undefined as unknown as AppAgent,
     };
@@ -552,11 +562,17 @@ export async function joinClientAgentGroup(
         return false;
     }
 
+    // Two independent gates, both of which must allow the join. The group flag
+    // is the client's own opt-in; the environment switch is the operator's
+    // emergency brake. Replacing an instance already in the group passes both,
+    // since that path fails outright today and so cannot regress anything.
     const allowMultiple =
-        options?.allowMultipleInstances ?? allowMultipleClientAgentInstances();
+        group.multiInstance &&
+        (options?.allowMultipleInstances ??
+            allowMultipleClientAgentInstances());
     if (!allowMultiple) {
         debugGroup(
-            `${group.name}: rejected instance ${registration.instanceId}; ${MULTI_INSTANCE_ENV} is off`,
+            `${group.name}: rejected instance ${registration.instanceId}; multiInstance=${group.multiInstance}`,
         );
         throw new Error(agentAlreadyExistsMessage(group.name));
     }

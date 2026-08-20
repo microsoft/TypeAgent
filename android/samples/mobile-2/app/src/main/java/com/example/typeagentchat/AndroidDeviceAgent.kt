@@ -41,9 +41,12 @@ internal object AndroidDeviceAgent {
             .put("agentInterface", JSONArray().put("executeAction"))
             // Identifies this device so several devices can share one
             // `androidDevice` agent, and so a reconnect replaces this device
-            // instead of adding another.
+            // instead of adding another. `multiInstance` is the opt-in: without
+            // it the server rejects the second device, as it does for clients
+            // that expect to be the only host of their agent.
             .put("instanceId", instanceId)
             .put("displayName", displayName)
+            .put("multiInstance", true)
     }
 
     /**

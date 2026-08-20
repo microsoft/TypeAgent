@@ -128,6 +128,12 @@ function forceKillServer(port: number): boolean {
 export type ClientAgentIdentity = {
     instanceId?: string;
     displayName?: string;
+    /**
+     * Opt in to sharing the agent name with other clients hosting the same
+     * schema. Off by default: a client that expects to be the only host keeps
+     * getting an error when a second one registers.
+     */
+    multiInstance?: boolean;
 };
 
 export type ConversationDispatcher = {
@@ -233,10 +239,10 @@ export type AgentServerConnection = {
      * exactly one conversation is joined. Re-registering the same `name` (e.g.
      * after {@link reconnect}) replaces the previous registration.
      *
-     * Several clients may register the same `name` on one conversation as long
-     * as they carry the same schema; each becomes an instance. Pass a stable
-     * `instanceId` so a reconnect replaces this client's instance instead of
-     * adding another.
+     * Several clients may register the same `name` on one conversation if they
+     * opt in with `multiInstance` and carry the same schema; each becomes an
+     * instance. Pass a stable `instanceId` so a reconnect replaces this
+     * client's instance instead of adding another.
      */
     registerClientAgent(
         name: string,
@@ -634,6 +640,9 @@ export function createAgentServerConnection(
                         : {}),
                     ...(identity?.displayName !== undefined
                         ? { displayName: identity.displayName }
+                        : {}),
+                    ...(identity?.multiInstance !== undefined
+                        ? { multiInstance: identity.multiInstance }
                         : {}),
                 });
             } catch (e) {

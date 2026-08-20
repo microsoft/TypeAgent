@@ -101,6 +101,7 @@ function createTestServer(): TestServer {
             instanceId: string,
             displayName: string,
             connectionId: string,
+            multiInstance: boolean,
             options?: any,
         ) {
             await registry.add(
@@ -112,6 +113,7 @@ function createTestServer(): TestServer {
                     connectionId,
                     appAgent,
                     manifest: agentManifest,
+                    multiInstance,
                 },
                 options,
             );
@@ -223,7 +225,11 @@ describe("client agent multi-instance integration", () => {
             manifest,
             makeAgent(executedA),
             CONVERSATION_ID,
-            { instanceId: "device-a", displayName: "Pixel 8" },
+            {
+                instanceId: "device-a",
+                displayName: "Pixel 8",
+                multiInstance: true,
+            },
         );
 
         const executedB: TypeAgentAction[] = [];
@@ -234,7 +240,11 @@ describe("client agent multi-instance integration", () => {
             manifest,
             makeAgent(executedB),
             CONVERSATION_ID,
-            { instanceId: "device-b", displayName: "Galaxy Tab" },
+            {
+                instanceId: "device-b",
+                displayName: "Galaxy Tab",
+                multiInstance: true,
+            },
         );
 
         // One dynamic agent, two instances.

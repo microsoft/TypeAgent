@@ -22,6 +22,7 @@ class AndroidDeviceAgentTest {
         assertEquals("conversation-1", registration.getString("conversationId"))
         assertEquals("instance-1", registration.getString("instanceId"))
         assertEquals("Pixel 8", registration.getString("displayName"))
+        assertEquals(true, registration.getBoolean("multiInstance"))
         assertEquals(
             "executeAction",
             registration.getJSONArray("agentInterface").getString(0)
