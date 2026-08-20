@@ -222,16 +222,28 @@ function analyzeFullRun(loaded) {
             candidatesByCase.set(row.caseId, candidates);
         }
     }
-    let pluralityPasses = 0;
+    let uniquePluralityPasses = 0;
     let pluralityTies = 0;
+    let tiedPluralityAllPass = 0;
+    let tiedPluralityAnyPass = 0;
     for (const candidates of candidatesByCase.values()) {
         const ranked = [...candidates.values()].sort(
             (left, right) => right.votes - left.votes,
         );
-        if (ranked.length > 1 && ranked[0].votes === ranked[1].votes) {
+        const leaders = ranked.filter(
+            (candidate) => candidate.votes === ranked[0].votes,
+        );
+        if (leaders.length > 1) {
             pluralityTies++;
+            if (leaders.every((candidate) => candidate.passed)) {
+                tiedPluralityAllPass++;
+            }
+            if (leaders.some((candidate) => candidate.passed)) {
+                tiedPluralityAnyPass++;
+            }
+        } else if (leaders[0].passed) {
+            uniquePluralityPasses++;
         }
-        if (ranked[0].passed) pluralityPasses++;
     }
 
     const zeroParameterActionSets = new Map();
@@ -312,6 +324,8 @@ function analyzeFullRun(loaded) {
     const passRates = models.map(({ typeAgent }) => typeAgent.passRate);
     const exactRates = models.map(({ adjusted }) => adjusted.accuracy);
     const softRates = models.map(({ adjusted }) => adjusted.softAccuracy);
+    const toolScores = models.map(({ typeAgent }) => typeAgent.toolScore);
+    const parameterScores = models.map(({ typeAgent }) => typeAgent.paramScore);
     const arrayRates = models.map(
         ({ slices }) => slices.arrayParameters.passRate,
     );
@@ -333,6 +347,8 @@ function analyzeFullRun(loaded) {
             typeAgentPassRate: range(passRates),
             officialExactAccuracy: range(exactRates),
             officialSoftAccuracy: range(softRates),
+            toolScore: range(toolScores),
+            parameterScore: range(parameterScores),
             arrayParameterPassRate: range(arrayRates),
             nonArrayParameterPassRate: range(nonArrayRates),
             wrongValueDiagnosticSharePercent: range(wrongValueShares),
@@ -344,9 +360,19 @@ function analyzeFullRun(loaded) {
             passAtLeastOneModel: anyPass,
             disagreeAcrossModels: cases.length - allPass - allFail,
             oraclePassRate: anyPass / cases.length,
-            pluralityVotePasses: pluralityPasses,
-            pluralityVotePassRate: pluralityPasses / cases.length,
             pluralityVoteTies: pluralityTies,
+            pluralityVotePasses: {
+                lowerBound: uniquePluralityPasses + tiedPluralityAllPass,
+                upperBound: uniquePluralityPasses + tiedPluralityAnyPass,
+            },
+            pluralityVotePassRate: {
+                lowerBound:
+                    (uniquePluralityPasses + tiedPluralityAllPass) /
+                    cases.length,
+                upperBound:
+                    (uniquePluralityPasses + tiedPluralityAnyPass) /
+                    cases.length,
+            },
         },
         nonVerbatimGoldStrings: nonVerbatimByModel,
         zeroParameterActionSets: [...zeroParameterActionSets.entries()]
@@ -516,7 +542,6 @@ async function main() {
         loadRunResults(dependentProbeRoot),
     ]);
     const report = {
-        generatedAt: new Date().toISOString(),
         coverage,
         fullRun: analyzeFullRun(fullRun),
         dependentProbe: analyzeDependentProbe(dependentProbe),
