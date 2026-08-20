@@ -566,13 +566,15 @@ export async function joinClientAgentGroup(
     // is the client's own opt-in; the environment switch is the operator's
     // emergency brake. Replacing an instance already in the group passes both,
     // since that path fails outright today and so cannot regress anything.
-    const allowMultiple =
-        group.multiInstance &&
-        (options?.allowMultipleInstances ??
-            allowMultipleClientAgentInstances());
-    if (!allowMultiple) {
+    const envAllows =
+        options?.allowMultipleInstances ?? allowMultipleClientAgentInstances();
+    if (!group.multiInstance || !envAllows) {
         debugGroup(
-            `${group.name}: rejected instance ${registration.instanceId}; multiInstance=${group.multiInstance}`,
+            `${group.name}: rejected instance ${registration.instanceId}; ${
+                group.multiInstance
+                    ? `${MULTI_INSTANCE_ENV} is off`
+                    : "the registration did not opt in to sharing"
+            }`,
         );
         throw new Error(agentAlreadyExistsMessage(group.name));
     }

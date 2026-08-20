@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, expect, test } from "@jest/globals";
+import { afterEach, describe, expect, test } from "@jest/globals";
 import type {
     ActionContext,
     AppAgent,
@@ -11,6 +11,7 @@ import type {
 } from "@typeagent/agent-sdk";
 import {
     agentAlreadyExistsMessage,
+    allowMultipleClientAgentInstances,
     createClientAgentRegistry,
     getInstanceLabels,
     getManifestKey,
@@ -347,6 +348,72 @@ describe("clientAgentRegistry registration", () => {
         });
         expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(1);
         await execute(registry, "conn-1b");
+        expect(reconnected.executed).toHaveLength(1);
+    });
+});
+
+describe("clientAgentRegistry kill switch", () => {
+    const ENV = "TYPEAGENT_ALLOW_MULTIPLE_CLIENT_AGENT_INSTANCES";
+    const original = process.env[ENV];
+
+    afterEach(() => {
+        if (original === undefined) {
+            delete process.env[ENV];
+        } else {
+            process.env[ENV] = original;
+        }
+    });
+
+    // The rest of the suite passes the boolean explicitly, so without this the
+    // environment reader - the thing the rollback plan actually depends on -
+    // would never run. A typo in the variable name would ship silently.
+    test.each([
+        [undefined, true],
+        ["", true],
+        ["1", true],
+        ["true", true],
+        ["yes", true],
+        ["0", false],
+        ["false", false],
+        ["FALSE", false],
+        ["  0  ", false],
+    ])("%s reads as %s", (value, expected) => {
+        if (value === undefined) {
+            delete process.env[ENV];
+        } else {
+            process.env[ENV] = value;
+        }
+        expect(allowMultipleClientAgentInstances()).toBe(expected);
+    });
+
+    test("turning it off rejects a second device even when the client opted in", async () => {
+        process.env[ENV] = "0";
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeDevice().appAgent,
+        });
+        await expect(
+            register(registry, host, {
+                instanceId: "b",
+                connectionId: "conn-b",
+                appAgent: makeDevice().appAgent,
+            }),
+        ).rejects.toThrow(`App agent '${AGENT_NAME}' already exists`);
+
+        // A reconnect still replaces in place, so a device that drops its
+        // socket is not stranded while the switch is off.
+        const reconnected = makeDevice();
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a2",
+            appAgent: reconnected.appAgent,
+        });
+        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(1);
+        await execute(registry, "conn-a2");
         expect(reconnected.executed).toHaveLength(1);
     });
 });
