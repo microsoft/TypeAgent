@@ -113,7 +113,7 @@ function normalizeText(value) {
 
 function canonicalJson(value) {
     if (Array.isArray(value)) {
-        return `[${value.map(canonicalJson).sort().join(",")}]`;
+        return `[${value.map(canonicalJson).join(",")}]`;
     }
     if (value !== null && typeof value === "object") {
         return `{${Object.entries(value)
@@ -127,9 +127,13 @@ function canonicalJson(value) {
     return JSON.stringify(value);
 }
 
-function hasNonVerbatimGoldString(row) {
-    const utterance = normalizeText(row.utterance);
-    return row.expectedActions.some((action) =>
+function canonicalActionSet(actions) {
+    return `[${actions.map(canonicalJson).sort().join(",")}]`;
+}
+
+function hasNonVerbatimGoldString(utteranceText, actions) {
+    const utterance = normalizeText(utteranceText);
+    return actions.some((action) =>
         stringLeaves(action.parameters).some((value) => {
             const normalized = normalizeText(value);
             return normalized !== "" && !utterance.includes(normalized);
@@ -211,7 +215,7 @@ function analyzeFullRun(loaded) {
     const candidatesByCase = new Map();
     for (const { data } of loaded) {
         for (const row of data.rows) {
-            const signature = canonicalJson(row.chosenActions);
+            const signature = canonicalActionSet(row.chosenActions);
             const candidates = candidatesByCase.get(row.caseId) ?? new Map();
             const candidate = candidates.get(signature) ?? {
                 votes: 0,
@@ -251,9 +255,13 @@ function analyzeFullRun(loaded) {
     const actionFamilyGrounding = new Map();
     for (const { data } of loaded) {
         for (const row of data.rows) {
-            for (const actionName of new Set(
-                row.expectedActions.map((action) => action.actionName),
-            )) {
+            const expectedByActionName = new Map();
+            for (const action of row.expectedActions) {
+                const group = expectedByActionName.get(action.actionName) ?? [];
+                group.push(action);
+                expectedByActionName.set(action.actionName, group);
+            }
+            for (const [actionName, expectedActions] of expectedByActionName) {
                 const family = actionFamilies.get(actionName) ?? {
                     evaluations: 0,
                     passes: 0,
@@ -272,7 +280,10 @@ function analyzeFullRun(loaded) {
                     },
                     verbatim: { evaluations: 0, passes: 0, caseIds: new Set() },
                 };
-                const bucket = hasNonVerbatimGoldString(row)
+                const bucket = hasNonVerbatimGoldString(
+                    row.utterance,
+                    expectedActions,
+                )
                     ? grounding.nonVerbatim
                     : grounding.verbatim;
                 bucket.evaluations++;
@@ -300,7 +311,10 @@ function analyzeFullRun(loaded) {
             allGoldStringsVerbatim: { rows: 0, passes: 0 },
         };
         for (const row of data.rows) {
-            const bucket = hasNonVerbatimGoldString(row)
+            const bucket = hasNonVerbatimGoldString(
+                row.utterance,
+                row.expectedActions,
+            )
                 ? buckets.hasNonVerbatimGoldString
                 : buckets.allGoldStringsVerbatim;
             bucket.rows++;
@@ -335,18 +349,24 @@ function analyzeFullRun(loaded) {
     const wrongValueShares = models.map(
         ({ wrongValueDiagnosticShare }) => wrongValueDiagnosticShare,
     );
+    const distinctModels = new Set(models.map(({ model }) => model)).size;
+    const duplicateActionNameCases = loaded[0].data.rows.filter((row) => {
+        const names = row.expectedActions.map((action) => action.actionName);
+        return new Set(names).size !== names.length;
+    }).length;
 
     return {
         run: {
             rows: cases.length,
-            models: models.length,
+            configurations: models.length,
+            distinctModels,
             selection: "independent multi-action DroidCall rows",
         },
         modelResults: models,
         ranges: {
             typeAgentPassRate: range(passRates),
-            officialExactAccuracy: range(exactRates),
-            officialSoftAccuracy: range(softRates),
+            adjustedExactAccuracy: range(exactRates),
+            adjustedSoftAccuracy: range(softRates),
             toolScore: range(toolScores),
             parameterScore: range(parameterScores),
             arrayParameterPassRate: range(arrayRates),
@@ -373,6 +393,7 @@ function analyzeFullRun(loaded) {
                     (uniquePluralityPasses + tiedPluralityAnyPass) /
                     cases.length,
             },
+            casesWithDuplicateExpectedActionNames: duplicateActionNameCases,
         },
         nonVerbatimGoldStrings: nonVerbatimByModel,
         zeroParameterActionSets: [...zeroParameterActionSets.entries()]
@@ -385,29 +406,29 @@ function analyzeFullRun(loaded) {
             }))
             .sort((a, b) => b.failuresAcrossModels - a.failuresAcrossModels)
             .slice(0, 12),
-        actionFamilies: [...actionFamilies.entries()]
+        rowsByActionFamily: [...actionFamilies.entries()]
             .map(([action, counts]) => ({
                 action,
                 sourceRows: counts.caseIds.size,
-                evaluations: counts.evaluations,
-                passes: counts.passes,
-                passRate: counts.passes / counts.evaluations,
+                rowEvaluations: counts.evaluations,
+                rowPasses: counts.passes,
+                rowPassRate: counts.passes / counts.evaluations,
             }))
             .sort((a, b) => b.sourceRows - a.sourceRows),
-        actionFamilyGrounding: [...actionFamilyGrounding.entries()]
+        rowsByActionFamilyGrounding: [...actionFamilyGrounding.entries()]
             .map(([action, groups]) => ({
                 action,
                 nonVerbatim: {
                     sourceRows: groups.nonVerbatim.caseIds.size,
-                    evaluations: groups.nonVerbatim.evaluations,
-                    passRate:
+                    rowEvaluations: groups.nonVerbatim.evaluations,
+                    rowPassRate:
                         groups.nonVerbatim.passes /
                         groups.nonVerbatim.evaluations,
                 },
                 verbatim: {
                     sourceRows: groups.verbatim.caseIds.size,
-                    evaluations: groups.verbatim.evaluations,
-                    passRate:
+                    rowEvaluations: groups.verbatim.evaluations,
+                    rowPassRate:
                         groups.verbatim.passes / groups.verbatim.evaluations,
                 },
             }))
@@ -417,15 +438,23 @@ function analyzeFullRun(loaded) {
             )
             .map((entry) => ({
                 ...entry,
-                passRateGap:
-                    entry.verbatim.passRate - entry.nonVerbatim.passRate,
+                rowPassRateGap:
+                    entry.verbatim.rowPassRate - entry.nonVerbatim.rowPassRate,
             }))
-            .sort((a, b) => b.passRateGap - a.passRateGap),
+            .sort((a, b) => b.rowPassRateGap - a.rowPassRateGap),
     };
 }
 
 function hasSealResultReference(row) {
     return /API_call_\d+/u.test(JSON.stringify(row.expectedActions));
+}
+
+function hasSealWholeValueResultReference(row) {
+    return row.expectedActions.some((action) =>
+        stringLeaves(action.parameters).some((value) =>
+            /^API_call_\d+$/u.test(value),
+        ),
+    );
 }
 
 async function analyzeCoverage() {
@@ -450,6 +479,9 @@ async function analyzeCoverage() {
         (row) => row.expectedActions.length > 1,
     ).length;
     const sealDependent = sealRows.filter(hasSealResultReference).length;
+    const sealWholeValueDependent = sealRows.filter(
+        hasSealWholeValueResultReference,
+    ).length;
     const sealStrict = sealRows.filter((row) => row.order === "strict").length;
     const combinedMulti = droidRows.length + sealMulti;
     const combinedDependent = droidDependent + sealDependent;
@@ -482,7 +514,10 @@ async function analyzeCoverage() {
         sealTools: {
             allRows: sealRows.length,
             multiActionRows: sealMulti,
-            dependentRows: sealDependent,
+            resultReferenceRows: sealDependent,
+            wholeValueResultReferenceRows: sealWholeValueDependent,
+            embeddedOnlyResultReferenceRows:
+                sealDependent - sealWholeValueDependent,
             strictOrderRows: sealStrict,
             dependentShareOfAllRowsPercent: round(
                 percent(sealDependent, sealRows.length),
