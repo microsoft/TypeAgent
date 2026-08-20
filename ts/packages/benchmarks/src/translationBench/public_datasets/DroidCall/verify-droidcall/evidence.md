@@ -73,7 +73,7 @@ imports a missing runner export.
 
 ```text
 Test Suites: 2 failed, 25 passed, 27 total
-Tests:       9 failed, 230 passed, 239 total
+Tests:       9 failed, 234 passed, 243 total
 ```
 
 These failures do not touch the DroidCall downloader, parser, analysis, or
