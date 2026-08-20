@@ -88,13 +88,14 @@ pnpm run prettier:fix        # Fix formatting
 Tests run against compiled output in `dist/test/` — you must build before running tests.
 
 **Before considering any change complete**, ensure the affected build, relevant
-tests, formatting check, and ratchet lint all pass. CI enforces formatting and
-ratchet lint separately, so it is easy to miss them if you only build and test:
+tests, formatting check, complexity ratchet, and lint ratchet all pass. CI
+enforces these separately, so it is easy to miss them if you only build and test:
 
 ```bash
 pnpm run build <package>
 pnpm --filter <package-name> test
 pnpm run prettier:changed:fix   # Fix formatting for files changed vs origin/main (matches CI's check)
+pnpm run code-complexity:ci     # Complexity ratchet against origin/main
 pnpm run code-lint -- --ratchet --base origin/main
 ```
 

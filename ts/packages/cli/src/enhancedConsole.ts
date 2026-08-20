@@ -960,6 +960,45 @@ export function createEnhancedClientIO(
         }
     }
 
+    function completeCommandNotification(
+        requestId: RequestId,
+        data: any,
+        source: string,
+    ): void {
+        const completedId =
+            typeof requestId === "object" &&
+            requestId !== null &&
+            "requestId" in requestId
+                ? requestId.requestId
+                : typeof requestId === "string"
+                  ? requestId
+                  : undefined;
+        if (completedId !== undefined && currentRequestId === completedId) {
+            currentRequestId = undefined;
+        }
+        if (completedId !== undefined) {
+            consumeSubmittedId(completedId);
+        }
+
+        const traceId =
+            typeof data?.result?.traceId === "string"
+                ? data.result.traceId
+                : undefined;
+        if (terminalLayout?.isActive) {
+            terminalLayout.flushInline();
+            if (traceId) {
+                terminalLayout.writeContent(
+                    chalk.dim(`[💬 ${source}] TraceID: ${traceId}\n`),
+                );
+            }
+            activePromptRenderer?.redraw();
+        } else if (traceId) {
+            process.stdout.write(
+                chalk.dim(`[💬 ${source}] TraceID: ${traceId}\n`),
+            );
+        }
+    }
+
     return {
         clear(): void {
             console.clear();
@@ -1151,32 +1190,11 @@ export function createEnhancedClientIO(
                     break;
 
                 case "commandComplete": {
-                    // Clear currentRequestId if the completed id matches so SIGINT doesn't target a stale id.
-                    const completedId =
-                        typeof requestId === "object" &&
-                        requestId !== null &&
-                        "requestId" in (requestId as any)
-                            ? (requestId as { requestId: string }).requestId
-                            : typeof requestId === "string"
-                              ? requestId
-                              : undefined;
-                    if (
-                        completedId !== undefined &&
-                        currentRequestId === completedId
-                    ) {
-                        currentRequestId = undefined;
-                    }
-                    if (completedId !== undefined) {
-                        consumeSubmittedId(completedId);
-                    }
                     // Commit any buffered inline output: actionIO.appendDisplay
                     // defaults to "inline" mode and the non-blocking submit path
                     // has no spinner, so one-shot commands (e.g. @config agent)
                     // would otherwise leave their only message in inlineBuffer.
-                    if (terminalLayout?.isActive) {
-                        terminalLayout.flushInline();
-                        activePromptRenderer?.redraw();
-                    }
+                    completeCommandNotification(requestId, data, source);
                     break;
                 }
 
