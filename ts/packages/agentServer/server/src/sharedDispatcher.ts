@@ -21,6 +21,7 @@ import type {
     QueueCancelReason,
     QueueSnapshot,
     DisplayLogEntry,
+    ProcessCommandOptions,
 } from "@typeagent/dispatcher-types";
 import { ServerStoppingError } from "@typeagent/dispatcher-types";
 import {
@@ -31,12 +32,21 @@ import {
 } from "agent-dispatcher/internal";
 import { PendingInteractionManager } from "agent-dispatcher/internal";
 import { supersedeStalledInteraction as supersedeStalledInteractionCore } from "./supersedeInteraction.js";
+import {
+    loadWorkingDirectoryPolicy,
+    selectWorkingDirectoryProposal,
+    resolveWorkingDirectory,
+} from "./workingDirectoryPolicy.js";
 
 import registerDebug from "debug";
 const debugConnect = registerDebug("agent-server:connect");
-const debugClientIOError = registerDebug("agent-server:clientIO:error");
-const debugInteraction = registerDebug("agent-server:interaction");
+const debugClientIOWarn = registerDebug("agent-server:clientIO:warn");
+const debugInteractionInfo = registerDebug("agent-server:interaction:info");
 const debugCommand = registerDebug("agent-server:command");
+
+function errMessage(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}
 
 type ClientRecord = {
     clientIO: ClientIO;
@@ -53,6 +63,7 @@ export async function createSharedDispatcher(
         );
     }
     let nextConnectionId = 0;
+    const workingDirectoryPolicy = loadWorkingDirectoryPolicy();
     const clients = new Map<string, ClientRecord>();
     const pendingInteractions = new PendingInteractionManager();
 
@@ -99,9 +110,13 @@ export async function createSharedDispatcher(
                 count++;
             } catch (error) {
                 // Ignore errors in server mode.
-                debugClientIOError(
-                    `ClientIO error on ${name} for client ${connectionId}: ${error}`,
-                );
+                debugClientIOWarn("broadcast failed", {
+                    operation: name,
+                    connection: connectionId,
+                    requestId: requestId?.requestId,
+                    originator: requestId?.connectionId === connectionId,
+                    error: errMessage(error),
+                });
             }
         }
         return count;
@@ -198,9 +213,13 @@ export async function createSharedDispatcher(
                 ...(defaultId !== undefined ? { defaultId } : {}),
             };
 
-            debugInteraction(
-                `question created: ${interactionId} message="${message}"`,
-            );
+            debugInteractionInfo("question created", {
+                interactionId,
+                requestId: requestId?.requestId,
+                source: request.source,
+                choiceCount: choices?.length,
+                messageLength: message?.length,
+            });
 
             // Broadcast to all connected clients
             broadcast("requestInteraction", requestId, (cio) =>
@@ -236,9 +255,11 @@ export async function createSharedDispatcher(
                 actionTemplates,
             };
 
-            debugInteraction(
-                `proposeAction created: ${interactionId} source="${source}"`,
-            );
+            debugInteractionInfo("proposeAction created", {
+                interactionId,
+                requestId: requestId?.requestId,
+                source,
+            });
 
             // Log + queue unconditionally so the interaction survives in
             // DisplayLog and is included in JoinSessionResult on next join.
@@ -273,9 +294,12 @@ export async function createSharedDispatcher(
                 form,
             };
 
-            debugInteraction(
-                `askForm created: ${interactionId} source="${request.source}" fields=${form.fields.length}`,
-            );
+            debugInteractionInfo("askForm created", {
+                interactionId,
+                requestId: requestId?.requestId,
+                source: request.source,
+                fieldCount: form.fields.length,
+            });
 
             // Log + queue unconditionally so the interaction survives in
             // DisplayLog and is included in JoinSessionResult on next join.
@@ -353,9 +377,11 @@ export async function createSharedDispatcher(
                 try {
                     return await provider.call(record.clientIO);
                 } catch (error) {
-                    debugClientIOError(
-                        `getUserContext failed for client ${connectionId}: ${error}`,
-                    );
+                    debugClientIOWarn("getUserContext failed", {
+                        connection: connectionId,
+                        requestId: requestId?.requestId,
+                        error: errMessage(error),
+                    });
                     return undefined;
                 }
             };
@@ -574,6 +600,7 @@ export async function createSharedDispatcher(
             // so interactions created before disconnect are unroutable after
             // reconnect. See docs/async-clientio-design.md §Open Questions.
             const connectionId = (nextConnectionId++).toString();
+            let selectedWorkingDirectory: string | undefined;
             const wasEmpty = clients.size === 0;
             clients.set(connectionId, {
                 clientIO,
@@ -670,10 +697,47 @@ export async function createSharedDispatcher(
                     connectionId,
                     attachmentCount: attachments?.length ?? 0,
                 });
+                const workingDirectory = resolveWorkingDirectory(
+                    selectWorkingDirectoryProposal(
+                        submitOptions?.workingDirectory,
+                        command,
+                        selectedWorkingDirectory,
+                    ),
+                    workingDirectoryPolicy,
+                );
+                if (workingDirectory.workingDirectory !== undefined) {
+                    selectedWorkingDirectory =
+                        workingDirectory.workingDirectory;
+                }
+                if (workingDirectory.rejectedRequested) {
+                    debugCommand(
+                        `Rejected client working directory for ${connectionId}; ` +
+                            (workingDirectory.source === "default"
+                                ? "using server default"
+                                : "coding root unavailable"),
+                    );
+                }
+                const {
+                    workingDirectory: _clientWorkingDirectory,
+                    ...optionsWithoutWorkingDirectory
+                } = submitOptions ?? {};
+                void _clientWorkingDirectory;
+                const hasOtherOptions =
+                    Object.keys(optionsWithoutWorkingDirectory).length > 0;
+                const normalizedOptions: ProcessCommandOptions | undefined =
+                    workingDirectory.workingDirectory !== undefined
+                        ? {
+                              ...optionsWithoutWorkingDirectory,
+                              workingDirectory:
+                                  workingDirectory.workingDirectory,
+                          }
+                        : hasOtherOptions
+                          ? optionsWithoutWorkingDirectory
+                          : undefined;
                 const result = await baseSubmitCommand(
                     command,
                     attachments,
-                    submitOptions,
+                    normalizedOptions,
                     clientRequestId,
                     requestId,
                 );
@@ -733,17 +797,19 @@ export async function createSharedDispatcher(
             return dispatcher;
         },
         respondToInteraction(response: PendingInteractionResponse): void {
-            debugInteraction(
-                `respondToInteraction: ${response.interactionId} type=${response.type}`,
-            );
+            debugInteractionInfo("respondToInteraction", {
+                interactionId: response.interactionId,
+                type: response.type,
+            });
             const resolved = pendingInteractions.resolve(
                 response.interactionId,
                 response.value,
             );
             if (!resolved) {
-                debugInteraction(
-                    `respondToInteraction: interaction ${response.interactionId} not found (may have expired or been resolved already)`,
-                );
+                debugInteractionInfo("respondToInteraction: not found", {
+                    interactionId: response.interactionId,
+                    reason: "expired or already resolved",
+                });
             } else {
                 // Notify all clients that this interaction was resolved
                 broadcast("interactionResolved", undefined, (cio) =>
@@ -762,15 +828,16 @@ export async function createSharedDispatcher(
             }
         },
         cancelInteraction(interactionId: string): void {
-            debugInteraction(`cancelInteraction: ${interactionId}`);
+            debugInteractionInfo("cancelInteraction", { interactionId });
             const cancelled = pendingInteractions.cancel(
                 interactionId,
                 new Error("Cancelled by client"),
             );
             if (!cancelled) {
-                debugInteraction(
-                    `cancelInteraction: interaction ${interactionId} not found (may have expired or been resolved already)`,
-                );
+                debugInteractionInfo("cancelInteraction: not found", {
+                    interactionId,
+                    reason: "expired or already resolved",
+                });
             } else {
                 broadcast("interactionCancelled", undefined, (cio) =>
                     cio.interactionCancelled(interactionId),
@@ -820,9 +887,11 @@ export async function createSharedDispatcher(
                 try {
                     clientRecord.clientIO.appendDisplay(agentMessage, "block");
                 } catch (error) {
-                    debugClientIOError(
-                        `ClientIO error on broadcastSystemMessage for client ${connectionId}: ${error}`,
-                    );
+                    debugClientIOWarn("broadcast failed", {
+                        operation: "broadcastSystemMessage",
+                        connection: connectionId,
+                        error: errMessage(error),
+                    });
                 }
             }
         },

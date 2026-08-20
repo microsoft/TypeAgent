@@ -45,8 +45,10 @@ import {
     logRequestReceived,
 } from "../otel/structuredEvents.js";
 
-const debugCommand = registerDebug("typeagent:dispatcher:command");
-const debugCommandError = registerDebug("typeagent:dispatcher:command:error");
+const debugCommandInfo = registerDebug("typeagent:dispatcher:command:info");
+const debugCommandVerbose = registerDebug(
+    "typeagent:dispatcher:command:verbose",
+);
 
 export type ResolveCommandResult = {
     // the app agent name parsed from the input.
@@ -154,7 +156,7 @@ export function getDefaultSubCommandDescriptor(
 //                in the table.  false when descriptor is the default
 //                subcommand or when descriptor is undefined.
 //
-export async function resolveCommand(
+async function resolveCommandCore(
     input: string,
     context: CommandHandlerContext,
 ): Promise<ResolveCommandResult> {
@@ -246,14 +248,36 @@ export async function resolveCommand(
         matched,
     };
 
-    if (debugCommand.enabled) {
-        debugCommand(`Resolved command:`, {
-            ...result,
+    return result;
+}
+
+function logResolvedCommand(
+    result: ResolveCommandResult,
+    submitted: boolean,
+): void {
+    const debug = submitted ? debugCommandInfo : debugCommandVerbose;
+    if (debug.enabled) {
+        debug(`Resolved command:`, {
+            parsedAppAgentName: result.parsedAppAgentName,
+            actualAppAgentName: result.actualAppAgentName,
+            commands: result.commands,
+            matched: result.matched,
             table: result.table !== undefined,
             descriptor: result.descriptor !== undefined,
         });
     }
+}
 
+/**
+ * Resolve a command outside the submitted-command path, including completion
+ * RPCs. These calls are verbose because completion invokes this per keystroke.
+ */
+export async function resolveCommand(
+    input: string,
+    context: CommandHandlerContext,
+): Promise<ResolveCommandResult> {
+    const result = await resolveCommandCore(input, context);
+    logResolvedCommand(result, false);
     return result;
 }
 
@@ -274,7 +298,8 @@ async function parseCommand(
     context: CommandHandlerContext,
 ) {
     const input = normalizeCommand(originalInput, context);
-    const result = await resolveCommand(input, context);
+    const result = await resolveCommandCore(input, context);
+    logResolvedCommand(result, true);
     if (result.descriptor !== undefined) {
         context.logger?.logEvent("command", {
             originalInput,
@@ -395,7 +420,6 @@ export async function processCommandNoLock(
             ),
             "block",
         );
-        debugCommandError(e.stack);
 
         ensureCommandResult(context).disposition = {
             status: "failed",
@@ -405,7 +429,9 @@ export async function processCommandNoLock(
         context?.logger?.logEvent(
             "command:exception",
             {
+                requestId: requestIdToString(getRequestId(context)),
                 request: originalInput,
+                name: e.name,
                 message: e.message,
                 stack: e.stack,
             },

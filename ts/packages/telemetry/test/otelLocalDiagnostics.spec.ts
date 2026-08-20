@@ -90,7 +90,7 @@ describe("JsonlLogExporter", () => {
         expect(resolved).toBe(
             path.resolve(
                 "logs",
-                "typeagent-agent_server-agent-player-20260817T083859-123Z-1234.jsonl",
+                "typeagent-agent_server-agent-player-20260817T083859Z-1234.jsonl",
             ),
         );
     });
@@ -106,27 +106,21 @@ describe("JsonlLogExporter", () => {
         expect(resolved).toBe(
             path.resolve(
                 "logs",
-                "typeagent-typeagent-local-agent-server-20260817T083859-123Z-1234.jsonl",
+                "typeagent-typeagent-local-agent-server-20260817T083859Z-1234.jsonl",
             ),
         );
     });
 
-    it("supports an explicit process-start timestamp placeholder", () => {
+    it("supports the process-first default template", () => {
         const resolved = resolveJsonlLogPath(
-            path.join(
-                "logs",
-                "typeagent-{service}-{process}-{timestamp}-{pid}.jsonl",
-            ),
+            path.join("logs", "{process}-{timestamp}-p{pid}.jsonl"),
             "typeagent-local",
             1234,
             "agent-server",
             new Date("2026-08-17T08:38:59.123Z"),
         );
         expect(resolved).toBe(
-            path.resolve(
-                "logs",
-                "typeagent-typeagent-local-agent-server-20260817T083859-123Z-1234.jsonl",
-            ),
+            path.resolve("logs", "agent-server-20260817T083859Z-p1234.jsonl"),
         );
     });
 
@@ -331,7 +325,7 @@ describe("JsonlLogExporter", () => {
         const template = path.join(blockingFile, "logs-{pid}.jsonl");
         // Pin startedAt so the injected {timestamp} placeholder resolves to the
         // same path across constructions; otherwise each new Date() can cross a
-        // millisecond boundary and the ownership conflict would not be detected.
+        // second boundary and the ownership conflict would not be detected.
         const startedAt = new Date("2026-08-17T08:38:59.123Z");
         const exporter = new JsonlLogExporter({
             filePath: template,
@@ -436,7 +430,7 @@ describe("debug bridge", () => {
             eventName: "aiclient:llm:completed",
             body: { scope: "background", success: false },
         });
-        state.setDebugCopy(true);
+        state.setProfile("verbose");
         logger.emit({ eventName: "debug", body: "debug-visible" });
         state.setProfile("off");
         logger.emit({ eventName: "structured-hidden", body: "hidden" });
@@ -450,6 +444,62 @@ describe("debug bridge", () => {
             ["aiclient:llm:completed", { scope: "background", success: false }],
             ["debug", "debug-visible"],
         ]);
+    });
+
+    it("classifies bridged debug records and filters them by profile", () => {
+        const exporter = new InMemoryLogRecordExporter();
+        provider = new LoggerProvider({
+            processors: [
+                new LocalLogRecordProcessor(
+                    new SimpleLogRecordProcessor({ exporter }),
+                ),
+            ],
+        });
+        logs.setGlobalLoggerProvider(provider);
+        const state = createLocalTelemetryState();
+        setLocalTelemetryState(state);
+        const output: Array<{
+            namespace: string | undefined;
+            args: unknown[];
+        }> = [];
+        const debugModule = createDebugModule(output);
+        const bridge = installDebugBridge([debugModule]);
+
+        state.setProfile("diagnostic");
+        debugModule.log.call({ namespace: "typeagent:test:error" }, "error");
+        debugModule.log.call({ namespace: "typeagent:test:warn" }, "warn");
+        debugModule.log.call({ namespace: "typeagent:test:info" }, "info");
+        debugModule.log.call(
+            { namespace: "typeagent:test:details" },
+            "diagnostic-hidden",
+        );
+
+        state.setProfile("verbose");
+        debugModule.log.call(
+            { namespace: "typeagent:test:details" },
+            "verbose-visible",
+        );
+
+        const records = exporter.getFinishedLogRecords();
+        expect(records.map((record) => record.body)).toEqual([
+            "error",
+            "warn",
+            "info",
+            "verbose-visible",
+        ]);
+        expect(
+            records.map((record) => record.attributes["debug.class"]),
+        ).toEqual(["error", "warn", "info", "verbose"]);
+        expect(
+            records.map((record) => record.attributes["debug.namespace"]),
+        ).toEqual([
+            "typeagent:test:error",
+            "typeagent:test:warn",
+            "typeagent:test:info",
+            "typeagent:test:details",
+        ]);
+
+        bridge.shutdown();
     });
 
     it("retains successful background LLM events outside focused mode", () => {
@@ -665,7 +715,7 @@ describe("debug bridge", () => {
 describe("local diagnostics correlation", () => {
     it("writes structured and debug records with the same active span", async () => {
         setLocalTelemetryState(
-            createLocalTelemetryState({ initialDebugCopy: true }),
+            createLocalTelemetryState({ initialProfile: "verbose" }),
         );
         const dir = makeTempDir();
         const jsonlExporter = new JsonlLogExporter({

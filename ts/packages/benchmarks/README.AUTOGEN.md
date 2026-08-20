@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=0734e7e4a961b84be758972ae2abb8b9d0c91c2e386f04bbce0bc7043dd4aecb -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2f5f430dff751fc6958f22c8e7be89fde26c6f13d5fe263e3d186302ef69eeba -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -52,10 +52,10 @@ _None._
 - [./src/core/prices.ts](./src/core/prices.ts)
 - [./src/core/rateLimiter.ts](./src/core/rateLimiter.ts)
 - [./src/core/tokenEstimate.ts](./src/core/tokenEstimate.ts)
-- _…and 40 more under `./src/`._
+- _…and 44 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `3fc3e11cad20608a7cef65b9ddb3736f3142b774` on `2026-08-19T01:03:36.415Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `95c2a1d9ba80426f522f7ece727da39f8a577d9e` on `2026-08-19T17:31:21.317Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -10,6 +10,11 @@ import type {
     SdkLogRecord,
 } from "@opentelemetry/sdk-logs";
 import { getLocalTelemetryState } from "./localTelemetryState.js";
+import {
+    debugClassAllowedByProfile,
+    readDebugClass,
+    type DebugLogClass,
+} from "./debugClass.js";
 
 /**
  * Applies process-local JSONL policy when a record is emitted, before an
@@ -19,7 +24,13 @@ export class LocalLogRecordProcessor implements LogRecordProcessor {
     public constructor(private readonly delegate: LogRecordProcessor) {}
 
     public onEmit(logRecord: SdkLogRecord, context?: Context): void {
-        if (shouldEmitLocalRecord(logRecord.eventName, logRecord.body)) {
+        if (
+            shouldEmitLocalRecord(
+                logRecord.eventName,
+                logRecord.body,
+                logRecord.attributes,
+            )
+        ) {
             this.delegate.onEmit(logRecord, context);
         }
     }
@@ -31,7 +42,7 @@ export class LocalLogRecordProcessor implements LogRecordProcessor {
         eventName?: string;
     }): boolean {
         return (
-            shouldEmitLocalRecord(options.eventName) &&
+            couldEmitLocalRecord(options.eventName) &&
             (this.delegate.enabled?.(options) ?? true)
         );
     }
@@ -45,20 +56,43 @@ export class LocalLogRecordProcessor implements LogRecordProcessor {
     }
 }
 
+/**
+ * Whether a record with the given event name could ever be emitted under the
+ * current profile, without inspecting per-record attributes. Used by
+ * `enabled()` to short-circuit record construction. `debug` records are
+ * governed by class in `onEmit`, so this only rejects the profiles that surface
+ * no debug at all (`off`, `focused`); structured events stay permissive here.
+ */
+function couldEmitLocalRecord(eventName: string | undefined): boolean {
+    const snapshot = getLocalTelemetryState().getSnapshot();
+    if (snapshot.profile === "off" || eventName === "dispatcher:command") {
+        return false;
+    }
+    if (eventName === "debug") {
+        return (
+            snapshot.profile === "diagnostic" || snapshot.profile === "verbose"
+        );
+    }
+    return true;
+}
+
 function shouldEmitLocalRecord(
     eventName: string | undefined,
     body?: unknown,
+    attributes?: Readonly<Record<string, unknown>>,
 ): boolean {
     const snapshot = getLocalTelemetryState().getSnapshot();
-    return (
-        snapshot.profile !== "off" &&
-        eventName !== "dispatcher:command" &&
-        (eventName !== "debug" || snapshot.debugCopy) &&
-        !shouldSuppressFocusedBackgroundLlmEvent(
-            snapshot.profile,
-            eventName,
-            body,
-        )
+    if (snapshot.profile === "off" || eventName === "dispatcher:command") {
+        return false;
+    }
+    if (eventName === "debug") {
+        const cls: DebugLogClass = readDebugClass(attributes);
+        return debugClassAllowedByProfile(snapshot.profile, cls);
+    }
+    return !shouldSuppressFocusedBackgroundLlmEvent(
+        snapshot.profile,
+        eventName,
+        body,
     );
 }
 

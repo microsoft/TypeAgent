@@ -4,25 +4,50 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
+import readline from "node:readline/promises";
+import {
+    disableTelemetryLocal,
+    enableTelemetryLocal,
+    resolveLocalConfigPath,
+} from "./lib/telemetryLocalYaml.mjs";
 
 const containerName = "typeagent-otel";
 const imageName = "grafana/otel-lgtm:latest";
 const dockerReadyTimeoutMs = 120_000;
 const grafanaReadyTimeoutMs = 120_000;
 
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const workspaceTsRoot = path.resolve(scriptDir, "../..");
+
 const args = new Set(process.argv.slice(2));
 if (args.has("--help") || args.has("-h")) {
-    console.log(`Usage: pnpm run telemetry:grafana [--install | --stop]
+    console.log(`Usage: pnpm run telemetry:grafana [--stop]
 
 Starts Docker Desktop when needed on Windows or macOS, then starts the local
-Grafana LGTM OpenTelemetry stack with loopback-only ports:
-  Grafana:   http://localhost:3000
-  OTLP/gRPC: http://localhost:4317
-  OTLP/HTTP: http://localhost:4318
+Grafana LGTM OpenTelemetry stack:
+  Grafana: http://localhost:3000
+
+The collector ports are assigned dynamically on the loopback interface and
+configured automatically in config.local.yaml (path resolved with the same
+precedence as getKeys):
+  TYPEAGENT_CONFIG_LOCAL > TYPEAGENT_CONFIG_DIR/config.local.yaml >
+  ts/config.local.yaml
+
+Starting sets telemetry.local.enabled to the string "true" and
+telemetry.local.otlpEndpoint to the discovered OTLP/HTTP address, only AFTER
+Grafana reports healthy. This script owns otlpEndpoint: any stale or
+hand-customized value is overwritten on every start, since the assigned
+port can differ from one run to the next. Stopping sets enabled to "false"
+after the container is confirmed stopped (or already not running); other
+local settings (logFile/logRetentionBytes/debugBridge/structuredLogs) are
+left untouched.
+
+TypeAgent reads config.local.yaml at process startup, so RESTART TypeAgent
+after each toggle for the change to take effect.
 
 Options:
-  --install  Install Docker Desktop when it is missing, then start Grafana.
   --stop     Stop the local Grafana LGTM container.
   --help     Show this help.`);
     process.exit(0);
@@ -126,6 +151,33 @@ function installDockerDesktop() {
     }
 }
 
+async function promptToInstallDockerDesktop() {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        throw new Error(
+            "Docker Desktop is not installed. Run this command in an interactive terminal to install it, or install it manually from https://docs.docker.com/desktop/.",
+        );
+    }
+
+    const stdio = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+    try {
+        const answer = await stdio.question(
+            "[telemetry:grafana] Docker Desktop is not installed. Install it now? (y/N) ",
+        );
+        if (answer.trim().toLowerCase() !== "y") {
+            throw new Error(
+                "Docker Desktop is required. Install it from https://docs.docker.com/desktop/, then run this command again.",
+            );
+        }
+    } finally {
+        stdio.close();
+    }
+
+    installDockerDesktop();
+}
+
 function startDockerDesktop() {
     if (process.platform === "win32") {
         const candidates = [
@@ -193,6 +245,24 @@ function getContainerId(all) {
     return result.stdout.trim();
 }
 
+function isLoopbackBinding(entries) {
+    return (
+        Array.isArray(entries) &&
+        entries.length === 1 &&
+        entries[0]?.HostIp === "127.0.0.1"
+    );
+}
+
+function isDynamicLoopbackBinding(entries) {
+    return isLoopbackBinding(entries) && entries[0].HostPort === "";
+}
+
+// `HostConfig.PortBindings` holds the *requested* binding spec and is
+// available whether the container is running or stopped, but for a
+// dynamically-assigned port (empty host port) it never reflects the actual
+// host port Docker chose. It only tells us the port is bound to loopback,
+// which is what we need to decide whether an existing container is
+// compatible with the current (loopback-only) scheme.
 function hasLoopbackBindings() {
     const result = runDocker(
         [
@@ -204,14 +274,43 @@ function hasLoopbackBindings() {
         { capture: true },
     );
     const bindings = JSON.parse(result.stdout);
-    return ["3000/tcp", "4317/tcp", "4318/tcp"].every((port) => {
-        const entries = bindings[port];
-        return (
-            Array.isArray(entries) &&
-            entries.length === 1 &&
-            entries[0]?.HostIp === "127.0.0.1"
+    return (
+        isLoopbackBinding(bindings["3000/tcp"]) &&
+        bindings["3000/tcp"][0].HostPort === "3000" &&
+        ["4317/tcp", "4318/tcp"].every((port) =>
+            isDynamicLoopbackBinding(bindings[port]),
+        )
+    );
+}
+
+// `NetworkSettings.Ports` reflects the *actual* live port assignment and is
+// only populated while the container is running. Docker picks a fresh
+// ephemeral host port for the OTLP receivers on every start, so this must
+// be re-queried each time rather than cached across runs.
+function getRuntimeOtlpPorts() {
+    const result = runDocker(
+        [
+            "inspect",
+            "--format",
+            "{{json .NetworkSettings.Ports}}",
+            containerName,
+        ],
+        { capture: true },
+    );
+    const bindings = JSON.parse(result.stdout);
+    const otlpHttpPort = getLoopbackHostPort(bindings, 4318);
+    const otlpGrpcPort = getLoopbackHostPort(bindings, 4317);
+    if (otlpHttpPort === undefined || otlpGrpcPort === undefined) {
+        throw new Error(
+            "Docker did not report loopback host ports for the OTLP endpoints.",
         );
-    });
+    }
+    return { otlpHttpPort, otlpGrpcPort };
+}
+
+function getLoopbackHostPort(bindings, containerPort) {
+    const entries = bindings[`${containerPort}/tcp`];
+    return isLoopbackBinding(entries) ? entries[0].HostPort : undefined;
 }
 
 async function waitForGrafana() {
@@ -227,29 +326,38 @@ async function waitForGrafana() {
 
 async function stop() {
     if (!isDockerInstalled()) {
-        throw new Error(
-            "Docker CLI was not found. Install Docker Desktop before using this command.",
-        );
+        console.log("[telemetry:grafana] Docker CLI was not found.");
+        toggleTelemetryLocal(false);
+        return;
     }
     if (!isDockerReady()) {
         console.log("[telemetry:grafana] Docker is not running.");
+        // Container is definitely not exporting; safe to flip the sink off.
+        toggleTelemetryLocal(false);
         return;
     }
     if (getContainerId(true) === "") {
         console.log("[telemetry:grafana] Grafana LGTM is not running.");
+        toggleTelemetryLocal(false);
         return;
     }
+    // Only flip the sink off after `docker stop` succeeds. If it fails, we
+    // leave config.local.yaml alone: TypeAgent may still be exporting to a
+    // partially-alive container, and a stale "enabled: false" would be
+    // misleading on the next start attempt.
     runDocker(["stop", containerName]);
+    toggleTelemetryLocal(false);
 }
 
 async function start() {
     if (!isDockerInstalled()) {
-        if (!args.has("--install")) {
+        if (process.platform === "win32" || process.platform === "darwin") {
+            await promptToInstallDockerDesktop();
+        } else {
             throw new Error(
-                "Docker Desktop is not installed. Run `pnpm run telemetry:grafana --install` or install it manually from https://docs.docker.com/desktop/.",
+                "Docker Engine is not installed. Install it using your distribution's supported procedure, then run this command again.",
             );
         }
-        installDockerDesktop();
     }
 
     if (!isDockerReady()) {
@@ -269,11 +377,7 @@ async function start() {
         console.log(
             "[telemetry:grafana] Grafana LGTM is already running at http://localhost:3000",
         );
-        await waitForGrafana();
-        return;
-    }
-
-    if (getContainerId(true) !== "") {
+    } else if (getContainerId(true) !== "") {
         console.log("[telemetry:grafana] Starting the existing container...");
         runDocker(["start", containerName]);
     } else {
@@ -288,28 +392,60 @@ async function start() {
             containerName,
             "-p",
             "127.0.0.1:3000:3000",
+            // Let Docker pick the host port for the OTLP receivers (empty
+            // host port) so they never collide with something else already
+            // listening on 4317/4318. The chosen ports are discovered below
+            // and written into config.local.yaml.
             "-p",
-            "127.0.0.1:4317:4317",
+            "127.0.0.1::4317",
             "-p",
-            "127.0.0.1:4318:4318",
+            "127.0.0.1::4318",
             imageName,
         ]);
     }
 
     await waitForGrafana();
+    // Grafana is healthy: safe to advertise the local sink to TypeAgent.
+    // We intentionally discover ports and toggle AFTER health passes so a
+    // failed startup does not leave the config claiming a working sink is
+    // available. Re-discover the ports even when the container was already
+    // running: Docker may have assigned different ephemeral ports than the
+    // last time this script ran, and this script owns otlpEndpoint, so any
+    // stale/customized value must not survive.
+    const { otlpHttpPort, otlpGrpcPort } = getRuntimeOtlpPorts();
+    const otlpEndpoint = `http://127.0.0.1:${otlpHttpPort}`;
+    toggleTelemetryLocal(true, otlpEndpoint);
     console.log("[telemetry:grafana] Grafana:   http://localhost:3000");
-    console.log("[telemetry:grafana] OTLP/HTTP: http://localhost:4318");
-    console.log("[telemetry:grafana] OTLP/gRPC: http://localhost:4317");
+    console.log(`[telemetry:grafana] OTLP/HTTP: ${otlpEndpoint}`);
+    console.log(
+        `[telemetry:grafana] OTLP/gRPC: http://127.0.0.1:${otlpGrpcPort}`,
+    );
+    console.log(
+        "[telemetry:grafana] Restart TypeAgent so it picks up the new telemetry config.",
+    );
+}
+
+function toggleTelemetryLocal(enable, otlpEndpoint) {
+    const filePath = resolveLocalConfigPath(workspaceTsRoot);
+    const result = enable
+        ? enableTelemetryLocal(filePath, otlpEndpoint)
+        : disableTelemetryLocal(filePath);
+    if (result.changed) {
+        console.log(
+            `[telemetry:grafana] ${enable ? "Enabled" : "Disabled"} telemetry.local in ${result.path}. Restart TypeAgent for the change to take effect.`,
+        );
+    } else {
+        console.log(
+            `[telemetry:grafana] telemetry.local already ${enable ? "enabled" : "disabled"} in ${result.path}; no change.`,
+        );
+    }
 }
 
 try {
     for (const arg of args) {
-        if (arg !== "--install" && arg !== "--stop") {
+        if (arg !== "--stop") {
             throw new Error(`Unknown argument: ${arg}`);
         }
-    }
-    if (args.has("--install") && args.has("--stop")) {
-        throw new Error("--install and --stop cannot be used together.");
     }
     if (args.has("--stop")) {
         await stop();
