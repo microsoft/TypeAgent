@@ -422,7 +422,7 @@ describe("translation bench candidate negative fairness from LLM assessments", (
         );
     });
 
-    it("requires the canonical generated-case path", () => {
+    it("canonicalizes mechanical path aliases onto $.genCases[N].utterance", () => {
         const candidate = fairCandidate("Leave my tabs alone.");
         const issues = checkTranslationBenchCandidateNegativeFairness(
             candidate,
@@ -436,8 +436,7 @@ describe("translation bench candidate negative fairness from LLM assessments", (
                 }),
             ],
         );
-        expect(issues).toHaveLength(1);
-        expect(issues[0]!.path).toBe("$.negativeAssessments");
+        expect(issues).toEqual([]);
     });
 
     it("rejects assessments whose path does not match a negative genCase", () => {
