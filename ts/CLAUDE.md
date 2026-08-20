@@ -100,9 +100,9 @@ since a newer/older Prettier version can produce spurious reformatting diffs.
 
 ### PR-only gates: build and tests passing is not enough
 
-`build-ts.yml` runs four more checks that only fire on pull requests, so they
-are invisible until CI fails. Each compares the files your change touches
-against the base branch. Run all four before calling a change done:
+`build-ts.yml` runs four ratchets that only fire on pull requests, so they are
+invisible until CI fails. Each compares the files your change touches against
+the base branch. Run all four before calling a change done:
 
 ```bash
 npm run code-lint       -- --ratchet --base origin/main   # no new eslint violations
@@ -113,53 +113,16 @@ npm run code-circular   -- --ratchet --base origin/main \
 npm run code-debt       -- --gate    --base origin/main   # no .only / newly skipped tests
 ```
 
-The lint ratchet is the one that bites most often, and `no-explicit-any` is the
-usual reason. A **new file counts entirely as added violations**, so a large new
-module written with `any` fails the gate even though it changed nothing that
-existed before. Prefer `unknown` plus a narrow cast at the point of use, and for
-name-keyed dispatch give the indexed shape a named type instead of `any`.
+The lint ratchet bites most often, usually on `no-explicit-any`. A **new file
+counts entirely as added violations**, so a new module written with `any` fails
+even though it changed nothing that existed before. Prefer `unknown` with a
+narrow cast where the value is actually used.
 
-`--ratchet` compares against `origin/main`, so fetch it first if the local ref
-is stale, and re-run after any reformatting - Prettier can move code across the
-line boundaries these reports cite.
-
-### Files outside `ts/` have no automated gate
-
-`prettier:changed` only formats prettier-supported extensions **under `ts/`**
-(see `ts/tools/scripts/prettier-changed.mjs`). Everything else in the repo -
-most importantly the Kotlin under `android/` - is checked by nothing: no
-prettier, no ktlint, no detekt, and no CI job builds or lints it.
-
-So when a change touches `android/` (or any other non-`ts/` source), the
-formatting and dead-code checks that CI would normally catch have to be done by
-hand. Build it, and read the final diff of every file you touched:
-
-```bash
-cd android/samples/mobile-2
-./gradlew assembleDebug        # gradlew.bat on Windows
-./gradlew testDebugUnitTest
-```
-
-Kotlin style to match the surrounding files: 4-space indent, a KDoc block on its
-own lines above the declaration (never `/** ... */ fun foo()` on one line), and
-the same copyright expectations as the rest of the repo.
-
-### Don't add members nothing calls
-
-Every function, property, constant, and parameter you add must have a caller in
-the same change. This applies hardest to code the compiler cannot help with: an
-unused _local_ is a compiler warning, but an unused public method on a class is
-just API surface, so nothing will ever tell you it is dead.
-
-Watch for the failure mode where a class gets filled out to its "expected"
-shape - a getter paired with a setter nobody calls, a stored preference nothing
-writes, an option nobody passes. If a member exists only because the class looks
-incomplete without it, delete it. Speculative hooks for future features are not
-worth the maintenance, and a KDoc describing a feature the app does not have is
-worse than no code at all.
-
-Before opening a PR, grep each newly added public name for a second reference.
-Zero hits means delete it, or wire it up in this change.
+Nothing outside `ts/` is checked at all — not by these ratchets, not by
+`prettier:changed`, and no CI job builds the Kotlin under `android/`. Verify
+those files by hand (`cd android/samples/mobile-2 && ./gradlew assembleDebug
+testDebugUnitTest`) and read the final diff, since formatting mistakes there
+reach `main` unchallenged.
 
 ## Architecture
 
@@ -289,11 +252,10 @@ files Prettier does not cover (anything outside `ts/`, notably Kotlin under
   distinguish a temporary **NYI (TODO)** from a fundamental limitation.
 - **Clear signatures.** Order parameters so common callers rely on defaults, make
   optional callbacks optional, and drop dead/unused parameters instead of threading
-  constants through.
-- **No members without callers.** Flag any added function, property, or constant
-  with no reference outside its own definition, and say so plainly rather than
-  filing it as style. An unused public member draws no compiler warning, so
-  review is the only thing that catches it.
+  constants through. This extends to whole members: an added function or property
+  with no caller is dead code unless it is deliberate public API of a published
+  package (`agentSdk` and friends). Nothing warns about an unused public member,
+  so review is the only thing that catches it.
 - **Clean up as you go.** Remove stale comments and tests that reference relocated
   or deleted code.
 
