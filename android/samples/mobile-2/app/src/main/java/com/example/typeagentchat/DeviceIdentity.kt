@@ -30,13 +30,9 @@ class StoredDeviceIdentity(context: Context) : DeviceIdentity {
 
     override val instanceId: String = loadOrCreateInstanceId()
 
+    /** The device model, which is what the user recognizes in a device list. */
     override val displayName: String
-        get() = prefs.getString(KEY_DISPLAY_NAME, null)?.takeIf { it.isNotBlank() }
-            ?: defaultDisplayName()
-
-    /** Lets the user rename the device; the name is visible to the conversation. */    fun setDisplayName(name: String) {
-        prefs.edit().putString(KEY_DISPLAY_NAME, name.trim()).apply()
-    }
+        get() = Build.MODEL?.takeIf { it.isNotBlank() } ?: "Android device"
 
     private fun loadOrCreateInstanceId(): String {
         val existing = prefs.getString(KEY_INSTANCE_ID, null)
@@ -48,12 +44,8 @@ class StoredDeviceIdentity(context: Context) : DeviceIdentity {
         return generated
     }
 
-    private fun defaultDisplayName(): String =
-        Build.MODEL?.takeIf { it.isNotBlank() } ?: "Android device"
-
     private companion object {
         const val PREFS_NAME = "typeagent_device_identity"
         const val KEY_INSTANCE_ID = "instance_id"
-        const val KEY_DISPLAY_NAME = "display_name"
     }
 }

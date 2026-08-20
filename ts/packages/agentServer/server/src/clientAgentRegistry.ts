@@ -541,11 +541,28 @@ export async function joinClientAgentGroup(
         return false;
     }
 
-    // Sharing is opt-in, and the group's creator decides. A client that opts in
-    // cannot join a group whose creator did not, so no client can widen another
-    // client's agent. Replacing an instance already in the group skips this,
-    // since that path fails outright today and so cannot regress anything.
-    if (!group.multiInstance) {
+    // A connection hosts one instance per agent name: both would sit on the
+    // single agent:<name> channel, so an instance already on this connection
+    // is the same client coming back under a new id, and its proxy died when
+    // the new registration claimed that channel. Retire it and hand its slot
+    // over. Leaving it would strand it past the connection's disconnect, and
+    // requester routing scans in insertion order, so it would be picked ahead
+    // of the live one. This is a replacement rather than a second device, so
+    // it does not need the sharing opt-in below.
+    const superseded = findInstanceIdForConnection(
+        group,
+        registration.connectionId,
+    );
+    if (superseded !== undefined) {
+        group.instances.delete(superseded);
+        getInternals(group).contexts.delete(superseded);
+        debugGroup(
+            `${group.name}: retired instance ${superseded}; connection ${registration.connectionId} re-registered as ${registration.instanceId}`,
+        );
+    } else if (!group.multiInstance) {
+        // Sharing is opt-in, and the group's creator decides. A client that
+        // opts in cannot join a group whose creator did not, so no client can
+        // widen another client's agent.
         debugGroup(
             `${group.name}: rejected instance ${registration.instanceId}; the registration did not opt in to sharing`,
         );
@@ -565,7 +582,7 @@ export async function joinClientAgentGroup(
         `${group.name}: added instance ${instance.instanceId} (${instance.displayName}) on connection ${instance.connectionId}, instances: ${group.instances.size}`,
     );
     await initializeInstance(group, instance);
-    return true;
+    return superseded === undefined;
 }
 
 /** The instance this connection owns in the group, if any. */

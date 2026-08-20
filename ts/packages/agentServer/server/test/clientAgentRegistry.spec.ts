@@ -307,6 +307,71 @@ describe("clientAgentRegistry registration", () => {
         await execute(registry, "conn-1b");
         expect(reconnected.executed).toHaveLength(1);
     });
+
+    test("a new instanceId on the same connection takes over that connection's slot", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        const other = makeDevice();
+        const stale = makeDevice();
+        const live = makeDevice();
+
+        await register(registry, host, {
+            instanceId: "other",
+            connectionId: "conn-other",
+            appAgent: other.appAgent,
+        });
+        await register(registry, host, {
+            instanceId: "old",
+            connectionId: "conn-1",
+            appAgent: stale.appAgent,
+        });
+        // Same socket, new identity: one client, not a third device.
+        await register(registry, host, {
+            instanceId: "new",
+            connectionId: "conn-1",
+            appAgent: live.appAgent,
+        });
+
+        const group = registry.groups.get(AGENT_NAME)!;
+        expect([...group.instances.keys()]).toEqual(["other", "new"]);
+        // Handing the slot over never empties the group, so the dynamic agent
+        // is not torn down and rebuilt.
+        expect(host.added).toEqual([AGENT_NAME]);
+        expect(host.removed).toEqual([]);
+
+        // Routing scans in insertion order, so a surviving stale instance
+        // would have been picked ahead of the live one.
+        await execute(registry, "conn-1");
+        expect(live.executed).toHaveLength(1);
+        expect(stale.executed).toHaveLength(0);
+    });
+
+    test("taking over a slot does not need the sharing opt-in", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        const live = makeDevice();
+
+        await register(registry, host, {
+            instanceId: "old",
+            connectionId: "conn-1",
+            appAgent: makeDevice().appAgent,
+            multiInstance: false,
+        });
+        // Replacing itself is not a second device, so the single-host rule
+        // must not reject it.
+        await register(registry, host, {
+            instanceId: "new",
+            connectionId: "conn-1",
+            appAgent: live.appAgent,
+            multiInstance: false,
+        });
+
+        expect([...registry.groups.get(AGENT_NAME)!.instances.keys()]).toEqual([
+            "new",
+        ]);
+        await execute(registry, "conn-1");
+        expect(live.executed).toHaveLength(1);
+    });
 });
 
 describe("clientAgentRegistry teardown", () => {

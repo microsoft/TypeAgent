@@ -268,14 +268,17 @@ export type ConversationManager = {
     ): Promise<void>;
     /**
      * Remove one instance added via {@link addClientAgent}. The dynamic agent
-     * itself is removed only when the last instance leaves.
+     * itself is removed only when the last instance leaves. Returns true if
+     * the instance was removed, false if it was not there or the owner check
+     * refused, so the caller knows whether its own bookkeeping still describes
+     * a live instance.
      */
     removeClientAgent(
         conversationId: string,
         name: string,
         instanceId: string,
         options?: RemoveClientAgentOptions,
-    ): Promise<void>;
+    ): Promise<boolean>;
     /**
      * The instance a connection owns for `name`, if any. Lets a caller resolve
      * an unregister to its own instance instead of another client's.
@@ -1253,10 +1256,10 @@ export async function createConversationManager(
             name: string,
             instanceId: string,
             options?: RemoveClientAgentOptions,
-        ): Promise<void> {
+        ): Promise<boolean> {
             const record = conversations.get(conversationId);
             if (record === undefined) {
-                return;
+                return false;
             }
             // A conversation whose dispatcher is already gone has nothing to
             // unregister, but the group bookkeeping still has to happen.
@@ -1274,6 +1277,7 @@ export async function createConversationManager(
                     }`,
                 );
             }
+            return removed;
         },
 
         async listConversations(name?: string): Promise<ConversationInfo[]> {

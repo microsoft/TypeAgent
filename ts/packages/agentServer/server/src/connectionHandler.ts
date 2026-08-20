@@ -628,28 +628,38 @@ export function createAgentServerConnectionHandler(
                 const { name } = param;
                 const connectionId =
                     joinedConversations.get(conversationId)!.connectionId;
+                const tracked = clientAgents.get(conversationId)?.get(name);
                 // Fall back to the instance this connection registered. The
                 // ownership check below makes an instanceId naming another
                 // device's instance inert, so a client can never unregister
                 // someone else's agent.
                 const instanceId =
                     param.instanceId ??
-                    clientAgents.get(conversationId)?.get(name) ??
+                    tracked ??
                     conversationManager.findClientAgentInstance(
                         conversationId,
                         name,
                         connectionId,
                     );
-                if (instanceId !== undefined) {
-                    await conversationManager.removeClientAgent(
+                const removed =
+                    instanceId !== undefined &&
+                    (await conversationManager.removeClientAgent(
                         conversationId,
                         name,
                         instanceId,
                         { ownerConnectionId: connectionId },
-                    );
+                    ));
+                // The channel and the local entry describe this connection's
+                // one instance, so they go together, and only once that
+                // instance is gone. A call naming another device's instance
+                // removes nothing: dropping the channel would kill our own
+                // live proxy, and dropping the entry would strand our instance
+                // past disconnect. With nothing tracked there is nothing to
+                // protect, so any dangling channel can go.
+                if (removed || tracked === undefined) {
+                    channelProvider.deleteChannel(`agent:${name}`);
+                    clientAgents.get(conversationId)?.delete(name);
                 }
-                channelProvider.deleteChannel(`agent:${name}`);
-                clientAgents.get(conversationId)?.delete(name);
             },
         };
 

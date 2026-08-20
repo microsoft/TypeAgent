@@ -125,7 +125,7 @@ function createTestServer(): TestServer {
             instanceId: string,
             options?: any,
         ) {
-            await registry.remove(host, name, instanceId, options);
+            return registry.remove(host, name, instanceId, options);
         },
     } as unknown as ConversationManager;
 
@@ -291,5 +291,113 @@ describe("client agent multi-instance integration", () => {
 
         await executeVia(server, undefined);
         expect(executed).toHaveLength(1);
+    });
+
+    // A connection hosts one instance per agent name. Re-registering under a
+    // new instanceId must retire the old one: it shares the single
+    // agent:<name> channel, so its proxy is already dead, and routing by
+    // requester connection would pick it ahead of the live one.
+    test("re-registering under a new instanceId retires the old instance", async () => {
+        const server = createTestServer();
+
+        const stale: TypeAgentAction[] = [];
+        const client = server.connect();
+        await client.join();
+        await client.connection.registerClientAgent(
+            AGENT_NAME,
+            manifest,
+            makeAgent(stale),
+            CONVERSATION_ID,
+            {
+                instanceId: "device-old",
+                displayName: "Pixel 8",
+                multiInstance: true,
+            },
+        );
+
+        const live: TypeAgentAction[] = [];
+        await client.connection.registerClientAgent(
+            AGENT_NAME,
+            manifest,
+            makeAgent(live),
+            CONVERSATION_ID,
+            {
+                instanceId: "device-new",
+                displayName: "Pixel 8",
+                multiInstance: true,
+            },
+        );
+
+        const group = server.registry.groups.get(AGENT_NAME)!;
+        expect([...group.instances.keys()]).toEqual(["device-new"]);
+        // The slot was handed over, not torn down and rebuilt.
+        expect(server.host.added).toEqual([AGENT_NAME]);
+        expect(server.host.removed).toEqual([]);
+
+        // The requester routes to the live proxy, not the retired one.
+        await executeVia(server, client.connectionId);
+        expect(live).toHaveLength(1);
+        expect(stale).toHaveLength(0);
+
+        // Disconnect still tears everything down: no instance was stranded.
+        client.disconnect();
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(server.registry.groups.size).toBe(0);
+        expect(server.host.removed).toEqual([AGENT_NAME]);
+    });
+
+    // Unregister only ever removes an instance the caller owns. Naming someone
+    // else's must leave the caller's own bookkeeping alone, or the caller's
+    // instance outlives its connection and lingers as an unreachable device.
+    test("unregistering another device's instance does not strand the caller's", async () => {
+        const server = createTestServer();
+
+        const executedA: TypeAgentAction[] = [];
+        const clientA = server.connect();
+        await clientA.join();
+        await clientA.connection.registerClientAgent(
+            AGENT_NAME,
+            manifest,
+            makeAgent(executedA),
+            CONVERSATION_ID,
+            {
+                instanceId: "device-a",
+                displayName: "Pixel 8",
+                multiInstance: true,
+            },
+        );
+
+        const clientB = server.connect();
+        await clientB.join();
+        await clientB.connection.registerClientAgent(
+            AGENT_NAME,
+            manifest,
+            makeAgent([]),
+            CONVERSATION_ID,
+            {
+                instanceId: "device-b",
+                displayName: "Galaxy Tab",
+                multiInstance: true,
+            },
+        );
+
+        // B names A's instance. The owner check makes the call inert.
+        await clientB.connection.unregisterClientAgent(
+            AGENT_NAME,
+            CONVERSATION_ID,
+            "device-a",
+        );
+        expect(server.registry.groups.get(AGENT_NAME)!.instances.size).toBe(2);
+
+        // B's own instance is still tracked, so B's disconnect retires it and
+        // leaves A the only device.
+        clientB.disconnect();
+        await new Promise((resolve) => setImmediate(resolve));
+        expect([
+            ...server.registry.groups.get(AGENT_NAME)!.instances.keys(),
+        ]).toEqual(["device-a"]);
+
+        await executeVia(server, clientA.connectionId);
+        expect(executedA).toHaveLength(1);
     });
 });

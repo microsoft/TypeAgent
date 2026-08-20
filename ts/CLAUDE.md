@@ -98,6 +98,44 @@ Do not rely on a bare `npx prettier` for validation — always use the repo's pi
 (`node_modules/.bin/prettier`, `pnpm exec prettier`, or `npx prettier@<version from package.json>`),
 since a newer/older Prettier version can produce spurious reformatting diffs.
 
+### Files outside `ts/` have no automated gate
+
+`prettier:changed` only formats prettier-supported extensions **under `ts/`**
+(see `ts/tools/scripts/prettier-changed.mjs`). Everything else in the repo -
+most importantly the Kotlin under `android/` - is checked by nothing: no
+prettier, no ktlint, no detekt, and no CI job builds or lints it.
+
+So when a change touches `android/` (or any other non-`ts/` source), the
+formatting and dead-code checks that CI would normally catch have to be done by
+hand. Build it, and read the final diff of every file you touched:
+
+```bash
+cd android/samples/mobile-2
+./gradlew assembleDebug        # gradlew.bat on Windows
+./gradlew testDebugUnitTest
+```
+
+Kotlin style to match the surrounding files: 4-space indent, a KDoc block on its
+own lines above the declaration (never `/** ... */ fun foo()` on one line), and
+the same copyright expectations as the rest of the repo.
+
+### Don't add members nothing calls
+
+Every function, property, constant, and parameter you add must have a caller in
+the same change. This applies hardest to code the compiler cannot help with: an
+unused _local_ is a compiler warning, but an unused public method on a class is
+just API surface, so nothing will ever tell you it is dead.
+
+Watch for the failure mode where a class gets filled out to its "expected"
+shape - a getter paired with a setter nobody calls, a stored preference nothing
+writes, an option nobody passes. If a member exists only because the class looks
+incomplete without it, delete it. Speculative hooks for future features are not
+worth the maintenance, and a KDoc describing a feature the app does not have is
+worse than no code at all.
+
+Before opening a PR, grep each newly added public name for a second reference.
+Zero hits means delete it, or wire it up in this change.
+
 ## Architecture
 
 TypeAgent is a **personal agent** that routes natural language requests to specialized **application agents** (plugins). The core flow is:
@@ -207,7 +245,9 @@ Use these criteria both when **writing** changes and when **reviewing** code (yo
 own or a diff you are asked to review). Report only high-confidence, substantive
 issues — prefer a short list of real problems over an exhaustive nitpick list. For
 each issue, name the file/line, explain _why_ it matters, and suggest a concrete
-fix. Do not comment on formatting that Prettier already enforces.
+fix. Do not comment on formatting that Prettier already enforces. Formatting in
+files Prettier does not cover (anything outside `ts/`, notably Kotlin under
+`android/`) is fair game — nothing else will catch it.
 
 ### Readability & maintainability
 
@@ -225,6 +265,10 @@ fix. Do not comment on formatting that Prettier already enforces.
 - **Clear signatures.** Order parameters so common callers rely on defaults, make
   optional callbacks optional, and drop dead/unused parameters instead of threading
   constants through.
+- **No members without callers.** Flag any added function, property, or constant
+  with no reference outside its own definition, and say so plainly rather than
+  filing it as style. An unused public member draws no compiler warning, so
+  review is the only thing that catches it.
 - **Clean up as you go.** Remove stale comments and tests that reference relocated
   or deleted code.
 
