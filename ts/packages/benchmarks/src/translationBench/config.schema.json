@@ -76,6 +76,11 @@
           "type": "number",
           "description": "How many eval models run in parallel."
         },
+        "caseOrder": {
+          "type": "string",
+          "enum": ["any", "strict"],
+          "description": "Optional action-order filter applied before maxCases."
+        },
         "maxCases": {
           "type": ["number", "null"],
           "description": "null = all rows."

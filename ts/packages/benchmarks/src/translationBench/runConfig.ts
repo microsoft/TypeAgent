@@ -40,6 +40,7 @@ export interface EvalConfig {
     modelConcurrency?: number;
     maxCases?: number | null;
     headroom?: number;
+    caseOrder?: "any" | "strict";
 }
 
 export interface BatchConfig {
@@ -72,6 +73,7 @@ export interface ResolvedRunConfig {
     concurrencyByModel: Record<string, number>;
     modelConcurrency: number;
     maxCases: number | undefined;
+    caseOrder: "any" | "strict" | undefined;
     tpmLimits: TpmLimits;
 }
 
@@ -244,6 +246,7 @@ export function resolveRunConfig(
             evalCfg.modelConcurrency ?? evalModels.length,
         ),
         maxCases: optionalMaxCases(evalCfg.maxCases),
+        caseOrder: evalCfg.caseOrder,
         tpmLimits: tpmLimitsFromModels(models),
     };
 }
