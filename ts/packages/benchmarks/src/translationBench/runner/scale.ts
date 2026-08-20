@@ -59,7 +59,9 @@ export interface TranslationBenchMergeResult<T = unknown> {
 }
 
 export type TranslationBenchTranslationCheckpointRow =
-    TranslationBenchCheckpointRow<TranslationBenchRow> & { phase: "translation" };
+    TranslationBenchCheckpointRow<TranslationBenchRow> & {
+        phase: "translation";
+    };
 
 export type TranslationBenchExplainerCheckpointRow =
     TranslationBenchCheckpointRow<TranslationBenchExplainerCaseResult> & {
@@ -409,6 +411,26 @@ function fsyncPath(filePath: string): void {
     }
 }
 
+function repairTranslationBenchCheckpointTail(filePath: string): void {
+    const content = fs.readFileSync(filePath);
+    if (content.length === 0 || content[content.length - 1] === 0x0a) return;
+
+    const lastNewline = content.lastIndexOf(0x0a);
+    if (lastNewline < 0) {
+        throw new Error(
+            `Translation bench checkpoint '${filePath}' has no complete line`,
+        );
+    }
+    const tail = content.subarray(lastNewline + 1).toString("utf8");
+    try {
+        JSON.parse(tail);
+        fs.appendFileSync(filePath, "\n");
+    } catch {
+        fs.truncateSync(filePath, lastNewline + 1);
+    }
+    fsyncPath(filePath);
+}
+
 export function appendTranslationBenchCheckpointRows<T = unknown>(
     filePath: string,
     checkpointHeader: TranslationBenchCheckpointHeader,
@@ -464,6 +486,7 @@ export function appendTranslationBenchCheckpointRows<T = unknown>(
         }
     }
     if (rows.length > 0) {
+        repairTranslationBenchCheckpointTail(filePath);
         // One append of complete newline-terminated records, then fsync so a
         // crash cannot lose accepted trajectory rows already acknowledged.
         fs.appendFileSync(
@@ -505,7 +528,9 @@ function requireRecord(
 }
 
 function validateExecutionCheckpointRow(
-    row: TranslationBenchCheckpointRow<TranslationBenchRow | TranslationBenchExplainerCaseResult>,
+    row: TranslationBenchCheckpointRow<
+        TranslationBenchRow | TranslationBenchExplainerCaseResult
+    >,
 ): asserts row is TranslationBenchExecutionCheckpointRow {
     requireRecord(row.value, "Translation bench checkpoint row value");
     const value = row.value;
@@ -537,7 +562,9 @@ function validateExecutionCheckpointRow(
         }
         return;
     }
-    throw new Error(`Unsupported translation bench checkpoint phase '${row.phase}'`);
+    throw new Error(
+        `Unsupported translation bench checkpoint phase '${row.phase}'`,
+    );
 }
 
 export function createTranslationBenchTranslationCheckpointRow(
@@ -691,7 +718,9 @@ export function mergeTranslationBenchCheckpoints<T = unknown>(
             validateRow(row);
             const key = translationBenchResumeKey(row);
             if (localKeys.has(key)) {
-                throw new Error(`Duplicate translation bench resume key '${key}'`);
+                throw new Error(
+                    `Duplicate translation bench resume key '${key}'`,
+                );
             }
             localKeys.add(key);
         }
@@ -707,7 +736,9 @@ export function mergeTranslationBenchCheckpoints<T = unknown>(
             );
         }
         if (!settingsEqual(current.settings, first.settings)) {
-            throw new Error("Translation bench checkpoint settings are incompatible");
+            throw new Error(
+                "Translation bench checkpoint settings are incompatible",
+            );
         }
         if (current.shardCount !== first.shardCount) {
             throw new Error(
@@ -737,7 +768,9 @@ export function mergeTranslationBenchCheckpoints<T = unknown>(
         for (const row of checkpoint.rows) {
             const key = translationBenchResumeKey(row);
             if (resumeKeys.has(key)) {
-                throw new Error(`Duplicate translation bench resume key '${key}'`);
+                throw new Error(
+                    `Duplicate translation bench resume key '${key}'`,
+                );
             }
             resumeKeys.add(key);
             rows.push(row);
@@ -749,7 +782,10 @@ export function mergeTranslationBenchCheckpoints<T = unknown>(
         }
     }
     rows.sort((left, right) =>
-        compareText(translationBenchResumeKey(left), translationBenchResumeKey(right)),
+        compareText(
+            translationBenchResumeKey(left),
+            translationBenchResumeKey(right),
+        ),
     );
 
     return {
@@ -775,7 +811,10 @@ export function getTranslationBenchCatalogCensus(
     const schemaNames = new Set<string>();
     const actionKeys = new Set<string>();
     const normalizedSchemas = schemas.map((schema) => {
-        requireNonEmpty(schema?.schemaName, "Translation bench catalog schema name");
+        requireNonEmpty(
+            schema?.schemaName,
+            "Translation bench catalog schema name",
+        );
         if (schemaNames.has(schema.schemaName)) {
             throw new Error(
                 `Duplicate translation bench catalog schema '${schema.schemaName}'`,

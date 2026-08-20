@@ -117,6 +117,25 @@ describe("translationBench scale checkpoint", () => {
             expect(translationBenchResumeKey(loaded.rows[0]!)).toContain(
                 "case-1",
             );
+
+            const second = createTranslationBenchTranslationCheckpointRow(
+                sampleRow("case-2"),
+            );
+            appendTranslationBenchCheckpointRows(
+                filePath,
+                header,
+                [second],
+                loaded,
+            );
+            const resumed =
+                readTranslationBenchCheckpoint<TranslationBenchRow>(filePath);
+            expect(resumed.rows.map((item) => item.value.caseId)).toEqual([
+                "case-1",
+                "case-2",
+            ]);
+            expect(fs.readFileSync(filePath, "utf8")).not.toContain(
+                '{"phase":"translation","model":"m"',
+            );
         } finally {
             fs.rmSync(dir, { recursive: true, force: true });
         }
