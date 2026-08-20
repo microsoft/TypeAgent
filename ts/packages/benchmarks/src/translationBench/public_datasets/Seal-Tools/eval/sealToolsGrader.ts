@@ -3,6 +3,7 @@
 
 import type { TranslationBenchRow } from "../../../runner/runner.js";
 import type { SealToolsGoldAction } from "../toTypeAgentSchema.js";
+import { isPythonNumber, toPythonNumberString } from "../pythonLiteral.js";
 
 export interface SealToolsMetric {
     precision: number | undefined;
@@ -29,10 +30,12 @@ export interface SealToolsOfficialScore {
 type SealToolsScoredRow = Pick<
     TranslationBenchRow,
     "caseId" | "chosenActions" | "error"
->;
+> &
+    Partial<Pick<TranslationBenchRow, "rawChosenActions">>;
 
 export interface SealToolsScoreOptions {
     ignoreStringCase?: boolean;
+    rawResponsesByCase?: ReadonlyMap<string, readonly string[]>;
 }
 
 function metric(
@@ -53,6 +56,7 @@ function metric(
 }
 
 function pythonString(value: unknown): string {
+    if (isPythonNumber(value)) return value.__pythonNumber;
     if (typeof value === "string") return value;
     if (value === null) return "None";
     if (value === true) return "True";
@@ -81,6 +85,7 @@ function pythonRepr(value: unknown): string {
 }
 
 function foldStringCase(value: unknown): unknown {
+    if (isPythonNumber(value)) return value;
     if (typeof value === "string") return value.toLocaleLowerCase("en-US");
     if (Array.isArray(value)) return value.map(foldStringCase);
     if (typeof value === "object" && value !== null) {
@@ -98,21 +103,151 @@ function comparableString(value: unknown, ignoreStringCase: boolean): string {
     return pythonString(ignoreStringCase ? foldStringCase(value) : value);
 }
 
-function toOfficialParameterValue(
-    value: unknown,
-    key: string,
-    gold: SealToolsGoldAction,
-    allGold: readonly SealToolsGoldAction[],
-): unknown {
-    if (typeof value !== "string") return value;
-    const match = /^\$\{step(\d+)\.result\}$/.exec(value);
-    if (match === null) return value;
-    const expected = gold.parameters[key];
-    const producer = allGold[Number(match[1])];
-    return typeof expected === "string" &&
-        producer?.responses.includes(expected)
-        ? expected
-        : value;
+function parseJsonWithNumberLexemes(text: string): unknown {
+    // Accept TypeAgent's object envelope and Seal's top-level action array.
+    // Taking the first opener through its matching final delimiter also
+    // accepts markdown-fenced JSON, like both evaluation harnesses do.
+    const objectStart = text.indexOf("{");
+    const arrayStart = text.indexOf("[");
+    const useArray =
+        arrayStart >= 0 && (objectStart < 0 || arrayStart < objectStart);
+    const start = useArray ? arrayStart : objectStart;
+    const end = useArray ? text.lastIndexOf("]") : text.lastIndexOf("}");
+    if (start < 0 || end <= start) {
+        throw new Error("Response does not contain a JSON object");
+    }
+    const jsonText = text.slice(start, end + 1);
+    return (
+        JSON.parse as unknown as (
+            text: string,
+            reviver: (
+                key: string,
+                value: unknown,
+                context?: { source?: string },
+            ) => unknown,
+        ) => unknown
+    )(jsonText, (_key, value, context) =>
+        typeof value === "number" && context?.source
+            ? { __pythonNumber: toPythonNumberString(context.source) }
+            : value,
+    );
+}
+
+interface RawActionCandidates {
+    actions: Record<string, unknown>[];
+    finalizedNames: string[];
+}
+
+function collectRawActions(value: unknown, result: RawActionCandidates): void {
+    if (Array.isArray(value)) {
+        for (const item of value) collectRawActions(item, result);
+        return;
+    }
+    if (typeof value !== "object" || value === null || isPythonNumber(value)) {
+        return;
+    }
+    const record = value as Record<string, unknown>;
+    if (record.actionName === "multiple") {
+        const parameters = parameterRecord(record.parameters);
+        const requests = parameters.requests;
+        if (Array.isArray(requests)) {
+            for (const request of requests) {
+                const entry = parameterRecord(request);
+                const action = parameterRecord(entry.action);
+                if (typeof action.actionName === "string") {
+                    result.actions.push(action);
+                    result.finalizedNames.push(
+                        "pendingResultEntityId" in entry
+                            ? "pendingRequestAction"
+                            : action.actionName,
+                    );
+                } else if (typeof entry.actionName === "string") {
+                    const flattenedAction = {
+                        actionName: entry.actionName,
+                        ...(Object.prototype.hasOwnProperty.call(
+                            entry,
+                            "parameters",
+                        )
+                            ? { parameters: entry.parameters }
+                            : {}),
+                    };
+                    result.actions.push(flattenedAction);
+                    result.finalizedNames.push(entry.actionName);
+                } else if ("pendingResultEntityId" in entry) {
+                    // The dispatcher finalizes an actionless dependency as a
+                    // pendingRequestAction, but Seal does not score it as a
+                    // provider tool prediction.
+                    result.finalizedNames.push("pendingRequestAction");
+                }
+            }
+        }
+        const pendingRequests = parameters.pendingRequests;
+        if (Array.isArray(pendingRequests)) {
+            result.finalizedNames.push(
+                ...pendingRequests.map(() => "pendingRequestAction"),
+            );
+        }
+        return;
+    }
+    if (typeof record.actionName === "string") {
+        result.actions.push(record);
+        result.finalizedNames.push(record.actionName);
+        return;
+    }
+    for (const item of Object.values(record)) collectRawActions(item, result);
+}
+
+function predictedActions(
+    row: SealToolsScoredRow,
+): TranslationBenchRow["chosenActions"] {
+    return row.rawChosenActions ?? row.chosenActions;
+}
+
+export function restoreSealToolsRawActions(
+    row: SealToolsScoredRow,
+    responses: readonly string[] | undefined,
+): TranslationBenchRow["chosenActions"] | undefined {
+    if (responses === undefined) return undefined;
+    const predicted = predictedActions(row);
+    // TypeChat repair and runner retries append calls in order. Accept only a
+    // single response whose complete action list matches the accepted result.
+    for (let i = responses.length - 1; i >= 0; i--) {
+        const raw: RawActionCandidates = { actions: [], finalizedNames: [] };
+        try {
+            collectRawActions(parseJsonWithNumberLexemes(responses[i]!), raw);
+        } catch {
+            continue;
+        }
+        if (row.error !== undefined && raw.actions.length > 0) {
+            return raw.actions.map((action) => ({
+                schemaName: "seal",
+                actionName: action.actionName as string,
+                ...(Object.prototype.hasOwnProperty.call(action, "parameters")
+                    ? { parameters: action.parameters as never }
+                    : {}),
+            }));
+        }
+        if (raw.finalizedNames.length !== predicted.length) continue;
+        const remaining = [...raw.finalizedNames];
+        const complete = predicted.every((action) => {
+            const index = remaining.findIndex(
+                (name) => name === action.actionName,
+            );
+            if (index < 0) return false;
+            remaining.splice(index, 1);
+            return true;
+        });
+        if (complete && remaining.length === 0) {
+            return raw.actions.map((action) => ({
+                schemaName: "seal",
+                actionName: action.actionName as string,
+                ...(Object.prototype.hasOwnProperty.call(action, "parameters")
+                    ? { parameters: action.parameters as never }
+                    : {}),
+            }));
+        }
+    }
+    return undefined;
 }
 
 export function scoreSealToolsOfficial(
@@ -135,9 +270,23 @@ export function scoreSealToolsOfficial(
         for (const action of gold) {
             goldParameters += Object.keys(action.parameters).length;
         }
-        if (row.error !== undefined) continue;
+        const predictions =
+            options.rawResponsesByCase === undefined
+                ? row.error === undefined
+                    ? predictedActions(row)
+                    : undefined
+                : restoreSealToolsRawActions(
+                      row,
+                      options.rawResponsesByCase.get(row.caseId),
+                  );
+        if (predictions === undefined) {
+            if (row.error !== undefined) continue;
+            throw new Error(
+                `Successful case '${row.caseId}' has no parseable complete raw response`,
+            );
+        }
         formatted++;
-        for (const predicted of row.chosenActions) {
+        for (const predicted of predictions) {
             predictedTools++;
             const parameters = parameterRecord(predicted.parameters);
             predictedParameters += Object.keys(parameters).length;
@@ -156,15 +305,7 @@ export function scoreSealToolsOfficial(
                 );
                 if (
                     matchedKey !== undefined &&
-                    comparableString(
-                        toOfficialParameterValue(
-                            value,
-                            matchedKey,
-                            matchedGold,
-                            gold,
-                        ),
-                        ignoreStringCase,
-                    ) ===
+                    comparableString(value, ignoreStringCase) ===
                         comparableString(
                             matchedGold.parameters[matchedKey],
                             ignoreStringCase,

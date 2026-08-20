@@ -75,7 +75,7 @@ it("preserves official duplicate matching and zero-score omission", () => {
     });
 });
 
-it("maps TypeAgent result references back to official API_call labels", () => {
+it("does not use gold answers to resolve TypeAgent result references", () => {
     const rows = [
         {
             caseId: "nested",
@@ -123,12 +123,66 @@ it("maps TypeAgent result references back to official API_call labels", () => {
         { ignoreStringCase: true },
     );
 
-    expect(score.parameter).toEqual({ precision: 1, recall: 1, f1: 1 });
-    expect(caseInsensitiveScore.parameter).toEqual({
-        precision: 1,
-        recall: 1,
-        f1: 1,
+    expect(score.parameter).toEqual({
+        precision: undefined,
+        recall: undefined,
+        f1: undefined,
     });
+    expect(caseInsensitiveScore.parameter).toEqual({
+        precision: undefined,
+        recall: undefined,
+        f1: undefined,
+    });
+});
+
+it("preserves Python numeric types from the raw model response", () => {
+    const rows = [
+        {
+            caseId: "case",
+            chosenActions: [
+                {
+                    schemaName: "seal",
+                    actionName: "transfer",
+                    parameters: { amount: 50000 },
+                },
+            ],
+        },
+    ];
+    const gold = new Map([
+        [
+            "case",
+            [
+                {
+                    api: "transfer",
+                    parameters: { amount: { __pythonNumber: "50000.0" } },
+                    responses: [],
+                },
+            ],
+        ],
+    ]);
+
+    const integer = scoreSealToolsOfficial(rows, gold, {
+        rawResponsesByCase: new Map([
+            [
+                "case",
+                ['{"actionName":"transfer","parameters":{"amount":50000}}'],
+            ],
+        ]),
+    });
+    const float = scoreSealToolsOfficial(rows, gold, {
+        rawResponsesByCase: new Map([
+            [
+                "case",
+                [
+                    '{"actionName":"transfer","parameters":{"amount":50000}}',
+                    '```json\n{"actionName":"transfer","parameters":{"amount":50000.0}}\n```',
+                ],
+            ],
+        ]),
+    });
+
+    expect(integer.parameter.f1).toBeUndefined();
+    expect(float.parameter).toEqual({ precision: 1, recall: 1, f1: 1 });
 });
 
 it("counts parameters only when the prediction value is an object", () => {
@@ -249,4 +303,107 @@ it("ignores case across API names, parameter names, and nested string values", (
 
     expect(score.tool).toEqual({ precision: 1, recall: 1, f1: 1 });
     expect(score.parameter).toEqual({ precision: 1, recall: 1, f1: 1 });
+});
+
+it("scores raw predictions and requires one complete parseable response", () => {
+    const action = (actionName: string, value?: number) => ({
+        schemaName: "seal",
+        actionName,
+        ...(value === undefined ? {} : { parameters: { value } }),
+    });
+    const row = {
+        caseId: "case",
+        chosenActions: [action("a", 1), action("b", 2)],
+        rawChosenActions: [action("a", 1), action("b", 2), action("unknown")],
+    };
+    const gold = new Map([
+        [
+            "case",
+            [
+                {
+                    api: "a",
+                    parameters: { value: { __pythonNumber: "1.0" } },
+                    responses: [],
+                },
+                {
+                    api: "b",
+                    parameters: { value: { __pythonNumber: "2" } },
+                    responses: [],
+                },
+            ],
+        ],
+    ]);
+    expect(scoreSealToolsOfficial([row], gold).counts.predictedTools).toBe(3);
+
+    const complete =
+        '{"actionName":"multiple","parameters":{"requests":[{"action":{"actionName":"a","parameters":{"value":1.0}}},{"action":{"actionName":"b","parameters":{"value":2}}},{"action":{"actionName":"unknown"}}]}}';
+    const score = scoreSealToolsOfficial([row], gold, {
+        rawResponsesByCase: new Map([
+            ["case", [complete, '{"actionName":"a","parameters":{"value":1}}']],
+        ]),
+    });
+    expect(score.parameter).toEqual({ precision: 1, recall: 1, f1: 1 });
+    const pendingRow = {
+        caseId: "pending",
+        chosenActions: [],
+        rawChosenActions: [
+            action("a", 1),
+            action("pendingRequestAction"),
+            action("pendingRequestAction"),
+        ],
+    };
+    const pendingRaw =
+        '{"actionName":"multiple","parameters":{"requests":[{"action":{"actionName":"a","parameters":{"value":1}}},{"action":{"actionName":"b","parameters":{"value":2}},"pendingResultEntityId":"a"},{"pendingResultEntityId":"b"}]}}';
+    const pendingScore = scoreSealToolsOfficial(
+        [pendingRow],
+        new Map([
+            [
+                "pending",
+                [
+                    { api: "a", parameters: { value: 1 }, responses: [] },
+                    { api: "b", parameters: { value: 2 }, responses: [] },
+                ],
+            ],
+        ]),
+        { rawResponsesByCase: new Map([["pending", [pendingRaw]]]) },
+    );
+    expect(pendingScore.counts.predictedTools).toBe(2);
+    expect(pendingScore.counts.correctTools).toBe(2);
+    expect(() =>
+        scoreSealToolsOfficial([row], gold, {
+            rawResponsesByCase: new Map([["case", ["not json"]]]),
+        }),
+    ).toThrow("no parseable complete raw response");
+
+    const schemaErrorScore = scoreSealToolsOfficial(
+        [
+            {
+                caseId: "schema-error",
+                chosenActions: [],
+                error: "TypeAgent schema validation failed",
+            },
+        ],
+        new Map([
+            [
+                "schema-error",
+                [{ api: "lookup", parameters: { id: "1" }, responses: [] }],
+            ],
+        ]),
+        {
+            rawResponsesByCase: new Map([
+                [
+                    "schema-error",
+                    [
+                        '```json\n[{"actionName":"lookup","parameters":{"id":"1"}}]\n```',
+                    ],
+                ],
+            ]),
+        },
+    );
+    expect(schemaErrorScore.counts).toMatchObject({
+        formatted: 1,
+        correctTools: 1,
+        predictedTools: 1,
+        correctParameters: 1,
+    });
 });
