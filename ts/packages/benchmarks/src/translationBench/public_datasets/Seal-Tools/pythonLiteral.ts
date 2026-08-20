@@ -8,10 +8,40 @@
 export type PyValue =
     | string
     | number
+    | PythonNumber
     | boolean
     | null
     | PyValue[]
     | { [key: string]: PyValue };
+
+export interface PythonNumber {
+    __pythonNumber: string;
+}
+
+export function isPythonNumber(value: unknown): value is PythonNumber {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        Object.keys(value).length === 1 &&
+        typeof (value as PythonNumber).__pythonNumber === "string"
+    );
+}
+
+export function toPythonNumberString(lexeme: string): string {
+    const value = Number(lexeme);
+    const isFloat = /[.eE]/.test(lexeme);
+    if (!isFloat) return BigInt(lexeme).toString();
+    if (Object.is(value, -0)) return "-0.0";
+    const absolute = Math.abs(value);
+    if (Number.isInteger(value) && absolute < 1e16) {
+        return `${String(value)}.0`;
+    }
+    const text =
+        absolute !== 0 && (absolute < 1e-4 || absolute >= 1e16)
+            ? value.toExponential()
+            : String(value);
+    return text.replace(/e([+-])(\d)$/, "e$10$2");
+}
 
 export function decodePythonStringContents(text: string): string {
     let out = "";
@@ -67,6 +97,7 @@ export function decodePythonStringContents(text: string): string {
 export function parsePythonLiteral(
     text: string,
     start = 0,
+    preserveNumberLexemes = false,
 ): { value: PyValue; end: number } {
     let i = start;
     const n = text.length;
@@ -181,7 +212,9 @@ export function parsePythonLiteral(
         if (m[0] === "True") return true;
         if (m[0] === "False") return false;
         if (m[0] === "None") return null;
-        return Number(m[0]);
+        return preserveNumberLexemes
+            ? { __pythonNumber: toPythonNumberString(m[0]) }
+            : Number(m[0]);
     }
 
     const value = parseValue();

@@ -21,9 +21,11 @@ import type {
 import { SEAL_TOOLS_HF, type SealToolsHfRow } from "./get-dataset.js";
 import {
     decodePythonStringContents,
+    isPythonNumber,
     parsePythonLiteral,
     type PyValue,
 } from "./pythonLiteral.js";
+import { getSealToolsTypeAgentOverride } from "./typeAgentOverrides.js";
 
 export const SEAL_SCHEMA_NAME = "sealtools";
 export const DATASET_NAME = "seal-tools-validation";
@@ -173,10 +175,17 @@ function parseHumanTurn(value: string): {
 }
 
 // Parse the `gpt` turn: a Python-repr list of {api, parameters, responses}.
-function parseGptTurn(value: string): SealCall[] {
+function parseGptTurn(
+    value: string,
+    preserveNumberLexemes = false,
+): SealCall[] {
     const trimmed = value.trim();
     if (trimmed === "-1" || trimmed === "") return [];
-    const { value: calls } = parsePythonLiteral(trimmed);
+    const { value: calls } = parsePythonLiteral(
+        trimmed,
+        0,
+        preserveNumberLexemes,
+    );
     if (!Array.isArray(calls)) return [];
     return calls.map((raw) => {
         const obj = asRecord(raw);
@@ -197,14 +206,27 @@ function parseGptTurn(value: string): SealCall[] {
     });
 }
 
-// Map Seal-Tools calls to ordered expected actions. A parameter value equal to
-// an earlier call's `API_call_N` response is a data dependency: it's rewritten
-// to a `${stepK.result}` placeholder and returned as a ref field (so the grader
-// can score it `ignore` — the opaque handle isn't a value a model can emit).
+function unwrapPythonNumbers(value: unknown): unknown {
+    if (isPythonNumber(value)) return Number(value.__pythonNumber);
+    if (Array.isArray(value)) return value.map(unwrapPythonNumbers);
+    if (typeof value === "object" && value !== null) {
+        return Object.fromEntries(
+            Object.entries(value).map(([key, item]) => [
+                key,
+                unwrapPythonNumbers(item),
+            ]),
+        );
+    }
+    return value;
+}
+
+// Map Seal-Tools calls to expected actions. A parameter value equal to another
+// call's `API_call_N` response marks the row as ordered, but the literal gold
+// value is preserved. The benchmark must not introduce synthetic `${...}`
+// placeholders that the Seal grader never sees.
 function toExpectedActions(calls: SealCall[]): {
     actions: TranslationBenchBenchmarkAction[];
     ordered: boolean;
-    refFieldsByAction: string[][];
 } {
     // Pass 1: map every response name to the step that produces it (handles
     // forward references, not just already-seen ones).
@@ -213,32 +235,60 @@ function toExpectedActions(calls: SealCall[]): {
         for (const response of call.responses) producerOf.set(response, step);
     });
     const actions: TranslationBenchBenchmarkAction[] = [];
-    const refFieldsByAction: string[][] = [];
     let ordered = false;
     calls.forEach((call, step) => {
         const parameters: Record<string, unknown> = {};
-        const refFields: string[] = [];
         for (const [key, val] of Object.entries(call.parameters)) {
             const producer =
                 typeof val === "string" && REF.test(val)
                     ? producerOf.get(val)
                     : undefined;
             if (producer !== undefined && producer !== step) {
-                parameters[key] = `\${step${producer}.result}`;
-                refFields.push(key);
                 ordered = true;
-            } else {
-                parameters[key] = val;
             }
+            parameters[key] = val;
         }
         actions.push({
             schemaName: SEAL_SCHEMA_NAME,
             actionName: call.api,
             parameters,
         });
-        refFieldsByAction.push(refFields);
     });
-    return { actions, ordered, refFieldsByAction };
+    return { actions, ordered };
+}
+
+export function createSealToolsParameterScore(
+    actions: TranslationBenchBenchmarkAction[],
+    tools: OpenAIFunctionTool[],
+): TranslationBenchParameterScoreSpec[] {
+    const toolsByName = new Map(
+        tools.map((tool) => [tool.function.name, tool]),
+    );
+    return actions.map((action) => {
+        const parameters = toolsByName.get(action.actionName)?.function
+            .parameters as { required?: unknown } | undefined;
+        const required = new Set(
+            Array.isArray(parameters?.required)
+                ? parameters.required.filter(
+                      (field): field is string => typeof field === "string",
+                  )
+                : [],
+        );
+        return {
+            defaultMode: "normalized",
+            fields: Object.fromEntries(
+                Object.keys(action.parameters ?? {})
+                    .filter((field) => !required.has(field))
+                    .map((field) => [field, "optionalNormalized"] as const),
+            ),
+        };
+    });
+}
+
+export function hasSealToolsApiCallReference(
+    row: Pick<TypeAgentEvalRow, "expectedActions">,
+): boolean {
+    return /API_call_\d+/.test(JSON.stringify(row.expectedActions));
 }
 
 function difficultyOf(id: string): string {
@@ -262,7 +312,66 @@ export interface TypeAgentEvalRow {
     parameterScore: TranslationBenchParameterScoreSpec[];
     targetAction: TranslationBenchTargetAction;
     dimensions: Record<string, string | number | boolean>;
+    typeAgentScoring?: {
+        overrideReason: string;
+        excluded: boolean;
+    };
     lineage: TranslationBenchPublicTurnLineage;
+}
+
+export function applySealToolsTypeAgentOverride(
+    row: TypeAgentEvalRow,
+): TypeAgentEvalRow {
+    const override = getSealToolsTypeAgentOverride(row.id);
+    if (override === undefined) return row;
+    const expectedActions = override.expectedActions ?? row.expectedActions;
+    const parameterScore = createSealToolsParameterScore(
+        expectedActions,
+        row.tools,
+    ).map((spec, index) => {
+        const actionOverride =
+            override.parameterScoreByAction?.[
+                expectedActions[index]!.actionName
+            ];
+        return {
+            ...spec,
+            fields: {
+                ...spec.fields,
+                ...override.parameterScore?.[index]?.fields,
+                ...actionOverride?.fields,
+            },
+            acceptedValues: {
+                ...spec.acceptedValues,
+                ...override.parameterScore?.[index]?.acceptedValues,
+                ...actionOverride?.acceptedValues,
+            },
+        };
+    });
+    const canonicalPayloadHash = sha256(
+        JSON.stringify({
+            utterance: row.utterance,
+            expectedActions,
+            order: row.order,
+        }),
+    );
+    return {
+        ...row,
+        expectedActions,
+        parameterScore,
+        targetAction: {
+            schemaName: SEAL_SCHEMA_NAME,
+            actionName: expectedActions[0]!.actionName,
+        },
+        typeAgentScoring: {
+            overrideReason: override.reason,
+            excluded: override.excludeFromScoring === true,
+        },
+        lineage: {
+            ...row.lineage,
+            canonicalPayloadHash,
+            transformVersion: 2,
+        },
+    };
 }
 
 // Convert one Seal-Tools row into a TypeAgent eval row, or `undefined` when the
@@ -279,26 +388,23 @@ export function toTypeAgentEvalRow(
     let calls: SealCall[];
     try {
         parsedHuman = parseHumanTurn(human);
-        calls = parseGptTurn(gpt);
+        calls = parseGptTurn(gpt, true);
     } catch {
         return undefined;
     }
     if (calls.length === 0) return undefined;
 
-    const { actions, ordered, refFieldsByAction } = toExpectedActions(calls);
-    // Drop chained cases: a later action consuming an earlier step's result
-    // (`${stepK.result}`) is a data dependency the tools-only eval can't score.
-    if (ordered) return undefined;
+    const plainCalls = calls.map((call) => ({
+        ...call,
+        parameters: unwrapPythonNumbers(call.parameters) as Record<
+            string,
+            unknown
+        >,
+    }));
+    const { actions, ordered } = toExpectedActions(plainCalls);
     const order: TranslationBenchOrder = ordered ? "strict" : "any";
-    // Dependency-ref fields carry an opaque `${stepK.result}` handle no model
-    // can emit, so score them `ignore`; everything else stays exact.
-    const parameterScore: TranslationBenchParameterScoreSpec[] = actions.map(
-        (_, i) => {
-            const fields: Record<string, "ignore"> = {};
-            for (const field of refFieldsByAction[i]!) fields[field] = "ignore";
-            return { defaultMode: "exact", fields };
-        },
-    );
+    const tools = parsedHuman.tools.map(toFunctionTool);
+    const parameterScore = createSealToolsParameterScore(actions, tools);
     const targetAction: TranslationBenchTargetAction = {
         schemaName: SEAL_SCHEMA_NAME,
         actionName: actions[0]!.actionName,
@@ -324,11 +430,11 @@ export function toTypeAgentEvalRow(
         transformVersion: 1,
     };
 
-    return {
+    return applySealToolsTypeAgentOverride({
         id: `sealtools-${row.id}`,
         utterance: parsedHuman.utterance,
         schemaName: SEAL_SCHEMA_NAME,
-        tools: parsedHuman.tools.map(toFunctionTool),
+        tools,
         sealToolsGoldActions: structuredClone(calls),
         expectedActions: actions,
         order,
@@ -343,7 +449,7 @@ export function toTypeAgentEvalRow(
             difficulty,
         },
         lineage,
-    };
+    });
 }
 
 export interface SealToolsEvalRows {
