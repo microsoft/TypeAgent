@@ -6,15 +6,12 @@ import { HistoryContext, RequestAction } from "@typeagent/agent-cache";
 import {
     getActivityActiveSchemas,
     getActivityCacheSpec,
+    getMatchRequestBypassReason,
     getNonActivityActiveSchemas,
     matchRequest,
 } from "./matchRequest.js";
 import { translateRequest } from "./translateRequest.js";
-import {
-    CommandHandlerContext,
-    getRequestId,
-    requestIdToString,
-} from "../context/commandHandlerContext.js";
+import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { CachedImageWithDetails } from "@typeagent/typechat-utils";
 import { unicodeChar } from "../command/command.js";
@@ -24,7 +21,11 @@ import {
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
 import registerDebug from "debug";
-import { ProfileNames } from "../utils/profileNames.js";
+import {
+    emitTranslationCacheBypass,
+    emitTranslationMatchResult,
+    runInTranslationSpan,
+} from "../otel/translationSpan.js";
 const debugInterpret = registerDebug("typeagent:interpret");
 export function getHistoryContext(context: CommandHandlerContext) {
     const config = context.session.getConfig();
@@ -117,15 +118,33 @@ async function interpretRequestWithActiveSchemas(
         history,
     );
     const canUseCacheMatch = cannotUseCacheReason === undefined;
-    const match = canUseCacheMatch
-        ? await matchRequest(
-              context,
-              request,
-              history,
-              activeSchemaNames,
-              systemContext.currentAbortSignal,
-          )
+    const matchBypassReason = canUseCacheMatch
+        ? getMatchRequestBypassReason(context, request)
         : undefined;
+    const match =
+        canUseCacheMatch && matchBypassReason === undefined
+            ? await matchRequest(
+                  context,
+                  request,
+                  history,
+                  activeSchemaNames,
+                  systemContext.currentAbortSignal,
+              )
+            : undefined;
+
+    // Activity-context translation may perform more than one lookup. Emit
+    // each result in order so the span reflects every cache/grammar decision.
+    if (!canUseCacheMatch) {
+        emitTranslationCacheBypass("request_constraints");
+    } else if (matchBypassReason !== undefined) {
+        emitTranslationCacheBypass(matchBypassReason);
+    } else if (match === undefined) {
+        emitTranslationMatchResult("miss");
+    } else if (match.type === "grammar") {
+        emitTranslationMatchResult("grammar_hit");
+    } else if (match.type === "construction") {
+        emitTranslationMatchResult("cache_hit");
+    }
 
     return (
         match ??
@@ -239,9 +258,11 @@ export async function interpretRequest(
     request: string,
     attachments: CachedImageWithDetails[] | undefined,
     history: HistoryContext | undefined,
+    activeSchemaNames?: string[],
 ): Promise<InterpretResult> {
     const systemContext = context.sessionContext.agentContext;
-    const activeSchemaNames = systemContext.agents.getActiveSchemas();
+    const requestActiveSchemaNames =
+        activeSchemaNames ?? systemContext.agents.getActiveSchemas();
 
     // Developer-mode capture: start a fresh prompt buffer for this request.
     systemContext.devTrace.beginTranslation();
@@ -258,25 +279,27 @@ export async function interpretRequest(
         tokenUsage.total_tokens += usage.total_tokens;
     };
 
-    const translateResult = history?.activityContext
-        ? await interpretRequestWithActivityContext(
-              context,
-              request,
-              attachments,
-              history,
-              0,
-              activeSchemaNames,
-              usageCallback,
-          )
-        : await interpretRequestWithActiveSchemas(
-              context,
-              request,
-              attachments,
-              history,
-              0,
-              activeSchemaNames,
-              usageCallback,
-          );
+    const translateResult = await runInTranslationSpan(context, async () => {
+        return history?.activityContext
+            ? await interpretRequestWithActivityContext(
+                  context,
+                  request,
+                  attachments,
+                  history,
+                  0,
+                  requestActiveSchemaNames,
+                  usageCallback,
+              )
+            : await interpretRequestWithActiveSchemas(
+                  context,
+                  request,
+                  attachments,
+                  history,
+                  0,
+                  requestActiveSchemaNames,
+                  usageCallback,
+              );
+    });
 
     const { requestAction, replacedAction } = await confirmTranslation(
         translateResult.elapsedMs,
@@ -287,25 +310,6 @@ export async function interpretRequest(
         context,
     );
 
-    if (!systemContext.batchMode) {
-        systemContext.logger?.logEvent(translateResult.type, {
-            elapsedMs: translateResult.elapsedMs,
-            request,
-            history,
-            actions: translateResult.requestAction.actions,
-            replacedAction,
-            schemaNames: activeSchemaNames,
-            developerMode: systemContext.developerMode,
-            config: translateResult.config,
-            metrics: systemContext.metricsManager?.getMeasures(
-                requestIdToString(getRequestId(systemContext)),
-                ProfileNames.translate,
-            ),
-            allMatches: translateResult.allMatches,
-            tokenUsage,
-        });
-    }
-
     // Developer-mode capture: persist the history + complete translation
     // prompt(s) for this request so it can be inspected/reconstructed later.
     // No-op unless developer mode is on and the session is persisted.
@@ -314,7 +318,7 @@ export async function interpretRequest(
         developerMode: systemContext.developerMode === true,
         translationType: translateResult.type,
         elapsedMs: translateResult.elapsedMs,
-        schemaNames: [...activeSchemaNames],
+        schemaNames: [...requestActiveSchemaNames],
         config: translateResult.config,
         history,
         attachmentCount: attachments?.length ?? 0,

@@ -29,6 +29,12 @@ import {
     tryReusePriorFieldGraderDecision,
     type ParamSpec,
 } from "../src/translationBench/synthesizer/catalogGenerator/index.js";
+import { countEligibleTranslationBenchActions } from "../src/translationBench/synthesizer/eligibleActions.js";
+import {
+    HARDCODED_NON_EVAL_ACTION_IDS,
+    getPackagedLlmJudgeExcludedActions,
+    clearPackagedLlmJudgeExcludedActionsCacheForTests,
+} from "../src/translationBench/synthesizer/eligibleActions.js";
 
 function objectSpec(
     fields: Record<string, { optional: boolean; spec: ParamSpec }>,
@@ -1127,7 +1133,7 @@ describe("incremental grader catalog", () => {
             second.byAction["timer.setReminder"],
         );
         expect(third.byAction["list.createList"]!.sourceFingerprint).toBe(
-            actionParameterSourceFingerprint(listSpec),
+            actionParameterSourceFingerprint(listSpec, "listName"),
         );
     });
 
@@ -1184,6 +1190,15 @@ describe("incremental grader catalog", () => {
         expect(
             forced.byAction["list.createList"]!.fields.listName?.rule,
         ).not.toMatch(/default/);
+    });
+
+    it("fingerprint ignores parameters summary order/text", () => {
+        const spec = objectSpec({
+            a: { optional: false, spec: { kind: "string" } },
+        });
+        expect(actionParameterSourceFingerprint(spec, "a: string")).toBe(
+            actionParameterSourceFingerprint(spec, "totally different"),
+        );
     });
 
     it("sourceFingerprint is paramSpec-only (stable across policy metadata)", async () => {
@@ -1389,6 +1404,152 @@ describe("GRADER_RULES_VERSION contract", () => {
             .slice(0, 16);
         // Bump GRADER_RULES_VERSION with this hash when rules change.
         expect(hash).toBe("f2c1d77d772926e9");
+    });
+});
+
+describe("eligible action coverage counting", () => {
+    it("subtracts excluded actions from the catalog total", () => {
+        const schemas = [
+            {
+                schemaName: "alpha",
+                tools: [
+                    { function: { name: "keep" } },
+                    { function: { name: "drop" } },
+                ],
+            },
+            {
+                schemaName: "beta",
+                tools: [{ function: { name: "keep" } }],
+            },
+        ];
+        expect(
+            countEligibleTranslationBenchActions(
+                schemas,
+                new Set(["alpha.drop"]),
+            ),
+        ).toBe(2);
+        expect(countEligibleTranslationBenchActions(schemas, new Set())).toBe(
+            3,
+        );
+    });
+
+    it("excludes hardcoded non-eval actions from the packaged exclusion set", () => {
+        clearPackagedLlmJudgeExcludedActionsCacheForTests();
+        const excluded = getPackagedLlmJudgeExcludedActions();
+        for (const id of HARDCODED_NON_EVAL_ACTION_IDS) {
+            expect(excluded.has(id)).toBe(true);
+        }
+        expect(HARDCODED_NON_EVAL_ACTION_IDS.has("chat.generateResponse")).toBe(
+            true,
+        );
+        expect(HARDCODED_NON_EVAL_ACTION_IDS.has("utility.claudeTask")).toBe(
+            true,
+        );
+    });
+});
+
+describe("hardcoded nonempty for conversation topic titles", () => {
+    it("soft-scores conversation name params without loosening identity names", async () => {
+        const catalog = {
+            catalogVersion: "test",
+            generatedAt: "2026-01-01T00:00:00.000Z",
+            actions: [
+                {
+                    schemaName: "system.conversation",
+                    actionName: "summarizeConversation",
+                    paramSpec: objectSpec({
+                        name: {
+                            optional: true,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+                {
+                    schemaName: "system.conversation",
+                    actionName: "indexConversation",
+                    paramSpec: objectSpec({
+                        name: {
+                            optional: true,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+                {
+                    schemaName: "list",
+                    actionName: "removeItems",
+                    paramSpec: objectSpec({
+                        listName: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                    }),
+                },
+            ],
+        };
+        const grader = await buildActionParametersGraderCatalog(catalog);
+        expect(
+            grader.byAction["system.conversation.summarizeConversation"]!
+                .parameterScore.fields.name,
+        ).toBe("nonempty");
+        expect(
+            grader.byAction["system.conversation.indexConversation"]!
+                .parameterScore.fields.name,
+        ).toBe("nonempty");
+        expect(
+            grader.byAction["list.removeItems"]!.parameterScore.fields.listName,
+        ).toBe("exact");
+    });
+});
+
+describe("hardcoded llmAsAJudge for internet lookup params", () => {
+    it("forces lookupAndAnswerInternet freeform params to llmAsAJudge", async () => {
+        const catalog = {
+            catalogVersion: "test",
+            generatedAt: "2026-01-01T00:00:00.000Z",
+            actions: [
+                {
+                    schemaName: "browser.lookupAndAnswer",
+                    actionName: "lookupAndAnswerInternet",
+                    paramSpec: objectSpec({
+                        originalRequest: {
+                            optional: false,
+                            spec: { kind: "string" },
+                        },
+                        internetLookups: {
+                            optional: false,
+                            spec: {
+                                kind: "array",
+                                item: { kind: "string" },
+                            },
+                        },
+                        sites: {
+                            optional: true,
+                            spec: {
+                                kind: "array",
+                                item: { kind: "string" },
+                            },
+                        },
+                    }),
+                },
+            ],
+        };
+        const grader = await buildActionParametersGraderCatalog(catalog);
+        const entry =
+            grader.byAction["browser.lookupAndAnswer.lookupAndAnswerInternet"]!;
+        expect(entry.parameterScore.fields).toEqual({
+            originalRequest: "llmAsAJudge",
+            internetLookups: "llmAsAJudge",
+            sites: "llmAsAJudge",
+        });
+        expect(entry.fields.internetLookups.verify).toBe("llmAsAJudge");
+        expect(entry.fields.originalRequest.verify).toBe("llmAsAJudge");
+        expect(entry.fields.sites.verify).toBe("llmAsAJudge");
+        expect(
+            parameterRequiresLlmJudge("originalRequest", {
+                create: "free_text",
+                actionId: "browser.lookupAndAnswer.lookupAndAnswerInternet",
+            }),
+        ).toBe(true);
     });
 });
 

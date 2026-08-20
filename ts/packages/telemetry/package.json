@@ -14,6 +14,14 @@
   "exports": {
     ".": {
       "node": "./dist/indexNode.js"
+    },
+    "./testing/inMemorySpanManager": {
+      "types": "./dist/otel/testing/inMemorySpanManager.d.ts",
+      "node": "./dist/otel/testing/inMemorySpanManager.js"
+    },
+    "./traceContext": {
+      "types": "./dist/otel/traceContract.d.ts",
+      "default": "./dist/otel/traceContract.js"
     }
   },
   "files": [
@@ -42,6 +50,7 @@
     "@opentelemetry/resources": "2.10.0",
     "@opentelemetry/sdk-logs": "0.221.0",
     "@opentelemetry/sdk-metrics": "2.10.0",
+    "@opentelemetry/sdk-trace-base": "2.10.0",
     "@opentelemetry/sdk-trace-node": "2.10.0",
     "@opentelemetry/semantic-conventions": "1.43.0",
     "@typeagent/common-utils": "workspace:*",

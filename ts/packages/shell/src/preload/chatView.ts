@@ -198,6 +198,9 @@ const api: ClientAPI = {
     openFolder: (path: string) => {
         ipcRenderer.send("open-folder", path);
     },
+    openConfigFile: (path: string) => {
+        ipcRenderer.send("open-config-file", path);
+    },
     openUrlInBrowserTab: (url: string) => {
         ipcRenderer.send("open-url-in-browser-tab", url);
     },

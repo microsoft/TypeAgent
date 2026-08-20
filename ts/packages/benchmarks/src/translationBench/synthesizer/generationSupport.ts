@@ -177,7 +177,12 @@ export function translationBenchResumeKey(
 ): string {
     const normalized = parseWithZod(
         workIdentitySchema,
-        identity,
+        {
+            phase: identity.phase,
+            model: identity.model,
+            scenario: identity.scenario,
+            caseId: identity.caseId,
+        },
         "work identity",
     );
     return JSON.stringify([

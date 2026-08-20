@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "description": "Create+verify policies per action parameter. sourceFingerprint is paramSpec-only (stable across policy edits); rulesFingerprint is catalog-level and forces a full reclassify when it drifts. Incremental: only added/updated actions are reclassified. Regex first, LLM prior reuse (not regex priors), LLM+verifier fallback. Open strings without a name heuristic use structural free_text/nonempty. `create` guides the synthesizer; `verify` / `parameterScore` drive runner soft matching. `llmAsAJudge` marks code/script params that need semantic LLM scoring. Object containers with only soft leaves use nonempty; mixed objects stay exact (no nested dotted paths yet).",
+  "description": "Create+verify policies per action parameter. sourceFingerprint is paramSpec-only (stable across policy edits). rulesFingerprint is catalog-level; when it drifts, all actions reclassify. Incremental: only added/updated actions are reclassified; unchanged fingerprints are kept. Regex first, LLM prior reuse (not regex priors), LLM+verifier fallback. Open strings without a name heuristic use structural free_text/nonempty. `create` guides the synthesizer; `verify` / `parameterScore` drive runner soft matching. `llmAsAJudge` marks code/script params that need semantic LLM scoring. Object containers with only soft leaves use nonempty; mixed objects stay exact (no nested dotted paths yet).",
   "catalogVersion": "2026-08-06",
-  "generatedAt": "2026-08-07T18:21:36.367Z",
-  "rulesFingerprint": "ed8397a82fd660ef",
+  "generatedAt": "2026-08-08T00:16:23.592Z",
+  "rulesFingerprint": "94e6a3cd9d4836a3",
   "modes": {
     "exact": "Chosen value must deep-equal expected",
     "exists": "Key must be present; value ignored (hand-authored seeds; not emitted by regex gen)",
@@ -1500,8 +1500,8 @@
           },
           "typeKind": "string",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "string-free-text-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "string-llm-as-a-judge",
           "source": "regex"
         },
         "internetLookups": {
@@ -1514,13 +1514,13 @@
           },
           "typeKind": "array<string>",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "array-items:string-collection-element-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "array-items:string-llm-as-a-judge",
           "source": "regex",
           "item": {
             "create": "free_text",
-            "verify": "nonempty",
-            "rule": "string-collection-element-nonempty",
+            "verify": "llmAsAJudge",
+            "rule": "string-llm-as-a-judge",
             "source": "regex"
           }
         },
@@ -1534,13 +1534,13 @@
           },
           "typeKind": "array<string>",
           "create": "free_text",
-          "verify": "nonempty",
-          "rule": "array-items:string-collection-element-nonempty",
+          "verify": "llmAsAJudge",
+          "rule": "array-items:string-llm-as-a-judge",
           "source": "regex",
           "item": {
             "create": "free_text",
-            "verify": "nonempty",
-            "rule": "string-collection-element-nonempty",
+            "verify": "llmAsAJudge",
+            "rule": "string-llm-as-a-judge",
             "source": "regex"
           }
         }
@@ -1548,9 +1548,9 @@
       "parameterScore": {
         "defaultMode": "exact",
         "fields": {
-          "originalRequest": "nonempty",
-          "internetLookups": "nonempty",
-          "sites": "nonempty"
+          "originalRequest": "llmAsAJudge",
+          "internetLookups": "llmAsAJudge",
+          "sites": "llmAsAJudge"
         }
       }
     },
@@ -30090,16 +30090,16 @@
             "kind": "string"
           },
           "typeKind": "string",
-          "create": "identifier",
-          "verify": "exact",
-          "rule": "string-identifier-exact",
+          "create": "free_text",
+          "verify": "nonempty",
+          "rule": "string-free-text-nonempty",
           "source": "regex"
         }
       },
       "parameterScore": {
         "defaultMode": "exact",
         "fields": {
-          "name": "exact"
+          "name": "nonempty"
         }
       }
     },
@@ -30139,16 +30139,16 @@
             "kind": "string"
           },
           "typeKind": "string",
-          "create": "identifier",
-          "verify": "exact",
-          "rule": "string-identifier-exact",
+          "create": "free_text",
+          "verify": "nonempty",
+          "rule": "string-free-text-nonempty",
           "source": "regex"
         }
       },
       "parameterScore": {
         "defaultMode": "exact",
         "fields": {
-          "name": "exact"
+          "name": "nonempty"
         }
       }
     },
@@ -30304,16 +30304,16 @@
             "kind": "string"
           },
           "typeKind": "string",
-          "create": "identifier",
-          "verify": "exact",
-          "rule": "string-identifier-exact",
+          "create": "free_text",
+          "verify": "nonempty",
+          "rule": "string-free-text-nonempty",
           "source": "regex"
         }
       },
       "parameterScore": {
         "defaultMode": "exact",
         "fields": {
-          "name": "exact"
+          "name": "nonempty"
         }
       }
     },

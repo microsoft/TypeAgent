@@ -122,13 +122,13 @@
     "@types/vscode": "^1.95.0",
     "@vscode/vsce": "^3.2.1",
     "concurrently": "^9.1.2",
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "mkdirp": "^3.0.1",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
   },
   "engines": {
-    "vscode": "^1.95.0"
+    "vscode": "^1.133.0"
   },
   "icon": "media/icons/icon-80.png",
   "enabledApiProposals": [

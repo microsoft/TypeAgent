@@ -18,10 +18,7 @@
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { readFileSync, existsSync, rmSync } from "fs";
-import {
-    seedViaImport,
-    type SeedResult,
-} from "./harness/seedInstanceStorage.mjs";
+import { seedViaImport } from "./harness/seedInstanceStorage.mjs";
 
 // Load .env from ts/ root manually (avoid dotenv dependency)
 const _thisDir = dirname(fileURLToPath(import.meta.url));
@@ -50,7 +47,10 @@ import {
     type BenchmarkOptions,
     type DispatcherAdapter,
 } from "./harness/benchmarkRunner.mjs";
-import type { BenchmarkScenario } from "./harness/types.mjs";
+import type {
+    BenchmarkCommandOptions,
+    BenchmarkScenario,
+} from "./harness/types.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -182,7 +182,10 @@ async function createLiveDispatcher(
     let lastDisplayText = "";
 
     return {
-        async processCommand(command: string): Promise<unknown> {
+        async processCommand(
+            command: string,
+            options?: BenchmarkCommandOptions,
+        ): Promise<unknown> {
             // Snapshot the current display log length so we can capture only
             // entries produced by THIS command after it completes.
             let seqBefore = 0;
@@ -195,7 +198,11 @@ async function createLiveDispatcher(
                 /* ignore */
             }
 
-            const submit = await dispatcher.submitCommand(command);
+            const submit = await dispatcher.submitCommand(
+                command,
+                undefined,
+                options,
+            );
             if (!submit.ok) {
                 throw new Error(
                     submit.error === "queue_full"
@@ -325,6 +332,10 @@ async function main() {
         "llm-translation.json",
         "fallback-chain.json",
         "end-to-end.json",
+        "grammar-subschemas.json",
+        "grammar-competition.json",
+        "grammar-collision.json",
+        "dev-actions-routing.json",
     ];
 
     let totalScenarios = 0;
@@ -434,7 +445,9 @@ async function main() {
                       100
                   ).toFixed(1)
                 : "0.0";
-        process.exit(parseFloat(passRate) >= 85 ? 0 : 1);
+        process.exit(
+            parseFloat(passRate) >= 85 && !runner.hasRequiredFailures() ? 0 : 1,
+        );
     } finally {
         await dispatcher.close();
     }

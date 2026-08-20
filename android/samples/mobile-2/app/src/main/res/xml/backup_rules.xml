@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
+   Auto Backup rules, used on API 30 and below. API 31+ reads
+   data_extraction_rules.xml instead, so any change here needs a matching
+   change there.
    See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
     <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+       The chat transcript is personal content and stays on the device it was
+       written on. Without this it is uploaded to the user's Google account and
+       restored onto any other device they sign in from.
+       Path must track ConversationStore.PREFS_NAME + ".xml".
+    -->
+    <exclude domain="sharedpref" path="typeagent_chat_session.xml" />
 </full-backup-content>

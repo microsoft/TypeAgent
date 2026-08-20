@@ -17,11 +17,14 @@ import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionResult,
+    ActionResultError,
     ActionContext,
+    AppAgent,
     ParsedCommandParams,
     ParameterDefinitions,
     AppAction,
 } from "@typeagent/agent-sdk";
+import type { Span } from "@opentelemetry/api";
 import {
     createActionResult,
     createActionResultNoDisplay,
@@ -52,14 +55,31 @@ import {
     resolveEntities,
     toPendingActions,
 } from "./pendingActions.js";
+import {
+    recordActionFlowException,
+    recordActionHandlerException,
+    recordActionResultError,
+    recordActionSetupFailure,
+    wrapActionSpan,
+} from "../otel/actionSpan.js";
+import { otel } from "@typeagent/telemetry";
 import { getActionContext } from "./actionContext.js";
+import {
+    AgentNotReadyError,
+    getErrorDisplayContent,
+} from "./agentNotReadyError.js";
 import {
     addActionResultToMemory,
     addResultToMemory,
 } from "../context/memory.js";
 import { setActivityContext } from "./activityContext.js";
 import { tryGetActionSchema } from "../translation/actionSchemaFileCache.js";
-import { processFlow } from "./flowInterpreter.js";
+import { processFlow, type FlowDefinition } from "./flowInterpreter.js";
+import { getSessionName } from "../context/session.js";
+import {
+    logActionCompleted,
+    logActionStarted,
+} from "../otel/structuredEvents.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 const debugCommandExecError = registerDebug(
@@ -102,9 +122,16 @@ export async function checkAgentReady(
         return undefined;
     }
     const reason = report.message ?? "Agent is not ready.";
+    // `details` carries the actionable part (which file to edit, the YAML to
+    // paste). It's markdown, so it travels as rich display content rather
+    // than being folded into the plain-text Error message, which clients
+    // render without formatting (collapsing the snippet's indentation).
+    const details = report.details;
     if (report.state === "unsupported") {
-        throw new Error(
-            `Agent '${appAgentName}' is not supported in this environment: ${reason}`,
+        const message = `Agent '${appAgentName}' is not supported in this environment: ${reason}`;
+        throw new AgentNotReadyError(
+            message,
+            details ? `${message}\n\n${details}` : undefined,
         );
     }
     // setup-required
@@ -122,12 +149,24 @@ export async function checkAgentReady(
     // Different hint depending on whether the agent can be configured
     // from chat. Without a hook (manual config case), `@config agent
     // setup` would just bounce the user; point at `refresh` instead.
-    const hint = systemContext.agents.hasSetup(appAgentName)
-        ? `Run \`@config agent setup ${appAgentName}\` to configure it.`
-        : `After fixing the underlying issue, run \`@config agent refresh ${appAgentName}\` to re-check.`;
-    throw new Error(
-        `Agent '${appAgentName}' needs configuration before it can be used: ${reason} ${hint}`,
-    );
+    const hasSetup = systemContext.agents.hasSetup(appAgentName);
+    const command = hasSetup
+        ? `@config agent setup ${appAgentName}`
+        : `@config agent refresh ${appAgentName}`;
+    const hint = hasSetup
+        ? `Run \`${command}\` to configure it.`
+        : `After fixing the underlying issue, run \`${command}\` to re-check.`;
+    const headline = `Agent '${appAgentName}' needs configuration before it can be used: ${reason}`;
+    // Agents commonly close their own `details` by telling the user to run
+    // the very same command; appending the hint on top of that just says it
+    // twice. Only add it when the details didn't already.
+    const detailsDisplay =
+        details === undefined
+            ? undefined
+            : details.includes(command)
+              ? `${headline}\n\n${details}`
+              : `${headline}\n\n${details}\n\n${hint}`;
+    throw new AgentNotReadyError(`${headline} ${hint}`, detailsDisplay);
 }
 
 function getStreamingActionContext(
@@ -155,6 +194,163 @@ function getStreamingActionContext(
         fullAction,
     );
     return actionContext;
+}
+
+interface ActionSpanExecutionArgs {
+    executableAction: ExecutableAction;
+    context: ActionContext<CommandHandlerContext>;
+    actionIndex: number;
+    systemContext: CommandHandlerContext;
+    appAgentName: string;
+    appAgent: AppAgent;
+    actionContext: ActionContext<unknown>;
+}
+
+interface ActionSpanExecutionOutcome {
+    result: ActionResult;
+    failureRecorded: boolean;
+    setupReplacementResult: boolean;
+}
+
+function rethrowIfActionCancelled(
+    error: unknown,
+    systemContext: CommandHandlerContext,
+): void {
+    if (
+        (error as { name?: unknown })?.name === "AbortError" ||
+        systemContext.currentAbortSignal?.aborted
+    ) {
+        throw new DOMException("The operation was aborted.", "AbortError");
+    }
+}
+
+function createConvertedActionErrorResult(error: unknown): ActionResult {
+    const details = serializeError(error);
+    const result = createActionResultFromError(details.message, details);
+    const errorDisplay = getErrorDisplayContent(error);
+    return errorDisplay === undefined
+        ? result
+        : { ...result, errorDisplayContent: errorDisplay };
+}
+
+async function executeFlowForActionSpan(
+    span: Span,
+    flowDef: FlowDefinition,
+    args: ActionSpanExecutionArgs,
+): Promise<ActionSpanExecutionOutcome> {
+    const { executableAction, context, actionIndex, systemContext } = args;
+    const flowParams = (executableAction.action.parameters ?? {}) as Record<
+        string,
+        unknown
+    >;
+    try {
+        const result = await processFlow(
+            flowDef,
+            flowParams,
+            context,
+            actionIndex,
+        );
+        return {
+            result,
+            failureRecorded: false,
+            setupReplacementResult: false,
+        };
+    } catch (error) {
+        rethrowIfActionCancelled(error, systemContext);
+        recordActionFlowException(span);
+        return {
+            result: createConvertedActionErrorResult(error),
+            failureRecorded: true,
+            setupReplacementResult: false,
+        };
+    }
+}
+
+async function executeHandlerForActionSpan(
+    span: Span,
+    args: ActionSpanExecutionArgs,
+): Promise<ActionSpanExecutionOutcome> {
+    const {
+        executableAction,
+        systemContext,
+        appAgentName,
+        appAgent,
+        actionContext,
+    } = args;
+    if (appAgent.executeAction === undefined) {
+        recordActionSetupFailure(span, "handler_missing");
+        const error = new Error(
+            `Agent '${appAgentName}' does not support executeAction.`,
+        );
+        return {
+            result: createConvertedActionErrorResult(error),
+            failureRecorded: true,
+            setupReplacementResult: false,
+        };
+    }
+
+    let setupResult: ActionResult | undefined;
+    try {
+        setupResult = await checkAgentReady(
+            appAgentName,
+            systemContext,
+            actionContext,
+        );
+    } catch (error) {
+        rethrowIfActionCancelled(error, systemContext);
+        recordActionSetupFailure(span, "agent_not_ready");
+        return {
+            result: createConvertedActionErrorResult(error),
+            failureRecorded: true,
+            setupReplacementResult: false,
+        };
+    }
+    if (setupResult !== undefined) {
+        return {
+            result: setupResult,
+            failureRecorded: false,
+            setupReplacementResult: true,
+        };
+    }
+
+    const displayCountBefore = systemContext.displayCount;
+    try {
+        const handlerResult = await appAgent.executeAction(
+            executableAction.action,
+            actionContext,
+        );
+        const completedText = `Action ${getFullActionName(
+            executableAction,
+        )} completed.`;
+        return {
+            result:
+                handlerResult ??
+                (systemContext.displayCount !== displayCountBefore
+                    ? createActionResultNoDisplay(completedText)
+                    : createActionResult(completedText)),
+            failureRecorded: false,
+            setupReplacementResult: false,
+        };
+    } catch (error) {
+        rethrowIfActionCancelled(error, systemContext);
+        recordActionHandlerException(span);
+        return {
+            result: createConvertedActionErrorResult(error),
+            failureRecorded: true,
+            setupReplacementResult: false,
+        };
+    }
+}
+
+async function executeForActionSpan(
+    span: Span,
+    args: ActionSpanExecutionArgs,
+): Promise<ActionSpanExecutionOutcome> {
+    const { schemaName, actionName } = args.executableAction.action;
+    const flowDef = args.systemContext.agents.getFlow(schemaName, actionName);
+    return flowDef === undefined
+        ? executeHandlerForActionSpan(span, args)
+        : executeFlowForActionSpan(span, flowDef, args);
 }
 
 // REVIEW: don't export this
@@ -212,104 +408,88 @@ export async function executeAction(
         true,
         actionIndex,
     );
-    let result: ActionResult;
-    try {
-        // Check if this action has a registered flow program
-        const flowDef = systemContext.agents.getFlow(
+
+    // Action parameters, result payloads, and user text are never stamped.
+    const actionSpanAttributes: {
+        -readonly [K in keyof otel.TypeAgentSpanAttributes]: otel.TypeAgentSpanAttributes[K];
+    } = {
+        agentName: appAgentName,
+        actionName: action.actionName,
+    };
+    const sessionDirPath = systemContext.session?.sessionDirPath;
+    if (sessionDirPath !== undefined) {
+        actionSpanAttributes.sessionId = getSessionName(sessionDirPath);
+    }
+    if (systemContext.activationId !== undefined) {
+        actionSpanAttributes.activationId = systemContext.activationId;
+    }
+    if (systemContext.traceId !== undefined) {
+        actionSpanAttributes.traceId = systemContext.traceId;
+    }
+
+    return wrapActionSpan(actionSpanAttributes, async (actionSpan) => {
+        const eventData = {
+            requestId: requestId.requestId,
             schemaName,
-            action.actionName,
-        );
-        if (flowDef !== undefined) {
-            const flowParams = (action.parameters ?? {}) as Record<
-                string,
-                unknown
-            >;
-            // Pass the outer context (ActionContext<CommandHandlerContext>) so the
-            // flow interpreter can access the full agent registry.
-            result = await processFlow(
-                flowDef,
-                flowParams,
+            actionName: action.actionName,
+            appAgentName,
+            actionIndex,
+        };
+        logActionStarted(systemContext.logger, eventData);
+        try {
+            const outcome = await executeForActionSpan(actionSpan, {
+                executableAction,
                 context,
                 actionIndex,
-            );
-        } else {
-            if (appAgent.executeAction === undefined) {
-                throw new Error(
-                    `Agent '${appAgentName}' does not support executeAction.`,
-                );
-            }
-            // Pre-flight readiness check — runs as late as possible, right
-            // before we invoke the agent. Agents that don't implement
-            // checkReadiness are reported as `ready` and never block here.
-            // When `setupOnFirstUse` is enabled and setup runs, its
-            // ActionResult replaces the user's original action — the
-            // caller is expected to re-run after setup completes.
-            const setupResult = await checkAgentReady(
-                appAgentName,
                 systemContext,
+                appAgentName,
+                appAgent,
                 actionContext,
-            );
-            if (setupResult !== undefined) {
-                result = setupResult;
-            } else {
-                const displayCountBefore = systemContext.displayCount;
-                const handlerResult = await appAgent.executeAction(
-                    action,
-                    actionContext,
-                );
-                if (handlerResult !== undefined) {
-                    result = handlerResult;
-                } else {
-                    // The agent returned no ActionResult. Synthesize a
-                    // completion using the same history/memory text as before.
-                    // If the action already emitted visible output - either
-                    // directly via actionIO or through a command it delegated
-                    // to with processCommandNoLock - suppress the redundant
-                    // "completed" bubble by returning a no-display result;
-                    // otherwise show it so silent actions still acknowledge.
-                    const completedText = `Action ${getFullActionName(
-                        executableAction,
-                    )} completed.`;
-                    result =
-                        systemContext.displayCount !== displayCountBefore
-                            ? createActionResultNoDisplay(completedText)
-                            : createActionResult(completedText);
-                }
+            });
+            // If the agent ran to completion but a cancel arrived while it was executing,
+            // discard the result and treat this as a cancellation.
+            systemContext.currentAbortSignal?.throwIfAborted();
+            actionContext.profiler?.stop();
+            actionContext.profiler = undefined;
+
+            if (debugActions.enabled) {
+                debugActions(actionResultToString(outcome.result));
             }
+
+            if (
+                !outcome.failureRecorded &&
+                !outcome.setupReplacementResult &&
+                outcome.result.error !== undefined
+            ) {
+                recordActionResultError(actionSpan);
+            }
+            emitActionResult(
+                outcome.result,
+                actionContext,
+                systemContext,
+                requestId,
+                appAgentName,
+                actionIndex,
+                schemaName,
+            );
+
+            logActionCompleted(systemContext.logger, {
+                ...eventData,
+                success: outcome.result.error === undefined,
+            });
+            closeActionContext();
+            return outcome.result;
+        } catch (error) {
+            logActionCompleted(systemContext.logger, {
+                ...eventData,
+                success: false,
+                cancelled:
+                    (error as { name?: unknown })?.name === "AbortError" ||
+                    systemContext.currentAbortSignal?.aborted === true,
+            });
+            throw error;
         }
-    } catch (e: any) {
-        if (
-            e.name === "AbortError" ||
-            systemContext.currentAbortSignal?.aborted
-        ) {
-            throw new DOMException("The operation was aborted.", "AbortError");
-        }
-        const details = serializeError(e);
-        result = createActionResultFromError(details.message, details);
-    }
-    // If the agent ran to completion but a cancel arrived while it was executing,
-    // discard the result and treat this as a cancellation.
-    systemContext.currentAbortSignal?.throwIfAborted();
-    actionContext.profiler?.stop();
-    actionContext.profiler = undefined;
-
-    if (debugActions.enabled) {
-        debugActions(actionResultToString(result));
-    }
-
-    // Display the action result.
-    emitActionResult(
-        result,
-        actionContext,
-        systemContext,
-        requestId,
-        appAgentName,
-        actionIndex,
-        schemaName,
-    );
-
-    closeActionContext();
-    return result;
+    });
 }
 
 // Post-execution processing for an ActionResult: error / displayContent /
@@ -354,6 +534,20 @@ function projectActionResultForDiagnostics(result: ActionResult): unknown {
     }
 }
 
+function displayActionResultError(
+    result: ActionResultError,
+    actionContext: ActionContext<unknown>,
+): void {
+    if (result.errorDisplayContent !== undefined) {
+        actionContext.actionIO.appendDisplay(
+            result.errorDisplayContent,
+            "block",
+        );
+    } else {
+        displayError(result.error, actionContext);
+    }
+}
+
 export function emitActionResult(
     result: ActionResult,
     actionContext: ActionContext<unknown>,
@@ -381,7 +575,7 @@ export function emitActionResult(
     }
     if (result.error !== undefined) {
         if (!("fallbackToReasoning" in result) || !result.fallbackToReasoning) {
-            displayError(result.error, actionContext);
+            displayActionResultError(result, actionContext);
         }
         return;
     }
@@ -912,7 +1106,12 @@ export async function executeCommand(
                     "AbortError",
                 );
             }
-            displayError(`ERROR: ${e.message}`, actionContext);
+            const errorDisplay = getErrorDisplayContent(e);
+            if (errorDisplay !== undefined) {
+                actionContext.actionIO.appendDisplay(errorDisplay, "block");
+            } else {
+                displayError(`ERROR: ${e.message}`, actionContext);
+            }
             debugCommandExecError(e.stack);
         }
     } finally {

@@ -21,7 +21,9 @@ import type {
     QueueCancelReason,
     QueueSnapshot,
     DisplayLogEntry,
+    ProcessCommandOptions,
 } from "@typeagent/dispatcher-types";
+import { ServerStoppingError } from "@typeagent/dispatcher-types";
 import {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
@@ -30,6 +32,11 @@ import {
 } from "agent-dispatcher/internal";
 import { PendingInteractionManager } from "agent-dispatcher/internal";
 import { supersedeStalledInteraction as supersedeStalledInteractionCore } from "./supersedeInteraction.js";
+import {
+    loadWorkingDirectoryPolicy,
+    selectWorkingDirectoryProposal,
+    resolveWorkingDirectory,
+} from "./workingDirectoryPolicy.js";
 
 import registerDebug from "debug";
 const debugConnect = registerDebug("agent-server:connect");
@@ -52,6 +59,7 @@ export async function createSharedDispatcher(
         );
     }
     let nextConnectionId = 0;
+    const workingDirectoryPolicy = loadWorkingDirectoryPolicy();
     const clients = new Map<string, ClientRecord>();
     const pendingInteractions = new PendingInteractionManager();
 
@@ -573,6 +581,7 @@ export async function createSharedDispatcher(
             // so interactions created before disconnect are unroutable after
             // reconnect. See docs/async-clientio-design.md §Open Questions.
             const connectionId = (nextConnectionId++).toString();
+            let selectedWorkingDirectory: string | undefined;
             const wasEmpty = clients.size === 0;
             clients.set(connectionId, {
                 clientIO,
@@ -652,12 +661,118 @@ export async function createSharedDispatcher(
             // new request queues behind a request that only unblocks on the
             // (up to 20 min) interaction / reasoning-loop timeout.
             const baseSubmitCommand = dispatcher.submitCommand.bind(dispatcher);
-            dispatcher.submitCommand = async (...args) => {
+            dispatcher.submitCommand = async (
+                command,
+                attachments,
+                submitOptions,
+                clientRequestId,
+                requestedId,
+            ) => {
                 supersedeStalledInteraction(
                     "user",
                     "Superseded by a new request",
                 );
-                return baseSubmitCommand(...args);
+                const requestId = requestedId ?? randomUUID();
+                context.logger?.logEvent("server:requestReceived", {
+                    requestId,
+                    connectionId,
+                    attachmentCount: attachments?.length ?? 0,
+                });
+                const workingDirectory = resolveWorkingDirectory(
+                    selectWorkingDirectoryProposal(
+                        submitOptions?.workingDirectory,
+                        command,
+                        selectedWorkingDirectory,
+                    ),
+                    workingDirectoryPolicy,
+                );
+                if (workingDirectory.workingDirectory !== undefined) {
+                    selectedWorkingDirectory =
+                        workingDirectory.workingDirectory;
+                }
+                if (workingDirectory.rejectedRequested) {
+                    debugCommand(
+                        `Rejected client working directory for ${connectionId}; ` +
+                            (workingDirectory.source === "default"
+                                ? "using server default"
+                                : "coding root unavailable"),
+                    );
+                }
+                const {
+                    workingDirectory: _clientWorkingDirectory,
+                    ...optionsWithoutWorkingDirectory
+                } = submitOptions ?? {};
+                void _clientWorkingDirectory;
+                const hasOtherOptions =
+                    Object.keys(optionsWithoutWorkingDirectory).length > 0;
+                const normalizedOptions: ProcessCommandOptions | undefined =
+                    workingDirectory.workingDirectory !== undefined
+                        ? {
+                              ...optionsWithoutWorkingDirectory,
+                              workingDirectory:
+                                  workingDirectory.workingDirectory,
+                          }
+                        : hasOtherOptions
+                          ? optionsWithoutWorkingDirectory
+                          : undefined;
+                const result = await baseSubmitCommand(
+                    command,
+                    attachments,
+                    normalizedOptions,
+                    clientRequestId,
+                    requestId,
+                );
+                if (!result.ok) {
+                    context.logger?.logEvent(
+                        "server:requestRejected",
+                        {
+                            requestId,
+                            connectionId,
+                            reason: result.error,
+                        },
+                        "warning",
+                    );
+                    return result;
+                }
+
+                void result.entry.completion.then(
+                    (commandResult) => {
+                        const cancelled = commandResult?.cancelled === true;
+                        const status = cancelled
+                            ? "cancelled"
+                            : (commandResult?.disposition?.status ??
+                              "completed");
+                        const success =
+                            !cancelled &&
+                            commandResult?.disposition?.status !== "failed";
+                        context.logger?.logEvent(
+                            "server:responseReady",
+                            {
+                                requestId: result.entry.requestId,
+                                connectionId,
+                                success,
+                                cancelled,
+                                status,
+                            },
+                            success ? "info" : cancelled ? "warning" : "error",
+                        );
+                    },
+                    (error) => {
+                        const cancelled = error instanceof ServerStoppingError;
+                        context.logger?.logEvent(
+                            "server:responseReady",
+                            {
+                                requestId: result.entry.requestId,
+                                connectionId,
+                                success: false,
+                                cancelled,
+                                status: cancelled ? "cancelled" : "failed",
+                            },
+                            cancelled ? "warning" : "error",
+                        );
+                    },
+                );
+                return result;
             };
 
             return dispatcher;

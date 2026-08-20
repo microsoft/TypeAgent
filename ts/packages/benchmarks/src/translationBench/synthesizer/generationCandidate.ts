@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    fromJSONParsedActionSchema,
-    validateAction,
-} from "@typeagent/action-schema";
+import { fromJSONParsedActionSchema } from "@typeagent/action-schema";
 import { z } from "zod";
 
 import {
@@ -22,6 +19,8 @@ import {
     normalizeTranslationBenchActionShapePolicy,
     type TranslationBenchActionShapePolicy,
 } from "./actionShape.js";
+import { stripEmptyGoldPlaceholders } from "./goldParameterHygiene.js";
+import { validateTranslationBenchGoldAction } from "./actionValidation.js";
 
 export interface TranslationBenchGeneratedCase {
     id: string;
@@ -197,6 +196,9 @@ export function parseTranslationBenchGeneratedCandidate(
             `Generated candidate requires exactly ${context.genCaseCount} gen cases`,
         );
     }
+    const candidate = stripEmptyGoldPlaceholdersFromCandidate(
+        structuredClone(parsed),
+    );
     const definition = fromJSONParsedActionSchema(
         structuredClone(context.schema.typeAgent!.parsedActionSchema),
     ).actionSchemas.get(context.targetAction.actionName);
@@ -226,7 +228,7 @@ export function parseTranslationBenchGeneratedCandidate(
                     `${path} must contain only the scheduled target action`,
                 );
             }
-            validateAction(definition, {
+            validateTranslationBenchGoldAction(definition, {
                 actionName: context.targetAction.actionName,
                 ...(action.parameters !== undefined
                     ? { parameters: action.parameters }
@@ -235,9 +237,9 @@ export function parseTranslationBenchGeneratedCandidate(
         }
         validateHistory(probe.history, path);
     };
-    validatePositive(parsed.seed, "seed", "seed");
+    validatePositive(candidate.seed, "seed", "seed");
     const ids = new Set<string>();
-    const seedUtterance = normalizedUtterance(parsed.seed.utterance);
+    const seedUtterance = normalizedUtterance(candidate.seed.utterance);
     if (context.forbiddenUtterances?.has(seedUtterance)) {
         throw new Error(
             "seed duplicates an utterance from another generated row",
@@ -246,7 +248,7 @@ export function parseTranslationBenchGeneratedCandidate(
     const utterances = new Set([seedUtterance]);
     let positives = 0;
     let negatives = 0;
-    parsed.genCases.forEach((probe, index) => {
+    candidate.genCases.forEach((probe, index) => {
         const path = `genCases[${index}]`;
         if (ids.has(probe.id)) throw new Error(`${path} has a duplicate id`);
         ids.add(probe.id);
@@ -280,7 +282,53 @@ export function parseTranslationBenchGeneratedCandidate(
             `Generated candidate requires ${expectedPerRole} positive and ${expectedPerRole} negative gen cases`,
         );
     }
-    return structuredClone(parsed);
+    return candidate;
+}
+
+function stripEmptyGoldPlaceholdersFromActions(
+    actions: TranslationBenchBenchmarkAction[],
+): TranslationBenchBenchmarkAction[] {
+    return actions.map((action) => {
+        if (action.parameters === undefined) {
+            return action;
+        }
+        const { parameters } = stripEmptyGoldPlaceholders(action.parameters);
+        if (parameters === action.parameters) {
+            return action;
+        }
+        if (parameters === undefined) {
+            // Keep parameters:{} when nested empties strip to nothing. Schemas
+            // like code.getSelection / desktop.ListThemes require the key
+            // (empty object type); dropping it fails validateAction.
+            return { ...action, parameters: {} };
+        }
+        return { ...action, parameters };
+    });
+}
+
+export function stripEmptyGoldPlaceholdersFromCandidate(
+    candidate: TranslationBenchGeneratedCandidate,
+): TranslationBenchGeneratedCandidate {
+    return {
+        ...candidate,
+        seed: {
+            ...candidate.seed,
+            expectedActions: stripEmptyGoldPlaceholdersFromActions(
+                candidate.seed.expectedActions,
+            ),
+        },
+        genCases: candidate.genCases.map((probe) => {
+            if (probe.role !== "positive") {
+                return probe;
+            }
+            return {
+                ...probe,
+                expectedActions: stripEmptyGoldPlaceholdersFromActions(
+                    probe.expectedActions,
+                ),
+            };
+        }),
+    };
 }
 
 export function parseTranslationBenchReviewerDecision(

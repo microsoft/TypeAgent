@@ -132,21 +132,38 @@ function generatedCandidate(target = targetAction(), genCaseCount = 20) {
                 role: positive ? ("positive" as const) : ("negative" as const),
                 utterance: positive
                     ? `Look up positive item ${index}`
-                    : `Please clarify negative item ${index}`,
+                    : `Don't run this action right now; leave everything alone (${index}).`,
                 expectedActions: positive
                     ? [expectedAction(target, `positive-${index}`)]
                     : [],
                 order: "any" as const,
-                dimensions: { variation: index },
+                dimensions: positive
+                    ? { variation: index }
+                    : { variation: index, negativeKind: "pure_refusal" },
             };
         }),
     };
+}
+
+function fairNegativeAssessments(genCaseCount = 20) {
+    const positiveCount = genCaseCount / 2;
+    return Array.from({ length: positiveCount }, (_, i) => ({
+        path: `$.genCases[${positiveCount + i}].utterance`,
+        kind: "pure_refusal" as const,
+        fairEmptyGold: true,
+        reason: "hard refusal with no alternate task",
+        opensAsHardAbstain: true,
+        hasAlternateOrSiblingTask: false,
+        hasQuestionOrExplanationRequest: false,
+        mapsToAnyLoadedTool: false,
+    }));
 }
 
 function reviewerDecision(
     candidateHash: string,
     decision: "approve" | "reject",
     feedback = "Make the seed more natural",
+    genCaseCount = 20,
 ) {
     return {
         candidateHash,
@@ -174,7 +191,21 @@ function reviewerDecision(
             decision === "approve"
                 ? "The row is ready"
                 : "The row needs revision",
+        negativeAssessments: fairNegativeAssessments(genCaseCount),
     };
+}
+
+function reviewerDecisionBody(
+    candidateHash: string,
+    decision: "approve" | "reject",
+    feedback = "Make the seed more natural",
+) {
+    const { negativeAssessments: _omit, ...body } = reviewerDecision(
+        candidateHash,
+        decision,
+        feedback,
+    );
+    return body;
 }
 
 function candidateHashFromPrompt(prompt: string): string {
@@ -321,6 +352,54 @@ describe("translation bench generation schedule", () => {
             }),
         ).toThrow(/cover|coverage|action/i);
     });
+
+    it("treats complete coverage as eligible actions after exclusions", () => {
+        const catalog = [
+            catalogSchema("alpha", ["keepAlpha", "drop"]),
+            catalogSchema("beta", ["keepBeta"]),
+        ];
+        const schedule = createTranslationBenchGenerationSchedule(catalog, {
+            caseCount: 2,
+            requireCompleteCoverage: true,
+            excludedActionIds: new Set(["alpha.drop"]),
+        });
+
+        expect(schedule.entries).toHaveLength(2);
+        expect(schedule.coverage).toMatchObject({
+            actionCount: 3,
+            scheduledActionCount: 2,
+            complete: true,
+        });
+        expect(
+            schedule.entries.map(
+                (entry) => `${entry.schemaName}.${entry.actionName}`,
+            ),
+        ).not.toContain("alpha.drop");
+    });
+
+    it("keeps same-named actions from different schemas eligible", () => {
+        const catalog = [
+            catalogSchema("alpha", ["shared", "onlyAlpha"]),
+            catalogSchema("beta", ["shared", "onlyBeta"]),
+        ];
+        const schedule = createTranslationBenchGenerationSchedule(catalog, {
+            caseCount: 4,
+            requireCompleteCoverage: true,
+        });
+
+        const targeted = schedule.entries.map(
+            (entry) => `${entry.schemaName}.${entry.actionName}`,
+        );
+        expect(schedule.coverage.complete).toBe(true);
+        expect(new Set(targeted)).toEqual(
+            new Set([
+                "alpha.shared",
+                "alpha.onlyAlpha",
+                "beta.shared",
+                "beta.onlyBeta",
+            ]),
+        );
+    });
 });
 
 describe("generated translation bench candidate validation", () => {
@@ -372,6 +451,23 @@ describe("generated translation bench candidate validation", () => {
         expect(() =>
             parseTranslationBenchGeneratedCandidate(wrongTarget, context),
         ).toThrow(/target|lookup|action/i);
+    });
+
+    it("rejects after strip when a required parameter was only an empty placeholder", () => {
+        const emptyRequired = generatedCandidate();
+        for (const probe of [emptyRequired.seed, ...emptyRequired.genCases]) {
+            if (probe.expectedActions.length === 0) continue;
+            probe.expectedActions = [
+                {
+                    schemaName: "tools",
+                    actionName: "lookup",
+                    parameters: { query: "" },
+                },
+            ];
+        }
+        expect(() =>
+            parseTranslationBenchGeneratedCandidate(emptyRequired, context),
+        ).toThrow(/required|query|missing/i);
     });
 
     it("canonicalizes generated payload hashes across checkpoint key sorting", () => {
@@ -476,14 +572,14 @@ describe("translation bench reviewer decision validation", () => {
     it("binds approval to the exact candidate hash", () => {
         expect(
             parseTranslationBenchReviewerDecision(
-                reviewerDecision(HASH, "approve"),
+                reviewerDecisionBody(HASH, "approve"),
                 HASH,
             ),
         ).toMatchObject({ decision: "approve", candidateHash: HASH });
 
         expect(() =>
             parseTranslationBenchReviewerDecision(
-                reviewerDecision("b".repeat(64), "approve"),
+                reviewerDecisionBody("b".repeat(64), "approve"),
                 HASH,
             ),
         ).toThrow(/hash/i);
@@ -491,7 +587,7 @@ describe("translation bench reviewer decision validation", () => {
 
     it("keeps structural parse free of score floor; optional threshold is explicit", () => {
         const lowApprove = {
-            ...reviewerDecision(HASH, "approve"),
+            ...reviewerDecisionBody(HASH, "approve"),
             scores: {
                 anchorFidelity: 0.5,
                 groundTruthCorrectness: 1,
@@ -576,6 +672,7 @@ describe("translation bench generation quality loop", () => {
                         reviewerDecision(
                             candidateHashFromPrompt(prompt),
                             "approve",
+                            "Make the seed more natural",
                         ),
                     );
                 },
@@ -587,6 +684,109 @@ describe("translation bench generation quality loop", () => {
         expect(JSON.stringify(generationSchema)).not.toContain(
             '\"required\":[\"schemaName\",\"actionName\",\"parameters\"]',
         );
+    });
+
+    it("strips empty gold placeholders and prompts grounded-param rules", async () => {
+        const parsed = parseToolsJsonSchema([
+            {
+                name: "authLogin",
+                description: "Log in to GitHub CLI",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        hostname: { type: "string" },
+                        token: { type: "string" },
+                        web: { type: "boolean" },
+                    },
+                    required: ["hostname"],
+                    additionalProperties: false,
+                },
+            },
+        ]);
+        const tools = generateActionActionFunctionJsonSchemas({
+            entry: parsed.entry.action!,
+            actionSchemas: parsed.actionSchemas,
+        }).map((tool) => ({
+            type: "function" as const,
+            function: {
+                name: tool.function.name,
+                ...(tool.function.description !== undefined
+                    ? { description: tool.function.description }
+                    : {}),
+                parameters: tool.function.parameters as Record<string, unknown>,
+            },
+        }));
+        const schema: TranslationBenchBenchmarkSchema = {
+            schemaName: "github-cli",
+            description: "github-cli actions",
+            tools,
+            typeAgent: {
+                sourceHash: `github-cli-${HASH}`,
+                schemaType: "GithubCliAction",
+                parsedActionSchema: toJSONParsedActionSchema(parsed),
+            },
+        };
+        const target = targetAction("github-cli", "authLogin");
+        const dirty = generatedCandidate(target, 2);
+        for (const probe of [dirty.seed, ...dirty.genCases]) {
+            if (probe.expectedActions.length === 0) continue;
+            probe.expectedActions = [
+                {
+                    ...target,
+                    parameters: {
+                        hostname: "github.acme.example",
+                        web: true,
+                        token: "",
+                    },
+                },
+            ];
+        }
+        let generatorPrompt = "";
+        const result = await runTranslationBenchGenerationQualityLoop({
+            targetAction: target,
+            schema,
+            anchor: sourceAnchor(),
+            activeSchemas: [schema.schemaName],
+            genCaseCount: 2,
+            maxAttempts: 5,
+            generator: {
+                model: "generator-model",
+                async complete(prompt) {
+                    generatorPrompt = prompt;
+                    return JSON.stringify(dirty);
+                },
+            },
+            reviewer: {
+                model: "reviewer-model",
+                async complete(prompt) {
+                    return JSON.stringify(
+                        reviewerDecision(
+                            candidateHashFromPrompt(prompt),
+                            "approve",
+                            "Make the seed more natural",
+                            2,
+                        ),
+                    );
+                },
+            },
+        });
+        expect(generatorPrompt).toContain(
+            "Only include parameters clearly supported by the utterance",
+        );
+        expect(result.candidate.seed.expectedActions[0]!.parameters).toEqual({
+            hostname: "github.acme.example",
+            web: true,
+        });
+        for (const probe of result.candidate.genCases) {
+            if (probe.role !== "positive") continue;
+            expect(probe.expectedActions[0]!.parameters).toEqual({
+                hostname: "github.acme.example",
+                web: true,
+            });
+            expect(probe.expectedActions[0]!.parameters).not.toHaveProperty(
+                "token",
+            );
+        }
     });
 
     it("uses separate generator and reviewer passes", async () => {

@@ -9,7 +9,7 @@ import yaml from "js-yaml";
 import dotenv from "dotenv";
 import registerDebug from "debug";
 
-import { flatten, mergeFlat } from "./flatten.js";
+import { flatten, mergeFlat, type FlattenOptions } from "./flatten.js";
 import { fetchKeyVaultConfig } from "./keyVault.js";
 import { validateConfigTree } from "./schema.js";
 import {
@@ -69,6 +69,20 @@ interface ResolvedConfigPaths {
     defaultsPath: string;
     localPath: string;
     dotEnvPath: string;
+}
+
+type ConfigLayer = { source: ConfigSource; flat: FlatEnv };
+
+/**
+ * Absolute path of the `config.local.yaml` this process would load, resolved
+ * with the same precedence as {@link loadConfigSync}. Used by setup hints so
+ * they can point at (and link to) the actual file on this machine rather than
+ * a generic repo-relative path. Returns the path whether or not it exists.
+ */
+export function resolveLocalConfigPath(
+    options: LoadConfigOptions = {},
+): string {
+    return resolveConfigPaths(options).localPath;
 }
 
 /**
@@ -135,6 +149,53 @@ function readDotEnvFile(filePath: string): FlatEnv {
 }
 
 /**
+ * A top-level section of a config file that failed to convert and was
+ * therefore skipped — most often a leftover `<value>` placeholder or a
+ * value of the wrong type. Reported instead of silently dropping the
+ * whole file, which used to leave everything looking "not configured".
+ */
+export interface ConfigProblem {
+    /** Absolute path of the file the section came from. */
+    readonly file: string;
+    /** Top-level key, e.g. `spotify`. */
+    readonly section: string;
+    /** Converter message, e.g. `Expected a number at 'spotify.port'`. */
+    readonly message: string;
+}
+
+let configProblems: ConfigProblem[] = [];
+const warnedProblems = new Set<string>();
+
+/**
+ * Sections skipped by the most recent load. Setup/readiness checks use
+ * this to explain "you configured it, but the value is invalid" rather
+ * than reporting the setting as missing.
+ */
+export function getConfigProblems(): ConfigProblem[] {
+    return configProblems;
+}
+
+function flattenOptions(file: string): FlattenOptions {
+    // Section errors are always non-fatal: one mistyped value shouldn't
+    // take down the whole file (which reads to the user as "nothing is
+    // configured", the exact confusion this reporting exists to avoid).
+    // File-level errors — unreadable file, invalid YAML — still honor
+    // `strict`.
+    return {
+        onSectionError: (section, error) => {
+            configProblems.push({ file, section, message: error.message });
+            const key = `${file}:${section}:${error.message}`;
+            if (!warnedProblems.has(key)) {
+                warnedProblems.add(key);
+                console.warn(
+                    `Warning: skipping '${section}:' in ${file} — ${error.message}`,
+                );
+            }
+        },
+    };
+}
+
+/**
  * Synchronous loader used by tests and any entry point that cannot
  * await. Reads YAML files and the `.env` fallback only — never reaches
  * out to Key Vault.
@@ -149,6 +210,7 @@ export function loadConfigSync(
     const trackSources = options.trackSources ?? false;
     const populateProcessEnv = options.populateProcessEnv ?? true;
     const strict = options.strict ?? true;
+    configProblems = [];
 
     debug(
         "loading config (defaults=%s, local=%s, dotenv=%s)",
@@ -157,7 +219,7 @@ export function loadConfigSync(
         dotEnvPath,
     );
 
-    const layers: { source: ConfigSource; flat: FlatEnv }[] = [];
+    const layers: ConfigLayer[] = [];
 
     // .env (legacy fallback, lowest precedence)
     try {
@@ -176,7 +238,7 @@ export function loadConfigSync(
         if (tree) {
             layers.push({
                 source: ConfigSource.Defaults,
-                flat: flatten(tree),
+                flat: flatten(tree, flattenOptions(defaultsPath)),
             });
         }
     } catch (err) {
@@ -190,7 +252,7 @@ export function loadConfigSync(
         if (tree) {
             layers.push({
                 source: ConfigSource.Local,
-                flat: flatten(tree),
+                flat: flatten(tree, flattenOptions(localPath)),
             });
         }
     } catch (err) {
@@ -216,6 +278,7 @@ export function loadConfigSync(
     }
 
     if (populateProcessEnv) {
+        rememberReloadState(localPath, layers);
         applyToProcessEnv(merged, sources);
     }
 
@@ -282,6 +345,9 @@ export async function loadConfig(
 
     debug("loading config with key vault (vault=%s)", vaultName);
 
+    // Discard anything the vault-name pre-pass reported; the layers
+    // below are re-read and re-report on their own.
+    configProblems = [];
     const layers: { source: ConfigSource; flat: FlatEnv }[] = [];
 
     // .env
@@ -306,7 +372,7 @@ export async function loadConfig(
         if (tree) {
             layers.push({
                 source: ConfigSource.KeyVault,
-                flat: flatten(tree),
+                flat: flatten(tree, flattenOptions("key vault")),
             });
         }
     } catch (err) {
@@ -317,7 +383,7 @@ export async function loadConfig(
     // local
     pushYamlLayer(layers, ConfigSource.Local, localPath, strict);
 
-    return finalize(layers, populateProcessEnv, trackSources);
+    return finalize(layers, populateProcessEnv, trackSources, localPath);
 }
 
 /**
@@ -355,7 +421,10 @@ function pushYamlLayer(
     try {
         const tree = readYamlFile(filePath);
         if (tree) {
-            layers.push({ source, flat: flatten(tree) });
+            layers.push({
+                source,
+                flat: flatten(tree, flattenOptions(filePath)),
+            });
         }
     } catch (err) {
         if (strict) throw err;
@@ -368,9 +437,10 @@ function pushYamlLayer(
  * and (optionally) push the result into `process.env`.
  */
 function finalize(
-    layers: { source: ConfigSource; flat: FlatEnv }[],
+    layers: ConfigLayer[],
     populateProcessEnv: boolean,
     trackSources: boolean,
+    localPath?: string,
 ): LoadConfigResult {
     const merged: FlatEnv = mergeFlat(...layers.map((l) => l.flat));
 
@@ -385,6 +455,9 @@ function finalize(
     }
 
     if (populateProcessEnv) {
+        if (localPath !== undefined) {
+            rememberReloadState(localPath, layers);
+        }
         applyToProcessEnv(merged, sources);
     }
 
@@ -395,6 +468,139 @@ function finalize(
     );
 
     return sources !== undefined ? { env: merged, sources } : { env: merged };
+}
+
+interface ReloadState {
+    readonly inheritedValue: string | undefined;
+    readonly restoreInheritedValue: boolean;
+}
+
+const reloadState = new Map<string, ReloadState>();
+
+function rememberReloadState(
+    localPath: string,
+    layers: readonly ConfigLayer[],
+): void {
+    const local =
+        layers.find(({ source }) => source === ConfigSource.Local)?.flat ?? {};
+    const lower = mergeFlat(
+        ...layers
+            .filter(({ source }) => source !== ConfigSource.Local)
+            .map(({ flat }) => flat),
+    );
+    const lowerSources: SourceMap = {};
+    for (const layer of layers) {
+        if (layer.source === ConfigSource.Local) {
+            continue;
+        }
+        for (const key of Object.keys(layer.flat)) {
+            lowerSources[key] = layer.source;
+        }
+    }
+    const keys = new Set([...Object.keys(lower), ...Object.keys(local)]);
+    for (const key of keys) {
+        const stateKey = `${localPath}\0${key}`;
+        if (reloadState.has(stateKey)) {
+            continue;
+        }
+        const current = process.env[key];
+        const processValueWins =
+            current !== undefined && current !== local[key];
+        reloadState.set(stateKey, {
+            inheritedValue: processValueWins ? current : lower[key],
+            restoreInheritedValue:
+                processValueWins || lowerSources[key] === ConfigSource.KeyVault,
+        });
+    }
+}
+
+/**
+ * Re-read only the legacy env keys used by one agent.
+ *
+ * Local values override the inherited startup value while present. Removing a
+ * local override restores that inherited value (including a value populated by
+ * Key Vault in the parent process), or deletes the key when no inherited value
+ * existed. Keys outside `keys` are never changed.
+ */
+export function reloadConfigKeysSync(
+    keys: readonly string[],
+    options: LoadConfigOptions = {},
+): string[] {
+    const paths = resolveConfigPaths(options);
+    loadConfigSync({
+        ...options,
+        strict: true,
+        populateProcessEnv: false,
+    });
+    const localTree = readYamlFile(paths.localPath);
+    const local = localTree
+        ? flatten(localTree, { onSectionError: () => {} })
+        : {};
+    const defaultsTree = readYamlFile(paths.defaultsPath);
+    const lower = mergeFlat(
+        readDotEnvFile(paths.dotEnvPath),
+        defaultsTree
+            ? flatten(defaultsTree, flattenOptions(paths.defaultsPath))
+            : {},
+    );
+    const changed: string[] = [];
+    for (const key of keys) {
+        const stateKey = `${paths.localPath}\0${key}`;
+        let state = reloadState.get(stateKey);
+        if (state === undefined) {
+            const current = process.env[key];
+            const localValue = local[key];
+            const lowerValue = lower[key];
+            state = {
+                inheritedValue:
+                    current !== undefined && current !== localValue
+                        ? current
+                        : lowerValue,
+                restoreInheritedValue:
+                    current !== undefined &&
+                    current !== localValue &&
+                    current !== lowerValue,
+            };
+            reloadState.set(stateKey, state);
+        }
+        const value =
+            local[key] ??
+            (state.restoreInheritedValue ? state.inheritedValue : lower[key]);
+        if (process.env[key] === value) {
+            continue;
+        }
+        if (value === undefined) {
+            delete process.env[key];
+        } else {
+            process.env[key] = value;
+        }
+        changed.push(key);
+    }
+    debug("reloaded config, %d key(s) changed", changed.length);
+    return changed;
+}
+
+/**
+ * Scoped reload for callers that must not fail because of it: a
+ * broken or unreadable config file leaves whatever was loaded at startup
+ * in place rather than turning "your Spotify settings are missing" into
+ * an unrelated parse error. Returns the keys that changed, or none.
+ *
+ * This is what agents should call before reading their settings. An agent
+ * process is forked with a snapshot of `process.env`, so without a reload
+ * it can never observe an edit the user made after startup — which is
+ * exactly what `@config agent refresh <agent>` promises to pick up.
+ */
+export function tryReloadConfigKeysSync(
+    keys: readonly string[],
+    options: LoadConfigOptions = {},
+): string[] {
+    try {
+        return reloadConfigKeysSync(keys, options);
+    } catch (e: any) {
+        debug("config reload failed: %s", e?.message ?? e);
+        return [];
+    }
 }
 
 /**

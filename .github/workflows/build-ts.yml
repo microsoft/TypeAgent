@@ -42,11 +42,11 @@ jobs:
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history so the changed-files lint can diff against the base.
           fetch-depth: 0
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         continue-on-error: true
         with:
@@ -54,12 +54,12 @@ jobs:
             ts:
               - "ts/**"
               - ".github/workflows/build-ts.yml"
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         with:
           node-version: ${{ matrix.version }}
@@ -141,11 +141,15 @@ jobs:
         working-directory: ts
         run: |
           pnpm run postinstall:better-sqlite3-node-restore
+      # Runs the unit suite once, then reruns only the packages that owned a
+      # failing test up to two times (serially), stopping early on success.
+      # Flaky tests are reported as annotations / a step summary but do not fail
+      # the build; the final retry package suite must otherwise pass.
       - name: Test
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
-          npm run test:local
+          node tools/scripts/runTestLocalWithSummary.mjs
       - name: UI tests (requires display)
         if: ${{ (github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false') && runner.os == 'Linux' }}
         working-directory: ts

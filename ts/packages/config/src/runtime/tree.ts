@@ -19,6 +19,7 @@
  */
 
 import type { ConfigTree, FlatEnv } from "../types.js";
+import { simpleConfigMappingsForSection } from "../mappings.js";
 import { regionFromUrl, regionToEnvSuffix } from "./regions.js";
 import { buildConfig } from "./build.js";
 import {
@@ -479,6 +480,8 @@ export function configToTree(config: Config): ConfigTree {
         const c: ConfigTree = {};
         if (config.copilot.defaultModel !== undefined)
             c.defaultModel = config.copilot.defaultModel;
+        if (config.copilot.fallbackModels !== undefined)
+            c.fallbackModels = [...config.copilot.fallbackModels];
         if (config.copilot.cliPath !== undefined)
             c.cliPath = config.copilot.cliPath;
         if (config.copilot.cliUrl !== undefined)
@@ -560,6 +563,16 @@ function asObject(node: unknown, where: string): Record<string, unknown> {
 function asString(node: unknown, where: string): string {
     if (typeof node !== "string") {
         throw new Error(`Expected a string at '${where}', got ${typeof node}.`);
+    }
+    return node;
+}
+
+function asStringArray(node: unknown, where: string): string[] {
+    if (
+        !Array.isArray(node) ||
+        node.some((value) => typeof value !== "string")
+    ) {
+        throw new Error(`Expected a string array at '${where}'.`);
     }
     return node;
 }
@@ -877,129 +890,65 @@ function emitOpenAIVariant(
         );
 }
 
-function emitSpeech(node: unknown, out: FlatEnv): void {
-    const s = asObject(node, "speech");
-    if (s.auth !== undefined)
-        out.SPEECH_SDK_KEY = authToYaml(readAuth(s.auth, "speech.auth"));
-    if (s.region !== undefined)
-        out.SPEECH_SDK_REGION = asString(s.region, "speech.region");
-    if (s.endpoint !== undefined)
-        out.SPEECH_SDK_ENDPOINT = asString(s.endpoint, "speech.endpoint");
+function emitSimpleMappedSection(
+    section: string,
+    node: unknown,
+    out: FlatEnv,
+    onLeafError?: (error: Error) => void,
+): void {
+    const sectionNode = asObject(node, section);
+    for (const mapping of simpleConfigMappingsForSection(section)) {
+        const segments = mapping.configPath.split(".").slice(1);
+        let parent = sectionNode;
+        let where = section;
+        let missing = false;
+        for (const segment of segments.slice(0, -1)) {
+            where += `.${segment}`;
+            const child = parent[segment];
+            if (child === undefined) {
+                missing = true;
+                break;
+            }
+            parent = asObject(child, where);
+        }
+        if (missing) continue;
+
+        const value = parent[segments[segments.length - 1]];
+        if (value === undefined) continue;
+        try {
+            switch (mapping.valueKind) {
+                case "auth":
+                    out[mapping.envVar] = authToYaml(
+                        readAuth(value, mapping.configPath),
+                    );
+                    break;
+                case "number":
+                    out[mapping.envVar] = String(
+                        asNumber(value, mapping.configPath),
+                    );
+                    break;
+                case "string":
+                    out[mapping.envVar] = asString(value, mapping.configPath);
+                    break;
+            }
+        } catch (error) {
+            if (onLeafError === undefined) {
+                throw error;
+            }
+            onLeafError(
+                error instanceof Error ? error : new Error(String(error)),
+            );
+        }
+    }
 }
 
-function emitMaps(node: unknown, out: FlatEnv): void {
-    const m = asObject(node, "maps");
-    if (m.clientId !== undefined)
-        out.AZURE_MAPS_CLIENTID = asString(m.clientId, "maps.clientId");
-    if (m.endpoint !== undefined)
-        out.AZURE_MAPS_ENDPOINT = asString(m.endpoint, "maps.endpoint");
-}
-
-function emitMsGraph(node: unknown, out: FlatEnv): void {
-    const m = asObject(node, "msGraph");
-    if (m.clientId !== undefined)
-        out.MSGRAPH_APP_CLIENTID = asString(m.clientId, "msGraph.clientId");
-    if (m.clientSecret !== undefined)
-        out.MSGRAPH_APP_CLIENTSECRET = asString(
-            m.clientSecret,
-            "msGraph.clientSecret",
-        );
-    if (m.tenantId !== undefined)
-        out.MSGRAPH_APP_TENANTID = asString(m.tenantId, "msGraph.tenantId");
-    if (m.username !== undefined)
-        out.MSGRAPH_APP_USERNAME = asString(m.username, "msGraph.username");
-    if (m.password !== undefined)
-        out.MSGRAPH_APP_PASSWD = asString(m.password, "msGraph.password");
-}
-
-function emitGoogleCalendar(node: unknown, out: FlatEnv): void {
-    const g = asObject(node, "googleCalendar");
-    if (g.clientId !== undefined)
-        out.GOOGLE_CALENDAR_CLIENT_ID = asString(
-            g.clientId,
-            "googleCalendar.clientId",
-        );
-    if (g.clientSecret !== undefined)
-        out.GOOGLE_CALENDAR_CLIENT_SECRET = asString(
-            g.clientSecret,
-            "googleCalendar.clientSecret",
-        );
-}
-
-function emitSpotify(node: unknown, out: FlatEnv): void {
-    const s = asObject(node, "spotify");
-    if (s.clientId !== undefined)
-        out.SPOTIFY_APP_CLI = asString(s.clientId, "spotify.clientId");
-    if (s.clientSecret !== undefined)
-        out.SPOTIFY_APP_CLISEC = asString(
-            s.clientSecret,
-            "spotify.clientSecret",
-        );
-    if (s.port !== undefined)
-        out.SPOTIFY_APP_PORT = String(asNumber(s.port, "spotify.port"));
-}
-
-function emitWikipedia(node: unknown, out: FlatEnv): void {
-    const w = asObject(node, "wikipedia");
-    if (w.clientId !== undefined)
-        out.WIKIPEDIA_CLIENT_ID = asString(w.clientId, "wikipedia.clientId");
-    if (w.clientSecret !== undefined)
-        out.WIKIPEDIA_CLIENT_SECRET = asString(
-            w.clientSecret,
-            "wikipedia.clientSecret",
-        );
-    if (w.endpoint !== undefined)
-        out.WIKIPEDIA_ENDPOINT = asString(w.endpoint, "wikipedia.endpoint");
-}
-
-function emitStorage(node: unknown, out: FlatEnv): void {
+function emitStorage(
+    node: unknown,
+    out: FlatEnv,
+    onLeafError?: (error: Error) => void,
+): void {
     const s = asObject(node, "storage");
-    if (s.azure !== undefined) {
-        const a = asObject(s.azure, "storage.azure");
-        if (a.account !== undefined)
-            out.AZURE_STORAGE_ACCOUNT = asString(
-                a.account,
-                "storage.azure.account",
-            );
-        if (a.container !== undefined)
-            out.AZURE_STORAGE_CONTAINER = asString(
-                a.container,
-                "storage.azure.container",
-            );
-    }
-    if (s.aws !== undefined) {
-        const a = asObject(s.aws, "storage.aws");
-        if (a.bucketName !== undefined)
-            out.AWS_S3_BUCKET_NAME = asString(
-                a.bucketName,
-                "storage.aws.bucketName",
-            );
-        if (a.region !== undefined)
-            out.AWS_S3_REGION = asString(a.region, "storage.aws.region");
-        if (a.accessKeyId !== undefined)
-            out.AWS_ACCESS_KEY_ID = asString(
-                a.accessKeyId,
-                "storage.aws.accessKeyId",
-            );
-        if (a.secretAccessKey !== undefined)
-            out.AWS_SECRET_ACCESS_KEY = asString(
-                a.secretAccessKey,
-                "storage.aws.secretAccessKey",
-            );
-    }
-    if (s.database !== undefined) {
-        const d = asObject(s.database, "storage.database");
-        if (d.cosmosDbConnectionString !== undefined)
-            out.COSMOSDB_CONNECTION_STRING = asString(
-                d.cosmosDbConnectionString,
-                "storage.database.cosmosDbConnectionString",
-            );
-        if (d.mongoDbConnectionString !== undefined)
-            out.MONGODB_CONNECTION_STRING = asString(
-                d.mongoDbConnectionString,
-                "storage.database.mongoDbConnectionString",
-            );
-    }
+    emitSimpleMappedSection("storage", node, out, onLeafError);
     if (s.elastic !== undefined) {
         const e = asObject(s.elastic, "storage.elastic");
         if (e.apiKey !== undefined)
@@ -1007,12 +956,6 @@ function emitStorage(node: unknown, out: FlatEnv): void {
         if (e.uri !== undefined)
             out.ELASTIC_URI = asString(e.uri, "storage.elastic.uri");
     }
-}
-
-function emitVault(node: unknown, out: FlatEnv): void {
-    const v = asObject(node, "vault");
-    if (v.shared !== undefined)
-        out.TYPEAGENT_SHAREDVAULT = asString(v.shared, "vault.shared");
 }
 
 function emitAzureFoundry(node: unknown, out: FlatEnv): void {
@@ -1104,6 +1047,10 @@ function emitCopilot(node: unknown, out: FlatEnv): void {
             c.defaultModel,
             "copilot.defaultModel",
         );
+    if (c.fallbackModels !== undefined)
+        out.COPILOT_FALLBACK_MODELS = JSON.stringify(
+            asStringArray(c.fallbackModels, "copilot.fallbackModels"),
+        );
     if (c.cliPath !== undefined)
         out.COPILOT_CLI_PATH = asString(c.cliPath, "copilot.cliPath");
     if (c.cliUrl !== undefined)
@@ -1152,7 +1099,11 @@ function emitReasoning(node: unknown, out: FlatEnv): void {
  * `configToEnv` but operating on the YAML object form (no Map types,
  * regions as object keys).
  */
-export function typedSectionToFlat(key: string, node: unknown): FlatEnv {
+export function typedSectionToFlat(
+    key: string,
+    node: unknown,
+    onLeafError?: (error: Error) => void,
+): FlatEnv {
     const out: FlatEnv = {};
     switch (key) {
         case "azureOpenAI":
@@ -1162,28 +1113,28 @@ export function typedSectionToFlat(key: string, node: unknown): FlatEnv {
             emitOpenAI(node, out);
             break;
         case "speech":
-            emitSpeech(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "maps":
-            emitMaps(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "msGraph":
-            emitMsGraph(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "googleCalendar":
-            emitGoogleCalendar(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "spotify":
-            emitSpotify(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "wikipedia":
-            emitWikipedia(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "storage":
-            emitStorage(node, out);
+            emitStorage(node, out, onLeafError);
             break;
         case "vault":
-            emitVault(node, out);
+            emitSimpleMappedSection(key, node, out, onLeafError);
             break;
         case "azureFoundry":
             emitAzureFoundry(node, out);

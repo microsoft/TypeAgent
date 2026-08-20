@@ -3,6 +3,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 
 import { z } from "zod";
 
@@ -102,11 +103,12 @@ export interface ActionParametersGraderCatalog {
     catalogVersion: string;
     generatedAt: string;
     /**
-     * Catalog-level policy/heuristic fingerprint. When it drifts (or is
-     * missing on an old catalog), incremental build reclassifies all actions.
-     * Per-action `sourceFingerprint` stays paramSpec-only, so policy PRs do
-     * not churn every entry.
+     * Policy/heuristic code fingerprint (not per-action). When this drifts,
+     * incremental build discards prior entries and reclassifies all actions.
+     * Per-action `sourceFingerprint` stays paramSpec-only so schema-stable
+     * actions do not churn fingerprints across policy PRs.
      */
+    /** Present on newly written catalogs; missing → treat as rules drift. */
     rulesFingerprint?: string;
     modes: Record<ActionParamVerifyMode, string>;
     createPolicies: Record<ActionParamCreatePolicy, string>;
@@ -174,6 +176,9 @@ export interface FieldGraderDecision {
 export const LLM_JUDGE_PARAMETERS = [
     "browser.actionDiscovery.createWebFlowFromRecording.recordedSteps",
     "browser.executeAdHocScript.script",
+    "browser.lookupAndAnswer.lookupAndAnswerInternet.internetLookups",
+    "browser.lookupAndAnswer.lookupAndAnswerInternet.originalRequest",
+    "browser.lookupAndAnswer.lookupAndAnswerInternet.sites",
     "browser.webFlows.editWebFlow.script",
     "code.code-editor.createCodeBlock.body",
     "code.code-editor.createCodeBlock.codeSnippet",
@@ -195,11 +200,21 @@ const LLM_JUDGE_PARAMETER_SET = new Set<string>(LLM_JUDGE_PARAMETERS);
 /** Literal stored strings that must deep-equal (not soft / not llm judge). */
 const EXACT_PARAMETERS = new Set<string>(["github-cli.aliasSet.command"]);
 
+export const NONEMPTY_PARAMETERS = [
+    "system.conversation.indexConversation.name",
+    "system.conversation.newConversation.name",
+    "system.conversation.summarizeConversation.name",
+] as const;
+
+const NONEMPTY_PARAMETER_SET = new Set<string>(NONEMPTY_PARAMETERS);
+
 export const HEURISTIC_SOURCE_HASH: string = createHash("sha256")
     .update(
         JSON.stringify({
             rules: [...REGEX_RULE_IDS].sort(),
             llmJudge: [...LLM_JUDGE_PARAMETERS],
+            nonempty: [...NONEMPTY_PARAMETERS],
+            exact: [...EXACT_PARAMETERS].sort(),
         }),
     )
     .digest("hex")
@@ -364,8 +379,15 @@ const parameterGraderLlmVerifierSchema = z
     })
     .passthrough();
 
-/** Schema identity of an action's parameters (paramSpec only, not policy rules). */
-export function actionParameterSourceFingerprint(paramSpec: ParamSpec): string {
+/**
+ * Stable identity of an action's parameter schema only.
+ * Does NOT include rules/heuristic versions — those live on
+ * catalog.rulesFingerprint so policy PRs do not rewrite every entry.
+ */
+export function actionParameterSourceFingerprint(
+    paramSpec: ParamSpec,
+    _parametersSummary?: string,
+): string {
     return createHash("sha256")
         .update(JSON.stringify(canonicalizeParamSpec(paramSpec)))
         .digest("hex")
@@ -1051,11 +1073,19 @@ export async function buildActionParametersGraderEntry(
                 actionId: id,
                 siblingFieldNames: Object.keys(paramSpec.fields),
             });
-            if (EXACT_PARAMETERS.has(`${id}.${name}`)) {
+            const fullName = `${id}.${name}`;
+            if (EXACT_PARAMETERS.has(fullName)) {
                 judged = {
                     create: "identifier",
                     verify: "exact",
                     rule: "string-identifier-exact",
+                    source: judged.source,
+                };
+            } else if (NONEMPTY_PARAMETER_SET.has(fullName)) {
+                judged = {
+                    create: "free_text",
+                    verify: "nonempty",
+                    rule: "string-free-text-nonempty",
                     source: judged.source,
                 };
             }
@@ -1373,6 +1403,37 @@ export function loadActionParametersGraderCatalogFile(
     return raw as unknown as ActionParametersGraderCatalog;
 }
 
+const requireFromHere = createRequire(import.meta.url);
+let cachedPackagedActionParametersGrader:
+    | ActionParametersGraderCatalog
+    | undefined;
+
+/**
+ * Packaged deterministic parameter grader, loaded from the generated JSON that
+ * ships with the benchmark. Cached; used to derive per-case `parameterScore`
+ * specs so the runner soft-matches params (e.g. free-text `nonempty`) instead
+ * of exact-matching everything.
+ */
+export function getPackagedActionParametersGraderCatalog(): ActionParametersGraderCatalog {
+    if (cachedPackagedActionParametersGrader === undefined) {
+        const graderPath = requireFromHere.resolve(
+            "../../action-parameters-grader.generated.json",
+        );
+        const catalog = loadActionParametersGraderCatalogFile(graderPath);
+        if (catalog === undefined) {
+            throw new Error(
+                `Missing packaged action-parameters grader at ${graderPath}`,
+            );
+        }
+        cachedPackagedActionParametersGrader = catalog;
+    }
+    return cachedPackagedActionParametersGrader;
+}
+
+export function clearPackagedActionParametersGraderCacheForTests(): void {
+    cachedPackagedActionParametersGrader = undefined;
+}
+
 function priorEntryStillValid(
     entry: ActionParametersGraderEntry,
     catalogRow: CatalogActionRow,
@@ -1383,8 +1444,16 @@ function priorEntryStillValid(
         );
     }
     // Catalog paramSpec must still canonicalize-equal stored paramSpec.
-    // (paramSpec equality implies fingerprint equality by construction.)
     if (!nestedParamSpecEqual(catalogRow.paramSpec, entry.paramSpec)) {
+        return false;
+    }
+    // Re-verify schema fingerprint only (rules drift handled at catalog level).
+    const liveFp = actionParameterSourceFingerprint(catalogRow.paramSpec);
+    if (
+        entry.sourceFingerprint !== liveFp ||
+        actionParameterSourceFingerprint(entry.paramSpec) !==
+            entry.sourceFingerprint
+    ) {
         return false;
     }
     if (entry.paramSpec.kind !== "object") {
@@ -1577,9 +1646,9 @@ export async function buildActionParametersGraderCatalog(
         version: 1,
         description:
             "Create+verify policies per action parameter. " +
-            "sourceFingerprint is paramSpec-only (stable across policy edits); " +
-            "rulesFingerprint is catalog-level and forces a full reclassify when it drifts. " +
-            "Incremental: only added/updated actions are reclassified. " +
+            "sourceFingerprint is paramSpec-only (stable across policy edits). " +
+            "rulesFingerprint is catalog-level; when it drifts, all actions reclassify. " +
+            "Incremental: only added/updated actions are reclassified; unchanged fingerprints are kept. " +
             "Regex first, LLM prior reuse (not regex priors), LLM+verifier fallback. " +
             "Open strings without a name heuristic use structural free_text/nonempty. " +
             "`create` guides the synthesizer; `verify` / `parameterScore` drive runner soft matching. `llmAsAJudge` marks code/script params that need semantic LLM scoring. " +
@@ -1694,6 +1763,19 @@ function isIdentifierName(name: string): boolean {
  * Runner-ready parameterScore specs aligned 1:1 with expectedActions.
  * Missing grader entries yield `undefined` slots (runner falls back to exact).
  */
+/**
+ * Field modes the deterministic runner can consume. `llmAsAJudge` is a
+ * generation/offline-scoring concept; the runner treats such params as
+ * `ignore` (they are semantically judged elsewhere, never exact-matched here).
+ */
+export type RunnerParamFieldMode = "exact" | "exists" | "nonempty" | "ignore";
+
+function toRunnerParamFieldMode(
+    mode: ActionParamVerifyMode,
+): RunnerParamFieldMode {
+    return mode === "llmAsAJudge" ? "ignore" : mode;
+}
+
 export function parameterScoreSpecsForExpectedActions(
     grader: ActionParametersGraderCatalog,
     expectedActions: ReadonlyArray<{
@@ -1702,8 +1784,8 @@ export function parameterScoreSpecsForExpectedActions(
     }>,
 ): Array<
     | {
-          defaultMode: ActionParamVerifyMode;
-          fields: Record<string, ActionParamVerifyMode>;
+          defaultMode: RunnerParamFieldMode;
+          fields: Record<string, RunnerParamFieldMode>;
       }
     | undefined
 > {
@@ -1717,9 +1799,15 @@ export function parameterScoreSpecsForExpectedActions(
         if (Object.keys(fields).length === 0) {
             return undefined;
         }
+        const mapped: Record<string, RunnerParamFieldMode> = {};
+        for (const [name, mode] of Object.entries(fields)) {
+            mapped[name] = toRunnerParamFieldMode(mode);
+        }
         return {
-            defaultMode: entry.parameterScore.defaultMode,
-            fields: { ...fields },
+            defaultMode: toRunnerParamFieldMode(
+                entry.parameterScore.defaultMode,
+            ),
+            fields: mapped,
         };
     });
 }
@@ -1728,8 +1816,8 @@ export function parameterScoreSpecsForExpectedActions(
 export function hasUsableParameterScoreSpecs(
     specs: ReadonlyArray<
         | {
-              defaultMode: ActionParamVerifyMode;
-              fields: Record<string, ActionParamVerifyMode>;
+              defaultMode: RunnerParamFieldMode;
+              fields: Record<string, RunnerParamFieldMode>;
           }
         | undefined
     >,

@@ -24,7 +24,7 @@ export interface ScriptRecipe {
 
 export interface ScriptParameter {
     name: string;
-    type: "string" | "number" | "boolean" | "path";
+    type: "string" | "number" | "boolean" | "path" | "executable";
     required: boolean;
     description: string;
     default?: unknown;

@@ -331,10 +331,11 @@ PowerShell supports two creation paths:
      v  reloadAgentSchema() -> grammar + schema updated
 ```
 
-> **Note:** Automatic capture from reasoning traces (intercepting
-> PowerShell commands executed via Bash during reasoning) is not yet
-> implemented. Flows are currently created via explicit import,
-> `createPowerShellFlow`, or seed samples.
+> **Note:** Automatic capture from successful reasoning traces is implemented
+> on Windows when `execution.scriptReuse` is enabled. `ScriptRecipeGenerator`
+> detects PowerShell commands in the trace, generalizes them, saves active
+> flows, and reloads the PowerShell schema. Explicit import,
+> `createPowerShellFlow`, and seed samples remain available.
 
 ### Execution architecture
 
@@ -355,13 +356,21 @@ PowerShell supports two creation paths:
 The `powershellRunner.mts` module spawns a PowerShell child process
 running `scriptHost.ps1`. Arguments are passed via command-line flags:
 
-| Flag                  | Value                                 |
-| --------------------- | ------------------------------------- |
-| `-ScriptBody`         | The PowerShell script text            |
-| `-ParametersJson`     | JSON-serialized parameter values      |
-| `-AllowedCmdletsJson` | JSON array of permitted cmdlet names  |
-| `-TimeoutSeconds`     | Maximum execution time                |
-| `-AllowedPathsJson`   | JSON array of permitted path patterns |
+| Flag                  | Value                                                                                   |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| `-ScriptBody`         | The PowerShell script text                                                              |
+| `-ParametersJson`     | JSON-serialized parameter values                                                        |
+| `-ParameterRolesJson` | Path and executable parameter roles derived from the flow's typed parameter definitions |
+| `-AllowedCmdletsJson` | JSON array of permitted cmdlet names                                                    |
+| `-TimeoutSeconds`     | Maximum execution time                                                                  |
+| `-AllowedPathsJson`   | JSON array of permitted path patterns                                                   |
+
+PowerShell recipes do not persist a separate `parameterRoles` property.
+`scriptParameters[].type` is the source of truth: `path` parameters are
+canonicalized as filesystem paths, while `executable` parameters resolve bare
+application names through PowerShell command resolution before the resulting
+file path is checked against `allowedPaths`. Other string parameters, including
+file content, URLs, patterns, and command arguments, are not path-validated.
 
 ### Sandbox: constrained runspace
 

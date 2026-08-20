@@ -20,6 +20,10 @@ import {
 } from "./agent/playerSchema.js";
 import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { createHash } from "node:crypto";
 import { loadConfigSync } from "@typeagent/config";
 //import * as Filter from "./trackFilter.js";
 import { openai, ChatModelWithStreaming } from "@typeagent/aiclient";
@@ -55,9 +59,14 @@ import { SpotifyService } from "./service.js";
 import {
     initializeUserData,
     mergeUserDataKind,
+    removeUserDataKind,
     saveUserData,
     addUserDataStrings,
     UserData,
+    type SpotifyUserData,
+    type MusicItemInfo,
+    type HistorySourceData,
+    MAX_ITEM_TIMESTAMPS,
     addFullTracks,
     getPlaylistsFromUserData,
     updatePlaylists,
@@ -105,7 +114,6 @@ import {
     setMaxVolumeAction,
     setVolumeAction,
 } from "./volume.js";
-import e from "express";
 
 function createWarningActionResult(message: string) {
     debugSpotifyError(message);
@@ -201,55 +209,388 @@ async function printTrackNames(
 
 interface SpotifyRecord {
     ts: string;
+    master_metadata_track_name: string | null;
+    master_metadata_album_artist_name: string | null;
+    master_metadata_album_album_name: string | null;
+    spotify_track_uri: string | null;
+}
+
+interface SpotifyTrackRecord extends SpotifyRecord {
     master_metadata_track_name: string;
-    master_metadata_album_artist_name: string;
-    master_metadata_album_album_name: string;
     spotify_track_uri: string;
 }
 
-function getIdPart(uri: string) {
+function getIdPart(uri: string | null) {
     if (uri && uri.startsWith("spotify:track:")) {
         const parts = uri.split(":");
         return parts[parts.length - 1];
     } else {
-        console.log(`Invalid uri: ${uri}`);
+        // Podcast/video/local-file rows land here on every history load, so
+        // this is debug output, not console noise.
+        debugSpotify(`Skipping row with non-track uri: ${uri}`);
         return "";
     }
+}
+
+function isSpotifyTrackRecord(
+    record: SpotifyRecord,
+): record is SpotifyTrackRecord {
+    return (
+        typeof record.master_metadata_track_name === "string" &&
+        record.master_metadata_track_name.trim().length > 0 &&
+        typeof record.spotify_track_uri === "string" &&
+        getIdPart(record.spotify_track_uri) !== ""
+    );
+}
+
+// A single streaming history JSON file to load, along with how to read it.
+type HistorySource = {
+    name: string;
+    read: () => Promise<string>;
+};
+
+type HistorySources = {
+    sources: HistorySource[];
+    // True when the user pointed at a directory, in which case files that
+    // aren't Spotify streaming history are silently skipped.
+    isDirectory: boolean;
+};
+
+export type LoadHistoryResult = {
+    loaded: string[];
+    skipped: string[];
+    records: number;
+};
+
+function expandHomeDir(p: string) {
+    return p === "~" || p.startsWith("~/") || p.startsWith("~\\")
+        ? path.join(os.homedir(), p.slice(1))
+        : p;
+}
+
+function isJsonFileName(name: string) {
+    return name.toLowerCase().endsWith(".json");
+}
+
+function createFsSource(filePath: string): HistorySource {
+    return {
+        name: filePath,
+        read: () => fs.promises.readFile(filePath, "utf8"),
+    };
+}
+
+async function getFsHistorySources(
+    fullPath: string,
+): Promise<HistorySources | undefined> {
+    let stats;
+    try {
+        stats = await fs.promises.stat(fullPath);
+    } catch {
+        return undefined;
+    }
+    if (!stats.isDirectory()) {
+        return { sources: [createFsSource(fullPath)], isDirectory: false };
+    }
+    const entries = await fs.promises.readdir(fullPath, {
+        withFileTypes: true,
+    });
+    const sources = entries
+        .filter((entry) => entry.isFile() && isJsonFileName(entry.name))
+        .map((entry) => entry.name)
+        .sort()
+        .map((name) => createFsSource(path.join(fullPath, name)));
+    return { sources, isDirectory: true };
+}
+
+async function getStorageHistorySources(
+    instanceStorage: Storage,
+    historyPath: string,
+): Promise<HistorySources | undefined> {
+    if (!(await instanceStorage.exists(historyPath))) {
+        return undefined;
+    }
+    let names: string[] | undefined;
+    try {
+        // Listing a file (instead of a directory) throws.
+        names = await instanceStorage.list(historyPath);
+    } catch {
+        names = undefined;
+    }
+    if (names === undefined) {
+        return {
+            sources: [
+                {
+                    name: historyPath,
+                    read: () => instanceStorage.read(historyPath, "utf8"),
+                },
+            ],
+            isDirectory: false,
+        };
+    }
+    const sources = names
+        .filter(isJsonFileName)
+        .sort()
+        .map((name) => {
+            const filePath = `${historyPath}/${name}`;
+            return {
+                name: filePath,
+                read: () => instanceStorage.read(filePath, "utf8"),
+            };
+        });
+    return { sources, isDirectory: true };
+}
+
+// Resolve the user supplied path to the set of files to load.  Absolute paths
+// (and paths that exist relative to the current working directory) are read
+// directly from the file system; everything else is resolved against the
+// agent's instance storage.
+async function getHistorySources(
+    instanceStorage: Storage,
+    historyPath: string,
+): Promise<HistorySources> {
+    const expandedPath = expandHomeDir(historyPath);
+    if (path.isAbsolute(expandedPath)) {
+        const sources = await getFsHistorySources(expandedPath);
+        if (sources === undefined) {
+            throw new Error(`History path not found: ${historyPath}`);
+        }
+        return sources;
+    }
+
+    const sources =
+        (await getStorageHistorySources(instanceStorage, expandedPath)) ??
+        (await getFsHistorySources(path.resolve(process.cwd(), expandedPath)));
+    if (sources === undefined) {
+        throw new Error(`History path not found: ${historyPath}`);
+    }
+    return sources;
+}
+
+function isSpotifyHistoryData(data: unknown): data is SpotifyRecord[] {
+    if (!Array.isArray(data) || data.length === 0) {
+        return false;
+    }
+    return data.every(
+        (record: unknown) =>
+            typeof record === "object" &&
+            record !== null &&
+            typeof (record as Record<string, unknown>).ts === "string" &&
+            Number.isFinite(
+                Date.parse((record as Record<string, string>).ts),
+            ) &&
+            isNullableString(
+                (record as Record<string, unknown>).master_metadata_track_name,
+            ) &&
+            isNullableString(
+                (record as Record<string, unknown>)
+                    .master_metadata_album_artist_name,
+            ) &&
+            isNullableString(
+                (record as Record<string, unknown>)
+                    .master_metadata_album_album_name,
+            ) &&
+            isNullableString(
+                (record as Record<string, unknown>).spotify_track_uri,
+            ),
+    );
+}
+
+function isNullableString(value: unknown): value is string | null {
+    return value === null || typeof value === "string";
 }
 
 export async function loadHistoryFile(
     instanceStorage: Storage,
     historyPath: string,
     context: IClientContext,
-) {
-    if (!(await instanceStorage.exists(historyPath))) {
-        throw new Error(`History file not found: ${historyPath}`);
-    }
+): Promise<LoadHistoryResult> {
     if (!context.userData) {
         throw new Error("User data not enabled");
     }
-    try {
-        const rawData = await instanceStorage.read(historyPath, "utf8");
-        let data: SpotifyRecord[] = JSON.parse(rawData);
-        for (const record of data) {
-            console.log(`${record.master_metadata_track_name}`);
-        }
-        data = data.filter((r) => r.spotify_track_uri !== null);
-        mergeUserDataKind(
-            context.userData.data.tracks,
-            data.map((r) => ({
-                timestamps: [r.ts],
-                freq: 1,
-                name: r.master_metadata_track_name,
-                albumArtist: r.master_metadata_album_artist_name,
-                albumName: r.master_metadata_album_album_name,
-                id: getIdPart(r.spotify_track_uri),
-            })),
-        );
-        await saveUserData(instanceStorage, context.userData.data);
-    } catch (e: any) {
-        throw new Error(`Error reading history file: ${e.message}`);
+    const { sources, isDirectory } = await getHistorySources(
+        instanceStorage,
+        historyPath,
+    );
+    if (isDirectory && sources.length === 0) {
+        throw new Error(`No JSON files found in directory: ${historyPath}`);
     }
+
+    const result: LoadHistoryResult = {
+        loaded: [],
+        skipped: [],
+        records: 0,
+    };
+    const original = context.userData.data;
+    const draft = cloneUserData(original);
+    for (const source of sources) {
+        let data: SpotifyRecord[];
+        let content: string;
+        try {
+            content = await source.read();
+            const parsed = JSON.parse(content);
+            if (!isSpotifyHistoryData(parsed)) {
+                throw new Error("Not a Spotify streaming history file");
+            }
+            data = parsed;
+        } catch (e: any) {
+            if (isDirectory) {
+                // Silently skip files that aren't streaming history.
+                debugSpotify(`Skipping ${source.name}: ${e.message}`);
+                result.skipped.push(source.name);
+                continue;
+            }
+            throw new Error(
+                `Error reading history file ${path.basename(source.name)}: ${e.message}`,
+            );
+        }
+
+        const fingerprint = createHash("sha256").update(content).digest("hex");
+        const previous = draft.historySources?.[source.name];
+        if (previous?.fingerprint === fingerprint) {
+            result.loaded.push(source.name);
+            continue;
+        }
+        const tracks = data.filter(isSpotifyTrackRecord);
+        const sourceData: HistorySourceData = {
+            fingerprint,
+            tracks: aggregateItems(
+                tracks.map((r) => ({
+                    timestamps: [r.ts],
+                    freq: 1,
+                    name: r.master_metadata_track_name,
+                    ...(r.master_metadata_album_artist_name === null
+                        ? {}
+                        : {
+                              albumArtist: r.master_metadata_album_artist_name,
+                          }),
+                    ...(r.master_metadata_album_album_name === null
+                        ? {}
+                        : { albumName: r.master_metadata_album_album_name }),
+                    id: getIdPart(r.spotify_track_uri),
+                })),
+            ),
+            artists: namedItems(
+                tracks,
+                (r) => r.master_metadata_album_artist_name,
+            ),
+            albums: namedItems(
+                tracks,
+                (r) => r.master_metadata_album_album_name,
+            ),
+        };
+        if (previous !== undefined) {
+            removeHistorySource(draft, previous);
+        }
+        applyHistorySource(draft, sourceData);
+        draft.historySources ??= {};
+        draft.historySources[source.name] = sourceData;
+        result.loaded.push(source.name);
+        result.records += tracks.length;
+    }
+
+    if (result.loaded.length === 0) {
+        throw new Error(
+            `No Spotify streaming history files found in: ${historyPath}`,
+        );
+    }
+
+    // The name index is built once and cached; wildcard validation consults
+    // it to decide whether a track/artist the user named is one of theirs.
+    // Leaving the pre-load index in place would make everything just loaded
+    // look unknown until the next restart.
+    delete draft.nameMap;
+    await saveUserData(instanceStorage, draft);
+    context.userData.data = draft;
+    return result;
+}
+
+function cloneUserData(userData: SpotifyUserData): SpotifyUserData {
+    const cloneMap = (items: Map<string, MusicItemInfo>) =>
+        new Map(
+            Array.from(items, ([id, item]) => [
+                id,
+                { ...item, timestamps: [...item.timestamps] },
+            ]),
+        );
+    const {
+        historySources,
+        nameMap: _discardedNameMap,
+        ...userDataWithoutDerivedState
+    } = userData;
+    return {
+        ...userDataWithoutDerivedState,
+        tracks: cloneMap(userData.tracks),
+        artists: cloneMap(userData.artists),
+        albums: cloneMap(userData.albums),
+        ...(historySources === undefined
+            ? {}
+            : { historySources: structuredClone(historySources) }),
+    };
+}
+
+function applyHistorySource(
+    userData: SpotifyUserData,
+    source: HistorySourceData,
+): void {
+    mergeUserDataKind(userData.tracks, source.tracks);
+    mergeUserDataKind(userData.artists, source.artists);
+    mergeUserDataKind(userData.albums, source.albums);
+}
+
+function removeHistorySource(
+    userData: SpotifyUserData,
+    source: HistorySourceData,
+): void {
+    removeUserDataKind(userData.tracks, source.tracks);
+    removeUserDataKind(userData.artists, source.artists);
+    removeUserDataKind(userData.albums, source.albums);
+}
+
+function aggregateItems(items: MusicItemInfo[]): MusicItemInfo[] {
+    const byId = new Map<string, MusicItemInfo>();
+    for (const item of items) {
+        const existing = byId.get(item.id);
+        if (existing === undefined) {
+            byId.set(item.id, { ...item, timestamps: [...item.timestamps] });
+        } else {
+            existing.freq += item.freq;
+            existing.timestamps.push(...item.timestamps);
+        }
+    }
+    for (const item of byId.values()) {
+        item.timestamps.sort();
+        item.timestamps = item.timestamps.slice(-MAX_ITEM_TIMESTAMPS);
+    }
+    return Array.from(byId.values());
+}
+
+// History exports have no artist/album ids, so these synthetic ids identify
+// history-derived entries only. API-derived entries keep their Spotify ids;
+// completion deduplicates their display names.
+function namedItems(
+    records: SpotifyRecord[],
+    getName: (r: SpotifyRecord) => string | null,
+): MusicItemInfo[] {
+    const byName = new Map<string, MusicItemInfo>();
+    for (const record of records) {
+        const name = getName(record);
+        if (!name || name.trim().length === 0) {
+            continue;
+        }
+        const id = `name:${name.toLocaleLowerCase()}`;
+        const existing = byName.get(id);
+        if (existing === undefined) {
+            byName.set(id, { id, name, freq: 1, timestamps: [record.ts] });
+        } else {
+            existing.freq++;
+            existing.timestamps.push(record.ts);
+        }
+    }
+    for (const item of byName.values()) {
+        item.timestamps.sort();
+        item.timestamps = item.timestamps.slice(-MAX_ITEM_TIMESTAMPS);
+    }
+    return Array.from(byName.values());
 }
 
 async function htmlPlaylistNames(

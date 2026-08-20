@@ -13,7 +13,6 @@ The provider also registers a small set of agents whose only purpose is to exerc
 Some agents are intentionally not bundled in the default provider profile and should be installed on demand from the workspace catalog source.
 
 ```text
-@package install androidMobile
 @package install vampire
 ```
 
