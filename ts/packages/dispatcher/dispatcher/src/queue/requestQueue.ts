@@ -621,30 +621,37 @@ export class RequestQueue {
                 let result: CommandResult | undefined;
                 let error: unknown = undefined;
                 try {
-                    const ctx: QueueExecutionContext = {
-                        requestId: entry.requestId,
-                        originatorConnectionId: entry.originatorConnectionId,
-                        text: entry.text,
-                    };
-                    if (entry.clientRequestId !== undefined)
-                        ctx.clientRequestId = entry.clientRequestId;
-                    if (entry.attachments !== undefined)
-                        ctx.attachments = entry.attachments;
-                    if (entry.options !== undefined)
-                        ctx.options = entry.options;
-                    if (entry.traceContext !== undefined)
-                        ctx.traceContext = entry.traceContext;
-                    result = await this.innerProcessCommand(ctx);
-                    if (result?.cancelled) {
+                    if (entry.cancelReason !== undefined) {
                         entry.state = "cancelled";
-                        if (entry.error === undefined) {
-                            entry.error = `cancelled:${entry.cancelReason ?? "user"}`;
-                        }
-                    } else if (result?.disposition?.status === "failed") {
-                        entry.state = "failed";
-                        entry.error = "command failed";
+                        entry.error = `cancelled:${entry.cancelReason}`;
+                        result = { cancelled: true };
                     } else {
-                        entry.state = "succeeded";
+                        const ctx: QueueExecutionContext = {
+                            requestId: entry.requestId,
+                            originatorConnectionId:
+                                entry.originatorConnectionId,
+                            text: entry.text,
+                        };
+                        if (entry.clientRequestId !== undefined)
+                            ctx.clientRequestId = entry.clientRequestId;
+                        if (entry.attachments !== undefined)
+                            ctx.attachments = entry.attachments;
+                        if (entry.options !== undefined)
+                            ctx.options = entry.options;
+                        if (entry.traceContext !== undefined)
+                            ctx.traceContext = entry.traceContext;
+                        result = await this.innerProcessCommand(ctx);
+                        if (result?.cancelled) {
+                            entry.state = "cancelled";
+                            if (entry.error === undefined) {
+                                entry.error = `cancelled:${entry.cancelReason ?? "user"}`;
+                            }
+                        } else if (result?.disposition?.status === "failed") {
+                            entry.state = "failed";
+                            entry.error = "command failed";
+                        } else {
+                            entry.state = "succeeded";
+                        }
                     }
                 } catch (e) {
                     error = e;

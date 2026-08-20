@@ -19,7 +19,9 @@ import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import {
     createRpc,
     RPC_METADATA_VERSION,
+    RPC_STRUCTURED_EVENTS,
     type RpcOptions,
+    type RpcStructuredLogger,
 } from "../src/rpc.js";
 import type { RpcChannel } from "../src/common.js";
 
@@ -99,6 +101,27 @@ function createFakeChannel(): FakeChannel {
 function connect(a: FakeChannel, b: FakeChannel) {
     a.setPeer(b);
     b.setPeer(a);
+}
+
+type CapturedEvent = {
+    eventName: string;
+    entry: Record<string, unknown>;
+    severity: "info" | "warning" | "error" | undefined;
+};
+
+function createRecordingLogger(): {
+    logger: RpcStructuredLogger;
+    events: CapturedEvent[];
+} {
+    const events: CapturedEvent[] = [];
+    return {
+        events,
+        logger: {
+            logEvent(eventName, entry, severity) {
+                events.push({ eventName, entry, severity });
+            },
+        },
+    };
 }
 
 type EchoInvoke = { echo: (x: number) => Promise<number> };
@@ -723,7 +746,7 @@ describe("createRpc OpenTelemetry propagation", () => {
         expect(serverSpans).toHaveLength(1);
         expect(serverSpans[0]!.status).toEqual({
             code: SpanStatusCode.ERROR,
-            message: "rpc failed",
+            message: "cancelled",
         });
     });
 
@@ -803,6 +826,55 @@ describe("createRpc OpenTelemetry propagation", () => {
         }
     });
 
+    it("reports wrapped cancellation consistently in spans and events", async () => {
+        const clientLogger = createRecordingLogger();
+        const serverLogger = createRecordingLogger();
+        const { clientRpc } = createTracingPair(
+            {
+                tracing: { trustRemoteContext: true },
+                logger: serverLogger.logger,
+            },
+            {
+                tracing: { propagateContext: true },
+                logger: clientLogger.logger,
+            },
+            async () => {
+                const cause = new DOMException("private detail", "AbortError");
+                const wrapper = new Error("private wrapper") as Error & {
+                    cause: unknown;
+                };
+                wrapper.cause = cause;
+                throw wrapper;
+            },
+        );
+
+        await expect(clientRpc.invoke("echo", 1)).rejects.toMatchObject({
+            name: "AbortError",
+        });
+
+        for (const span of fixture!.exporter.getFinishedSpans()) {
+            expect(span.status).toEqual({
+                code: SpanStatusCode.ERROR,
+                message: "cancelled",
+            });
+        }
+        for (const events of [clientLogger.events, serverLogger.events]) {
+            expect(events.map((event) => event.eventName)).toEqual([
+                RPC_STRUCTURED_EVENTS.started,
+                RPC_STRUCTURED_EVENTS.completed,
+            ]);
+            expect(events[1]).toMatchObject({
+                entry: {
+                    status: "cancelled",
+                    success: false,
+                    cancelled: true,
+                },
+                severity: "warning",
+            });
+            expect(events[1]!.entry).not.toHaveProperty("errorCategory");
+        }
+    });
+
     it("records stable statuses for remote errors and ends both spans", async () => {
         const { clientRpc } = createTracingPair(
             { tracing: { trustRemoteContext: true } },
@@ -826,6 +898,215 @@ describe("createRpc OpenTelemetry propagation", () => {
         expect(serverSpan.status).toEqual({
             code: SpanStatusCode.ERROR,
             message: "request failed",
+        });
+    });
+
+    describe("RPC structured lifecycle events", () => {
+        function assertSafeEvent(entry: Record<string, unknown>): void {
+            expect(Object.keys(entry)).toEqual(
+                expect.arrayContaining(["role", "channel", "method", "callId"]),
+            );
+            for (const forbidden of [
+                "args",
+                "result",
+                "error",
+                "message",
+                "stack",
+            ]) {
+                expect(entry).not.toHaveProperty(forbidden);
+            }
+        }
+
+        it("emits exactly one bounded pair per client and server success", async () => {
+            const client = createFakeChannel();
+            const server = createFakeChannel();
+            connect(client, server);
+            const clientLogger = createRecordingLogger();
+            const serverLogger = createRecordingLogger();
+            const clientRpc = createRpc<EchoInvoke>(
+                "client-a",
+                client,
+                undefined,
+                undefined,
+                { logger: clientLogger.logger },
+            );
+            createRpc<{}, {}, EchoInvoke>(
+                "server-a",
+                server,
+                { echo: async (value) => value * 2 },
+                undefined,
+                { logger: serverLogger.logger },
+            );
+
+            await expect(clientRpc.invoke("echo", 21)).resolves.toBe(42);
+
+            for (const [role, events] of [
+                ["client", clientLogger.events],
+                ["server", serverLogger.events],
+            ] as const) {
+                expect(events.map((event) => event.eventName)).toEqual([
+                    RPC_STRUCTURED_EVENTS.started,
+                    RPC_STRUCTURED_EVENTS.completed,
+                ]);
+                expect(events[0]!.entry).toMatchObject({
+                    role,
+                    method: "echo",
+                    callId: 0,
+                });
+                expect(events[1]).toMatchObject({
+                    entry: {
+                        role,
+                        method: "echo",
+                        callId: 0,
+                        status: "succeeded",
+                        success: true,
+                    },
+                    severity: "info",
+                });
+                expect(typeof events[1]!.entry.elapsedMs).toBe("number");
+                for (const event of events) {
+                    assertSafeEvent(event.entry);
+                }
+            }
+        });
+
+        it("classifies only the server's original failure", async () => {
+            const client = createFakeChannel();
+            const server = createFakeChannel();
+            connect(client, server);
+            const clientLogger = createRecordingLogger();
+            const serverLogger = createRecordingLogger();
+            const clientRpc = createRpc<EchoInvoke>(
+                "client-b",
+                client,
+                undefined,
+                undefined,
+                { logger: clientLogger.logger },
+            );
+            createRpc<{}, {}, EchoInvoke>(
+                "server-b",
+                server,
+                {
+                    echo: async () => {
+                        const error = new Error(
+                            "private provider detail",
+                        ) as Error & {
+                            code: string;
+                        };
+                        error.code = "ECONNREFUSED";
+                        throw error;
+                    },
+                },
+                undefined,
+                { logger: serverLogger.logger },
+            );
+
+            await expect(clientRpc.invoke("echo", 1)).rejects.toThrow(
+                "private provider detail",
+            );
+
+            expect(serverLogger.events[1]).toMatchObject({
+                entry: {
+                    status: "failed",
+                    success: false,
+                    errorCategory: "network",
+                    errorCode: "ECONNREFUSED",
+                    retryable: true,
+                },
+                severity: "error",
+            });
+            expect(clientLogger.events[1]!.entry).toMatchObject({
+                status: "failed",
+                success: false,
+                errorCategory: "internal",
+            });
+            for (const event of [
+                ...clientLogger.events,
+                ...serverLogger.events,
+            ]) {
+                assertSafeEvent(event.entry);
+            }
+        });
+
+        it("bounds invalid channel and method labels", async () => {
+            const client = createFakeChannel();
+            const logger = createRecordingLogger();
+            const rpc = createRpc<
+                Record<string, (...args: any[]) => Promise<unknown>>
+            >("x".repeat(257), client, undefined, undefined, {
+                logger: logger.logger,
+            });
+
+            const result = rpc.invoke("y".repeat(257));
+            client.deliver({
+                type: "invokeError",
+                callId: 0,
+                error: "remote failure",
+            });
+            await expect(result).rejects.toThrow("remote failure");
+
+            for (const event of logger.events) {
+                expect(event.entry).toMatchObject({
+                    channel: "invalid_channel",
+                    method: "invalid_method",
+                });
+            }
+        });
+
+        it("does not let a throwing logger change RPC behavior", async () => {
+            const client = createFakeChannel();
+            const server = createFakeChannel();
+            connect(client, server);
+            const logger: RpcStructuredLogger = {
+                logEvent() {
+                    throw new Error("logger failed");
+                },
+            };
+            const clientRpc = createRpc<EchoInvoke>(
+                "client-c",
+                client,
+                undefined,
+                undefined,
+                { logger },
+            );
+            createRpc<{}, {}, EchoInvoke>(
+                "server-c",
+                server,
+                { echo: async (value) => value + 1 },
+                undefined,
+                { logger },
+            );
+
+            await expect(clientRpc.invoke("echo", 41)).resolves.toBe(42);
+        });
+
+        it("pairs lifecycle events for an invoke attempted while disconnected", async () => {
+            const channel = createFakeChannel();
+            const recording = createRecordingLogger();
+            const rpc = createRpc<EchoInvoke>(
+                "client-disconnected",
+                channel,
+                undefined,
+                undefined,
+                { rebindable: true, logger: recording.logger },
+            );
+            channel.fireDisconnect();
+
+            await expect(rpc.invoke("echo", 1)).rejects.toThrow(
+                "Agent channel disconnected",
+            );
+            expect(recording.events.map((event) => event.eventName)).toEqual([
+                RPC_STRUCTURED_EVENTS.started,
+                RPC_STRUCTURED_EVENTS.completed,
+            ]);
+            expect(recording.events[1]).toMatchObject({
+                entry: {
+                    status: "failed",
+                    success: false,
+                    errorCategory: "internal",
+                },
+                severity: "error",
+            });
         });
     });
 });

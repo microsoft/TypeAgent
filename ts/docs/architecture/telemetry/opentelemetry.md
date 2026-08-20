@@ -751,11 +751,44 @@ other fields are present only for decisions the code actually observed. The
 reduced local message appends `+llm` when a cache/grammar strategy still reached
 the model.
 
+### RPC lifecycle events
+
+`agentRpc` optionally emits `rpc:started` and `rpc:completed` at each `invoke`
+boundary: once for the outbound client call and once for inbound server handler
+dispatch. A logger is supplied structurally through `RpcOptions.logger`; when it
+is omitted, RPC behavior is unchanged and no events are emitted. Logger failures
+cannot fail an invocation.
+
+The events contain only bounded operational fields. Arguments, results, raw
+error messages, stacks, and transport payloads are never included.
+
+- `role` - `client` or `server`.
+- `channel` and `method` - validated labels capped at 256 characters. Invalid,
+  oversized, or secret-shaped values become `invalid_channel` or
+  `invalid_method`.
+- `callId` - the per-RPC-instance monotonic identifier.
+- `status` - `succeeded`, `failed`, or `cancelled` on `rpc:completed`.
+- `success`, optional `cancelled`, and `elapsedMs` on `rpc:completed`.
+- `errorCategory` and optional bounded `errorCode`, `httpStatus`, and
+  `retryable` only for real failures.
+
+Client and server spans and events use the same shared cancellation classifier,
+including its bounded `cause` walk. A wrapped `AbortError` therefore produces
+`cancelled` consistently and carries no failure classification. Each started
+event is paired with exactly one completed event, including local setup errors,
+handler failures, disconnect/rebind cancellation, and logger failure.
+
+`agentRpc` imports the classifier from the browser-safe
+`@typeagent/telemetry/errorClassification` subpath rather than the Node-only
+package root. Reduced local messages render role, method, channel, status,
+elapsed time, and bounded classification without consulting payload content.
+
 ### Failure classification
 
 Structured failure events use a small, shared classification instead of
 exporting error messages or stacks. This makes failures useful in telemetry
-without exposing user or provider content.
+without exposing user or provider content. The same classifier is used for
+failed `rpc:completed` events.
 
 The classification can include:
 
