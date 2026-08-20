@@ -314,15 +314,18 @@ export async function wrapTranslationSpan<T>(
                 effectiveAttributes,
             );
             try {
-                return await context.with(spanContext, () =>
-                    withChatModelTelemetryContext(
-                        {
-                            phase: "translation",
-                            purpose: "action-generation",
-                            scope: "foreground",
-                        },
-                        () => body(span),
-                    ),
+                return await otel.runInTypeAgentTelemetryContext(
+                    spanContext,
+                    effectiveAttributes,
+                    () =>
+                        withChatModelTelemetryContext(
+                            {
+                                phase: "translation",
+                                purpose: "action-generation",
+                                scope: "foreground",
+                            },
+                            () => body(span),
+                        ),
                 );
             } catch (error) {
                 recordSpanFailure(

@@ -31,6 +31,48 @@ const logger = new ChildLogger(
     "aiclient",
 );
 
+const DEFAULT_CLASSIFICATION_WINDOW_MS = 60_000;
+
+let defaultClassificationCount = 0;
+let defaultClassificationReportedAt: number | undefined;
+
+export function resetLlmClassificationDiagnostics(): void {
+    defaultClassificationCount = 0;
+    defaultClassificationReportedAt = undefined;
+}
+
+function noteClassificationSource(
+    classification: ChatModelTelemetryContext,
+    structuredLogger: Logger,
+): void {
+    if (
+        classification.scope !== "foreground" ||
+        classification.classificationSource !== "default"
+    ) {
+        return;
+    }
+    defaultClassificationCount += 1;
+    const now = Date.now();
+    if (
+        defaultClassificationReportedAt !== undefined &&
+        now - defaultClassificationReportedAt < DEFAULT_CLASSIFICATION_WINDOW_MS
+    ) {
+        return;
+    }
+    defaultClassificationReportedAt = now;
+    const count = defaultClassificationCount;
+    defaultClassificationCount = 0;
+    structuredLogger.logEvent(
+        "llm:classification:default",
+        {
+            scope: "foreground",
+            count,
+            windowMs: DEFAULT_CLASSIFICATION_WINDOW_MS,
+        },
+        "warning",
+    );
+}
+
 export type ChatModelTelemetryInfo = {
     provider: string;
     model?: string;
@@ -39,21 +81,14 @@ export type ChatModelTelemetryInfo = {
 type LlmCallState = {
     readonly span: Span;
     readonly activeContext: Context;
+    readonly attributes: otel.TypeAgentSpanAttributes;
     readonly startedAt: number;
     readonly correlation: LlmCorrelation;
-    readonly classification: LlmClassification;
+    readonly classification: ChatModelTelemetryContext;
     readonly logger: Logger;
     usage?: CompletionUsageStats;
     ended: boolean;
 };
-
-type LlmClassification =
-    | ChatModelTelemetryContext
-    | {
-          readonly phase: "unclassified";
-          readonly purpose: "unclassified";
-          readonly scope: "unclassified";
-      };
 
 type LlmCorrelation = {
     -readonly [Key in
@@ -83,7 +118,7 @@ export function instrumentChatModel(
         const signal = args[4];
         args[1] = captureUsage(args[1], state);
         try {
-            const result = await context.with(state.activeContext, () =>
+            const result = await runInCallContext(state, () =>
                 complete(...args),
             );
             if (signal?.aborted === true) {
@@ -104,7 +139,7 @@ export function instrumentChatModel(
         const signal = args[4];
         args[1] = captureUsage(args[1], state);
         try {
-            const result = await context.with(state.activeContext, () =>
+            const result = await runInCallContext(state, () =>
                 completeStream(...args),
             );
             if (signal?.aborted === true) {
@@ -129,6 +164,14 @@ export function instrumentChatModel(
     return model;
 }
 
+function runInCallContext<T>(state: LlmCallState, body: () => T): T {
+    return otel.runInTypeAgentTelemetryContext(
+        state.activeContext,
+        state.attributes,
+        body,
+    );
+}
+
 function safely(body: () => void): void {
     try {
         body();
@@ -148,12 +191,7 @@ function startLlmCall(
     );
     const span = tracer.startSpan(otel.TYPEAGENT_SPAN_NAMES.LLM);
     const inherited = otel.getActiveTypeAgentSpanAttributes();
-    const classification: LlmClassification =
-        getChatModelTelemetryContext() ?? {
-            phase: "unclassified",
-            purpose: "unclassified",
-            scope: "unclassified",
-        };
+    const classification = getChatModelTelemetryContext();
     const attributes = {
         ...inherited,
         genAiSystem: info.provider,
@@ -161,18 +199,16 @@ function startLlmCall(
         llmPhase: classification.phase,
         llmPurpose: classification.purpose,
         llmScope: classification.scope,
+        llmClassificationSource: classification.classificationSource,
     };
-    otel.setTypeAgentSpanAttributes(span, attributes);
-    if (classification.phase === "unclassified") {
-        span.addEvent("typeagent.llm.classification.missing");
-    }
-    const activeContext = otel.setActiveTypeAgentSpanAttributes(
-        trace.setSpan(context.active(), span),
-        attributes,
-    );
+    safely(() => otel.setTypeAgentSpanAttributes(span, attributes));
     const state = {
         span,
-        activeContext,
+        activeContext: otel.setActiveTypeAgentSpanAttributes(
+            trace.setSpan(context.active(), span),
+            attributes,
+        ),
+        attributes,
         startedAt: Date.now(),
         correlation: getLlmCorrelation(inherited),
         classification,
@@ -180,14 +216,17 @@ function startLlmCall(
         ended: false,
     };
     if (otel.isStructuredLoggingEnabled()) {
-        context.with(activeContext, () =>
-            structuredLogger.logEvent("llm:started", {
-                provider: info.provider,
-                ...(info.model === undefined ? {} : { model: info.model }),
-                operation: "chat",
-                streaming,
-                ...classification,
-                ...state.correlation,
+        safely(() =>
+            runInCallContext(state, () => {
+                structuredLogger.logEvent("llm:started", {
+                    provider: info.provider,
+                    ...(info.model === undefined ? {} : { model: info.model }),
+                    operation: "chat",
+                    streaming,
+                    ...classification,
+                    ...state.correlation,
+                });
+                noteClassificationSource(classification, structuredLogger);
             }),
         );
     }
@@ -212,9 +251,7 @@ async function* instrumentStream(
 ): AsyncIterableIterator<string> {
     try {
         while (true) {
-            const next = await context.with(state.activeContext, () =>
-                source.next(),
-            );
+            const next = await runInCallContext(state, () => source.next());
             if (next.done) {
                 if (signal?.aborted === true) {
                     cancelLlmCall(state, info);
@@ -347,7 +384,7 @@ function emitCompleted(
         return;
     }
     safely(() =>
-        context.with(state.activeContext, () =>
+        runInCallContext(state, () =>
             state.logger.logEvent(
                 "llm:completed",
                 {

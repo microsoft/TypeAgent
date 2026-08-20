@@ -71,6 +71,7 @@ export const TYPEAGENT_SPAN_ATTRIBUTES = Object.freeze({
     LLM_PHASE: "typeagent.llm.phase",
     LLM_PURPOSE: "typeagent.llm.purpose",
     LLM_SCOPE: "typeagent.llm.scope",
+    LLM_CLASSIFICATION_SOURCE: "typeagent.llm.classification_source",
 } as const);
 
 /** Type of a well-known TypeAgent attribute-key value. */
@@ -109,18 +110,37 @@ export interface TypeAgentSpanAttributes {
     readonly llmPurpose?: string;
     /** Whether the LLM operation is foreground or background work. */
     readonly llmScope?: string;
+    /** Whether a call site explicitly classified the LLM operation. */
+    readonly llmClassificationSource?: string;
 }
 
 const ACTIVE_TYPEAGENT_ATTRIBUTES = createContextKey(
     "typeagent.active-span-attributes",
 );
 
+export interface AmbientTypeAgentAttributeStore {
+    getActive(): TypeAgentSpanAttributes | undefined;
+    run<T>(attributes: TypeAgentSpanAttributes, body: () => T): T;
+}
+
+let ambientStore: AmbientTypeAgentAttributeStore | undefined;
+
+export function installAmbientTypeAgentAttributeStore(
+    store: AmbientTypeAgentAttributeStore | undefined,
+): AmbientTypeAgentAttributeStore | undefined {
+    const previous = ambientStore;
+    ambientStore = store;
+    return previous;
+}
+
 export function getActiveTypeAgentSpanAttributes(
     activeContext: Context = context.active(),
 ): TypeAgentSpanAttributes | undefined {
-    return activeContext.getValue(ACTIVE_TYPEAGENT_ATTRIBUTES) as
-        | TypeAgentSpanAttributes
-        | undefined;
+    return (
+        (activeContext.getValue(ACTIVE_TYPEAGENT_ATTRIBUTES) as
+            | TypeAgentSpanAttributes
+            | undefined) ?? ambientStore?.getActive()
+    );
 }
 
 export function setActiveTypeAgentSpanAttributes(
@@ -134,6 +154,17 @@ export function setActiveTypeAgentSpanAttributes(
         ...current,
         ...attributes,
     });
+}
+
+export function runInTypeAgentTelemetryContext<T>(
+    activeContext: Context,
+    attributes: TypeAgentSpanAttributes,
+    body: () => T,
+): T {
+    const withContext = () => context.with(activeContext, body);
+    return ambientStore === undefined
+        ? withContext()
+        : ambientStore.run(attributes, withContext);
 }
 
 const ATTRIBUTE_KEY_FOR_FIELD: {
@@ -150,6 +181,8 @@ const ATTRIBUTE_KEY_FOR_FIELD: {
     llmPhase: TYPEAGENT_SPAN_ATTRIBUTES.LLM_PHASE,
     llmPurpose: TYPEAGENT_SPAN_ATTRIBUTES.LLM_PURPOSE,
     llmScope: TYPEAGENT_SPAN_ATTRIBUTES.LLM_SCOPE,
+    llmClassificationSource:
+        TYPEAGENT_SPAN_ATTRIBUTES.LLM_CLASSIFICATION_SOURCE,
 };
 
 /**

@@ -21,7 +21,10 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import type { ChatModel } from "@typeagent/aiclient";
+import {
+    withChatModelTelemetryContext,
+    type ChatModel,
+} from "@typeagent/aiclient";
 import type { ActionConfigProvider } from "../../translation/actionConfigProvider.js";
 import { getSchemaContent } from "../../translation/actionConfig.js";
 import type { Neighborhood, NeighborhoodMember } from "../types.js";
@@ -374,7 +377,14 @@ Return JSON only:
 }`;
 
     const model = opts.createModel("classify");
-    const result = await model.complete(prompt);
+    const result = await withChatModelTelemetryContext(
+        {
+            phase: "background",
+            purpose: "optimization-case-classification",
+            scope: "background",
+        },
+        () => model.complete(prompt),
+    );
     if (!result.success) {
         throw new Error(`caseAnalyzer LLM failure: ${result.message}`);
     }

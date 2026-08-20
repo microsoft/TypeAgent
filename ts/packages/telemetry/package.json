@@ -20,6 +20,10 @@
       "node": "./dist/otel/testing/inMemorySpanManager.js"
     },
     "./traceContext": {
+      "node": {
+        "types": "./dist/otel/traceContextNode.d.ts",
+        "default": "./dist/otel/traceContextNode.js"
+      },
       "types": "./dist/otel/traceContract.d.ts",
       "default": "./dist/otel/traceContract.js"
     },

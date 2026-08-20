@@ -149,6 +149,12 @@ Browser-shared RPC code reads active TypeAgent metadata through the
 `@typeagent/telemetry/traceContext` subpath. It does not import the Node-only
 telemetry composition root.
 
+The browser-safe contract contains no Node builtins. Its Node export condition
+loads `traceContextNode.ts`, which installs an `AsyncLocalStorage` attribute
+store into the contract. This keeps request correlation available to logs-only
+Node processes without making browser paths import `node:async_hooks`; browser
+callers continue to use the active OTel context.
+
 The trusted dispatcher RPC channel extends the same trace from a client host
 into agent-server request processing:
 
@@ -194,14 +200,14 @@ processable telemetry record.**
   auto-instrumentation.
 - Classify each LLM operation explicitly at the high-level call site. The
   central model wrapper records `typeagent.llm.phase`,
-  `typeagent.llm.purpose`, and `typeagent.llm.scope`; it never infers purpose
-  from prompt text, model output, timing, or token counts.
-- High-level classification contexts are complete. Nested operations may
-  override only the purpose while retaining their phase and scope.
-- A model call outside a classified operation records `unclassified` for all
-  three attributes and adds a `typeagent.llm.classification.missing` span
-  event. This makes missing instrumentation visible without failing the model
-  request.
+  `typeagent.llm.purpose`, `typeagent.llm.scope`, and
+  `typeagent.llm.classification_source`; it never infers purpose from prompt
+  text, model output, timing, or token counts.
+- Nested classification scopes may refine one field while retaining the
+  others. Calling the wrapper always records `classificationSource: explicit`.
+- A model call outside a classified operation records `phase: unknown`,
+  `purpose: unknown`, `scope: foreground`, and
+  `classificationSource: default`.
 
 ### Logs
 
@@ -672,7 +678,8 @@ such as `Request accepted and queued` or `Translation succeeded via grammar`.
 Use opt-in debug records for detailed diagnostics behind that lifecycle step.
 LLM messages include their explicit phase and purpose so parallel schema
 selection, action generation, and background cache generation are
-distinguishable without inspecting private model content.
+distinguishable without inspecting private model content. Default
+classification is marked `(unclassified)`.
 Correlation fields are elevated once rather than repeated in the body, and the
 redundant legacy `dispatcher:command` record is omitted from local JSONL.
 Repeated SDK metadata such as the observed timestamp, resource,
@@ -684,6 +691,35 @@ Structured dispatcher records include events such as `command` and
 `requestQueue:start`. Bridged debug records include their debug namespace.
 Prompt text, response text, action parameters, errors, stacks, and unknown
 dispatcher fields are excluded by the dispatcher projection.
+
+### LLM phase and purpose attribution
+
+`llm:started`, `llm:completed`, and the `typeagent.llm` span carry `phase`,
+`purpose`, `scope`, and `classificationSource`. `explicit` means a call site
+used `withChatModelTelemetryContext`; `default` means no call site classified
+the operation. An explicit `unknown` phase is therefore distinguishable from a
+missing classification.
+
+The classification context uses `AsyncLocalStorage` owned by `aiclient`, so it
+survives awaits, microtasks, and nested/retry calls even when traces are
+disabled. Work detached into a worker, child process, or later promise chain
+must classify itself at its entry point. Active correlation attributes use the
+runtime-supplied ambient store described above, so logs-only Node processes
+retain `sessionId`, `requestId`, and `traceId` without taking ownership of the
+global OTel context-manager slot.
+
+Statically identifiable offline work uses `phase: background`, `scope:
+background`, and a specific purpose. This includes keyword authoring, bulk
+sample-request generation, optimization case classification, hypothesis
+generation (including nested retries), and guideline distillation. Foreground
+capability descriptions and sample-request generation use specific purposes
+while retaining or explicitly stating their phase.
+
+An unattributed foreground call emits a rate-limited
+`llm:classification:default` diagnostic. It contains only the foreground scope,
+the number of calls covered by the window, and the fixed window length. It
+contains no prompt, model, provider, stack, or call-site identity and cannot
+fail the model call.
 
 ### Phase-completion durations and translation routing
 
@@ -1045,9 +1081,19 @@ exception messages and stack traces are never exported.
 Each instrumented model call creates one `typeagent.llm` span. A returned
 failure result sets `ERROR` with `model returned failure`; a thrown failure
 records `ModelError` / `model call failed`, or `AbortError` / `cancelled` for a
-cancellation. Prompts, responses, and provider messages are never recorded.
-The matching `llm:completed` event carries the normalized failure
-classification.
+cancellation. Prompts, responses, and provider messages are never recorded on
+the span. The matching `llm:completed` log event carries the normalized failure
+classification described under
+[Failure classification](#failure-classification).
+
+The readable `llm:started` and `llm:completed` messages include phase, purpose,
+background scope, provider/model, outcome, elapsed time, total token count when
+available, and bounded failure classification. They never include prompts,
+responses, provider messages, or stacks.
+
+The span is ended exactly once on every path, including when emitting the
+completion event throws: a broken sink degrades telemetry rather than leaking
+an unfinished span, and it never replaces the failure the call was reporting.
 
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |
