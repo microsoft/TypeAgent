@@ -457,6 +457,10 @@ export async function executeAction(
             appAgentName,
             actionIndex,
         };
+        // Measure the action-execution phase at this call boundary (same
+        // `Date.now()` convention as reasoning/translation) so success,
+        // failure, and cancellation completions all carry a real duration.
+        const actionStartedAt = Date.now();
         logActionStarted(systemContext.logger, eventData);
         try {
             const outcome = await executeForActionSpan(actionSpan, {
@@ -494,6 +498,7 @@ export async function executeAction(
             logActionCompleted(systemContext.logger, {
                 ...eventData,
                 success: outcome.result.error === undefined,
+                elapsedMs: Date.now() - actionStartedAt,
             });
             closeActionContext();
             return outcome.result;
@@ -504,6 +509,7 @@ export async function executeAction(
                 cancelled:
                     (error as { name?: unknown })?.name === "AbortError" ||
                     systemContext.currentAbortSignal?.aborted === true,
+                elapsedMs: Date.now() - actionStartedAt,
             });
             throw error;
         }

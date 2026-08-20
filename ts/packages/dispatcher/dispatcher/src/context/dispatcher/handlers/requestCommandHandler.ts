@@ -68,6 +68,7 @@ import {
     logTranslationCompleted,
     logTranslationStarted,
 } from "../../../otel/structuredEvents.js";
+import { readTranslationRoutingFromError } from "../../../otel/translationSpan.js";
 import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 
 type ReasoningFallbackContext = {
@@ -829,6 +830,12 @@ export class RequestCommandHandler implements CommandHandler {
                 requestId,
                 schemaNames: activeSchemaScope.schemaNames,
             });
+            // Measure the translation phase at this call boundary with a
+            // monotonic-ish wall clock (consistent with the reasoning span's
+            // `Date.now()` convention) so the duration is a real fact on the
+            // event, not something the exporter has to reconstruct from span
+            // timestamps. Covers the success, failure, and cancellation paths.
+            const translationStartedAt = Date.now();
             try {
                 interpretResult = await interpretRequest(
                     context,
@@ -852,11 +859,19 @@ export class RequestCommandHandler implements CommandHandler {
                 }
                 logTranslationCompleted(systemContext.logger, {
                     requestId,
+                    // `strategy` is only a placeholder on the failure path (the
+                    // terminal route is unknown). The routing summary carried on
+                    // the error is the source of truth: `logTranslationCompleted`
+                    // derives `routingReason` from the routes actually observed
+                    // and omits it when none reached a terminal decision, so a
+                    // cache-stage failure is never mislabelled `llm_translation`.
                     strategy: "translate",
                     success: false,
                     cancelled:
                         e?.name === "AbortError" ||
                         systemContext.currentAbortSignal?.aborted === true,
+                    elapsedMs: Date.now() - translationStartedAt,
+                    routing: readTranslationRoutingFromError(e),
                     actions: [],
                 });
                 debugRequest(`Request translation failed: ${e.message}`);
@@ -870,6 +885,8 @@ export class RequestCommandHandler implements CommandHandler {
                     ? "user"
                     : interpretResult.fromCache || "translate",
                 success: true,
+                elapsedMs: Date.now() - translationStartedAt,
+                routing: interpretResult.routing,
                 actions: requestAction.actions,
             });
 

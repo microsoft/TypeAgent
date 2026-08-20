@@ -38,7 +38,7 @@ export function getStructuredLogMessage(
         case "dispatcher:action:started":
             return `Action started: ${formatAction(data)}`;
         case "dispatcher:action:completed":
-            return `Action ${stringValue(data, "status", "completed")}: ${formatAction(data)}`;
+            return `Action ${stringValue(data, "status", "completed")}: ${formatAction(data)}${formatElapsed(data)}`;
         case "dispatcher:request:completed":
             return `Request completed: ${stringValue(data, "status", "completed")}`;
         case "aiclient:llm:started":
@@ -54,9 +54,37 @@ function formatTranslationCompleted(data: Record<string, unknown>): string {
     const status = stringValue(data, "status", "completed");
     const strategy = stringValue(data, "strategy", "unknown strategy");
     const actions = stringArrayValue(data, "actionNames");
-    return `Translation ${status} via ${strategy}${
-        actions.length === 0 ? "" : `: ${actions.join(", ")}`
-    }`;
+    return `Translation ${status} via ${strategy}${formatRoutingNote(
+        data,
+    )}${formatElapsed(data)}${actions.length === 0 ? "" : `: ${actions.join(", ")}`}`;
+}
+
+// Note only the routing nuance that `strategy` does not already convey: a
+// mixed activity-context translation that reached the model despite a
+// cache/grammar strategy (`+llm`), assistant-switch fallback, and retries. JSON
+// fields remain primary.
+function formatRoutingNote(data: Record<string, unknown>): string {
+    const parts: string[] = [];
+    const strategy = stringValue(data, "strategy", "");
+    const routes = stringArrayValue(data, "routes");
+    if (routes.includes("llm") && strategy !== "" && strategy !== "translate") {
+        parts.push("+llm");
+    }
+    if (data.fallback === true) {
+        parts.push("fallback");
+    }
+    const retryCount = numberValue(data, "retryCount", 0);
+    if (retryCount > 0) {
+        parts.push(`retry x${retryCount}`);
+    }
+    return parts.length === 0 ? "" : ` [${parts.join(", ")}]`;
+}
+
+function formatElapsed(data: Record<string, unknown>): string {
+    const value = data.elapsedMs;
+    return typeof value === "number" && Number.isFinite(value)
+        ? ` in ${value} ms`
+        : "";
 }
 
 function formatLlmCompleted(data: Record<string, unknown>): string {

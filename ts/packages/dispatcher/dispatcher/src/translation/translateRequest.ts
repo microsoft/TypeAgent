@@ -80,6 +80,7 @@ import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { getHistoryContext } from "./interpretRequest.js";
 import {
     emitTranslationFallback,
+    emitTranslationLlmInvoked,
     emitTranslationRetry,
     runInTranslationSpan,
 } from "../otel/translationSpan.js";
@@ -1294,6 +1295,13 @@ async function translateRequestCore(
 
     const provider: ActionConfigProvider =
         actionConfigProvider ?? systemContext.agents;
+
+    // Reaching here means the cache/grammar match did not resolve the request,
+    // so this translation is about to call the model. Record the LLM route on
+    // the span *before* the call so a mid-flight failure/cancellation still
+    // reflects that the model path was taken (additive with any prior
+    // cache/grammar hit in a mixed activity-context translation).
+    emitTranslationLlmInvoked();
 
     const executableAction = await translateRequestWithActiveSchemas(
         request,
