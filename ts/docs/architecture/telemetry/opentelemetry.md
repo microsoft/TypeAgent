@@ -736,131 +736,35 @@ the model.
 
 ### Failure classification
 
-Structured failure events carry a normalized classification instead of the
-original message and stack, so a failure is actionable without exporting user
-content. `classifyTelemetryError` in `@typeagent/telemetry` is the single
-normalizer; it is applied at `command:exception`, at failed
-`translation:completed` and `action:completed` events, and at failed
-`llm:completed` events.
+Structured failure events use a small, shared classification instead of
+exporting error messages or stacks. This makes failures useful in telemetry
+without exposing user or provider content.
 
-- `errorCategory` - a closed union: `authentication`, `authorization`,
-  `rate_limit`, `network`, `timeout`, `validation`, `provider`, `cancelled`,
-  or `internal`.
-- `errorCode` - present only when the error carries a `code` (or an explicit
-  `errorCode`) that is a member of `TELEMETRY_ERROR_CODES`, the closed reviewed
-  allowlist. A shape check is not enough on its own: a `code` that happens to
-  be an identifier-shaped GUID, account name, or API key passes any pattern and
-  then either blows up label cardinality or carries an identifier off the
-  machine, so an unlisted code is dropped rather than exported. A package that
-  needs its own code adds it to that list (one reviewed line) and declares it
-  through `TelemetryClassifiedError`. `error.name` is never used as a code: it
-  is usually just `Error` and can be assigned arbitrary text at runtime.
-- `httpStatus` - present only when the error (or its `response`) carries an
-  integer failure status in the 400-599 range. A string `"429"` is ignored
-  rather than coerced, and a 1xx/2xx/3xx value is ignored because it is not
-  evidence of a failure (`status` doubles as a non-HTTP enum elsewhere, such
-  as a `child_process` exit code).
-- `retryable` - present only when the matched signal actually determines it.
+The classification can include:
 
-Classification never parses free-text messages: a message is the part of an
-error most likely to contain a prompt, a path, or a user's request, and
-matching on its wording is both a privacy hazard and fragile across provider
-versions. Each link of the `cause` chain (and the first entry of an
-`AggregateError`) is examined in turn, outermost first, bounded in depth and
-guarded against cycles, so a `fetch` failure that wraps `ECONNREFUSED`
-classifies as `network`.
+- `errorCategory` - for example `authentication`, `rate_limit`, `network`,
+  `timeout`, `provider`, or `internal`.
+- `errorCode` - only for codes in the reviewed allowlist.
+- `httpStatus` - only for HTTP failure statuses.
+- `retryable` - when the failure is known to be safe to retry.
 
-**Precedence.** The first link that carries a recognized signal wins, and every
-reported field is read from that one link, so category, code, status, and
-retryability describe the same error rather than being stitched together across
-links (a cause's `ECONNRESET` must not be reported next to its wrapper's HTTP
-401). Within the winning link the order is: an explicit classification the
-thrower attached, then `error.name` against a closed table of standard platform
-names, then `error.code` against the code table, then an HTTP failure status. A
-link carrying only an allowlisted code with no category rule still wins and
-reports that code with the `internal` category. A thrown string, a thrown
-object, or a plain `Error` becomes `internal` with no invented code, status, or
-retryability.
+Use `classifyTelemetryError` from `@typeagent/telemetry` rather than creating
+classification logic at individual call sites. It handles wrapped errors and
+unknown thrown values, and does not inspect free-text messages.
 
-Classification never throws. A thrown value is hostile-shaped input - getters
-throw, proxies trap every operation, and a proxy can be revoked between two
-reads - so every property access is guarded and the entry point has a
-last-resort fallback. Classifying a hostile error degrades to `internal`
-instead of replacing the original failure with a telemetry one, and the same
-guarding covers the raw `name`/`message`/`stack` the dispatcher keeps for its
-private diagnostics.
+Provider clients should attach a classification before converting a transport
+error into a returned failure result. This preserves useful details such as an
+HTTP status or network failure after the original error is no longer available.
 
-The normalizer is published on its own as
-`@typeagent/telemetry/errorClassification` and imports nothing, so
-browser-shared code can classify a failure without pulling the Node-only
-telemetry composition root into a bundle. A spec reads the module's source and
-fails if an import ever appears in it.
+Cancellation is handled separately from failure classification. Spans and
+structured completion events use the same cancellation check, including wrapped
+abort errors and abort signals, so they report the same outcome. Cancelled events
+do not include failure classification fields.
 
-A package that owns a typed error opts in by declaring `errorCategory` (and
-optionally `errorCode` / `retryable`) on it - see `TelemetryClassifiedError`
-and `CopilotEndpointUnavailableError`. That keeps domain error names out of the
-shared normalizer.
-
-**Failures that are returned rather than thrown.** `typechat`'s `Result`
-failure is `{ success: false, message }`, so by the time a caller sees one, the
-HTTP status or socket error the transport knew has been flattened into prose
-telemetry must not parse. The REST client and the Copilot transport therefore
-attach the bounded facts where they still have them, through
-`attachTelemetryErrorClassification`: a non-enumerable, symbol-keyed property
-that leaves spreads, `Object.keys`, `JSON.stringify`, and existing equality
-assertions unchanged. `otelChatModel` reads it back with
-`readTelemetryErrorClassification`, which re-validates the payload against the
-same closed vocabularies so a stale or forged carrier cannot smuggle an
-unbounded field into an export. A real 401, 403, 429, timeout, network failure,
-or `CopilotEndpointUnavailableError` therefore keeps its category on
-`llm:completed`; when nothing is attached, the event falls back to `provider`,
-which is truthful because every returned failure originates in the provider
-call.
-
-That fallback is only reachable if the transport declines to guess. `internal`
-is a claim - it says the failure came from our own code - so a layer attaching a
-classification to a value that already has a truthful default uses
-`classifyTelemetryErrorIfRecognized`, which returns nothing when no link of the
-chain carried a recognized signal, rather than `classifyTelemetryError`, which
-answers `internal`. An unexplained `fetch failed` therefore leaves the `Result`
-unclassified and is reported as `provider`, not as our own bug.
-
-The transport also has to describe one event the same way from every code path.
-`callFetch` reports a dropped connection either by throwing or by resolving
-without a `Response`; the single-endpoint path turns the second into a throw and
-the endpoint-pool path handles it inline. Both build from one
-`NO_RESPONSE_CLASSIFICATION` constant (`network`, retryable), so the same outage
-does not read as `network` from a single-endpoint deployment and as nothing from
-a pooled one.
-
-A cancellation is a disposition, not a failure: cancelled completions carry no
-classification fields at all. Cancellation is decided once, by
-`isTelemetryCancellation`, and every signal reads that one result - `cancelled`,
-the event `status`, the log severity, the span status and exception name, and
-the presence of classification fields cannot disagree. It takes two inputs: the
-thrown value, walked through its `cause` chain so an `AbortError` wrapped by a
-phase-level error is still recognized, and what the call site knows from outside
-the error, typically that the request's abort signal fired. The second matters
-on its own, because a cancelled request usually surfaces as whatever the
-provider was in the middle of. The phase spans (`typeagent.request`,
-`typeagent.translation`, `typeagent.reasoning`, `typeagent.action`) and the LLM
-span classify through the same call with the same signals the completion events
-use, so a span and the event beside it always agree. A cancelled span still
-carries `ERROR` status - the operation did not complete - and is distinguished
-by its `AbortError` exception name and `cancelled` message rather than the
-phase's own failure wording. A failure with no thrown value carries no
-classification either: an agent that reports failure through a typed
-`ActionResult.error` never threw, so `action:completed` records the failure
-status without asserting a category.
-
-The raw `request`, `name`, `message`, and `stack` remain on
-`command:exception` for the local debug sink and the opt-in database sinks
-(`@config log db on`). They are not in the dispatcher's OTel allowlist, so they
-never reach OTLP or the local JSONL file; only the classification does. The
-reduced local message renders the classification alone, for example
-`Command failed: rate_limit (HTTP 429, retryable)`. Failed phase completions
-append the same rendering to their existing line, for example
-`Action failed: player.play in 4 ms [timeout (retryable)]`.
+The dispatcher OTel projection exports only the normalized classification. Raw
+request and error details remain limited to local, explicitly enabled diagnostic
+sinks. Existing lifecycle messages show a short summary such as
+`rate_limit (HTTP 429, retryable)`.
 
 ### 5. Inspect the Same Logs in Grafana
 
@@ -1022,12 +926,9 @@ await createDispatcher(hostName, {
 ```
 
 Original exception messages and stacks are omitted because they can contain user
-content. Record a stable classification and message at the catch site. For a
-structured log event, use `classifyTelemetryError` rather than hand-rolling a
-classification; see [Failure classification](#failure-classification). A span
-wrapper records the exception through `recordSpanFailure`, which applies the
-shared cancellation decision so the span cannot call a cancellation a phase
-failure while the completion event calls it a cancellation.
+content. Record a stable classification and message at the catch site. Use the
+shared helpers described in [Failure classification](#failure-classification)
+for structured events and span failures.
 
 ## Currently Captured Dispatcher Telemetry
 
@@ -1085,11 +986,7 @@ execution order.
 
 Translation spans carry the same available correlation attributes as the root
 request span. Errors record a privacy-safe `TranslationError`, or `AbortError`
-for cancellation, and set a stable error status before rethrowing. Cancellation
-is the shared decision described under
-[Failure classification](#failure-classification), so an abort carried as the
-`cause` of a translation error, or a request whose abort signal fired, is
-recorded as a cancellation on the span and on `translation:completed` alike.
+for cancellation, and set a stable error status before rethrowing.
 
 ### Action span
 
@@ -1116,9 +1013,7 @@ Failure modes are recorded distinctly and use bounded, allowlisted values:
   `ActionResult.error` text itself is never stamped.
 - An exception that escapes the wrapper is recorded as `AbortError` /
   `cancelled` for cancellation and `ActionError` / `action failed`
-  otherwise, matching the request and translation span conventions. The
-  cancellation decision reads the `cause` chain and the request's abort
-  signal, the same two inputs `action:completed` uses.
+  otherwise, matching the request and translation span conventions.
 
 Auto-setup replacement results (produced when `setupOnFirstUse` runs setup
 in place of the user's action) leave the span status unset regardless of
@@ -1142,26 +1037,17 @@ prompts, responses, and reasoning text are never recorded on the span.
 Timeout and external cancellation are propagated to the underlying SDK
 operation before the span ends. Cancellation records the privacy-safe
 `AbortError` / `cancelled` exception classification and sets error status.
-A reasoning run that is cancelled usually throws whatever the SDK was in the
-middle of rather than an `AbortError`, so the decision also reads the reasoning
-deadline signal and the request's own signal - the same inputs
-`reasoning:completed` uses, so the two never disagree. Other escaping exceptions
-use `ReasoningError` / `reasoning failed`. Original exception messages and stack
-traces are never exported.
+Other escaping exceptions use `ReasoningError` / `reasoning failed`. Original
+exception messages and stack traces are never exported.
 
 ### LLM span
 
 Each instrumented model call creates one `typeagent.llm` span. A returned
 failure result sets `ERROR` with `model returned failure`; a thrown failure
 records `ModelError` / `model call failed`, or `AbortError` / `cancelled` for a
-cancellation. Prompts, responses, and provider messages are never recorded on
-the span. The matching `llm:completed` log event carries the normalized failure
-classification described under
-[Failure classification](#failure-classification).
-
-The span is ended exactly once on every path, including when emitting the
-completion event throws: a broken sink degrades telemetry rather than leaking
-an unfinished span, and it never replaces the failure the call was reporting.
+cancellation. Prompts, responses, and provider messages are never recorded.
+The matching `llm:completed` event carries the normalized failure
+classification.
 
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |
