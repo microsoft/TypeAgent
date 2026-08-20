@@ -12,7 +12,7 @@ import type {
 import {
     agentAlreadyExistsMessage,
     createClientAgentRegistry,
-    getInstanceChoices,
+    getInstanceLabels,
     getManifestKey,
     type ClientAgentHost,
     type ClientAgentRegistry,
@@ -88,32 +88,23 @@ function makeHost(): FakeHost {
 }
 
 /**
- * Minimal stand-in for the SessionContext the dispatcher hands the mux. Only
- * the fields routing reads are real.
+ * Minimal stand-in for the SessionContext the dispatcher hands the mux.
+ * `popupQuestion` throws: routing must never ask which device to use.
  */
-function makeSessionContext(
-    connectionId: string | undefined,
-    popupAnswer?: number,
-): {
+function makeSessionContext(connectionId: string | undefined): {
     context: SessionContext<unknown>;
-    prompts: { message: string; choices: string[] }[];
 } {
-    const prompts: { message: string; choices: string[] }[] = [];
     const context = {
         agentContext: undefined,
         sessionStorage: undefined,
         instanceStorage: undefined,
         sessionContextId: "test",
         currentConnectionId: connectionId,
-        async popupQuestion(message: string, choices: string[] = []) {
-            prompts.push({ message, choices });
-            if (popupAnswer === undefined) {
-                throw new Error("unexpected popupQuestion");
-            }
-            return popupAnswer;
+        async popupQuestion() {
+            throw new Error("routing must not prompt");
         },
     } as unknown as SessionContext<unknown>;
-    return { context, prompts };
+    return { context };
 }
 
 function makeActionContext(
@@ -159,14 +150,12 @@ function getMux(registry: ClientAgentRegistry): AppAgent {
 async function execute(
     registry: ClientAgentRegistry,
     connectionId: string | undefined,
-    popupAnswer?: number,
-): Promise<{ prompts: { message: string; choices: string[] }[] }> {
-    const { context, prompts } = makeSessionContext(connectionId, popupAnswer);
+): Promise<void> {
+    const { context } = makeSessionContext(connectionId);
     await getMux(registry).executeAction!(
         { actionName: "showAlarms" } as TypeAgentAction,
         makeActionContext(context),
     );
-    return { prompts };
 }
 
 describe("clientAgentRegistry registration", () => {
@@ -438,7 +427,7 @@ describe("clientAgentRegistry teardown", () => {
 
 describe("clientAgentRegistry routing", () => {
     // Case 8
-    test("routes to the requester, the active device, the only device, then asks", async () => {
+    test("routes to the requester, then to the only device, and otherwise refuses", async () => {
         const registry = createClientAgentRegistry();
         const host = makeHost();
         const a = makeDevice();
@@ -451,7 +440,8 @@ describe("clientAgentRegistry routing", () => {
             appAgent: a.appAgent,
         });
 
-        // Only one device: no requester needed, no prompt.
+        // One device, so a request from anywhere else still lands on it. This
+        // is "ask the shell, act on my only phone".
         await execute(registry, undefined);
         expect(a.executed).toHaveLength(1);
 
@@ -462,26 +452,62 @@ describe("clientAgentRegistry routing", () => {
             appAgent: b.appAgent,
         });
 
-        // Requester wins.
+        // The device that asked always wins, however many are connected.
         await execute(registry, "conn-b");
         expect(b.executed).toHaveLength(1);
-        expect(a.executed).toHaveLength(1);
+        await execute(registry, "conn-a");
+        expect(a.executed).toHaveLength(2);
 
-        // No requester and no active device: ask, and remember the answer.
-        const { prompts } = await execute(registry, undefined, 1);
-        expect(prompts).toHaveLength(1);
-        expect(prompts[0].choices).toEqual(["Pixel 8", "Galaxy Tab"]);
-        expect(b.executed).toHaveLength(2);
-        expect(registry.groups.get(AGENT_NAME)!.activeInstanceId).toBe("b");
+        // Two devices and the asker is neither of them: refuse rather than
+        // guess, and say which devices are connected.
+        await expect(execute(registry, undefined)).rejects.toThrow(
+            /Pixel 8, Galaxy Tab/,
+        );
+        // Nothing ran anywhere.
+        expect(a.executed).toHaveLength(2);
+        expect(b.executed).toHaveLength(1);
 
-        // Active device is used without asking again.
+        // A request from an unknown connection is treated the same way.
+        await expect(execute(registry, "conn-shell")).rejects.toThrow(
+            /hosted by 2 devices/,
+        );
+    });
+
+    test("refusing to route leaves no remembered device behind", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        const a = makeDevice();
+        const b = makeDevice();
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: a.appAgent,
+        });
+        await register(registry, host, {
+            instanceId: "b",
+            connectionId: "conn-b",
+            appAgent: b.appAgent,
+        });
+
+        // Asking from a device must not make it the target for later requests
+        // from elsewhere. That hidden state is what sends an action to the
+        // wrong phone.
+        await execute(registry, "conn-a");
+        await expect(execute(registry, undefined)).rejects.toThrow(
+            /hosted by 2 devices/,
+        );
+
+        // Once only one device is left, routing becomes unambiguous again.
+        await registry.remove(host, AGENT_NAME, "a", {
+            ownerConnectionId: "conn-a",
+        });
         await execute(registry, undefined);
-        expect(b.executed).toHaveLength(3);
-        expect(a.executed).toHaveLength(1);
+        expect(b.executed).toHaveLength(1);
     });
 
     // Case 9
-    test("two devices sharing a display name get distinct choices that resolve correctly", async () => {
+    test("two devices sharing a display name are listed distinctly", async () => {
         const registry = createClientAgentRegistry();
         const host = makeHost();
         const a = makeDevice();
@@ -500,20 +526,19 @@ describe("clientAgentRegistry routing", () => {
             appAgent: b.appAgent,
         });
 
-        const choices = getInstanceChoices(registry.groups.get(AGENT_NAME)!);
-        expect(choices.map((c) => c.label)).toEqual([
+        expect(getInstanceLabels(registry.groups.get(AGENT_NAME)!)).toEqual([
             "Pixel 8 (1)",
             "Pixel 8 (2)",
         ]);
-        expect(choices.map((c) => c.instanceId)).toEqual(["a", "b"]);
 
-        const { prompts } = await execute(registry, undefined, 1);
-        expect(prompts[0].choices).toEqual(["Pixel 8 (1)", "Pixel 8 (2)"]);
-        expect(b.executed).toHaveLength(1);
+        await expect(execute(registry, undefined)).rejects.toThrow(
+            /Pixel 8 \(1\), Pixel 8 \(2\)/,
+        );
         expect(a.executed).toHaveLength(0);
+        expect(b.executed).toHaveLength(0);
     });
 
-    test("a non-user-facing call never asks which device", async () => {
+    test("a read-only call still runs when the target is ambiguous", async () => {
         const registry = createClientAgentRegistry();
         const host = makeHost();
         const readinessCalls: string[] = [];
@@ -538,12 +563,11 @@ describe("clientAgentRegistry routing", () => {
             appAgent: makeReadyDevice("b"),
         });
 
-        // No requester, no active device, two candidates: a prompt here would
-        // interrupt the user for a check they never asked for.
-        const { context, prompts } = makeSessionContext(undefined);
+        // Readiness changes nothing on the device, so failing it would make the
+        // agent look broken for a question the user never asked.
+        const { context } = makeSessionContext(undefined);
         await getMux(registry).checkReadiness!(context);
 
-        expect(prompts).toHaveLength(0);
         expect(readinessCalls).toHaveLength(1);
     });
 

@@ -8,12 +8,9 @@ import java.util.UUID
 /**
  * Who this device is, from the server's point of view.
  *
- * The server keys one `androidDevice` agent by `instanceId`, so several devices
- * can share it and a reconnect replaces this device's registration rather than
- * adding another. `displayName` is what the user sees when the server has to
- * ask which device an action should run on.
- *
- * This is an interface so `WebSocketManager` can be constructed in plain JVM
+ * The server keys one `androidDevice` agent by `instanceId`, so several
+ * devices can share it and a reconnect replaces this device rather than adding
+ * another. An interface so `WebSocketManager` stays constructible in plain JVM
  * unit tests, which have no `Context`.
  */
 interface DeviceIdentity {
@@ -22,13 +19,9 @@ interface DeviceIdentity {
 }
 
 /**
- * `SharedPreferences`-backed identity. The id is generated once and kept, so it
- * survives app restarts; it is a random UUID and never a hardware identifier,
+ * `SharedPreferences`-backed identity. The id is generated once and kept, so
+ * it survives restarts. It is a random UUID, never a hardware identifier,
  * which would need permissions and would follow the user across apps.
- *
- * Reads and writes are blocking, so build this off the main thread or accept a
- * single small preference read at startup, the same way `ConversationStore`
- * does.
  */
 class StoredDeviceIdentity(context: Context) : DeviceIdentity {
 
@@ -41,8 +34,7 @@ class StoredDeviceIdentity(context: Context) : DeviceIdentity {
         get() = prefs.getString(KEY_DISPLAY_NAME, null)?.takeIf { it.isNotBlank() }
             ?: defaultDisplayName()
 
-    /** Lets the user rename the device; the name is visible to the conversation. */
-    fun setDisplayName(name: String) {
+    /** Lets the user rename the device; the name is visible to the conversation. */    fun setDisplayName(name: String) {
         prefs.edit().putString(KEY_DISPLAY_NAME, name.trim()).apply()
     }
 

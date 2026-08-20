@@ -145,9 +145,8 @@ type ConversationRecord = {
     readOnly?: boolean | undefined;
     copilot?: CopilotMirrorMetadata | undefined;
     /**
-     * Client-hosted agents on this conversation. The registry outlives any one
-     * connection, so a device disconnecting only removes its own instance, and
-     * it serialises its own mutations per conversation.
+     * Client-hosted agents on this conversation. Outlives any one connection,
+     * and serialises its own mutations.
      */
     clientAgents: ClientAgentRegistry;
 };
@@ -251,12 +250,12 @@ export type ConversationManager = {
      * agent on a conversation's dispatcher. The conversation must already have a
      * dispatcher (i.e. a client has joined).
      *
-     * A second client may register the same `name` as long as it carries the
-     * same schema: the dynamic agent is registered once and each client becomes
-     * an instance behind it. Re-registering the same `instanceId` replaces that
-     * instance's proxy in place, which is how a reconnect after a dropped
-     * socket recovers. Rejects when the schema differs, or when
-     * multi-instance support is switched off and the instance is new.
+     * Several clients may register the same `name` as long as they carry the
+     * same schema: the dynamic agent is added once and each client becomes an
+     * instance behind it. Re-registering the same `instanceId` replaces its
+     * proxy in place, which is how a reconnect recovers. Rejects when the
+     * schema differs, or when the instance is new and multi-instance support
+     * is switched off.
      */
     addClientAgent(
         conversationId: string,
@@ -279,9 +278,8 @@ export type ConversationManager = {
         options?: RemoveClientAgentOptions,
     ): Promise<void>;
     /**
-     * The instance a connection owns for `name`, or undefined when it owns
-     * none. Lets a caller resolve an explicit unregister to its own instance
-     * instead of removing another client's by name.
+     * The instance a connection owns for `name`, if any. Lets a caller resolve
+     * an unregister to its own instance instead of another client's.
      */
     findClientAgentInstance(
         conversationId: string,
@@ -294,9 +292,8 @@ export type ConversationManager = {
 export type RemoveClientAgentOptions = {
     /**
      * Only remove the instance if it still names this connection. Guards the
-     * sleeping-phone case: the device reconnects and re-registers the same
-     * `instanceId` before its half-open socket is reaped, and the late
-     * disconnect must not evict the live registration.
+     * sleeping phone: it reconnects and re-registers before its half-open
+     * socket is reaped, and the late disconnect must not evict it.
      */
     ownerConnectionId?: string | undefined;
 };

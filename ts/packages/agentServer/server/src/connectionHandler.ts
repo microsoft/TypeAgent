@@ -40,9 +40,8 @@ const MAX_IDENTITY_LENGTH = 64;
 
 /**
  * Validate an optional client-supplied identity field, falling back to a
- * server-derived default when it is absent. Bounds are cheap insurance against
- * a buggy client filling the group map (and the "which device?" prompt) with
- * junk.
+ * server-derived default. The bounds are cheap insurance against a buggy
+ * client filling the group with junk.
  */
 function checkIdentityField(
     field: string,
@@ -571,10 +570,9 @@ export function createAgentServerConnectionHandler(
                 const { name, manifest, agentInterface } = param;
                 const connectionId =
                     joinedConversations.get(conversationId)!.connectionId;
-                // A client that sends no instanceId is a single instance tied
-                // to its connection: synthesising the id from the connection
-                // keeps it distinct from other devices, and means it does not
-                // survive a reconnect (which is exactly the old behaviour).
+                // No instanceId means a single instance tied to this
+                // connection: it stays distinct from other devices, and does
+                // not survive a reconnect, which is the old behaviour.
                 const instanceId = checkIdentityField(
                     "instanceId",
                     param.instanceId,

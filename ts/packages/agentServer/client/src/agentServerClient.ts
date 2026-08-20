@@ -120,10 +120,10 @@ function forceKillServer(port: number): boolean {
 }
 
 /**
- * Optional identity for a client-hosted agent, used when several clients host
- * the same agent name on one conversation. `instanceId` must be stable across
- * reconnects so the server replaces this client's instance rather than adding
- * another; `displayName` is what the user sees when asked which device to use.
+ * Optional identity for a client-hosted agent, for when several clients host
+ * the same agent name on one conversation. `instanceId` must survive
+ * reconnects, so the server replaces this client's instance instead of adding
+ * another.
  */
 export type ClientAgentIdentity = {
     instanceId?: string;
@@ -234,10 +234,9 @@ export type AgentServerConnection = {
      * after {@link reconnect}) replaces the previous registration.
      *
      * Several clients may register the same `name` on one conversation as long
-     * as they carry the same schema; each becomes an instance and the server
-     * routes each action to one of them. Pass a stable `instanceId` so a
-     * reconnect replaces this client's instance instead of adding another, and
-     * a `displayName` so the user can tell instances apart.
+     * as they carry the same schema; each becomes an instance. Pass a stable
+     * `instanceId` so a reconnect replaces this client's instance instead of
+     * adding another.
      */
     registerClientAgent(
         name: string,

@@ -39,19 +39,18 @@ internal object AndroidDeviceAgent {
             .put("conversationId", conversationId)
             .put("manifest", manifest)
             .put("agentInterface", JSONArray().put("executeAction"))
-            // Identifies this device to the server so several devices can share
-            // one `androidDevice` agent, and so a reconnect replaces this
-            // device's registration instead of adding another.
+            // Identifies this device so several devices can share one
+            // `androidDevice` agent, and so a reconnect replaces this device
+            // instead of adding another.
             .put("instanceId", instanceId)
             .put("displayName", displayName)
     }
 
     /**
-     * Params for `unregisterClientAgent`. Deliberately carries no `instanceId`:
+     * Params for `unregisterClientAgent`. Carries no `instanceId` on purpose:
      * the server resolves the call to the calling connection's own
-     * registration, so this is inert when the connection has none. Naming a
-     * concrete instance here would give the collision shim a way to drop
-     * another device's live registration.
+     * registration, so it is inert when that connection has none. Naming an
+     * instance would give the collision shim a way to drop another device.
      */
     fun createUnregistrationParams(conversationId: String): JSONObject {
         return JSONObject()

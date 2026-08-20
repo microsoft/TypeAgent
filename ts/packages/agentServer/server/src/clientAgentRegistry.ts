@@ -15,9 +15,8 @@ const debugGroup = registerDebug("agent-server:clientAgent");
 const debugRoute = registerDebug("agent-server:clientAgent:route");
 
 /**
- * One client (a phone, a shell, a browser extension) hosting the agent.
- * `appAgent` is the agent-rpc proxy that talks back over that client's own
- * connection, so an instance dies with its connection.
+ * One client (a phone, a shell, a browser extension) hosting the agent. The
+ * proxy talks back over that client's connection, so an instance dies with it.
  */
 export type ClientAgentInstance = {
     instanceId: string;
@@ -30,8 +29,7 @@ export type ClientAgentInstance = {
 
 /**
  * All the clients hosting one agent name on one conversation. The dispatcher
- * only ever sees {@link ClientAgentGroup.mux}, which is registered once and
- * routes each call to a single instance.
+ * only sees {@link ClientAgentGroup.mux}, registered once for the whole group.
  */
 export type ClientAgentGroup = {
     name: string;
@@ -39,7 +37,6 @@ export type ClientAgentGroup = {
     /** Hash of the schema source; instances must agree on it. See {@link getManifestKey}. */
     manifestKey: string;
     instances: Map<string, ClientAgentInstance>;
-    activeInstanceId: string | undefined;
     mux: AppAgent;
 };
 
@@ -54,10 +51,8 @@ export type ClientAgentRegistration = {
 const MULTI_INSTANCE_ENV = "TYPEAGENT_ALLOW_MULTIPLE_CLIENT_AGENT_INSTANCES";
 
 /**
- * Kill switch for the multi-instance behaviour. Default on; set the
- * environment variable to `0` or `false` to get the pre-multi-instance
- * behaviour back (one instance per group, second device rejected with the
- * original "already exists" error) without a redeploy.
+ * Kill switch. Default on; set the environment variable to `0` or `false` for
+ * the old behaviour (one instance per group, second device rejected).
  */
 export function allowMultipleClientAgentInstances(): boolean {
     const value = process.env[MULTI_INSTANCE_ENV];
@@ -74,9 +69,8 @@ export function agentAlreadyExistsMessage(name: string): string {
 }
 
 /**
- * Collect the schema sources a manifest carries, in a deterministic order.
- * Only inline content counts: a client-hosted agent always ships its schema
- * text, and a file path would not be comparable across machines anyway.
+ * Schema sources a manifest carries, in a deterministic order. Only inline
+ * content counts: a file path would not be comparable across machines.
  */
 function collectSchemaContent(
     manifest: AppAgentManifest | Record<string, any>,
@@ -117,13 +111,10 @@ function canonicalize(value: unknown): string {
 /**
  * Version key two clients must agree on to share a group.
  *
- * This hashes the schema *text*, not the serialised manifest. Android builds
- * its manifest with `org.json.JSONObject`, whose key order is not stable, so
- * hashing the manifest object would make two phones running the same APK look
- * like a version mismatch. The schema text is read verbatim from the app's
- * assets and is byte-for-byte identical across devices. A manifest with no
- * inline schema falls back to a canonicalised (key-sorted) form, which is
- * order-independent for the same reason.
+ * Hashes the schema *text*, not the manifest: Android builds its manifest with
+ * `org.json.JSONObject`, whose key order is not stable, so hashing the object
+ * would make two phones running the same APK look like a version mismatch. A
+ * manifest with no inline schema falls back to a key-sorted form.
  */
 export function getManifestKey(manifest: AppAgentManifest): string {
     const parts: string[] = [];
@@ -138,13 +129,10 @@ export function schemaMismatchMessage(name: string): string {
 }
 
 /**
- * Give every instance a label the user can tell apart. Two phones of the same
- * model both report "Pixel 8", so duplicates get a numeric suffix in
- * registration order. Unique names are left alone.
+ * Names the user can tell apart. Two phones of the same model both report
+ * "Pixel 8", so duplicates get a numeric suffix in registration order.
  */
-export function getInstanceChoices(
-    group: ClientAgentGroup,
-): { label: string; instanceId: string }[] {
+export function getInstanceLabels(group: ClientAgentGroup): string[] {
     const instances = [...group.instances.values()].sort(
         (a, b) => a.registeredAt - b.registeredAt,
     );
@@ -158,42 +146,39 @@ export function getInstanceChoices(
     const seen = new Map<string, number>();
     return instances.map((instance) => {
         if ((counts.get(instance.displayName) ?? 0) <= 1) {
-            return {
-                label: instance.displayName,
-                instanceId: instance.instanceId,
-            };
+            return instance.displayName;
         }
         const n = (seen.get(instance.displayName) ?? 0) + 1;
         seen.set(instance.displayName, n);
-        return {
-            label: `${instance.displayName} (${n})`,
-            instanceId: instance.instanceId,
-        };
+        return `${instance.displayName} (${n})`;
     });
 }
 
+export function ambiguousDeviceMessage(group: ClientAgentGroup): string {
+    return `'${group.name}' is hosted by ${group.instances.size} devices (${getInstanceLabels(
+        group,
+    ).join(", ")}). Run the request from the device you want it to act on.`;
+}
+
 /**
- * Pick the instance a call goes to. Order matters: the device that asked wins
- * before the remembered active device, so "my phone does what I ask my phone"
- * never needs a prompt.
+ * Pick the device a call goes to. We never guess: an action on the wrong
+ * phone is worse than one that does not run, because the user believes it ran.
+ * So there are two certain ways to route, and a failure when neither applies.
  *
- * `allowPrompt` is false for everything that is not a user-facing invocation
- * (readiness checks, completions, dynamic schema). Those must not put a "Which
- * device?" question in front of the user, so they fall back to the most
- * recently used device instead.
+ * Read-only calls (`sideEffecting` false) change nothing on the device and
+ * every instance runs the same build, so they take any instance rather than
+ * failing a question the user never asked.
  */
-async function selectInstance(
+function selectInstance(
     group: ClientAgentGroup,
     sessionContext: SessionContext<unknown> | undefined,
-    allowPrompt: boolean,
-): Promise<ClientAgentInstance> {
+    sideEffecting: boolean,
+): ClientAgentInstance {
     if (group.instances.size === 0) {
-        throw new Error(
-            `Client agent '${group.name}' has no connected instances`,
-        );
+        throw new Error(`No device is connected for '${group.name}'`);
     }
 
-    // Rule 2: the connection that made the request.
+    // The device that made the request. Certain, and the common case.
     const connectionId = sessionContext?.currentConnectionId;
     if (connectionId !== undefined) {
         for (const instance of group.instances.values()) {
@@ -206,19 +191,8 @@ async function selectInstance(
         }
     }
 
-    // Rule 3: the remembered active instance.
-    if (group.activeInstanceId !== undefined) {
-        const active = group.instances.get(group.activeInstanceId);
-        if (active !== undefined) {
-            debugRoute(
-                `${group.name}: active -> ${active.instanceId} (${active.displayName})`,
-            );
-            return touch(active);
-        }
-        group.activeInstanceId = undefined;
-    }
-
-    // Rule 4: only one candidate.
+    // The only candidate, so there is nothing to get wrong. This is what keeps
+    // "ask the shell, act on my one phone" working.
     if (group.instances.size === 1) {
         const only = group.instances.values().next().value!;
         debugRoute(
@@ -227,37 +201,13 @@ async function selectInstance(
         return touch(only);
     }
 
-    if (!allowPrompt || sessionContext?.popupQuestion === undefined) {
-        const fallback = group.instances.get(selectNewActiveInstance(group)!)!;
-        debugRoute(
-            `${group.name}: recent -> ${fallback.instanceId} (${fallback.displayName})`,
-        );
-        return touch(fallback);
+    if (sideEffecting) {
+        debugRoute(`${group.name}: ambiguous, refusing to pick`);
+        throw new Error(ambiguousDeviceMessage(group));
     }
-
-    // Rule 5: ask, and remember the answer.
-    const choices = getInstanceChoices(group);
-    const index = await sessionContext.popupQuestion(
-        "Which device?",
-        choices.map((choice) => choice.label),
-    );
-    const chosen = choices[index];
-    // Map the label back through the instanceId, never the display name: two
-    // devices can share a display name.
-    const instance =
-        chosen !== undefined
-            ? group.instances.get(chosen.instanceId)
-            : undefined;
-    if (instance === undefined) {
-        throw new Error(
-            `Client agent '${group.name}': the selected device is no longer connected`,
-        );
-    }
-    group.activeInstanceId = instance.instanceId;
-    debugRoute(
-        `${group.name}: prompt -> ${instance.instanceId} (${instance.displayName})`,
-    );
-    return touch(instance);
+    const any = group.instances.values().next().value!;
+    debugRoute(`${group.name}: read-only -> ${any.instanceId}`);
+    return touch(any);
 }
 
 function touch(instance: ClientAgentInstance): ClientAgentInstance {
@@ -296,9 +246,8 @@ const actionContextArg: Record<string, number> = {
 };
 
 // Lifecycle methods that must reach every instance, not just the routed one.
-// initializeAgentContext is deliberately absent: it takes no context, so the
-// mux cannot tell instances apart, and per-instance initialization happens
-// when the instance joins (see initializeInstance).
+// initializeAgentContext is absent because it takes no context, so the mux
+// cannot tell instances apart; late joiners go through initializeInstance.
 const broadcastMethods = new Set([
     "updateAgentContext",
     "closeAgentContext",
@@ -306,10 +255,9 @@ const broadcastMethods = new Set([
     "stopBackgroundTasks",
 ]);
 
-// Calls a user made, and so the only ones allowed to ask which device to use.
-// Everything else (readiness checks, completions, dynamic schema) runs on the
-// dispatcher's own schedule and must never put a question in front of the user.
-const promptingMethods = new Set([
+// Calls that change something on the device. These refuse to run rather than
+// pick a device; everything else is read-only and takes any instance.
+const sideEffectingMethods = new Set([
     "executeAction",
     "executeCommand",
     "handleChoice",
@@ -319,15 +267,11 @@ const promptingMethods = new Set([
 /**
  * Per-instance view of a context.
  *
- * The dispatcher holds one `SessionContext` for the whole group, whose
- * `agentContext` is whatever the *first* instance's `initializeAgentContext`
- * returned. Handing that to a second instance's rpc proxy would send it an
- * agent-context id minted by another process. So each instance gets a view of
- * the context with its own `agentContext` spliced in.
- *
- * The views are cached per instance because agent-rpc keys its context table
- * on object identity and only releases an entry in `closeAgentContext`; a
- * fresh wrapper per call would leak one entry per call.
+ * The dispatcher holds one `SessionContext` whose `agentContext` came from the
+ * first instance. Handing that to a second instance's rpc proxy would send it
+ * an id minted by another process, so each instance sees the context with its
+ * own `agentContext` spliced in. Views are cached because agent-rpc keys its
+ * context table on object identity, so a fresh wrapper per call would leak.
  */
 type InstanceContexts = {
     agentContext: unknown;
@@ -443,7 +387,7 @@ function createMux(group: ClientAgentGroup, template: AppAgent): AppAgent {
         const sessionArg = sessionContextArg[method];
         const actionArg = actionContextArg[method];
         const broadcast = broadcastMethods.has(method);
-        const allowPrompt = promptingMethods.has(method);
+        const sideEffecting = sideEffectingMethods.has(method);
 
         mux[method] = async (...args: any[]) => {
             const rebind = (instance: ClientAgentInstance) => {
@@ -498,7 +442,7 @@ function createMux(group: ClientAgentGroup, template: AppAgent): AppAgent {
                     : sessionArg !== undefined
                       ? args[sessionArg]
                       : undefined;
-            const instance = await selectInstance(group, context, allowPrompt);
+            const instance = selectInstance(group, context, sideEffecting);
             const fn = (instance.appAgent as any)[method];
             if (fn === undefined) {
                 throw new Error(
@@ -512,10 +456,8 @@ function createMux(group: ClientAgentGroup, template: AppAgent): AppAgent {
 }
 
 /**
- * Bring a device that joined after the dispatcher already enabled the group up
- * to the same state as the devices already in it. Failures are traced, not
- * thrown: the device is registered either way and a broken lifecycle call on
- * one device must not fail another device's registration.
+ * Bring a device that joined late up to the state the others are in. Failures
+ * are traced, not thrown: one device must not fail another's registration.
  */
 async function initializeInstance(
     group: ClientAgentGroup,
@@ -563,7 +505,6 @@ export function createClientAgentGroup(
         manifest: registration.manifest,
         manifestKey: getManifestKey(registration.manifest),
         instances: new Map([[instance.instanceId, instance]]),
-        activeInstanceId: undefined,
         mux: undefined as unknown as AppAgent,
     };
     internals.set(group, {
@@ -584,13 +525,10 @@ export type JoinClientAgentGroupOptions = {
 };
 
 /**
- * Add a device to an existing group, or replace its proxy if the same
- * `instanceId` is already there. Replacement in place is what makes a
- * reconnect work: the device keeps its slot and the dispatcher never sees a
- * change.
- *
- * Returns true when the group gained an instance, false when an existing one
- * was replaced.
+ * Add a device, or replace its proxy if the same `instanceId` is already
+ * there. Replacing in place is what makes a reconnect work: the device keeps
+ * its slot and the dispatcher never sees a change. Returns true if the group
+ * gained an instance.
  */
 export async function joinClientAgentGroup(
     group: ClientAgentGroup,
@@ -654,11 +592,9 @@ export function findInstanceIdForConnection(
 
 export type RemoveClientAgentInstanceOptions = {
     /**
-     * Only remove the instance if it still names this connection. A phone that
-     * sleeps leaves a half-open socket; it reconnects and re-registers the same
-     * `instanceId` before the dead socket is reaped, which re-points the
-     * instance at the new connection. Without this check, the late disconnect
-     * of the dead socket would evict the live device.
+     * Only remove the instance if it still names this connection. A sleeping
+     * phone leaves a half-open socket, then reconnects on a new one; without
+     * this check the late disconnect would evict the live device.
      */
     ownerConnectionId?: string | undefined;
 };
@@ -682,32 +618,15 @@ export function removeClientAgentInstance(
     }
     group.instances.delete(instanceId);
     getInternals(group).contexts.delete(instanceId);
-    if (group.activeInstanceId === instanceId) {
-        // Mirrors the browser WebSocket server's active-client reselection:
-        // fall back to the most recently used survivor rather than leaving the
-        // group pointing at a device that is gone.
-        group.activeInstanceId = selectNewActiveInstance(group);
-    }
     debugGroup(
         `${group.name}: removed instance ${instanceId} (${instance.displayName}), instances: ${group.instances.size}`,
     );
     return true;
 }
 
-function selectNewActiveInstance(group: ClientAgentGroup): string | undefined {
-    let best: ClientAgentInstance | undefined;
-    for (const instance of group.instances.values()) {
-        if (best === undefined || instance.lastUsed > best.lastUsed) {
-            best = instance;
-        }
-    }
-    return best?.instanceId;
-}
-
 /**
- * What the registry needs from the conversation's dispatcher. Kept as a
- * parameter rather than a dependency so the registry can be exercised without
- * standing up a dispatcher.
+ * What the registry needs from the conversation's dispatcher. A parameter
+ * rather than a dependency, so the registry can be tested without one.
  */
 export type ClientAgentHost = {
     addDynamicAgent(
@@ -721,17 +640,12 @@ export type ClientAgentHost = {
 /**
  * The client-hosted agents of one conversation.
  *
- * Every mutation runs under this registry's own lock. Joining a group is a
- * read-modify-write (look for a group, then either create one and register the
- * dynamic agent, or add an instance to it) and the dispatcher's command lock
- * only wraps the addDynamicAgent call, not the lookup that decides to make it.
- * Without serialising here, two devices registering at the same instant would
- * both create a group and the second addDynamicAgent would throw the very
- * "already exists" error this exists to remove.
- *
- * The lock is per conversation, and the dispatcher's command lock is always
- * taken inside it (via the host), never the other way round, so the two cannot
- * deadlock.
+ * Every mutation runs under this registry's own lock. Joining is a
+ * read-modify-write, and the dispatcher's command lock only wraps the
+ * addDynamicAgent call, not the lookup that decides to make it: without this,
+ * two devices registering at once would both create a group and the second
+ * would throw "already exists". The dispatcher's lock is always taken inside
+ * this one, never the reverse.
  */
 export type ClientAgentRegistry = {
     readonly groups: ReadonlyMap<string, ClientAgentGroup>;
