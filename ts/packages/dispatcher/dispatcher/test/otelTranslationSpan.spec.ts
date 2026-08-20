@@ -9,10 +9,14 @@ import {
 } from "@typeagent/telemetry/testing/inMemorySpanManager";
 import { wrapRootRequestSpan } from "../src/otel/rootRequestSpan.js";
 import {
+    attachTranslationRoutingToError,
     emitTranslationCacheBypass,
     emitTranslationFallback,
+    emitTranslationLlmInvoked,
     emitTranslationMatchResult,
     emitTranslationRetry,
+    readTranslationRoutingFromError,
+    readTranslationRoutingSummary,
     wrapTranslationSpan,
 } from "../src/otel/translationSpan.js";
 
@@ -227,6 +231,111 @@ describe("wrapTranslationSpan", () => {
         expect(manager.findSpansByName("typeagent.translation")).toHaveLength(
             1,
         );
+    });
+});
+
+describe("translation routing summary", () => {
+    let manager: InMemorySpanManager;
+
+    beforeEach(() => {
+        manager = createInMemorySpanManager();
+    });
+
+    afterEach(async () => {
+        await manager.shutdown();
+    });
+
+    it("summarizes a cache-hit path with no fallback or retry", async () => {
+        const summary = await wrapTranslationSpan(ATTRIBUTES, async () => {
+            emitTranslationMatchResult("cache_hit");
+            return readTranslationRoutingSummary();
+        });
+
+        expect(summary).toEqual({
+            matchOutcome: "cache_hit",
+            routes: ["cache"],
+            fallback: false,
+            retryCount: 0,
+        });
+    });
+
+    it("records a mixed cache-then-LLM path additively without collapsing", async () => {
+        const summary = await wrapTranslationSpan(ATTRIBUTES, async () => {
+            // Activity-context translation: cache hit, then the model is called
+            // for an unknown action. The later miss overwrites `matchOutcome`,
+            // but both routes must survive.
+            emitTranslationMatchResult("cache_hit");
+            emitTranslationMatchResult("miss");
+            emitTranslationLlmInvoked();
+            return readTranslationRoutingSummary();
+        });
+
+        expect(summary).toEqual({
+            matchOutcome: "miss",
+            routes: ["cache", "llm"],
+            fallback: false,
+            retryCount: 0,
+        });
+    });
+
+    it("summarizes a cache-miss fallback-and-retry path", async () => {
+        const summary = await wrapTranslationSpan(ATTRIBUTES, async () => {
+            emitTranslationMatchResult("miss");
+            emitTranslationRetry("selected_actions_full");
+            emitTranslationFallback();
+            emitTranslationRetry("same_schema");
+            return readTranslationRoutingSummary();
+        });
+
+        expect(summary).toEqual({
+            matchOutcome: "miss",
+            fallback: true,
+            retryCount: 2,
+        });
+    });
+
+    it("summarizes a bypassed cache without inventing a match outcome", async () => {
+        const summary = await wrapTranslationSpan(ATTRIBUTES, async () => {
+            emitTranslationCacheBypass("cache_disabled");
+            return readTranslationRoutingSummary();
+        });
+
+        expect(summary).toEqual({
+            cacheBypassReason: "cache_disabled",
+            fallback: false,
+            retryCount: 0,
+        });
+        expect(summary).not.toHaveProperty("matchOutcome");
+    });
+
+    it("returns undefined when no translation span is active", () => {
+        expect(readTranslationRoutingSummary()).toBeUndefined();
+    });
+
+    it("round-trips a routing summary through a failed translation error", () => {
+        const error = new Error("translation failed");
+        attachTranslationRoutingToError(error, {
+            matchOutcome: "miss",
+            fallback: true,
+            retryCount: 1,
+        });
+
+        expect(readTranslationRoutingFromError(error)).toEqual({
+            matchOutcome: "miss",
+            fallback: true,
+            retryCount: 1,
+        });
+        // Diagnostic carrier must not serialize into logs.
+        expect(Object.keys(error)).not.toContain(
+            "__typeagentTranslationRouting",
+        );
+        expect(JSON.stringify(error)).not.toContain("__typeagent");
+    });
+
+    it("returns undefined routing for errors without an attached summary", () => {
+        expect(readTranslationRoutingFromError(new Error("x"))).toBeUndefined();
+        expect(readTranslationRoutingFromError(undefined)).toBeUndefined();
+        expect(readTranslationRoutingFromError(null)).toBeUndefined();
     });
 });
 

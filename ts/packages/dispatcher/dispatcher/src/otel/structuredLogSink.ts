@@ -28,6 +28,9 @@ const SAFE_STRING_FIELDS = [
     "phase",
     "position",
     "path",
+    "routingReason",
+    "matchOutcome",
+    "cacheBypassReason",
 ] as const;
 
 const SAFE_NUMBER_FIELDS = [
@@ -46,6 +49,7 @@ const SAFE_NUMBER_FIELDS = [
     "outputTokens",
     "totalTokens",
     "cachedTokens",
+    "retryCount",
 ] as const;
 
 const SAFE_BOOLEAN_FIELDS = [
@@ -55,12 +59,14 @@ const SAFE_BOOLEAN_FIELDS = [
     "includeContext",
     "cancelled",
     "streaming",
+    "fallback",
 ] as const;
 
 const SAFE_STRING_ARRAY_FIELDS = [
     "schemaNames",
     "actionNames",
     "command",
+    "routes",
 ] as const;
 const MAX_ARRAY_LENGTH = 64;
 const MAX_STRING_LENGTH = 256;

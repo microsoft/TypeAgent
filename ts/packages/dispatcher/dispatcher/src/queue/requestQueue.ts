@@ -17,7 +17,9 @@ import {
 } from "@typeagent/dispatcher-types";
 
 import registerDebug from "debug";
-const debug = registerDebug("typeagent:requestQueue");
+const debugInfo = registerDebug("typeagent:requestQueue:info");
+const debugWarn = registerDebug("typeagent:requestQueue:warn");
+const debugError = registerDebug("typeagent:requestQueue:error");
 const debugInternal = registerDebug("agent-dispatcher:requestQueue");
 
 /** Hard cap on running + queued entries; submits beyond this throw QueueFullError. */
@@ -175,12 +177,16 @@ export class RequestQueue {
         }
         const depth = this.tail.length + (this.head !== null ? 1 : 0);
         if (depth >= MAX_QUEUE_DEPTH) {
-            this.log("requestQueue:rejected", {
-                connectionId: input.originatorConnectionId,
-                reason: "queue_full",
-                position,
-                depth,
-            });
+            this.log(
+                "requestQueue:rejected",
+                {
+                    connectionId: input.originatorConnectionId,
+                    reason: "queue_full",
+                    position,
+                    depth,
+                },
+                "warning",
+            );
             throw new QueueFullError(MAX_QUEUE_DEPTH);
         }
         const entry = this.materialize(input);
@@ -452,10 +458,15 @@ export class RequestQueue {
         this.safeBroadcast("queueStateChanged", () =>
             this.broadcast.queueStateChanged(this.getSnapshot()),
         );
-        this.log("requestQueue:abandoned", {
-            count: all.length,
-            reason,
-        });
+        this.log(
+            "requestQueue:abandoned",
+            {
+                count: all.length,
+                reason,
+                requestIds: all.slice(0, 10).map((entry) => entry.requestId),
+            },
+            "warning",
+        );
     }
 
     // ---------- internals ----------
@@ -536,7 +547,16 @@ export class RequestQueue {
             if (this.logger !== undefined) {
                 this.logger.logEvent(name, data, severity);
             } else {
-                debug(name, data);
+                // No structured logger: route the debug fallback to a
+                // class-suffixed namespace so @log profiles filter it by
+                // severity the same way they would the structured event.
+                const debugForSeverity =
+                    severity === "error"
+                        ? debugError
+                        : severity === "warning"
+                          ? debugWarn
+                          : debugInfo;
+                debugForSeverity(name, data);
                 debugInternal(name, data);
             }
         } catch {
@@ -552,8 +572,11 @@ export class RequestQueue {
         try {
             fn();
         } catch (e) {
-            debug("broadcast:error", { name, error: String(e) });
-            debugInternal(`broadcast ${name} threw:`, e);
+            this.log(
+                "requestQueue:broadcastFailed",
+                { broadcast: name, error: String(e) },
+                "warning",
+            );
         }
     }
 

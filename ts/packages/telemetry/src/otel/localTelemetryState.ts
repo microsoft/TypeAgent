@@ -14,17 +14,18 @@
  *
  * Profiles
  * --------
- * The `focused` (default) profile omits successful background LLM lifecycle
- * records while retaining foreground work and background failures.
- * `diagnostic` and `verbose` retain every structured event. The `off` profile
- * disables the local OTel logger sink. Profiles never modify DEBUG or `@trace`
- * patterns.
+ * Every profile except `off` emits all structured events. They differ only in
+ * which classes of bridged `debug` log they additionally surface (see
+ * `debugClass.ts`):
+ * - `focused` (default): structured events only - no debug logs.
+ * - `diagnostic`: adds `error`, `warn`, and `info` debug logs.
+ * - `verbose`: adds every debug class.
+ * The `off` profile disables the local OTel logger sink entirely. Profiles
+ * never modify DEBUG or `@trace` patterns.
  *
- * Debug copy
- * ----------
- * `debug-copy on|off` is orthogonal to profile. When on, debug messages that
- * are ALREADY enabled by DEBUG/@trace are copied into OTel logs. It never
- * enables namespaces on its own. Default is OFF.
+ * The `focused` profile additionally omits successful background LLM lifecycle
+ * structured events to keep the default readable; every other structured event
+ * is retained in all non-`off` profiles.
  */
 
 export type LocalTelemetryProfile =
@@ -134,7 +135,6 @@ export function expandTracePresets(names: readonly string[]): {
 
 export interface LocalTelemetrySnapshot {
     readonly profile: LocalTelemetryProfile;
-    readonly debugCopy: boolean;
     readonly debugBridgeAvailable: boolean;
     readonly localLogAvailable: boolean;
     readonly revision: number;
@@ -143,14 +143,12 @@ export interface LocalTelemetrySnapshot {
 export interface LocalTelemetryState {
     getSnapshot(): LocalTelemetrySnapshot;
     setProfile(profile: LocalTelemetryProfile): LocalTelemetrySnapshot;
-    setDebugCopy(on: boolean): LocalTelemetrySnapshot;
-    /** Reset to `focused` profile and `debugCopy` off in a single atomic update. */
+    /** Reset to the `focused` profile in a single atomic update. */
     clear(): LocalTelemetrySnapshot;
 }
 
 export interface CreateLocalTelemetryStateOptions {
     readonly initialProfile?: LocalTelemetryProfile;
-    readonly initialDebugCopy?: boolean;
     readonly debugBridgeAvailable?: boolean;
     readonly localLogAvailable?: boolean;
     /**
@@ -163,14 +161,12 @@ export interface CreateLocalTelemetryStateOptions {
 
 function freezeSnapshot(
     profile: LocalTelemetryProfile,
-    debugCopy: boolean,
     debugBridgeAvailable: boolean,
     localLogAvailable: boolean,
     revision: number,
 ): LocalTelemetrySnapshot {
     return Object.freeze({
         profile,
-        debugCopy,
         debugBridgeAvailable,
         localLogAvailable,
         revision,
@@ -195,7 +191,6 @@ export function createLocalTelemetryState(
 ): LocalTelemetryState {
     let snapshot = freezeSnapshot(
         options.initialProfile ?? "focused",
-        options.initialDebugCopy ?? false,
         options.debugBridgeAvailable ?? false,
         options.localLogAvailable ?? false,
         0,
@@ -230,22 +225,6 @@ export function createLocalTelemetryState(
             return commit(
                 freezeSnapshot(
                     profile,
-                    snapshot.debugCopy,
-                    snapshot.debugBridgeAvailable,
-                    snapshot.localLogAvailable,
-                    snapshot.revision + 1,
-                ),
-            );
-        },
-        setDebugCopy(on: boolean): LocalTelemetrySnapshot {
-            const next = on === true;
-            if (next === snapshot.debugCopy) {
-                return snapshot;
-            }
-            return commit(
-                freezeSnapshot(
-                    snapshot.profile,
-                    next,
                     snapshot.debugBridgeAvailable,
                     snapshot.localLogAvailable,
                     snapshot.revision + 1,
@@ -253,16 +232,12 @@ export function createLocalTelemetryState(
             );
         },
         clear(): LocalTelemetrySnapshot {
-            if (
-                snapshot.profile === "focused" &&
-                snapshot.debugCopy === false
-            ) {
+            if (snapshot.profile === "focused") {
                 return snapshot;
             }
             return commit(
                 freezeSnapshot(
                     "focused",
-                    false,
                     snapshot.debugBridgeAvailable,
                     snapshot.localLogAvailable,
                     snapshot.revision + 1,
@@ -281,8 +256,8 @@ let processState: LocalTelemetryState | undefined;
 /**
  * Return the process-shared `LocalTelemetryState`. Hosts install a real
  * instance during telemetry bootstrap; libraries that read state before a host
- * has installed one see a permissive no-op default (focused profile, debug-copy
- * off) that never notifies listeners.
+ * has installed one see a permissive no-op default (focused profile) that never
+ * notifies listeners.
  */
 export function getLocalTelemetryState(): LocalTelemetryState {
     if (processState === undefined) {

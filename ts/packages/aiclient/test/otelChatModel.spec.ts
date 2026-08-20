@@ -11,7 +11,10 @@ import type { Logger } from "@typeagent/telemetry";
 import { error, success } from "typechat";
 import type { ChatModelWithStreaming } from "../src/models.js";
 import { instrumentChatModel } from "../src/otelChatModel.js";
-import { withChatModelTelemetryContext } from "../src/chatModelTelemetryContext.js";
+import {
+    withChatModelTelemetryContext,
+    withChatModelTelemetryPurpose,
+} from "../src/chatModelTelemetryContext.js";
 
 function createModel(): ChatModelWithStreaming {
     return {
@@ -52,7 +55,7 @@ describe("instrumentChatModel", () => {
         await spans.shutdown();
     });
 
-    it("records successful complete calls as typeagent.llm spans", async () => {
+    it("marks calls outside a classified operation as unclassified", async () => {
         const model = instrumentChatModel(createModel(), {
             provider: "test-provider",
             model: "test-model",
@@ -66,10 +69,15 @@ describe("instrumentChatModel", () => {
         expect(span?.attributes).toMatchObject({
             "gen_ai.system": "test-provider",
             "gen_ai.request.model": "test-model",
-            "typeagent.llm.phase": "unknown",
-            "typeagent.llm.purpose": "unknown",
-            "typeagent.llm.scope": "foreground",
+            "typeagent.llm.phase": "unclassified",
+            "typeagent.llm.purpose": "unclassified",
+            "typeagent.llm.scope": "unclassified",
         });
+        expect(span?.events).toEqual([
+            expect.objectContaining({
+                name: "typeagent.llm.classification.missing",
+            }),
+        ]);
         expect(span?.status.code).toBe(0);
     });
 
@@ -232,7 +240,7 @@ describe("instrumentChatModel", () => {
 
         await withChatModelTelemetryContext(
             {
-                phase: "background",
+                phase: "explanation",
                 purpose: "cache-generation",
                 scope: "background",
             },
@@ -242,21 +250,47 @@ describe("instrumentChatModel", () => {
         expect(
             spans.findSpansByName("typeagent.llm")[0]?.attributes,
         ).toMatchObject({
-            "typeagent.llm.phase": "background",
+            "typeagent.llm.phase": "explanation",
             "typeagent.llm.purpose": "cache-generation",
             "typeagent.llm.scope": "background",
         });
         expect(events.map(({ data }) => data)).toEqual([
             expect.objectContaining({
-                phase: "background",
+                phase: "explanation",
                 purpose: "cache-generation",
                 scope: "background",
             }),
             expect.objectContaining({
-                phase: "background",
+                phase: "explanation",
                 purpose: "cache-generation",
                 scope: "background",
             }),
         ]);
+    });
+
+    it("overrides only the purpose inside a classified operation", async () => {
+        const model = instrumentChatModel(createModel(), {
+            provider: "test-provider",
+        });
+
+        await withChatModelTelemetryContext(
+            {
+                phase: "translation",
+                purpose: "action-generation",
+                scope: "foreground",
+            },
+            () =>
+                withChatModelTelemetryPurpose("schema-selection", () =>
+                    model.complete("private prompt"),
+                ),
+        );
+
+        expect(
+            spans.findSpansByName("typeagent.llm")[0]?.attributes,
+        ).toMatchObject({
+            "typeagent.llm.phase": "translation",
+            "typeagent.llm.purpose": "schema-selection",
+            "typeagent.llm.scope": "foreground",
+        });
     });
 });

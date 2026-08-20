@@ -60,26 +60,6 @@
     parameters: { profile: "off" }
   };
 
-<EnableDebugCopy> =
-  <Polite> (turn on | enable) (local)? debug (copy | copying) -> {
-    actionName: "setLogDebugCopy",
-    parameters: { enabled: true }
-  }
-  | <Polite> (include | copy | capture) (enabled)? debug (output | logs | messages) (in | into | to) (the)? (local logs | local jsonl logs) -> {
-    actionName: "setLogDebugCopy",
-    parameters: { enabled: true }
-  };
-
-<DisableDebugCopy> =
-  <Polite> (turn off | disable) (local)? debug (copy | copying) -> {
-    actionName: "setLogDebugCopy",
-    parameters: { enabled: false }
-  }
-  | <Polite> (stop | quit) copying debug (output | logs | messages) (in | into | to) (the)? (local logs | local jsonl logs) -> {
-    actionName: "setLogDebugCopy",
-    parameters: { enabled: false }
-  };
-
 <ClearLogSettings> =
   <Polite> (reset | clear) (the)? <LocalLogNoun> (settings | configuration)? -> {
     actionName: "clearLogSettings"
@@ -93,6 +73,4 @@
   | <SetDiagnosticProfile>
   | <SetVerboseProfile>
   | <SetOffProfile>
-  | <EnableDebugCopy>
-  | <DisableDebugCopy>
   | <ClearLogSettings>;

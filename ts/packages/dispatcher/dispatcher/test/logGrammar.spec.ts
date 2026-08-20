@@ -63,19 +63,6 @@ describe("system.log grammar", () => {
     });
 
     it.each([
-        ["turn on debug copying", true],
-        ["include debug output in local logs", true],
-        ["capture enabled debug messages into local jsonl logs", true],
-        ["disable local debug copy", false],
-        ["stop copying debug logs into local logs", false],
-    ])("maps debug-copy phrase %p", (input, enabled) => {
-        expect(match(input)).toEqual({
-            actionName: "setLogDebugCopy",
-            parameters: { enabled },
-        });
-    });
-
-    it.each([
         "reset local logging",
         "clear local telemetry settings",
         "restore the local otel defaults",

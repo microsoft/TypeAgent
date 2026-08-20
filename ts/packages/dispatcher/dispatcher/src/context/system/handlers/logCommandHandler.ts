@@ -5,10 +5,10 @@
  * `@log` — sink-side control surface for local OpenTelemetry capture.
  *
  * This handler is the ONLY place where users configure local OTel sinks: the
- * active profile (`focused`/`diagnostic`/`verbose`/`off`) and the `debug-copy`
- * gate that controls whether debug messages already enabled by `DEBUG`/`@trace`
- * are teed into OTel logs. It never touches `@trace`, DEBUG, or namespace
- * enablement.
+ * active profile (`focused`/`diagnostic`/`verbose`/`off`). The profile decides
+ * which classes of bridged `debug` log reach the local JSONL sink; structured
+ * events are always captured (except the `off` profile, which disables the sink
+ * entirely). It never touches `@trace`, DEBUG, or namespace enablement.
  *
  * Phase 2 note: the grammar `@log next-request` is reserved for a future
  * per-request capture feature and is intentionally NOT implemented here.
@@ -34,7 +34,7 @@ const KNOWN_PROFILES = otel.LOCAL_TELEMETRY_PROFILES;
 
 class LogStatusCommandHandler implements CommandHandlerNoParams {
     public readonly description =
-        "Show local OTel sink profile, debug-copy state, and current @trace patterns";
+        "Show local OTel sink profile and current @trace patterns";
     public readonly action = {
         schema: "system.log",
         actionName: "showLogStatus",
@@ -74,7 +74,6 @@ export function showLogStatus(context: ActionContext<unknown>): void {
 
     const lines: string[] = [];
     lines.push(`Local OTel profile: ${snapshot.profile}`);
-    lines.push(`debug-copy:         ${snapshot.debugCopy ? "on" : "off"}`);
     lines.push(
         `debug bridge:       ${snapshot.debugBridgeAvailable ? "available" : "not configured"}`,
     );
@@ -83,15 +82,13 @@ export function showLogStatus(context: ActionContext<unknown>): void {
     );
     lines.push(`process scope:      pid ${process.pid}`);
     lines.push(`state revision:     ${snapshot.revision}`);
-    if (
-        snapshot.profile === "focused" ||
-        snapshot.profile === "diagnostic" ||
-        snapshot.profile === "verbose"
-    ) {
-        lines.push(
-            "profile behavior:   focused, diagnostic, and verbose are equivalent in Phase 1",
-        );
-    }
+    const profileBehavior: Record<otel.LocalTelemetryProfile, string> = {
+        focused: "structured events only (no debug logs)",
+        diagnostic: "structured events + error/warn/info debug logs",
+        verbose: "structured events + all debug logs",
+        off: "local OTel sink disabled",
+    };
+    lines.push(`profile behavior:   ${profileBehavior[snapshot.profile]}`);
     lines.push("");
     lines.push(`@trace patterns (${provenance}):`);
     lines.push(`  ${currentTrace.length === 0 ? "(none)" : currentTrace}`);
@@ -152,12 +149,6 @@ export function setLogProfile(
     const state = otel.getLocalTelemetryState();
     const snapshot = state.setProfile(raw);
     displaySuccess(`Local OTel profile set to '${snapshot.profile}'.`, context);
-    if (raw !== "off") {
-        displayResult(
-            "Phase 1 note: focused, diagnostic, and verbose currently capture the same local log records.",
-            context,
-        );
-    }
     if (raw === "off") {
         displayResult(
             "Note: '@log profile off' does not clear @trace. Use '@trace --clear' if you also want to silence debug output.",
@@ -166,64 +157,9 @@ export function setLogProfile(
     }
 }
 
-class LogDebugCopyCommandHandler implements CommandHandler {
-    public readonly description =
-        "Turn local JSONL debug-copy on/off. It never enables debug namespaces or changes OTLP export.";
-    public readonly action = {
-        schema: "system.log",
-        actionName: "setLogDebugCopy",
-    };
-    public readonly parameters = {
-        args: {
-            state: {
-                description: "on | off",
-                type: "string",
-            },
-        },
-    } as const;
-    public async run(
-        context: ActionContext<unknown>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        setLogDebugCopy(params.args.state, context);
-    }
-}
-
-export function setLogDebugCopy(
-    state: string,
-    context: ActionContext<unknown>,
-): void {
-    const raw = state.trim().toLowerCase();
-    if (raw !== "on" && raw !== "off") {
-        displayError(
-            `debug-copy expects 'on' or 'off', got '${state}'.`,
-            context,
-        );
-        return;
-    }
-    const on = raw === "on";
-    const snapshot = otel.getLocalTelemetryState().getSnapshot();
-    if (on && (!snapshot.debugBridgeAvailable || !snapshot.localLogAvailable)) {
-        const missing = [
-            ...(snapshot.debugBridgeAvailable ? [] : ["telemetry.debugBridge"]),
-            ...(snapshot.localLogAvailable ? [] : ["telemetry.logFile"]),
-        ];
-        displayError(
-            `Cannot enable local JSONL debug-copy: ${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} not configured. Update telemetry configuration and restart the process.`,
-            context,
-        );
-        return;
-    }
-    otel.getLocalTelemetryState().setDebugCopy(on);
-    displaySuccess(
-        `Local JSONL debug-copy is now ${on ? "on" : "off"}.`,
-        context,
-    );
-}
-
 class LogClearCommandHandler implements CommandHandlerNoParams {
     public readonly description =
-        "Reset local OTel sinks to defaults: profile=focused, debug-copy=off. Leaves @trace unchanged.";
+        "Reset local OTel sinks to defaults: profile=focused. Leaves @trace unchanged.";
     public readonly action = {
         schema: "system.log",
         actionName: "clearLogSettings",
@@ -236,7 +172,7 @@ class LogClearCommandHandler implements CommandHandlerNoParams {
 export function clearLogSettings(context: ActionContext<unknown>): void {
     otel.getLocalTelemetryState().clear();
     displaySuccess(
-        "Local OTel sinks reset: profile=focused, debug-copy=off. @trace patterns unchanged.",
+        "Local OTel sinks reset: profile=focused. @trace patterns unchanged.",
         context,
     );
 }
@@ -278,7 +214,6 @@ export function getLogCommandHandlers(): CommandHandlerTable {
         commands: {
             status: new LogStatusCommandHandler(),
             profile: new LogProfileCommandHandler(),
-            "debug-copy": new LogDebugCopyCommandHandler(),
             clear: new LogClearCommandHandler(),
         },
     };

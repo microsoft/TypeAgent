@@ -131,7 +131,7 @@ function walk(
     if (!flatKey) {
         return;
     }
-    const stringValue = scalarToString(node);
+    const stringValue = scalarToString(node, flatKey);
     if (stringValue !== undefined) {
         out[flatKey] = stringValue;
     }
@@ -188,7 +188,15 @@ function expandValueGroup(
     }
 }
 
-function scalarToString(value: unknown): string | undefined {
+const PRESERVED_FALSE_KEYS = new Set([
+    "TELEMETRY_DEBUGBRIDGE",
+    "TELEMETRY_STRUCTUREDLOGS",
+    "TELEMETRY_LOCAL_ENABLED",
+    "TELEMETRY_LOCAL_DEBUGBRIDGE",
+    "TELEMETRY_LOCAL_STRUCTUREDLOGS",
+]);
+
+function scalarToString(value: unknown, flatKey: string): string | undefined {
     if (typeof value === "string") {
         return value;
     }
@@ -200,8 +208,14 @@ function scalarToString(value: unknown): string | undefined {
     }
     if (typeof value === "boolean") {
         // Match the codebase convention: truthy flags are stored as
-        // "1"; falsy flags are simply absent.
-        return value ? "1" : undefined;
+        // "1"; falsy flags are usually absent. Telemetry controls preserve
+        // "0" because local defaults must distinguish an explicit false
+        // from an omitted setting.
+        return value
+            ? "1"
+            : PRESERVED_FALSE_KEYS.has(flatKey)
+              ? "0"
+              : undefined;
     }
     return undefined;
 }

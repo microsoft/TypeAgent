@@ -3,6 +3,8 @@
 
 export {
     resolveTelemetryConfig,
+    getAllOtlpExporters,
+    DEFAULT_LOG_RETENTION_BYTES,
     type OtlpExporterConfig,
     type TraceSampler,
     type TraceConfig,
@@ -36,10 +38,27 @@ export {
 export {
     JsonlLogExporter,
     resolveJsonlLogPath,
+    getJsonlLogPathIdentity,
+    getActiveJsonlLogPaths,
     type JsonlLogExporterOptions,
 } from "./jsonlLogExporter.js";
 
+export {
+    runLogRetentionCleanup,
+    type LogRetentionFs,
+    type RunLogRetentionCleanupOptions,
+} from "./logRetention.js";
+
 export { LocalLogRecordProcessor } from "./localLogRecordProcessor.js";
+
+export {
+    classifyDebugNamespace,
+    debugClassAllowedByProfile,
+    readDebugClass,
+    DEBUG_CLASS_ATTRIBUTE,
+    DEBUG_NAMESPACE_ATTRIBUTE,
+    type DebugLogClass,
+} from "./debugClass.js";
 
 export {
     createTelemetryLifecycle,

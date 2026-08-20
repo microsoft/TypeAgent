@@ -33,7 +33,7 @@ import { ActionConfig } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import {
     CompleteUsageStatsCallback,
-    withChatModelTelemetryContext,
+    withChatModelTelemetryPurpose,
 } from "@typeagent/aiclient";
 import { PromptLogger } from "@typeagent/telemetry";
 import type { UserContext } from "./userContext.js";
@@ -327,17 +327,15 @@ function createTypeAgentTranslator<
                 userContext,
             );
 
-            return withChatModelTelemetryContext(
-                { purpose: "action-generation" },
-                () =>
-                    streamingTranslator.translate(
-                        requestPrompt,
-                        history?.promptSections,
-                        attachments,
-                        cb,
-                        usageCallback,
-                        signal,
-                    ),
+            return withChatModelTelemetryPurpose("action-generation", () =>
+                streamingTranslator.translate(
+                    requestPrompt,
+                    history?.promptSections,
+                    attachments,
+                    cb,
+                    usageCallback,
+                    signal,
+                ),
             );
         },
         // No streaming, no history, no attachments.
@@ -351,9 +349,8 @@ function createTypeAgentTranslator<
                 entityPromptShape,
                 entityPathNavigationEnabled,
             );
-            return withChatModelTelemetryContext(
-                { purpose: "action-validation" },
-                () => altTranslator.translate(requestPrompt),
+            return withChatModelTelemetryPurpose("action-validation", () =>
+                altTranslator.translate(requestPrompt),
             );
         },
         getSchemaName(actionName: string) {
