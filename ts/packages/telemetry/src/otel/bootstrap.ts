@@ -453,7 +453,6 @@ export async function initTelemetry(
     setLocalTelemetryState(
         createLocalTelemetryState({
             initialProfile: "focused",
-            initialDebugCopy: false,
             debugBridgeAvailable:
                 config.debugBridge === true &&
                 options.debugModules !== undefined &&

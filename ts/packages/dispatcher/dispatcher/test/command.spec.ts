@@ -15,6 +15,7 @@ import { getCommandInterface } from "@typeagent/agent-sdk/helpers/command";
 import { resolveCommand } from "../src/command/command.js";
 import { createDispatcher } from "../src/dispatcher.js";
 import { awaitCommand } from "@typeagent/dispatcher-types";
+import registerDebug from "debug";
 import type { Dispatcher } from "@typeagent/dispatcher-types";
 
 // create an inlined test agent and provider to test command handler.
@@ -74,6 +75,26 @@ export const testCommandAgentProvider: AppAgentProvider = {
         }
     },
 };
+
+async function captureDebug(
+    namespaces: string,
+    action: () => Promise<unknown>,
+): Promise<string[]> {
+    const priorNamespaces = registerDebug.disable();
+    const priorLog = registerDebug.log;
+    const captured: string[] = [];
+    registerDebug.log = (message: string) => {
+        captured.push(message);
+    };
+    registerDebug.enable(namespaces);
+    try {
+        await action();
+        return captured;
+    } finally {
+        registerDebug.log = priorLog;
+        registerDebug.enable(priorNamespaces);
+    }
+}
 
 describe("Command", () => {
     describe("initialize", () => {
@@ -192,6 +213,35 @@ describe("Command", () => {
             expect(command.descriptor).toBeUndefined();
             expect(command.matched).toBe(false);
         });
+
+        describe("debug logging", () => {
+            // resolveCommand runs for both submitted commands and completion
+            // RPCs; keep the diagnostic (info) channel silent here so
+            // completion polling does not flood the diagnostic profile.
+            it("does not emit the info channel from resolveCommand", async () => {
+                const captured = await captureDebug(
+                    "typeagent:dispatcher:command:info",
+                    () => resolveCommand("test test", context),
+                );
+                expect(
+                    captured.some((line) =>
+                        line.includes("dispatcher:command:info"),
+                    ),
+                ).toBe(false);
+            });
+
+            it("emits the verbose channel from resolveCommand", async () => {
+                const captured = await captureDebug(
+                    "typeagent:dispatcher:command:verbose",
+                    () => resolveCommand("test test", context),
+                );
+                expect(
+                    captured.some((line) =>
+                        line.includes("dispatcher:command:verbose"),
+                    ),
+                ).toBe(true);
+            });
+        });
     });
     describe("parse", () => {
         let dispatcher: Dispatcher;
@@ -282,6 +332,28 @@ describe("Command", () => {
             expect(result!.lastError).toContain(
                 "Command or agent name required.",
             );
+        });
+
+        describe("debug logging", () => {
+            // Submitted commands should still surface the info-level
+            // "Resolved command" log so diagnostic captures show what
+            // was actually executed.
+            it("emits the info channel for submitted commands", async () => {
+                const captured = await captureDebug(
+                    "typeagent:dispatcher:command:*",
+                    () => awaitCommand(dispatcher, "@test test"),
+                );
+                expect(
+                    captured.some((line) =>
+                        line.includes("dispatcher:command:info"),
+                    ),
+                ).toBe(true);
+                expect(
+                    captured.some((line) =>
+                        line.includes("dispatcher:command:verbose"),
+                    ),
+                ).toBe(false);
+            });
         });
     });
 });

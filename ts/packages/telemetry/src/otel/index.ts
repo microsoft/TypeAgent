@@ -52,6 +52,15 @@ export {
 export { LocalLogRecordProcessor } from "./localLogRecordProcessor.js";
 
 export {
+    classifyDebugNamespace,
+    debugClassAllowedByProfile,
+    readDebugClass,
+    DEBUG_CLASS_ATTRIBUTE,
+    DEBUG_NAMESPACE_ATTRIBUTE,
+    type DebugLogClass,
+} from "./debugClass.js";
+
+export {
     createTelemetryLifecycle,
     TelemetryLifecycleClosedError,
     TelemetryShutdownTimeoutError,

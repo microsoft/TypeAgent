@@ -609,20 +609,30 @@ Only enabled `DEBUG` namespaces are bridged. Existing terminal debug output is
 unchanged. Structured logging must be enabled explicitly because dispatcher
 events can originate from user requests.
 
-Local JSONL starts in the `focused` profile with debug-copy off. It therefore
-contains the structured lifecycle by default, even when the debug bridge is
-configured. Use `@trace` to select terminal debug namespaces, then opt those
-already-enabled records into the local file only when needed:
+Local JSONL starts in the `focused` profile. It therefore contains the
+structured lifecycle by default, even when the debug bridge is configured.
+Bridged debug records are surfaced by class: each bridged `debug` namespace
+carries a class (`error`, `warn`, `info`, or `verbose`) derived from its
+trailing `:`-delimited segment, and each profile admits a subset of those
+classes. Use `@trace` to select which terminal debug namespaces are produced,
+then raise the local profile to admit their classes into the file:
 
 ```text
 @log status
 @trace --preset request
-@log debug-copy on
+@log profile diagnostic
 ```
 
+Profiles filter bridged debug records by class (structured events are always
+emitted and are not governed by class):
+
+- `off` - local JSONL sink disabled.
+- `focused` - structured events only; no debug records.
+- `diagnostic` - structured events plus `error`, `warn`, and `info` debug.
+- `verbose` - structured events plus every debug class.
+
 `@log profile off` disables only the local JSONL sink. It does not change
-`DEBUG`, `@trace`, or OTLP export. `@log clear` restores
-`profile=focused, debug-copy=off`.
+`DEBUG`, `@trace`, or OTLP export. `@log clear` restores `profile=focused`.
 
 ### 3. Generate Telemetry
 
@@ -672,6 +682,55 @@ Structured dispatcher records include events such as `command` and
 `requestQueue:start`. Bridged debug records include their debug namespace.
 Prompt text, response text, action parameters, errors, stacks, and unknown
 dispatcher fields are excluded by the dispatcher projection.
+
+### Phase-completion durations and translation routing
+
+Each phase-completion lifecycle event carries `elapsedMs`, measured at the
+call boundary that owns the phase rather than reconstructed by an exporter from
+span timestamps: `translation:completed` and `action:completed` join
+`reasoning:completed` in reporting a real duration on the success, failure, and
+cancellation paths. The reduced local message appends it (for example,
+`Translation succeeded via grammar in 12 ms` and
+`Action completed: calendar.addEvent in 8 ms`).
+
+`translation:completed` also carries a bounded, stable routing rationale so an
+operator can answer why a request took the schema, cache, fallback, or retry
+path without inspecting user input. The fields reuse the translation
+span-event vocabulary and never include prompts or high-cardinality text:
+
+- `routingReason` - the terminal decision, one of `user_action`,
+  `cache_construction`, `cache_grammar`, or `llm_translation`. On success it is
+  derived from the terminal `strategy`. A failed or cancelled translation has no
+  trustworthy terminal strategy, so the reason is derived from the routes
+  actually observed and is **omitted** when none reached a terminal decision -
+  a failure during cache matching before any model call is never labelled
+  `llm_translation`.
+- `matchOutcome` - the terminal cache/grammar lookup result
+  (`grammar_hit`, `cache_hit`, or `miss`). A later lookup in a multi-stage
+  translation overwrites it, so it names the last lookup, not every one.
+- `routes` - the additive set of routing mechanisms actually exercised
+  (`grammar`, `cache`, and/or `llm`), sorted and de-duplicated. Unlike
+  `matchOutcome`/`strategy`, routes are only ever added, so a mixed
+  activity-context translation that hits the cache and then calls the model for
+  an unknown action reports `["cache", "llm"]` instead of collapsing to a
+  cache-only story. The closed three-value vocabulary keeps this
+  low-cardinality. Present only when at least one route was observed.
+- `cacheBypassReason` - why the cache lookup was skipped
+  (`request_constraints`, `reasoning_request`, or `cache_disabled`).
+- `fallback` - whether an assistant-switch fallback occurred.
+- `retryCount` - the number of translation retries (any tier).
+
+Cache, grammar, and user-selected translations never call an LLM, so no model
+event is emitted for them; their routing reason on `translation:completed` is
+the only signal for that decision. The routing summary is captured inside the
+translation span's async context and, on a failed or cancelled translation from
+either the span itself or the subsequent confirmation/translation-phase work,
+is carried to the completion boundary on a non-enumerable error property so the
+event stays truthful without re-deriving state. Reasons are never overstated:
+`routingReason` is present only when a terminal route is actually known, and the
+other fields are present only for decisions the code actually observed. The
+reduced local message appends `+llm` when a cache/grammar strategy still reached
+the model.
 
 ### 5. Inspect the Same Logs in Grafana
 
