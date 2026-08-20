@@ -15,7 +15,11 @@ import {
     type TranslationBenchSuite,
     type TranslationBenchSuiteSourceIndex,
 } from "../../../runner/runner.js";
-import { DATASET_NAME, type TypeAgentEvalRow } from "../toTypeAgentSchema.js";
+import {
+    applySealToolsTypeAgentOverride,
+    DATASET_NAME,
+    type TypeAgentEvalRow,
+} from "../toTypeAgentSchema.js";
 
 // Schema names double as dispatcher app-agent names; keep them identifier-safe.
 function schemaNameFor(rowId: string): string {
@@ -37,7 +41,8 @@ export function buildSealToolsSuite(rows: TypeAgentEvalRow[]): {
     const cases: TranslationBenchCase[] = [];
     const sources: TranslationBenchLineage[] = [];
 
-    for (const row of rows) {
+    for (const sourceRow of rows) {
+        const row = applySealToolsTypeAgentOverride(sourceRow);
         const schemaName = schemaNameFor(row.id);
         schemas.push({
             schemaName,

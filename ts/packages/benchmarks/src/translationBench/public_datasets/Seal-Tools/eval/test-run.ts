@@ -20,7 +20,6 @@
  *   node dist/.../eval/test-run.js --rate-limiter-db /tmp/seal.sqlite
  */
 
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -29,12 +28,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, "../../../../..");
 const SMOKE_OUT = path.join(
     PACKAGE_ROOT,
-    "src/translationBench/public_datasets/Seal-Tools/eval/fixtures",
+    `src/translationBench/public_datasets/Seal-Tools/eval/results/smoke-${process.pid}`,
 );
 
 const MODELS =
-    process.env.SEAL_MODELS ??
-    "azure/gpt-5.6-luna,azure/gpt-4o,azure/gpt-4.1";
+    process.env.SEAL_MODELS ?? "azure/gpt-5.6-luna,azure/gpt-4o,azure/gpt-4.1";
 const DEFAULT_CASE_IDS = [
     "sealtools-dev-easy-0",
     "sealtools-dev-easy-1",
@@ -66,9 +64,6 @@ if (process.env.TYPEAGENT_MODEL_PROVIDER === undefined) {
         process.env.OPENAI_API_KEY = key;
     }
 }
-
-// Fresh each run so a rerun re-translates instead of resuming the checkpoint.
-fs.rmSync(SMOKE_OUT, { recursive: true, force: true });
 
 // runEval reads process.argv via commander; seed defaults, then let any extra
 // args the user passed (argv[2:]) override.
