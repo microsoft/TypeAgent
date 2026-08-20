@@ -63,22 +63,35 @@ export function agentAlreadyExistsMessage(name: string): string {
 }
 
 /**
+ * The parts of a manifest {@link collectSchemaContent} walks. Manifests nest
+ * sub-manifests of the same shape, and only the inline schema content matters
+ * here, so this is narrower than `AppAgentManifest`.
+ */
+type SchemaBearingManifest = {
+    schema?:
+        | string
+        | { schemaFile?: string | { format: string; content: string } };
+    subActionManifests?: Record<string, SchemaBearingManifest>;
+};
+
+/**
  * Schema sources a manifest carries, in a deterministic order. Only inline
  * content counts: a file path would not be comparable across machines.
  */
 function collectSchemaContent(
-    manifest: AppAgentManifest | Record<string, any>,
+    manifest: AppAgentManifest | SchemaBearingManifest,
     out: string[],
 ): void {
-    const schemaFile = (manifest as any).schema?.schemaFile;
+    const { schema, subActionManifests } = manifest as SchemaBearingManifest;
+    const schemaFile =
+        typeof schema === "string" ? undefined : schema?.schemaFile;
     if (schemaFile !== undefined && typeof schemaFile !== "string") {
         out.push(`${schemaFile.format}\u0000${schemaFile.content}`);
     }
-    const subs = (manifest as any).subActionManifests;
-    if (subs !== undefined) {
-        for (const key of Object.keys(subs).sort()) {
+    if (subActionManifests !== undefined) {
+        for (const key of Object.keys(subActionManifests).sort()) {
             out.push(`sub\u0000${key}`);
-            collectSchemaContent(subs[key], out);
+            collectSchemaContent(subActionManifests[key], out);
         }
     }
 }
@@ -355,20 +368,34 @@ function getContexts(
     return contexts;
 }
 
+/**
+ * The mux dispatches by method name, which the `AppAgent` interface gives no
+ * indexed access to. Every method on it is async and the mux only ever passes
+ * the arguments back through, so this is all it needs to know about them.
+ */
+type AppAgentMethod = (...args: unknown[]) => unknown;
+
+/** Indexed view of an agent, for the name-keyed dispatch below. */
+function methodsOf(
+    appAgent: AppAgent,
+): Record<string, AppAgentMethod | undefined> {
+    return appAgent as unknown as Record<string, AppAgentMethod | undefined>;
+}
+
 function createMux(group: ClientAgentGroup, template: AppAgent): AppAgent {
-    const mux: Record<string, any> = {};
+    const mux: Record<string, AppAgentMethod> = {};
     for (const method of Object.keys(template)) {
-        if ((template as any)[method] === undefined) {
+        if (methodsOf(template)[method] === undefined) {
             continue;
         }
         if (method === "initializeAgentContext") {
-            mux[method] = async (...args: any[]) => {
+            mux[method] = async (...args: unknown[]) => {
                 const first = group.instances.values().next().value;
                 if (first === undefined) {
                     return undefined;
                 }
-                const agentContext = await (
-                    first.appAgent as any
+                const agentContext = await methodsOf(
+                    first.appAgent,
                 ).initializeAgentContext?.(...args);
                 const contexts = getContexts(group, first.instanceId);
                 contexts.agentContext = agentContext;
@@ -383,19 +410,19 @@ function createMux(group: ClientAgentGroup, template: AppAgent): AppAgent {
         const broadcast = broadcastMethods.has(method);
         const sideEffecting = sideEffectingMethods.has(method);
 
-        mux[method] = async (...args: any[]) => {
+        mux[method] = async (...args: unknown[]) => {
             const rebind = (instance: ClientAgentInstance) => {
                 const contexts = getContexts(group, instance.instanceId);
                 const bound = [...args];
                 if (sessionArg !== undefined && bound[sessionArg]) {
                     bound[sessionArg] = viewSessionContext(
                         contexts,
-                        bound[sessionArg],
+                        bound[sessionArg] as SessionContext<unknown>,
                     );
                 } else if (actionArg !== undefined && bound[actionArg]) {
                     bound[actionArg] = viewActionContext(
                         contexts,
-                        bound[actionArg],
+                        bound[actionArg] as ActionContext<unknown>,
                     );
                 }
                 return bound;
@@ -406,7 +433,11 @@ function createMux(group: ClientAgentGroup, template: AppAgent): AppAgent {
                 if (method === "updateAgentContext") {
                     // Remember how the dispatcher enabled the group so a
                     // device that joins later can be brought to the same state.
-                    const [enable, sessionContext, schemaName] = args;
+                    const [enable, sessionContext, schemaName] = args as [
+                        boolean,
+                        SessionContext<unknown>,
+                        string,
+                    ];
                     state.sessionContext = sessionContext;
                     if (enable) {
                         state.enabledSchemas.add(schemaName);
@@ -414,11 +445,11 @@ function createMux(group: ClientAgentGroup, template: AppAgent): AppAgent {
                         state.enabledSchemas.delete(schemaName);
                     }
                 } else if (method === "startBackgroundTasks") {
-                    state.sessionContext = args[0];
+                    state.sessionContext = args[0] as SessionContext<unknown>;
                 }
                 const results = await Promise.all(
                     [...group.instances.values()].map((instance) =>
-                        (instance.appAgent as any)[method]?.(
+                        methodsOf(instance.appAgent)[method]?.(
                             ...rebind(instance),
                         ),
                     ),
@@ -432,12 +463,13 @@ function createMux(group: ClientAgentGroup, template: AppAgent): AppAgent {
 
             const context =
                 actionArg !== undefined
-                    ? args[actionArg]?.sessionContext
+                    ? (args[actionArg] as ActionContext<unknown> | undefined)
+                          ?.sessionContext
                     : sessionArg !== undefined
-                      ? args[sessionArg]
+                      ? (args[sessionArg] as SessionContext<unknown>)
                       : undefined;
             const instance = selectInstance(group, context, sideEffecting);
-            const fn = (instance.appAgent as any)[method];
+            const fn = methodsOf(instance.appAgent)[method];
             if (fn === undefined) {
                 throw new Error(
                     `Client agent '${group.name}': device '${instance.displayName}' does not support '${method}'`,
@@ -446,7 +478,7 @@ function createMux(group: ClientAgentGroup, template: AppAgent): AppAgent {
             return fn.apply(instance.appAgent, rebind(instance));
         };
     }
-    return mux as AppAgent;
+    return mux as unknown as AppAgent;
 }
 
 /**
@@ -459,7 +491,7 @@ async function initializeInstance(
 ): Promise<void> {
     const state = getInternals(group);
     const contexts = getContexts(group, instance.instanceId);
-    const appAgent = instance.appAgent as any;
+    const appAgent = methodsOf(instance.appAgent);
     try {
         if (appAgent.initializeAgentContext !== undefined) {
             contexts.agentContext = await appAgent.initializeAgentContext();

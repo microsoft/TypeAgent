@@ -98,6 +98,31 @@ Do not rely on a bare `npx prettier` for validation — always use the repo's pi
 (`node_modules/.bin/prettier`, `pnpm exec prettier`, or `npx prettier@<version from package.json>`),
 since a newer/older Prettier version can produce spurious reformatting diffs.
 
+### PR-only gates: build and tests passing is not enough
+
+`build-ts.yml` runs four more checks that only fire on pull requests, so they
+are invisible until CI fails. Each compares the files your change touches
+against the base branch. Run all four before calling a change done:
+
+```bash
+npm run code-lint       -- --ratchet --base origin/main   # no new eslint violations
+npm run code-complexity -- --ratchet --base origin/main --cyclomatic 25 --cognitive 30 \
+                           --new-file-cyclomatic 25 --new-file-cognitive 30
+npm run code-circular   -- --ratchet --base origin/main \
+                           --exceptions-file tools/scripts/code/circular-baseline-exception.json
+npm run code-debt       -- --gate    --base origin/main   # no .only / newly skipped tests
+```
+
+The lint ratchet is the one that bites most often, and `no-explicit-any` is the
+usual reason. A **new file counts entirely as added violations**, so a large new
+module written with `any` fails the gate even though it changed nothing that
+existed before. Prefer `unknown` plus a narrow cast at the point of use, and for
+name-keyed dispatch give the indexed shape a named type instead of `any`.
+
+`--ratchet` compares against `origin/main`, so fetch it first if the local ref
+is stale, and re-run after any reformatting - Prettier can move code across the
+line boundaries these reports cite.
+
 ### Files outside `ts/` have no automated gate
 
 `prettier:changed` only formats prettier-supported extensions **under `ts/`**
