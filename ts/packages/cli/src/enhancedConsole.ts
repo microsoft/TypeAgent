@@ -990,7 +990,7 @@ export function createEnhancedClientIO(
             }
             activePromptRenderer?.redraw();
         } else if (traceId) {
-            console.log(chalk.dim(`Trace ID: ${traceId}`));
+            process.stdout.write(chalk.dim(`Trace ID: ${traceId}\n`));
         }
     }
 
