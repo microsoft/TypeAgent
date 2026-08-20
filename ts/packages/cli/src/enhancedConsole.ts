@@ -1169,13 +1169,24 @@ export function createEnhancedClientIO(
                     if (completedId !== undefined) {
                         consumeSubmittedId(completedId);
                     }
+                    const traceId =
+                        typeof data?.result?.traceId === "string"
+                            ? data.result.traceId
+                            : undefined;
                     // Commit any buffered inline output: actionIO.appendDisplay
                     // defaults to "inline" mode and the non-blocking submit path
                     // has no spinner, so one-shot commands (e.g. @config agent)
                     // would otherwise leave their only message in inlineBuffer.
                     if (terminalLayout?.isActive) {
                         terminalLayout.flushInline();
+                        if (traceId) {
+                            process.stdout.write(
+                                chalk.dim(`Trace ID: ${traceId}\n`),
+                            );
+                        }
                         activePromptRenderer?.redraw();
+                    } else if (traceId) {
+                        console.log(chalk.dim(`Trace ID: ${traceId}`));
                     }
                     break;
                 }

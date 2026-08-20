@@ -180,6 +180,44 @@ describe("CLI inline-buffer flush on commandComplete (regression: @config agent)
             layout.teardown();
         }
     });
+
+    it("prints the completed request Trace ID after buffered output", () => {
+        const clientIO = createEnhancedClientIO(undefined, {
+            current: undefined,
+        });
+        const layout = __testActivateTerminalLayout(1);
+        try {
+            clientIO.appendDisplay(
+                {
+                    requestId: { requestId: "rid-1", clientRequestId: "c-1" },
+                    message: { type: "text", content: "ACTION_COMPLETED" },
+                    source: "system",
+                } as any,
+                "inline",
+            );
+
+            clientIO.notify(
+                { requestId: "rid-1", clientRequestId: "c-1" } as any,
+                "commandComplete",
+                {
+                    result: {
+                        traceId: "abcd1234abcd1234abcd1234abcd1234",
+                    },
+                },
+                "system",
+            );
+
+            const output = captured();
+            expect(output).toContain(
+                "Trace ID: abcd1234abcd1234abcd1234abcd1234",
+            );
+            expect(output.indexOf("Trace ID:")).toBeGreaterThan(
+                output.indexOf("ACTION_COMPLETED"),
+            );
+        } finally {
+            layout.teardown();
+        }
+    });
 });
 
 // /queue slash commands
