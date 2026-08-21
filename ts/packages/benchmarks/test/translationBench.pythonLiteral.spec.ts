@@ -40,6 +40,10 @@ describe("Python literals", () => {
             /preserve/,
         );
         expect(() => parsePythonLiteral("1e309")).toThrow(/preserve/);
+        expect(() => parsePythonLiteral(`'\\U00110000'`)).toThrow(SyntaxError);
+        expect(() => parsePythonLiteral(`'\\U00110000'`)).toThrow(
+            /invalid Python string escape/,
+        );
         expect(() => parsePythonLiteral("True trailing")).toThrow(/trailing/);
         expect(() => parsePythonLiteral("[[None]]", { maxDepth: 1 })).toThrow(
             /maxDepth/,

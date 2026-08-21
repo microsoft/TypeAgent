@@ -191,8 +191,12 @@ class PythonLiteralParser {
             if (!new RegExp(`^[0-9a-fA-F]{${width}}$`).test(digits)) {
                 throw this.error("invalid Python string escape", offset - 1);
             }
+            const codePoint = Number.parseInt(digits, 16);
+            if (codePoint > 0x10ffff) {
+                throw this.error("invalid Python string escape", offset - 1);
+            }
             return {
-                value: String.fromCodePoint(Number.parseInt(digits, 16)),
+                value: String.fromCodePoint(codePoint),
                 end: offset + 1 + width,
             };
         }
