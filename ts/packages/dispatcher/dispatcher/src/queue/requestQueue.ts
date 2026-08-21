@@ -580,6 +580,97 @@ export class RequestQueue {
         }
     }
 
+    private broadcastRunningSnapshot(entry: InternalEntry): void {
+        // requestStarted can synchronously cancel the entry. In that case,
+        // cancelRunning already emitted the newer cancellation version; a
+        // running snapshot would resurrect it in client queue mirrors.
+        if (entry.cancelReason !== undefined) return;
+        this.safeBroadcast("queueStateChanged", () =>
+            this.broadcast.queueStateChanged(this.getSnapshot()),
+        );
+    }
+
+    private async processEntry(entry: InternalEntry): Promise<void> {
+        let result: CommandResult | undefined;
+        let error: unknown = undefined;
+        let state: "cancelled" | "failed" | "succeeded";
+        try {
+            if (entry.cancelReason !== undefined) {
+                state = "cancelled";
+                entry.error = `cancelled:${entry.cancelReason}`;
+                result = { cancelled: true };
+            } else {
+                const ctx: QueueExecutionContext = {
+                    requestId: entry.requestId,
+                    originatorConnectionId: entry.originatorConnectionId,
+                    text: entry.text,
+                };
+                if (entry.clientRequestId !== undefined)
+                    ctx.clientRequestId = entry.clientRequestId;
+                if (entry.attachments !== undefined)
+                    ctx.attachments = entry.attachments;
+                if (entry.options !== undefined) ctx.options = entry.options;
+                if (entry.traceContext !== undefined)
+                    ctx.traceContext = entry.traceContext;
+                result = await this.innerProcessCommand(ctx);
+                if (result?.cancelled) {
+                    state = "cancelled";
+                    if (entry.error === undefined) {
+                        entry.error = `cancelled:${entry.cancelReason ?? "user"}`;
+                    }
+                } else if (result?.disposition?.status === "failed") {
+                    state = "failed";
+                    entry.error = "command failed";
+                } else {
+                    state = "succeeded";
+                }
+            }
+        } catch (e) {
+            error = e;
+            const isAbort = e instanceof Error && e.name === "AbortError";
+            if (entry.cancelReason !== undefined && isAbort) {
+                state = "cancelled";
+                if (entry.error === undefined) {
+                    entry.error = `cancelled:${entry.cancelReason}`;
+                }
+                error = undefined;
+                result = { cancelled: true };
+            } else {
+                state = "failed";
+                entry.error = e instanceof Error ? e.message : String(e);
+            }
+        }
+        entry.state = state;
+        entry.finishedAt = Date.now();
+        if (entry.settled) {
+            this.head = null;
+            return;
+        }
+        entry.settled = true;
+        this.head = null;
+        ++this.snapshotVersion;
+
+        this.log(
+            "requestQueue:complete",
+            {
+                requestId: entry.requestId,
+                connectionId: entry.originatorConnectionId,
+                state: entry.state,
+                runMs: (entry.finishedAt ?? 0) - (entry.startedAt ?? 0),
+                totalMs: (entry.finishedAt ?? 0) - entry.submittedAt,
+            },
+            entry.state === "failed" ? "error" : "info",
+        );
+        this.safeBroadcast("queueStateChanged", () =>
+            this.broadcast.queueStateChanged(this.getSnapshot()),
+        );
+        if (error !== undefined) {
+            entry.rejectCompletion(error);
+        } else {
+            entry.resolveCompletion(result);
+        }
+    }
+
     private async maybeDrain(): Promise<void> {
         if (this.draining) return;
         if (this.head !== null) return;
@@ -609,100 +700,14 @@ export class RequestQueue {
                         startVersion,
                     ),
                 );
-                // requestStarted can synchronously cancel the entry. In that case,
-                // cancelRunning already emitted the newer cancellation version; a
-                // running snapshot would resurrect it in client queue mirrors.
-                if (entry.cancelReason === undefined) {
-                    this.safeBroadcast("queueStateChanged", () =>
-                        this.broadcast.queueStateChanged(this.getSnapshot()),
-                    );
-                }
+                this.broadcastRunningSnapshot(entry);
                 this.log("requestQueue:start", {
                     requestId: entry.requestId,
                     connectionId: entry.originatorConnectionId,
                     waitMs: entry.startedAt - entry.submittedAt,
                 });
 
-                let result: CommandResult | undefined;
-                let error: unknown = undefined;
-                try {
-                    if (entry.cancelReason !== undefined) {
-                        entry.state = "cancelled";
-                        entry.error = `cancelled:${entry.cancelReason}`;
-                        result = { cancelled: true };
-                    } else {
-                        const ctx: QueueExecutionContext = {
-                            requestId: entry.requestId,
-                            originatorConnectionId:
-                                entry.originatorConnectionId,
-                            text: entry.text,
-                        };
-                        if (entry.clientRequestId !== undefined)
-                            ctx.clientRequestId = entry.clientRequestId;
-                        if (entry.attachments !== undefined)
-                            ctx.attachments = entry.attachments;
-                        if (entry.options !== undefined)
-                            ctx.options = entry.options;
-                        if (entry.traceContext !== undefined)
-                            ctx.traceContext = entry.traceContext;
-                        result = await this.innerProcessCommand(ctx);
-                        if (result?.cancelled) {
-                            entry.state = "cancelled";
-                            if (entry.error === undefined) {
-                                entry.error = `cancelled:${entry.cancelReason ?? "user"}`;
-                            }
-                        } else if (result?.disposition?.status === "failed") {
-                            entry.state = "failed";
-                            entry.error = "command failed";
-                        } else {
-                            entry.state = "succeeded";
-                        }
-                    }
-                } catch (e) {
-                    error = e;
-                    const isAbort =
-                        e instanceof Error && e.name === "AbortError";
-                    if (entry.cancelReason !== undefined && isAbort) {
-                        entry.state = "cancelled";
-                        if (entry.error === undefined) {
-                            entry.error = `cancelled:${entry.cancelReason}`;
-                        }
-                        error = undefined;
-                        result = { cancelled: true };
-                    } else {
-                        entry.state = "failed";
-                        entry.error =
-                            e instanceof Error ? e.message : String(e);
-                    }
-                }
-                entry.finishedAt = Date.now();
-                if (entry.settled) {
-                    this.head = null;
-                    continue;
-                }
-                entry.settled = true;
-                this.head = null;
-                ++this.snapshotVersion;
-
-                this.log(
-                    "requestQueue:complete",
-                    {
-                        requestId: entry.requestId,
-                        connectionId: entry.originatorConnectionId,
-                        state: entry.state,
-                        runMs: (entry.finishedAt ?? 0) - (entry.startedAt ?? 0),
-                        totalMs: (entry.finishedAt ?? 0) - entry.submittedAt,
-                    },
-                    entry.state === "failed" ? "error" : "info",
-                );
-                this.safeBroadcast("queueStateChanged", () =>
-                    this.broadcast.queueStateChanged(this.getSnapshot()),
-                );
-                if (error !== undefined) {
-                    entry.rejectCompletion(error);
-                } else {
-                    entry.resolveCompletion(result);
-                }
+                await this.processEntry(entry);
             }
         } finally {
             this.draining = false;
