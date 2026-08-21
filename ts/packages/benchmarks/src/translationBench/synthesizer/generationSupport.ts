@@ -338,6 +338,60 @@ export function appendTranslationBenchCheckpointRows<T = unknown>(
     };
 }
 
+export function mergeTranslationBenchCheckpoints<T = unknown>(
+    checkpoints: readonly TranslationBenchCheckpoint<T>[],
+): TranslationBenchCheckpoint<T> {
+    if (checkpoints.length === 0) {
+        throw new Error("No translation bench checkpoints to merge");
+    }
+    const first = checkpoints[0]!.header;
+    const byShard = new Map<number, TranslationBenchCheckpoint<T>>();
+    for (const checkpoint of checkpoints) {
+        assertTranslationBenchCheckpointHeadersCompatible(checkpoint.header, {
+            ...first,
+            shardIndex: checkpoint.header.shardIndex,
+        });
+        if (byShard.has(checkpoint.header.shardIndex)) {
+            throw new Error(
+                `Duplicate translation bench checkpoint shard ${checkpoint.header.shardIndex}`,
+            );
+        }
+        byShard.set(checkpoint.header.shardIndex, checkpoint);
+    }
+
+    const rows: TranslationBenchCheckpointRow<T>[] = [];
+    const resumeKeys = new Set<string>();
+    for (let index = 0; index < first.shardCount; index++) {
+        const checkpoint = byShard.get(index);
+        if (checkpoint === undefined) {
+            throw new Error(`Missing checkpoint shard: ${index}`);
+        }
+        for (const row of checkpoint.rows) {
+            const normalized = parseTranslationBenchCheckpointRow<T>(row);
+            validateTranslationBenchCheckpointRowShard(
+                normalized,
+                checkpoint.header,
+            );
+            const key = translationBenchResumeKey(normalized);
+            if (resumeKeys.has(key)) {
+                throw new Error(
+                    `Duplicate translation bench resume key '${key}'`,
+                );
+            }
+            resumeKeys.add(key);
+            rows.push(normalized);
+        }
+    }
+    rows.sort((left, right) =>
+        compareText(
+            translationBenchResumeKey(left),
+            translationBenchResumeKey(right),
+        ),
+    );
+
+    return { header: byShard.get(0)!.header, rows, resumeKeys };
+}
+
 export function getTranslationBenchCatalogCensus(
     schemas: readonly TranslationBenchBenchmarkSchema[],
 ): TranslationBenchCatalogCensus {
