@@ -2,14 +2,14 @@
   "paramSpec": {
     "addItems": {
       "items.*": "wildcard",
-      "listName": "checked_wildcard"
+      "listName": "wildcard"
     },
     "removeItems": {
       "items.*": "wildcard",
       "listName": "checked_wildcard"
     },
     "createList": {
-      "listName": "checked_wildcard"
+      "listName": "wildcard"
     },
     "getList": {
       "listName": "checked_wildcard"
