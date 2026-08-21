@@ -1,14 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { context, createContextKey } from "@opentelemetry/api";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 export type ChatModelTelemetryPhase =
     | "translation"
     | "reasoning"
     | "action"
-    | "background"
-    | "unknown";
+    | "explanation";
 
 export type ChatModelTelemetryPurpose =
     | "schema-selection"
@@ -17,8 +16,7 @@ export type ChatModelTelemetryPurpose =
     | "entity-resolution"
     | "reasoning"
     | "action"
-    | "cache-generation"
-    | "unknown";
+    | "cache-generation";
 
 export type ChatModelTelemetryScope = "foreground" | "background";
 
@@ -28,38 +26,29 @@ export interface ChatModelTelemetryContext {
     readonly scope: ChatModelTelemetryScope;
 }
 
-const CHAT_MODEL_TELEMETRY_CONTEXT_KEY = createContextKey(
-    "typeagent.aiclient.chatModelTelemetryContext",
-);
+const chatModelTelemetryContext =
+    new AsyncLocalStorage<ChatModelTelemetryContext>();
 
-const DEFAULT_CHAT_MODEL_TELEMETRY_CONTEXT: ChatModelTelemetryContext =
-    Object.freeze({
-        phase: "unknown",
-        purpose: "unknown",
-        scope: "foreground",
-    });
-
-export function getChatModelTelemetryContext(): ChatModelTelemetryContext {
-    return (
-        (context
-            .active()
-            .getValue(
-                CHAT_MODEL_TELEMETRY_CONTEXT_KEY,
-            ) as ChatModelTelemetryContext) ??
-        DEFAULT_CHAT_MODEL_TELEMETRY_CONTEXT
-    );
+export function getChatModelTelemetryContext():
+    | ChatModelTelemetryContext
+    | undefined {
+    return chatModelTelemetryContext.getStore();
 }
 
 export function withChatModelTelemetryContext<T>(
-    telemetryContext: Partial<ChatModelTelemetryContext>,
+    telemetryContext: ChatModelTelemetryContext,
+    body: () => T,
+): T {
+    return chatModelTelemetryContext.run(telemetryContext, body);
+}
+
+export function withChatModelTelemetryPurpose<T>(
+    purpose: ChatModelTelemetryPurpose,
     body: () => T,
 ): T {
     const current = getChatModelTelemetryContext();
-    return context.with(
-        context.active().setValue(CHAT_MODEL_TELEMETRY_CONTEXT_KEY, {
-            ...current,
-            ...telemetryContext,
-        }),
-        body,
-    );
+    if (current === undefined) {
+        return body();
+    }
+    return withChatModelTelemetryContext({ ...current, purpose }, body);
 }

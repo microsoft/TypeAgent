@@ -90,6 +90,7 @@ function mapResult(result: any):
           actionTokenUsage?: any;
           parsePhase?: any;
           cancelled?: boolean;
+          traceId?: string;
       }
     | undefined {
     if (!result) return undefined;
@@ -104,6 +105,7 @@ function mapResult(result: any):
         actionTokenUsage: result.actionTokenUsage,
         parsePhase: metrics?.parse,
         cancelled: result.cancelled === true,
+        traceId: result.traceId,
     };
 }
 
@@ -220,6 +222,7 @@ function toHistoryEntries(entries: any[]): HistoryEntry[] {
                     firstMessageMs: rid
                         ? firstMessageMsByRequestId.get(rid)
                         : undefined,
+                    traceId: e.traceId,
                 });
                 break;
             }

@@ -4,7 +4,6 @@
 export type LogAction =
     | ShowLogStatusAction
     | SetLogProfileAction
-    | SetLogDebugCopyAction
     | ClearLogSettingsAction;
 
 // Show the current local OpenTelemetry logging configuration.
@@ -22,16 +21,7 @@ export type SetLogProfileAction = {
     };
 };
 
-// Control whether enabled debug messages are copied into local JSONL logs.
-// Examples: "include debug output in local logs", "stop copying debug logs locally".
-export type SetLogDebugCopyAction = {
-    actionName: "setLogDebugCopy";
-    parameters: {
-        enabled: boolean;
-    };
-};
-
-// Restore local logging to focused profile with debug copying disabled.
+// Restore local logging to the focused profile.
 // Examples: "reset local logging", "clear local telemetry settings".
 export type ClearLogSettingsAction = {
     actionName: "clearLogSettings";

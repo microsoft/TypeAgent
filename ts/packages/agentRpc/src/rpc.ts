@@ -143,8 +143,7 @@ export function createRpc<
     callHandlers?: CallHandlers,
     options?: RpcOptions,
 ): RpcReturn<InvokeTargetFunctions, CallTargetFunctions> {
-    const debugIn = registerDebug(`typeagent:${name}:rpc:in`);
-    const debugOut = registerDebug(`typeagent:${name}:rpc:out`);
+    const debugWarn = registerDebug(`typeagent:${name}:rpc:warn`);
     const debugError = registerDebug(`typeagent:${name}:rpc:error`);
     const tracer = trace.getTracer(
         RPC_INSTRUMENTATION_SCOPE,
@@ -177,38 +176,48 @@ export function createRpc<
         message: RpcMessage,
         cbErr: (err: Error | null) => void = () => {},
     ) => {
-        debugOut(message);
         currentChannel.send(message, cbErr);
+    };
+    // One transport warning for every outbound send failure (best-effort
+    // sends and responses alike). Bounded fields only, never the payload.
+    const warnSendFailure = (
+        message: RpcMessage,
+        error: unknown,
+        method = rpcMethodOf(message),
+    ) => {
+        debugWarn("send failed", {
+            direction: "out",
+            agent: name,
+            type: message.type,
+            method,
+            callId: message.callId,
+            error: getErrorMessage(error),
+        });
     };
     const sendBestEffort = (message: RpcMessage) => {
         try {
             out(message, (error) => {
                 if (error !== null) {
-                    debugError(
-                        "Failed to send RPC message",
-                        message.type,
-                        getErrorMessage(error),
-                    );
+                    warnSendFailure(message, error);
                 }
             });
         } catch (error) {
-            debugError(
-                "Failed to send RPC message",
-                message.type,
-                getErrorMessage(error),
-            );
+            warnSendFailure(message, error);
         }
     };
-    const sendResponse = (message: InvokeResult | InvokeError) => {
-        out(message, (error) => {
-            if (error !== null) {
-                debugError(
-                    "Failed to send RPC response",
-                    message.type,
-                    getErrorMessage(error),
-                );
-            }
-        });
+    const sendResponse = (
+        message: InvokeResult | InvokeError,
+        method: string,
+    ) => {
+        try {
+            out(message, (error) => {
+                if (error !== null) {
+                    warnSendFailure(message, error, method);
+                }
+            });
+        } catch (error) {
+            warnSendFailure(message, error, method);
+        }
     };
 
     const processInvoke = async (message: InvokeMessage) => {
@@ -280,37 +289,47 @@ export function createRpc<
                     }
                     serverInvokes.delete(message.callId);
                     if (result.kind === "result") {
-                        sendResponse({
-                            type: "invokeResult",
-                            callId: message.callId,
-                            result: result.result,
-                        });
+                        sendResponse(
+                            {
+                                type: "invokeResult",
+                                callId: message.callId,
+                                result: result.result,
+                            },
+                            message.name,
+                        );
                         return;
                     }
 
                     const cancellationError = isAbortError(result.error);
                     recordServerError(span, cancellationError);
-                    sendResponse({
-                        type: "invokeError",
-                        callId: message.callId,
-                        error: getErrorMessage(result.error),
-                        ...(cancellationError
-                            ? { cancelled: true }
-                            : undefined),
-                        ...(typeof result.error?.markdown === "string"
-                            ? { errorMarkdown: result.error.markdown }
-                            : undefined),
-                        ...(debugError.enabled &&
-                        typeof result.error?.stack === "string"
-                            ? { stack: result.error.stack }
-                            : undefined),
-                    });
+                    sendResponse(
+                        {
+                            type: "invokeError",
+                            callId: message.callId,
+                            error: getErrorMessage(result.error),
+                            ...(cancellationError
+                                ? { cancelled: true }
+                                : undefined),
+                            ...(typeof result.error?.markdown === "string"
+                                ? { errorMarkdown: result.error.markdown }
+                                : undefined),
+                            ...(debugError.enabled &&
+                            typeof result.error?.stack === "string"
+                                ? { stack: result.error.stack }
+                                : undefined),
+                        },
+                        message.name,
+                    );
                 } catch (error) {
                     recordLocalRpcError(span);
-                    debugError(
-                        "Failed to send invoke response",
-                        getErrorMessage(error),
-                    );
+                    debugError("invoke response processing failed", {
+                        agent: name,
+                        method: message.name,
+                        callId: message.callId,
+                        errorType: getErrorType(error),
+                        error: getErrorMessage(error),
+                        stack: getErrorStack(error),
+                    });
                 } finally {
                     if (serverInvokes.get(message.callId) === serverInvoke) {
                         serverInvokes.delete(message.callId);
@@ -321,66 +340,94 @@ export function createRpc<
         );
     };
 
-    const cb = (message: any) => {
-        debugIn(message);
-        if (isCallMessage(message)) {
-            const f = callHandlers?.[message.name];
+    const processCall = (message: CallMessage) => {
+        const f = callHandlers?.[message.name];
 
-            if (f === undefined) {
-                debugError("No call handler", message);
-            } else {
-                // Call handlers are fire-and-forget (no callId), so any
-                // synchronous throw cannot be reported back to the caller.
-                // Swallow it here to keep the RPC bus alive.
-                try {
-                    f(...message.args);
-                } catch (e: any) {
-                    debugError(
-                        "Call handler threw",
-                        message.name,
-                        e?.message ?? e,
-                    );
-                }
-            }
-            return;
-        }
-        if (message?.type === "invoke") {
-            if (!isInvokeMessage(message)) {
-                debugError("Invalid invoke message", message);
-                if (isValidCallId(message?.callId)) {
-                    sendBestEffort({
-                        type: "invokeError",
-                        callId: message.callId,
-                        error: "Invalid invoke message",
-                    });
-                }
-                return;
-            }
-            if (serverInvokes.has(message.callId)) {
-                debugError("Duplicate in-flight callId", message.callId);
-                return;
-            }
-            void processInvoke(message).catch((error) => {
-                debugError(
-                    "Invoke instrumentation failed",
-                    getErrorMessage(error),
-                );
+        if (f === undefined) {
+            debugWarn("missing call handler", {
+                channel: name,
+                method: message.name,
+                callId: message.callId,
             });
             return;
         }
-        if (!isInvokeResult(message) && !isInvokeError(message)) {
+
+        // Call handlers are fire-and-forget (no callId), so any synchronous
+        // throw cannot be reported back to the caller. Swallow it here to keep
+        // the RPC bus alive.
+        try {
+            f(...message.args);
+        } catch (error) {
+            debugError("call handler threw", {
+                agent: name,
+                method: message.name,
+                errorType: getErrorType(error),
+                error: getErrorMessage(error),
+                stack: getErrorStack(error),
+            });
+        }
+    };
+
+    const processInvokeMessage = (message: any) => {
+        if (!isInvokeMessage(message)) {
+            debugWarn("invalid invoke message", {
+                channel: name,
+                type: message?.type,
+                callId: isValidCallId(message?.callId)
+                    ? message.callId
+                    : undefined,
+                reason: !isValidCallId(message?.callId)
+                    ? "invalid callId"
+                    : typeof message?.name !== "string"
+                      ? "missing method"
+                      : "invalid args",
+            });
+            if (isValidCallId(message?.callId)) {
+                sendBestEffort({
+                    type: "invokeError",
+                    callId: message.callId,
+                    error: "Invalid invoke message",
+                });
+            }
             return;
         }
+
+        if (serverInvokes.has(message.callId)) {
+            debugWarn("duplicate in-flight callId", {
+                channel: name,
+                method: message.name,
+                callId: message.callId,
+                inFlight: serverInvokes.size,
+            });
+            return;
+        }
+
+        void processInvoke(message).catch((error) => {
+            debugError("invoke instrumentation failed", {
+                method: message.name,
+                callId: message.callId,
+                error: getErrorMessage(error),
+                stack: getErrorStack(error),
+            });
+        });
+    };
+
+    const processInvokeResponse = (
+        message: InvokeResult | InvokeError,
+    ): void => {
         const pendingInvoke = pending.get(message.callId);
         if (pendingInvoke === undefined) {
-            debugError("Invalid callId", message);
+            debugError("no pending invoke for callId", {
+                channel: name,
+                type: message.type,
+                callId: message.callId,
+            });
             return;
         }
         pending.delete(message.callId);
         if (isInvokeResult(message)) {
             pendingInvoke.resolve(message.result);
         } else {
-            debugError("Invoke error", message.stack);
             const error = new Error(message.error) as RpcFailure & {
                 markdown?: string;
             };
@@ -396,6 +443,20 @@ export function createRpc<
         }
     };
 
+    const cb = (message: any) => {
+        if (isCallMessage(message)) {
+            processCall(message);
+            return;
+        }
+        if (message?.type === "invoke") {
+            processInvokeMessage(message);
+            return;
+        }
+        if (isInvokeResult(message) || isInvokeError(message)) {
+            processInvokeResponse(message);
+        }
+    };
+
     const bindChannel = (newChannel: RpcChannel) => {
         currentChannel = newChannel;
         connected = true;
@@ -406,7 +467,12 @@ export function createRpc<
             if (generation !== bindGeneration) {
                 return;
             }
-            debugError("disconnect");
+            debugWarn("channel disconnected", {
+                channel: name,
+                pending: pending.size,
+                serverInvokes: serverInvokes.size,
+                rebindable,
+            });
             newChannel.off("message", cb);
             connected = false;
             rejectAllPending("Agent channel disconnected");
@@ -836,6 +902,28 @@ function getErrorMessage(error: unknown): string {
         typeof (error as { message?: unknown }).message === "string"
         ? (error as { message: string }).message
         : String(error);
+}
+
+function getErrorType(error: unknown): string | undefined {
+    return error !== null &&
+        typeof error === "object" &&
+        typeof (error as { name?: unknown }).name === "string"
+        ? (error as { name: string }).name
+        : undefined;
+}
+
+function getErrorStack(error: unknown): string | undefined {
+    return error !== null &&
+        typeof error === "object" &&
+        typeof (error as { stack?: unknown }).stack === "string"
+        ? (error as { stack: string }).stack
+        : undefined;
+}
+
+function rpcMethodOf(message: RpcMessage): string | undefined {
+    return message.type === "call" || message.type === "invoke"
+        ? message.name
+        : undefined;
 }
 
 function toError(error: unknown): RpcFailure {

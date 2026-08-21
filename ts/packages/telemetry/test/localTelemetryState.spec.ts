@@ -10,11 +10,10 @@ import {
 } from "../src/otel/localTelemetryState.js";
 
 describe("localTelemetryState", () => {
-    it("starts at focused / debug-copy off by default", () => {
+    it("starts at focused by default", () => {
         const state = createLocalTelemetryState();
         const snap = state.getSnapshot();
         expect(snap.profile).toBe("focused");
-        expect(snap.debugCopy).toBe(false);
         expect(snap.debugBridgeAvailable).toBe(false);
         expect(snap.localLogAvailable).toBe(false);
         expect(snap.revision).toBe(0);
@@ -24,13 +23,11 @@ describe("localTelemetryState", () => {
     it("honors initial values", () => {
         const state = createLocalTelemetryState({
             initialProfile: "diagnostic",
-            initialDebugCopy: true,
             debugBridgeAvailable: true,
             localLogAvailable: true,
         });
         const snap = state.getSnapshot();
         expect(snap.profile).toBe("diagnostic");
-        expect(snap.debugCopy).toBe(true);
         expect(snap.debugBridgeAvailable).toBe(true);
         expect(snap.localLogAvailable).toBe(true);
         expect(snap.revision).toBe(0);
@@ -42,16 +39,15 @@ describe("localTelemetryState", () => {
             onChange: (s) => seen.push(s),
         });
         state.setProfile("diagnostic");
-        state.setDebugCopy(true);
+        state.setProfile("verbose");
         state.setProfile("off");
 
         expect(seen.map((s) => s.revision)).toEqual([1, 2, 3]);
         expect(seen.map((s) => s.profile)).toEqual([
             "diagnostic",
-            "diagnostic",
+            "verbose",
             "off",
         ]);
-        expect(seen.map((s) => s.debugCopy)).toEqual([false, true, true]);
         for (const s of seen) {
             expect(Object.isFrozen(s)).toBe(true);
         }
@@ -63,23 +59,20 @@ describe("localTelemetryState", () => {
             onChange: (s) => seen.push(s),
         });
         state.setProfile("focused"); // unchanged from default
-        state.setDebugCopy(false); // unchanged
         expect(seen).toHaveLength(0);
         expect(state.getSnapshot().revision).toBe(0);
     });
 
-    it("clear resets to focused + debug-copy off in a single revision", () => {
+    it("clear resets to focused in a single revision", () => {
         const seen: LocalTelemetrySnapshot[] = [];
         const state = createLocalTelemetryState({
             initialProfile: "verbose",
-            initialDebugCopy: true,
             onChange: (s) => seen.push(s),
         });
         state.clear();
         expect(seen).toHaveLength(1);
         const snap = state.getSnapshot();
         expect(snap.profile).toBe("focused");
-        expect(snap.debugCopy).toBe(false);
         expect(snap.revision).toBe(1);
     });
 

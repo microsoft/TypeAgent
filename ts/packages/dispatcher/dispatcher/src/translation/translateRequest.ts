@@ -74,18 +74,25 @@ import { DispatcherConfig } from "../context/session.js";
 import {
     openai as ai,
     CompleteUsageStatsCallback,
-    withChatModelTelemetryContext,
+    withChatModelTelemetryPurpose,
 } from "@typeagent/aiclient";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { getHistoryContext } from "./interpretRequest.js";
 import {
     emitTranslationFallback,
+    emitTranslationLlmInvoked,
     emitTranslationRetry,
     runInTranslationSpan,
 } from "../otel/translationSpan.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
-const debugSemanticSearch = registerDebug("typeagent:translate:semantic");
+const debugTranslateInfo = registerDebug("typeagent:translate:info");
+const debugSemanticSearchInfo = registerDebug(
+    "typeagent:translate:semantic:info",
+);
+const debugSemanticSearchWarn = registerDebug(
+    "typeagent:translate:semantic:warn",
+);
 
 /**
  * Gather active action configs that are injected to include for translation and switching.
@@ -168,13 +175,17 @@ export function getTranslatorForSchema(
         schemaName,
     );
 
-    debugTranslate(
-        `Creating translator for '${translatorName}':\n  schemas: ${actionConfigs
-            .map((actionConfig) => actionConfig.schemaName)
-            .join(",")}\n  switch: ${switchActionConfigs
-            .map((actionConfig) => actionConfig.schemaName)
-            .join(",")}`,
-    );
+    debugTranslateInfo(`Creating translator for '${translatorName}'`, {
+        translator: translatorName,
+        schemaCount: actionConfigs.length,
+        switchCount: switchActionConfigs.length,
+        schemas: actionConfigs
+            .slice(0, 20)
+            .map((actionConfig) => actionConfig.schemaName),
+        switches: switchActionConfigs
+            .slice(0, 20)
+            .map((actionConfig) => actionConfig.schemaName),
+    });
     const generateOptions = {
         exact: !config.schema.optimize.enabled,
         jsonSchema: config.schema.generation.jsonSchema,
@@ -198,7 +209,6 @@ export function getTranslatorForSchema(
     );
     if (useCache) {
         context.translatorCache.set(translatorName, newTranslator);
-        debugTranslate(`Cached translator for '${translatorName}'`);
     }
     return newTranslator;
 }
@@ -303,7 +313,6 @@ export async function pickInitialSchema(
     let schemaName: string | undefined = systemContext.lastActionSchemaName;
     const embedding = switchConfig.embedding;
     if (embedding && request.length > 0) {
-        debugSemanticSearch(`Using embedding for schema selection`);
         // Use embedding to determine the most likely action schema and use the schema name for that.
         // When LLM-select collision detection is on, ask for top-N so we can
         // compare scores and decide whether the choice is ambiguous. The
@@ -312,7 +321,7 @@ export async function pickInitialSchema(
         const wantMultiple = collisionCfg.detect || prefCfg.registryFirst;
         const maxMatches = wantMultiple
             ? Math.max(2, collisionCfg.topN)
-            : debugSemanticSearch.enabled
+            : debugSemanticSearchInfo.enabled
               ? 5
               : 1;
         try {
@@ -322,14 +331,14 @@ export async function pickInitialSchema(
                 (schemaName: string) => activeSchemas.has(schemaName),
             );
             if (result) {
-                debugSemanticSearch(
-                    `Semantic search result: ${result
-                        .map(
-                            (r) =>
-                                `${r.item.actionSchemaFile.schemaName}.${r.item.definition.name} (${r.score})`,
-                        )
-                        .join("\n")}`,
-                );
+                debugSemanticSearchInfo("semantic search result", {
+                    candidates: result.slice(0, 5).map((r, rank) => ({
+                        rank,
+                        schema: r.item.actionSchemaFile.schemaName,
+                        action: r.item.definition.name,
+                        score: Math.round(r.score * 1000) / 1000,
+                    })),
+                });
                 if (result.length > 0) {
                     const found = result[0].item.actionSchemaFile.schemaName;
                     const topActionName = result[0].item.definition.name;
@@ -511,23 +520,27 @@ export async function pickInitialSchema(
                 }
             }
         } catch (e: any) {
-            debugSemanticSearch(`Semantic search failed: ${e}`);
+            debugSemanticSearchWarn("semantic search failed", {
+                requestId: systemContext.currentRequestId?.requestId,
+                error: e?.message ?? String(e),
+                errorType: e?.name,
+                fallback: "keep last-used schema",
+            });
         }
     }
 
     if (!activeSchemas.has(schemaName)) {
-        debugTranslate(
-            `Translating request using default translator: ${schemaName} not active`,
-        );
+        const priorSchema = schemaName;
         // REVIEW: Just pick the first one.
         schemaName = activeSchemas.values().next().value;
         if (schemaName === undefined) {
             throw new Error("No active translator available");
         }
-    } else {
-        debugTranslate(
-            `Translating request using current translator: ${schemaName}`,
-        );
+        debugTranslateInfo("using default translator", {
+            priorSchema,
+            selectedSchema: schemaName,
+            reason: "prior schema not active",
+        });
     }
     return { kind: "schema", schemaName };
 }
@@ -841,8 +854,8 @@ async function translateWithTranslator(
               }
             : undefined;
     try {
-        const response = await withChatModelTelemetryContext(
-            { purpose: "action-generation" },
+        const response = await withChatModelTelemetryPurpose(
+            "action-generation",
             () =>
                 translator.translate(
                     request,
@@ -896,13 +909,8 @@ async function findAssistantForRequest(
         systemContext.promptLogger,
     );
 
-    const result = await withChatModelTelemetryContext(
-        { purpose: "schema-selection" },
-        () =>
-            selectTranslator.translate(
-                request,
-                systemContext.currentAbortSignal,
-            ),
+    const result = await withChatModelTelemetryPurpose("schema-selection", () =>
+        selectTranslator.translate(request, systemContext.currentAbortSignal),
     );
     if (!result.success) {
         displayWarn(`Failed to switch assistant: ${result.message}`, context);
@@ -1282,6 +1290,13 @@ async function translateRequestCore(
 
     const provider: ActionConfigProvider =
         actionConfigProvider ?? systemContext.agents;
+
+    // Reaching here means the cache/grammar match did not resolve the request,
+    // so this translation is about to call the model. Record the LLM route on
+    // the span *before* the call so a mid-flight failure/cancellation still
+    // reflects that the model path was taken (additive with any prior
+    // cache/grammar hit in a mixed activity-context translation).
+    emitTranslationLlmInvoked();
 
     const executableAction = await translateRequestWithActiveSchemas(
         request,

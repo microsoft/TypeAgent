@@ -19,7 +19,14 @@ export function pricesFor(model: string): {
     prices: Prices | undefined;
     table: PriceTable;
 } {
-    const table: PriceTable = { ...PRICES, rates: { ...PRICES.rates } };
-    const prices = table.rates[model] ?? table.rates[model.replace(/\*$/, "")];
+    const rates = Object.fromEntries(
+        Object.entries(PRICES.rates).map(([name, prices]) => [
+            name,
+            { ...prices },
+        ]),
+    );
+    const table: PriceTable = { ...PRICES, rates };
+    const lookupModel = model.replace(/^azure\//, "").replace(/\*$/, "");
+    const prices = table.rates[model] ?? table.rates[lookupModel];
     return { prices, table };
 }
