@@ -269,7 +269,7 @@ class PythonLiteralParser {
         if (
             !this.preserveNumberLexemes &&
             (!Number.isFinite(number) ||
-                (!/[.eE]/u.test(lexeme) && !Number.isSafeInteger(number)))
+                (Number.isInteger(number) && !Number.isSafeInteger(number)))
         ) {
             throw this.error("number requires preserveNumberLexemes", offset);
         }

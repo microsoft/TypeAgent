@@ -34,6 +34,7 @@ describe("Python literals", () => {
         expect(Object.getPrototypeOf(object)).toBeNull();
         expect(object.__proto__).toBe(true);
         expect(() => parse("9007199254740992")).toThrow(/preserve/);
+        expect(() => parse("9007199254740993.0")).toThrow(/preserve/);
         expect(() => parse("1e309")).toThrow(/preserve/);
         const invalidEscape = () => parse(`'\\U00110000'`);
         expect(invalidEscape).toThrow(SyntaxError);
