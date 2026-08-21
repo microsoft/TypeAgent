@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
+import type { RpcStructuredLogger } from "@typeagent/agent-rpc/rpc";
 import { createDispatcherRpcClient } from "../src/dispatcherClient.js";
 import { createDispatcherRpcServer } from "../src/dispatcherServer.js";
 import type {
@@ -123,6 +124,31 @@ function makeResponse(interactionId = "id-1"): PendingInteractionResponse {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+describe("dispatcher RPC lifecycle options", () => {
+    it("forwards an optional logger on both client and server", async () => {
+        const { serverChannel, clientChannel } = createChannelPair();
+        const clientEvents: string[] = [];
+        const serverEvents: string[] = [];
+        const logger = (events: string[]): RpcStructuredLogger => ({
+            logEvent(eventName) {
+                events.push(eventName);
+            },
+        });
+        createDispatcherRpcServer(makeStubDispatcher(), serverChannel, {
+            logger: logger(serverEvents),
+        });
+        const { dispatcher } = createDispatcherRpcClient(
+            clientChannel,
+            undefined,
+            { logger: logger(clientEvents) },
+        );
+
+        await expect(dispatcher.restoreAllHidden()).resolves.toBe(0);
+        expect(clientEvents).toEqual(["rpc:started", "rpc:completed"]);
+        expect(serverEvents).toEqual(["rpc:started", "rpc:completed"]);
+    });
+});
+
 describe("dispatcher RPC — cancelInteraction (fire-and-forget)", () => {
     it("sends a call message and does not wait for a reply", () => {
         const { serverChannel, clientChannel } = createChannelPair();

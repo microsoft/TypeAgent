@@ -25,6 +25,12 @@ export function getStructuredLogMessage(
             return `Request queue rejected submission: ${stringValue(data, "reason", "unknown reason")}`;
         case "dispatcher:requestQueue:cancel":
             return `Request cancelled while ${stringValue(data, "phase", "queued")}`;
+        case "dispatcher:requestQueue:promote":
+            return "Queued request promoted to next";
+        case "dispatcher:requestQueue:abandoned":
+            return `Request queue abandoned ${numberValue(data, "count", 0)} entr${numberValue(data, "count", 0) === 1 ? "y" : "ies"}: ${stringValue(data, "reason", "unknown reason")}`;
+        case "dispatcher:requestQueue:broadcastFailed":
+            return "Request queue broadcast failed";
         case "dispatcher:request:received":
             return "Dispatcher began processing request";
         case "dispatcher:command:exception":
@@ -49,6 +55,12 @@ export function getStructuredLogMessage(
             return formatLlmCompleted(data);
         case "aiclient:llm:classification:default":
             return `${numberValue(data, "count", 0)} foreground LLM call(s) ran with default (unclassified) phase/purpose`;
+        case "rpc:started":
+        case "agentRpc:rpc:started":
+            return `RPC started: ${formatRpcInvocation(data)}`;
+        case "rpc:completed":
+        case "agentRpc:rpc:completed":
+            return `RPC ${stringValue(data, "status", "completed")}: ${formatRpcInvocation(data)}${formatElapsed(data)}${formatFailureNote(data)}`;
         default:
             return undefined;
     }
@@ -160,6 +172,17 @@ function formatAction(data: Record<string, unknown>): string {
     const schemaName = stringValue(data, "schemaName", "unknown");
     const actionName = stringValue(data, "actionName", "action");
     return `${schemaName}.${actionName}`;
+}
+
+function formatRpcInvocation(data: Record<string, unknown>): string {
+    const role = stringValue(data, "role", "");
+    const method = stringValue(data, "method", "unknown");
+    const channel = stringValue(data, "channel", "");
+    const direction = role === "client" ? "->" : role === "server" ? "<-" : "";
+    const suffix = channel === "" ? "" : ` on ${channel}`;
+    return direction === ""
+        ? `${method}${suffix}`
+        : `${direction} ${method}${suffix}`;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

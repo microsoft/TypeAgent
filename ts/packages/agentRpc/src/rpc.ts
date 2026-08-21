@@ -15,6 +15,11 @@ import {
 } from "@opentelemetry/api";
 import registerDebug from "debug";
 import { filterSecrets } from "@typeagent/common-utils";
+import {
+    classifyTelemetryError,
+    isTelemetryCancellation,
+    type TelemetryErrorClassification,
+} from "@typeagent/telemetry/errorClassification";
 
 import { RpcChannel } from "./common.js";
 
@@ -92,7 +97,29 @@ export type RpcOptions = {
     // intact so the rpc can be reattached to a fresh channel via rebind().
     rebindable?: boolean;
     tracing?: RpcTracingOptions;
+    /**
+     * Optional structured-event logger for `rpc:started` and `rpc:completed`.
+     * The structural type keeps browser callers independent of the Node-only
+     * telemetry package entry point.
+     */
+    logger?: RpcStructuredLogger;
 };
+
+export interface RpcStructuredLogger {
+    logEvent(
+        eventName: string,
+        entry: Record<string, unknown>,
+        severity?: "info" | "warning" | "error",
+    ): void;
+}
+
+export const RPC_STRUCTURED_EVENTS = {
+    started: "rpc:started",
+    completed: "rpc:completed",
+} as const;
+
+type RpcRole = "client" | "server";
+type RpcStatus = "succeeded" | "failed" | "cancelled";
 
 const RPC_SPAN_NAME = "typeagent.rpc.invoke";
 const RPC_INSTRUMENTATION_SCOPE = "@typeagent/agent-rpc";
@@ -100,6 +127,7 @@ const RPC_INSTRUMENTATION_VERSION = "0.0.1";
 const MAX_TRACEPARENT_LENGTH = 512;
 const MAX_TRACESTATE_LENGTH = 512;
 const MAX_CORRELATION_LENGTH = 256;
+const MAX_RPC_CHANNEL_LENGTH = 256;
 const MAX_RPC_METHOD_LENGTH = 256;
 const MAX_TRACESTATE_MEMBERS = 32;
 const CORRELATION_VALUE_PATTERN = /^[A-Za-z0-9._:@/-]+$/;
@@ -234,57 +262,76 @@ export function createRpc<
             remote.parentContext,
             async (span) => {
                 setCorrelationAttributes(span, remote.correlation);
+                const lifecycle = createLifecycleFields(
+                    "server",
+                    name,
+                    message.name,
+                    message.callId,
+                );
+                const startedAt = Date.now();
+                emitStructuredStarted(options?.logger, lifecycle);
+                let outcome: RpcCompletion = {
+                    ...lifecycle,
+                    status: "failed",
+                };
                 let cancelServerInvoke:
                     | ((reason: ServerCancellation) => void)
                     | undefined;
-                const cancellation = new Promise<{
-                    kind: "cancelled";
-                    reason: ServerCancellation;
-                }>((resolve) => {
-                    cancelServerInvoke = (reason) =>
-                        resolve({ kind: "cancelled", reason });
-                });
-                const serverInvoke: ServerInvoke = {
-                    cancel(reason) {
-                        cancelServerInvoke?.(reason);
-                    },
-                };
-                serverInvokes.set(message.callId, serverInvoke);
-
-                const handler = invokeHandlers?.[message.name];
-                const handlerResult = context.with(
-                    context
-                        .active()
-                        .setValue(ACTIVE_RPC_CORRELATION, remote.correlation),
-                    () =>
-                        handler === undefined
-                            ? Promise.resolve({
-                                  kind: "error" as const,
-                                  error: new Error(
-                                      `No invoke handler ${message.name}`,
-                                  ),
-                              })
-                            : Promise.resolve()
-                                  .then(() => handler(...message.args))
-                                  .then(
-                                      (result) => ({
-                                          kind: "result" as const,
-                                          result,
-                                      }),
-                                      (error) => ({
-                                          kind: "error" as const,
-                                          error,
-                                      }),
-                                  ),
-                );
-
+                let serverInvoke: ServerInvoke | undefined;
                 try {
+                    const cancellation = new Promise<{
+                        kind: "cancelled";
+                        reason: ServerCancellation;
+                    }>((resolve) => {
+                        cancelServerInvoke = (reason) =>
+                            resolve({ kind: "cancelled", reason });
+                    });
+                    serverInvoke = {
+                        cancel(reason) {
+                            cancelServerInvoke?.(reason);
+                        },
+                    };
+                    serverInvokes.set(message.callId, serverInvoke);
+
+                    const handler = invokeHandlers?.[message.name];
+                    const handlerResult = context.with(
+                        context
+                            .active()
+                            .setValue(
+                                ACTIVE_RPC_CORRELATION,
+                                remote.correlation,
+                            ),
+                        () =>
+                            handler === undefined
+                                ? Promise.resolve({
+                                      kind: "error" as const,
+                                      error: new Error(
+                                          `No invoke handler ${message.name}`,
+                                      ),
+                                  })
+                                : Promise.resolve()
+                                      .then(() => handler(...message.args))
+                                      .then(
+                                          (result) => ({
+                                              kind: "result" as const,
+                                              result,
+                                          }),
+                                          (error) => ({
+                                              kind: "error" as const,
+                                              error,
+                                          }),
+                                      ),
+                    );
                     const result = await Promise.race([
                         handlerResult,
                         cancellation,
                     ]);
                     if (result.kind === "cancelled") {
                         recordServerCancellation(span);
+                        outcome = {
+                            ...lifecycle,
+                            status: "cancelled",
+                        };
                         return;
                     }
                     serverInvokes.delete(message.callId);
@@ -297,10 +344,16 @@ export function createRpc<
                             },
                             message.name,
                         );
+                        outcome = {
+                            ...lifecycle,
+                            status: "succeeded",
+                        };
                         return;
                     }
 
-                    const cancellationError = isAbortError(result.error);
+                    const cancellationError = isTelemetryCancellation(
+                        result.error,
+                    );
                     recordServerError(span, cancellationError);
                     sendResponse(
                         {
@@ -320,8 +373,18 @@ export function createRpc<
                         },
                         message.name,
                     );
+                    outcome = {
+                        ...lifecycle,
+                        status: cancellationError ? "cancelled" : "failed",
+                        error: cancellationError ? undefined : result.error,
+                    };
                 } catch (error) {
                     recordLocalRpcError(span);
+                    outcome = {
+                        ...lifecycle,
+                        status: "failed",
+                        error,
+                    };
                     debugError("invoke response processing failed", {
                         agent: name,
                         method: message.name,
@@ -331,9 +394,16 @@ export function createRpc<
                         stack: getErrorStack(error),
                     });
                 } finally {
-                    if (serverInvokes.get(message.callId) === serverInvoke) {
+                    if (
+                        serverInvoke !== undefined &&
+                        serverInvokes.get(message.callId) === serverInvoke
+                    ) {
                         serverInvokes.delete(message.callId);
                     }
+                    emitStructuredCompleted(options?.logger, {
+                        ...outcome,
+                        elapsedMs: Date.now() - startedAt,
+                    });
                     span.end();
                 }
             },
@@ -478,21 +548,37 @@ export function createRpc<
             rejectAllPending("Agent channel disconnected");
             cancelAllServerInvokes("disconnect");
             if (!rebindable) {
-                rpc.invoke = errorFunc;
+                rpc.invoke = disconnectedInvoke;
                 rpc.send = errorFunc;
             }
         });
     };
 
     let nextCallId = 0;
+    const disconnectedInvoke = (
+        methodName: keyof InvokeTargetFunctions,
+        ..._args: unknown[]
+    ): never => {
+        const lifecycle = createLifecycleFields(
+            "client",
+            name,
+            methodName as string,
+            nextCallId++,
+        );
+        const error = new Error("Agent channel disconnected");
+        emitStructuredStarted(options?.logger, lifecycle);
+        emitStructuredCompleted(options?.logger, {
+            ...lifecycle,
+            status: "failed",
+            elapsedMs: 0,
+            error,
+        });
+        throw error;
+    };
     const invoke = async (
         methodName: keyof InvokeTargetFunctions,
         args: any[],
     ): Promise<any> => {
-        if (!connected) {
-            throw new Error("Agent channel disconnected");
-        }
-
         return tracer.startActiveSpan(
             RPC_SPAN_NAME,
             {
@@ -504,20 +590,36 @@ export function createRpc<
                     method: methodName as string,
                     args,
                 };
-                const correlation = getOutboundCorrelation(
-                    options?.tracing,
-                    invocation,
+                const callId = nextCallId++;
+                const lifecycle = createLifecycleFields(
+                    "client",
+                    name,
+                    invocation.method,
+                    callId,
                 );
-                setCorrelationAttributes(span, correlation);
+                const startedAt = Date.now();
+                emitStructuredStarted(options?.logger, lifecycle);
+                let outcome: RpcCompletion = {
+                    ...lifecycle,
+                    status: "succeeded",
+                };
                 try {
+                    if (!connected) {
+                        throw new Error("Agent channel disconnected");
+                    }
+                    const correlation = getOutboundCorrelation(
+                        options?.tracing,
+                        invocation,
+                    );
+                    setCorrelationAttributes(span, correlation);
                     const metadata =
                         options?.tracing?.propagateContext === true
                             ? createMetadataEnvelope(correlation)
                             : undefined;
                     const message: InvokeMessage = {
                         type: "invoke",
-                        callId: nextCallId++,
-                        name: methodName as string,
+                        callId,
+                        name: invocation.method,
                         args,
                         ...(metadata === undefined ? undefined : { metadata }),
                     };
@@ -546,9 +648,19 @@ export function createRpc<
                         }
                     });
                 } catch (error) {
+                    const cancelled = isTelemetryCancellation(error);
+                    outcome = {
+                        ...lifecycle,
+                        status: cancelled ? "cancelled" : "failed",
+                        error: cancelled ? undefined : error,
+                    };
                     recordClientError(span, error);
                     throw error;
                 } finally {
+                    emitStructuredCompleted(options?.logger, {
+                        ...outcome,
+                        elapsedMs: Date.now() - startedAt,
+                    });
                     span.end();
                 }
             },
@@ -600,18 +712,25 @@ export function createRpc<
 function createSpanAttributes(methodName: string) {
     return {
         "rpc.system": "typeagent",
-        "rpc.method": isValidRpcMethod(methodName)
-            ? methodName
-            : "invalid_method",
+        "rpc.method": boundedRpcIdentifier(
+            methodName,
+            MAX_RPC_METHOD_LENGTH,
+            "invalid_method",
+        ),
     };
 }
 
-function isValidRpcMethod(value: string): boolean {
-    return (
-        value.length > 0 &&
-        value.length <= MAX_RPC_METHOD_LENGTH &&
-        RPC_METHOD_PATTERN.test(value)
-    );
+function boundedRpcIdentifier(
+    value: string,
+    maxLength: number,
+    fallback: string,
+): string {
+    return value.length > 0 &&
+        value.length <= maxLength &&
+        RPC_METHOD_PATTERN.test(value) &&
+        filterSecrets(value) === value
+        ? value
+        : fallback;
 }
 
 function setCorrelationAttributes(
@@ -859,7 +978,7 @@ function validateTracestate(value: unknown): value is string {
 
 function recordClientError(span: Span, error: unknown): void {
     const failureKind = (error as RpcFailure | undefined)?.rpcFailureKind;
-    if (failureKind === "cancelled" || isAbortError(error)) {
+    if (failureKind === "cancelled" || isTelemetryCancellation(error)) {
         span.recordException({ name: "AbortError", message: "cancelled" });
         span.setStatus({
             code: SpanStatusCode.ERROR,
@@ -880,7 +999,7 @@ function recordServerError(span: Span, cancelled: boolean): void {
 }
 
 function recordServerCancellation(span: Span): void {
-    recordLocalRpcError(span);
+    recordServerError(span, true);
 }
 
 function recordLocalRpcError(span: Span): void {
@@ -888,12 +1007,83 @@ function recordLocalRpcError(span: Span): void {
     span.setStatus({ code: SpanStatusCode.ERROR, message: "rpc failed" });
 }
 
-function isAbortError(error: unknown): boolean {
-    return (
-        error !== null &&
-        typeof error === "object" &&
-        (error as { name?: unknown }).name === "AbortError"
-    );
+type RpcLifecycleFields = {
+    role: RpcRole;
+    channel: string;
+    method: string;
+    callId: number;
+};
+
+type RpcCompletion = RpcLifecycleFields & {
+    status: RpcStatus;
+    error?: unknown;
+};
+
+function createLifecycleFields(
+    role: RpcRole,
+    channel: string,
+    method: string,
+    callId: number,
+): RpcLifecycleFields {
+    return {
+        role,
+        channel: boundedRpcIdentifier(
+            channel,
+            MAX_RPC_CHANNEL_LENGTH,
+            "invalid_channel",
+        ),
+        method: boundedRpcIdentifier(
+            method,
+            MAX_RPC_METHOD_LENGTH,
+            "invalid_method",
+        ),
+        callId,
+    };
+}
+
+function emitStructuredStarted(
+    logger: RpcStructuredLogger | undefined,
+    fields: RpcLifecycleFields,
+): void {
+    try {
+        logger?.logEvent(RPC_STRUCTURED_EVENTS.started, { ...fields });
+    } catch {
+        // Logging must not change RPC behavior.
+    }
+}
+
+function emitStructuredCompleted(
+    logger: RpcStructuredLogger | undefined,
+    data: RpcCompletion & { elapsedMs: number },
+): void {
+    if (logger === undefined) {
+        return;
+    }
+    try {
+        const classification: TelemetryErrorClassification | undefined =
+            data.status === "failed" && data.error !== undefined
+                ? classifyTelemetryError(data.error)
+                : undefined;
+        const success = data.status === "succeeded";
+        const cancelled = data.status === "cancelled";
+        logger.logEvent(
+            RPC_STRUCTURED_EVENTS.completed,
+            {
+                role: data.role,
+                channel: data.channel,
+                method: data.method,
+                callId: data.callId,
+                status: data.status,
+                success,
+                ...(cancelled ? { cancelled: true } : {}),
+                elapsedMs: data.elapsedMs,
+                ...(classification ?? {}),
+            },
+            success ? "info" : cancelled ? "warning" : "error",
+        );
+    } catch {
+        // Logging must not change RPC behavior.
+    }
 }
 
 function getErrorMessage(error: unknown): string {

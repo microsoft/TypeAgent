@@ -233,4 +233,65 @@ describe("getStructuredLogMessage", () => {
             getStructuredLogMessage("custom:event", { value: "detail" }),
         ).toBeUndefined();
     });
+
+    it("summarizes secondary queue lifecycle events", () => {
+        expect(
+            getStructuredLogMessage("dispatcher:requestQueue:promote", {}),
+        ).toBe("Queued request promoted to next");
+        expect(
+            getStructuredLogMessage("dispatcher:requestQueue:abandoned", {
+                count: 3,
+                reason: "server_stopping",
+            }),
+        ).toBe("Request queue abandoned 3 entries: server_stopping");
+        expect(
+            getStructuredLogMessage("dispatcher:requestQueue:abandoned", {
+                count: 1,
+                reason: "shutdown",
+            }),
+        ).toBe("Request queue abandoned 1 entry: shutdown");
+        expect(
+            getStructuredLogMessage(
+                "dispatcher:requestQueue:broadcastFailed",
+                {},
+            ),
+        ).toBe("Request queue broadcast failed");
+    });
+
+    it("summarizes RPC lifecycle events without payload content", () => {
+        expect(
+            getStructuredLogMessage("rpc:started", {
+                role: "client",
+                channel: "agent:calendar",
+                method: "executeAction",
+                callId: 3,
+            }),
+        ).toBe("RPC started: -> executeAction on agent:calendar");
+        expect(
+            getStructuredLogMessage("rpc:completed", {
+                role: "server",
+                channel: "agent:calendar",
+                method: "executeAction",
+                callId: 3,
+                status: "failed",
+                success: false,
+                elapsedMs: 12,
+                errorCategory: "network",
+                errorCode: "ECONNREFUSED",
+                retryable: true,
+                message: "private detail",
+            }),
+        ).toBe(
+            "RPC failed: <- executeAction on agent:calendar in 12 ms [network (ECONNREFUSED, retryable)]",
+        );
+        expect(
+            getStructuredLogMessage("agentRpc:rpc:completed", {
+                role: "client",
+                channel: "agent:calendar",
+                method: "executeAction",
+                status: "cancelled",
+                elapsedMs: 5,
+            }),
+        ).toBe("RPC cancelled: -> executeAction on agent:calendar in 5 ms");
+    });
 });
