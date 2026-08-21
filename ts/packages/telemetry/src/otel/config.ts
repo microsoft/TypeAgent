@@ -177,6 +177,7 @@ export interface ResolveTelemetryConfigOptions {
  * backend is configured for a signal, the local exporter becomes that
  * signal's primary. Local defaults for `logFile`, `debugBridge`, and
  * `structuredLogs` only apply when the standard YAML/env values are unset.
+ * The default local OTLP/HTTP endpoint is `http://127.0.0.1:24318`.
  * `enabled` is intentionally a string because the flat env layer drops YAML
  * booleans whose value is `false`, which would silently "stick" once turned
  * on.
@@ -461,7 +462,7 @@ function resolveLocalSink(yaml: Readonly<Record<string, string | undefined>>): {
         debugBridge?: boolean;
         structuredLogs?: boolean;
     } = {
-        endpoint: endpoint ?? "http://localhost:4318",
+        endpoint: endpoint ?? "http://127.0.0.1:24318",
         logFile:
             logFile ?? "~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl",
         debugBridge: debugBridge ?? true,

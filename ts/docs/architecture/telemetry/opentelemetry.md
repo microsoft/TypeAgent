@@ -382,15 +382,14 @@ telemetry:
   tracesSampler: always_on
   local:
     enabled: "true"
-    otlpEndpoint: http://127.0.0.1:54321
+    otlpEndpoint: http://127.0.0.1:24318
     debugBridge: "true"
     structuredLogs: "true"
 ```
 
-`telemetry.local.otlpEndpoint` above (`54321` is just an example) is written
-by `pnpm run telemetry:grafana`: Docker assigns the local container's
-OTLP/HTTP host port dynamically on every start, so the script owns this
-value and overwrites it on every run instead of preserving a stale one.
+`telemetry.local.otlpEndpoint` is written by
+`pnpm run telemetry:grafana`. The script owns this value and uses the stable
+OTLP/HTTP loopback port `24318`.
 
 Standard `OTEL_*` variables override YAML. Relevant settings include:
 
@@ -412,10 +411,12 @@ Partner libraries use host configuration and do not read TypeAgent YAML.
 with the standard exporter; it does not replace or rewrite the backend
 endpoint (`telemetry.otlpEndpoint`). Identical resolved endpoints are
 deduplicated. The script does, however, own `telemetry.local.otlpEndpoint`
-itself: it discovers the container's dynamically-assigned OTLP/HTTP host
-port on every start and overwrites the local endpoint with it, so a stale or
-hand-edited value never lingers. TypeAgent reads this configuration at
-process startup, so processes must restart after the script changes it.
+itself: it writes the stable `http://127.0.0.1:24318` endpoint, so a stale or
+hand-edited value never lingers. The setting remains enabled when LGTM stops.
+This lets a configured TypeAgent process start while LGTM is absent and begin
+exporting when the collector becomes available. TypeAgent reads this
+configuration at process startup, so processes must restart only after the
+script changes it from an older configuration.
 
 Local development samples all traces by default when trace export is enabled.
 Deployments may configure standard OTel sampling. Partner hosts own sampling.
@@ -557,21 +558,24 @@ The helper:
   engine.
 - Pulls `grafana/otel-lgtm:latest` when it is not already installed.
 - Starts or reuses the `typeagent-otel` container.
+- Recreates an existing container if its port mappings are stale.
 - Waits for Grafana to become healthy.
-- Publishes Grafana and both collector receivers on `127.0.0.1` only.
+- Publishes fixed loopback ports for OTLP/gRPC (`24317`), OTLP/HTTP (`24318`),
+  and Grafana (`24319`).
+- Fails with an actionable error when a required host port is unavailable.
 
 The loopback binding keeps the services inaccessible from other machines on
 the network. Do not publish these ports on all interfaces unless remote access
 is intentional and protected separately.
 
-Grafana always listens on `3000`. Docker assigns the collector ports on the
-loopback interface, and the helper writes the current OTLP/HTTP endpoint into
-`telemetry.local.otlpEndpoint`; no collector-port configuration is needed.
+The fixed host ports are below the OS ephemeral range. The helper writes
+`http://127.0.0.1:24318` into `telemetry.local.otlpEndpoint` before starting
+Docker, and `--stop` leaves that configuration enabled.
 
 Verify that Grafana is ready:
 
 ```powershell
-Invoke-RestMethod http://localhost:3000/api/health
+Invoke-RestMethod http://127.0.0.1:24319/api/health
 ```
 
 ### 2. Configure and Start TypeAgent
@@ -582,10 +586,8 @@ From `ts/`, build the agent server and configure its process environment:
 pnpm run build agent-server
 
 $env:OTEL_SERVICE_NAME = "typeagent-local"
-# Use the OTLP/HTTP address `pnpm run telemetry:grafana` printed (or
-# `docker port typeagent-otel 4318/tcp`): Docker assigns this port
-# dynamically, so it is not always 4318.
-$env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://127.0.0.1:54321"
+# `pnpm run telemetry:grafana` provisions telemetry.local with the stable
+# http://127.0.0.1:24318 endpoint. No OTLP endpoint env var is required.
 $env:OTEL_TRACES_SAMPLER = "always_on"
 $env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\{process}-{timestamp}-p{pid}.jsonl"
 $env:TYPEAGENT_OTEL_DEBUG_BRIDGE = "true"
@@ -768,7 +770,7 @@ sinks. Existing lifecycle messages show a short summary such as
 
 ### 5. Inspect the Same Logs in Grafana
 
-Open [http://localhost:3000](http://localhost:3000), select **Explore**, choose
+Open [http://127.0.0.1:24319](http://127.0.0.1:24319), select **Explore**, choose
 the **Loki** data source, and switch the query editor to **Code** mode. Do not
 use Logs Drilldown or its search box; those use a different search API rather
 than executing the LogQL below. Query all records from this validation run:
@@ -823,6 +825,10 @@ Grafana LGTM:
 ```powershell
 pnpm run telemetry:grafana --stop
 ```
+
+Stopping LGTM leaves `telemetry.local` enabled at the stable endpoint. A
+configured TypeAgent process can remain running and resumes export when LGTM
+starts again.
 
 ## Privacy and Reliability
 
