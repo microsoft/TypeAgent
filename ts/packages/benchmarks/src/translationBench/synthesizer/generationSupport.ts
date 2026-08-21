@@ -7,6 +7,11 @@ import { z } from "zod";
 
 import type { TranslationBenchBenchmarkSchema } from "./benchmark.js";
 import {
+    appendSyncedJsonlRecords,
+    initializeSyncedJsonlFile,
+    readRecoverableJsonlLines,
+} from "./jsonlCheckpoint.js";
+import {
     parseJsonText,
     parseVersionedWithZod,
     parseWithZod,
@@ -193,7 +198,7 @@ export function translationBenchResumeKey(
     ]);
 }
 
-function validateRowShard<T>(
+function validateTranslationBenchCheckpointRowShard<T>(
     row: TranslationBenchCheckpointRow<T>,
     header: TranslationBenchCheckpointHeader,
 ): void {
@@ -208,11 +213,14 @@ function validateRowShard<T>(
     }
 }
 
-function settingsEqual(left: unknown, right: unknown): boolean {
+function translationBenchCheckpointSettingsEqual(
+    left: unknown,
+    right: unknown,
+): boolean {
     return canonicalJson(left) === canonicalJson(right);
 }
 
-function assertCompatibleHeaders(
+function assertTranslationBenchCheckpointHeadersCompatible(
     actual: TranslationBenchCheckpointHeader,
     expected: TranslationBenchCheckpointHeader,
 ): void {
@@ -221,7 +229,12 @@ function assertCompatibleHeaders(
             "Translation bench checkpoint run fingerprint is incompatible",
         );
     }
-    if (!settingsEqual(actual.settings, expected.settings)) {
+    if (
+        !translationBenchCheckpointSettingsEqual(
+            actual.settings,
+            expected.settings,
+        )
+    ) {
         throw new Error(
             "Translation bench checkpoint settings are incompatible",
         );
@@ -245,19 +258,12 @@ export function createTranslationBenchRunFingerprint(
 export function readTranslationBenchCheckpoint<T = unknown>(
     filePath: string,
 ): TranslationBenchCheckpoint<T> {
-    const text = fs.readFileSync(filePath, "utf8");
-    const lines = text.endsWith("\n")
-        ? text.slice(0, -1).split("\n")
-        : text.split("\n");
-    if (lines.length === 0 || (lines.length === 1 && lines[0] === "")) {
-        throw new Error(`Translation bench checkpoint '${filePath}' is empty`);
-    }
-    if (lines.some((line) => line.trim().length === 0)) {
+    const lines = readRecoverableJsonlLines(filePath);
+    if (lines.length === 0 || lines.some((line) => line.trim().length === 0)) {
         throw new Error(
-            `Translation bench checkpoint '${filePath}' contains a blank line`,
+            `Translation bench checkpoint '${filePath}' is empty or contains a blank line`,
         );
     }
-
     const header = parseTranslationBenchCheckpointHeader(
         parseJsonText(lines[0]!, `checkpoint '${filePath}' line 1`),
     );
@@ -270,7 +276,7 @@ export function readTranslationBenchCheckpoint<T = unknown>(
                 `checkpoint '${filePath}' line ${index + 1}`,
             ),
         );
-        validateRowShard(row, header);
+        validateTranslationBenchCheckpointRowShard(row, header);
         const key = translationBenchResumeKey(row);
         if (resumeKeys.has(key)) {
             throw new Error(`Duplicate translation bench resume key '${key}'`);
@@ -281,6 +287,10 @@ export function readTranslationBenchCheckpoint<T = unknown>(
     return { header, rows, resumeKeys };
 }
 
+/**
+ * Appends checkpoint rows for one owning writer. Concurrent writers are not
+ * supported; the caller must serialize all access to the checkpoint path.
+ */
 export function appendTranslationBenchCheckpointRows<T = unknown>(
     filePath: string,
     checkpointHeader: TranslationBenchCheckpointHeader,
@@ -290,7 +300,7 @@ export function appendTranslationBenchCheckpointRows<T = unknown>(
     const batchKeys = new Set<string>();
     const normalizedRows = rows.map((row) => {
         const parsed = parseTranslationBenchCheckpointRow<T>(row);
-        validateRowShard(parsed, header);
+        validateTranslationBenchCheckpointRowShard(parsed, header);
         const key = translationBenchResumeKey(parsed);
         if (batchKeys.has(key)) {
             throw new Error(`Duplicate translation bench resume key '${key}'`);
@@ -302,34 +312,23 @@ export function appendTranslationBenchCheckpointRows<T = unknown>(
     let current: TranslationBenchCheckpoint<T>;
     if (fs.existsSync(filePath)) {
         current = readTranslationBenchCheckpoint<T>(filePath);
-        assertCompatibleHeaders(current.header, header);
+        assertTranslationBenchCheckpointHeadersCompatible(
+            current.header,
+            header,
+        );
     } else {
-        try {
-            fs.writeFileSync(filePath, `${canonicalJson(header)}\n`, {
-                flag: "wx",
-            });
-            current = {
-                header,
-                rows: [],
-                resumeKeys: new Set(),
-            };
-        } catch (error) {
-            const code = (error as NodeJS.ErrnoException).code;
-            if (code !== "EEXIST") throw error;
-            current = readTranslationBenchCheckpoint<T>(filePath);
-            assertCompatibleHeaders(current.header, header);
-        }
+        initializeSyncedJsonlFile(filePath, canonicalJson(header));
+        current = { header, rows: [], resumeKeys: new Set() };
     }
-
     for (const key of batchKeys) {
         if (current.resumeKeys.has(key)) {
             throw new Error(`Duplicate translation bench resume key '${key}'`);
         }
     }
     if (normalizedRows.length > 0) {
-        fs.appendFileSync(
+        appendSyncedJsonlRecords(
             filePath,
-            normalizedRows.map((row) => `${canonicalJson(row)}\n`).join(""),
+            normalizedRows.map((row) => canonicalJson(row)),
         );
     }
     return {
@@ -337,6 +336,58 @@ export function appendTranslationBenchCheckpointRows<T = unknown>(
         rows: [...current.rows, ...normalizedRows],
         resumeKeys: new Set([...current.resumeKeys, ...batchKeys]),
     };
+}
+
+export function mergeTranslationBenchCheckpoints<T = unknown>(
+    checkpoints: readonly TranslationBenchCheckpoint<T>[],
+): TranslationBenchCheckpoint<T> {
+    if (checkpoints.length === 0) {
+        throw new Error("No translation bench checkpoints to merge");
+    }
+    const first = checkpoints[0]!.header;
+    const byShard = new Map<number, TranslationBenchCheckpoint<T>>();
+    for (const checkpoint of checkpoints) {
+        assertTranslationBenchCheckpointHeadersCompatible(checkpoint.header, {
+            ...first,
+            shardIndex: checkpoint.header.shardIndex,
+        });
+        if (byShard.has(checkpoint.header.shardIndex)) {
+            throw new Error(
+                `Duplicate translation bench checkpoint shard ${checkpoint.header.shardIndex}`,
+            );
+        }
+        byShard.set(checkpoint.header.shardIndex, checkpoint);
+    }
+    const rows: TranslationBenchCheckpointRow<T>[] = [];
+    const resumeKeys = new Set<string>();
+    for (let index = 0; index < first.shardCount; index++) {
+        const checkpoint = byShard.get(index);
+        if (checkpoint === undefined) {
+            throw new Error(`Missing checkpoint shard: ${index}`);
+        }
+        for (const row of checkpoint.rows) {
+            const normalized = parseTranslationBenchCheckpointRow<T>(row);
+            validateTranslationBenchCheckpointRowShard(
+                normalized,
+                checkpoint.header,
+            );
+            const key = translationBenchResumeKey(normalized);
+            if (resumeKeys.has(key)) {
+                throw new Error(
+                    `Duplicate translation bench resume key '${key}'`,
+                );
+            }
+            resumeKeys.add(key);
+            rows.push(normalized);
+        }
+    }
+    rows.sort((left, right) =>
+        compareText(
+            translationBenchResumeKey(left),
+            translationBenchResumeKey(right),
+        ),
+    );
+    return { header: byShard.get(0)!.header, rows, resumeKeys };
 }
 
 export function getTranslationBenchCatalogCensus(
