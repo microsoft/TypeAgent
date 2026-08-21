@@ -9,13 +9,11 @@
 //   - `enabled` is written as the string "true" / "false". The flat env
 //     layer used by `@typeagent/config` drops YAML booleans whose value is
 //     `false`, so a plain boolean would silently "stick" once enabled.
-//   - `startLocalTelemetry.mjs` owns `otlpEndpoint`: Docker assigns the
-//     container's OTLP/HTTP host port dynamically on every start, so
-//     enabling always overwrites `otlpEndpoint` with the caller-supplied
-//     value instead of preserving a stale/customized one. Defaults are
-//     otherwise only inserted for keys the user has NOT set; existing
+//   - `startLocalTelemetry.mjs` owns `otlpEndpoint` and always writes the
+//     stable local OTLP/HTTP endpoint. Defaults are otherwise only inserted
+//     for keys the user has NOT set; existing
 //     `logFile` / `logRetentionBytes` / `debugBridge` / `structuredLogs`
-//     values are preserved so a customized local sink survives a toggle.
+//     values are preserved so a customized local sink survives setup.
 //   - The document is parsed with js-yaml before and after the edit. If
 //     either parse fails, or if `telemetry` / `telemetry.local` uses an
 //     ambiguous / unsupported shape (flow style, sequence, scalar, custom
@@ -24,6 +22,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
+
+export const LOCAL_OTLP_ENDPOINT = "http://127.0.0.1:24318";
 
 /**
  * Default values written by `pnpm run telemetry:grafana` when the user has
@@ -59,35 +59,15 @@ export function resolveLocalConfigPath(workspaceTsRoot) {
 }
 
 /**
- * Enable the local telemetry sink in `config.local.yaml` and point it at
- * `otlpEndpoint`. `startLocalTelemetry.mjs` owns this value: Docker assigns
- * the container's OTLP/HTTP host port dynamically on every start, so a
- * stale or hand-customized endpoint is overwritten rather than preserved.
- * The caller must provide the endpoint discovered from Docker. Writes the
- * file only when its content actually changes.
+ * Enable the local telemetry sink in `config.local.yaml` and point it at the
+ * stable local OTLP/HTTP endpoint. Writes the file only when its content
+ * actually changes.
  */
-export function enableTelemetryLocal(filePath, otlpEndpoint) {
-    return applyTelemetryLocalEdit(filePath, true, otlpEndpoint);
+export function enableTelemetryLocal(filePath) {
+    return applyTelemetryLocalEdit(filePath);
 }
 
-/**
- * Disable the local telemetry sink in `config.local.yaml`. Preserves any
- * customized local defaults (including `otlpEndpoint`) so re-enabling does
- * not lose them.
- */
-export function disableTelemetryLocal(filePath) {
-    return applyTelemetryLocalEdit(filePath, false, undefined);
-}
-
-function applyTelemetryLocalEdit(filePath, enable, otlpEndpoint) {
-    if (
-        enable &&
-        (typeof otlpEndpoint !== "string" || otlpEndpoint.trim() === "")
-    ) {
-        throw new Error(
-            "otlpEndpoint must be a non-empty string when enabling telemetry.local.",
-        );
-    }
+function applyTelemetryLocalEdit(filePath) {
     const originalText = fs.existsSync(filePath)
         ? fs.readFileSync(filePath, "utf8")
         : "";
@@ -97,7 +77,7 @@ function applyTelemetryLocalEdit(filePath, enable, otlpEndpoint) {
     const existingLocal = getExistingLocal(parsed);
     const previouslyEnabled = existingLocal?.enabled === "true";
 
-    const desiredLocal = buildDesiredLocal(existingLocal, enable, otlpEndpoint);
+    const desiredLocal = buildDesiredLocal(existingLocal);
     const newText = rewriteTelemetryLocalBlock(originalText, desiredLocal);
 
     // Re-parse to guarantee we did not corrupt the document. If it fails,
@@ -193,15 +173,10 @@ function getExistingLocal(parsed) {
     return local;
 }
 
-function buildDesiredLocal(existingLocal, enable, otlpEndpoint) {
+function buildDesiredLocal(existingLocal) {
     const merged = { ...LOCAL_DEFAULTS, ...(existingLocal ?? {}) };
-    merged.enabled = enable ? "true" : "false";
-    if (enable) {
-        // The local launcher owns this value: Docker assigns a new
-        // ephemeral host port on every start, so a stale/customized
-        // endpoint left over from a previous toggle must not survive.
-        merged.otlpEndpoint = otlpEndpoint;
-    }
+    merged.enabled = "true";
+    merged.otlpEndpoint = LOCAL_OTLP_ENDPOINT;
     for (const key of ["debugBridge", "structuredLogs"]) {
         if (typeof merged[key] === "boolean") {
             merged[key] = merged[key] ? "true" : "false";
