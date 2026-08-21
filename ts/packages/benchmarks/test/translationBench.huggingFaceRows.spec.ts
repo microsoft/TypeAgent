@@ -1,0 +1,46 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { jest } from "@jest/globals";
+import { downloadHuggingFaceRows } from "../src/translationBench/public_datasets/huggingFaceRows.js";
+
+const SHA = "a".repeat(40);
+// prettier-ignore
+const source = { dataset: "owner/name", revision: "feature/one", config: "default", split: "train" };
+const directory = () => mkdtemp(join(tmpdir(), "hf-rows-"));
+
+// prettier-ignore
+test("resolves revisions and handles retries, cancellation, and atomic output", async () => {
+    const successDir = await directory(), outputPath = join(successDir, "rows.jsonl"), requests: URL[] = [], progress: number[] = [];
+    await writeFile(outputPath, "old");
+    let hubAttempts = 0;
+    const fetch = jest.fn<typeof globalThis.fetch>(async (input) => {
+        const url = new URL(String(input)); requests.push(url);
+        if (url.hostname === "huggingface.co") { if (++hubAttempts === 1) throw new TypeError("network failure"); if (hubAttempts === 2) return new Response(null, { status: 503 }); return Response.json({ sha: SHA }); }
+        const offset = Number(url.searchParams.get("offset"));
+        return Response.json({ rows: [{ row: { id: offset + 1 } }], num_rows_total: 2 }, { headers: { "x-revision": SHA } });
+    });
+    await expect(downloadHuggingFaceRows({ source, outputPath, parseRow: (row) => row, fetch, pageSize: 1, retryDelayMs: 0, onProgress: (count) => progress.push(count) })).resolves.toBe(2);
+    expect(requests.find((url) => url.hostname === "huggingface.co")!.pathname).toMatch(/\/revision\/feature%2Fone$/); expect(requests.filter((url) => url.hostname !== "huggingface.co").every((url) => !url.searchParams.has("revision"))).toBe(true); expect(progress).toEqual([1, 2]);
+    expect(await readFile(outputPath, "utf8")).toBe('{"id":1}\n{"id":2}\n');
+    const mismatchDir = await directory(), mismatch = jest.fn<typeof globalThis.fetch>(async (input) => {
+        const url = new URL(String(input)); if (url.hostname === "huggingface.co") return Response.json({ sha: SHA });
+        const offset = Number(url.searchParams.get("offset"));
+        return Response.json({ rows: [{ row: { id: offset + 1 } }], num_rows_total: 2 }, { headers: { "x-revision": offset === 0 ? SHA : "b".repeat(40) } });
+    });
+    await expect(downloadHuggingFaceRows({ source, outputPath: join(mismatchDir, "rows.jsonl"), parseRow: (row) => row, fetch: mismatch, pageSize: 1 })).rejects.toThrow(`did not serve revision ${SHA}`);
+    expect(await readdir(mismatchDir)).toEqual([]);
+    const failureDir = await directory(), preservedPath = join(failureDir, "rows.jsonl"); await writeFile(preservedPath, "old");
+    const notFound = jest.fn<typeof globalThis.fetch>(async () => new Response(null, { status: 404 }));
+    await expect(downloadHuggingFaceRows({ source, outputPath: preservedPath, parseRow: (row) => row, fetch: notFound })).rejects.toThrow("404");
+    expect(notFound).toHaveBeenCalledTimes(1); expect(await readFile(preservedPath, "utf8")).toBe("old");
+    const controller = new AbortController(), abortDir = await directory(), transient = jest.fn<typeof globalThis.fetch>(async (input) => { if (new URL(String(input)).hostname === "huggingface.co") return Response.json({ sha: SHA }); queueMicrotask(() => controller.abort()); return new Response(null, { status: 503 }); });
+    await expect(downloadHuggingFaceRows({ source, outputPath: join(abortDir, "rows.jsonl"), parseRow: (row) => row, fetch: transient, retryDelayMs: 10_000, signal: controller.signal })).rejects.toThrow();
+    expect(transient).toHaveBeenCalledTimes(2); expect(await readdir(abortDir)).toEqual([]);
+    const timeoutDir = await directory(), timeout = jest.fn<typeof globalThis.fetch>((_input, init) => new Promise((_resolve, reject) => init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason))));
+    await expect(downloadHuggingFaceRows({ source, outputPath: join(timeoutDir, "rows.jsonl"), parseRow: (row) => row, fetch: timeout, retryAttempts: 2, retryDelayMs: 0, requestTimeoutMs: 1 })).rejects.toThrow();
+    expect(timeout).toHaveBeenCalledTimes(2);
+});
