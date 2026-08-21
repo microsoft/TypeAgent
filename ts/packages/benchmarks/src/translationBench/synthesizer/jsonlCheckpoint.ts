@@ -4,6 +4,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { splitTranslationBenchCheckpointLines } from "../runner/scale.js";
+
 function fsyncDirectory(filePath: string): void {
     if (process.platform === "win32") return;
     const directory = fs.openSync(path.dirname(filePath), "r");
@@ -48,19 +50,9 @@ export function initializeSyncedJsonlFile(
 }
 
 export function readRecoverableJsonlLines(filePath: string): string[] {
-    const text = fs.readFileSync(filePath, "utf8");
-    if (text.length === 0) return [];
-    const lines = text.endsWith("\n")
-        ? text.slice(0, -1).split("\n")
-        : text.split("\n");
-    if (!text.endsWith("\n")) {
-        try {
-            JSON.parse(lines.at(-1)!);
-        } catch {
-            lines.pop();
-        }
-    }
-    return lines;
+    return splitTranslationBenchCheckpointLines(
+        fs.readFileSync(filePath, "utf8"),
+    );
 }
 
 /**
