@@ -323,7 +323,6 @@ async function main() {
     if (developerMode) {
         debugStartup("developer mode enabled at startup (--dev)");
     }
-
     debugStartup("creating conversation manager (will lockInstanceDir)");
     // Single PortRegistrar shared across every conversation in this
     // process. Lets external clients (browser extension, VS Code, CLI)

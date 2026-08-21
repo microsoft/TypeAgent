@@ -119,6 +119,23 @@ function forceKillServer(port: number): boolean {
     return true;
 }
 
+/**
+ * Optional identity for a client-hosted agent, for when several clients host
+ * the same agent name on one conversation. `instanceId` must survive
+ * reconnects, so the server replaces this client's instance instead of adding
+ * another.
+ */
+export type ClientAgentIdentity = {
+    instanceId?: string;
+    displayName?: string;
+    /**
+     * Opt in to sharing the agent name with other clients hosting the same
+     * schema. Off by default: a client that expects to be the only host keeps
+     * getting an error when a second one registers.
+     */
+    multiInstance?: boolean;
+};
+
 export type ConversationDispatcher = {
     dispatcher: Dispatcher;
     conversationId: string;
@@ -220,17 +237,29 @@ export type AgentServerConnection = {
      * rpc proxy that forwards calls back over the connection. Pass
      * `conversationId` to target a specific joined conversation, or omit it when
      * exactly one conversation is joined. Re-registering the same `name` (e.g.
-     * after {@link reconnect}) replaces the previous registration. Rejects if
-     * another client already registered `name` on the target conversation.
+     * after {@link reconnect}) replaces the previous registration.
+     *
+     * Several clients may register the same `name` on one conversation if they
+     * opt in with `multiInstance` and carry the same schema; each becomes an
+     * instance. Pass a stable `instanceId` so a reconnect replaces this
+     * client's instance instead of adding another.
      */
     registerClientAgent(
         name: string,
         manifest: AppAgentManifest,
         agent: AppAgent,
         conversationId?: string,
+        identity?: ClientAgentIdentity,
     ): Promise<void>;
-    /** Unregister an agent previously registered via registerClientAgent. */
-    unregisterClientAgent(name: string, conversationId?: string): Promise<void>;
+    /**
+     * Unregister an agent previously registered via registerClientAgent. The
+     * server only removes an instance this connection owns.
+     */
+    unregisterClientAgent(
+        name: string,
+        conversationId?: string,
+        instanceId?: string,
+    ): Promise<void>;
     /**
      * Reopen the underlying transport and rebind the control rpc onto it,
      * reusing this connection object instead of building a new one. Returns
@@ -588,6 +617,7 @@ export function createAgentServerConnection(
             manifest: AppAgentManifest,
             agent: AppAgent,
             conversationId?: string,
+            identity?: ClientAgentIdentity,
         ): Promise<void> {
             // Drop any previous rpc server for this name (e.g. re-registering
             // after a reconnect, where the old server sat on a stale channel).
@@ -605,6 +635,15 @@ export function createAgentServerConnection(
                     manifest,
                     agentInterface,
                     ...(conversationId !== undefined ? { conversationId } : {}),
+                    ...(identity?.instanceId !== undefined
+                        ? { instanceId: identity.instanceId }
+                        : {}),
+                    ...(identity?.displayName !== undefined
+                        ? { displayName: identity.displayName }
+                        : {}),
+                    ...(identity?.multiInstance !== undefined
+                        ? { multiInstance: identity.multiInstance }
+                        : {}),
                 });
             } catch (e) {
                 closeFn();
@@ -616,11 +655,13 @@ export function createAgentServerConnection(
         async unregisterClientAgent(
             name: string,
             conversationId?: string,
+            instanceId?: string,
         ): Promise<void> {
             try {
                 await rpc.invoke("unregisterClientAgent", {
                     name,
                     ...(conversationId !== undefined ? { conversationId } : {}),
+                    ...(instanceId !== undefined ? { instanceId } : {}),
                 });
             } finally {
                 clientAgentServers.get(name)?.();
