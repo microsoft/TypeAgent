@@ -149,6 +149,10 @@ Browser-shared RPC code reads active TypeAgent metadata through the
 `@typeagent/telemetry/traceContext` subpath. It does not import the Node-only
 telemetry composition root.
 
+The trace-context contract is browser-safe. Its Node export adds ambient
+context so logs-only processes retain request correlation when tracing is
+disabled.
+
 The trusted dispatcher RPC channel extends the same trace from a client host
 into agent-server request processing:
 
@@ -194,14 +198,11 @@ processable telemetry record.**
   auto-instrumentation.
 - Classify each LLM operation explicitly at the high-level call site. The
   central model wrapper records `typeagent.llm.phase`,
-  `typeagent.llm.purpose`, and `typeagent.llm.scope`; it never infers purpose
-  from prompt text, model output, timing, or token counts.
-- High-level classification contexts are complete. Nested operations may
-  override only the purpose while retaining their phase and scope.
-- A model call outside a classified operation records `unclassified` for all
-  three attributes and adds a `typeagent.llm.classification.missing` span
-  event. This makes missing instrumentation visible without failing the model
-  request.
+  `typeagent.llm.purpose`, `typeagent.llm.scope`, and
+  `typeagent.llm.classification_source`. Nested scopes inherit unspecified
+  values.
+- Unclassified calls use `unknown` phase and purpose, `foreground` scope, and
+  `default` classification source.
 
 ### Logs
 
@@ -687,6 +688,20 @@ Structured dispatcher records include events such as `command` and
 Prompt text, response text, action parameters, errors, stacks, and unknown
 dispatcher fields are excluded by the dispatcher projection.
 
+### LLM phase and purpose attribution
+
+`llm:started`, `llm:completed`, and the `typeagent.llm` span carry `phase`,
+`purpose`, `scope`, and `classificationSource`. `explicit` means a call site
+used `withChatModelTelemetryContext`; `default` means no call site classified
+the operation. Nested and retry calls inherit this context across async work.
+
+Known offline operations use background scope and a specific purpose. Detached
+workers and processes classify themselves at entry.
+
+Unclassified foreground calls emit one aggregate warning per minute. The
+warning contains only scope, count, and window length; it never includes model
+content or call-site identity.
+
 ### Phase-completion durations and translation routing
 
 Each phase-completion lifecycle event carries `elapsedMs`, measured at the
@@ -1051,9 +1066,10 @@ exception messages and stack traces are never exported.
 Each instrumented model call creates one `typeagent.llm` span. A returned
 failure result sets `ERROR` with `model returned failure`; a thrown failure
 records `ModelError` / `model call failed`, or `AbortError` / `cancelled` for a
-cancellation. Prompts, responses, and provider messages are never recorded.
-The matching `llm:completed` event carries the normalized failure
-classification.
+cancellation. Prompts, responses, and provider messages are never recorded on
+the span. Lifecycle logs summarize attribution, outcome, elapsed time, token
+count, and bounded failure classification without recording model content or
+stacks. Telemetry failures do not affect the model call.
 
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |

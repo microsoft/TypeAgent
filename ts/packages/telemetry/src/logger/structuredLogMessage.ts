@@ -47,6 +47,8 @@ export function getStructuredLogMessage(
             return `LLM started: ${formatLlmOperation(data)}${formatScope(data)}${formatModel(data)}${booleanValue(data, "streaming") ? " (streaming)" : ""}`;
         case "aiclient:llm:completed":
             return formatLlmCompleted(data);
+        case "aiclient:llm:classification:default":
+            return `${numberValue(data, "count", 0)} foreground LLM call(s) ran with default (unclassified) phase/purpose`;
         default:
             return undefined;
     }
@@ -134,7 +136,10 @@ function formatLlmCompleted(data: Record<string, unknown>): string {
 function formatLlmOperation(data: Record<string, unknown>): string {
     const phase = stringValue(data, "phase", "unknown");
     const purpose = stringValue(data, "purpose", "unknown");
-    return phase === purpose ? phase : `${phase}.${purpose}`;
+    const operation = phase === purpose ? phase : `${phase}.${purpose}`;
+    return data.classificationSource === "default"
+        ? `${operation} (unclassified)`
+        : operation;
 }
 
 function formatScope(data: Record<string, unknown>): string {

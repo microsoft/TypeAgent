@@ -50,11 +50,12 @@ export async function wrapRootRequestSpan<
         options?.parentContext ?? ROOT_CONTEXT,
         async (span) => {
             otel.setTypeAgentSpanAttributes(span, attributes);
-            return context.with(
+            return otel.runInTypeAgentTelemetryContext(
                 otel.setActiveTypeAgentSpanAttributes(
                     context.active(),
                     attributes,
                 ),
+                attributes,
                 async () => {
                     try {
                         const result = await body(span);
