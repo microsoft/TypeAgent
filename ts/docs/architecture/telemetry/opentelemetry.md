@@ -250,9 +250,11 @@ have matched. Redaction runs only after this bound and the result must also fit.
 
 The dispatcher places an allowlisted projection in front of `OtelLoggerSink`.
 Only bounded correlation identifiers, agent/schema/action names, state and
-reason fields, durations and counts, booleans, and command/schema-name arrays
-reach OTel. Prompt and response text, history, action parameters, errors and
-stacks, feedback comments and context, and all unknown fields are excluded.
+reason fields, the normalized failure classification
+(`errorCategory`/`errorCode`/`httpStatus`/`retryable`), durations and counts,
+booleans, and command/schema-name arrays reach OTel. Prompt and response text,
+history, action parameters, raw error names, messages and stacks, feedback
+comments and context, and all unknown fields are excluded.
 Other producers that attach `OtelLoggerSink` remain responsible for an
 equivalent source-specific projection. The sink applies known-secret and
 secret-format filtering as defense in depth, covering the promoted correlation
@@ -732,6 +734,38 @@ other fields are present only for decisions the code actually observed. The
 reduced local message appends `+llm` when a cache/grammar strategy still reached
 the model.
 
+### Failure classification
+
+Structured failure events use a small, shared classification instead of
+exporting error messages or stacks. This makes failures useful in telemetry
+without exposing user or provider content.
+
+The classification can include:
+
+- `errorCategory` - for example `authentication`, `rate_limit`, `network`,
+  `timeout`, `provider`, or `internal`.
+- `errorCode` - only for codes in the reviewed allowlist.
+- `httpStatus` - only for HTTP failure statuses.
+- `retryable` - when the failure is known to be safe to retry.
+
+Use `classifyTelemetryError` from `@typeagent/telemetry` rather than creating
+classification logic at individual call sites. It handles wrapped errors and
+unknown thrown values, and does not inspect free-text messages.
+
+Provider clients should attach a classification before converting a transport
+error into a returned failure result. This preserves useful details such as an
+HTTP status or network failure after the original error is no longer available.
+
+Cancellation is handled separately from failure classification. Spans and
+structured completion events use the same cancellation check, including wrapped
+abort errors and abort signals, so they report the same outcome. Cancelled events
+do not include failure classification fields.
+
+The dispatcher OTel projection exports only the normalized classification. Raw
+request and error details remain limited to local, explicitly enabled diagnostic
+sinks. Existing lifecycle messages show a short summary such as
+`rate_limit (HTTP 429, retryable)`.
+
 ### 5. Inspect the Same Logs in Grafana
 
 Open [http://localhost:3000](http://localhost:3000), select **Explore**, choose
@@ -892,7 +926,9 @@ await createDispatcher(hostName, {
 ```
 
 Original exception messages and stacks are omitted because they can contain user
-content. Record a stable classification and message at the catch site.
+content. Record a stable classification and message at the catch site. Use the
+shared helpers described in [Failure classification](#failure-classification)
+for structured events and span failures.
 
 ## Currently Captured Dispatcher Telemetry
 
@@ -1003,6 +1039,15 @@ operation before the span ends. Cancellation records the privacy-safe
 `AbortError` / `cancelled` exception classification and sets error status.
 Other escaping exceptions use `ReasoningError` / `reasoning failed`. Original
 exception messages and stack traces are never exported.
+
+### LLM span
+
+Each instrumented model call creates one `typeagent.llm` span. A returned
+failure result sets `ERROR` with `model returned failure`; a thrown failure
+records `ModelError` / `model call failed`, or `AbortError` / `cancelled` for a
+cancellation. Prompts, responses, and provider messages are never recorded.
+The matching `llm:completed` event carries the normalized failure
+classification.
 
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |

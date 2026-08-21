@@ -128,6 +128,82 @@ describe("getStructuredLogMessage", () => {
         );
     });
 
+    it("summarizes a failure from its classification, never its message", () => {
+        expect(
+            getStructuredLogMessage("dispatcher:command:exception", {
+                requestId: "request-1",
+                errorCategory: "rate_limit",
+                httpStatus: 429,
+                retryable: true,
+                // Present in the raw event for the private diagnostic sinks;
+                // never rendered.
+                request: "play some private music",
+                name: "Error",
+                message: "secret provider detail",
+                stack: "at secret()",
+            }),
+        ).toBe("Command failed: rate_limit (HTTP 429, retryable)");
+        expect(
+            getStructuredLogMessage("dispatcher:command:exception", {
+                errorCategory: "internal",
+            }),
+        ).toBe("Command failed: internal");
+        expect(
+            getStructuredLogMessage("dispatcher:command:exception", {
+                errorCategory: "network",
+                errorCode: "ECONNREFUSED",
+            }),
+        ).toBe("Command failed: network (ECONNREFUSED)");
+    });
+
+    it("appends the classification to failed completions only", () => {
+        expect(
+            getStructuredLogMessage("dispatcher:action:completed", {
+                status: "failed",
+                schemaName: "player",
+                actionName: "play",
+                elapsedMs: 4,
+                errorCategory: "timeout",
+                retryable: true,
+            }),
+        ).toBe("Action failed: player.play in 4 ms [timeout (retryable)]");
+        expect(
+            getStructuredLogMessage("dispatcher:translation:completed", {
+                status: "failed",
+                strategy: "translate",
+                actionNames: [],
+                errorCategory: "provider",
+                httpStatus: 500,
+                retryable: true,
+            }),
+        ).toBe(
+            "Translation failed via translate [provider (HTTP 500, retryable)]",
+        );
+        expect(
+            getStructuredLogMessage("aiclient:llm:completed", {
+                provider: "azure",
+                status: "failed",
+                elapsedMs: 12,
+                phase: "translation",
+                purpose: "action-generation",
+                scope: "foreground",
+                errorCategory: "rate_limit",
+                httpStatus: 429,
+                retryable: true,
+            }),
+        ).toBe(
+            "LLM failed: translation.action-generation (azure) in 12 ms [rate_limit (HTTP 429, retryable)]",
+        );
+        // Cancellations carry no classification, so the line is unchanged.
+        expect(
+            getStructuredLogMessage("dispatcher:action:completed", {
+                status: "cancelled",
+                schemaName: "player",
+                actionName: "play",
+            }),
+        ).toBe("Action cancelled: player.play");
+    });
+
     it("does not invent messages for diagnostic events", () => {
         expect(
             getStructuredLogMessage("debug", {
