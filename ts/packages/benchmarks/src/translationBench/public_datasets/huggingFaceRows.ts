@@ -64,6 +64,7 @@ function combineSignals(
 async function fetchPage(
     fetchImpl: typeof fetch,
     url: URL,
+    revision: string,
     attempts: number,
     retryDelayMs: number,
     requestTimeoutMs: number,
@@ -91,6 +92,11 @@ async function fetchPage(
         }
         if (response.ok) {
             try {
+                if (response.headers.get("x-revision") !== revision) {
+                    throw new Error(
+                        `Hugging Face rows API did not serve revision ${revision}`,
+                    );
+                }
                 return await response.json();
             } finally {
                 requestSignal.dispose();
@@ -167,7 +173,6 @@ export async function downloadHuggingFaceRows<Row>(
         while (expectedTotal === undefined || offset < expectedTotal) {
             const url = new URL(options.rowsApi ?? defaultRowsApi);
             url.searchParams.set("dataset", options.source.dataset);
-            url.searchParams.set("revision", options.source.revision);
             url.searchParams.set("config", options.source.config);
             url.searchParams.set("split", options.source.split);
             url.searchParams.set("offset", String(offset));
@@ -176,6 +181,7 @@ export async function downloadHuggingFaceRows<Row>(
                 await fetchPage(
                     fetchImpl,
                     url,
+                    options.source.revision,
                     retryAttempts,
                     retryDelayMs,
                     requestTimeoutMs,

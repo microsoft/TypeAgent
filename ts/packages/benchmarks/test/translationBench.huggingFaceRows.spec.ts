@@ -24,11 +24,23 @@ test("handles retries, cancellation, and atomic output", async () => {
         if (requests.length === 1) throw new TypeError("network failure");
         if (requests.length === 2) return new Response(null, { status: 503 });
         const offset = Number(url.searchParams.get("offset"));
-        return Response.json({ rows: [{ row: { id: offset + 1 } }], num_rows_total: 2 });
+        return Response.json(
+            { rows: [{ row: { id: offset + 1 } }], num_rows_total: 2 },
+            { headers: { "x-revision": "abc123" } },
+        );
     });
     await expect(downloadHuggingFaceRows({ source, outputPath, parseRow: (row) => row, fetch, pageSize: 1, retryDelayMs: 0, onProgress: (count) => progress.push(count) })).resolves.toBe(2);
-    expect(requests.every((url) => url.searchParams.get("revision") === "abc123")).toBe(true); expect(progress).toEqual([1, 2]);
+    expect(requests.every((url) => !url.searchParams.has("revision"))).toBe(true); expect(progress).toEqual([1, 2]);
     expect(await readFile(outputPath, "utf8")).toBe('{"id":1}\n{"id":2}\n');
+    const wrongRevisionDir = await directory();
+    const wrongRevision = jest.fn<typeof globalThis.fetch>(async () =>
+        Response.json(
+            { rows: [], num_rows_total: 0 },
+            { headers: { "x-revision": "latest" } },
+        ),
+    );
+    await expect(downloadHuggingFaceRows({ source, outputPath: join(wrongRevisionDir, "rows.jsonl"), parseRow: (row) => row, fetch: wrongRevision })).rejects.toThrow("did not serve revision abc123");
+    expect(await readdir(wrongRevisionDir)).toEqual([]);
     const failureDir = await directory(), preservedPath = join(failureDir, "rows.jsonl");
     await writeFile(preservedPath, "old");
     const notFound = jest.fn<typeof globalThis.fetch>(async () => new Response(null, { status: 404 }));
