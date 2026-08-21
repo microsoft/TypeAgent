@@ -42,8 +42,8 @@ import {
     appendTranslationBenchCheckpointRows,
     createTranslationBenchRunFingerprint,
     createTranslationBenchTranslationCheckpointRow,
+    mergeTranslationBenchExecutionCheckpoints,
     readTranslationBenchCheckpoint,
-    rebuildTranslationBenchRunResult,
     translationBenchResumeKey,
     type TranslationBenchCheckpoint,
     type TranslationBenchCheckpointHeader,
@@ -413,15 +413,13 @@ async function main(): Promise<void> {
     }
 
     if (checkpointState !== undefined && checkpointState.rows.length > 0) {
-        const fromCheckpoint = rebuildTranslationBenchRunResult(
-            checkpointState.rows
-                .filter((r) => r.phase === "translation")
-                .map((r) => r.value),
+        const fromCheckpoint = mergeTranslationBenchExecutionCheckpoints(
+            [checkpointState],
             {
                 schemaHashes: result.schemaHashes,
                 settings: result.settings,
             },
-        );
+        ).runResult;
         if (fromCheckpoint.rows.length >= result.rows.length) {
             result = fromCheckpoint;
         }
