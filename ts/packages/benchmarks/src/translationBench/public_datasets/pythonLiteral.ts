@@ -178,7 +178,14 @@ class PythonLiteralParser {
         if (character in simpleEscapes) {
             return { value: simpleEscapes[character]!, end: offset + 1 };
         }
-        const width = character === "x" ? 2 : character === "u" ? 4 : 0;
+        const width =
+            character === "x"
+                ? 2
+                : character === "u"
+                  ? 4
+                  : character === "U"
+                    ? 8
+                    : 0;
         if (width !== 0) {
             const digits = this.text.slice(offset + 1, offset + 1 + width);
             if (!new RegExp(`^[0-9a-fA-F]{${width}}$`).test(digits)) {
@@ -258,7 +265,7 @@ class PythonLiteralParser {
         if (
             !this.preserveNumberLexemes &&
             (!Number.isFinite(number) ||
-                (Number.isInteger(number) && !Number.isSafeInteger(number)))
+                (!/[.eE]/u.test(lexeme) && !Number.isSafeInteger(number)))
         ) {
             throw this.error("number requires preserveNumberLexemes", offset);
         }

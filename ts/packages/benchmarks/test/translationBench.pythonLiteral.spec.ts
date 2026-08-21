@@ -16,6 +16,8 @@ describe("Python literals", () => {
                 `{'text': 'line\\n', "items": [True, False, None, -1.25e+3,],}`,
             ),
         ).toEqual({ text: "line\n", items: [true, false, null, -1250] });
+        expect(parsePythonLiteral(`'\\U0001f600'`)).toBe("😀");
+        expect(parsePythonLiteral("[1e10, 101.0]")).toEqual([1e10, 101]);
     });
 
     it("supports offsets and preserved number lexemes", () => {
