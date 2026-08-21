@@ -609,9 +609,14 @@ export class RequestQueue {
                         startVersion,
                     ),
                 );
-                this.safeBroadcast("queueStateChanged", () =>
-                    this.broadcast.queueStateChanged(this.getSnapshot()),
-                );
+                // requestStarted can synchronously cancel the entry. In that case,
+                // cancelRunning already emitted the newer cancellation version; a
+                // running snapshot would resurrect it in client queue mirrors.
+                if (entry.cancelReason === undefined) {
+                    this.safeBroadcast("queueStateChanged", () =>
+                        this.broadcast.queueStateChanged(this.getSnapshot()),
+                    );
+                }
                 this.log("requestQueue:start", {
                     requestId: entry.requestId,
                     connectionId: entry.originatorConnectionId,

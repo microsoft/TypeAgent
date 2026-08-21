@@ -8,8 +8,10 @@ import { awaitCommand } from "@typeagent/dispatcher-types";
 import type {
     ClientIO,
     Dispatcher,
+    QueueSnapshot,
     RequestId,
 } from "@typeagent/dispatcher-types";
+import { QueueStateMirror } from "@typeagent/dispatcher-types";
 import type { LogEvent } from "@typeagent/telemetry";
 
 const captured: LogEvent[] = [];
@@ -54,15 +56,31 @@ const slowAgentProvider = {
 function createClientIO(): {
     clientIO: ClientIO;
     requestId: Promise<string>;
+    queueObservations: Array<{
+        event: "cancelled" | "snapshot";
+        running: string | null;
+    }>;
     cancelOnStart(callback: (() => void) | undefined): void;
 } {
     let resolveRequestId!: (id: string) => void;
     let onStart: (() => void) | undefined;
+    const mirror = new QueueStateMirror();
+    const queueObservations: Array<{
+        event: "cancelled" | "snapshot";
+        running: string | null;
+    }> = [];
+    const observe = (event: "cancelled" | "snapshot") => {
+        queueObservations.push({
+            event,
+            running: mirror.snapshot?.running?.requestId ?? null,
+        });
+    };
     const requestId = new Promise<string>((resolve) => {
         resolveRequestId = resolve;
     });
     return {
         requestId,
+        queueObservations,
         cancelOnStart(callback) {
             onStart = callback;
         },
@@ -87,7 +105,18 @@ function createClientIO(): {
             requestInteraction: () => {},
             interactionResolved: () => {},
             interactionCancelled: () => {},
-            requestStarted: () => onStart?.(),
+            requestStarted: (entry, version) => {
+                mirror.applyStarted(entry, version);
+                onStart?.();
+            },
+            requestCancelled: (id, _reason, version) => {
+                mirror.applyCancelled(id, version);
+                observe("cancelled");
+            },
+            queueStateChanged: (snapshot: QueueSnapshot) => {
+                mirror.applyQueueStateChanged(snapshot);
+                observe("snapshot");
+            },
             takeAction: (_requestId, action) => {
                 throw new Error(`Action ${action} not supported`);
             },
@@ -97,7 +126,8 @@ function createClientIO(): {
 
 describe("cancelCommandByClientId ordering", () => {
     let dispatcher: Dispatcher;
-    const { clientIO, requestId, cancelOnStart } = createClientIO();
+    const { clientIO, requestId, queueObservations, cancelOnStart } =
+        createClientIO();
 
     beforeAll(async () => {
         dispatcher = await createDispatcher("cancel-ordering", {
@@ -150,6 +180,7 @@ describe("cancelCommandByClientId ordering", () => {
 
     it("preserves cancellation when requestStarted races controller setup", async () => {
         const clientRequestId = "request-start-race";
+        queueObservations.length = 0;
         cancelOnStart(() =>
             dispatcher.cancelCommandByClientId(clientRequestId),
         );
@@ -163,6 +194,18 @@ describe("cancelCommandByClientId ordering", () => {
                     clientRequestId,
                 ),
             ).resolves.toMatchObject({ cancelled: true });
+            const cancelledIndex = queueObservations.findIndex(
+                ({ event }) => event === "cancelled",
+            );
+            expect(cancelledIndex).toBeGreaterThanOrEqual(0);
+            expect(
+                queueObservations
+                    .slice(cancelledIndex + 1)
+                    .some(
+                        ({ event, running }) =>
+                            event === "snapshot" && running !== null,
+                    ),
+            ).toBe(false);
         } finally {
             cancelOnStart(undefined);
         }

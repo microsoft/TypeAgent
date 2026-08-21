@@ -557,7 +557,7 @@ export function createRpc<
     let nextCallId = 0;
     const disconnectedInvoke = (
         methodName: keyof InvokeTargetFunctions,
-        ..._args: any[]
+        ..._args: unknown[]
     ): never => {
         const lifecycle = createLifecycleFields(
             "client",
