@@ -101,7 +101,9 @@ Analyze this script and generate a recipe JSON object:
 2. **description**: Concise description of what the script does.
 3. **displayName**: Human-readable name.
 4. **parameters**: Extract from the param() block if present. Map PowerShell types:
-   [string] -> "string", [int] -> "number", [bool]/[switch] -> "boolean", paths -> "path".
+   [string] -> "string", [int] -> "number", [bool]/[switch] -> "boolean",
+   filesystem paths -> "path", and values passed to executable command parameters
+   such as Start-Process -FilePath -> "executable".
    Include defaults from the param() block. If no param() block exists, infer likely
    parameters from hardcoded values in the script.
 5. **script.body**: Use the EXACT script content provided. Do NOT modify it.
@@ -122,7 +124,7 @@ Return ONLY a JSON object matching this schema (no markdown fences, no explanati
   "description": "what this script does",
   "displayName": "Human Readable Name",
   "parameters": [
-    { "name": "paramName", "type": "string|number|boolean|path", "required": true, "description": "...", "default": "optional default" }
+    { "name": "paramName", "type": "string|number|boolean|path|executable", "required": true, "description": "...", "default": "optional default" }
   ],
   "script": {
     "language": "powershell",

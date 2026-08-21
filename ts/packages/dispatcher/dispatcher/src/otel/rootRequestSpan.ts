@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    context,
     SpanStatusCode,
     ROOT_CONTEXT,
     trace,
@@ -43,34 +44,44 @@ export async function wrapRootRequestSpan<
         options?.parentContext ?? ROOT_CONTEXT,
         async (span) => {
             otel.setTypeAgentSpanAttributes(span, attributes);
-            try {
-                const result = await body(span);
-                if (result?.cancelled === true) {
-                    span.setStatus({
-                        code: SpanStatusCode.ERROR,
-                        message: "cancelled",
-                    });
-                }
-                return result;
-            } catch (e) {
-                // Detect AbortError before wrapping: DOMException is not
-                // always `instanceof Error` in Node, so we can't rely on
-                // err.name after the wrapping fallback below.
-                const isAbort =
-                    e !== null &&
-                    typeof e === "object" &&
-                    (e as { name?: unknown }).name === "AbortError";
-                const name = isAbort ? "AbortError" : "RequestError";
-                const message = isAbort ? "cancelled" : "request failed";
-                span.recordException({ name, message });
-                span.setStatus({
-                    code: SpanStatusCode.ERROR,
-                    message,
-                });
-                throw e;
-            } finally {
-                span.end();
-            }
+            return context.with(
+                otel.setActiveTypeAgentSpanAttributes(
+                    context.active(),
+                    attributes,
+                ),
+                async () => {
+                    try {
+                        const result = await body(span);
+                        if (result?.cancelled === true) {
+                            span.setStatus({
+                                code: SpanStatusCode.ERROR,
+                                message: "cancelled",
+                            });
+                        }
+                        return result;
+                    } catch (e) {
+                        // Detect AbortError before wrapping: DOMException is not
+                        // always `instanceof Error` in Node, so we can't rely on
+                        // err.name after the wrapping fallback below.
+                        const isAbort =
+                            e !== null &&
+                            typeof e === "object" &&
+                            (e as { name?: unknown }).name === "AbortError";
+                        const name = isAbort ? "AbortError" : "RequestError";
+                        const message = isAbort
+                            ? "cancelled"
+                            : "request failed";
+                        span.recordException({ name, message });
+                        span.setStatus({
+                            code: SpanStatusCode.ERROR,
+                            message,
+                        });
+                        throw e;
+                    } finally {
+                        span.end();
+                    }
+                },
+            );
         },
     );
 }

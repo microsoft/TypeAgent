@@ -8,10 +8,10 @@ import {
     generateActionActionFunctionJsonSchemas,
     parseToolsJsonSchema,
     toJSONParsedActionSchema,
-    validateAction,
     type ParsedActionSchema,
     type ParsedActionSchemaJSON,
 } from "@typeagent/action-schema";
+import { validateTranslationBenchGoldAction } from "./actionValidation.js";
 import type { SchemaTypeNames } from "@typeagent/agent-sdk";
 import { z } from "zod";
 
@@ -56,7 +56,25 @@ export interface TranslationBenchBenchmarkProbePayload {
     expectedActions: TranslationBenchBenchmarkAction[];
     order: TranslationBenchOrder;
     history?: ChatHistoryInput;
+    /**
+     * Per-expected-action soft-match specs consumed by the runner. Derived
+     * deterministically from the packaged parameter grader at finalize time
+     * (not authored by the LLM, not part of the canonical payload hash).
+     * Entry `i` scores `expectedActions[i]`; `undefined` = exact-match.
+     */
+    parameterScore?: Array<TranslationBenchParameterScoreSpec | undefined>;
 }
+
+export interface TranslationBenchParameterScoreSpec {
+    defaultMode: TranslationBenchParamFieldMode;
+    fields: Record<string, TranslationBenchParamFieldMode>;
+}
+
+export type TranslationBenchParamFieldMode =
+    | "exact"
+    | "exists"
+    | "nonempty"
+    | "ignore";
 
 export interface TranslationBenchPublicTurnLineage {
     dataset: string;
@@ -414,11 +432,19 @@ const actionSchema = z
         parameters: z.record(z.string(), z.unknown()).optional(),
     })
     .strict();
+const paramFieldModeSchema = z.enum(["exact", "exists", "nonempty", "ignore"]);
+const parameterScoreSpecSchema = z
+    .object({
+        defaultMode: paramFieldModeSchema,
+        fields: z.record(z.string(), paramFieldModeSchema),
+    })
+    .strict();
 const probePayloadShape = {
     utterance: z.string().trim().min(1),
     expectedActions: z.array(actionSchema),
     order: z.enum(["strict", "any"]),
     history: z.unknown().optional(),
+    parameterScore: z.array(parameterScoreSpecSchema.optional()).optional(),
 } as const;
 function validateHistory(
     probe: { history?: unknown },
@@ -2276,7 +2302,12 @@ function validateExpectedActions(
                 `${label} expects unknown existing TypeAgent action '${action.schemaName}.${action.actionName}'`,
             );
         }
-        validateAction(definition, action);
+        validateTranslationBenchGoldAction(definition, {
+            actionName: action.actionName,
+            ...(action.parameters !== undefined
+                ? { parameters: action.parameters }
+                : {}),
+        });
     }
 }
 

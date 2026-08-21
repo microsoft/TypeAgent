@@ -34,9 +34,11 @@
   },
   "dependencies": {
     "@azure/identity": "^4.10.0",
-    "@github/copilot-sdk": "1.0.5",
+    "@github/copilot-sdk": "1.0.9",
+    "@opentelemetry/api": "1.9.0",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
     "async": "^3.2.5",
     "debug": "^4.4.0",
     "typechat": "^0.1.1"

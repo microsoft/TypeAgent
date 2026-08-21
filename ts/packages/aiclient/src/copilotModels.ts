@@ -5,6 +5,7 @@ import {
     CopilotClient,
     RuntimeConnection,
     approveAll,
+    type ModelInfo,
     type SessionConfig,
 } from "@github/copilot-sdk";
 import { execSync } from "node:child_process";
@@ -26,7 +27,6 @@ import {
 import {
     CopilotApiSettings,
     copilotApiSettingsFromConfig,
-    COPILOT_FALLBACK_MODEL,
 } from "./copilotSettings.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
 import { EndpointPool, makeSingleMemberPool } from "./endpointPool.js";
@@ -311,63 +311,125 @@ export async function warmupCopilotFromConfig(): Promise<void> {
     }
 }
 
-// Cached per-model capability info, populated from client.listModels() once per
-// process. Used to (a) fall back to an available model when the configured one
-// isn't offered by the tenant, and (b) decide reasoningEffort (invalid for
-// non-reasoning models; forced to minimal for reasoning models on translation).
-const reasoningSupportCache = new Map<string, boolean>();
-let modelListPromise: Promise<void> | undefined;
+let modelListPromise: Promise<readonly ModelInfo[] | undefined> | undefined;
 
-async function ensureModelList(client: CopilotClient): Promise<void> {
+async function ensureModelList(
+    client: CopilotClient,
+): Promise<readonly ModelInfo[] | undefined> {
     if (modelListPromise === undefined) {
-        modelListPromise = (async () => {
-            try {
-                const models = await client.listModels();
-                for (const m of models) {
-                    reasoningSupportCache.set(
-                        m.id,
-                        m.capabilities?.supports?.reasoningEffort === true,
-                    );
-                }
-            } catch (err) {
-                debug(
-                    `listModels failed; model capabilities unknown: ${
-                        err instanceof Error ? err.message : String(err)
-                    }`,
-                );
-            }
-        })();
+        const pending = client.listModels().catch((err) => {
+            debug(
+                `listModels failed; model capabilities unknown: ${
+                    err instanceof Error ? err.message : String(err)
+                }`,
+            );
+            return undefined;
+        });
+        modelListPromise = pending;
+        const models = await pending;
+        if (models === undefined && modelListPromise === pending) {
+            modelListPromise = undefined;
+        }
+        return models;
     }
-    await modelListPromise;
+    return modelListPromise;
 }
 
-// Resolve the model to actually use for a session, falling back to
-// COPILOT_FALLBACK_MODEL when the requested model isn't offered by the tenant,
-// and reporting whether that model supports reasoning effort. When the model
-// list is unavailable (e.g. listModels failed), the requested model is used
-// as-is and reasoning support is left unknown.
+function isConcreteAvailableModel(model: ModelInfo): boolean {
+    return model.id !== "auto" && model.policy?.state !== "disabled";
+}
+
+function versionedFamily(
+    modelId: string,
+): { family: string; version: number[] } | undefined {
+    const match = /^(.*?)-(\d+(?:\.\d+)*)$/.exec(modelId);
+    if (match === null) return undefined;
+    return {
+        family: match[1],
+        version: match[2].split(".").map(Number),
+    };
+}
+
+function compareVersionsDescending(a: number[], b: number[]): number {
+    const count = Math.max(a.length, b.length);
+    for (let i = 0; i < count; i++) {
+        const difference = (b[i] ?? 0) - (a[i] ?? 0);
+        if (difference !== 0) return difference;
+    }
+    return 0;
+}
+
+export function selectCopilotModel(
+    requested: string,
+    fallbackModels: readonly string[],
+    models: readonly ModelInfo[],
+): ModelInfo | undefined {
+    const available = models.filter(isConcreteAvailableModel);
+    const byId = new Map(available.map((model) => [model.id, model]));
+
+    const requestedModel = byId.get(requested);
+    if (requestedModel !== undefined) return requestedModel;
+
+    for (const fallback of fallbackModels) {
+        const fallbackModel = byId.get(fallback);
+        if (fallbackModel !== undefined) return fallbackModel;
+    }
+
+    const requestedFamily = versionedFamily(requested);
+    if (requestedFamily !== undefined) {
+        const familyModels = available
+            .map((model) => ({
+                model,
+                version: versionedFamily(model.id),
+            }))
+            .filter(
+                (
+                    candidate,
+                ): candidate is {
+                    model: ModelInfo;
+                    version: { family: string; version: number[] };
+                } => candidate.version?.family === requestedFamily.family,
+            )
+            .sort((a, b) =>
+                compareVersionsDescending(a.version.version, b.version.version),
+            );
+        if (familyModels.length > 0) return familyModels[0].model;
+    }
+
+    return available.sort((a, b) => a.id.localeCompare(b.id))[0];
+}
+
+type ResolvedCopilotModel = {
+    model: string;
+    reasoningSupported: boolean | undefined;
+};
+
+// Resolve a concrete model for the direct HTTP transport. If model discovery
+// fails, preserve the requested model so endpoint acquisition can still work.
 async function resolveModel(
     client: CopilotClient,
-    requested: string,
-): Promise<{ model: string; reasoningSupported: boolean | undefined }> {
-    await ensureModelList(client);
-    if (reasoningSupportCache.size === 0) {
-        return { model: requested, reasoningSupported: undefined };
+    settings: CopilotApiSettings,
+): Promise<ResolvedCopilotModel | undefined> {
+    const models = await ensureModelList(client);
+    if (models === undefined) {
+        return { model: settings.modelName, reasoningSupported: undefined };
     }
-    if (reasoningSupportCache.has(requested)) {
-        return {
-            model: requested,
-            reasoningSupported: reasoningSupportCache.get(requested),
-        };
-    }
-    debug(
-        `model "${requested}" not available in this tenant; ` +
-            `falling back to "${COPILOT_FALLBACK_MODEL}"`,
+    const selected = selectCopilotModel(
+        settings.modelName,
+        settings.fallbackModels,
+        models,
     );
+    if (selected === undefined) return undefined;
+    if (selected.id !== settings.modelName) {
+        debug(
+            `model "${settings.modelName}" not available in this tenant; ` +
+                `falling back to "${selected.id}"`,
+        );
+    }
     return {
-        model: COPILOT_FALLBACK_MODEL,
+        model: selected.id,
         reasoningSupported:
-            reasoningSupportCache.get(COPILOT_FALLBACK_MODEL) ?? false,
+            selected.capabilities?.supports?.reasoningEffort === true,
     };
 }
 
@@ -388,7 +450,7 @@ function buildSessionConfig(
             | undefined) ?? settings.reasoningEffort;
     // Simple translation calls don't benefit from model-side "thinking" and it
     // adds significant latency, so we disable it wherever possible:
-    //  - Non-reasoning models (e.g. claude-haiku-4.5): never send reasoningEffort.
+    //  - Non-reasoning models: never send reasoningEffort.
     //    The SDK/CLI rejects it for models where capabilities.supports.reasoningEffort
     //    is false, and these models don't think anyway.
     //  - Reasoning-capable models with no explicit override: force the lowest
@@ -473,10 +535,7 @@ function mapEndpoint(ep: SdkProviderEndpoint, model: string): CopilotEndpoint {
 }
 
 // Acquire a fresh endpoint snapshot through a short-lived SDK session. Passing a
-// concrete `modelId` binds the endpoint to that model; when the requested model
-// isn't offered by the tenant (resolveModel falls back to "auto"), we throw
-// `CopilotEndpointUnavailableError` rather than dealing with an auto-bound
-// session token.
+// concrete `modelId` binds the endpoint and its token to that model.
 async function acquireEndpoint(
     settings: CopilotApiSettings,
 ): Promise<CopilotEndpoint> {
@@ -490,11 +549,31 @@ async function acquireEndpoint(
         cliPath: settings.cliPath,
         cliUrl: settings.cliUrl,
     });
-    const resolved = await resolveModel(client, settings.modelName);
-    if (resolved.model === COPILOT_FALLBACK_MODEL) {
+    try {
+        return await acquireEndpointForCurrentModelList(client, settings);
+    } catch (err) {
+        if (!isModelUnavailableError(err)) throw err;
+        modelListPromise = undefined;
+        return acquireEndpointForCurrentModelList(client, settings);
+    }
+}
+
+function isModelUnavailableError(err: unknown): boolean {
+    const message = err instanceof Error ? err.message : String(err);
+    return /model.*(?:not available|unavailable|not found|disabled)/i.test(
+        message,
+    );
+}
+
+async function acquireEndpointForCurrentModelList(
+    client: CopilotClient,
+    settings: CopilotApiSettings,
+): Promise<CopilotEndpoint> {
+    const resolved = await resolveModel(client, settings);
+    if (resolved === undefined) {
         throw new CopilotEndpointUnavailableError(
-            `Model "${settings.modelName}" is not available in this tenant; ` +
-                `the HTTP transport requires a concrete model.`,
+            `Model "${settings.modelName}" is not available in this tenant, ` +
+                `and no concrete fallback model was found.`,
         );
     }
     const tCreate = Date.now();

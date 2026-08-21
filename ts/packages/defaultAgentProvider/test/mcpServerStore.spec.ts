@@ -16,9 +16,12 @@ function tmpInstanceDir(): string {
 
 function makeConfig(name: string): NormalizedMcpServerConfig {
     return {
+        id: name,
         name,
         scope: "user",
         trust: "trusted",
+        enabled: true,
+        provenance: { source: "test" },
         transport: { kind: "stdio", command: "node", args: ["server.js"] },
     };
 }
@@ -62,6 +65,39 @@ describe("mcpServers.json store", () => {
         const second = openMcpServerStore(dir);
         expect(second.has("beta")).toBe(true);
         expect(second.get("beta")).toEqual(makeConfig("beta"));
+    });
+
+    it("migrates legacy name-keyed records with safe defaults", () => {
+        const dir = tmpInstanceDir();
+        fs.writeFileSync(
+            path.join(dir, "mcpServers.json"),
+            JSON.stringify({
+                servers: {
+                    legacy: {
+                        name: "legacy display",
+                        transport: { kind: "stdio", command: "legacy" },
+                    },
+                },
+            }),
+        );
+
+        const store = openMcpServerStore(dir);
+        expect(store.get("legacy")).toEqual({
+            id: "legacy",
+            name: "legacy display",
+            enabled: true,
+            trust: "untrusted",
+            scope: "user",
+            provenance: {
+                source: "legacy-mcpServers.json",
+                sourceKind: "legacy",
+                ref: "legacy",
+            },
+            transport: { kind: "stdio", command: "legacy" },
+        });
+        expect(readMcpServersJson(dir)?.servers.legacy).toEqual(
+            store.get("legacy"),
+        );
     });
 
     it("drops reserved-name collisions on open", () => {

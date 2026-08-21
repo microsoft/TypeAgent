@@ -2470,6 +2470,43 @@ describe("installed agent source api (install/uninstall/update)", () => {
         expect(fs.existsSync(sharedDir)).toBe(false);
     });
 
+    it("MCP cleanup keeps an owned path until the final config reference is removed", () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const sharedDir = path.join(
+            instanceDir,
+            "installedAgents",
+            "mcp",
+            "shared",
+        );
+        fs.mkdirSync(sharedDir, { recursive: true });
+        const firstConfig = {
+            id: "first",
+            provenance: { ownedPaths: [sharedDir] },
+        } as any;
+        const secondConfig = {
+            id: "second",
+            provenance: { ownedPaths: [sharedDir] },
+        } as any;
+        const configs = [firstConfig, secondConfig];
+        const installer = createDefaultInstalledAgentSource(
+            instanceDir,
+            undefined,
+            undefined,
+            undefined,
+            {
+                listServers: () => configs,
+            } as any,
+        ).testApi;
+
+        configs.splice(0, 1);
+        installer.cleanupMcp!(firstConfig);
+        expect(fs.existsSync(sharedDir)).toBe(true);
+
+        configs.pop();
+        installer.cleanupMcp!(secondConfig);
+        expect(fs.existsSync(sharedDir)).toBe(false);
+    });
+
     it("unsupported path update does not prune a shared root", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const installer =
@@ -2776,5 +2813,107 @@ describe("structural manifest check on install/update (5.3)", () => {
         ).rejects.toThrow();
         expect(readAgentsJson(instanceDir)?.agents.p).toBeUndefined();
         expect(installedNames(built)).not.toContain("p");
+    });
+});
+
+describe("installed record its source can no longer resolve", () => {
+    // Install a catalog-sourced agent, then delete its catalog key: the record
+    // stays in agents.json but a fresh source construction can no longer
+    // re-resolve it - the "agent removed from the catalog since install" case.
+    async function installThenDropCatalogKey(): Promise<string> {
+        const instanceDir = catalogPathInstanceDir("cat", "cat-mod", true);
+        const built = createDefaultInstalledAgentSource(instanceDir).testApi;
+        await built.install("x", "cat-mod", "cat", noopHost);
+        fs.writeFileSync(
+            path.join(instanceDir, "catalog.json"),
+            JSON.stringify({ agents: {} }),
+        );
+        return instanceDir;
+    }
+
+    // Build the source with console.warn captured, so the startup warning does
+    // not pollute the test output.
+    function buildCapturingWarnings(instanceDir: string): {
+        built: ReturnType<typeof createDefaultInstalledAgentSource>;
+        warnings: string[];
+    } {
+        const warnings: string[] = [];
+        const originalWarn = console.warn;
+        console.warn = (message: string) => {
+            warnings.push(message);
+        };
+        try {
+            return {
+                built: createDefaultInstalledAgentSource(instanceDir),
+                warnings,
+            };
+        } finally {
+            console.warn = originalWarn;
+        }
+    }
+
+    it("is skipped with a warning instead of failing source construction", async () => {
+        const instanceDir = await installThenDropCatalogKey();
+        const { built, warnings } = buildCapturingWarnings(instanceDir);
+
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toMatch(/Installed agent 'x' is not available/);
+        expect(warnings[0]).toMatch(/@package uninstall x/);
+
+        // The agent is not vended to a connecting session...
+        const connection = built.connect(noopHost);
+        const names = (await connection.providers).flatMap((p) =>
+            p.getAppAgentNames(),
+        );
+        expect(names).not.toContain("x");
+        connection.dispose();
+
+        // ...but the record is kept (unresolvability can be transient).
+        expect(readAgentsJson(instanceDir)?.agents.x).toBeDefined();
+        expect(installedNames(built.testApi)).toContain("x");
+    });
+
+    it("resolves again once its source is repaired", async () => {
+        const instanceDir = await installThenDropCatalogKey();
+        buildCapturingWarnings(instanceDir);
+        fs.writeFileSync(
+            path.join(instanceDir, "catalog.json"),
+            JSON.stringify({ agents: { cat: { path: "catalog-package" } } }),
+        );
+
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const connection = built.connect(noopHost);
+        const names = (await connection.providers).flatMap((p) =>
+            p.getAppAgentNames(),
+        );
+        expect(names).toContain("x");
+        connection.dispose();
+    });
+
+    it("can be uninstalled (nothing to tear down, record dropped)", async () => {
+        const instanceDir = await installThenDropCatalogKey();
+        const { built } = buildCapturingWarnings(instanceDir);
+
+        const outcomes: string[] = [];
+        await built.testApi.uninstall("x", noopHost, (status) =>
+            outcomes.push(status),
+        );
+
+        expect(outcomes).toEqual(["uninstalled"]);
+        expect(readAgentsJson(instanceDir)?.agents.x).toBeUndefined();
+        expect(installedNames(built.testApi)).not.toContain("x");
+    });
+
+    it("reports why an update cannot run", async () => {
+        const instanceDir = await installThenDropCatalogKey();
+        const { built } = buildCapturingWarnings(instanceDir);
+
+        await expect(
+            built.testApi.update("x", undefined, noopHost),
+        ).rejects.toThrow(
+            /could not be loaded from its install source[\s\S]*@package uninstall x/,
+        );
+        // The record is left alone for the retry after the source is fixed.
+        expect(readAgentsJson(instanceDir)?.agents.x).toBeDefined();
     });
 });

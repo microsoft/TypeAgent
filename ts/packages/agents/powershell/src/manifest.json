@@ -11,6 +11,46 @@
     "schemaType": "PowerShellActions"
   },
   "subActionManifests": {
+    "powershell-files": {
+      "defaultEnabled": true,
+      "schema": {
+        "description": "PowerShell actions for listing, reading, writing, copying, moving, deleting, searching, and creating files and directories.",
+        "originalSchemaFile": "./namespaces/files/filesActionsSchema.mts",
+        "schemaFile": "../dist/filesSchema.pas.json",
+        "grammarFile": "../dist/filesSchema.ag.json",
+        "schemaType": "PowerShellFilesActions"
+      }
+    },
+    "powershell-processes": {
+      "defaultEnabled": true,
+      "schema": {
+        "description": "PowerShell actions for listing, inspecting, starting, stopping, and waiting for processes.",
+        "originalSchemaFile": "./namespaces/processes/processesActionsSchema.mts",
+        "schemaFile": "../dist/processesSchema.pas.json",
+        "grammarFile": "../dist/processesSchema.ag.json",
+        "schemaType": "PowerShellProcessesActions"
+      }
+    },
+    "powershell-system": {
+      "defaultEnabled": true,
+      "schema": {
+        "description": "PowerShell actions for system information, disk usage, updates, uptime, and environment variables.",
+        "originalSchemaFile": "./namespaces/system/systemActionsSchema.mts",
+        "schemaFile": "../dist/systemSchema.pas.json",
+        "grammarFile": "../dist/systemSchema.ag.json",
+        "schemaType": "PowerShellSystemActions"
+      }
+    },
+    "powershell-services": {
+      "defaultEnabled": true,
+      "schema": {
+        "description": "PowerShell actions for listing, inspecting, starting, stopping, and restarting Windows services.",
+        "originalSchemaFile": "./namespaces/services/servicesActionsSchema.mts",
+        "schemaFile": "../dist/servicesSchema.pas.json",
+        "grammarFile": "../dist/servicesSchema.ag.json",
+        "schemaType": "PowerShellServicesActions"
+      }
+    },
     "powershell-network": {
       "defaultEnabled": true,
       "schema": {
@@ -19,6 +59,26 @@
         "schemaFile": "../dist/networkSchema.pas.json",
         "grammarFile": "../dist/networkSchema.ag.json",
         "schemaType": "PowerShellNetworkActions"
+      }
+    },
+    "powershell-data": {
+      "defaultEnabled": true,
+      "schema": {
+        "description": "PowerShell actions for reading, writing, filtering, and converting JSON and CSV data.",
+        "originalSchemaFile": "./namespaces/data/dataActionsSchema.mts",
+        "schemaFile": "../dist/dataSchema.pas.json",
+        "grammarFile": "../dist/dataSchema.ag.json",
+        "schemaType": "PowerShellDataActions"
+      }
+    },
+    "powershell-archives": {
+      "defaultEnabled": true,
+      "schema": {
+        "description": "PowerShell actions for compressing and extracting ZIP archives.",
+        "originalSchemaFile": "./namespaces/archives/archivesActionsSchema.mts",
+        "schemaFile": "../dist/archivesSchema.pas.json",
+        "grammarFile": "../dist/archivesSchema.ag.json",
+        "schemaType": "PowerShellArchivesActions"
       }
     }
   }

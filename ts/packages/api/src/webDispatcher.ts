@@ -16,8 +16,7 @@ import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import {
     getDefaultAppAgentProviders,
-    getDefaultAppAgentSource,
-    getMcpAppAgentSource,
+    getDefaultAppAgentSources,
     getDefaultConstructionProvider,
     getIndexingServiceRegistry,
 } from "default-agent-provider";
@@ -35,7 +34,9 @@ export interface WebDispatcher {
     handleAction(action: FullAction): Promise<CommandResult>;
 }
 
-export async function createWebDispatcher(): Promise<WebDispatcher> {
+export async function createWebDispatcher(
+    structuredLogs: boolean,
+): Promise<WebDispatcher> {
     let ws: WebSocket | null = null;
     const clientIOChannel = createChannelAdapter((message: any) =>
         ws?.send(
@@ -52,18 +53,18 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
     const clientIO = createClientIORpcClient(clientIOChannel.channel);
     const dispatcher = await createDispatcher("api", {
         appAgentProviders: getDefaultAppAgentProviders(instanceDir),
-        appAgentSources: [
-            getDefaultAppAgentSource(instanceDir, {
-                excludePathSources: true,
-            }),
-            getMcpAppAgentSource(instanceDir),
-        ],
+        appAgentSources: getDefaultAppAgentSources(instanceDir, {
+            excludePathSources: true,
+        }),
         persistSession: true,
         persistDir: instanceDir,
         storageProvider: getFsStorageProvider(),
         metrics: true,
         dblogging: true,
         traceId: getTraceId(),
+        telemetry: {
+            structuredLogs,
+        },
         clientIO: clientIO,
         constructionProvider: getDefaultConstructionProvider(),
         indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),

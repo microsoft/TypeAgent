@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    fromJSONParsedActionSchema,
-    validateAction,
-} from "@typeagent/action-schema";
+import { fromJSONParsedActionSchema } from "@typeagent/action-schema";
 import { z } from "zod";
 
 import {
@@ -23,6 +20,7 @@ import {
     type TranslationBenchActionShapePolicy,
 } from "./actionShape.js";
 import { stripEmptyGoldPlaceholders } from "./goldParameterHygiene.js";
+import { validateTranslationBenchGoldAction } from "./actionValidation.js";
 
 export interface TranslationBenchGeneratedCase {
     id: string;
@@ -230,7 +228,7 @@ export function parseTranslationBenchGeneratedCandidate(
                     `${path} must contain only the scheduled target action`,
                 );
             }
-            validateAction(definition, {
+            validateTranslationBenchGoldAction(definition, {
                 actionName: context.targetAction.actionName,
                 ...(action.parameters !== undefined
                     ? { parameters: action.parameters }
@@ -291,13 +289,18 @@ function stripEmptyGoldPlaceholdersFromActions(
     actions: TranslationBenchBenchmarkAction[],
 ): TranslationBenchBenchmarkAction[] {
     return actions.map((action) => {
+        if (action.parameters === undefined) {
+            return action;
+        }
         const { parameters } = stripEmptyGoldPlaceholders(action.parameters);
         if (parameters === action.parameters) {
             return action;
         }
         if (parameters === undefined) {
-            const { parameters: _drop, ...rest } = action;
-            return rest;
+            // Keep parameters:{} when nested empties strip to nothing. Schemas
+            // like code.getSelection / desktop.ListThemes require the key
+            // (empty object type); dropping it fails validateAction.
+            return { ...action, parameters: {} };
         }
         return { ...action, parameters };
     });

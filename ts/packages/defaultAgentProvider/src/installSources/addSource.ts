@@ -14,6 +14,7 @@ import {
     FeedSourceConfig,
     McpConfigSourceConfig,
     PathSourceConfig,
+    RegistrySourceConfig,
 } from "./config.js";
 import { DefaultInstallSourceRegistry } from "./registry.js";
 import { expandHome } from "./paths.js";
@@ -35,9 +36,28 @@ function validateFeedRegistry(url: string): void {
     } catch {
         throw new Error(`'${url}' is not a well-formed URL`);
     }
+
     if (parsed.protocol !== "https:") {
         throw new Error(`feed registry URL must be https: '${url}'`);
     }
+}
+
+function validateRegistryUrl(url: string): string {
+    let parsed: URL;
+    try {
+        parsed = new URL(url);
+    } catch {
+        throw new Error(`'${url}' is not a well-formed URL`);
+    }
+    if (parsed.protocol !== "https:") {
+        throw new Error(`MCP Registry URL must be https: '${url}'`);
+    }
+    parsed.search = "";
+    parsed.hash = "";
+    if (!parsed.pathname.endsWith("/")) {
+        parsed.pathname += "/";
+    }
+    return parsed.toString();
 }
 
 function validateCatalogFile(catalog: string): void {
@@ -208,6 +228,7 @@ class McpConfigAddCommandHandler implements CommandHandler {
                 "--file <path> is required for an mcp-config source",
             );
         }
+
         const normalizedFile = normalizeAbsolutePath(file);
         try {
             JSON.parse(fs.readFileSync(normalizedFile, "utf8"));
@@ -218,6 +239,7 @@ class McpConfigAddCommandHandler implements CommandHandler {
                     `MCP config file '${normalizedFile}' is not accessible: ${err.message}`,
                 );
             }
+
             throw new Error(
                 `MCP config '${normalizedFile}' is not valid JSON: ${err.message}`,
             );
@@ -229,6 +251,53 @@ class McpConfigAddCommandHandler implements CommandHandler {
         };
         this.registry.add(config);
         displayResult(`Added mcp-config source '${name}'.`, context);
+    }
+}
+
+class RegistryAddCommandHandler implements CommandHandler {
+    public readonly description = "Add an MCP Registry v0.1 install source";
+    public readonly parameters = {
+        args: {
+            name: { description: "Unique source name", type: "string" },
+        },
+        flags: {
+            url: {
+                description: "MCP Registry base URL (https)",
+                char: "u",
+                type: "string",
+            },
+            "cache-ttl": {
+                description: "Metadata cache TTL in seconds",
+                type: "number",
+                optional: true,
+            },
+        },
+    } as const;
+    constructor(private readonly registry: DefaultInstallSourceRegistry) {}
+    public async run(
+        context: ActionContext<unknown>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const url = params.flags.url;
+        if (url === undefined) {
+            throw new Error(
+                "--url <https-url> is required for a registry source",
+            );
+        }
+        const ttlSeconds = params.flags["cache-ttl"];
+        if (ttlSeconds !== undefined && ttlSeconds <= 0) {
+            throw new Error("--cache-ttl must be greater than zero");
+        }
+        const config: RegistrySourceConfig = {
+            kind: "registry",
+            name: params.args.name,
+            baseUrl: validateRegistryUrl(url),
+            ...(ttlSeconds === undefined
+                ? {}
+                : { cacheTtlMs: ttlSeconds * 1000 }),
+        };
+        this.registry.add(config);
+        displayResult(`Added registry source '${params.args.name}'.`, context);
     }
 }
 
@@ -247,6 +316,7 @@ export function getAddSourceCommandHandlers(
             catalog: new CatalogAddCommandHandler(registry),
             path: new PathAddCommandHandler(registry),
             "mcp-config": new McpConfigAddCommandHandler(registry),
+            registry: new RegistryAddCommandHandler(registry),
         },
     };
 }

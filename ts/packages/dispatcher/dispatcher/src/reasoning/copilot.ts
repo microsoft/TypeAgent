@@ -16,9 +16,12 @@ import {
     CopilotClient,
     RuntimeConnection,
     defineTool,
-    approveAll,
     type AssistantMessageEvent,
     type CopilotSession,
+    type PermissionHandler,
+    type PermissionRequest,
+    type PermissionRequestResult,
+    type MessageOptions,
     type SessionConfig,
 } from "@github/copilot-sdk";
 import registerDebug from "debug";
@@ -74,6 +77,15 @@ import {
     runInReasoningSpan,
 } from "../otel/reasoningSpan.js";
 import { getReasoningProfileGuidance } from "./reasoningProfile.js";
+import {
+    createCodingCompletionTracker,
+    type CodingCompletionTracker,
+} from "./codingCompletion.js";
+import {
+    getCodingSessionMaxAgeMs,
+    pruneStaleCodingSessions,
+} from "./codingSessionLifecycle.js";
+import { getCodingAttachmentPaths } from "./codingContext.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -104,6 +116,14 @@ export async function sendAndWaitWithCancellation(
     prompt: string,
     signal: AbortSignal | undefined,
 ): Promise<AssistantMessageEvent | undefined> {
+    return sendMessageAndWaitWithCancellation(session, { prompt }, signal);
+}
+
+async function sendMessageAndWaitWithCancellation(
+    session: CopilotSession,
+    message: MessageOptions,
+    signal: AbortSignal | undefined,
+): Promise<AssistantMessageEvent | undefined> {
     const timeoutMs = resolveReasoningTimeoutMs();
     const timeoutController = new AbortController();
     const timeout =
@@ -116,7 +136,7 @@ export async function sendAndWaitWithCancellation(
                   timeoutMs,
               )
             : undefined;
-    const waitPromise = session.sendAndWait({ prompt }, MAX_SETTIMEOUT_MS);
+    const waitPromise = session.sendAndWait(message, MAX_SETTIMEOUT_MS);
     try {
         return await withAbortSignal(
             withAbortSignal(waitPromise, signal),
@@ -237,6 +257,17 @@ const copilotClientPromises = new WeakMap<object, Promise<CopilotClient>>();
 
 // Track Copilot session IDs per dispatcher instance (mirrors Claude's session tracking)
 const copilotSessionIds = new WeakMap<object, string>();
+
+function generateCodingSessionId(
+    context: ActionContext<CommandHandlerContext>,
+): string {
+    const sessionDirPath =
+        context.sessionContext.agentContext.session.getSessionDirPath();
+    const sessionName = sessionDirPath
+        ? (sessionDirPath.split(/[/\\]/).pop() ?? "default")
+        : "default";
+    return `typeagent-code-${sessionName}-${Date.now()}`;
+}
 
 /**
  * Get the stored session ID for this dispatcher context
@@ -422,6 +453,17 @@ async function createCopilotClient(
         debug("Starting Copilot client...");
         await client.start();
         debug("Copilot client started successfully");
+        try {
+            const pruned = await pruneStaleCodingSessions(
+                client,
+                getCodingSessionMaxAgeMs(),
+            );
+            if (pruned > 0) {
+                debug(`Pruned ${pruned} stale TypeAgent coding session(s)`);
+            }
+        } catch (error) {
+            debug("Failed to prune stale TypeAgent coding sessions:", error);
+        }
 
         // Register cleanup on process exit
         process.on("exit", () => {
@@ -682,6 +724,404 @@ async function copilotSubagentResult(
             resultType: "failure" as const,
             error: message,
         };
+    }
+}
+
+export function getCopilotPermissionDefault(
+    request: PermissionRequest,
+): PermissionRequestResult | undefined {
+    if (request.managedApprovalRequired === true) {
+        return undefined;
+    }
+    if (request.kind === "read" && request.requestSandboxBypass !== true) {
+        return { kind: "approve-once" };
+    }
+    if (request.kind === "mcp" && request.readOnly === true) {
+        return { kind: "approve-once" };
+    }
+    if (
+        request.kind === "shell" &&
+        request.requestSandboxBypass !== true &&
+        request.hasWriteFileRedirection === false &&
+        request.commands.length > 0 &&
+        request.commands.every((command) => command.readOnly)
+    ) {
+        return { kind: "approve-once" };
+    }
+    return undefined;
+}
+
+function createCopilotPermissionHandler(
+    context: ActionContext<CommandHandlerContext>,
+    allowedRoot?: string,
+): PermissionHandler {
+    return async (request) => {
+        const scopeViolation = getCopilotPermissionScopeViolation(
+            request,
+            allowedRoot,
+        );
+        if (scopeViolation !== undefined) {
+            return {
+                kind: "reject",
+                feedback: scopeViolation,
+            };
+        }
+        const safe = getCopilotPermissionDefault(request);
+        if (safe !== undefined) {
+            return safe;
+        }
+        const identity =
+            request.kind === "mcp"
+                ? `MCP tool '${request.serverName}/${request.toolName}'`
+                : `Copilot ${request.kind} operation`;
+        const choice = await context.sessionContext.popupQuestion(
+            `${identity} requests sensitive permission. Allow this request once?`,
+            ["Allow once", "Deny"],
+            1,
+        );
+        return choice === 0
+            ? { kind: "approve-once" }
+            : {
+                  kind: "reject",
+                  feedback: "Denied by the TypeAgent host permission policy.",
+              };
+    };
+}
+
+function isPathWithinRoot(candidatePath: string, root: string): boolean {
+    const resolvedRoot = realpathSync(root);
+    const resolvedCandidate = path.isAbsolute(candidatePath)
+        ? path.resolve(candidatePath)
+        : path.resolve(resolvedRoot, candidatePath);
+    let existing = resolvedCandidate;
+    while (!existsSync(existing)) {
+        const parent = path.dirname(existing);
+        if (parent === existing) {
+            return false;
+        }
+        existing = parent;
+    }
+    const realExisting = realpathSync(existing);
+    const realRelative = path.relative(resolvedRoot, realExisting);
+    return (
+        realRelative === "" ||
+        (!realRelative.startsWith("..") && !path.isAbsolute(realRelative))
+    );
+}
+
+export function getCopilotPermissionScopeViolation(
+    request: PermissionRequest,
+    allowedRoot: string | undefined,
+): string | undefined {
+    if (allowedRoot === undefined) {
+        return undefined;
+    }
+    const paths =
+        request.kind === "read"
+            ? [request.path]
+            : request.kind === "write"
+              ? [request.fileName]
+              : request.kind === "shell"
+                ? request.possiblePaths
+                : [];
+    const outside = paths.find(
+        (candidate) => !isPathWithinRoot(candidate, allowedRoot),
+    );
+    return outside === undefined
+        ? undefined
+        : `Access outside the authorized coding root is not allowed: ${outside}`;
+}
+
+type CodingAffinity = NonNullable<CommandHandlerContext["codingAffinity"]>;
+
+type CodingSessionEvents = {
+    streamedContent: string;
+    finalContent: string;
+    taskComplete?: {
+        success?: boolean;
+        summary?: string;
+        outcome?: string;
+    };
+};
+
+function createCodingSessionConfig(
+    context: ActionContext<CommandHandlerContext>,
+    codingAffinity: CodingAffinity,
+    completionTracker: CodingCompletionTracker,
+): SessionConfig {
+    const config: SessionConfig = {
+        clientName: "TypeAgent Coding",
+        model: resolveModel(context),
+        streaming: true,
+        workingDirectory: codingAffinity.workingDirectory,
+        onPermissionRequest: createCopilotPermissionHandler(
+            context,
+            codingAffinity.workingDirectory,
+        ),
+        hooks: {
+            onPreToolUse: (input) => {
+                completionTracker.onToolStart(input.toolName, input.toolArgs);
+            },
+            onPostToolUse: (input) => {
+                completionTracker.onToolSuccess(input.toolName, input.toolArgs);
+            },
+            onPostToolUseFailure: (input) => {
+                completionTracker.onToolFailure(input.toolName, input.toolArgs);
+            },
+            onAgentStop: (input) =>
+                completionTracker.onAgentStop(input.stopHookActive),
+        },
+    };
+    const reasoningEffort = resolveReasoningEffort(context);
+    if (reasoningEffort !== undefined) {
+        config.reasoningEffort = reasoningEffort;
+    }
+    return config;
+}
+
+async function getOrCreateCodingSession(
+    client: CopilotClient,
+    config: SessionConfig,
+    codingAffinity: CodingAffinity,
+    context: ActionContext<CommandHandlerContext>,
+): Promise<CopilotSession> {
+    let session: CopilotSession | undefined;
+    if (codingAffinity.copilotSessionId !== undefined) {
+        try {
+            session = await client.resumeSession(
+                codingAffinity.copilotSessionId,
+                config,
+            );
+        } catch (error) {
+            debug(
+                "Failed to resume code-mode session; creating a new one:",
+                error,
+            );
+        }
+    }
+    if (session === undefined) {
+        const sessionId = generateCodingSessionId(context);
+        session = await createCopilotSession(client, sessionId, config);
+        codingAffinity.copilotSessionId = sessionId;
+    }
+    if (session === undefined) {
+        throw new Error("Failed to create the Copilot code-mode session.");
+    }
+    return session;
+}
+
+function subscribeCodingSession(
+    session: CopilotSession,
+    context: ActionContext<CommandHandlerContext>,
+): { events: CodingSessionEvents; unsubscribe: () => void } {
+    const events: CodingSessionEvents = {
+        streamedContent: "",
+        finalContent: "",
+    };
+    const unsubscribeDelta = session.on("assistant.message_delta", (event) => {
+        events.streamedContent += event.data.deltaContent ?? "";
+        context.actionIO.appendDisplay(
+            { type: "markdown", content: events.streamedContent },
+            "temporary",
+        );
+    });
+    const unsubscribeMessage = session.on("assistant.message", (event) => {
+        events.finalContent = event.data.content ?? "";
+    });
+    const unsubscribeTaskComplete = session.on(
+        "session.task_complete",
+        (event) => {
+            events.taskComplete = event.data;
+        },
+    );
+    const unsubscribeToolStart = session.on("tool.execution_start", (event) => {
+        const toolName = event.data.toolName;
+        context.actionIO.appendDisplay(
+            { type: "text", content: `Running ${toolName}...` },
+            "temporary",
+        );
+    });
+    const unsubscribeToolComplete = session.on(
+        "tool.execution_complete",
+        (event) => {
+            const { content, isError } = copilotToolResultDisplay(event);
+            if (content) {
+                context.actionIO.appendDisplay(
+                    {
+                        type: "markdown",
+                        content,
+                        kind: isError ? "warning" : "info",
+                    },
+                    "step",
+                );
+            }
+        },
+    );
+    return {
+        events,
+        unsubscribe: () => {
+            unsubscribeDelta();
+            unsubscribeMessage();
+            unsubscribeTaskComplete();
+            unsubscribeToolStart();
+            unsubscribeToolComplete();
+        },
+    };
+}
+
+function buildCodingMessage(
+    originalRequest: string,
+    context: ActionContext<CommandHandlerContext>,
+    codingAffinity: CodingAffinity,
+    attachments: string[] | undefined,
+): MessageOptions {
+    const userContext =
+        context.sessionContext.agentContext.currentOptions?.userContext;
+    const editorContext = formatUserContextForPrompt(userContext);
+    const codingAttachments = getCodingAttachmentPaths(
+        codingAffinity.workingDirectory,
+        attachments,
+        userContext,
+    );
+    return {
+        prompt: editorContext
+            ? `${editorContext}\n\n[Current request]\n${originalRequest}`
+            : originalRequest,
+        ...(codingAttachments === undefined
+            ? {}
+            : {
+                  attachments: codingAttachments.map((attachmentPath) => ({
+                      type: "file" as const,
+                      path: attachmentPath,
+                  })),
+              }),
+    };
+}
+
+function recordCodingOutcome(
+    systemContext: CommandHandlerContext,
+    codingAffinity: CodingAffinity,
+    sessionId: string,
+    completionTracker: CodingCompletionTracker,
+    taskComplete: CodingSessionEvents["taskComplete"],
+): void {
+    const codingOutcome = completionTracker.outcome(sessionId);
+    if (taskComplete?.success !== undefined) {
+        codingOutcome.taskComplete = taskComplete.success;
+    }
+    if (taskComplete?.summary) {
+        codingOutcome.taskCompleteSummary = taskComplete.summary;
+    }
+    ensureCommandResult(systemContext).codingOutcome = codingOutcome;
+    systemContext.codingSessions.set(codingAffinity.workingDirectory, {
+        sessionId,
+        lastUsedAt: Date.now(),
+    });
+}
+
+function recordFailedCodingOutcome(
+    systemContext: CommandHandlerContext,
+    sessionId: string,
+    completionTracker: CodingCompletionTracker,
+    error: unknown,
+    cancelled: boolean,
+): void {
+    const codingOutcome = completionTracker.outcome(sessionId);
+    codingOutcome.status = cancelled ? "cancelled" : "failed";
+    codingOutcome.error =
+        error instanceof Error ? error.message : String(error);
+    ensureCommandResult(systemContext).codingOutcome = codingOutcome;
+}
+
+async function disconnectCodingSession(session: CopilotSession): Promise<void> {
+    try {
+        await session.disconnect();
+    } catch (error) {
+        debug("Failed to disconnect coding session:", error);
+    }
+}
+
+/** Run one turn through the SDK's default coding agent. */
+export async function executeCodingRequest(
+    originalRequest: string,
+    context: ActionContext<CommandHandlerContext>,
+    attachments?: string[],
+): Promise<void> {
+    const systemContext = context.sessionContext.agentContext;
+    const codingAffinity = systemContext.codingAffinity;
+    if (codingAffinity === undefined) {
+        throw new Error("Coding affinity is not active.");
+    }
+
+    const completionTracker = createCodingCompletionTracker(originalRequest);
+    const client = await getCopilotClient(systemContext);
+    const session = await getOrCreateCodingSession(
+        client,
+        createCodingSessionConfig(context, codingAffinity, completionTracker),
+        codingAffinity,
+        context,
+    );
+    systemContext.codingSessions.set(codingAffinity.workingDirectory, {
+        sessionId: session.sessionId,
+        lastUsedAt: Date.now(),
+    });
+    const subscription = subscribeCodingSession(session, context);
+
+    try {
+        const response = await sendMessageAndWaitWithCancellation(
+            session,
+            buildCodingMessage(
+                originalRequest,
+                context,
+                codingAffinity,
+                attachments,
+            ),
+            context.abortSignal,
+        );
+        const content =
+            response?.data.content ||
+            subscription.events.finalContent ||
+            subscription.events.streamedContent;
+        if (content) {
+            context.actionIO.appendDisplay(
+                { type: "markdown", content },
+                "block",
+            );
+        }
+        recordCodingOutcome(
+            systemContext,
+            codingAffinity,
+            session.sessionId,
+            completionTracker,
+            subscription.events.taskComplete,
+        );
+        if (
+            ensureCommandResult(systemContext).codingOutcome?.status ===
+            "unvalidated"
+        ) {
+            context.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    kind: "warning",
+                    content:
+                        "Files changed, but no successful test, build, lint, " +
+                        "typecheck, or compile validation was observed.",
+                },
+                "block",
+            );
+        }
+    } catch (error) {
+        recordFailedCodingOutcome(
+            systemContext,
+            session.sessionId,
+            completionTracker,
+            error,
+            context.abortSignal?.aborted === true,
+        );
+        throw error;
+    } finally {
+        subscription.unsubscribe();
+        await disconnectCodingSession(session);
     }
 }
 
@@ -1513,7 +1953,7 @@ function getCopilotSessionConfig(
             "shell",
         ],
         workingDirectory: getRepoRoot(),
-        onPermissionRequest: approveAll,
+        onPermissionRequest: createCopilotPermissionHandler(context),
         systemMessage: {
             mode: "append" as const,
             content: [

@@ -9,6 +9,7 @@ import type {
     DispatcherInvokeFunctions,
     WireSubmitResult,
 } from "./dispatcherTypes.js";
+import type { DispatcherRpcOptions } from "./dispatcherClient.js";
 
 /**
  * Drop the in-process-only `completion` promise from a `SubmitResult` so it
@@ -26,6 +27,7 @@ function toWire(result: SubmitResult): WireSubmitResult {
 export function createDispatcherRpcServer(
     dispatcher: Dispatcher,
     channel: RpcChannel,
+    options?: DispatcherRpcOptions,
 ) {
     const dispatcherCallHandler: DispatcherCallFunctions = {
         cancelCommandByClientId(...args) {
@@ -107,5 +109,12 @@ export function createDispatcherRpcServer(
         channel,
         dispatcherInvokeHandler,
         dispatcherCallHandler,
+        options?.trustedContextPropagation === true
+            ? {
+                  tracing: {
+                      trustRemoteContext: true,
+                  },
+              }
+            : undefined,
     );
 }
