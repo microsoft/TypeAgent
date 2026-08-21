@@ -110,15 +110,18 @@ export async function wrapReasoningSpan<T>(
                 effectiveAttributes,
             );
             try {
-                return await context.with(spanContext, () =>
-                    withChatModelTelemetryContext(
-                        {
-                            phase: "reasoning",
-                            purpose: "reasoning",
-                            scope: "foreground",
-                        },
-                        () => body(span),
-                    ),
+                return await otel.runInTypeAgentTelemetryContext(
+                    spanContext,
+                    effectiveAttributes,
+                    () =>
+                        withChatModelTelemetryContext(
+                            {
+                                phase: "reasoning",
+                                purpose: "reasoning",
+                                scope: "foreground",
+                            },
+                            () => body(span),
+                        ),
                 );
             } catch (error) {
                 recordSpanFailure(

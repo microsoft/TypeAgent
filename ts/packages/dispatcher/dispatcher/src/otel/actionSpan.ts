@@ -95,11 +95,12 @@ export async function wrapActionSpan<T>(
                 ...attributes,
             };
             otel.setTypeAgentSpanAttributes(span, effectiveAttributes);
-            return context.with(
+            return otel.runInTypeAgentTelemetryContext(
                 otel.setActiveTypeAgentSpanAttributes(
                     context.active(),
                     effectiveAttributes,
                 ),
+                effectiveAttributes,
                 async () => {
                     return withChatModelTelemetryContext(
                         {

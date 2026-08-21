@@ -7,7 +7,9 @@ export type ChatModelTelemetryPhase =
     | "translation"
     | "reasoning"
     | "action"
-    | "explanation";
+    | "explanation"
+    | "background"
+    | "unknown";
 
 export type ChatModelTelemetryPurpose =
     | "schema-selection"
@@ -16,39 +18,63 @@ export type ChatModelTelemetryPurpose =
     | "entity-resolution"
     | "reasoning"
     | "action"
-    | "cache-generation";
+    | "cache-generation"
+    | "capability-description"
+    | "keyword-authoring"
+    | "sample-request-generation"
+    | "optimization-case-classification"
+    | "optimization-hypothesis-generation"
+    | "optimization-guideline-distillation"
+    | "unknown";
 
 export type ChatModelTelemetryScope = "foreground" | "background";
+
+export type ChatModelTelemetryClassificationSource = "explicit" | "default";
 
 export interface ChatModelTelemetryContext {
     readonly phase: ChatModelTelemetryPhase;
     readonly purpose: ChatModelTelemetryPurpose;
     readonly scope: ChatModelTelemetryScope;
+    readonly classificationSource: ChatModelTelemetryClassificationSource;
 }
 
-const chatModelTelemetryContext =
-    new AsyncLocalStorage<ChatModelTelemetryContext>();
+export type ChatModelTelemetryClassification = Partial<
+    Omit<ChatModelTelemetryContext, "classificationSource">
+>;
 
-export function getChatModelTelemetryContext():
-    | ChatModelTelemetryContext
-    | undefined {
-    return chatModelTelemetryContext.getStore();
+const classificationStore = new AsyncLocalStorage<ChatModelTelemetryContext>();
+
+const DEFAULT_CHAT_MODEL_TELEMETRY_CONTEXT: ChatModelTelemetryContext =
+    Object.freeze({
+        phase: "unknown",
+        purpose: "unknown",
+        scope: "foreground",
+        classificationSource: "default",
+    });
+
+export function getChatModelTelemetryContext(): ChatModelTelemetryContext {
+    return (
+        classificationStore.getStore() ?? DEFAULT_CHAT_MODEL_TELEMETRY_CONTEXT
+    );
 }
 
 export function withChatModelTelemetryContext<T>(
-    telemetryContext: ChatModelTelemetryContext,
+    classification: ChatModelTelemetryClassification,
     body: () => T,
 ): T {
-    return chatModelTelemetryContext.run(telemetryContext, body);
+    return classificationStore.run(
+        {
+            ...getChatModelTelemetryContext(),
+            ...classification,
+            classificationSource: "explicit",
+        },
+        body,
+    );
 }
 
 export function withChatModelTelemetryPurpose<T>(
     purpose: ChatModelTelemetryPurpose,
     body: () => T,
 ): T {
-    const current = getChatModelTelemetryContext();
-    if (current === undefined) {
-        return body();
-    }
-    return withChatModelTelemetryContext({ ...current, purpose }, body);
+    return withChatModelTelemetryContext({ purpose }, body);
 }

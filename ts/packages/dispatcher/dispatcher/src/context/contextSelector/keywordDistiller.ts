@@ -12,7 +12,10 @@
 // model's JSON against the schema, with an auto-repair retry — goes through
 // TypeChat via the shared `distillJson` helper.
 
-import type { ChatModel } from "@typeagent/aiclient";
+import {
+    withChatModelTelemetryContext,
+    type ChatModel,
+} from "@typeagent/aiclient";
 import { KeywordExtractionInput } from "./keywordExtractor.js";
 import { tokenize } from "./tokenize.js";
 import { distillJson } from "../../utils/distillJson.js";
@@ -94,11 +97,19 @@ export async function distillKeywords(
     const topN = options.topN ?? DEFAULT_TOP_N;
     let result: KeywordVector | undefined;
     try {
-        result = await distillJson<KeywordVector>(
-            options.createModel("distill"),
-            buildRequest(input, topN),
-            KEYWORD_SCHEMA,
-            "KeywordVector",
+        result = await withChatModelTelemetryContext(
+            {
+                phase: "background",
+                purpose: "keyword-authoring",
+                scope: "background",
+            },
+            () =>
+                distillJson<KeywordVector>(
+                    options.createModel("distill"),
+                    buildRequest(input, topN),
+                    KEYWORD_SCHEMA,
+                    "KeywordVector",
+                ),
         );
     } catch {
         // Only reached if the model factory itself throws; distillJson never does.
