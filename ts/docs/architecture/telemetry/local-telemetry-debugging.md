@@ -9,7 +9,8 @@ instrumentation contracts, see [OpenTelemetry in TypeAgent](./opentelemetry.md).
 
 ## Quick Start
 
-This assumes TypeAgent is already running.
+TypeAgent may already be running if `telemetry.local` was configured by an
+earlier run.
 
 From `ts`, run:
 
@@ -21,8 +22,9 @@ If Docker Desktop is missing on Windows or macOS, the command asks whether to
 install it. Otherwise, it starts Docker when needed, starts the local Grafana
 stack, and enables local telemetry in `config.local.yaml`.
 
-Restart TypeAgent so it picks up the new configuration, send a request, then
-open [Grafana](http://localhost:3000) to inspect traces and logs.
+If the command changes `telemetry.local`, restart TypeAgent once so it picks
+up the configuration. Send a request, then open
+[Grafana](http://127.0.0.1:24319) to inspect traces and logs.
 
 For setup details, queries, cleanup, and troubleshooting, continue below.
 
@@ -34,9 +36,8 @@ You need:
 
 - A configured TypeAgent checkout.
 - Docker Desktop or Docker Engine.
-- Port `3000` available on `localhost` for Grafana. The OTLP/gRPC and
-  OTLP/HTTP receiver ports are assigned dynamically on the loopback
-  interface, so no specific port needs to be free for them.
+- Loopback ports `24317` (OTLP/gRPC), `24318` (OTLP/HTTP), and `24319`
+  (Grafana) available. The command reports which occupied port must be freed.
 
 If this is a fresh checkout, run `pnpm run setup` from `ts`.
 
@@ -51,22 +52,22 @@ pnpm run telemetry:grafana
 The command starts the local Grafana LGTM container. It includes Grafana,
 Loki, Tempo, Prometheus, and an OpenTelemetry collector.
 
-Once Grafana reports healthy, the command also enables the local sink in
-`config.local.yaml` — no `OTEL_*` / `TYPEAGENT_OTEL_*` environment variables
-are required. The block includes the Docker-assigned endpoint:
+Before starting Docker, the command enables the local sink in
+`config.local.yaml` - no `OTEL_*` / `TYPEAGENT_OTEL_*` environment variables
+are required. The block includes the stable endpoint:
 
 ```yaml
 telemetry:
   local:
     enabled: "true"
-    otlpEndpoint: http://127.0.0.1:<assigned-port>
+    otlpEndpoint: http://127.0.0.1:24318
     logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
     debugBridge: "true"
     structuredLogs: "true"
 ```
 
-`otlpEndpoint` is owned by `pnpm run telemetry:grafana`: the command discovers
-and writes the current endpoint automatically. Other local settings you have customized
+`otlpEndpoint` is owned by `pnpm run telemetry:grafana`: the command writes
+the fixed endpoint automatically. Other local settings you have customized
 (`logFile`, `logRetentionBytes`, `debugBridge`, `structuredLogs`) are left
 alone.
 
@@ -75,16 +76,18 @@ configured in `telemetry.otlpEndpoint`, TypeAgent exports to both the
 standard backend and the local Grafana LGTM stack in parallel (deduplicated
 when they resolve to the same URL).
 
-> TypeAgent reads `config.local.yaml` at process startup, so **restart the
-> agent-server after enabling the local sink** — otherwise the running
-> process will not pick up the new configuration.
+> TypeAgent reads `config.local.yaml` at process startup. Restart the
+> agent-server only when the command changes the local configuration. Once
+> configured, the agent-server can start while LGTM is absent and begins
+> exporting when LGTM starts.
 
-Open Grafana at [http://localhost:3000](http://localhost:3000).
+Open Grafana at
+[http://127.0.0.1:24319](http://127.0.0.1:24319).
 
 Check that Grafana is ready:
 
 ```powershell
-Invoke-RestMethod http://localhost:3000/api/health
+Invoke-RestMethod http://127.0.0.1:24319/api/health
 ```
 
 The response should report that the database is `ok`.
@@ -252,11 +255,9 @@ Then stop the local stack:
 pnpm run telemetry:grafana --stop
 ```
 
-`--stop` also flips `telemetry.local.enabled` to `"false"` in
-`config.local.yaml`. Other local values (`logFile`, `logRetentionBytes`,
-`debugBridge`, `structuredLogs`) are preserved for the next start;
-`otlpEndpoint` is refreshed automatically the next time you start the stack,
-since Docker may assign a different host port.
+`--stop` stops only the LGTM sink. It leaves `telemetry.local` enabled at the
+stable endpoint, so a running agent-server can resume exporting the next time
+LGTM starts without being restarted.
 
 ### Log Retention and Manual Cleanup
 
@@ -310,7 +311,7 @@ Run:
 
 ```powershell
 docker ps --filter "name=typeagent-otel"
-Invoke-RestMethod http://localhost:3000/api/health
+Invoke-RestMethod http://127.0.0.1:24319/api/health
 ```
 
 If Docker is stopped, start it and run `pnpm run telemetry:grafana` again.
@@ -323,8 +324,8 @@ Check that:
   `Enabled telemetry.local in ...config.local.yaml`.
 - `config.local.yaml` contains `telemetry.local.enabled: "true"` (the value
   must be the string `"true"`, not the YAML boolean `true`).
-- The agent server was restarted **after** the sink was enabled — config is
-  read at process startup.
+- The agent server was restarted after the sink was first enabled or migrated
+  from an older endpoint. Config is read at process startup.
 - Nothing in the environment sets `OTEL_TRACES_EXPORTER=none` for the shell
   that started the agent server (that explicitly opts out of the traces
   signal even when the local sink is enabled).
