@@ -149,6 +149,10 @@ Browser-shared RPC code reads active TypeAgent metadata through the
 `@typeagent/telemetry/traceContext` subpath. It does not import the Node-only
 telemetry composition root.
 
+The trace-context contract is browser-safe. Its Node export adds ambient
+context so logs-only processes retain request correlation when tracing is
+disabled.
+
 The trusted dispatcher RPC channel extends the same trace from a client host
 into agent-server request processing:
 
@@ -194,14 +198,11 @@ processable telemetry record.**
   auto-instrumentation.
 - Classify each LLM operation explicitly at the high-level call site. The
   central model wrapper records `typeagent.llm.phase`,
-  `typeagent.llm.purpose`, and `typeagent.llm.scope`; it never infers purpose
-  from prompt text, model output, timing, or token counts.
-- High-level classification contexts are complete. Nested operations may
-  override only the purpose while retaining their phase and scope.
-- A model call outside a classified operation records `unclassified` for all
-  three attributes and adds a `typeagent.llm.classification.missing` span
-  event. This makes missing instrumentation visible without failing the model
-  request.
+  `typeagent.llm.purpose`, `typeagent.llm.scope`, and
+  `typeagent.llm.classification_source`. Nested scopes inherit unspecified
+  values.
+- Unclassified calls use `unknown` phase and purpose, `foreground` scope, and
+  `default` classification source.
 
 ### Logs
 
@@ -250,9 +251,11 @@ have matched. Redaction runs only after this bound and the result must also fit.
 
 The dispatcher places an allowlisted projection in front of `OtelLoggerSink`.
 Only bounded correlation identifiers, agent/schema/action names, state and
-reason fields, durations and counts, booleans, and command/schema-name arrays
-reach OTel. Prompt and response text, history, action parameters, errors and
-stacks, feedback comments and context, and all unknown fields are excluded.
+reason fields, the normalized failure classification
+(`errorCategory`/`errorCode`/`httpStatus`/`retryable`), durations and counts,
+booleans, and command/schema-name arrays reach OTel. Prompt and response text,
+history, action parameters, raw error names, messages and stacks, feedback
+comments and context, and all unknown fields are excluded.
 Other producers that attach `OtelLoggerSink` remain responsible for an
 equivalent source-specific projection. The sink applies known-secret and
 secret-format filtering as defense in depth, covering the promoted correlation
@@ -380,15 +383,14 @@ telemetry:
   tracesSampler: always_on
   local:
     enabled: "true"
-    otlpEndpoint: http://127.0.0.1:54321
+    otlpEndpoint: http://127.0.0.1:24318
     debugBridge: "true"
     structuredLogs: "true"
 ```
 
-`telemetry.local.otlpEndpoint` above (`54321` is just an example) is written
-by `pnpm run telemetry:grafana`: Docker assigns the local container's
-OTLP/HTTP host port dynamically on every start, so the script owns this
-value and overwrites it on every run instead of preserving a stale one.
+`telemetry.local.otlpEndpoint` is written by
+`pnpm run telemetry:grafana`. The script owns this value and uses the stable
+OTLP/HTTP loopback port `24318`.
 
 Standard `OTEL_*` variables override YAML. Relevant settings include:
 
@@ -410,10 +412,12 @@ Partner libraries use host configuration and do not read TypeAgent YAML.
 with the standard exporter; it does not replace or rewrite the backend
 endpoint (`telemetry.otlpEndpoint`). Identical resolved endpoints are
 deduplicated. The script does, however, own `telemetry.local.otlpEndpoint`
-itself: it discovers the container's dynamically-assigned OTLP/HTTP host
-port on every start and overwrites the local endpoint with it, so a stale or
-hand-edited value never lingers. TypeAgent reads this configuration at
-process startup, so processes must restart after the script changes it.
+itself: it writes the stable `http://127.0.0.1:24318` endpoint, so a stale or
+hand-edited value never lingers. The setting remains enabled when LGTM stops.
+This lets a configured TypeAgent process start while LGTM is absent and begin
+exporting when the collector becomes available. TypeAgent reads this
+configuration at process startup, so processes must restart only after the
+script changes it from an older configuration.
 
 Local development samples all traces by default when trace export is enabled.
 Deployments may configure standard OTel sampling. Partner hosts own sampling.
@@ -555,21 +559,24 @@ The helper:
   engine.
 - Pulls `grafana/otel-lgtm:latest` when it is not already installed.
 - Starts or reuses the `typeagent-otel` container.
+- Recreates an existing container if its port mappings are stale.
 - Waits for Grafana to become healthy.
-- Publishes Grafana and both collector receivers on `127.0.0.1` only.
+- Publishes fixed loopback ports for OTLP/gRPC (`24317`), OTLP/HTTP (`24318`),
+  and Grafana (`24319`).
+- Fails with an actionable error when a required host port is unavailable.
 
 The loopback binding keeps the services inaccessible from other machines on
 the network. Do not publish these ports on all interfaces unless remote access
 is intentional and protected separately.
 
-Grafana always listens on `3000`. Docker assigns the collector ports on the
-loopback interface, and the helper writes the current OTLP/HTTP endpoint into
-`telemetry.local.otlpEndpoint`; no collector-port configuration is needed.
+The fixed host ports are below the OS ephemeral range. The helper writes
+`http://127.0.0.1:24318` into `telemetry.local.otlpEndpoint` before starting
+Docker, and `--stop` leaves that configuration enabled.
 
 Verify that Grafana is ready:
 
 ```powershell
-Invoke-RestMethod http://localhost:3000/api/health
+Invoke-RestMethod http://127.0.0.1:24319/api/health
 ```
 
 ### 2. Configure and Start TypeAgent
@@ -580,10 +587,8 @@ From `ts/`, build the agent server and configure its process environment:
 pnpm run build agent-server
 
 $env:OTEL_SERVICE_NAME = "typeagent-local"
-# Use the OTLP/HTTP address `pnpm run telemetry:grafana` printed (or
-# `docker port typeagent-otel 4318/tcp`): Docker assigns this port
-# dynamically, so it is not always 4318.
-$env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://127.0.0.1:54321"
+# `pnpm run telemetry:grafana` provisions telemetry.local with the stable
+# http://127.0.0.1:24318 endpoint. No OTLP endpoint env var is required.
 $env:OTEL_TRACES_SAMPLER = "always_on"
 $env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\{process}-{timestamp}-p{pid}.jsonl"
 $env:TYPEAGENT_OTEL_DEBUG_BRIDGE = "true"
@@ -683,6 +688,20 @@ Structured dispatcher records include events such as `command` and
 Prompt text, response text, action parameters, errors, stacks, and unknown
 dispatcher fields are excluded by the dispatcher projection.
 
+### LLM phase and purpose attribution
+
+`llm:started`, `llm:completed`, and the `typeagent.llm` span carry `phase`,
+`purpose`, `scope`, and `classificationSource`. `explicit` means a call site
+used `withChatModelTelemetryContext`; `default` means no call site classified
+the operation. Nested and retry calls inherit this context across async work.
+
+Known offline operations use background scope and a specific purpose. Detached
+workers and processes classify themselves at entry.
+
+Unclassified foreground calls emit one aggregate warning per minute. The
+warning contains only scope, count, and window length; it never includes model
+content or call-site identity.
+
 ### Phase-completion durations and translation routing
 
 Each phase-completion lifecycle event carries `elapsedMs`, measured at the
@@ -732,9 +751,41 @@ other fields are present only for decisions the code actually observed. The
 reduced local message appends `+llm` when a cache/grammar strategy still reached
 the model.
 
+### Failure classification
+
+Structured failure events use a small, shared classification instead of
+exporting error messages or stacks. This makes failures useful in telemetry
+without exposing user or provider content.
+
+The classification can include:
+
+- `errorCategory` - for example `authentication`, `rate_limit`, `network`,
+  `timeout`, `provider`, or `internal`.
+- `errorCode` - only for codes in the reviewed allowlist.
+- `httpStatus` - only for HTTP failure statuses.
+- `retryable` - when the failure is known to be safe to retry.
+
+Use `classifyTelemetryError` from `@typeagent/telemetry` rather than creating
+classification logic at individual call sites. It handles wrapped errors and
+unknown thrown values, and does not inspect free-text messages.
+
+Provider clients should attach a classification before converting a transport
+error into a returned failure result. This preserves useful details such as an
+HTTP status or network failure after the original error is no longer available.
+
+Cancellation is handled separately from failure classification. Spans and
+structured completion events use the same cancellation check, including wrapped
+abort errors and abort signals, so they report the same outcome. Cancelled events
+do not include failure classification fields.
+
+The dispatcher OTel projection exports only the normalized classification. Raw
+request and error details remain limited to local, explicitly enabled diagnostic
+sinks. Existing lifecycle messages show a short summary such as
+`rate_limit (HTTP 429, retryable)`.
+
 ### 5. Inspect the Same Logs in Grafana
 
-Open [http://localhost:3000](http://localhost:3000), select **Explore**, choose
+Open [http://127.0.0.1:24319](http://127.0.0.1:24319), select **Explore**, choose
 the **Loki** data source, and switch the query editor to **Code** mode. Do not
 use Logs Drilldown or its search box; those use a different search API rather
 than executing the LogQL below. Query all records from this validation run:
@@ -789,6 +840,10 @@ Grafana LGTM:
 ```powershell
 pnpm run telemetry:grafana --stop
 ```
+
+Stopping LGTM leaves `telemetry.local` enabled at the stable endpoint. A
+configured TypeAgent process can remain running and resumes export when LGTM
+starts again.
 
 ## Privacy and Reliability
 
@@ -892,7 +947,9 @@ await createDispatcher(hostName, {
 ```
 
 Original exception messages and stacks are omitted because they can contain user
-content. Record a stable classification and message at the catch site.
+content. Record a stable classification and message at the catch site. Use the
+shared helpers described in [Failure classification](#failure-classification)
+for structured events and span failures.
 
 ## Currently Captured Dispatcher Telemetry
 
@@ -1003,6 +1060,16 @@ operation before the span ends. Cancellation records the privacy-safe
 `AbortError` / `cancelled` exception classification and sets error status.
 Other escaping exceptions use `ReasoningError` / `reasoning failed`. Original
 exception messages and stack traces are never exported.
+
+### LLM span
+
+Each instrumented model call creates one `typeagent.llm` span. A returned
+failure result sets `ERROR` with `model returned failure`; a thrown failure
+records `ModelError` / `model call failed`, or `AbortError` / `cancelled` for a
+cancellation. Prompts, responses, and provider messages are never recorded on
+the span. Lifecycle logs summarize attribution, outcome, elapsed time, token
+count, and bounded failure classification without recording model content or
+stacks. Telemetry failures do not affect the model call.
 
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |

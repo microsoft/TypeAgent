@@ -6,6 +6,7 @@ import {
     DISPATCHER_STRUCTURED_EVENTS,
     logActionCompleted,
     logActionStarted,
+    logCommandException,
     logRequestCompleted,
     logRequestReceived,
     logTranslationCompleted,
@@ -180,6 +181,320 @@ describe("dispatcher structured lifecycle events", () => {
                 status: "cancelled",
                 success: false,
                 cancelled: true,
+            },
+        });
+    });
+});
+
+describe("dispatcher failure classification", () => {
+    it("records a command exception with a bounded classification", () => {
+        const { logger, events } = createCapture();
+
+        logCommandException(logger, {
+            requestId: "request-4",
+            request: "play some private music",
+            error: Object.assign(new Error("secret provider detail"), {
+                status: 429,
+                code: "ETIMEDOUT",
+            }),
+        });
+
+        expect(events[0]?.name).toBe("command:exception");
+        expect(events[0]?.severity).toBe("error");
+        expect(events[0]?.data).toMatchObject({
+            requestId: "request-4",
+            // Code and status come from the same error; the code table wins
+            // the category.
+            errorCategory: "timeout",
+            errorCode: "ETIMEDOUT",
+            httpStatus: 429,
+            retryable: true,
+        });
+    });
+
+    it("does not export failure fields for a wrapped cancellation", () => {
+        const { logger, events } = createCapture();
+        const error = Object.assign(new Error("private wrapper detail"), {
+            cause: new DOMException("private abort detail", "AbortError"),
+        });
+
+        logCommandException(logger, {
+            requestId: "request-4a",
+            request: "private request",
+            error,
+        });
+
+        expect(events[0]?.data).not.toHaveProperty("errorCategory");
+        expect(events[0]?.data).not.toHaveProperty("errorCode");
+        expect(events[0]?.data).not.toHaveProperty("httpStatus");
+        expect(events[0]?.data).not.toHaveProperty("retryable");
+        expect(events[0]?.severity).toBe("warning");
+    });
+
+    it("drops a code outside the reviewed allowlist", () => {
+        const { logger, events } = createCapture();
+
+        logCommandException(logger, {
+            requestId: "request-4b",
+            request: "play some private music",
+            error: Object.assign(new Error("secret provider detail"), {
+                status: 429,
+                code: "ERR_TENANT_8f14e45f",
+            }),
+        });
+
+        expect(events[0]?.data).toMatchObject({
+            errorCategory: "rate_limit",
+            httpStatus: 429,
+        });
+        expect(events[0]?.data).not.toHaveProperty("errorCode");
+    });
+
+    it("survives an error whose property reads throw", () => {
+        const { logger, events } = createCapture();
+        const hostile = new Proxy(new Error("hostile"), {
+            get(_target, property) {
+                throw new Error(`no reads allowed: ${String(property)}`);
+            },
+        });
+
+        expect(() =>
+            logCommandException(logger, {
+                requestId: "request-4c",
+                request: "private request",
+                error: hostile,
+            }),
+        ).not.toThrow();
+        expect(events[0]?.data).toMatchObject({
+            requestId: "request-4c",
+            errorCategory: "internal",
+        });
+        expect(events[0]?.data).not.toHaveProperty("name");
+        expect(events[0]?.data).not.toHaveProperty("message");
+        expect(events[0]?.data).not.toHaveProperty("stack");
+    });
+
+    it("keeps the raw error detail for the private diagnostic sinks", () => {
+        const { logger, events } = createCapture();
+        const error = new Error("secret provider detail");
+        error.name = "TypeError";
+
+        logCommandException(logger, {
+            requestId: "request-5",
+            request: "play some private music",
+            error,
+        });
+
+        // These fields stay in the local debug and opt-in database sinks;
+        // `createDispatcherOtelLoggerSink` strips them before OTel.
+        expect(events[0]?.data).toMatchObject({
+            request: "play some private music",
+            name: "TypeError",
+            message: "secret provider detail",
+            stack: expect.any(String),
+        });
+    });
+
+    it("survives a non-Error throw without inventing raw fields", () => {
+        const { logger, events } = createCapture();
+
+        logCommandException(logger, {
+            requestId: "request-6",
+            request: "private request",
+            error: "just a string",
+        });
+
+        expect(events[0]?.data).toMatchObject({
+            requestId: "request-6",
+            errorCategory: "internal",
+        });
+        expect(events[0]?.data).not.toHaveProperty("message");
+        expect(events[0]?.data).not.toHaveProperty("stack");
+        expect(events[0]?.data).not.toHaveProperty("name");
+    });
+
+    it("classifies failed phase completions and leaves the rest untouched", () => {
+        const { logger, events } = createCapture();
+        const timeout = new Error("secret endpoint detail");
+        timeout.name = "TimeoutError";
+
+        logActionCompleted(logger, {
+            requestId: "request-7",
+            schemaName: "email",
+            actionName: "send",
+            appAgentName: "email",
+            actionIndex: 0,
+            success: false,
+            error: timeout,
+        });
+        logTranslationCompleted(logger, {
+            requestId: "request-7",
+            strategy: "translate",
+            success: false,
+            error: Object.assign(new Error("secret detail"), { status: 503 }),
+            actions: [],
+        });
+        // Cancellation is a disposition, not a failure to classify.
+        logActionCompleted(logger, {
+            requestId: "request-7",
+            schemaName: "email",
+            actionName: "send",
+            appAgentName: "email",
+            actionIndex: 1,
+            success: false,
+            cancelled: true,
+            error: new DOMException("The operation was aborted.", "AbortError"),
+        });
+        logActionCompleted(logger, {
+            requestId: "request-7",
+            schemaName: "email",
+            actionName: "send",
+            appAgentName: "email",
+            actionIndex: 2,
+            success: true,
+        });
+
+        expect(events[0]?.data).toMatchObject({
+            status: "failed",
+            errorCategory: "timeout",
+            retryable: true,
+        });
+        expect(events[1]?.data).toMatchObject({
+            status: "failed",
+            errorCategory: "provider",
+            httpStatus: 503,
+            retryable: true,
+        });
+        expect(events[2]?.data).not.toHaveProperty("errorCategory");
+        expect(events[3]?.data).not.toHaveProperty("errorCategory");
+        expect(events[0]?.data).not.toHaveProperty("error");
+        expect(events[1]?.data).not.toHaveProperty("error");
+        expect(JSON.stringify(events)).not.toContain("secret");
+    });
+
+    it("invents no classification when the failure had no thrown value", () => {
+        const { logger, events } = createCapture();
+
+        // The common agent failure: a typed `ActionResult.error` with no
+        // exception, so there is nothing to classify.
+        logActionCompleted(logger, {
+            requestId: "request-8",
+            schemaName: "email",
+            actionName: "send",
+            appAgentName: "email",
+            actionIndex: 0,
+            success: false,
+        });
+        logTranslationCompleted(logger, {
+            requestId: "request-8",
+            strategy: "translate",
+            success: false,
+            actions: [],
+        });
+
+        expect(events[0]?.data).toMatchObject({ status: "failed" });
+        expect(events[0]?.data).not.toHaveProperty("errorCategory");
+        expect(events[1]?.data).not.toHaveProperty("errorCategory");
+    });
+});
+
+// `cancelled`, `status`, severity, and the classification fields all derive
+// from one classification, so a cancellation the call site could not see -
+// one wrapped as a `cause` - is a cancellation on every one of them.
+describe("dispatcher cancellation coherence", () => {
+    function wrappedAbort(): Error {
+        return Object.assign(new Error("Error translating request"), {
+            cause: new DOMException("The operation was aborted.", "AbortError"),
+        });
+    }
+
+    it("recognizes a wrapped cancellation on action completion", () => {
+        const { logger, events } = createCapture();
+
+        logActionCompleted(logger, {
+            requestId: "request-9",
+            schemaName: "email",
+            actionName: "send",
+            appAgentName: "email",
+            actionIndex: 0,
+            success: false,
+            // The call site only knows the abort signal has not fired yet.
+            cancelled: false,
+            error: wrappedAbort(),
+        });
+
+        expect(events[0]).toMatchObject({
+            severity: "warning",
+            data: { status: "cancelled", cancelled: true, success: false },
+        });
+        expect(events[0]?.data).not.toHaveProperty("errorCategory");
+    });
+
+    it("recognizes a wrapped cancellation on translation completion", () => {
+        const { logger, events } = createCapture();
+
+        logTranslationCompleted(logger, {
+            requestId: "request-9",
+            strategy: "translate",
+            success: false,
+            cancelled: false,
+            error: wrappedAbort(),
+            actions: [],
+        });
+
+        expect(events[0]).toMatchObject({
+            severity: "warning",
+            data: { status: "cancelled", cancelled: true, success: false },
+        });
+        expect(events[0]?.data).not.toHaveProperty("errorCategory");
+    });
+
+    it("still honors a cancellation the call site knows about on its own", () => {
+        const { logger, events } = createCapture();
+
+        // The abort signal fired while a handler was failing for an unrelated
+        // reason; the disposition is still cancellation.
+        logActionCompleted(logger, {
+            requestId: "request-10",
+            schemaName: "email",
+            actionName: "send",
+            appAgentName: "email",
+            actionIndex: 0,
+            success: false,
+            cancelled: true,
+            error: Object.assign(new Error("secret detail"), { status: 500 }),
+        });
+
+        expect(events[0]).toMatchObject({
+            severity: "warning",
+            data: { status: "cancelled", cancelled: true },
+        });
+        expect(events[0]?.data).not.toHaveProperty("errorCategory");
+        expect(events[0]?.data).not.toHaveProperty("httpStatus");
+    });
+
+    it("does not mark an ordinary failure as cancelled", () => {
+        const { logger, events } = createCapture();
+
+        logActionCompleted(logger, {
+            requestId: "request-11",
+            schemaName: "email",
+            actionName: "send",
+            appAgentName: "email",
+            actionIndex: 0,
+            success: false,
+            cancelled: false,
+            error: Object.assign(new Error("secret detail"), { status: 503 }),
+        });
+
+        expect(events[0]).toMatchObject({
+            severity: "error",
+            data: {
+                status: "failed",
+                cancelled: false,
+                errorCategory: "provider",
+                httpStatus: 503,
+                retryable: true,
             },
         });
     });
