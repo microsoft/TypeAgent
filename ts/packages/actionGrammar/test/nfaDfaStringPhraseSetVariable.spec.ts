@@ -10,14 +10,11 @@
  * code emits these forms.
  *
  * Coverage:
- *   - matchGrammar (interpreter): StringPart capture (single + multi-token)
+ *   - matchGrammar (interpreter): StringPart + PhraseSetPart capture
  *   - matchGrammarWithNFA: StringPart and PhraseSetPart capture
  *   - matchDFAWithSplitting: StringPart and PhraseSetPart capture (delegates
  *     to matchNFA via dfa.sourceNFA)
  *   - JSON round-trip: variable preserved through serialize/deserialize
- *
- * grammarMatcher.ts has no PhraseSetPart match path — phraseSet capture is
- * exercised only against the NFA / DFA matchers.
  */
 
 import { matchGrammar } from "../src/grammarMatcher.js";
@@ -186,6 +183,21 @@ describe("PhraseSetPart variable capture", () => {
             },
         ],
     };
+
+    function bestGrammarActionValue(g: Grammar, request: string): unknown {
+        const results = matchGrammar(g, request);
+        if (results.length === 0) return undefined;
+        return results[0].match;
+    }
+
+    it("grammar matcher: PhraseSetPart binds matched phrase tokens joined", () => {
+        expect(bestGrammarActionValue(grammar, "please go")).toStrictEqual({
+            opener: "please",
+        });
+        expect(bestGrammarActionValue(grammar, "could you go")).toStrictEqual({
+            opener: "could you",
+        });
+    });
 
     it("NFA: PhraseSetPart binds matched phrase tokens joined", () => {
         // "Polite" set includes "please", "could you", "would you", etc.
