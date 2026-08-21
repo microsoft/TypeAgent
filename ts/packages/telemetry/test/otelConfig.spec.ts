@@ -843,7 +843,7 @@ describe("resolveTelemetryConfig", () => {
             );
             const cfg = resolve(root);
             expect(cfg.traces?.otlp?.endpoint).toBe(
-                "http://localhost:4318/v1/traces",
+                "http://127.0.0.1:24318/v1/traces",
             );
             expect(cfg.logs?.logFile).toContain(
                 "/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl",
