@@ -110,7 +110,6 @@ export interface TypeAgentSpanAttributes {
     readonly llmPurpose?: string;
     /** Whether the LLM operation is foreground or background work. */
     readonly llmScope?: string;
-    /** Whether a call site explicitly classified the LLM operation. */
     readonly llmClassificationSource?: string;
 }
 
