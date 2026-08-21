@@ -44,7 +44,10 @@ interface TreeNode {
     host?: string;
     // Full invocation path minus the leading `@` (e.g. `config agent enable`).
     full?: string;
-    // actionName of the equivalent agent action, when the handler declares one.
+    executable?: boolean;
+    defaultSubCommand?: string;
+    // Resolved identity of the equivalent agent action.
+    actionSchema?: string;
     actionName?: string;
     args?: { name: string; optional: boolean; description: string }[];
     flags?: {
@@ -175,7 +178,12 @@ function buildHostTree(host: string, commands: CommandInfo[]): TreeNode {
         const node = ensureNode(segments);
         node.host = host;
         node.full = commandDisplayPath(host, command.path);
-        if (command.action) {
+        node.executable = command.executable;
+        if (command.defaultSubCommand !== undefined) {
+            node.defaultSubCommand = command.defaultSubCommand;
+        }
+        if (command.action?.resolvedSchema !== undefined) {
+            node.actionSchema = command.action.resolvedSchema;
             node.actionName = command.action.actionName;
         }
         node.description = command.description;
@@ -377,10 +385,10 @@ const APP = `
 
   // Cross-reference actions with the commands declared equivalent to them, and
   // tally how many commands carry a natural-language action.
-  var actionIndex={}, commandsForAction={}, commandLeafCount=0, commandLinkedCount=0;
-  (function walk(n){ if(n.kind==='action'){ actionIndex[n.agent+'\\n'+n.name]=n; } if(n.children) n.children.forEach(walk); })(DATA.agents);
+  var actionIndex={}, commandsForAction={}, commandEndpointCount=0, commandLinkedCount=0;
+  (function walk(n){ if(n.kind==='action'){ actionIndex[n.schema+'\\n'+n.name]=n; } if(n.children) n.children.forEach(walk); })(DATA.agents);
   (function walk(n){
-    if(n.kind==='command'){ commandLeafCount++; if(n.actionName){ commandLinkedCount++; var k=n.host+'\\n'+n.actionName; (commandsForAction[k]||(commandsForAction[k]=[])).push(n); } }
+    if(n.executable){ commandEndpointCount++; if(n.actionSchema&&n.actionName){ commandLinkedCount++; var k=n.actionSchema+'\\n'+n.actionName; (commandsForAction[k]||(commandsForAction[k]=[])).push(n); } }
     if(n.children) n.children.forEach(walk);
   })(DATA.commands);
 
@@ -467,7 +475,7 @@ const APP = `
   function buildCell(c, role, idx, n){
     var node=c.node;
     var el=document.createElement('div');
-    el.className='cell '+role+' k-'+node.kind+(node.actionName?' linked':'');
+    el.className='cell '+role+' k-'+node.kind+(node.actionSchema?' linked':'');
     el._layout=c;
     if(role==='container'){
       var h=node._hue==null?210:node._hue;
@@ -507,6 +515,7 @@ const APP = `
     // into). Categories, command hosts, and command groups zoom in; leaves
     // open the side panel.
     if(node.kind==='agent'){ openActionsDialog(node); return; }
+    if(state.query && node.executable){ openPanel(node); return; }
     if(node.children && node.children.length){
       var r=el._layout;
       state.path.push(node);
@@ -593,7 +602,7 @@ const APP = `
     if(state.query){ var r=document.createElement('span'); r.className='crumb crumb-static'; r.textContent='Results: “'+state.query+'”'; crumbEl.appendChild(r); }
     if(state.mode==='commands' && !state.query){
       var cov=document.createElement('span'); cov.className='cov-chip';
-      cov.textContent=commandLinkedCount+' / '+commandLeafCount+' commands have an action';
+      cov.textContent=commandLinkedCount+' / '+commandEndpointCount+' command endpoints have an action';
       crumbEl.appendChild(cov);
     }
   }
@@ -611,12 +620,12 @@ const APP = `
     var toks = state.query.split(/\\s+/).filter(Boolean);
     var out=[];
     (function walk(n){
-      if(n.children && n.children.length) n.children.forEach(walk);
-      else {
+      if(n.kind==='action' || n.executable){
         if(n._hay==null) n._hay=buildHay(n);
         var ok=true; for(var i=0;i<toks.length;i++){ if(n._hay.indexOf(toks[i])<0){ ok=false; break; } }
         if(ok) out.push(n);
       }
+      if(n.children && n.children.length) n.children.forEach(walk);
     })(root);
     return out;
   }
@@ -668,7 +677,7 @@ const APP = `
         node.phrasings.forEach(function(p){ html+='<span class="chip">'+esc(p)+'</span>'; });
         html+='</div>';
       }
-    } else if(node.kind==='command'){
+    } else if(node.executable){
       if(node.description) html+='<p class="p-desc">'+esc(node.description)+'</p>';
       if(node.args && node.args.length){
         html+='<h3>Arguments</h3><ul class="p-list">';
@@ -689,16 +698,16 @@ const APP = `
   var panelLinkTargets=[];
   function panelLinkChip(node){
     var i=panelLinkTargets.push(node)-1;
-    var label=node.kind==='command'?'@'+(node.full||node.name):node.name;
+    var label=node.kind==='action'?node.name:'@'+(node.full||node.name);
     return '<button class="p-link" data-link="'+i+'">'+esc(label)+'</button>';
   }
   function crossLinkHtml(node){
-    if(node.kind==='command' && node.actionName){
-      var a=actionIndex[node.host+'\\n'+node.actionName];
+    if(node.executable && node.actionSchema && node.actionName){
+      var a=actionIndex[node.actionSchema+'\\n'+node.actionName];
       return '<div class="p-xlink"><span class="p-xlabel">Same as action</span>'+(a?panelLinkChip(a):'<span class="p-xnote">'+esc(node.actionName)+'</span>')+'</div>';
     }
     if(node.kind==='action'){
-      var cs=commandsForAction[node.agent+'\\n'+node.name];
+      var cs=commandsForAction[node.schema+'\\n'+node.name];
       if(cs&&cs.length){
         var chips=''; for(var i=0;i<cs.length;i++){ chips+=panelLinkChip(cs[i]); }
         return '<div class="p-xlink"><span class="p-xlabel">Same as command'+(cs.length>1?'s':'')+'</span>'+chips+'</div>';
@@ -708,10 +717,10 @@ const APP = `
   }
 
   function openPanel(node){
-    if(node.kind!=='action' && node.kind!=='command') return;
+    if(node.kind!=='action' && !node.executable) return;
     panelLinkTargets=[];
     var kicker = node.kind==='action' ? esc(node.agent||'')+' · '+esc(node.schema||'') : esc(node.host||'system')+' command';
-    var title = node.kind==='command' ? '@'+esc(node.full||node.name) : esc(node.name);
+    var title = node.kind==='action' ? esc(node.name) : '@'+esc(node.full||node.name);
     document.getElementById('panelBody').innerHTML='<div class="p-kicker">'+kicker+'</div><h2 class="p-title">'+title+'</h2>'+crossLinkHtml(node)+detailHtml(node);
     document.getElementById('panel').classList.add('open');
     document.getElementById('backdrop').classList.add('show');
@@ -873,7 +882,7 @@ export function renderHtml(catalog: Catalog): string {
         "<header>",
         '<div class="titlebar">',
         "<h1>🧭 TypeAgent Action Browser</h1>",
-        `<span class="meta">${counts.agents} agents · ${counts.actions} actions · ${counts.commands} commands · generated ${generated}</span>`,
+        `<span class="meta">${counts.agents} agents · ${counts.actions} actions · ${counts.commandEndpoints} command endpoints · generated ${generated}</span>`,
         "</div>",
         '<div class="controls">',
         '<div class="tabs">',

@@ -14,7 +14,9 @@ import { LocalPlayerActions } from "./localPlayerSchema.ts";
           | <Previous>
           | <Status>
           | <PlayCommand>
+          | <ToggleShuffle>
           | <VolumeCommand>
+          | <ToggleMute>
           | <Mute>
           | <Unmute>
           | <ShowQueue>
@@ -32,7 +34,10 @@ import { LocalPlayerActions } from "./localPlayerSchema.ts";
 
 <Status> = (what('s | is) | show) (playing | status | now playing)?   ->  { actionName: "status" };
 
-<PlayCommand> = <PlayTrackNumberCommand>;
+<PlayCommand> = <PlayTrackNumberCommand> | <PlayDefaultCommand>;
+
+<PlayDefaultCommand> = play ((the)? (music | audio))?
+    -> { actionName: "play" };
 
 <PlayTrackNumberCommand> =
     play (the)? $(n:<Ordinal>) (track | song)? -> {
@@ -66,6 +71,12 @@ import { LocalPlayerActions } from "./localPlayerSchema.ts";
 
 <SetVolume> = <LocalPlayerPrefix> set volume (to)? $(n:number) (percent)?
     -> { actionName: "setVolume", parameters: { level: n } };
+
+<ToggleShuffle> = toggle (the)? shuffle (mode)?
+    -> { actionName: "toggleShuffle" };
+
+<ToggleMute> = toggle (the)? mute (state)?
+    -> { actionName: "toggleMute" };
 
 <Mute> = mute (the)? (music | sound | audio)?   ->  { actionName: "mute", parameters: { isMuted: true } };
 

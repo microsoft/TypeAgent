@@ -29,6 +29,10 @@ export class SearchProviderCommandHandlerTable implements CommandHandlerTable {
 
 export class ListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Lists browser agent search providers";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "listSearchProviders",
+    };
     public async run(
         context: ActionContext<BrowserActionContext>,
     ): Promise<void> {
@@ -52,6 +56,10 @@ export class ListCommandHandler implements CommandHandlerNoParams {
 
 export class SetCommandHandler implements CommandHandler {
     public readonly description = "Sets the active search provider";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "setSearchProvider",
+    };
     public readonly parameters = {
         args: {
             provider: {
@@ -100,11 +108,16 @@ export class SetCommandHandler implements CommandHandler {
 export class ShowCommandHandler implements CommandHandler {
     public readonly description =
         "Shows the details of the selected search provider";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "showSearchProvider",
+    };
     public readonly parameters = {
         args: {
             provider: {
                 description:
-                    "The name of the search provider to show details for.",
+                    "The name of the search provider to show details for. Omit to show the active provider.",
+                optional: true,
             },
         },
     } as const;
@@ -114,12 +127,14 @@ export class ShowCommandHandler implements CommandHandler {
     ): Promise<void> {
         const searchProviders: SearchProvider[] =
             context.sessionContext.agentContext.searchProviders;
+        const requestedProvider =
+            params.args.provider?.trim() ||
+            context.sessionContext.agentContext.activeSearchProvider.name;
 
         let bFound: boolean = false;
         searchProviders.forEach((provider) => {
             if (
-                provider.name.toLowerCase() ===
-                params.args.provider.toLowerCase()
+                provider.name.toLowerCase() === requestedProvider.toLowerCase()
             ) {
                 displayResult(JSON.stringify(provider, null, 2), context);
                 bFound = true;
@@ -129,7 +144,7 @@ export class ShowCommandHandler implements CommandHandler {
 
         if (!bFound) {
             displayError(
-                `Search provider '${params.args.provider}' not found.`,
+                `Search provider '${requestedProvider}' not found.`,
                 context,
             );
         }
@@ -138,6 +153,10 @@ export class ShowCommandHandler implements CommandHandler {
 
 export class AddCommandHandler implements CommandHandler {
     public readonly description = "Adds a new search provider";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "addSearchProvider",
+    };
     public readonly parameters = {
         args: {
             provider: {
@@ -196,6 +215,10 @@ export class AddCommandHandler implements CommandHandler {
 
 export class RemoveCommandHandler implements CommandHandler {
     public readonly description = "Removes the selected search provider";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "removeSearchProvider",
+    };
     public readonly parameters = {
         args: {
             provider: {
@@ -260,6 +283,10 @@ export class RemoveCommandHandler implements CommandHandler {
 export class ImportCommandHandler implements CommandHandler {
     public readonly description =
         "Imports the search providers from the specified browser";
+    public readonly action = {
+        schema: "browser.config",
+        actionName: "importSearchProviders",
+    };
     public readonly parameters = {
         args: {
             browser: {

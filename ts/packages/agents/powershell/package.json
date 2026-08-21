@@ -22,6 +22,7 @@
   "files": [
     "dist",
     "src",
+    "!dist/test",
     "!dist/tsconfig.tsbuildinfo"
   ],
   "scripts": {
@@ -63,6 +64,7 @@
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
+    "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/debug": "^4.1.12",

@@ -17,9 +17,11 @@ import {
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import { DispatcherName } from "../../dispatcher/dispatcherUtils.js";
+import { STATUS_NOTICE_DEFAULT_MESSAGE } from "../notificationDefaults.js";
 
 class NotifyInfoCommandHandler implements CommandHandlerNoParams {
     description: string = "Shows the number of notifications available";
+    public readonly action = "showNotificationSummary";
     help?: string;
     public async run(
         context: ActionContext<CommandHandlerContext>,
@@ -36,6 +38,7 @@ class NotifyInfoCommandHandler implements CommandHandlerNoParams {
 
 class NotifyClearCommandHandler implements CommandHandlerNoParams {
     description: string = "Clears notifications";
+    public readonly action = "clearNotifications";
     help?: string;
     public async run(
         context: ActionContext<CommandHandlerContext>,
@@ -52,6 +55,7 @@ class NotifyClearCommandHandler implements CommandHandlerNoParams {
 
 class NotifyShowUnreadCommandHandler implements CommandHandlerNoParams {
     description: string = "Shows unread notifications";
+    public readonly action = "showNotifications";
     help?: string;
     public async run(
         context: ActionContext<CommandHandlerContext>,
@@ -68,6 +72,7 @@ class NotifyShowUnreadCommandHandler implements CommandHandlerNoParams {
 
 class NotifyShowAllCommandHandler implements CommandHandlerNoParams {
     description: string = "Shows all notifications";
+    public readonly action = "showNotifications";
     help?: string;
 
     public async run(
@@ -96,9 +101,12 @@ const NOTIFY_TEST_MODES = {
 
 type NotifyTestMode = keyof typeof NOTIFY_TEST_MODES;
 
+export { STATUS_NOTICE_DEFAULT_MESSAGE } from "../notificationDefaults.js";
+
 class NotifyTestCommandHandler implements CommandHandler {
     public readonly description =
         "Fire a synthetic notification through the channel — for verifying chat rendering without an agent";
+    public readonly action = "testNotification";
     public readonly parameters = {
         args: {
             message: {
@@ -148,6 +156,7 @@ class NotifyTestCommandHandler implements CommandHandler {
 class NotifyStatusTestCommandHandler implements CommandHandler {
     public readonly description =
         "Fire a persistent status notice (a toast that collapses to the notification bell) to verify the chat-ui affordance without a stale server";
+    public readonly action = "testStatusNotice";
     public readonly parameters = {
         args: {
             message: {
@@ -193,9 +202,7 @@ class NotifyStatusTestCommandHandler implements CommandHandler {
             id: "notify-test-status",
             level,
             title: "Test status notice",
-            message:
-                params.args.message ??
-                "Dismissing this collapses it to the notification bell; click the bell to re-expand.",
+            message: params.args.message ?? STATUS_NOTICE_DEFAULT_MESSAGE,
         };
         if (params.flags.restart) {
             notice.actionLabel = "Restart server";
@@ -214,23 +221,25 @@ class NotifyStatusTestCommandHandler implements CommandHandler {
     }
 }
 
-export function getNotifyCommandHandlers(): CommandHandlerTable {
-    return {
-        description: "Notify commands",
-        defaultSubCommand: "info",
-        commands: {
-            info: new NotifyInfoCommandHandler(),
-            clear: new NotifyClearCommandHandler(),
-            test: new NotifyTestCommandHandler(),
-            status: new NotifyStatusTestCommandHandler(),
-            show: {
-                description: "Show notifications",
-                defaultSubCommand: "unread",
-                commands: {
-                    unread: new NotifyShowUnreadCommandHandler(),
-                    all: new NotifyShowAllCommandHandler(),
-                },
+export const notifyCommandHandlers: CommandHandlerTable = {
+    description: "Notify commands",
+    defaultSubCommand: "info",
+    commands: {
+        info: new NotifyInfoCommandHandler(),
+        clear: new NotifyClearCommandHandler(),
+        test: new NotifyTestCommandHandler(),
+        status: new NotifyStatusTestCommandHandler(),
+        show: {
+            description: "Show notifications",
+            defaultSubCommand: "unread",
+            commands: {
+                unread: new NotifyShowUnreadCommandHandler(),
+                all: new NotifyShowAllCommandHandler(),
             },
         },
-    };
+    },
+};
+
+export function getNotifyCommandHandlers(): CommandHandlerTable {
+    return notifyCommandHandlers;
 }

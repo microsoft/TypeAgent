@@ -64,6 +64,10 @@ const DEFAULT_BASELINE = "translation-results.json";
 class CollisionOptimizeListLeversCommandHandler implements CommandHandler {
     public readonly description =
         "List all registered optimization levers with their description, consumes, and probeType.";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "listCollisionOptimizationLevers",
+    };
     public readonly parameters = {} as const;
 
     public async run(
@@ -117,6 +121,10 @@ class CollisionOptimizeListLeversCommandHandler implements CommandHandler {
 class CollisionOptimizeExploreCommandHandler implements CommandHandler {
     public readonly description =
         "Run the optimize loop on the top-N collision neighborhoods. Writes an attempts archive under <workdir>/optimization-run-<ts>/.";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "exploreCollisionOptimizations",
+    };
     public readonly parameters = {
         flags: {
             corpus: {
@@ -437,6 +445,10 @@ function parseSeverities(
 class CollisionOptimizeValidateCommandHandler implements CommandHandler {
     public readonly description =
         "Stack all winners from an optimization run and re-probe the full baseline corpus. Emits optimization-impact.{json,html} with cross-neighborhood regression flags.";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "validateCollisionOptimizations",
+    };
     public readonly parameters = {
         flags: {
             run: {
@@ -567,6 +579,10 @@ class CollisionOptimizeValidateCommandHandler implements CommandHandler {
 class CollisionOptimizePatternsCommandHandler implements CommandHandler {
     public readonly description =
         "Mine patterns.jsonl across all accumulated optimize runs. Emits patterns.{json,html} with three groupings (mechanism × pattern, per-lever, lever-effectiveness) plus classifier agreement.";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "mineCollisionOptimizationPatterns",
+    };
     public readonly parameters = {
         flags: {
             "patterns-file": {
@@ -689,6 +705,10 @@ class CollisionOptimizePatternsCommandHandler implements CommandHandler {
 class CollisionOptimizeRunCommandHandler implements CommandHandler {
     public readonly description =
         "Run the full optimize pipeline (neighborhoods → explore → validate → patterns → distill) with --from gating. Each step's predecessor must exist before it runs.";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "runCollisionOptimizationPipeline",
+    };
     public readonly parameters = {
         flags: {
             from: {
@@ -822,6 +842,10 @@ class CollisionOptimizeRunCommandHandler implements CommandHandler {
 class CollisionOptimizeDistillCommandHandler implements CommandHandler {
     public readonly description =
         "Distill winning attempts in patterns.jsonl into candidate schemaGuidelines additions. Groups winners by (mechanism, guidelineHook), calls the LLM with the current schemaGuidelines as context, writes schemaGuidelines.candidates.md for operator review.";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "distillCollisionOptimizationPatterns",
+    };
     public readonly parameters = {
         flags: {
             "min-attempts": {
@@ -901,6 +925,10 @@ class CollisionOptimizeDistillCommandHandler implements CommandHandler {
 class CollisionOptimizeBrowseCommandHandler implements CommandHandler {
     public readonly description =
         "Generate browse.html for one or more optimization-run-* directories. Walks the run, writes a sortable case index plus a self-contained case.html per case showing every attempt with before/after diffs.";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "browseCollisionOptimizationRuns",
+    };
     public readonly parameters = {
         flags: {
             run: {

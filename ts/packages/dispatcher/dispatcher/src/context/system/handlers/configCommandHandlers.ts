@@ -50,7 +50,6 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { alwaysEnabledAgents } from "../../appAgentManager.js";
 import { getCacheFactory } from "../../../utils/cacheFactory.js";
-import { resolveCommand } from "../../../command/command.js";
 import { toggleActivityContext } from "../../../execute/activityContext.js";
 import registerDebug from "debug";
 const debugReasoning = registerDebug("typeagent:dispatcher:reasoning:config");
@@ -1498,6 +1497,11 @@ async function checkRequestHandler(
     systemContext: CommandHandlerContext,
     throwIfFailed: boolean = true,
 ) {
+    // Imported lazily to break a module cycle: command.js pulls in
+    // systemAgent.js, whose module-level systemHandlers calls
+    // getConfigCommandHandlers() from this file. A static import makes that a
+    // temporal dead zone error whenever this module is loaded first.
+    const { resolveCommand } = await import("../../../command/command.js");
     const result = await resolveCommand(
         `${appAgentName} request`,
         systemContext,
@@ -3308,102 +3312,131 @@ class DevModeOnCommandHandler implements CommandHandler {
     }
 }
 
-export function getConfigCommandHandlers(): CommandHandlerTable {
-    return {
-        description: "Configuration commands",
-        commands: {
-            schema: new AgentToggleCommandHandler(AgentToggle.Schema),
-            action: new AgentToggleCommandHandler(AgentToggle.Action),
-            command: new AgentToggleCommandHandler(AgentToggle.Command),
-            agent: {
-                description: "Manage agents (enable/disable, setup, refresh)",
-                defaultSubCommand: new AgentToggleCommandHandler(
-                    AgentToggle.Agent,
+const configCommandAction = {
+    schema: "system.config",
+    actionName: "runConfigCommand",
+} as const;
+
+type ConfigCommandDefinition = CommandHandlerTable["commands"][string];
+
+function addConfigActionLink(definition: ConfigCommandDefinition): void {
+    if ("commands" in definition) {
+        for (const command of Object.values(definition.commands)) {
+            addConfigActionLink(command);
+        }
+        if (
+            definition.defaultSubCommand !== undefined &&
+            typeof definition.defaultSubCommand !== "string"
+        ) {
+            addConfigActionLink(definition.defaultSubCommand);
+        }
+        return;
+    }
+    definition.action ??= configCommandAction;
+}
+
+function addConfigActionLinks(table: CommandHandlerTable): CommandHandlerTable {
+    for (const command of Object.values(table.commands)) {
+        addConfigActionLink(command);
+    }
+    return table;
+}
+
+export const configCommandHandlers: CommandHandlerTable = addConfigActionLinks({
+    description: "Configuration commands",
+    commands: {
+        schema: new AgentToggleCommandHandler(AgentToggle.Schema),
+        action: new AgentToggleCommandHandler(AgentToggle.Action),
+        command: new AgentToggleCommandHandler(AgentToggle.Command),
+        agent: {
+            description: "Manage agents (enable/disable, setup, refresh)",
+            defaultSubCommand: new AgentToggleCommandHandler(AgentToggle.Agent),
+            commands: {
+                setup: new AgentSetupCommandHandler(),
+                refresh: new AgentRefreshCommandHandler(),
+            },
+        },
+        request: new ConfigRequestCommandHandler(),
+        scrub: getToggleHandlerTable(
+            "outbound secret scrubbing",
+            async (_context, enable: boolean) => {
+                setEgressSecretRedactionEnabled(enable);
+            },
+        ),
+        match: {
+            description: "Configure match behavior",
+            commands: {
+                grammar: getToggleHandlerTable(
+                    "grammar cache usage",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            { cache: { grammar: enable } },
+                            context,
+                        );
+                    },
                 ),
-                commands: {
-                    setup: new AgentSetupCommandHandler(),
-                    refresh: new AgentRefreshCommandHandler(),
-                },
             },
-            request: new ConfigRequestCommandHandler(),
-            scrub: getToggleHandlerTable(
-                "outbound secret scrubbing",
-                async (_context, enable: boolean) => {
-                    setEgressSecretRedactionEnabled(enable);
-                },
-            ),
-            match: {
-                description: "Configure match behavior",
-                commands: {
-                    grammar: getToggleHandlerTable(
-                        "grammar cache usage",
-                        async (context, enable: boolean) => {
-                            await changeContextConfig(
-                                { cache: { grammar: enable } },
-                                context,
-                            );
-                        },
-                    ),
-                },
+        },
+        cache: {
+            description: "Configure cache behavior",
+            commands: {
+                grammarSystem: new GrammarSystemCommandHandler(),
+                useDFA: new GrammarUseDFACommandHandler(),
             },
-            cache: {
-                description: "Configure cache behavior",
-                commands: {
-                    grammarSystem: new GrammarSystemCommandHandler(),
-                    useDFA: new GrammarUseDFACommandHandler(),
-                },
-            },
-            translation: configTranslationCommandHandlers,
-            explainer: configExplainerCommandHandlers,
-            execution: configExecutionCommandHandlers,
-            modelProvider: new ConfigModelProviderCommandHandler(),
-            dev: {
-                description: "Toggle development mode",
-                defaultSubCommand: "on",
-                commands: {
-                    on: new DevModeOnCommandHandler(),
-                    off: {
-                        description: "Turn off development mode",
-                        run: async (
-                            context: ActionContext<CommandHandlerContext>,
-                        ) => {
-                            const systemContext =
-                                context.sessionContext.agentContext;
-                            systemContext.developerMode = false;
-                            systemContext.confirmActions = false;
-                            systemContext.clientIO.notify(
-                                undefined,
-                                "developerMode",
-                                { enabled: false },
-                                "dispatcher",
-                            );
-                            displaySuccess(
-                                "development mode is disabled.",
-                                context,
-                            );
-                        },
+        },
+        translation: configTranslationCommandHandlers,
+        explainer: configExplainerCommandHandlers,
+        execution: configExecutionCommandHandlers,
+        modelProvider: new ConfigModelProviderCommandHandler(),
+        dev: {
+            description: "Toggle development mode",
+            defaultSubCommand: "on",
+            commands: {
+                on: new DevModeOnCommandHandler(),
+                off: {
+                    description: "Turn off development mode",
+                    run: async (
+                        context: ActionContext<CommandHandlerContext>,
+                    ) => {
+                        const systemContext =
+                            context.sessionContext.agentContext;
+                        systemContext.developerMode = false;
+                        systemContext.confirmActions = false;
+                        systemContext.clientIO.notify(
+                            undefined,
+                            "developerMode",
+                            { enabled: false },
+                            "dispatcher",
+                        );
+                        displaySuccess(
+                            "development mode is disabled.",
+                            context,
+                        );
                     },
                 },
             },
-            log: {
-                description: "Toggle logging",
-                commands: {
-                    db: getToggleHandlerTable(
-                        "logging",
-                        async (context, enable) => {
-                            // Honor the toggle: previously hardcoded to
-                            // false regardless of `enable`, which made
-                            // `@config log db on` a no-op and blocked
-                            // every collision-rollout experiment from
-                            // uploading to Cosmos.
-                            context.sessionContext.agentContext.dblogging =
-                                enable;
-                        },
-                    ),
-                },
-            },
-
-            collision: getCollisionCommandHandlers(),
         },
-    };
+        log: {
+            description: "Toggle logging",
+            commands: {
+                db: getToggleHandlerTable(
+                    "logging",
+                    async (context, enable) => {
+                        // Honor the toggle: previously hardcoded to
+                        // false regardless of `enable`, which made
+                        // `@config log db on` a no-op and blocked
+                        // every collision-rollout experiment from
+                        // uploading to Cosmos.
+                        context.sessionContext.agentContext.dblogging = enable;
+                    },
+                ),
+            },
+        },
+
+        collision: getCollisionCommandHandlers(),
+    },
+});
+
+export function getConfigCommandHandlers(): CommandHandlerTable {
+    return configCommandHandlers;
 }

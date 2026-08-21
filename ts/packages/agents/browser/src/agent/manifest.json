@@ -24,6 +24,33 @@
     }
   },
   "subActionManifests": {
+    "pageTools": {
+      "defaultEnabled": true,
+      "transient": false,
+      "schema": {
+        "description": "Extract knowledge, answer questions, and record reusable actions on the current browser page.",
+        "schemaFile": "./pageToolsActionSchema.mts",
+        "schemaType": "BrowserPageToolsActions"
+      }
+    },
+    "automation": {
+      "defaultEnabled": true,
+      "transient": false,
+      "schema": {
+        "description": "Launch and close browser processes used by TypeAgent automation.",
+        "schemaFile": "./automationActionSchema.mts",
+        "schemaType": "BrowserAutomationActions"
+      }
+    },
+    "config": {
+      "defaultEnabled": true,
+      "transient": false,
+      "schema": {
+        "description": "Configure browser control routing, URL resolvers, internet lookup mode, and search providers.",
+        "schemaFile": "./configActionSchema.mts",
+        "schemaType": "BrowserConfigActions"
+      }
+    },
     "lookupAndAnswer": {
       "defaultEnabled": true,
       "transient": false,

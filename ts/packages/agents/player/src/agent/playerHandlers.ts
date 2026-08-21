@@ -5,6 +5,7 @@ import {
     IClientContext,
     getClientContext,
     handleCall,
+    loadHistoryFile,
     searchForPlaylists,
 } from "../client.js";
 import chalk from "chalk";
@@ -21,6 +22,10 @@ import {
     ResolveEntityResult,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
+import {
+    displaySuccess,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
 import {
     configKeyNames,
     configPathForEnvVar,
@@ -151,6 +156,15 @@ async function executePlayerAction(
     action: TypeAgentAction<PlayerActions>,
     context: ActionContext<PlayerActionContext>,
 ) {
+    switch (action.actionName) {
+        case "spotifyLogin":
+            return runSpotifyLogin(context);
+        case "spotifyLogout":
+            return runSpotifyLogout(context);
+        case "loadSpotifyUserData":
+            return runLoadSpotifyUserData(context, action.parameters.file);
+    }
+
     const clientContext = context.sessionContext.agentContext.spotify;
     if (clientContext) {
         // Per-request accumulator for any LLM tokens consumed while executing
@@ -180,6 +194,73 @@ async function executePlayerAction(
     return createActionResultFromError(
         "Not logged in to Spotify.  Use the command '@player spotify login' to log in.",
     );
+}
+
+export async function runSpotifyLogin(
+    context: ActionContext<PlayerActionContext>,
+    login: (
+        context: SessionContext<PlayerActionContext>,
+    ) => Promise<string | undefined> = enableSpotify,
+): Promise<undefined> {
+    const sessionContext = context.sessionContext;
+    const clientContext = sessionContext.agentContext.spotify;
+    if (clientContext !== undefined) {
+        const user = clientContext.service.retrieveUser().username;
+        displayWarn(`Already logged in to Spotify as ${user}`, context);
+        return undefined;
+    }
+    const user = await login(sessionContext);
+    displaySuccess(`Logged in to Spotify as ${user}`, context);
+    return undefined;
+}
+
+export async function runSpotifyLogout(
+    context: ActionContext<PlayerActionContext>,
+    logout: (
+        context: SessionContext<PlayerActionContext>,
+        clearToken: boolean,
+    ) => Promise<void> = disableSpotify,
+): Promise<undefined> {
+    const sessionContext = context.sessionContext;
+    if (sessionContext.agentContext.spotify === undefined) {
+        displayWarn("Not logged in to Spotify.", context);
+        return undefined;
+    }
+    await logout(sessionContext, true);
+    displaySuccess("Logged out from Spotify.", context);
+    return undefined;
+}
+
+export async function runLoadSpotifyUserData(
+    context: ActionContext<PlayerActionContext>,
+    file: string,
+    load: typeof loadHistoryFile = loadHistoryFile,
+): Promise<undefined> {
+    const sessionContext = context.sessionContext;
+    const clientContext = sessionContext.agentContext.spotify;
+    if (clientContext === undefined) {
+        throw new Error("Spotify integration is not enabled.");
+    }
+    if (sessionContext.instanceStorage === undefined) {
+        throw new Error("User data storage disabled.");
+    }
+
+    context.actionIO.setDisplay("Loading Spotify user data...");
+    const result = await load(
+        sessionContext.instanceStorage,
+        file,
+        clientContext,
+    );
+    const skipped =
+        result.skipped.length !== 0
+            ? `\n\nSkipped ${result.skipped.length} file(s) that aren't Spotify streaming history: ${result.skipped
+                  .map((f) => f.replace(/^.*[\\/]/, ""))
+                  .join(", ")}.`
+            : "";
+    context.actionIO.setDisplay(
+        `Spotify user data loaded: ${result.records} track play(s) from ${result.loaded.length} file(s).${skipped}`,
+    );
+    return undefined;
 }
 
 async function updatePlayerContext(

@@ -16,12 +16,40 @@ export type CalendarTimeRange = string; // "2pm to 3pm", "9am-10am", "1-2pm" - u
 export type CalendarEntities = CalendarDate | CalendarTime | CalendarTimeRange;
 
 export type CalendarActionV3 =
+    | CalendarLoginAction
+    | CalendarLogoutAction
+    | CalendarGoogleAuthAction
     | ScheduleEventAction
     | FindEventsAction
     | AddParticipantAction
     | FindTodaysEventsAction
     | FindThisWeeksEventsAction
     | RemoveEventAction;
+
+// user: log in to my calendar
+// agent: { "actionName": "calendarLogin" }
+// Sign in to the configured calendar provider.
+export type CalendarLoginAction = {
+    actionName: "calendarLogin";
+};
+
+// user: log out of my calendar
+// agent: { "actionName": "calendarLogout" }
+// Sign out of the configured calendar provider.
+export type CalendarLogoutAction = {
+    actionName: "calendarLogout";
+};
+
+// user: finish setting up my Google Calendar
+// agent: { "actionName": "calendarGoogleAuth" }
+// Explain how to finish Google Calendar authorization. This action deliberately
+// takes no parameters: the authorization code is a single-use credential, so it
+// must be typed into the `@calendar google-auth <code>` command rather than
+// routed through translation, where the model could truncate or rewrite it and
+// where it would be sent to the model provider.
+export type CalendarGoogleAuthAction = {
+    actionName: "calendarGoogleAuth";
+};
 
 // Schedule a new event on the calendar
 // Examples: "schedule a meeting tomorrow at 2pm", "add dentist appointment on Friday at 3pm"

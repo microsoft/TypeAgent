@@ -54,6 +54,10 @@ const VALID_KINDS: readonly CollisionEventKind[] = [
 class CollisionEventsCommandHandler implements CommandHandler {
     public readonly description =
         "Show recent collision events captured in the current session's ring buffer";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "showCollisionEvents",
+    };
     public readonly parameters = {
         flags: {
             limit: {
@@ -380,6 +384,10 @@ const SIMILARITY_CACHE_RELATIVE = path.join(
 class CollisionSimilarCommandHandler implements CommandHandler {
     public readonly description =
         "Find semantically similar actions across agents (multi-vector embedding similarity, clusters by default)";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "findSimilarActions",
+    };
     public readonly parameters = {
         flags: {
             threshold: {
@@ -569,6 +577,10 @@ class CollisionSimilarCommandHandler implements CommandHandler {
 class CollisionSimilarListStrategiesCommandHandler implements CommandHandler {
     public readonly description =
         "List the named strategies available for `@collision similar -s <name>`";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "listCollisionStrategies",
+    };
     public readonly parameters = {} as const;
 
     public async run(context: ActionContext<CommandHandlerContext>) {
@@ -1029,6 +1041,10 @@ const LLM_SELECT_DELTA_DEFAULT = 0.05;
 class CollisionProbeCommandHandler implements CommandHandler {
     public readonly description =
         "Probe what action(s) a hand-crafted utterance would route to via the embedding ranker (top-K with cosine deltas)";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "probeCollisionPhrase",
+    };
     public readonly parameters = {
         flags: {
             top: {
@@ -1270,22 +1286,23 @@ function renderProbeText(
     return lines;
 }
 
+export const collisionCommandHandlers: CommandHandlerTable = {
+    description:
+        "Inspect collision detection telemetry and run static collision analyses",
+    defaultSubCommand: "events",
+    commands: {
+        events: new CollisionEventsCommandHandler(),
+        similar: new CollisionSimilarCommandHandler(),
+        probe: new CollisionProbeCommandHandler(),
+        corpus: getCollisionCorpusCommandHandlers(),
+        neighborhoods: new CollisionNeighborhoodsCommandHandler(),
+        optimize: getCollisionOptimizeCommandHandlers(),
+        preferences: getCollisionPreferenceCommandHandlers(),
+        keywords: getCollisionKeywordCommandHandlers(),
+        "list-strategies": new CollisionSimilarListStrategiesCommandHandler(),
+    },
+};
+
 export function getCollisionCommandHandlers(): CommandHandlerTable {
-    return {
-        description:
-            "Inspect collision detection telemetry and run static collision analyses",
-        defaultSubCommand: "events",
-        commands: {
-            events: new CollisionEventsCommandHandler(),
-            similar: new CollisionSimilarCommandHandler(),
-            probe: new CollisionProbeCommandHandler(),
-            corpus: getCollisionCorpusCommandHandlers(),
-            neighborhoods: new CollisionNeighborhoodsCommandHandler(),
-            optimize: getCollisionOptimizeCommandHandlers(),
-            preferences: getCollisionPreferenceCommandHandlers(),
-            keywords: getCollisionKeywordCommandHandlers(),
-            "list-strategies":
-                new CollisionSimilarListStrategiesCommandHandler(),
-        },
-    };
+    return collisionCommandHandlers;
 }

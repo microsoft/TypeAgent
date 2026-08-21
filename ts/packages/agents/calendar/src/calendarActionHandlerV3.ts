@@ -37,6 +37,7 @@ import {
     CalendarClient,
     ICalendarProvider,
     CalendarProviderType,
+    CalendarUser,
     createCalendarProviderFromConfig,
     claimSilentRestoreAnnouncement,
     evaluateGraphReadiness,
@@ -72,6 +73,7 @@ export class CalendarClientLoginCommandHandler
     implements CommandHandlerNoParams
 {
     public readonly description = "Log into calendar service";
+    public readonly action = "calendarLogin";
     public async run(context: ActionContext<CalendarActionContext>) {
         const provider = context.sessionContext.agentContext.calendarProvider;
         const providerType = context.sessionContext.agentContext.providerType;
@@ -92,16 +94,7 @@ export class CalendarClientLoginCommandHandler
             const name = user.displayName || "Unknown";
             const email = user.email || "Unknown";
             displayWarn(`Already logged in as ${name}<${email}>`, context);
-            // Re-emit the signed-in marker so the avatar (name + photo)
-            // resyncs even when the user was already authenticated — e.g.
-            // restored silently on launch before the photo had been fetched.
-            const photoAttr = user.photoUrl
-                ? ` data-photo="${escapeHtml(user.photoUrl)}"`
-                : "";
-            context.actionIO.appendDisplay({
-                type: "html",
-                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
-            });
+            await applyCalendarLoginState(context, user);
             return;
         }
 
@@ -130,18 +123,7 @@ export class CalendarClientLoginCommandHandler
                 `Successfully logged in as ${name} <${email}>`,
                 context,
             );
-            // Hidden marker the chat-ui / shell scan for after each agent
-            // message. Lifts the signed-in identity into UI state so the
-            // user-letter avatar shows the real initial and stops triggering
-            // login on click. data-photo carries the base64 profile photo
-            // (when the provider has one) so the avatar can render the image.
-            const photoAttr = user.photoUrl
-                ? ` data-photo="${escapeHtml(user.photoUrl)}"`
-                : "";
-            context.actionIO.appendDisplay({
-                type: "html",
-                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
-            });
+            await applyCalendarLoginState(context, user);
         } else {
             displayWarn(
                 "Login failed. If using Google Calendar, you can also try '@calendar google-auth <code>' with a manual authorization code.",
@@ -156,6 +138,7 @@ export class CalendarClientLogoutCommandHandler
     implements CommandHandlerNoParams
 {
     public readonly description = "Log out of calendar service";
+    public readonly action = "calendarLogout";
     public async run(context: ActionContext<CalendarActionContext>) {
         const provider = context.sessionContext.agentContext.calendarProvider;
         if (provider === undefined) {
@@ -175,6 +158,7 @@ export class CalendarClientLogoutCommandHandler
             type: "html",
             content: `<span class="typeagent-user-signed-out" hidden></span>`,
         });
+        await context.sessionContext.notifyReadinessChanged();
     }
 }
 
@@ -182,6 +166,7 @@ export class CalendarClientLogoutCommandHandler
 export class GoogleAuthCommandHandler implements CommandHandler {
     public readonly description =
         "Complete Google Calendar OAuth flow with authorization code";
+    public readonly action = "calendarGoogleAuth";
     public readonly parameters = {
         args: {
             code: {
@@ -231,6 +216,7 @@ export class GoogleAuthCommandHandler implements CommandHandler {
                 `Successfully logged in to Google Calendar as ${user.displayName || "Unknown"} <${user.email || "Unknown"}>`,
                 context,
             );
+            await applyCalendarLoginState(context, user);
         } else {
             displayWarn(
                 "Failed to complete authorization. Please try '@calendar login' again to get a new code.",
@@ -240,13 +226,17 @@ export class GoogleAuthCommandHandler implements CommandHandler {
     }
 }
 
+const calendarLoginHandler = new CalendarClientLoginCommandHandler();
+const calendarLogoutHandler = new CalendarClientLogoutCommandHandler();
+const googleAuthHandler = new GoogleAuthCommandHandler();
+
 const handlers: CommandHandlerTable = {
     description: "Calendar login command",
     defaultSubCommand: "login",
     commands: {
-        login: new CalendarClientLoginCommandHandler(),
-        logout: new CalendarClientLogoutCommandHandler(),
-        "google-auth": new GoogleAuthCommandHandler(),
+        login: calendarLoginHandler,
+        logout: calendarLogoutHandler,
+        "google-auth": googleAuthHandler,
     },
 };
 
@@ -257,6 +247,22 @@ function escapeHtml(text: string): string {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+async function applyCalendarLoginState(
+    context: ActionContext<CalendarActionContext>,
+    user: CalendarUser,
+): Promise<void> {
+    const name = user.displayName || "Unknown";
+    const email = user.email || "Unknown";
+    const photoAttr = user.photoUrl
+        ? ` data-photo="${escapeHtml(user.photoUrl)}"`
+        : "";
+    context.actionIO.appendDisplay({
+        type: "html",
+        content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
+    });
+    await context.sessionContext.notifyReadinessChanged();
 }
 
 // Attempt a silent, non-interactive sign-in using cached MS Graph
@@ -558,6 +564,22 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 `\n[Calendar V3] Executing action: ${calendarAction.actionName} (provider: ${providerType || "none"})`,
             ),
         );
+
+        switch (calendarAction.actionName) {
+            case "calendarLogin":
+                await calendarLoginHandler.run(context);
+                return undefined;
+            case "calendarLogout":
+                await calendarLogoutHandler.run(context);
+                return undefined;
+            case "calendarGoogleAuth":
+                // The command path does the real work. The action only points
+                // the user at it so the single-use authorization code is never
+                // produced by the translator.
+                return createActionResultFromTextDisplay(
+                    "To finish Google Calendar authorization, run `@calendar google-auth <code>` with the code Google gave you. The code is single-use, so it has to be entered directly rather than through a natural-language request.",
+                );
+        }
 
         if (!provider) {
             return createActionResultFromError(
@@ -1380,8 +1402,9 @@ export async function runCalendarLogin(
             );
         }
         const user = await provider.getUser();
+        await applyCalendarLoginState(actionContext, user);
         return createActionResultFromTextDisplay(
-            `[${ts()}] Signed in as ${user.displayName || user.email || "Unknown"}. Re-run your calendar command — readiness was re-checked automatically.`,
+            `[${ts()}] Signed in as ${user.displayName || user.email || "Unknown"}. Re-run your calendar command - readiness was re-checked automatically.`,
         );
     } catch (e: any) {
         return createActionResultFromError(

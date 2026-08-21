@@ -208,7 +208,13 @@ function isUsefulPhrase(phrase: string): boolean {
  */
 export function extractCompiledPhrasings(
     content: string,
+    sourceMap?: string,
 ): Map<string, string[]> {
+    const source = sourceGrammarFromMap(sourceMap);
+    if (source !== undefined) {
+        return extractPhrasings(source.fileName, source.content);
+    }
+
     const result = new Map<string, string[]>();
     let grammar: Grammar;
     try {
@@ -250,6 +256,28 @@ export function extractCompiledPhrasings(
         }
     }
     return result;
+}
+
+function sourceGrammarFromMap(
+    sourceMap: string | undefined,
+): { fileName: string; content: string } | undefined {
+    if (sourceMap === undefined) {
+        return undefined;
+    }
+    try {
+        const parsed = asRecord(JSON.parse(sourceMap));
+        const rules = asRecord(parsed?.rules);
+        const start = asRecord(rules?.Start);
+        const fileName = start?.fileId;
+        const files = asRecord(parsed?.files);
+        if (typeof fileName !== "string") {
+            return undefined;
+        }
+        const content = files?.[fileName];
+        return typeof content === "string" ? { fileName, content } : undefined;
+    } catch {
+        return undefined;
+    }
 }
 
 function renderCompiledParts(parts: unknown, depth: number): string {

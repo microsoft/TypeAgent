@@ -29,14 +29,23 @@ const schemaDir = path.resolve(
 // schema file name -> its exported entry (action) type, matching the
 // subActionManifests registration in systemAgent.ts.
 const ENTRY_TYPES: Record<string, string> = {
+    "collisionActionSchema.ts": "CollisionAction",
     "configActionSchema.ts": "ConfigAction",
+    "constructionActionSchema.ts": "ConstructionAction",
     "conversationActionSchema.ts": "ConversationAction",
+    "copilotActionSchema.ts": "CopilotAction",
+    "feedbackActionSchema.ts": "FeedbackAction",
     "grammarActionSchema.ts": "GrammarAction",
     "helpActionSchema.ts": "HelpAction",
     "historyActionSchema.ts": "HistoryAction",
+    "indexActionSchema.ts": "IndexAction",
     "logActionSchema.ts": "LogAction",
+    "memoryActionSchema.ts": "MemoryAction",
     "notificationActionSchema.ts": "NotificationAction",
+    "sessionActionSchema.ts": "SessionAction",
     "settingsActionSchema.ts": "UserSettingsAction",
+    "systemDiagnosticsActionSchema.ts": "SystemDiagnosticsAction",
+    "systemOperationsActionSchema.ts": "SystemOperationsAction",
 };
 
 const schemaFiles = fs

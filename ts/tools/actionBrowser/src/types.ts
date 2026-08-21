@@ -65,6 +65,21 @@ export interface CommandActionLink {
     /** Schema that declares the action; omitted when unambiguous in the agent. */
     schema?: string;
     actionName: string;
+    /** Fully-qualified schema resolved from the bundled action catalog. */
+    resolvedSchema?: string;
+}
+
+export interface CommandActionLinkIssue {
+    host: string;
+    path: string;
+    actionName: string;
+    schema?: string;
+    message: string;
+}
+
+export interface CommandActionGap {
+    host: string;
+    path: string;
 }
 
 export interface CommandInfo {
@@ -83,6 +98,10 @@ export interface CommandInfo {
     description: string;
     /** True when the entry is a command group (has sub-commands). */
     group: boolean;
+    /** True when this exact path resolves to an executable descriptor. */
+    executable: boolean;
+    /** Referenced child used when this path is invoked without a subcommand. */
+    defaultSubCommand?: string;
     args: CommandArg[];
     flags: CommandFlag[];
     /**
@@ -97,6 +116,10 @@ export interface CatalogCounts {
     agents: number;
     actions: number;
     commands: number;
+    commandEndpoints: number;
+    linkedCommandEndpoints: number;
+    missingCommandActions: number;
+    invalidCommandActionLinks: number;
 }
 
 export interface Catalog {
@@ -105,5 +128,11 @@ export interface Catalog {
     agents: AgentInfo[];
     /** Every `@command`, across the system host and each agent host. */
     commands: CommandInfo[];
+    /** Declared command links that do not resolve to one registered action. */
+    commandActionLinkIssues: CommandActionLinkIssue[];
+    /** Executable command endpoints with no declared equivalent action. */
+    missingCommandActions: CommandActionGap[];
+    /** Runtime-generated schemas intentionally omitted from static collection. */
+    runtimeOnlySchemas: string[];
     counts: CatalogCounts;
 }
