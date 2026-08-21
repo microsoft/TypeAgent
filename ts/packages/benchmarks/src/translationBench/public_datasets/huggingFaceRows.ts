@@ -26,11 +26,16 @@ export interface DownloadRowsOptions<Row> {
     signal?: AbortSignal;
 }
 
+interface DatasetInfo {
+    sha?: unknown;
+}
+
 interface RowsPage {
     rows?: { row?: unknown }[];
     num_rows_total?: number;
 }
 
+const defaultHubApi = "https://huggingface.co/api/datasets";
 const defaultRowsApi = "https://datasets-server.huggingface.co/rows";
 const transientStatuses = new Set([408, 425, 429]);
 
@@ -61,14 +66,15 @@ function combineSignals(
     };
 }
 
-async function fetchPage(
+async function fetchJson(
     fetchImpl: typeof fetch,
     url: URL,
-    revision: string,
+    api: "Hub API" | "rows API",
     attempts: number,
     retryDelayMs: number,
     requestTimeoutMs: number,
     signal?: AbortSignal,
+    revision?: string,
 ): Promise<unknown> {
     let lastError: unknown;
     for (let attempt = 0; attempt < attempts; attempt++) {
@@ -87,12 +93,15 @@ async function fetchPage(
         if (!response.ok && !isTransientStatus(response.status)) {
             requestSignal.dispose();
             throw new Error(
-                `Hugging Face rows API returned ${response.status} ${response.statusText}`,
+                `Hugging Face ${api} returned ${response.status} ${response.statusText}`,
             );
         }
         if (response.ok) {
             try {
-                if (response.headers.get("x-revision") !== revision) {
+                if (
+                    revision !== undefined &&
+                    response.headers.get("x-revision") !== revision
+                ) {
                     throw new Error(
                         `Hugging Face rows API did not serve revision ${revision}`,
                     );
@@ -104,13 +113,44 @@ async function fetchPage(
         }
         requestSignal.dispose();
         lastError = new Error(
-            `Hugging Face rows API returned ${response.status}`,
+            `Hugging Face ${api} returned ${response.status}`,
         );
         if (attempt + 1 < attempts) {
             await delay(retryDelayMs * 2 ** attempt, undefined, { signal });
         }
     }
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+async function resolveRevision(
+    fetchImpl: typeof fetch,
+    source: HuggingFaceRowsSource,
+    attempts: number,
+    retryDelayMs: number,
+    requestTimeoutMs: number,
+    signal?: AbortSignal,
+): Promise<string> {
+    const url = new URL(
+        `${defaultHubApi}/${source.dataset}/revision/${encodeURIComponent(source.revision)}`,
+    );
+    const value = (await fetchJson(
+        fetchImpl,
+        url,
+        "Hub API",
+        attempts,
+        retryDelayMs,
+        requestTimeoutMs,
+        signal,
+    )) as DatasetInfo;
+    if (
+        typeof value !== "object" ||
+        value === null ||
+        typeof value.sha !== "string" ||
+        !/^[0-9a-f]{40}$/.test(value.sha)
+    ) {
+        throw new Error("Hugging Face Hub API returned an invalid revision");
+    }
+    return value.sha;
 }
 
 function parsePage<Row>(
@@ -163,6 +203,14 @@ export async function downloadHuggingFaceRows<Row>(
         throw new Error("requestTimeoutMs must be a positive integer");
     }
     options.signal?.throwIfAborted();
+    const revision = await resolveRevision(
+        fetchImpl,
+        options.source,
+        retryAttempts,
+        retryDelayMs,
+        requestTimeoutMs,
+        options.signal,
+    );
 
     await mkdir(dirname(options.outputPath), { recursive: true });
     const tempPath = `${options.outputPath}.${process.pid}.${Date.now()}.tmp`;
@@ -178,14 +226,15 @@ export async function downloadHuggingFaceRows<Row>(
             url.searchParams.set("offset", String(offset));
             url.searchParams.set("length", String(pageSize));
             const page = parsePage<Row>(
-                await fetchPage(
+                await fetchJson(
                     fetchImpl,
                     url,
-                    options.source.revision,
+                    "rows API",
                     retryAttempts,
                     retryDelayMs,
                     requestTimeoutMs,
                     options.signal,
+                    revision,
                 ),
                 offset,
                 options.parseRow,
