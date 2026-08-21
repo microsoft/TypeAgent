@@ -4,7 +4,6 @@
 import {
     context,
     createContextKey,
-    SpanStatusCode,
     trace,
     type Context,
     type Span,
@@ -16,9 +15,20 @@ import { otel } from "@typeagent/telemetry";
 import type { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { getSessionName } from "../context/session.js";
 import {
+    anyCancellationSignalAborted,
+    recordSpanFailure,
+    type CancellationSignals,
+    type SpanFailureNames,
+} from "./spanFailure.js";
+import {
     logReasoningCompleted,
     logReasoningStarted,
 } from "./structuredEvents.js";
+
+const REASONING_FAILURE: SpanFailureNames = {
+    errorName: "ReasoningError",
+    failureMessage: "reasoning failed",
+};
 
 export const REASONING_SPAN_EVENTS = Object.freeze({
     TOOL_CALL: "reasoning.tool_call",
@@ -66,13 +76,17 @@ export function emitReasoningToolCall(toolCallNumber: number): void {
     });
 }
 
+/**
+ * Run a reasoning body inside a `typeagent.reasoning` span.
+ *
+ * `cancellationSignals` are the signals the caller holds: a cancelled or
+ * timed-out run usually throws whatever the provider was in the middle of,
+ * which says nothing about having been cancelled.
+ */
 export async function wrapReasoningSpan<T>(
     attributes: otel.TypeAgentSpanAttributes,
     body: (span: Span) => Promise<T>,
-    isCancellation: (error: unknown) => boolean = (error) =>
-        error !== null &&
-        typeof error === "object" &&
-        (error as { name?: unknown }).name === "AbortError",
+    cancellationSignals?: CancellationSignals,
 ): Promise<T> {
     const tracer: Tracer = trace.getTracer(
         otel.INSTRUMENTATION_SCOPE_NAME,
@@ -107,14 +121,12 @@ export async function wrapReasoningSpan<T>(
                     ),
                 );
             } catch (error) {
-                const isAbort = isCancellation(error);
-                const name = isAbort ? "AbortError" : "ReasoningError";
-                const message = isAbort ? "cancelled" : "reasoning failed";
-                span.recordException({ name, message });
-                span.setStatus({
-                    code: SpanStatusCode.ERROR,
-                    message,
-                });
+                recordSpanFailure(
+                    span,
+                    error,
+                    REASONING_FAILURE,
+                    cancellationSignals,
+                );
                 throw error;
             } finally {
                 state.ended = true;
@@ -159,6 +171,12 @@ export function runInReasoningSpan<T>(
             ? {}
             : { model: modelAttributes.genAiRequestModel }),
     };
+    // Both the span and the `reasoning:completed` event below classify from
+    // this one list, so they cannot disagree.
+    const cancellationSignals: CancellationSignals = [
+        cancellationSignal,
+        context.abortSignal,
+    ];
     return wrapReasoningSpan(
         attributes,
         async (span) => {
@@ -182,12 +200,10 @@ export function runInReasoningSpan<T>(
                 }
                 return result;
             } catch (error) {
-                const cancelled =
-                    cancellationSignal?.aborted === true ||
-                    context.abortSignal?.aborted === true ||
-                    (error !== null &&
-                        typeof error === "object" &&
-                        (error as { name?: unknown }).name === "AbortError");
+                const cancelled = otel.isTelemetryCancellation(
+                    error,
+                    anyCancellationSignalAborted(cancellationSignals),
+                );
                 if (requestId !== undefined) {
                     logReasoningCompleted(systemContext.logger, {
                         requestId,
@@ -200,11 +216,6 @@ export function runInReasoningSpan<T>(
                 throw error;
             }
         },
-        (error) =>
-            cancellationSignal?.aborted === true ||
-            context.abortSignal?.aborted === true ||
-            (error !== null &&
-                typeof error === "object" &&
-                (error as { name?: unknown }).name === "AbortError"),
+        cancellationSignals,
     );
 }
