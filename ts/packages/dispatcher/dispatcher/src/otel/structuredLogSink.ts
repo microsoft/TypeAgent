@@ -31,6 +31,12 @@ const SAFE_STRING_FIELDS = [
     "routingReason",
     "matchOutcome",
     "cacheBypassReason",
+    // Both come from closed vocabularies (a fixed union and a reviewed
+    // allowlist), so neither adds cardinality. The raw error `name`,
+    // `message`, `stack`, and the original `request` are absent from every
+    // list here so they never leave the local and opt-in database sinks.
+    "errorCategory",
+    "errorCode",
 ] as const;
 
 const SAFE_NUMBER_FIELDS = [
@@ -50,6 +56,7 @@ const SAFE_NUMBER_FIELDS = [
     "totalTokens",
     "cachedTokens",
     "retryCount",
+    "httpStatus",
 ] as const;
 
 const SAFE_BOOLEAN_FIELDS = [
@@ -60,6 +67,7 @@ const SAFE_BOOLEAN_FIELDS = [
     "cancelled",
     "streaming",
     "fallback",
+    "retryable",
 ] as const;
 
 const SAFE_STRING_ARRAY_FIELDS = [

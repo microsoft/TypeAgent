@@ -124,3 +124,18 @@ export {
     isStructuredLoggingEnabled,
     setStructuredLoggingEnabled,
 } from "./structuredLogging.js";
+
+export {
+    attachTelemetryErrorClassification,
+    classifyTelemetryError,
+    classifyTelemetryErrorIfRecognized,
+    classifyTelemetryHttpStatus,
+    isTelemetryCancellation,
+    readTelemetryErrorClassification,
+    TELEMETRY_ERROR_CATEGORIES,
+    TELEMETRY_ERROR_CODES,
+    type TelemetryClassifiedError,
+    type TelemetryErrorCategory,
+    type TelemetryErrorClassification,
+    type TelemetryErrorCode,
+} from "./errorClassification.js";
