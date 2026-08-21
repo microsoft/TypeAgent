@@ -22,6 +22,10 @@
     "./traceContext": {
       "types": "./dist/otel/traceContract.d.ts",
       "default": "./dist/otel/traceContract.js"
+    },
+    "./errorClassification": {
+      "types": "./dist/otel/errorClassification.d.ts",
+      "default": "./dist/otel/errorClassification.js"
     }
   },
   "files": [

@@ -878,11 +878,13 @@ export class RequestCommandHandler implements CommandHandler {
                     // cache-stage failure is never mislabelled `llm_translation`.
                     strategy: "translate",
                     success: false,
+                    // Only what is known from outside the error; a cancellation
+                    // carried by the thrown value is recognized from `error`.
                     cancelled:
-                        e?.name === "AbortError" ||
                         systemContext.currentAbortSignal?.aborted === true,
                     elapsedMs: Date.now() - translationStartedAt,
                     routing: readTranslationRoutingFromError(e),
+                    error: e,
                     actions: [],
                 });
                 debugRequest(`Request translation failed: ${e.message}`);
