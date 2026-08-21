@@ -70,6 +70,16 @@ describe("agent-server working-directory policy", () => {
         });
     });
 
+    test("rejects an allowlist with no valid roots", () => {
+        expect(() =>
+            loadWorkingDirectoryPolicy({
+                TYPEAGENT_CODE_ALLOWED_ROOTS: path.join(root, "does-not-exist"),
+            }),
+        ).toThrow(
+            "TYPEAGENT_CODE_ALLOWED_ROOTS does not contain an existing directory",
+        );
+    });
+
     test("infers the parent directory of a quoted file path", () => {
         const file = path.join(child, "releaseNotes.ts");
         fs.writeFileSync(file, "export {};\n");

@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 import type { CodingTaskOutcome } from "@typeagent/dispatcher-types";
+import { isMutatingCodingRequest } from "./codingRequestClassification.js";
 
-const MUTATION_REQUEST_PATTERN =
-    /\b(add|build|create|delete|edit|fix|format|implement|migrate|modify|refactor|remove|rename|update|write)\b/i;
+export { isMutatingCodingRequest } from "./codingRequestClassification.js";
 const DOCUMENTATION_TARGET_PATTERN =
     /\b(docs?|documentation|markdown|readme)\b|\.(?:md|mdx)\b/i;
 const VALIDATED_TARGET_PATTERN =
@@ -23,10 +23,6 @@ function serializedArgs(args: unknown): string {
     } catch {
         return String(args);
     }
-}
-
-export function isMutatingCodingRequest(request: string): boolean {
-    return MUTATION_REQUEST_PATTERN.test(request);
 }
 
 export function requiresCodingValidation(request: string): boolean {
@@ -79,6 +75,8 @@ export function createCodingCompletionTracker(request: string) {
         onToolSuccess(toolName: string, args: unknown): void {
             if (isWriteToolUse(toolName, args)) {
                 filesChanged = true;
+                validationSucceeded = false;
+                stopBlockIssued = false;
             }
             if (isValidationToolUse(toolName, args)) {
                 validationAttempted = true;
