@@ -26,44 +26,17 @@ export interface DownloadRowsOptions<Row> {
     signal?: AbortSignal;
 }
 
-interface DatasetInfo {
-    sha?: unknown;
-}
-
+type DatasetInfo = { sha?: unknown };
 interface RowsPage {
     rows?: { row?: unknown }[];
     num_rows_total?: number;
 }
-
 const defaultHubApi = "https://huggingface.co/api/datasets";
 const defaultRowsApi = "https://datasets-server.huggingface.co/rows";
 const transientStatuses = new Set([408, 425, 429]);
 
 function isTransientStatus(status: number): boolean {
     return transientStatuses.has(status) || status >= 500;
-}
-
-function combineSignals(
-    signal: AbortSignal | undefined,
-    timeoutMs: number,
-): { signal: AbortSignal; dispose: () => void } {
-    const timeout = AbortSignal.timeout(timeoutMs);
-    if (signal === undefined) return { signal: timeout, dispose: () => {} };
-    const controller = new AbortController();
-    const forwardAbort = (source: AbortSignal) =>
-        controller.abort(source.reason);
-    const onAbort = () => forwardAbort(signal);
-    const onTimeout = () => forwardAbort(timeout);
-    signal.addEventListener("abort", onAbort, { once: true });
-    timeout.addEventListener("abort", onTimeout, { once: true });
-    if (signal.aborted) forwardAbort(signal);
-    return {
-        signal: controller.signal,
-        dispose: () => {
-            signal.removeEventListener("abort", onAbort);
-            timeout.removeEventListener("abort", onTimeout);
-        },
-    };
 }
 
 async function fetchJson(
@@ -79,11 +52,13 @@ async function fetchJson(
     let lastError: unknown;
     for (let attempt = 0; attempt < attempts; attempt++) {
         let response: Response;
-        const requestSignal = combineSignals(signal, requestTimeoutMs);
+        const timeout = AbortSignal.timeout(requestTimeoutMs);
+        const requestSignal = signal
+            ? AbortSignal.any([signal, timeout])
+            : timeout;
         try {
-            response = await fetchImpl(url, { signal: requestSignal.signal });
+            response = await fetchImpl(url, { signal: requestSignal });
         } catch (error) {
-            requestSignal.dispose();
             if (signal?.aborted) throw signal.reason;
             lastError = error;
             if (attempt + 1 === attempts) break;
@@ -91,27 +66,21 @@ async function fetchJson(
             continue;
         }
         if (!response.ok && !isTransientStatus(response.status)) {
-            requestSignal.dispose();
             throw new Error(
                 `Hugging Face ${api} returned ${response.status} ${response.statusText}`,
             );
         }
         if (response.ok) {
-            try {
-                if (
-                    revision !== undefined &&
-                    response.headers.get("x-revision") !== revision
-                ) {
-                    throw new Error(
-                        `Hugging Face rows API did not serve revision ${revision}`,
-                    );
-                }
-                return await response.json();
-            } finally {
-                requestSignal.dispose();
+            if (
+                revision !== undefined &&
+                response.headers.get("x-revision") !== revision
+            ) {
+                throw new Error(
+                    `Hugging Face rows API did not serve revision ${revision}`,
+                );
             }
+            return response.json();
         }
-        requestSignal.dispose();
         lastError = new Error(
             `Hugging Face ${api} returned ${response.status}`,
         );
