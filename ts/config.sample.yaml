@@ -428,11 +428,13 @@ typeagent:
 #
 # Local Grafana LGTM sink (managed by `pnpm run telemetry:grafana`).
 #
-# You normally do not edit this section — `pnpm run telemetry:grafana` sets
-# `enabled: "true"` once Grafana is healthy and preserves any custom values
-# you have added. When enabled it runs alongside any standard backend above
-# (deduplicated when they resolve to the same URL); it becomes the primary
-# exporter when no standard backend is configured.
+# You normally do not edit this section - `pnpm run telemetry:grafana` sets
+# `enabled: "true"` and the stable loopback endpoint while preserving other
+# custom values. The setting remains enabled when LGTM stops, so TypeAgent
+# can start first and export as soon as LGTM becomes available. When enabled
+# it runs alongside any standard backend above (deduplicated when they
+# resolve to the same URL); it becomes the primary exporter when no standard
+# backend is configured.
 #
 # `enabled` is a STRING because the flat env layer drops YAML booleans whose
 # value is `false` — a plain boolean would silently "stick" once enabled.
@@ -440,7 +442,7 @@ typeagent:
 # telemetry:
 #   local:
 #     enabled: "true"
-#     otlpEndpoint: http://localhost:4318
+#     otlpEndpoint: http://127.0.0.1:24318
 #     logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
 #     logRetentionBytes: 524288000
 #     debugBridge: "true"

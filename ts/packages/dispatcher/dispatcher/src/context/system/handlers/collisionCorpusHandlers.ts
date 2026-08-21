@@ -39,7 +39,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 
-import { openai } from "@typeagent/aiclient";
+import { openai, withChatModelTelemetryContext } from "@typeagent/aiclient";
 
 import {
     CommandHandlerContext,
@@ -765,7 +765,14 @@ async function generateCorpus(
         async (task) => {
             const prompt = buildCorpusPrompt(task.action, opts.styles);
             try {
-                const result = await task.model.complete(prompt);
+                const result = await withChatModelTelemetryContext(
+                    {
+                        phase: "background",
+                        purpose: "sample-request-generation",
+                        scope: "background",
+                    },
+                    () => task.model.complete(prompt),
+                );
                 if (!result.success) {
                     perCallErrors.push({
                         schemaName: task.action.schemaName,

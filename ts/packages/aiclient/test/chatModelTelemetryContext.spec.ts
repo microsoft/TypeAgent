@@ -23,8 +23,16 @@ describe("chat model telemetry context", () => {
             },
         );
 
-        expect(observed).toEqual(classification);
-        expect(getChatModelTelemetryContext()).toBeUndefined();
+        expect(observed).toEqual({
+            ...classification,
+            classificationSource: "explicit",
+        });
+        expect(getChatModelTelemetryContext()).toEqual({
+            phase: "unknown",
+            purpose: "unknown",
+            scope: "foreground",
+            classificationSource: "default",
+        });
     });
 
     it("overrides purpose without changing phase or scope", () => {
@@ -44,14 +52,20 @@ describe("chat model telemetry context", () => {
             phase: "translation",
             purpose: "schema-selection",
             scope: "foreground",
+            classificationSource: "explicit",
         });
     });
 
-    it("does not invent phase or scope for a purpose-only operation", () => {
+    it("marks a purpose-only operation as explicit while retaining defaults", () => {
         const observed = withChatModelTelemetryPurpose("schema-selection", () =>
             getChatModelTelemetryContext(),
         );
 
-        expect(observed).toBeUndefined();
+        expect(observed).toEqual({
+            phase: "unknown",
+            purpose: "schema-selection",
+            scope: "foreground",
+            classificationSource: "explicit",
+        });
     });
 });

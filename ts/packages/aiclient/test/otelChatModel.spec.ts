@@ -10,7 +10,10 @@ import { otel } from "@typeagent/telemetry";
 import type { Logger } from "@typeagent/telemetry";
 import { error, success } from "typechat";
 import type { ChatModelWithStreaming } from "../src/models.js";
-import { instrumentChatModel } from "../src/otelChatModel.js";
+import {
+    instrumentChatModel,
+    resetLlmClassificationDiagnostics,
+} from "../src/otelChatModel.js";
 import { fetchWithRetry } from "../src/restClient.js";
 import {
     withChatModelTelemetryContext,
@@ -59,14 +62,16 @@ describe("instrumentChatModel", () => {
     beforeEach(() => {
         spans = createInMemorySpanManager();
         otel.setStructuredLoggingEnabled(false);
+        resetLlmClassificationDiagnostics();
     });
 
     afterEach(async () => {
         otel.setStructuredLoggingEnabled(false);
+        resetLlmClassificationDiagnostics();
         await spans.shutdown();
     });
 
-    it("marks calls outside a classified operation as unclassified", async () => {
+    it("marks calls outside a classified operation as default", async () => {
         const model = instrumentChatModel(createModel(), {
             provider: "test-provider",
             model: "test-model",
@@ -80,15 +85,12 @@ describe("instrumentChatModel", () => {
         expect(span?.attributes).toMatchObject({
             "gen_ai.system": "test-provider",
             "gen_ai.request.model": "test-model",
-            "typeagent.llm.phase": "unclassified",
-            "typeagent.llm.purpose": "unclassified",
-            "typeagent.llm.scope": "unclassified",
+            "typeagent.llm.phase": "unknown",
+            "typeagent.llm.purpose": "unknown",
+            "typeagent.llm.scope": "foreground",
+            "typeagent.llm.classification_source": "default",
         });
-        expect(span?.events).toEqual([
-            expect.objectContaining({
-                name: "typeagent.llm.classification.missing",
-            }),
-        ]);
+        expect(span?.events).toEqual([]);
         expect(span?.status.code).toBe(0);
     });
 
@@ -203,7 +205,12 @@ describe("instrumentChatModel", () => {
             ).complete("private prompt"),
         );
 
-        expect(events).toEqual([
+        expect(
+            events.filter(
+                ({ name }) =>
+                    name === "llm:started" || name === "llm:completed",
+            ),
+        ).toEqual([
             {
                 name: "llm:started",
                 data: expect.objectContaining({
@@ -249,17 +256,20 @@ describe("instrumentChatModel", () => {
             "typeagent.llm.phase": "explanation",
             "typeagent.llm.purpose": "cache-generation",
             "typeagent.llm.scope": "background",
+            "typeagent.llm.classification_source": "explicit",
         });
         expect(events.map(({ data }) => data)).toEqual([
             expect.objectContaining({
                 phase: "explanation",
                 purpose: "cache-generation",
                 scope: "background",
+                classificationSource: "explicit",
             }),
             expect.objectContaining({
                 phase: "explanation",
                 purpose: "cache-generation",
                 scope: "background",
+                classificationSource: "explicit",
             }),
         ]);
     });
@@ -287,6 +297,102 @@ describe("instrumentChatModel", () => {
             "typeagent.llm.phase": "translation",
             "typeagent.llm.purpose": "schema-selection",
             "typeagent.llm.scope": "foreground",
+            "typeagent.llm.classification_source": "explicit",
+        });
+    });
+
+    describe("foreground default diagnostic", () => {
+        it("reports once per window and counts suppressed calls", async () => {
+            const realNow = Date.now;
+            let now = realNow();
+            Date.now = () => now;
+            try {
+                otel.setStructuredLoggingEnabled(true);
+                const events: CapturedEvent[] = [];
+                const model = instrumentChatModel(
+                    createModel(),
+                    { provider: "test-provider" },
+                    createCapturingLogger(events),
+                );
+
+                for (let index = 0; index < 5; index++) {
+                    await model.complete("private prompt");
+                }
+
+                const diagnostics = () =>
+                    events.filter(
+                        ({ name }) => name === "llm:classification:default",
+                    );
+                expect(diagnostics()).toHaveLength(1);
+                expect(diagnostics()[0]?.data).toEqual({
+                    scope: "foreground",
+                    count: 1,
+                    windowMs: expect.any(Number),
+                });
+
+                const windowMs = diagnostics()[0]?.data.windowMs as number;
+                now += windowMs + 1;
+                await model.complete("private prompt");
+                expect(diagnostics()).toHaveLength(2);
+                expect(diagnostics()[1]?.data).toMatchObject({ count: 5 });
+            } finally {
+                Date.now = realNow;
+            }
+        });
+
+        it("omits prompt, provider, model, and call-site identity", async () => {
+            otel.setStructuredLoggingEnabled(true);
+            const events: CapturedEvent[] = [];
+            await instrumentChatModel(
+                createModel(),
+                { provider: "secret-provider", model: "secret-model" },
+                createCapturingLogger(events),
+            ).complete("private prompt");
+
+            const diagnostic = events.find(
+                ({ name }) => name === "llm:classification:default",
+            );
+            expect(Object.keys(diagnostic?.data ?? {}).sort()).toEqual([
+                "count",
+                "scope",
+                "windowMs",
+            ]);
+            expect(JSON.stringify(diagnostic)).not.toContain("secret");
+            expect(JSON.stringify(diagnostic)).not.toContain("private prompt");
+        });
+    });
+
+    it("keeps attribution and correlation when tracing is disabled", async () => {
+        await spans.shutdown();
+        otel.setStructuredLoggingEnabled(true);
+        const events: CapturedEvent[] = [];
+        const model = instrumentChatModel(
+            createModel(),
+            { provider: "test-provider" },
+            createCapturingLogger(events),
+        );
+
+        await otel.runInTypeAgentTelemetryContext(
+            context.active(),
+            { sessionId: "session", requestId: "request" },
+            () =>
+                withChatModelTelemetryContext(
+                    {
+                        phase: "background",
+                        purpose: "cache-generation",
+                        scope: "background",
+                    },
+                    () => model.complete("private prompt"),
+                ),
+        );
+
+        expect(events[0]?.data).toMatchObject({
+            sessionId: "session",
+            requestId: "request",
+            phase: "background",
+            purpose: "cache-generation",
+            scope: "background",
+            classificationSource: "explicit",
         });
     });
 

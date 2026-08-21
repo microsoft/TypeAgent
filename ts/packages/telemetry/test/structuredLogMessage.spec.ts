@@ -108,6 +108,7 @@ describe("getStructuredLogMessage", () => {
                 phase: "translation",
                 purpose: "schema-selection",
                 scope: "foreground",
+                classificationSource: "explicit",
             }),
         ).toBe(
             "LLM started: translation.schema-selection (azure/GPT_4_1) (streaming)",
@@ -122,9 +123,27 @@ describe("getStructuredLogMessage", () => {
                 phase: "explanation",
                 purpose: "cache-generation",
                 scope: "background",
+                classificationSource: "explicit",
             }),
         ).toBe(
             "LLM succeeded: explanation.cache-generation [background] (azure/GPT_4_1) in 1234 ms (456 tokens)",
+        );
+        expect(
+            getStructuredLogMessage("aiclient:llm:started", {
+                phase: "unknown",
+                purpose: "unknown",
+                scope: "foreground",
+                classificationSource: "default",
+            }),
+        ).toBe("LLM started: unknown (unclassified)");
+        expect(
+            getStructuredLogMessage("aiclient:llm:classification:default", {
+                scope: "foreground",
+                count: 7,
+                windowMs: 60_000,
+            }),
+        ).toBe(
+            "7 foreground LLM call(s) ran with default (unclassified) phase/purpose",
         );
     });
 
