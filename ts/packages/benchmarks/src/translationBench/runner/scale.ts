@@ -335,10 +335,10 @@ export function validateTranslationBenchCheckpointWork(
 }
 
 /**
- * Split checkpoint JSONL into logical lines. A crash during append can leave
- * the final line incomplete; prior complete rows remain resumable.
+ * Split append-only JSONL into logical lines. A crash during append can leave
+ * the final line incomplete; prior complete rows remain recoverable.
  */
-export function splitTranslationBenchCheckpointLines(text: string): string[] {
+export function readRecoverableJsonlLines(text: string): string[] {
     if (text.length === 0) {
         return [];
     }
@@ -365,7 +365,7 @@ export function readTranslationBenchCheckpoint<T = unknown>(
     filePath: string,
 ): TranslationBenchCheckpoint<T> {
     const text = fs.readFileSync(filePath, "utf8");
-    const lines = splitTranslationBenchCheckpointLines(text);
+    const lines = readRecoverableJsonlLines(text);
     if (lines.length === 0 || (lines.length === 1 && lines[0] === "")) {
         throw new Error(`Translation bench checkpoint '${filePath}' is empty`);
     }

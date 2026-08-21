@@ -3,6 +3,8 @@
 
 import fs from "node:fs";
 
+import { readRecoverableJsonlLines } from "../../../runner/scale.js";
+
 export interface SealToolsTrajectoryRecord {
     rowid: string;
     setupid: string;
@@ -24,7 +26,7 @@ export function reconcileSealToolsTrajectories(
 ): Map<string, string[]> {
     if (!fs.existsSync(trajectoryPath)) return new Map();
     const text = fs.readFileSync(trajectoryPath, "utf8");
-    const lines = text.split("\n");
+    const lines = readRecoverableJsonlLines(text);
     const records: SealToolsTrajectoryRecord[] = [];
     for (let index = 0; index < lines.length; index++) {
         const line = lines[index]!;
@@ -32,9 +34,6 @@ export function reconcileSealToolsTrajectories(
         try {
             records.push(JSON.parse(line) as SealToolsTrajectoryRecord);
         } catch (error) {
-            const truncated =
-                index === lines.length - 1 && !text.endsWith("\n");
-            if (truncated) break;
             throw new Error(
                 `Invalid trajectory JSON at line ${index + 1}: ${String(error)}`,
             );

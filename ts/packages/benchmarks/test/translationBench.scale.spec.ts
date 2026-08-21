@@ -9,8 +9,8 @@ import {
     appendTranslationBenchCheckpointRows,
     createTranslationBenchRunFingerprint,
     createTranslationBenchTranslationCheckpointRow,
+    readRecoverableJsonlLines,
     readTranslationBenchCheckpoint,
-    splitTranslationBenchCheckpointLines,
     translationBenchResumeKey,
     type TranslationBenchCheckpointHeader,
 } from "../src/translationBench/runner/scale.js";
@@ -105,7 +105,7 @@ describe("translationBench scale checkpoint", () => {
                 '{"phase":"translation","model":"m"',
                 "utf8",
             );
-            const lines = splitTranslationBenchCheckpointLines(
+            const lines = readRecoverableJsonlLines(
                 fs.readFileSync(filePath, "utf8"),
             );
             expect(lines.length).toBe(2); // header + complete row

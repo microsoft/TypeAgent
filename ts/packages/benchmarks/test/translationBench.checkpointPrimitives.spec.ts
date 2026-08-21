@@ -6,7 +6,7 @@ import { describe, expect, it } from "@jest/globals";
 import {
     createTranslationBenchRunFingerprint,
     getTranslationBenchShardIndex,
-    splitTranslationBenchCheckpointLines,
+    readRecoverableJsonlLines,
 } from "../src/translationBench/runner/scale.js";
 
 describe("translation bench checkpoint primitives", () => {
@@ -20,8 +20,8 @@ describe("translation bench checkpoint primitives", () => {
     });
 
     it("drops only an incomplete trailing JSONL row", () => {
-        expect(
-            splitTranslationBenchCheckpointLines('{"header":1}\n{"row":'),
-        ).toEqual(['{"header":1}']);
+        expect(readRecoverableJsonlLines('{"header":1}\n{"row":')).toEqual([
+            '{"header":1}',
+        ]);
     });
 });
