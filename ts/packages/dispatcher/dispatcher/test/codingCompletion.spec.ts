@@ -83,6 +83,22 @@ describe("coding completion evidence", () => {
         });
     });
 
+    test("invalidates validation when a write tool fails", () => {
+        const tracker = createCodingCompletionTracker("change the module");
+        tracker.onToolSuccess("edit", { path: "module.ts" });
+        tracker.onToolSuccess("shell", { command: "pnpm test" });
+        tracker.onToolFailure("shell", {
+            command: "Set-Content module.ts broken; exit 1",
+        });
+
+        expect(tracker.onAgentStop(false)?.decision).toBe("block");
+        expect(tracker.outcome("session-4")).toMatchObject({
+            status: "unvalidated",
+            filesChanged: true,
+            validationSucceeded: false,
+        });
+    });
+
     test("does not require validation for read-only analysis", () => {
         const tracker = createCodingCompletionTracker("review parser.ts");
         expect(tracker.onAgentStop(false)).toBeUndefined();

@@ -80,6 +80,19 @@ describe("agent-server working-directory policy", () => {
         );
     });
 
+    test.each(["", " ", path.delimiter])(
+        "rejects an explicitly configured empty allowlist",
+        (configuredRoots) => {
+            expect(() =>
+                loadWorkingDirectoryPolicy({
+                    TYPEAGENT_CODE_ALLOWED_ROOTS: configuredRoots,
+                }),
+            ).toThrow(
+                "TYPEAGENT_CODE_ALLOWED_ROOTS does not contain an existing directory",
+            );
+        },
+    );
+
     test("infers the parent directory of a quoted file path", () => {
         const file = path.join(child, "releaseNotes.ts");
         fs.writeFileSync(file, "export {};\n");

@@ -66,6 +66,12 @@ export function createCodingCompletionTracker(request: string) {
     let validationSucceeded = false;
     let stopBlockIssued = false;
 
+    const recordWriteEvidence = (): void => {
+        filesChanged = true;
+        validationSucceeded = false;
+        stopBlockIssued = false;
+    };
+
     return {
         onToolStart(toolName: string, args: unknown): void {
             if (isValidationToolUse(toolName, args)) {
@@ -74,9 +80,7 @@ export function createCodingCompletionTracker(request: string) {
         },
         onToolSuccess(toolName: string, args: unknown): void {
             if (isWriteToolUse(toolName, args)) {
-                filesChanged = true;
-                validationSucceeded = false;
-                stopBlockIssued = false;
+                recordWriteEvidence();
             }
             if (isValidationToolUse(toolName, args)) {
                 validationAttempted = true;
@@ -84,6 +88,9 @@ export function createCodingCompletionTracker(request: string) {
             }
         },
         onToolFailure(toolName: string, args: unknown): void {
+            if (isWriteToolUse(toolName, args)) {
+                recordWriteEvidence();
+            }
             if (isValidationToolUse(toolName, args)) {
                 validationAttempted = true;
                 validationSucceeded = false;
