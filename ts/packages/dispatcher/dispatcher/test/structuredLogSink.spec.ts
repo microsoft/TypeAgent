@@ -86,6 +86,42 @@ describe("dispatcher structured log projection", () => {
         expect(JSON.stringify(captured)).not.toContain("PRIVATE_");
     });
 
+    it("keeps the failure classification and drops the raw error", () => {
+        const captured: LogEvent[] = [];
+        const sink = createDispatcherOtelLoggerSink({
+            logEvent(event) {
+                captured.push(event);
+            },
+        });
+
+        // Exactly the shape `logCommandException` produces.
+        sink.logEvent({
+            eventName: "command:exception",
+            timestamp: new Date().toISOString(),
+            severity: "error",
+            event: {
+                requestId: "request",
+                errorCategory: "rate_limit",
+                errorCode: "ERR_TOO_MANY",
+                httpStatus: 429,
+                retryable: true,
+                request: "PRIVATE_REQUEST_MARKER",
+                name: "PRIVATE_NAME_MARKER",
+                message: "PRIVATE_ERROR_MARKER",
+                stack: "PRIVATE_STACK_MARKER",
+            },
+        });
+
+        expect(captured[0]?.event).toEqual({
+            requestId: "request",
+            errorCategory: "rate_limit",
+            errorCode: "ERR_TOO_MANY",
+            httpStatus: 429,
+            retryable: true,
+        });
+        expect(JSON.stringify(captured)).not.toContain("PRIVATE_");
+    });
+
     it("drops oversized and incorrectly typed allowlisted values", () => {
         const captured: LogEvent[] = [];
         const sink = createDispatcherOtelLoggerSink({
