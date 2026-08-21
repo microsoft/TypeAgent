@@ -11,6 +11,8 @@ import { UserIdentity } from "@typeagent/agent-server-protocol";
 import { DispatcherOptions } from "agent-dispatcher";
 import os from "node:os";
 import registerDebug from "debug";
+import { MacroManager } from "@typeagent/copilot-macros";
+import { McpReplayHost } from "default-agent-provider";
 
 import {
     createConversationManager,
@@ -83,6 +85,10 @@ export async function createInProcessAgentServer(
 
     const { handler } = createAgentServerConnectionHandler({
         conversationManager,
+        macroManager: new MacroManager(
+            instanceDir,
+            new McpReplayHost(instanceDir),
+        ),
         shutdown: options.shutdown,
         getUserIdentity: options.getUserIdentity ?? defaultUserIdentity,
         // No discovery RPC here: embedded hosts run their own discovery

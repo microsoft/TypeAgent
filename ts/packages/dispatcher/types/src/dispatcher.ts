@@ -86,6 +86,49 @@ export type CompletionUsageStats = {
     thinking_tokens_estimated?: boolean;
 };
 
+export type CommandDisposition =
+    | {
+          status: "handled";
+          path: "action" | "reasoning" | "command";
+          schemas?: string[];
+      }
+    | {
+          status: "notHandled";
+          reason:
+              | "unknown"
+              | "clarification"
+              | "noActiveSchema"
+              | "notPowerShellCapable";
+      }
+    | {
+          status: "failed";
+          path: "action" | "reasoning" | "command";
+          mayHaveSideEffects: boolean;
+          schemas?: string[];
+      };
+
+export type PowerShellCapabilityOutcome =
+    | {
+          status: "handledExisting";
+          schema: string;
+          actionName: string;
+          flowName?: string;
+      }
+    | {
+          status: "created";
+          flowName: string;
+      }
+    | {
+          status: "notSuitable";
+          reasonCode: string;
+      }
+    | {
+          status: "failed";
+          phase: "classify" | "discover" | "validate" | "execute" | "persist";
+          mayHaveSideEffects: boolean;
+          reason: string;
+      };
+
 export type CommandResult = {
     // last error message
     lastError?: string;
@@ -95,6 +138,12 @@ export type CommandResult = {
 
     // Actions that were executed as part of the command.
     actions?: TypeAgentAction[];
+    // Explicit routing outcome for callers that need safe handled/fallthrough
+    // behavior without inferring it from actions or display output.
+    disposition?: CommandDisposition;
+    // Machine-readable completion reported by PowerShell capability reasoning.
+    capabilityOutcome?: PowerShellCapabilityOutcome;
+    codingOutcome?: CodingTaskOutcome;
     metrics?: RequestMetrics;
     // Token usage for translating the user's request into actions (the LLM
     // "translation" step). Absent for @-commands and cached translations.
@@ -104,6 +153,21 @@ export type CommandResult = {
     // reported usage (unknown). A present all-zero value => actions ran but
     // made no LLM call.
     actionTokenUsage?: CompletionUsageStats;
+    // Canonical OpenTelemetry trace id of the root request span.
+    traceId?: string;
+};
+
+export type CodingTaskOutcome = {
+    taskKind: "analysis" | "mutation";
+    validationRequired: boolean;
+    status: "completed" | "unvalidated" | "failed" | "cancelled";
+    filesChanged: boolean;
+    validationAttempted: boolean;
+    validationSucceeded: boolean;
+    sessionId: string;
+    taskComplete?: boolean;
+    taskCompleteSummary?: string;
+    error?: string;
 };
 
 // Architecture: docs/architecture/core/completion.md — Data flow / Key types
@@ -285,11 +349,36 @@ export type UserContext = {
 
 export type ProcessCommandOptions = {
     /**
+     * Host-selected filesystem root for this request. CLI and shell hosts
+     * normally provide their current working directory; editor hosts provide
+     * the active workspace folder.
+     */
+    workingDirectory?: string;
+    /**
      * When true, skip reasoning, clarification, and chat fallback.
      * Use when the caller (e.g. an AI agent) handles reasoning itself
      * and TypeAgent should act as a pure action executor.
      */
     noReasoning?: boolean;
+    /**
+     * Restrict translation and grammar matching to this subset of currently
+     * active schemas. The request returns notHandled when any requested schema
+     * is unavailable.
+     */
+    activeSchemas?: string[];
+    /**
+     * Restrict translation and grammar matching to active schemas in these
+     * families. A family includes its root schema and dot-qualified children,
+     * such as "powershell" and "powershell.powershell-network".
+     */
+    activeSchemaFamilies?: string[];
+    /**
+     * Add request-scoped instructions to the configured reasoning engine.
+     */
+    reasoningProfile?:
+        | "default"
+        | "powershellFlowRecording"
+        | "powershellCapabilityFallback";
     /**
      * User-environment context for translation prompts.
      * Provides information about which app/host the user is currently in

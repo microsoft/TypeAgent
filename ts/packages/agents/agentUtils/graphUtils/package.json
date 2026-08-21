@@ -37,6 +37,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "chalk": "^5.4.1",
     "date-fns": "^4.1.0",
     "debug": "^4.4.0",

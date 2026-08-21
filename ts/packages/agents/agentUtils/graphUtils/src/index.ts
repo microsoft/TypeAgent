@@ -85,5 +85,8 @@ export {
     GraphAgentName,
     GraphReadinessProbe,
     evaluateGraphReadiness,
+    graphProviderSetupHint,
+    graphProviderSetupError,
     probeGraphConfig,
+    probeCurrentGraphConfig,
 } from "./readiness.js";

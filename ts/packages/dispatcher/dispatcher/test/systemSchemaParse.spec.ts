@@ -34,6 +34,7 @@ const ENTRY_TYPES: Record<string, string> = {
     "grammarActionSchema.ts": "GrammarAction",
     "helpActionSchema.ts": "HelpAction",
     "historyActionSchema.ts": "HistoryAction",
+    "logActionSchema.ts": "LogAction",
     "notificationActionSchema.ts": "NotificationAction",
     "settingsActionSchema.ts": "UserSettingsAction",
 };

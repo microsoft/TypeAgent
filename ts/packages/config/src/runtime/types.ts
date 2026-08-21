@@ -328,6 +328,8 @@ export interface ReasoningConfig {
 export interface CopilotConfig {
     /** Model id used when `copilot:` is selected with no name. */
     readonly defaultModel?: string | undefined;
+    /** Concrete model ids to try when the requested model is unavailable. */
+    readonly fallbackModels?: readonly string[] | undefined;
     /** Override the auto-detected `copilot` CLI binary path. */
     readonly cliPath?: string | undefined;
     /**

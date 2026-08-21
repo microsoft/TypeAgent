@@ -62,7 +62,6 @@ To list all available agents and their status, just the command without any para
 🤖🚧💾  [🎧📅📩📝🌐💬🤖🔧📷🖐🖼️📱🗎]> @config agent
 |Agent               |Schemas|Actions|Commands|
 |--------------------|-------|-------|--------|
-|androidMobile       |✅     |✅     |        |
 |browser             |✅     |✅     |✅      |
 |  browser.commerce  |💤     |💤     |        |
 |  browser.crossword |💤     |💤     |        |

@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { resolveReasoningTimeoutMs } from "../src/reasoning/copilot.js";
+import {
+    resolveReasoningTimeoutMs,
+    sendAndWaitWithCancellation,
+} from "../src/reasoning/copilot.js";
+import type { CopilotSession } from "@github/copilot-sdk";
 
 const ENV_KEY = "TYPEAGENT_REASONING_TIMEOUT_MS";
 const DEFAULT_MS = 20 * 60 * 1000;
@@ -12,6 +16,34 @@ describe("resolveReasoningTimeoutMs", () => {
     beforeEach(() => {
         saved = process.env[ENV_KEY];
         delete process.env[ENV_KEY];
+    });
+
+    describe("sendAndWaitWithCancellation", () => {
+        it("reports the configured idle timeout as cancellation", async () => {
+            const saved = process.env[ENV_KEY];
+            process.env[ENV_KEY] = "1";
+            let abortCalls = 0;
+            const waitPromise = new Promise<never>(() => {});
+            const session = {
+                sendAndWait: () => waitPromise,
+                abort: async () => {
+                    abortCalls++;
+                },
+            } as unknown as CopilotSession;
+
+            try {
+                await expect(
+                    sendAndWaitWithCancellation(session, "prompt", undefined),
+                ).rejects.toMatchObject({ name: "AbortError" });
+                expect(abortCalls).toBe(1);
+            } finally {
+                if (saved === undefined) {
+                    delete process.env[ENV_KEY];
+                } else {
+                    process.env[ENV_KEY] = saved;
+                }
+            }
+        });
     });
     afterEach(() => {
         if (saved === undefined) {

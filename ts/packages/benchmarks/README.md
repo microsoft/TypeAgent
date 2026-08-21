@@ -4,7 +4,20 @@ Action-translation eval for TypeAgent: pinned catalogs, model prices, and scorin
 
 ## Catalog + action-parameters grader
 
-Pinned `catalog.generated.json` and `action-parameters-grader.generated.json`. Regenerate with `pnpm run gen-catalog` (grader is incremental by default; pass `--force` for a full rebuild, `--model <name>` for LLM fallback). Tests: `pnpm run test:local`.
+Pinned `catalog.generated.json` and `action-parameters-grader.generated.json`. Code/script parameters use verify mode `llmAsAJudge` (not exact); synthesizer exclusions are derived from those fields. Regenerate with `pnpm run gen-catalog` (`--force` full rebuild). Tests: `pnpm run test:local`.
+
+## Dataset synthesizer (part 3)
+
+Simple-action dataset generation only (one expected action per positive/seed).
+
+- Core: `src/translationBench/synthesizer/` — benchmark JSONL, source import, LLM labeler, quality verifier
+- Default shape: `mode: "simple"` via `actionShape.ts` (multi reserved for a later PR)
+- Seed example: `synthesizer/seed/`
+- Unit tests: `test/translationBench.{benchmark,datasetGenerator,sourceBuilder}.spec.ts`
+
+```bash
+cd ts/packages/benchmarks && pnpm run build && pnpm run jest-esm --testPathPattern="translationBench\.(benchmark|datasetGenerator|sourceBuilder)"
+```
 
 ## Dataset synthesizer (part 3)
 
