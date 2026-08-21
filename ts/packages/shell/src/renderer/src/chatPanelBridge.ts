@@ -26,6 +26,7 @@ import {
     parseStatusNotice,
     type TemplateEditServices,
     type ConnectionStatus,
+    fileLinkToPath,
 } from "@typeagent/chat-ui";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import {
@@ -89,6 +90,7 @@ function mapResult(result: any):
           actionTokenUsage?: any;
           parsePhase?: any;
           cancelled?: boolean;
+          traceId?: string;
       }
     | undefined {
     if (!result) return undefined;
@@ -103,6 +105,7 @@ function mapResult(result: any):
         actionTokenUsage: result.actionTokenUsage,
         parsePhase: metrics?.parse,
         cancelled: result.cancelled === true,
+        traceId: result.traceId,
     };
 }
 
@@ -219,6 +222,7 @@ function toHistoryEntries(entries: any[]): HistoryEntry[] {
                     firstMessageMs: rid
                         ? firstMessageMsByRequestId.get(rid)
                         : undefined,
+                    traceId: e.traceId,
                 });
                 break;
             }
@@ -654,6 +658,14 @@ export function createChatPanelClient(
     const chatPanel = new ChatPanel(rootElement, {
         platformAdapter: {
             handleLinkClick: (href: string) => {
+                // Local-file links open in the OS default editor; the
+                // `openFolder` channel is just `shell.openPath`, which
+                // handles files as well as directories.
+                const filePath = fileLinkToPath(href);
+                if (filePath !== undefined) {
+                    getClientAPI().openConfigFile(filePath);
+                    return;
+                }
                 getClientAPI().openUrlExternal(href);
             },
         },
@@ -685,6 +697,23 @@ export function createChatPanelClient(
             // RPC: permanent=true is a non-recoverable hard delete;
             // permanent=false is a recoverable soft delete (trash).
             void dispatcher?.recordUserHide(requestId, true, target, permanent);
+        },
+        // Live-updating displays (an agent's ActionResult.dynamicDisplayId,
+        // e.g. the player's now-playing "status" card). ChatPanel arms a
+        // refresh timer on setDynamicDisplay and calls this each tick to pull
+        // fresh content; it also only registers the bubble with the top rail
+        // once a refresh returns. Without this callback setDynamicDisplay is a
+        // no-op, so the card never updates and never pins. Read the dispatcher
+        // closure per call so it stays reconnect-safe; "html" because the shell
+        // renders HTML display content.
+        getDynamicDisplay: async (source, displayId) => {
+            const d = dispatcher;
+            if (d === undefined) {
+                throw new Error(
+                    "Dispatcher not ready for dynamic display refresh",
+                );
+            }
+            return d.getDynamicDisplay(source, "html", displayId);
         },
         speechProvider,
         ttsProvider,
@@ -866,13 +895,23 @@ export function createChatPanelClient(
             });
         },
         setDynamicDisplay: (
-            _requestId,
+            requestId,
             source,
             _actionIndex,
             displayId,
             nextRefreshMs,
         ) => {
-            chatPanel.setDynamicDisplay(source, displayId, nextRefreshMs);
+            afterReplay(() => {
+                if (isCancelledRequest(ridStr(requestId))) return;
+                // Pass the requestId so chat-ui refreshes the action's own
+                // bubble in place instead of a separate globe-icon card.
+                chatPanel.setDynamicDisplay(
+                    source,
+                    displayId,
+                    nextRefreshMs,
+                    ridStr(requestId),
+                );
+            });
         },
         question: async (requestId, message, choices, defaultId) => {
             if (requestId === undefined) {
@@ -1246,8 +1285,8 @@ export function createChatPanelClient(
                     );
                     break;
                 default:
-                    // Android-only actions (set-alarm, call-phonenumber, etc.)
-                    // are not supported in the Electron shell.
+                    // Client-agent actions handled by other hosts (e.g. the
+                    // Android sample) are not supported in the Electron shell.
                     break;
             }
         } catch (e) {

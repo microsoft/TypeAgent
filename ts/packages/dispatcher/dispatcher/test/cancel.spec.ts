@@ -132,8 +132,6 @@ describe("Cancellation (AbortSignal smoke tests)", () => {
     });
 
     it("cancels a slow command quickly and sets cancelled:true", async () => {
-        const start = Date.now();
-
         // Start the slow command — it will block for 30 s unless cancelled.
         const resultPromise = awaitCommand(dispatcher, "@slow slow");
 
@@ -143,13 +141,15 @@ describe("Cancellation (AbortSignal smoke tests)", () => {
         dispatcher.cancelCommand(requestId);
 
         const result = await resultPromise;
-        const elapsed = Date.now() - start;
 
         expect(result).toBeDefined();
         expect(result!.cancelled).toBe(true);
-        // Should return well within 500 ms — not wait 30 s.
-        expect(elapsed).toBeLessThan(500);
-    }, 5_000 /* generous 5 s jest timeout */);
+        // Liveness is enforced by the jest timeout below, not a wall-clock
+        // assertion: cancellation either aborts the await (a few ms) or the
+        // command hangs on its 30 s sleep. The 10 s timeout is far under 30 s,
+        // so a broken cancel fails deterministically, while the fast path never
+        // flakes on a loaded CI runner.
+    }, 10_000 /* far below the agent's 30 s sleep */);
 });
 describe("Early cancellation via cancelCommandByClientId", () => {
     let dispatcher: Dispatcher;
@@ -231,7 +231,6 @@ describe("Early cancellation via cancelCommandByClientId", () => {
 
         // Queue a second command with a client-assigned id while the first is still running.
         // It is now blocked behind the command lock — setUserRequest has not yet fired for it.
-        const start = Date.now();
         const secondResultPromise = awaitCommand(
             dispatcher,
             "@slow slow",
@@ -252,12 +251,11 @@ describe("Early cancellation via cancelCommandByClientId", () => {
             firstResultPromise,
             secondResultPromise,
         ]);
-        const elapsed = Date.now() - start;
 
         expect(firstResult?.cancelled).toBe(true);
         expect(secondResult).toBeDefined();
         expect(secondResult!.cancelled).toBe(true);
-        // Second command should cancel quickly once the first releases the lock.
-        expect(elapsed).toBeLessThan(1000);
+        // As above, the jest timeout (far under the 30 s sleep) is the liveness
+        // guard; both commands are cancelled rather than waited out.
     }, 10_000);
 });

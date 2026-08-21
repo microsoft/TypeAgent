@@ -51,6 +51,19 @@ describe("flatten", () => {
         });
     });
 
+    test("flattens Copilot fallback models as a JSON array", () => {
+        const out = flatten({
+            copilot: {
+                defaultModel: "claude-haiku-4.5",
+                fallbackModels: ["gpt-5-mini", "gpt-5.4-mini"],
+            },
+        });
+        expect(out).toEqual({
+            COPILOT_DEFAULT_MODEL: "claude-haiku-4.5",
+            COPILOT_FALLBACK_MODELS: '["gpt-5-mini","gpt-5.4-mini"]',
+        });
+    });
+
     test("env: top-level passthrough leaves keys verbatim", () => {
         const out = flatten({
             env: {
@@ -111,6 +124,27 @@ describe("flatten", () => {
             },
         });
         expect(out).toEqual({ AZURE_OPENAI_RESPONSE_FORMAT: "1" });
+    });
+
+    test("preserves explicit false values for telemetry controls", () => {
+        const out = flatten({
+            telemetry: {
+                debugBridge: false,
+                structuredLogs: false,
+                local: {
+                    enabled: false,
+                    debugBridge: false,
+                    structuredLogs: false,
+                },
+            },
+        });
+        expect(out).toEqual({
+            TELEMETRY_DEBUGBRIDGE: "0",
+            TELEMETRY_STRUCTUREDLOGS: "0",
+            TELEMETRY_LOCAL_ENABLED: "0",
+            TELEMETRY_LOCAL_DEBUGBRIDGE: "0",
+            TELEMETRY_LOCAL_STRUCTUREDLOGS: "0",
+        });
     });
 
     test("numbers are stringified", () => {

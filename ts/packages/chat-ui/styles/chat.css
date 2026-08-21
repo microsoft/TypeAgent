@@ -1209,6 +1209,79 @@
   background: rgba(0, 0, 0, 0.45);
 }
 
+/* In-page text viewer overlay (openTextViewer) - the fallback for hosts without
+   a native window (the Electron shell, web). Same backdrop as the image
+   lightbox; holds a scrollable, themed panel with a header (title + copy/close)
+   and the full result text. */
+.chat-text-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--chat-lightbox-backdrop, rgba(0, 0, 0, 0.75));
+  outline: none;
+}
+.chat-text-viewer-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(900px, 90vw);
+  height: min(80vh, 900px);
+  border: 1px solid var(--chat-conversation-border, #d0d0d0);
+  border-radius: 8px;
+  background: var(
+    --chat-conversation-popover-background,
+    var(--chat-conversation-background, #fff)
+  );
+  color: var(--chat-conversation-foreground, #1f1f1f);
+  box-shadow: 0 6px 32px
+    var(--chat-conversation-popover-shadow, rgba(0, 0, 0, 0.4));
+  overflow: hidden;
+}
+.chat-text-viewer-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--chat-conversation-border, #d0d0d0);
+}
+.chat-text-viewer-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 13px;
+}
+.chat-text-viewer-button {
+  flex: none;
+  border: 1px solid var(--chat-conversation-button-border, transparent);
+  border-radius: 6px;
+  background: var(--chat-conversation-button-background, #e8e8e8);
+  color: var(--chat-conversation-button-foreground, #1f1f1f);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.chat-text-viewer-button:hover {
+  background: var(--chat-conversation-button-hover-background, #dcdcdc);
+}
+.chat-text-viewer-body {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 .chat-message-hidden {
   display: none;
   visibility: hidden;
@@ -1279,28 +1352,31 @@ table.sc-table {
 
 table.sc-table th,
 table.sc-table td {
-  /* Final fallback (used where --vscode-* isn't defined, e.g. the Electron
-     shell) is a mid-gray alpha so borders read on both light and dark. */
-  border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.35));
-  padding: 4px 10px;
+  padding: 5px 10px;
   text-align: left;
   vertical-align: top;
+  /* Let long unbreakable tokens (e.g. slugs like "subagent/prime-83-...")
+     wrap instead of forcing the table wider than its bubble. `anywhere` (not
+     `break-word`) also shrinks the column's min-content width, which is what
+     actually keeps the table from scrolling sideways in a narrow bubble. */
+  overflow-wrap: anywhere;
 }
 
+/* A single header underline plus subtle zebra striping - no full per-cell
+   grid, which reads as a heavy spreadsheet inside a chat bubble. */
 table.sc-table thead th {
-  background: var(
-    --chat-conversation-list-hover-background,
-    rgba(0, 0, 0, 0.06)
-  );
+  background: transparent;
   color: var(--chat-conversation-foreground, #1f1f1f);
   font-weight: 600;
   white-space: nowrap;
+  border-bottom: 1px solid
+    var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.4));
 }
 
 table.sc-table tbody tr:nth-child(even) {
   /* Mid-gray alpha fallback so the zebra stripe stays visible on the Electron
      shell's dark bubbles (where --vscode-list-hoverBackground is undefined). */
-  background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12));
+  background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.08));
 }
 
 .sc-cell-number {
@@ -1490,6 +1566,92 @@ table.sc-kv-table.sc-card-fields {
 }
 
 /* --- Code blocks --------------------------------------------------------- */
+
+/* Fenced code blocks in agent messages. `position: relative` anchors the
+   hover-reveal copy button added by attachCodeBlockCopyButtons. */
+pre.chat-code-block {
+  position: relative;
+}
+
+.chat-code-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  /* Dimmed rather than hidden: the button is the only hint that a snippet
+     can be copied, so it has to be discoverable without hovering. */
+  opacity: 0.5;
+  transition: opacity 0.12s ease;
+  background: var(--vscode-editorWidget-background, rgba(255, 255, 255, 0.85));
+  color: var(--vscode-editorWidget-foreground, #333);
+  border: 1px solid var(--vscode-widget-border, rgba(0, 0, 0, 0.15));
+}
+
+pre.chat-code-block:hover .chat-code-copy,
+.chat-code-copy:focus-visible {
+  opacity: 1;
+}
+
+.chat-code-copy:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(0, 0, 0, 0.06));
+}
+
+/* Syntax tokens inside chat code blocks, set by highlightCodeBlock().
+   Same palette as the action-JSON popup so highlighted YAML and JSON read
+   identically wherever they appear. `!important` matches the popup rules:
+   the surrounding bubble sets a foreground color that would otherwise
+   inherit down into these spans. */
+pre.chat-code-block code .json-key {
+  color: #9c27b0 !important;
+  font-weight: 600;
+}
+
+pre.chat-code-block code .json-string {
+  color: #0a8043 !important;
+}
+
+pre.chat-code-block code .json-number {
+  color: #1976d2 !important;
+}
+
+pre.chat-code-block code .json-bool {
+  color: #b85c00 !important;
+  font-weight: 600;
+}
+
+pre.chat-code-block code .json-null {
+  color: #888 !important;
+  font-style: italic;
+}
+
+/* Inline commands (`@config agent refresh player`) are click-to-copy.
+   Keep the affordance quiet — a pointer cursor and a hover tint — so the
+   text still reads as prose rather than as a button. */
+code.chat-inline-copy {
+  cursor: pointer;
+  border-radius: 3px;
+  transition:
+    background-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+code.chat-inline-copy:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 0 0 2px
+    var(--vscode-toolbar-hoverBackground, rgba(0, 0, 0, 0.08));
+}
+
+code.chat-inline-copied {
+  background: rgba(10, 128, 67, 0.18);
+  box-shadow: 0 0 0 2px rgba(10, 128, 67, 0.18);
+}
 
 .sc-code {
   background: var(--vscode-textCodeBlock-background, #f0f0f0);
@@ -1893,6 +2055,83 @@ table.sc-kv-table.sc-card-fields {
   font-size: 0.95em;
 }
 .reasoning-tool-call-json {
+  margin: 4px 0 0 0;
+  padding: 8px;
+  background: rgba(127, 127, 127, 0.1);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  max-width: 100%;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Logged tool results inside a reasoning step. Mirrors the tool-call block: a
+   native <details> whose <summary> is a clickable one-line preview (with an
+   error marker when the tool failed); expanding it reveals the full result
+   text. chat-ui appends an "open in viewer" button to the summary the first
+   time a result opens so large results can be popped out into a bigger view. */
+.reasoning-tool-result {
+  margin: 2px 0;
+}
+.reasoning-tool-result-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.reasoning-tool-result-summary::-webkit-details-marker {
+  display: none;
+}
+.reasoning-tool-result-summary strong {
+  flex: none;
+  font-weight: 600;
+  color: var(--chat-conversation-success-foreground, #16825d);
+}
+.reasoning-tool-result-error .reasoning-tool-result-summary strong {
+  color: var(--chat-conversation-error-foreground, #c42b1c);
+}
+/* Result preview chip - neutral gray (not the gold tool-name chip) so a result
+   reads as distinct from a call. Ellipsizes when the preview is wide. */
+.reasoning-tool-result-summary code {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(127, 127, 127, 0.18);
+  padding: 0 4px;
+  border-radius: 3px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.95em;
+}
+/* "Open in viewer" button - pushed to the trailing edge, icon-only. */
+.reasoning-tool-result-open {
+  flex: none;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+}
+.reasoning-tool-result-open:hover {
+  opacity: 1;
+  background: rgba(127, 127, 127, 0.18);
+}
+.reasoning-tool-result-body {
   margin: 4px 0 0 0;
   padding: 8px;
   background: rgba(127, 127, 127, 0.1);
@@ -3335,6 +3574,107 @@ span.ansi-bright-white-fg {
 
 .chat-new-messages-pill:active {
   transform: translateX(-50%) scale(0.98);
+}
+
+/* =========================================================================
+   Live-bubble Top Rail
+   In-flow strip above the messages (never overlaps the transcript or the
+   scrollbar). Shows a compact chip for each live-updating bubble (agent
+   dynamic displays, the conversation-index progress bar) once it scrolls out
+   of view. Self-contained colors (shared with the New-messages pill) so it
+   reads on both light and dark host themes.
+   ========================================================================= */
+
+.chat-top-rail {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.18);
+}
+
+.chat-top-rail:empty {
+  display: none;
+}
+
+.chat-live-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 4px 6px 4px 10px;
+  background-color: var(--chat-new-messages-bg, #0066bf);
+  color: var(--chat-new-messages-fg, #ffffff);
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  user-select: none;
+}
+
+.chat-live-chip:hover {
+  background-color: var(--chat-new-messages-bg-hover, #0052a3);
+}
+
+.chat-live-chip-dir {
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.chat-live-chip-icon {
+  font-size: 13px;
+  line-height: 1;
+  animation: chat-live-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes chat-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.chat-live-chip-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.chat-live-chip-bar {
+  flex: 0 0 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+}
+
+.chat-live-chip-bar > i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: #fff;
+  transition: width 0.3s ease;
+}
+
+.chat-live-chip-pin {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+.chat-live-chip-pin:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 /* =========================================================================

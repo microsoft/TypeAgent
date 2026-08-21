@@ -15,6 +15,16 @@ const debugWssError = registerDebug("typeagent:transport:wss:error");
 
 let nextId = 0;
 
+function errMessage(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}
+function errType(err: unknown): string | undefined {
+    return err instanceof Error ? err.name : undefined;
+}
+function errStack(err: unknown): string | undefined {
+    return err instanceof Error ? err.stack : undefined;
+}
+
 type WebSocketChannelServer = {
     close: () => void;
 };
@@ -68,22 +78,33 @@ export async function createWebSocketChannelServer(
         const id = nextId++;
         const debugId = `typeagent:transport:wss:ws-${id}`;
         const debug = registerDebug(debugId);
+        const debugWarn = registerDebug(`${debugId}:warn`);
         const debugError = registerDebug(`${debugId}:error`);
         debug(`connected`);
         const channelProvider = createChannelProviderAdapter(
             "agent-server:server",
             (message, cb) => {
                 const data = JSON.stringify(message);
-                debug(`sending message: ${data}`);
+                debug("sending message", {
+                    channel: message?.name,
+                    type: message?.message?.type,
+                    method: message?.message?.name,
+                    callId: message?.message?.callId,
+                    bytes: Buffer.byteLength(data),
+                });
                 // Skip sends to a socket that is closing/closed. ws.send()
                 // would otherwise queue the failure on process.nextTick,
                 // bypassing any synchronous try/catch around the caller and
                 // becoming an uncaughtException. Best-effort: just drop the
                 // message and report via the callback (if any).
                 if (ws.readyState !== WebSocket.OPEN) {
-                    debugError(
-                        `dropping send: ws not open (readyState=${ws.readyState})`,
-                    );
+                    debugWarn("dropping send: socket not open", {
+                        connection: id,
+                        readyState: ws.readyState,
+                        channel: message?.name,
+                        type: message?.message?.type,
+                        callId: message?.message?.callId,
+                    });
                     if (cb) {
                         cb(
                             new Error(
@@ -96,7 +117,11 @@ export async function createWebSocketChannelServer(
                 try {
                     ws.send(data, (err) => {
                         if (err) {
-                            debugError(`send error callback: ${err}`);
+                            debugWarn("send callback error", {
+                                connection: id,
+                                errorType: errType(err),
+                                error: errMessage(err),
+                            });
                         }
                         if (cb) {
                             cb(err ?? null);
@@ -106,7 +131,15 @@ export async function createWebSocketChannelServer(
                     // Synchronous failures from ws.send (e.g. socket closed
                     // mid-write) — surface to the caller if it asked, but
                     // don't escalate to an uncaughtException.
-                    debugError(`send threw: ${err}`);
+                    debugError("synchronous send failure", {
+                        connection: id,
+                        channel: message?.name,
+                        type: message?.message?.type,
+                        callId: message?.message?.callId,
+                        errorType: errType(err),
+                        error: errMessage(err),
+                        stack: errStack(err),
+                    });
                     if (cb) {
                         cb(err as Error);
                     }
@@ -114,17 +147,30 @@ export async function createWebSocketChannelServer(
             },
         );
         ws.on("message", (data: Buffer) => {
-            debug(`receiving message: ${data}`);
+            debug("receiving message", {
+                connection: id,
+                bytes: data.length,
+            });
             try {
                 // REVIEW: assume all messages are JSON
                 const message = JSON.parse(data.toString());
                 channelProvider.notifyMessage(message);
             } catch (err) {
-                debugError("Failed to parse message:", err);
+                debugWarn("failed to parse inbound message", {
+                    connection: id,
+                    bytes: data.length,
+                    errorType: errType(err),
+                });
             }
         });
         ws.on("error", (err) => {
-            debugError("error:", err);
+            debugError("socket error event", {
+                connection: id,
+                readyState: ws.readyState,
+                errorType: errType(err),
+                error: errMessage(err),
+                stack: errStack(err),
+            });
             ws.close();
         });
         ws.on("close", (code, reason) => {

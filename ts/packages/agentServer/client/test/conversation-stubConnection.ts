@@ -13,6 +13,7 @@ import type {
     ConversationDispatcher,
     ConversationInfo,
     ConversationMatch,
+    ConversationContentMatch,
 } from "../src/index.js";
 
 export function makeInfo(
@@ -52,6 +53,14 @@ export type StubConnectionOptions = {
             maxMatches: number | undefined,
             callIndex: number,
         ) => ConversationMatch[] | Promise<ConversationMatch[]> | undefined;
+        searchConversationContent?: (
+            query: string,
+            maxMatches: number | undefined,
+            callIndex: number,
+        ) =>
+            | ConversationContentMatch[]
+            | Promise<ConversationContentMatch[]>
+            | undefined;
         createConversation?: (
             name: string,
             callIndex: number,
@@ -109,6 +118,56 @@ export function makeStubConnection(
         }) as ConversationDispatcher;
 
     const stub: AgentServerConnection = {
+        async armMacroRecording() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async getMacroRecordingState() {
+            return { status: "idle" };
+        },
+        async claimMacroRecording() {
+            return undefined;
+        },
+        async cancelMacroRecording() {},
+        async failMacroRecording() {},
+        async finalizeMacroRecording() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async listMacros() {
+            return [];
+        },
+        async searchMacros() {
+            return [];
+        },
+        async inspectMacro() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async getMacroRequirements() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async createMacroFromTrace() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async validateMacro() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async approveMacro() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async disableMacro() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async deleteMacro() {},
+        async runMacro() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async submitMacroCandidate() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+        async cancelMacroRun() {},
+        async getMacroRun() {
+            throw new Error("Not implemented by conversation test stub");
+        },
+
         async listConversations(name?: string) {
             const idx = nextCount("listConversations");
             calls.push({ method: "listConversations", args: [name] });
@@ -142,6 +201,31 @@ export function makeStubConnection(
             const matched = state
                 .filter((c) => c.name.toLowerCase().includes(norm))
                 .map((conversation) => ({ conversation, score: 1 }));
+            return maxMatches !== undefined
+                ? matched.slice(0, maxMatches)
+                : matched;
+        },
+
+        async searchConversationContent(query: string, maxMatches?: number) {
+            const idx = nextCount("searchConversationContent");
+            calls.push({
+                method: "searchConversationContent",
+                args: [query, maxMatches],
+            });
+            const override = await opts.intercept?.searchConversationContent?.(
+                query,
+                maxMatches,
+                idx,
+            );
+            if (override !== undefined) return override;
+            const norm = query.trim().toLowerCase();
+            const matched = state
+                .filter((c) => c.name.toLowerCase().includes(norm))
+                .map((conversation) => ({
+                    conversation,
+                    score: 1,
+                    snippets: [] as string[],
+                }));
             return maxMatches !== undefined
                 ? matched.slice(0, maxMatches)
                 : matched;

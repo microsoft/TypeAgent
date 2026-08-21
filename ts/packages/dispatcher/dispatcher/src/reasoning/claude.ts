@@ -51,7 +51,8 @@ import { getActionSchemaTypeName } from "../translation/agentTranslators.js";
 import {
     formatParams as sharedFormatParams,
     formatThinkingDisplay as sharedFormatThinkingDisplay,
-    formatToolResultDisplay as sharedFormatToolResultDisplay,
+    formatToolResult,
+    formatToolRun,
     buildReasoningActionResult,
     estimateReasoningTokens,
     reasoningTokenUsage,
@@ -70,6 +71,11 @@ import {
     findInstallableAgents,
     formatInstallableAgents,
 } from "./installableAgents.js";
+import {
+    emitReasoningToolCall,
+    runInReasoningSpan,
+} from "../otel/reasoningSpan.js";
+import { getReasoningProfileGuidance } from "./reasoningProfile.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 // Separate channel for MCP tool invocations (discover_actions / execute_action)
 // so call counts can be traced without enabling the full messages channel.
@@ -235,6 +241,12 @@ function buildPromptWithContext(
     if (editorContext) {
         parts.push(editorContext);
     }
+    const profileGuidance = getReasoningProfileGuidance(
+        context.sessionContext.agentContext.currentOptions,
+    );
+    if (profileGuidance) {
+        parts.push(profileGuidance);
+    }
     if (fallbackContext) {
         const lines = ["[Fallback context — a prior action failed]"];
         if (fallbackContext.failedSchema && fallbackContext.failedAction) {
@@ -318,7 +330,15 @@ function formatToolCallDisplay(toolName: string, input: any): string {
     return `**Tool:** ${toolName}${params}`;
 }
 
-const formatToolResultDisplay = sharedFormatToolResultDisplay;
+// Render a Claude tool call as a click-to-expand block (matching the copilot
+// engine). A call and its result render together in one bubble, so this is
+// combined with formatToolResult when the tool finishes.
+function renderToolCallBlock(toolName: string, input: unknown): string {
+    return formatToolRun(formatToolCallDisplay(toolName, input), [
+        { tool: toolName, args: input },
+    ]);
+}
+
 const formatThinkingDisplay = sharedFormatThinkingDisplay;
 
 const mcpExecuteActionTool = `mcp__${mcpServerName}__execute_action`;
@@ -661,11 +681,12 @@ function getClaudeOptions(
         },
     };
 
-    // TODO (deferred): cross-conversation browsing. get_conversation_info /
-    // read_conversation are scoped to the CURRENT conversation only. To help a
-    // user who is unsure which conversation they were in, add
-    // list_conversations / read_conversation(conversationId) backed by the
-    // agent-server ConversationManager (getConversationList). Not implemented yet.
+    // get_conversation_info / read_conversation are scoped to the CURRENT
+    // conversation. Cross-conversation browsing is provided by
+    // list_conversations (id + name) and search_conversations (content search
+    // with snippets), both backed by the agent-server ConversationManager.
+    // TODO (deferred): read_conversation(conversationId) to page another
+    // conversation's full transcript, not just its search snippets.
     const conversationInfoSchema = {};
     const getConversationInfoTool: SdkMcpToolDefinition<
         typeof conversationInfoSchema
@@ -742,6 +763,96 @@ function getClaudeOptions(
             return {
                 content: [
                     { type: "text", text: `${header}\n${lines.join("\n")}` },
+                ],
+            };
+        },
+    };
+
+    const listConversationsSchema = {};
+    const listConversationsTool: SdkMcpToolDefinition<
+        typeof listConversationsSchema
+    > = {
+        name: "list_conversations",
+        description: [
+            "List ALL of the user's conversations (id + name), across the whole session store — not just the current one.",
+            "Use this to resolve a conversation the user names (e.g. 'the CLI conversation') to its id before reading or searching it.",
+        ].join("\n"),
+        inputSchema: listConversationsSchema,
+        handler: async () => {
+            const list = systemContext.getConversationList?.() ?? [];
+            if (list.length === 0) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "No other conversations are available in this host.",
+                        },
+                    ],
+                };
+            }
+            return {
+                content: [
+                    { type: "text", text: JSON.stringify(list, null, 2) },
+                ],
+            };
+        },
+    };
+
+    const searchConversationsSchema = {
+        question: z.string().optional(),
+        terms: z.array(z.string()).optional(),
+        maxMatches: z.number().optional(),
+    };
+    const searchConversationsTool: SdkMcpToolDefinition<
+        typeof searchConversationsSchema
+    > = {
+        name: "search_conversations",
+        description: [
+            "Search the CONTENT of ALL the user's conversations (not just the current one) and return the best-matching conversations with representative snippets.",
+            "Use this to answer questions like 'what did we discuss in the CLI conversation' or to find where a topic was talked about across conversations.",
+            "Provide a natural-language `question` and/or a list of keyword `terms` - they are blended (NL/semantic + literal message-text match), so put distinctive keywords (e.g. proper nouns) in `terms` to catch literal mentions.",
+            "This reads matching content back to you - unlike the conversation find/search *actions*, which only render in the UI.",
+        ].join("\n"),
+        inputSchema: searchConversationsSchema,
+        handler: async (args) => {
+            const search = systemContext.searchConversations;
+            if (search === undefined) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "Cross-conversation content search is not available in this host.",
+                        },
+                    ],
+                };
+            }
+            const question = args.question;
+            const terms = args.terms;
+            if (!question && (terms === undefined || terms.length === 0)) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: "Provide a `question` and/or `terms` to search for.",
+                        },
+                    ],
+                };
+            }
+            const matches = await search({ question, terms }, args.maxMatches);
+            if (matches.length === 0) {
+                const what = question ?? (terms ?? []).join(", ");
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `No conversations with content matching "${what}" found.`,
+                        },
+                    ],
+                };
+            }
+            return {
+                content: [
+                    { type: "text", text: JSON.stringify(matches, null, 2) },
                 ],
             };
         },
@@ -1016,6 +1127,8 @@ function getClaudeOptions(
                 "- `remember`: Durably save a new memory so it can be recalled later",
                 "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
                 "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
+                "- `list_conversations`: List ALL conversations (id + name) across the session store — use to resolve a conversation the user names",
+                "- `search_conversations`: Search the CONTENT of ALL conversations and read back matching snippets (use for 'what did we discuss in X')",
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file, language, cursor/selection ranges, workspace, open editors, the active file's diagnostic messages) and the user's selected text (bounded) when present; use the code agent's read actions for full file contents",
                 "- `find_installable_agent`: List agents that are not installed yet but can be installed on demand. Call it when no active agent can fulfill the request; if a candidate matches, tell the user the exact `@package install` command (never install it yourself)",
                 "- `ask_user`: Ask the user ONE multiple-choice question and block for their answer - only when genuinely blocked on a decision only they can make (see Autonomous Execution Policy)",
@@ -1325,6 +1438,8 @@ function getClaudeOptions(
                           "",
                           "BEST PRACTICES:",
                           "- Always include param() block matching scriptParameters",
+                          "- Use script parameter type 'path' for filesystem paths",
+                          "- Use script parameter type 'executable' for values passed to executable command parameters such as Start-Process -FilePath",
                           "- Output objects or text, avoid Format-Table (hard to parse)",
                           "- Use [PSCustomObject] for structured output",
                           "",
@@ -1429,6 +1544,8 @@ function getClaudeOptions(
                     rememberTool,
                     getConversationInfoTool,
                     readConversationTool,
+                    listConversationsTool,
+                    searchConversationsTool,
                     getUserContextTool,
                     ...subagentTools,
                     findInstallableAgentTool,
@@ -1481,6 +1598,269 @@ function extractActionInfo(
     return out;
 }
 
+type ClaudeMessage =
+    ReturnType<typeof query> extends AsyncIterable<infer Message>
+        ? Message
+        : never;
+
+type ReasoningStreamState = {
+    finalResult?: string;
+    toolUseCount: number;
+    reasoningStepCount: number;
+    toolUseIdToName: Map<string, string>;
+    pendingToolCalls: Map<string, { tool: string; args: unknown }>;
+    pendingExecuteActions: Map<string, TypeAgentAction>;
+    executedActions: TypeAgentAction[];
+    usageInputTokens: number;
+    usageOutputTokens: number;
+    usageCachedTokens: number;
+    usageThinkingTokens: number[];
+    currentThinkingEstimate: number;
+    reasoningBlockTexts: string[];
+};
+
+function createReasoningStreamState(): ReasoningStreamState {
+    return {
+        toolUseCount: 0,
+        reasoningStepCount: 0,
+        toolUseIdToName: new Map(),
+        pendingToolCalls: new Map(),
+        pendingExecuteActions: new Map(),
+        executedActions: [],
+        usageInputTokens: 0,
+        usageOutputTokens: 0,
+        usageCachedTokens: 0,
+        usageThinkingTokens: [],
+        currentThinkingEstimate: 0,
+        reasoningBlockTexts: [],
+    };
+}
+
+function handleAssistantMessage(
+    message: Extract<ClaudeMessage, { type: "assistant" }>,
+    context: ActionContext<CommandHandlerContext>,
+    displayMode: DisplayAppendMode,
+    state: ReasoningStreamState,
+    tracer?: ReasoningTraceCollector,
+): void {
+    tracer?.recordThinking(message.message);
+
+    for (const content of message.message.content) {
+        if (content.type === "text") {
+            context.actionIO.appendDisplay(
+                { type: "markdown", content: content.text },
+                displayMode,
+            );
+        } else if (content.type === "tool_use") {
+            state.toolUseCount++;
+            state.reasoningStepCount++;
+            emitReasoningToolCall(state.toolUseCount);
+            state.toolUseIdToName.set(content.id, content.name);
+            const executedAction = extractExecutedAction(
+                content.name,
+                content.input,
+            );
+            if (executedAction) {
+                state.pendingExecuteActions.set(content.id, executedAction);
+            }
+            tracer?.recordToolCall(content.name, content.input);
+            context.actionIO.appendDiagnosticData({
+                type: "reasoningStep",
+                phase: "toolCall",
+                stepNumber: state.reasoningStepCount,
+                toolUseId: content.id,
+                toolName: content.name,
+                ...extractActionInfo(content.name, content.input),
+                parameters: content.input,
+                timestamp: new Date().toISOString(),
+            });
+            state.pendingToolCalls.set(content.id, {
+                tool: content.name,
+                args: content.input,
+            });
+        } else {
+            const thinking = content as unknown as {
+                type?: string;
+                thinking?: string;
+            };
+            if (thinking.type === "thinking" && thinking.thinking) {
+                state.reasoningBlockTexts.push(thinking.thinking);
+                context.actionIO.appendDisplay(
+                    {
+                        type: "html",
+                        content: formatThinkingDisplay(
+                            thinking.thinking,
+                            estimateReasoningTokens(thinking.thinking),
+                        ),
+                        kind: "status",
+                    },
+                    displayMode,
+                );
+            }
+            if (
+                thinking.type === "thinking" &&
+                state.currentThinkingEstimate > 0
+            ) {
+                state.usageThinkingTokens.push(state.currentThinkingEstimate);
+                state.currentThinkingEstimate = 0;
+            }
+        }
+    }
+}
+
+type ToolResultBlock = {
+    type: string;
+    tool_use_id: string;
+    is_error?: boolean;
+    content?: string | { type: string; text?: string }[];
+};
+
+function getToolResultContent(block: ToolResultBlock): string {
+    if (typeof block.content === "string") {
+        return block.content;
+    }
+    return (
+        block.content
+            ?.filter(
+                (content): content is { type: string; text: string } =>
+                    content.type === "text" && typeof content.text === "string",
+            )
+            .map((content) => content.text)
+            .join("") ?? ""
+    );
+}
+
+function handleToolResult(
+    block: ToolResultBlock,
+    context: ActionContext<CommandHandlerContext>,
+    displayMode: DisplayAppendMode,
+    state: ReasoningStreamState,
+    tracer?: ReasoningTraceCollector,
+): void {
+    const isError = block.is_error ?? false;
+    const content = getToolResultContent(block);
+    if (!isError) {
+        const executed = state.pendingExecuteActions.get(block.tool_use_id);
+        if (executed) {
+            state.executedActions.push(executed);
+        }
+    }
+
+    const toolName = state.toolUseIdToName.get(block.tool_use_id);
+    const diagnosticToolName = tracer ? (toolName ?? "unknown") : toolName;
+    tracer?.recordToolResult(
+        diagnosticToolName ?? "unknown",
+        content,
+        isError ? content : undefined,
+    );
+    context.actionIO.appendDiagnosticData({
+        type: "reasoningStep",
+        phase: "toolResult",
+        toolUseId: block.tool_use_id,
+        ...(diagnosticToolName !== undefined
+            ? { toolName: diagnosticToolName }
+            : {}),
+        isError,
+        result: content,
+        timestamp: new Date().toISOString(),
+    });
+
+    const call = state.pendingToolCalls.get(block.tool_use_id);
+    state.pendingToolCalls.delete(block.tool_use_id);
+    context.actionIO.appendDisplay(
+        {
+            type: "markdown",
+            content:
+                (call ? renderToolCallBlock(call.tool, call.args) : "") +
+                formatToolResult(content, isError),
+            kind: isError ? "warning" : "info",
+        },
+        displayMode,
+    );
+}
+
+function handleUserMessage(
+    message: Extract<ClaudeMessage, { type: "user" }>,
+    context: ActionContext<CommandHandlerContext>,
+    displayMode: DisplayAppendMode,
+    state: ReasoningStreamState,
+    tracer?: ReasoningTraceCollector,
+): void {
+    const userMessage = message.message as unknown as {
+        content?: ToolResultBlock[];
+    };
+    for (const block of userMessage.content ?? []) {
+        if (block.type === "tool_result") {
+            handleToolResult(block, context, displayMode, state, tracer);
+        }
+    }
+}
+
+function handleResultMessage(
+    message: Extract<ClaudeMessage, { type: "result" }>,
+    state: ReasoningStreamState,
+): void {
+    if (message.subtype !== "success") {
+        const failedResult = message as unknown as { errors?: string[] };
+        throw new Error(
+            `Error: ${failedResult.errors?.join(", ") || "Unknown error"}`,
+        );
+    }
+
+    state.finalResult = message.result;
+    const usage = message.usage;
+    state.usageInputTokens = usage.input_tokens;
+    state.usageOutputTokens = usage.output_tokens;
+    state.usageCachedTokens =
+        (usage.cache_read_input_tokens ?? 0) +
+        (usage.cache_creation_input_tokens ?? 0);
+}
+
+function processReasoningMessage(
+    message: ClaudeMessage,
+    context: ActionContext<CommandHandlerContext>,
+    displayMode: DisplayAppendMode,
+    state: ReasoningStreamState,
+    tracer?: ReasoningTraceCollector,
+): void {
+    debug(message);
+    if ("session_id" in message && !getSessionId(context)) {
+        setSessionId(context, message.session_id);
+    }
+    if (message.type === "system" && message.subtype === "thinking_tokens") {
+        state.currentThinkingEstimate = message.estimated_tokens ?? 0;
+    } else if (message.type === "assistant") {
+        handleAssistantMessage(message, context, displayMode, state, tracer);
+    } else if (message.type === "user") {
+        handleUserMessage(message, context, displayMode, state, tracer);
+    } else if (message.type === "result") {
+        handleResultMessage(message, state);
+    }
+}
+
+function createReasoningResult(
+    state: ReasoningStreamState,
+): ReturnType<typeof createActionResultNoDisplay> | undefined {
+    if (!state.finalResult) {
+        return undefined;
+    }
+    const result = createActionResultNoDisplay(state.finalResult);
+    const thinkingTokens =
+        state.usageThinkingTokens.length > 0
+            ? state.usageThinkingTokens
+            : state.reasoningBlockTexts
+                  .map(estimateReasoningTokens)
+                  .filter((count) => count > 0);
+    result.tokenUsage = reasoningTokenUsage(
+        state.usageInputTokens,
+        state.usageOutputTokens,
+        state.usageCachedTokens,
+        thinkingTokens,
+        true,
+    );
+    return result;
+}
+
 /**
  * Execute reasoning action without planning (standard mode)
  */
@@ -1488,9 +1868,10 @@ async function executeReasoningWithoutPlanning(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
     fallbackContext?: ReasoningFallbackContext,
-    abortSignal?: AbortSignal,
+    abortController?: AbortController,
     requireToolUse: boolean = false,
 ): Promise<any> {
+    const abortSignal = abortController?.signal;
     // Display initial message
     context.actionIO.appendDisplay("Thinking...", "temporary");
     const displayMode = resolveReasoningDisplayMode(context);
@@ -1500,191 +1881,19 @@ async function executeReasoningWithoutPlanning(
             context,
             fallbackContext,
         ),
-        options: { ...getClaudeOptions(context), ...claudeExecutableOption() },
+        options: {
+            ...getClaudeOptions(context),
+            ...claudeExecutableOption(),
+            ...(abortController === undefined ? {} : { abortController }),
+        },
     });
 
-    let finalResult: string | undefined = undefined;
-    let toolUseCount = 0;
-    let reasoningStepCount = 0;
-    const toolUseIdToName = new Map<string, string>();
-    const pendingExecuteActions = new Map<string, TypeAgentAction>();
-    const executedActions: TypeAgentAction[] = [];
-    // LLM token usage reported by the final result message (captured below).
-    let usageInputTokens = 0;
-    let usageOutputTokens = 0;
-    let usageCachedTokens = 0;
-    // Anthropic bills thinking inside output_tokens without a separate count,
-    // but the SDK streams an approximate per-block estimate (system/
-    // thinking_tokens). Tabulate one entry per thinking block so the UI can
-    // show an approximate per-block "Thinking Tokens" breakdown.
-    const usageThinkingTokens: number[] = [];
-    let currentThinkingEstimate = 0;
-    // Fallback: reasoning text per thinking block, used to estimate thinking
-    // tokens when the SDK does not stream a per-block estimate.
-    const reasoningBlockTexts: string[] = [];
+    const state = createReasoningStreamState();
 
     // Process streaming response
     for await (const message of queryInstance) {
         (abortSignal ?? context.abortSignal)?.throwIfAborted();
-        debug(message);
-        // Capture session ID from first message for future resume
-        if ("session_id" in message && !getSessionId(context)) {
-            setSessionId(context, (message as any).session_id);
-        }
-        // Anthropic bills thinking inside output_tokens without a separate
-        // count, but the SDK streams an approximate running total per thinking
-        // block (system/thinking_tokens). Keep the latest; it's recorded when
-        // the block's thinking content arrives below.
-        if (message.type === "system") {
-            const sysMsg = message as {
-                subtype?: string;
-                estimated_tokens?: number;
-            };
-            if (sysMsg.subtype === "thinking_tokens") {
-                currentThinkingEstimate = sysMsg.estimated_tokens ?? 0;
-            }
-        }
-        if (message.type === "assistant") {
-            for (const content of message.message.content) {
-                if (content.type === "text") {
-                    // Update display with current thinking content
-                    // REVIEW: assume markdown?
-                    context.actionIO.appendDisplay(
-                        {
-                            type: "markdown",
-                            content: content.text,
-                        },
-                        displayMode,
-                    );
-                } else if (content.type === "tool_use") {
-                    toolUseCount++;
-                    reasoningStepCount++;
-                    toolUseIdToName.set(content.id, content.name);
-                    const executedAction = extractExecutedAction(
-                        content.name,
-                        content.input,
-                    );
-                    if (executedAction) {
-                        pendingExecuteActions.set(content.id, executedAction);
-                    }
-                    const actionInfo = extractActionInfo(
-                        content.name,
-                        content.input,
-                    );
-                    context.actionIO.appendDiagnosticData({
-                        type: "reasoningStep",
-                        phase: "toolCall",
-                        stepNumber: reasoningStepCount,
-                        toolUseId: content.id,
-                        toolName: content.name,
-                        ...actionInfo,
-                        parameters: content.input,
-                        timestamp: new Date().toISOString(),
-                    });
-                    context.actionIO.appendDisplay(
-                        {
-                            type: "markdown",
-                            content: formatToolCallDisplay(
-                                content.name,
-                                content.input,
-                            ),
-                            kind: "info",
-                        },
-                        displayMode,
-                    );
-                } else if ((content as any).type === "thinking") {
-                    const thinkingContent = (content as any).thinking;
-                    if (thinkingContent) {
-                        reasoningBlockTexts.push(thinkingContent);
-                        context.actionIO.appendDisplay(
-                            {
-                                type: "html",
-                                content: formatThinkingDisplay(
-                                    thinkingContent,
-                                    estimateReasoningTokens(thinkingContent),
-                                ),
-                                kind: "status",
-                            },
-                            displayMode,
-                        );
-                    }
-                    // Record the SDK's per-block thinking-token estimate (the
-                    // running total streamed as system/thinking_tokens above)
-                    // and reset for the next block.
-                    if (currentThinkingEstimate > 0) {
-                        usageThinkingTokens.push(currentThinkingEstimate);
-                        currentThinkingEstimate = 0;
-                    }
-                }
-            }
-        } else if (message.type === "user") {
-            // Tool results come back as user messages with tool_result blocks
-            const msg = (message as any).message;
-            if (msg?.content) {
-                for (const block of msg.content) {
-                    if (block.type === "tool_result") {
-                        const isError = block.is_error || false;
-                        let content = "";
-                        if (Array.isArray(block.content)) {
-                            for (const cb of block.content) {
-                                if (cb.type === "text") content += cb.text;
-                            }
-                        } else if (typeof block.content === "string") {
-                            content = block.content;
-                        }
-                        if (!isError) {
-                            const executed = pendingExecuteActions.get(
-                                block.tool_use_id,
-                            );
-                            if (executed) {
-                                executedActions.push(executed);
-                            }
-                        }
-                        const toolName = toolUseIdToName.get(block.tool_use_id);
-                        context.actionIO.appendDiagnosticData({
-                            type: "reasoningStep",
-                            phase: "toolResult",
-                            toolUseId: block.tool_use_id,
-                            ...(toolName !== undefined ? { toolName } : {}),
-                            isError,
-                            result: content,
-                            timestamp: new Date().toISOString(),
-                        });
-                        context.actionIO.appendDisplay(
-                            {
-                                type: "markdown",
-                                content: formatToolResultDisplay(
-                                    content,
-                                    isError,
-                                ),
-                                kind: isError ? "warning" : "info",
-                            },
-                            displayMode,
-                        );
-                    }
-                }
-            }
-        } else if (message.type === "result") {
-            // Final result from the agent
-            if (message.subtype === "success") {
-                finalResult = message.result;
-                // Track cache read/creation tokens separately from fresh input
-                // tokens (the Anthropic API reports them as distinct fields) so
-                // the UI can report them as a distinct "cached" figure.
-                const resultUsage = (message as any).usage;
-                usageInputTokens = resultUsage?.input_tokens ?? 0;
-                usageOutputTokens = resultUsage?.output_tokens ?? 0;
-                usageCachedTokens =
-                    (resultUsage?.cache_read_input_tokens ?? 0) +
-                    (resultUsage?.cache_creation_input_tokens ?? 0);
-            } else {
-                // Handle error results
-                const errors =
-                    "errors" in message ? (message as any).errors : undefined;
-                const errorMessage = `Error: ${errors?.join(", ") || "Unknown error"}`;
-                throw new Error(errorMessage);
-            }
-        }
+        processReasoningMessage(message, context, displayMode, state);
     }
 
     // For the action-execution path (requireToolUse), a success result with
@@ -1693,34 +1902,14 @@ async function executeReasoningWithoutPlanning(
     // instead of reporting the text as a successful action. Conversation-answer
     // callers leave requireToolUse false: answering a question with text only
     // is a valid, complete result.
-    if (requireToolUse && finalResult && toolUseCount === 0) {
+    if (requireToolUse && state.finalResult && state.toolUseCount === 0) {
         throw new Error(
             "Reasoning completed with no tool calls — the model produced a text-only response and did not execute any action. No state was modified.",
         );
     }
 
-    recordReasoningActions(context, executedActions);
-    if (!finalResult) {
-        return undefined;
-    }
-    const result = createActionResultNoDisplay(finalResult);
-    // Claude's thinking tokens are an approximate per-block figure (Anthropic
-    // does not bill them separately): prefer the SDK's streamed estimate, else
-    // estimate from the reasoning text. Either way, flag as estimated.
-    const thinkingTokens =
-        usageThinkingTokens.length > 0
-            ? usageThinkingTokens
-            : reasoningBlockTexts
-                  .map(estimateReasoningTokens)
-                  .filter((n) => n > 0);
-    result.tokenUsage = reasoningTokenUsage(
-        usageInputTokens,
-        usageOutputTokens,
-        usageCachedTokens,
-        thinkingTokens,
-        true,
-    );
-    return result;
+    recordReasoningActions(context, state.executedActions);
+    return createReasoningResult(state);
 }
 
 /**
@@ -1730,9 +1919,10 @@ async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
     fallbackContext?: ReasoningFallbackContext,
-    abortSignal?: AbortSignal,
+    abortController?: AbortController,
     requireToolUse: boolean = false,
 ): Promise<any> {
+    const abortSignal = abortController?.signal;
     const systemContext = context.sessionContext.agentContext;
     const storage = context.sessionContext.sessionStorage;
 
@@ -1743,7 +1933,7 @@ async function executeReasoningWithTracing(
             originalRequest,
             context,
             undefined,
-            abortSignal,
+            abortController,
             requireToolUse,
         );
     }
@@ -1775,257 +1965,66 @@ async function executeReasoningWithTracing(
             options: {
                 ...getClaudeOptions(context),
                 ...claudeExecutableOption(),
+                ...(abortController === undefined ? {} : { abortController }),
             },
         });
 
-        let finalResult: string | undefined = undefined;
-        let toolUseCount = 0;
-        let reasoningStepCount = 0;
-        const toolUseIdToName = new Map<string, string>();
-        const pendingExecuteActions = new Map<string, TypeAgentAction>();
-        const executedActions: TypeAgentAction[] = [];
-        // LLM token usage reported by the final result message (captured below).
-        let usageInputTokens = 0;
-        let usageOutputTokens = 0;
-        let usageCachedTokens = 0;
-        // Anthropic bills thinking inside output_tokens without a separate
-        // count, but the SDK streams an approximate per-block estimate (system/
-        // thinking_tokens). Tabulate one entry per thinking block so the UI can
-        // show an approximate per-block "Thinking Tokens" breakdown.
-        const usageThinkingTokens: number[] = [];
-        let currentThinkingEstimate = 0;
-        // Fallback: reasoning text per thinking block, used to estimate thinking
-        // tokens when the SDK does not stream a per-block estimate.
-        const reasoningBlockTexts: string[] = [];
+        const state = createReasoningStreamState();
 
         // Process streaming response with tracing
         for await (const message of queryInstance) {
             (abortSignal ?? context.abortSignal)?.throwIfAborted();
-            debug(message);
-            // Capture session ID from first message for future resume
-            if ("session_id" in message && !getSessionId(context)) {
-                setSessionId(context, (message as any).session_id);
-            }
-            // Anthropic bills thinking inside output_tokens without a separate
-            // count, but the SDK streams an approximate running total per
-            // thinking block (system/thinking_tokens). Keep the latest; it's
-            // recorded when the block's thinking content arrives below.
-            if (message.type === "system") {
-                const sysMsg = message as {
-                    subtype?: string;
-                    estimated_tokens?: number;
-                };
-                if (sysMsg.subtype === "thinking_tokens") {
-                    currentThinkingEstimate = sysMsg.estimated_tokens ?? 0;
-                }
-            }
-
-            if (message.type === "assistant") {
-                // Record thinking
-                tracer.recordThinking(message.message);
-
-                for (const content of message.message.content) {
-                    if (content.type === "text") {
-                        // Update display with current thinking content
-                        context.actionIO.appendDisplay(
-                            {
-                                type: "markdown",
-                                content: content.text,
-                            },
-                            displayMode,
-                        );
-                    } else if (content.type === "tool_use") {
-                        toolUseCount++;
-                        reasoningStepCount++;
-                        // Track tool_use_id → name for matching results
-                        toolUseIdToName.set(content.id, content.name);
-                        const executedAction = extractExecutedAction(
-                            content.name,
-                            content.input,
-                        );
-                        if (executedAction) {
-                            pendingExecuteActions.set(
-                                content.id,
-                                executedAction,
-                            );
-                        }
-                        // Record tool call for tracing
-                        tracer.recordToolCall(content.name, content.input);
-
-                        const actionInfo = extractActionInfo(
-                            content.name,
-                            content.input,
-                        );
-                        context.actionIO.appendDiagnosticData({
-                            type: "reasoningStep",
-                            phase: "toolCall",
-                            stepNumber: reasoningStepCount,
-                            toolUseId: content.id,
-                            toolName: content.name,
-                            ...actionInfo,
-                            parameters: content.input,
-                            timestamp: new Date().toISOString(),
-                        });
-
-                        context.actionIO.appendDisplay(
-                            {
-                                type: "markdown",
-                                content: formatToolCallDisplay(
-                                    content.name,
-                                    content.input,
-                                ),
-                                kind: "info",
-                            },
-                            displayMode,
-                        );
-                    } else if ((content as any).type === "thinking") {
-                        const thinkingContent = (content as any).thinking;
-                        if (thinkingContent) {
-                            reasoningBlockTexts.push(thinkingContent);
-                            context.actionIO.appendDisplay(
-                                {
-                                    type: "html",
-                                    content: formatThinkingDisplay(
-                                        thinkingContent,
-                                        estimateReasoningTokens(
-                                            thinkingContent,
-                                        ),
-                                    ),
-                                    kind: "status",
-                                },
-                                displayMode,
-                            );
-                        }
-                        // Record the SDK's per-block thinking-token estimate
-                        // (the running total streamed as system/thinking_tokens
-                        // above) and reset for the next block.
-                        if (currentThinkingEstimate > 0) {
-                            usageThinkingTokens.push(currentThinkingEstimate);
-                            currentThinkingEstimate = 0;
-                        }
-                    }
-                }
-            } else if (message.type === "user") {
-                // Tool results come back as user messages with tool_result blocks
-                const msg = (message as any).message;
-                if (msg?.content) {
-                    for (const block of msg.content) {
-                        if (block.type === "tool_result") {
-                            const isError = block.is_error || false;
-                            let content = "";
-                            if (Array.isArray(block.content)) {
-                                for (const cb of block.content) {
-                                    if (cb.type === "text") content += cb.text;
-                                }
-                            } else if (typeof block.content === "string") {
-                                content = block.content;
-                            }
-
-                            if (!isError) {
-                                const executed = pendingExecuteActions.get(
-                                    block.tool_use_id,
-                                );
-                                if (executed) {
-                                    executedActions.push(executed);
-                                }
-                            }
-
-                            // Record tool result in trace for script extraction
-                            const toolName =
-                                toolUseIdToName.get(block.tool_use_id) ??
-                                "unknown";
-                            tracer.recordToolResult(
-                                toolName,
-                                content,
-                                isError ? content : undefined,
-                            );
-
-                            context.actionIO.appendDiagnosticData({
-                                type: "reasoningStep",
-                                phase: "toolResult",
-                                toolUseId: block.tool_use_id,
-                                toolName,
-                                isError,
-                                result: content,
-                                timestamp: new Date().toISOString(),
-                            });
-
-                            context.actionIO.appendDisplay(
-                                {
-                                    type: "markdown",
-                                    content: formatToolResultDisplay(
-                                        content,
-                                        isError,
-                                    ),
-                                    kind: isError ? "warning" : "info",
-                                },
-                                displayMode,
-                            );
-                        }
-                    }
-                }
-            } else if (message.type === "result") {
-                // Final result from the agent
-                if (message.subtype === "success") {
-                    finalResult = message.result;
-                    // Track cache read/creation tokens separately from fresh
-                    // input tokens (the Anthropic API reports them as distinct
-                    // fields) so the UI can report a distinct "cached" figure.
-                    const resultUsage = (message as any).usage;
-                    usageInputTokens = resultUsage?.input_tokens ?? 0;
-                    usageOutputTokens = resultUsage?.output_tokens ?? 0;
-                    usageCachedTokens =
-                        (resultUsage?.cache_read_input_tokens ?? 0) +
-                        (resultUsage?.cache_creation_input_tokens ?? 0);
-                } else {
-                    // Handle error results
-                    const errors =
-                        "errors" in message
-                            ? (message as any).errors
-                            : undefined;
-                    const errorMessage = `Error: ${errors?.join(", ") || "Unknown error"}`;
-                    throw new Error(errorMessage);
-                }
-            }
+            processReasoningMessage(
+                message,
+                context,
+                displayMode,
+                state,
+                tracer,
+            );
         }
 
         // Mark trace as successful
-        tracer.markSuccess(finalResult);
+        tracer.markSuccess(state.finalResult);
 
         // Save trace
         await tracer.saveTrace();
 
         // Auto-generate recipe from successful trace for future reuse via flowInterpreter
         if (tracer.wasSuccessful()) {
-            try {
-                const recipeGen = new ReasoningRecipeGenerator();
-                const recipe = await recipeGen.generate(tracer.getTrace());
+            if (
+                systemContext.currentOptions?.reasoningProfile !==
+                "powershellFlowRecording"
+            ) {
+                try {
+                    const recipeGen = new ReasoningRecipeGenerator();
+                    const recipe = await recipeGen.generate(tracer.getTrace());
 
-                if (recipe) {
-                    const saved = await saveTaskFlowRecipeToInstanceStorage(
-                        recipe,
-                        systemContext,
-                    );
-                    if (saved) {
-                        debug(`TaskFlow recipe saved: ${recipe.name}`);
-                        context.actionIO.appendDisplay({
-                            type: "text",
-                            content: `\n✓ Task flow registered: ${recipe.name}`,
-                        });
-                        try {
-                            await systemContext.agents.reloadAgentSchema(
-                                "taskflow",
-                                systemContext,
-                            );
-                        } catch {
-                            debug(
-                                "Failed to reload taskflow schema after saving recipe",
-                            );
+                    if (recipe) {
+                        const saved = await saveTaskFlowRecipeToInstanceStorage(
+                            recipe,
+                            systemContext,
+                        );
+                        if (saved) {
+                            debug(`TaskFlow recipe saved: ${recipe.name}`);
+                            context.actionIO.appendDisplay({
+                                type: "text",
+                                content: `\n✓ Task flow registered: ${recipe.name}`,
+                            });
+                            try {
+                                await systemContext.agents.reloadAgentSchema(
+                                    "taskflow",
+                                    systemContext,
+                                );
+                            } catch {
+                                debug(
+                                    "Failed to reload taskflow schema after saving recipe",
+                                );
+                            }
                         }
                     }
+                } catch (error) {
+                    debug("Failed to generate recipe from trace:", error);
                 }
-            } catch (error) {
-                debug("Failed to generate recipe from trace:", error);
             }
 
             // Auto-generate script recipes from PowerShell scripts in trace
@@ -2074,29 +2073,8 @@ async function executeReasoningWithTracing(
             }
         }
 
-        recordReasoningActions(context, executedActions);
-
-        if (!finalResult) {
-            return undefined;
-        }
-        const result = createActionResultNoDisplay(finalResult);
-        // Claude's thinking tokens are an approximate per-block figure (Anthropic
-        // does not bill them separately): prefer the SDK's streamed estimate,
-        // else estimate from the reasoning text. Either way, flag as estimated.
-        const thinkingTokens =
-            usageThinkingTokens.length > 0
-                ? usageThinkingTokens
-                : reasoningBlockTexts
-                      .map(estimateReasoningTokens)
-                      .filter((n) => n > 0);
-        result.tokenUsage = reasoningTokenUsage(
-            usageInputTokens,
-            usageOutputTokens,
-            usageCachedTokens,
-            thinkingTokens,
-            true,
-        );
-        return result;
+        recordReasoningActions(context, state.executedActions);
+        return createReasoningResult(state);
     } catch (error) {
         // Mark trace as failed and save
         tracer.markFailed(error instanceof Error ? error : String(error));
@@ -2553,7 +2531,8 @@ export interface ReasoningFallbackContext {
  */
 async function runWithReasoningTimeout<T>(
     context: ActionContext<CommandHandlerContext>,
-    fn: (signal: AbortSignal) => Promise<T>,
+    controller: AbortController,
+    fn: (controller: AbortController) => Promise<T>,
 ): Promise<T> {
     const raw = process.env.TYPEAGENT_REASONING_TIMEOUT_MS;
     const parsed = raw !== undefined ? Number(raw) : NaN;
@@ -2562,7 +2541,6 @@ async function runWithReasoningTimeout<T>(
             ? parsed
             : DEFAULT_REASONING_TIMEOUT_MS;
 
-    const controller = new AbortController();
     const externalSignal = context.abortSignal;
     const onExternalAbort = () => controller.abort(externalSignal?.reason);
 
@@ -2586,7 +2564,7 @@ async function runWithReasoningTimeout<T>(
             : undefined;
 
     try {
-        return await fn(controller.signal);
+        return await fn(controller);
     } finally {
         if (timer !== undefined) clearTimeout(timer);
         externalSignal?.removeEventListener?.("abort", onExternalAbort);
@@ -2614,23 +2592,33 @@ export async function executeReasoning(
     const planReuseEnabled = options?.planReuseEnabled ?? false;
     const fallbackContext = options?.fallbackContext;
     const requireToolUse = options?.requireToolUse ?? false;
-    return runWithReasoningTimeout(context, (signal) => {
-        if (!planReuseEnabled) {
-            return executeReasoningWithoutPlanning(
-                request,
-                context,
-                fallbackContext,
-                signal,
-                requireToolUse,
-            );
-        }
-        // Trace capture + auto recipe generation
-        return executeReasoningWithTracing(
-            request,
-            context,
-            fallbackContext,
-            signal,
-            requireToolUse,
-        );
-    });
+    const controller = new AbortController();
+    return runInReasoningSpan(
+        context,
+        () =>
+            runWithReasoningTimeout(context, controller, (controller) => {
+                if (!planReuseEnabled) {
+                    return executeReasoningWithoutPlanning(
+                        request,
+                        context,
+                        fallbackContext,
+                        controller,
+                        requireToolUse,
+                    );
+                }
+                // Trace capture + auto recipe generation
+                return executeReasoningWithTracing(
+                    request,
+                    context,
+                    fallbackContext,
+                    controller,
+                    requireToolUse,
+                );
+            }),
+        {
+            genAiSystem: "anthropic",
+            genAiRequestModel: model,
+        },
+        controller.signal,
+    );
 }

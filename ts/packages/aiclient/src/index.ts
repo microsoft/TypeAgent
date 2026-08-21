@@ -3,6 +3,19 @@
 
 export * from "./common.js";
 export * from "./models.js";
+export {
+    instrumentChatModel,
+    type ChatModelTelemetryInfo,
+} from "./otelChatModel.js";
+export {
+    getChatModelTelemetryContext,
+    withChatModelTelemetryContext,
+    withChatModelTelemetryPurpose,
+    type ChatModelTelemetryContext,
+    type ChatModelTelemetryPhase,
+    type ChatModelTelemetryPurpose,
+    type ChatModelTelemetryScope,
+} from "./chatModelTelemetryContext.js";
 export * as openai from "./openai.js";
 export * as bing from "./bing.js";
 export * from "./restClient.js";

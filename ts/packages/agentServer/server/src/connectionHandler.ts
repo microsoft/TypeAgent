@@ -18,6 +18,7 @@ import {
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
 import type { ConfigDrift } from "@typeagent/config";
+import type { MacroManager } from "@typeagent/copilot-macros";
 import type { Dispatcher } from "agent-dispatcher";
 import type { PortRegistrar } from "agent-dispatcher";
 import type { ConversationManager } from "./conversationManager.js";
@@ -38,6 +39,7 @@ export type ConnectionHandler = (
 export type ConnectionHandlerDeps = {
     /** The conversation manager backing this server. */
     conversationManager: ConversationManager;
+    macroManager: MacroManager;
     /**
      * Invoked when the dispatcher (or an RPC client) requests a server
      * shutdown. For the standalone agent-server this kills the process; for an
@@ -172,6 +174,7 @@ export function createAgentServerConnectionHandler(
 } {
     const {
         conversationManager,
+        macroManager,
         shutdown,
         restart,
         isStale,
@@ -256,6 +259,36 @@ export function createAgentServerConnectionHandler(
         let staleNotifier: (() => void) | undefined;
 
         const invokeFunctions: AgentServerInvokeFunctions = {
+            armMacroRecording: async (request) =>
+                macroManager.armRecording(request),
+            getMacroRecordingState: async (sessionId) =>
+                macroManager.getRecordingState(sessionId),
+            claimMacroRecording: async (request) =>
+                macroManager.claimRecording(request),
+            cancelMacroRecording: async (sessionId) =>
+                macroManager.cancelRecording(sessionId),
+            failMacroRecording: async (sessionId, tokenId, error) =>
+                macroManager.failRecording(sessionId, tokenId, error),
+            finalizeMacroRecording: async (request) =>
+                macroManager.finalizeRecording(request),
+            listMacros: async (request) => macroManager.listMacros(request),
+            searchMacros: async (request) => macroManager.searchMacros(request),
+            inspectMacro: async (request) => macroManager.inspectMacro(request),
+            getMacroRequirements: async (request) =>
+                macroManager.getMacroRequirements(request),
+            createMacroFromTrace: async (request) =>
+                macroManager.createMacroFromTrace(request),
+            validateMacro: async (request) =>
+                macroManager.validateMacro(request),
+            approveMacro: async (request) => macroManager.approveMacro(request),
+            disableMacro: async (request) => macroManager.disableMacro(request),
+            deleteMacro: async (request) => macroManager.deleteMacro(request),
+            runMacro: async (request) => macroManager.runMacro(request),
+            submitMacroCandidate: async (request) =>
+                macroManager.submitMacroCandidate(request),
+            cancelMacroRun: async (runId) => macroManager.cancelMacroRun(runId),
+            getMacroRun: async (runId) => macroManager.getMacroRun(runId),
+
             joinConversation: async (options?: DispatcherConnectOptions) => {
                 // Resolve conversation ID first (may auto-create default)
                 const conversationId =
@@ -319,6 +352,9 @@ export function createAgentServerConnectionHandler(
                         createDispatcherRpcServer(
                             result.dispatcher,
                             dispatcherChannel,
+                            {
+                                trustedContextPropagation: true,
+                            },
                         );
                     } catch (e) {
                         channelProvider.deleteChannel(
@@ -453,6 +489,19 @@ export function createAgentServerConnectionHandler(
 
             findConversations: async (query: string, maxMatches?: number) => {
                 return conversationManager.findConversations(query, maxMatches);
+            },
+
+            searchConversationContent: async (
+                query: string,
+                maxMatches?: number,
+            ) => {
+                // The wire/command path passes a plain query string; treat it
+                // as a natural-language question (the index blends in a
+                // message-text match too).
+                return conversationManager.searchConversationContent(
+                    { question: query },
+                    maxMatches,
+                );
             },
 
             renameConversation: async (

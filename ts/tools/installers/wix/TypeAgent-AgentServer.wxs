@@ -22,6 +22,7 @@
     ProductVersion      e.g. 0.0.1-12345
     AgentServerZip      path to the built agent-server.zip
     CopilotPluginZip    path to the built copilot-plugin.zip
+    VsCodeChatVsix      path to the packaged TypeAgent Chat VSIX
     MarketplaceDir      path to directory containing the generated marketplace.json
     InstallerSourceDir  path to this file's directory (for register-plugin.ps1)
     ShellBaseUrl        default SHELLBASEURL (anonymous blob base for the shell); may be ""
@@ -48,6 +49,7 @@
       Manufacturer="Microsoft Corporation" />
 
     <MediaTemplate EmbedCab="yes" />
+    <Binary Id="ProgressVbs" SourceFile="$(var.InstallerSourceDir)\progress.vbs" />
 
     <!-- Upgrade: replaces older versions, blocks downgrades -->
     <MajorUpgrade DowngradeErrorMessage="A newer version of TypeAgent is already installed." />
@@ -72,6 +74,7 @@
          ═══════════════════════════════════════════════ -->
     <Property Id="STARTSERVER" Value="1" Secure="yes" />
     <Property Id="AUTOSTART" Value="1" Secure="yes" />
+    <Property Id="VSCODECHAT" Value="1" Secure="yes" />
 
     <!-- ═══════════════════════════════════════════════
          Optional TypeAgent Shell install (Electron app)
@@ -81,7 +84,7 @@
          download for a public container; otherwise SHELLSTORAGE/SHELLCONTAINER
          are used with the Azure CLI (az login).
          ═══════════════════════════════════════════════ -->
-    <Property Id="SHELL" Value="0" Secure="yes" />
+    <Property Id="SHELL" Secure="yes" />
     <!-- Shell download coordinates: baked from build vars when provided, else
          left undefined. candle rejects Value="" (CNDL0006), so only emit Value
          when the build var is non-empty (preprocessor comparison). -->
@@ -144,6 +147,7 @@
         <Directory Id="TYPEAGENTROOT" Name="TypeAgent">
           <Directory Id="INSTALLFOLDER" Name="agent-server" />
           <Directory Id="PLUGINFOLDER" Name="copilot-plugin" />
+          <Directory Id="VSCODECHATFOLDER" Name="vscode-chat" />
           <Directory Id="PAYLOADFOLDER" Name="payload" />
           <Directory Id="GITHUBFOLDER" Name=".github">
             <Directory Id="PLUGINREGFOLDER" Name="plugin" />
@@ -159,10 +163,12 @@
       <!-- Payload archives (extracted at install time by ExtractPayload) -->
       <ComponentRef Id="AgentServerZipComponent" />
       <ComponentRef Id="CopilotPluginZipComponent" />
+      <ComponentRef Id="VsCodeChatVsixComponent" />
       <!-- Static files and registry -->
       <ComponentRef Id="MarketplaceJsonComponent" />
       <ComponentRef Id="RegisterPluginPs1Component" />
       <ComponentRef Id="RegisterPluginMjsComponent" />
+      <ComponentRef Id="InstallVsCodeChatPs1Component" />
       <ComponentRef Id="ExtractPayloadPs1Component" />
       <ComponentRef Id="InstallPrereqsPs1Component" />
       <ComponentRef Id="ResolveNodePs1Component" />
@@ -190,6 +196,14 @@
       </Component>
     </DirectoryRef>
 
+    <DirectoryRef Id="VSCODECHATFOLDER">
+      <Component Id="VsCodeChatVsixComponent" Guid="*">
+        <File Id="VsCodeChatVsix" Name="typeagent-vscode-chat.vsix"
+              Source="$(var.VsCodeChatVsix)" KeyPath="yes" />
+        <RemoveFolder Id="RemoveVsCodeChatFolder" Directory="VSCODECHATFOLDER" On="uninstall" />
+      </Component>
+    </DirectoryRef>
+
     <!-- marketplace.json — enables `copilot plugin marketplace add <TYPEAGENTROOT>` -->
     <DirectoryRef Id="PLUGINREGFOLDER">
       <Component Id="MarketplaceJsonComponent" Guid="*">
@@ -210,6 +224,10 @@
       <Component Id="RegisterPluginMjsComponent" Guid="*">
         <File Id="RegisterPluginMjs" Name="register-plugin.mjs"
               Source="$(var.InstallerSourceDir)\..\common\register-plugin.mjs" />
+      </Component>
+      <Component Id="InstallVsCodeChatPs1Component" Guid="*">
+        <File Id="InstallVsCodeChatPs1" Name="install-vscode-chat.ps1"
+              Source="$(var.InstallerSourceDir)\..\common\install-vscode-chat.ps1" />
       </Component>
       <Component Id="InstallShellPs1Component" Guid="*">
         <File Id="InstallShellPs1" Name="install-shell.ps1"
@@ -240,6 +258,7 @@
           <RegistryValue Name="InstallDir"        Value="[TYPEAGENTROOT]" Type="string" KeyPath="yes" />
           <RegistryValue Name="AgentServerDir"    Value="[INSTALLFOLDER]"   Type="string" />
           <RegistryValue Name="CopilotPluginDir"  Value="[PLUGINFOLDER]"    Type="string" />
+          <RegistryValue Name="VsCodeChatDir"     Value="[VSCODECHATFOLDER]" Type="string" />
           <RegistryValue Name="Version"           Value="$(var.ProductVersion)" Type="string" />
         </RegistryKey>
       </Component>
@@ -252,12 +271,24 @@
          so it writes under the user's LocalAppData. Fatal on failure
          (Return="check") since the rest of the install depends on the files.
          ═══════════════════════════════════════════════ -->
-    <SetProperty Id="ExtractPayload"
-           Before="ExtractPayload"
+    <SetProperty Id="ExtractAgentServerPayload"
+           Before="ExtractAgentServerPayload"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -Payload &quot;agent-server&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot;" />
 
-    <CustomAction Id="ExtractPayload"
+    <CustomAction Id="ExtractAgentServerPayload"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+
+    <SetProperty Id="ExtractCopilotPluginPayload"
+           Before="ExtractCopilotPluginPayload"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -Payload &quot;copilot-plugin&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot;" />
+
+    <CustomAction Id="ExtractCopilotPluginPayload"
                   BinaryKey="WixCA"
                   DllEntry="WixQuietExec64"
                   Execute="deferred"
@@ -304,6 +335,36 @@
            Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]register-plugin.ps1&quot; -Uninstall -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-register-plugin.log&quot;" />
 
     <CustomAction Id="UnregisterCopilotPlugin"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
+    <!-- ═══════════════════════════════════════════════
+         Custom actions — native VS Code Chat integration
+         The shared helper discovers VS Code >= 1.133, installs the VSIX, and
+         creates a desktop shortcut with the proposed API enabled. Missing or
+         incompatible VS Code is a non-fatal skip.
+         ═══════════════════════════════════════════════ -->
+    <SetProperty Id="InstallVsCodeChat"
+           Before="InstallVsCodeChat"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-chat.ps1&quot; -Action Install -Owner msi -VsixPath &quot;[VSCODECHATFOLDER]typeagent-vscode-chat.vsix&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-chat-install.log&quot;" />
+
+    <CustomAction Id="InstallVsCodeChat"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
+    <SetProperty Id="UninstallVsCodeChat"
+           Before="UninstallVsCodeChat"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-chat.ps1&quot; -Action Uninstall -Owner msi -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-chat-install.log&quot;" />
+
+    <CustomAction Id="UninstallVsCodeChat"
                   BinaryKey="WixCA"
                   DllEntry="WixQuietExec64"
                   Execute="deferred"
@@ -419,12 +480,10 @@
                   Impersonate="yes" />
 
     <!-- ═══════════════════════════════════════════════
-         Custom action — fail loudly if the shell was requested with no location
-         SHELL=1 needs a download location (SHELLBASEURL or SHELLSTORAGE). Rather
-         than silently no-op (the previous behavior masked by Return="ignore"),
-         abort with a clear message so the user knows the shell was not installed.
+         Custom action — fail if no complete shell source was configured
+         Blob storage is optional when the package feed fallback is complete.
          ═══════════════════════════════════════════════ -->
-    <CustomAction Id="ShellLocationMissing" Error="Installing the TypeAgent Shell requires a download location, but none was configured in this package. Re-run with SHELLBASEURL=https://&lt;account&gt;.blob.core.windows.net/&lt;container&gt;/ (or SHELLSTORAGE + SHELLCONTAINER), or clear the shell option." />
+    <CustomAction Id="ShellLocationMissing" Error="Installing the TypeAgent Shell requires either a blob location or a complete package feed configuration. Set SHELLBASEURL, SHELLSTORAGE, or SHELLFEED + SHELLPACKAGE + SHELLORG + SHELLPROJECT; otherwise clear the shell option." />
 
     <!-- ═══════════════════════════════════════════════
          Custom action — optional TypeAgent Shell install
@@ -434,10 +493,22 @@
          shell install target resolve correctly. Non-fatal (Return="ignore") so
          a shell hiccup does not roll back the agent-server install.
          ═══════════════════════════════════════════════ -->
+    <SetProperty Id="DownloadTypeAgentShell"
+           Before="DownloadTypeAgentShell"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-shell.ps1&quot; -Phase Download -Storage &quot;[SHELLSTORAGE]&quot; -Container &quot;[SHELLCONTAINER]&quot; -Channel &quot;[SHELLCHANNEL]&quot; -BlobBaseUrl &quot;[SHELLBASEURL]&quot; -Feed &quot;[SHELLFEED]&quot; -FeedPackage &quot;[SHELLPACKAGE]&quot; -FeedVersion &quot;[SHELLFEEDVERSION]&quot; -Organization &quot;[SHELLORG]&quot; -Project &quot;[SHELLPROJECT]&quot; -SkipTypeAgentCheck -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-shell.log&quot;" />
+
+    <CustomAction Id="DownloadTypeAgentShell"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
     <SetProperty Id="InstallTypeAgentShell"
            Before="InstallTypeAgentShell"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-shell.ps1&quot; -Storage &quot;[SHELLSTORAGE]&quot; -Container &quot;[SHELLCONTAINER]&quot; -Channel &quot;[SHELLCHANNEL]&quot; -BlobBaseUrl &quot;[SHELLBASEURL]&quot; -Feed &quot;[SHELLFEED]&quot; -FeedPackage &quot;[SHELLPACKAGE]&quot; -FeedVersion &quot;[SHELLFEEDVERSION]&quot; -Organization &quot;[SHELLORG]&quot; -Project &quot;[SHELLPROJECT]&quot; -SkipTypeAgentCheck -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-shell.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-shell.ps1&quot; -Phase Install -NoStart -SkipTypeAgentCheck -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-shell.log&quot;" />
 
     <CustomAction Id="InstallTypeAgentShell"
                   BinaryKey="WixCA"
@@ -446,19 +517,128 @@
                   Return="ignore"
                   Impersonate="yes" />
 
+    <SetProperty Id="VerifyTypeAgentShell"
+           Before="VerifyTypeAgentShell"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-shell.ps1&quot; -Phase Verify -SkipTypeAgentCheck -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-shell.log&quot;" />
+
+    <CustomAction Id="VerifyTypeAgentShell"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
+    <CustomAction Id="ResetMainProgress"
+                  BinaryKey="ProgressVbs"
+                  VBScriptCall="ResetMainProgress"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+    <CustomAction Id="MainProgress1"
+                  BinaryKey="ProgressVbs"
+                  VBScriptCall="AdvanceProgress"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+    <CustomAction Id="MainProgress2"
+                  BinaryKey="ProgressVbs"
+                  VBScriptCall="AdvanceProgress"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+    <CustomAction Id="MainProgress3"
+                  BinaryKey="ProgressVbs"
+                  VBScriptCall="AdvanceProgress"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+    <CustomAction Id="MainProgress4"
+                  BinaryKey="ProgressVbs"
+                  VBScriptCall="AdvanceProgress"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+    <CustomAction Id="MainProgress5"
+                  BinaryKey="ProgressVbs"
+                  VBScriptCall="AdvanceProgress"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+    <CustomAction Id="MainProgress6"
+                  BinaryKey="ProgressVbs"
+                  VBScriptCall="AdvanceProgress"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+    <CustomAction Id="MainProgress7"
+                  BinaryKey="ProgressVbs"
+                  VBScriptCall="AdvanceProgress"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+    <CustomAction Id="MainProgress8"
+                  BinaryKey="ProgressVbs"
+                  VBScriptCall="AdvanceProgress"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+    <CustomAction Id="ResetShellProgress"
+                  BinaryKey="ProgressVbs"
+                  VBScriptCall="ResetShellProgress"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+    <CustomAction Id="ShellProgress1"
+                  BinaryKey="ProgressVbs"
+                  VBScriptCall="AdvanceProgress"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+    <CustomAction Id="ShellProgress2"
+                  BinaryKey="ProgressVbs"
+                  VBScriptCall="AdvanceProgress"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+    <CustomAction Id="ShellProgress3"
+                  BinaryKey="ProgressVbs"
+                  VBScriptCall="AdvanceProgress"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+
     <InstallExecuteSequence>
-      <Custom Action="ExtractPayload"          After="InstallFiles">NOT REMOVE~="ALL"</Custom>
-      <Custom Action="RegisterCopilotPlugin"   After="ExtractPayload">NOT REMOVE~="ALL"</Custom>
-      <Custom Action="ProvisionSelfHostConfig" After="RegisterCopilotPlugin">(NOT REMOVE~="ALL") AND (PROVIDER&lt;&gt;"AISYSTEMS")</Custom>
+      <Custom Action="ResetMainProgress"        After="InstallFiles">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="MainProgress1"            After="ResetMainProgress">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="ExtractAgentServerPayload" After="MainProgress1">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="MainProgress2"            After="ExtractAgentServerPayload">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="ExtractCopilotPluginPayload" After="MainProgress2">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="MainProgress3"            After="ExtractCopilotPluginPayload">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="RegisterCopilotPlugin"    After="MainProgress3">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="MainProgress4"            After="RegisterCopilotPlugin">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="InstallVsCodeChat"        After="MainProgress4">(NOT REMOVE~="ALL") AND (VSCODECHAT="1")</Custom>
+      <Custom Action="MainProgress5"            After="InstallVsCodeChat">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="ProvisionSelfHostConfig" After="MainProgress5">(NOT REMOVE~="ALL") AND (PROVIDER&lt;&gt;"AISYSTEMS")</Custom>
       <Custom Action="ProvisionAiSystemsConfig" After="ProvisionSelfHostConfig">(NOT REMOVE~="ALL") AND (PROVIDER="AISYSTEMS")</Custom>
       <!-- Prereqs (claude/copilot from the feed) run AFTER provisioning so the
            AISYSTEMS az login has established a session the feed token reuses. -->
-      <Custom Action="InstallPrereqs"          After="ProvisionAiSystemsConfig">NOT REMOVE~="ALL"</Custom>
-      <Custom Action="StartAgentServer"        After="InstallPrereqs">(NOT REMOVE~="ALL") AND (STARTSERVER="1")</Custom>
-      <Custom Action="EnableAutostart"         After="StartAgentServer">(NOT REMOVE~="ALL") AND (AUTOSTART="1")</Custom>
-      <Custom Action="ShellLocationMissing"    After="EnableAutostart">(NOT REMOVE~="ALL") AND (SHELL="1") AND (NOT SHELLBASEURL) AND (NOT SHELLSTORAGE) AND (NOT SHELLFEED)</Custom>
-      <Custom Action="InstallTypeAgentShell"   After="ShellLocationMissing">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
-      <Custom Action="DisableAutostart"        Before="UnregisterCopilotPlugin">REMOVE~="ALL"</Custom>
+      <Custom Action="MainProgress6"           After="ProvisionAiSystemsConfig">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="InstallPrereqs"          After="MainProgress6">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="MainProgress7"           After="InstallPrereqs">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="StartAgentServer"        After="MainProgress7">(NOT REMOVE~="ALL") AND (STARTSERVER="1")</Custom>
+      <Custom Action="MainProgress8"           After="StartAgentServer">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="EnableAutostart"         After="MainProgress8">(NOT REMOVE~="ALL") AND (AUTOSTART="1")</Custom>
+      <Custom Action="ShellLocationMissing"    After="EnableAutostart">(NOT REMOVE~="ALL") AND (SHELL="1") AND (NOT SHELLBASEURL) AND (NOT SHELLSTORAGE) AND ((NOT SHELLFEED) OR (NOT SHELLPACKAGE) OR (NOT SHELLORG) OR (NOT SHELLPROJECT))</Custom>
+      <Custom Action="ResetShellProgress"      After="ShellLocationMissing">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
+      <Custom Action="ShellProgress1"          After="ResetShellProgress">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
+      <Custom Action="DownloadTypeAgentShell"  After="ShellProgress1">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
+      <Custom Action="ShellProgress2"          After="DownloadTypeAgentShell">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
+      <Custom Action="InstallTypeAgentShell"   After="ShellProgress2">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
+      <Custom Action="ShellProgress3"          After="InstallTypeAgentShell">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
+      <Custom Action="VerifyTypeAgentShell"    After="ShellProgress3">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
+      <Custom Action="DisableAutostart"        Before="UninstallVsCodeChat">REMOVE~="ALL"</Custom>
+      <Custom Action="UninstallVsCodeChat"     Before="UnregisterCopilotPlugin">REMOVE~="ALL"</Custom>
       <Custom Action="UnregisterCopilotPlugin" Before="RemoveFiles">REMOVE~="ALL"</Custom>
       <Custom Action="CleanupPayload"          After="UnregisterCopilotPlugin">REMOVE~="ALL"</Custom>
     </InstallExecuteSequence>
@@ -470,7 +650,7 @@
 
   <!-- ═══════════════════════════════════════════════
        Custom UI scheme: WixUI_TypeAgent
-       WelcomeDlg → LicenseAgreementDlg → ProviderDlg → VerifyReadyDlg
+       WelcomeDlg → ProviderDlg → VerifyReadyDlg
        Adds a provider/embedding selection dialog bound to the public
        PROVIDER / EMBEDDING / OLLAMAHOST properties. Modeled on
        WixUI_InstallDir (minus the install-directory dialog, since this
@@ -485,6 +665,23 @@
       <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
       <Property Id="WixUI_Mode" Value="InstallDir" />
 
+      <ProgressText Action="ExtractAgentServerPayload">Step 1 of 8: Extracting TypeAgent agent server...</ProgressText>
+      <ProgressText Action="ExtractCopilotPluginPayload">Step 2 of 8: Extracting Copilot plugin...</ProgressText>
+      <ProgressText Action="RegisterCopilotPlugin">Step 3 of 8: Registering Copilot plugin...</ProgressText>
+      <ProgressText Action="InstallVsCodeChat">Step 4 of 8: Installing TypeAgent Chat for VS Code...</ProgressText>
+      <ProgressText Action="ProvisionSelfHostConfig">Step 5 of 8: Configuring TypeAgent...</ProgressText>
+      <ProgressText Action="ProvisionAiSystemsConfig">Step 5 of 8: Downloading TypeAgent configuration...</ProgressText>
+      <ProgressText Action="InstallPrereqs">Step 6 of 8: Checking TypeAgent prerequisites...</ProgressText>
+      <ProgressText Action="StartAgentServer">Step 7 of 8: Starting TypeAgent agent server...</ProgressText>
+      <ProgressText Action="EnableAutostart">Step 8 of 8: Enabling TypeAgent automatic startup...</ProgressText>
+      <ProgressText Action="DownloadTypeAgentShell">Downloading TypeAgent Shell...</ProgressText>
+      <ProgressText Action="InstallTypeAgentShell">Installing TypeAgent Shell...</ProgressText>
+      <ProgressText Action="VerifyTypeAgentShell">Verifying TypeAgent Shell...</ProgressText>
+      <ProgressText Action="DisableAutostart">Disabling TypeAgent automatic startup...</ProgressText>
+      <ProgressText Action="UninstallVsCodeChat">Removing TypeAgent Chat from VS Code...</ProgressText>
+      <ProgressText Action="UnregisterCopilotPlugin">Unregistering Copilot plugin...</ProgressText>
+      <ProgressText Action="CleanupPayload">Removing TypeAgent components...</ProgressText>
+
       <DialogRef Id="ErrorDlg" />
       <DialogRef Id="FatalError" />
       <DialogRef Id="FilesInUse" />
@@ -495,7 +692,7 @@
       <DialogRef Id="UserExit" />
 
       <!-- ═══ Provider / embedding selection dialog ═══ -->
-      <Dialog Id="ProviderDlg" Width="370" Height="270" Title="[ProductName] Setup">
+      <Dialog Id="ProviderDlg" Width="370" Height="290" Title="[ProductName] Setup">
         <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44"
                  TabSkip="no" Text="!(loc.InstallDirDlgBannerBitmap)" />
         <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
@@ -557,16 +754,20 @@
           <Condition Action="enable">PROVIDER&lt;&gt;"AISYSTEMS"</Condition>
         </Control>
 
-        <Control Id="ShellCheckBox" Type="CheckBox" X="20" Y="221" Width="340" Height="12"
-                 Property="SHELL" CheckBoxValue="1"
-                 Text="Also install the TypeAgent Shell desktop app (needs SHELLSTORAGE or SHELLBASEURL)" />
+        <Control Id="VsCodeChatCheckBox" Type="CheckBox" X="20" Y="221" Width="340" Height="12"
+                 Property="VSCODECHAT" CheckBoxValue="1"
+                 Text="Install TypeAgent Chat for VS Code 1.133 or newer" />
 
-        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
-        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17"
+        <Control Id="ShellCheckBox" Type="CheckBox" X="20" Y="237" Width="340" Height="12"
+                 Property="SHELL" CheckBoxValue="1"
+                 Text="Also install the TypeAgent Shell desktop app" />
+
+        <Control Id="BottomLine" Type="Line" X="0" Y="254" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="263" Width="56" Height="17"
                  Text="!(loc.WixUIBack)" />
-        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17"
+        <Control Id="Next" Type="PushButton" X="236" Y="263" Width="56" Height="17"
                  Default="yes" Text="!(loc.WixUINext)" />
-        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17"
+        <Control Id="Cancel" Type="PushButton" X="304" Y="263" Width="56" Height="17"
                  Cancel="yes" Text="!(loc.WixUICancel)">
           <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
         </Control>
@@ -574,13 +775,10 @@
 
       <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999">1</Publish>
 
-      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg">NOT Installed</Publish>
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="ProviderDlg">NOT Installed</Publish>
       <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg">Installed AND PATCH</Publish>
 
-      <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
-      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ProviderDlg">LicenseAccepted = "1"</Publish>
-
-      <Publish Dialog="ProviderDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+      <Publish Dialog="ProviderDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
       <Publish Dialog="ProviderDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
 
       <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="ProviderDlg" Order="1">NOT Installed</Publish>

@@ -66,7 +66,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # For fork PRs, analyze the PR head commit so results map to the PR.
           # Otherwise use the default ref (merge ref for internal PRs, branch tip
@@ -74,7 +74,7 @@ jobs:
           ref: ${{ env.IS_FORK_PR == 'true' && github.event.pull_request.head.sha || github.ref }}
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -89,7 +89,7 @@ jobs:
           # rule from the branch ruleset.
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
           category: "/language:${{ matrix.language }}"
           # Push and internal-branch PRs have a write token and upload directly.
@@ -100,7 +100,7 @@ jobs:
 
       - name: Stage SARIF for fork PR upload
         if: ${{ env.IS_FORK_PR == 'true' }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codeql-sarif-${{ matrix.language }}
           path: sarif-results

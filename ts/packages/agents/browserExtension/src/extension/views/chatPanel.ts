@@ -33,6 +33,11 @@ function extractThreadId(requestId: any): string | undefined {
 // Platform adapter: open links in a real Chrome tab
 const platformAdapter: PlatformAdapter = {
     handleLinkClick(href: string, _target: string | null) {
+        // Local-file links only make sense in the desktop/VS Code hosts;
+        // the extension can't open a path on the user's machine.
+        if (href.startsWith("typeagent-file:")) {
+            return;
+        }
         // Rewrite typeagent-browser:// URLs to the actual extension URL
         if (href.startsWith("typeagent-browser://")) {
             const path = href.replace("typeagent-browser://", "");

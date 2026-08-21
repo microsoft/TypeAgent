@@ -7,13 +7,21 @@ import {
     TypeAgentAction,
     DisplayAppendMode,
 } from "@typeagent/agent-sdk";
-import { CommandHandlerContext } from "../context/commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    ensureCommandResult,
+} from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import {
     CopilotClient,
     RuntimeConnection,
     defineTool,
-    approveAll,
+    type AssistantMessageEvent,
+    type CopilotSession,
+    type PermissionHandler,
+    type PermissionRequest,
+    type PermissionRequestResult,
+    type MessageOptions,
     type SessionConfig,
 } from "@github/copilot-sdk";
 import registerDebug from "debug";
@@ -64,6 +72,20 @@ import {
     findInstallableAgents,
     formatInstallableAgents,
 } from "./installableAgents.js";
+import {
+    emitReasoningToolCall,
+    runInReasoningSpan,
+} from "../otel/reasoningSpan.js";
+import { getReasoningProfileGuidance } from "./reasoningProfile.js";
+import {
+    createCodingCompletionTracker,
+    type CodingCompletionTracker,
+} from "./codingCompletion.js";
+import {
+    getCodingSessionMaxAgeMs,
+    pruneStaleCodingSessions,
+} from "./codingSessionLifecycle.js";
+import { getCodingAttachmentPaths } from "./codingContext.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -87,6 +109,60 @@ function withAbortSignal<T>(
             },
         );
     });
+}
+
+export async function sendAndWaitWithCancellation(
+    session: CopilotSession,
+    prompt: string,
+    signal: AbortSignal | undefined,
+): Promise<AssistantMessageEvent | undefined> {
+    return sendMessageAndWaitWithCancellation(session, { prompt }, signal);
+}
+
+async function sendMessageAndWaitWithCancellation(
+    session: CopilotSession,
+    message: MessageOptions,
+    signal: AbortSignal | undefined,
+): Promise<AssistantMessageEvent | undefined> {
+    const timeoutMs = resolveReasoningTimeoutMs();
+    const timeoutController = new AbortController();
+    const timeout =
+        timeoutMs < MAX_SETTIMEOUT_MS
+            ? setTimeout(
+                  () =>
+                      timeoutController.abort(
+                          new DOMException("Reasoning timed out", "AbortError"),
+                      ),
+                  timeoutMs,
+              )
+            : undefined;
+    const waitPromise = session.sendAndWait(message, MAX_SETTIMEOUT_MS);
+    try {
+        return await withAbortSignal(
+            withAbortSignal(waitPromise, signal),
+            timeoutController.signal,
+        );
+    } catch (error) {
+        try {
+            await session.abort();
+        } catch (abortError) {
+            debug("Failed to abort Copilot reasoning session:", abortError);
+            try {
+                await session.disconnect();
+            } catch (disconnectError) {
+                debug(
+                    "Failed to disconnect Copilot reasoning session:",
+                    disconnectError,
+                );
+            }
+            throw error;
+        }
+        throw error;
+    } finally {
+        if (timeout !== undefined) {
+            clearTimeout(timeout);
+        }
+    }
 }
 
 const FALLBACK_MODEL = "claude-opus-4.8";
@@ -181,6 +257,17 @@ const copilotClientPromises = new WeakMap<object, Promise<CopilotClient>>();
 
 // Track Copilot session IDs per dispatcher instance (mirrors Claude's session tracking)
 const copilotSessionIds = new WeakMap<object, string>();
+
+function generateCodingSessionId(
+    context: ActionContext<CommandHandlerContext>,
+): string {
+    const sessionDirPath =
+        context.sessionContext.agentContext.session.getSessionDirPath();
+    const sessionName = sessionDirPath
+        ? (sessionDirPath.split(/[/\\]/).pop() ?? "default")
+        : "default";
+    return `typeagent-code-${sessionName}-${Date.now()}`;
+}
 
 /**
  * Get the stored session ID for this dispatcher context
@@ -366,6 +453,17 @@ async function createCopilotClient(
         debug("Starting Copilot client...");
         await client.start();
         debug("Copilot client started successfully");
+        try {
+            const pruned = await pruneStaleCodingSessions(
+                client,
+                getCodingSessionMaxAgeMs(),
+            );
+            if (pruned > 0) {
+                debug(`Pruned ${pruned} stale TypeAgent coding session(s)`);
+            }
+        } catch (error) {
+            debug("Failed to prune stale TypeAgent coding sessions:", error);
+        }
 
         // Register cleanup on process exit
         process.on("exit", () => {
@@ -472,6 +570,12 @@ function buildPromptWithContext(
     if (editorContext) {
         parts.push(editorContext);
     }
+    const profileGuidance = getReasoningProfileGuidance(
+        context.sessionContext.agentContext.currentOptions,
+    );
+    if (profileGuidance) {
+        parts.push(profileGuidance);
+    }
     if (parts.length === 0) {
         return originalRequest;
     }
@@ -567,6 +671,31 @@ function formatToolCallDisplay(toolName: string, input: unknown): string {
     return `**Tool:** \`${toolName}\``;
 }
 
+// Extract the UI display text and error state from a Copilot
+// `tool.execution_complete` event. The SDK reports the full result meant for
+// display in result.detailedContent (falling back to the model-facing, possibly
+// truncated result.content), and failures in error.message.
+function copilotToolResultDisplay(event: {
+    data?: {
+        success?: boolean;
+        error?: { message?: string };
+        result?: { detailedContent?: string; content?: string };
+    };
+}): {
+    content: string;
+    isError: boolean;
+} {
+    const data = event?.data ?? {};
+    const isError = data.success === false;
+    const content = isError
+        ? (data.error?.message ??
+          data.result?.detailedContent ??
+          data.result?.content ??
+          "")
+        : (data.result?.detailedContent ?? data.result?.content ?? "");
+    return { content: String(content ?? ""), isError };
+}
+
 /**
  * Generate a unique request ID for tracing
  */
@@ -595,6 +724,404 @@ async function copilotSubagentResult(
             resultType: "failure" as const,
             error: message,
         };
+    }
+}
+
+export function getCopilotPermissionDefault(
+    request: PermissionRequest,
+): PermissionRequestResult | undefined {
+    if (request.managedApprovalRequired === true) {
+        return undefined;
+    }
+    if (request.kind === "read" && request.requestSandboxBypass !== true) {
+        return { kind: "approve-once" };
+    }
+    if (request.kind === "mcp" && request.readOnly === true) {
+        return { kind: "approve-once" };
+    }
+    if (
+        request.kind === "shell" &&
+        request.requestSandboxBypass !== true &&
+        request.hasWriteFileRedirection === false &&
+        request.commands.length > 0 &&
+        request.commands.every((command) => command.readOnly)
+    ) {
+        return { kind: "approve-once" };
+    }
+    return undefined;
+}
+
+function createCopilotPermissionHandler(
+    context: ActionContext<CommandHandlerContext>,
+    allowedRoot?: string,
+): PermissionHandler {
+    return async (request) => {
+        const scopeViolation = getCopilotPermissionScopeViolation(
+            request,
+            allowedRoot,
+        );
+        if (scopeViolation !== undefined) {
+            return {
+                kind: "reject",
+                feedback: scopeViolation,
+            };
+        }
+        const safe = getCopilotPermissionDefault(request);
+        if (safe !== undefined) {
+            return safe;
+        }
+        const identity =
+            request.kind === "mcp"
+                ? `MCP tool '${request.serverName}/${request.toolName}'`
+                : `Copilot ${request.kind} operation`;
+        const choice = await context.sessionContext.popupQuestion(
+            `${identity} requests sensitive permission. Allow this request once?`,
+            ["Allow once", "Deny"],
+            1,
+        );
+        return choice === 0
+            ? { kind: "approve-once" }
+            : {
+                  kind: "reject",
+                  feedback: "Denied by the TypeAgent host permission policy.",
+              };
+    };
+}
+
+function isPathWithinRoot(candidatePath: string, root: string): boolean {
+    const resolvedRoot = realpathSync(root);
+    const resolvedCandidate = path.isAbsolute(candidatePath)
+        ? path.resolve(candidatePath)
+        : path.resolve(resolvedRoot, candidatePath);
+    let existing = resolvedCandidate;
+    while (!existsSync(existing)) {
+        const parent = path.dirname(existing);
+        if (parent === existing) {
+            return false;
+        }
+        existing = parent;
+    }
+    const realExisting = realpathSync(existing);
+    const realRelative = path.relative(resolvedRoot, realExisting);
+    return (
+        realRelative === "" ||
+        (!realRelative.startsWith("..") && !path.isAbsolute(realRelative))
+    );
+}
+
+export function getCopilotPermissionScopeViolation(
+    request: PermissionRequest,
+    allowedRoot: string | undefined,
+): string | undefined {
+    if (allowedRoot === undefined) {
+        return undefined;
+    }
+    const paths =
+        request.kind === "read"
+            ? [request.path]
+            : request.kind === "write"
+              ? [request.fileName]
+              : request.kind === "shell"
+                ? request.possiblePaths
+                : [];
+    const outside = paths.find(
+        (candidate) => !isPathWithinRoot(candidate, allowedRoot),
+    );
+    return outside === undefined
+        ? undefined
+        : `Access outside the authorized coding root is not allowed: ${outside}`;
+}
+
+type CodingAffinity = NonNullable<CommandHandlerContext["codingAffinity"]>;
+
+type CodingSessionEvents = {
+    streamedContent: string;
+    finalContent: string;
+    taskComplete?: {
+        success?: boolean;
+        summary?: string;
+        outcome?: string;
+    };
+};
+
+function createCodingSessionConfig(
+    context: ActionContext<CommandHandlerContext>,
+    codingAffinity: CodingAffinity,
+    completionTracker: CodingCompletionTracker,
+): SessionConfig {
+    const config: SessionConfig = {
+        clientName: "TypeAgent Coding",
+        model: resolveModel(context),
+        streaming: true,
+        workingDirectory: codingAffinity.workingDirectory,
+        onPermissionRequest: createCopilotPermissionHandler(
+            context,
+            codingAffinity.workingDirectory,
+        ),
+        hooks: {
+            onPreToolUse: (input) => {
+                completionTracker.onToolStart(input.toolName, input.toolArgs);
+            },
+            onPostToolUse: (input) => {
+                completionTracker.onToolSuccess(input.toolName, input.toolArgs);
+            },
+            onPostToolUseFailure: (input) => {
+                completionTracker.onToolFailure(input.toolName, input.toolArgs);
+            },
+            onAgentStop: (input) =>
+                completionTracker.onAgentStop(input.stopHookActive),
+        },
+    };
+    const reasoningEffort = resolveReasoningEffort(context);
+    if (reasoningEffort !== undefined) {
+        config.reasoningEffort = reasoningEffort;
+    }
+    return config;
+}
+
+async function getOrCreateCodingSession(
+    client: CopilotClient,
+    config: SessionConfig,
+    codingAffinity: CodingAffinity,
+    context: ActionContext<CommandHandlerContext>,
+): Promise<CopilotSession> {
+    let session: CopilotSession | undefined;
+    if (codingAffinity.copilotSessionId !== undefined) {
+        try {
+            session = await client.resumeSession(
+                codingAffinity.copilotSessionId,
+                config,
+            );
+        } catch (error) {
+            debug(
+                "Failed to resume code-mode session; creating a new one:",
+                error,
+            );
+        }
+    }
+    if (session === undefined) {
+        const sessionId = generateCodingSessionId(context);
+        session = await createCopilotSession(client, sessionId, config);
+        codingAffinity.copilotSessionId = sessionId;
+    }
+    if (session === undefined) {
+        throw new Error("Failed to create the Copilot code-mode session.");
+    }
+    return session;
+}
+
+function subscribeCodingSession(
+    session: CopilotSession,
+    context: ActionContext<CommandHandlerContext>,
+): { events: CodingSessionEvents; unsubscribe: () => void } {
+    const events: CodingSessionEvents = {
+        streamedContent: "",
+        finalContent: "",
+    };
+    const unsubscribeDelta = session.on("assistant.message_delta", (event) => {
+        events.streamedContent += event.data.deltaContent ?? "";
+        context.actionIO.appendDisplay(
+            { type: "markdown", content: events.streamedContent },
+            "temporary",
+        );
+    });
+    const unsubscribeMessage = session.on("assistant.message", (event) => {
+        events.finalContent = event.data.content ?? "";
+    });
+    const unsubscribeTaskComplete = session.on(
+        "session.task_complete",
+        (event) => {
+            events.taskComplete = event.data;
+        },
+    );
+    const unsubscribeToolStart = session.on("tool.execution_start", (event) => {
+        const toolName = event.data.toolName;
+        context.actionIO.appendDisplay(
+            { type: "text", content: `Running ${toolName}...` },
+            "temporary",
+        );
+    });
+    const unsubscribeToolComplete = session.on(
+        "tool.execution_complete",
+        (event) => {
+            const { content, isError } = copilotToolResultDisplay(event);
+            if (content) {
+                context.actionIO.appendDisplay(
+                    {
+                        type: "markdown",
+                        content,
+                        kind: isError ? "warning" : "info",
+                    },
+                    "step",
+                );
+            }
+        },
+    );
+    return {
+        events,
+        unsubscribe: () => {
+            unsubscribeDelta();
+            unsubscribeMessage();
+            unsubscribeTaskComplete();
+            unsubscribeToolStart();
+            unsubscribeToolComplete();
+        },
+    };
+}
+
+function buildCodingMessage(
+    originalRequest: string,
+    context: ActionContext<CommandHandlerContext>,
+    codingAffinity: CodingAffinity,
+    attachments: string[] | undefined,
+): MessageOptions {
+    const userContext =
+        context.sessionContext.agentContext.currentOptions?.userContext;
+    const editorContext = formatUserContextForPrompt(userContext);
+    const codingAttachments = getCodingAttachmentPaths(
+        codingAffinity.workingDirectory,
+        attachments,
+        userContext,
+    );
+    return {
+        prompt: editorContext
+            ? `${editorContext}\n\n[Current request]\n${originalRequest}`
+            : originalRequest,
+        ...(codingAttachments === undefined
+            ? {}
+            : {
+                  attachments: codingAttachments.map((attachmentPath) => ({
+                      type: "file" as const,
+                      path: attachmentPath,
+                  })),
+              }),
+    };
+}
+
+function recordCodingOutcome(
+    systemContext: CommandHandlerContext,
+    codingAffinity: CodingAffinity,
+    sessionId: string,
+    completionTracker: CodingCompletionTracker,
+    taskComplete: CodingSessionEvents["taskComplete"],
+): void {
+    const codingOutcome = completionTracker.outcome(sessionId);
+    if (taskComplete?.success !== undefined) {
+        codingOutcome.taskComplete = taskComplete.success;
+    }
+    if (taskComplete?.summary) {
+        codingOutcome.taskCompleteSummary = taskComplete.summary;
+    }
+    ensureCommandResult(systemContext).codingOutcome = codingOutcome;
+    systemContext.codingSessions.set(codingAffinity.workingDirectory, {
+        sessionId,
+        lastUsedAt: Date.now(),
+    });
+}
+
+function recordFailedCodingOutcome(
+    systemContext: CommandHandlerContext,
+    sessionId: string,
+    completionTracker: CodingCompletionTracker,
+    error: unknown,
+    cancelled: boolean,
+): void {
+    const codingOutcome = completionTracker.outcome(sessionId);
+    codingOutcome.status = cancelled ? "cancelled" : "failed";
+    codingOutcome.error =
+        error instanceof Error ? error.message : String(error);
+    ensureCommandResult(systemContext).codingOutcome = codingOutcome;
+}
+
+async function disconnectCodingSession(session: CopilotSession): Promise<void> {
+    try {
+        await session.disconnect();
+    } catch (error) {
+        debug("Failed to disconnect coding session:", error);
+    }
+}
+
+/** Run one turn through the SDK's default coding agent. */
+export async function executeCodingRequest(
+    originalRequest: string,
+    context: ActionContext<CommandHandlerContext>,
+    attachments?: string[],
+): Promise<void> {
+    const systemContext = context.sessionContext.agentContext;
+    const codingAffinity = systemContext.codingAffinity;
+    if (codingAffinity === undefined) {
+        throw new Error("Coding affinity is not active.");
+    }
+
+    const completionTracker = createCodingCompletionTracker(originalRequest);
+    const client = await getCopilotClient(systemContext);
+    const session = await getOrCreateCodingSession(
+        client,
+        createCodingSessionConfig(context, codingAffinity, completionTracker),
+        codingAffinity,
+        context,
+    );
+    systemContext.codingSessions.set(codingAffinity.workingDirectory, {
+        sessionId: session.sessionId,
+        lastUsedAt: Date.now(),
+    });
+    const subscription = subscribeCodingSession(session, context);
+
+    try {
+        const response = await sendMessageAndWaitWithCancellation(
+            session,
+            buildCodingMessage(
+                originalRequest,
+                context,
+                codingAffinity,
+                attachments,
+            ),
+            context.abortSignal,
+        );
+        const content =
+            response?.data.content ||
+            subscription.events.finalContent ||
+            subscription.events.streamedContent;
+        if (content) {
+            context.actionIO.appendDisplay(
+                { type: "markdown", content },
+                "block",
+            );
+        }
+        recordCodingOutcome(
+            systemContext,
+            codingAffinity,
+            session.sessionId,
+            completionTracker,
+            subscription.events.taskComplete,
+        );
+        if (
+            ensureCommandResult(systemContext).codingOutcome?.status ===
+            "unvalidated"
+        ) {
+            context.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    kind: "warning",
+                    content:
+                        "Files changed, but no successful test, build, lint, " +
+                        "typecheck, or compile validation was observed.",
+                },
+                "block",
+            );
+        }
+    } catch (error) {
+        recordFailedCodingOutcome(
+            systemContext,
+            session.sessionId,
+            completionTracker,
+            error,
+            context.abortSignal?.aborted === true,
+        );
+        throw error;
+    } finally {
+        subscription.unsubscribe();
+        await disconnectCodingSession(session);
     }
 }
 
@@ -781,6 +1308,17 @@ function getCopilotSessionConfig(
                         context,
                         actionIndex++,
                     );
+                    if (actionResult.error === undefined) {
+                        const commandResult =
+                            ensureCommandResult(systemContext);
+                        commandResult.actions = [
+                            ...(commandResult.actions ?? []),
+                            {
+                                schemaName,
+                                ...actionJson,
+                            } as TypeAgentAction,
+                        ];
+                    }
                     systemContext.clientIO = savedClientIO;
 
                     // Surface the action's history text (its full, model-facing
@@ -897,11 +1435,12 @@ function getCopilotSessionConfig(
         },
     });
 
-    // TODO (deferred): cross-conversation browsing. get_conversation_info /
-    // read_conversation are scoped to the CURRENT conversation only. To help a
-    // user who is unsure which conversation they were in, add
-    // list_conversations / read_conversation(conversationId) backed by the
-    // agent-server ConversationManager (getConversationList). Not implemented yet.
+    // get_conversation_info / read_conversation are scoped to the CURRENT
+    // conversation. Cross-conversation browsing is provided by
+    // list_conversations (id + name) and search_conversations (content search
+    // with snippets), both backed by the agent-server ConversationManager.
+    // TODO (deferred): read_conversation(conversationId) to page another
+    // conversation's full transcript, not just its search snippets.
     const getConversationInfoTool = defineTool("get_conversation_info", {
         description: [
             "Get metadata about the current conversation transcript: total message count and which agents have responded.",
@@ -979,6 +1518,101 @@ function getCopilotSessionConfig(
             const header = `Messages ${offset}\u2013${offset + page.length - 1} of ${total}${more ? " (more available — increase offset to continue)" : ""}:`;
             return {
                 textResultForLlm: `${header}\n${lines.join("\n")}`,
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const listConversationsTool = defineTool("list_conversations", {
+        description: [
+            "List ALL of the user's conversations (id + name), across the whole session store — not just the current one.",
+            "Use this to resolve a conversation the user names (e.g. 'the CLI conversation') to its id before reading or searching it.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {},
+            required: [],
+        },
+        handler: async () => {
+            const list = systemContext.getConversationList?.() ?? [];
+            if (list.length === 0) {
+                return {
+                    textResultForLlm:
+                        "No other conversations are available in this host.",
+                    resultType: "success" as const,
+                };
+            }
+            return {
+                textResultForLlm: JSON.stringify(list, null, 2),
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const searchConversationsTool = defineTool("search_conversations", {
+        description: [
+            "Search the CONTENT of ALL the user's conversations (not just the current one) and return the best-matching conversations with representative snippets.",
+            "Use this to answer questions like 'what did we discuss in the CLI conversation' or to find where a topic was talked about across conversations.",
+            "Provide a natural-language `question` and/or a list of keyword `terms` - they are blended (NL/semantic + literal message-text match), so put distinctive keywords (e.g. proper nouns) in `terms` to catch literal mentions.",
+            "This reads matching content back to you - unlike the conversation find/search *actions*, which only render in the UI.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                question: {
+                    type: "string",
+                    description:
+                        "A natural-language question to match against conversation content",
+                },
+                terms: {
+                    type: "array",
+                    items: { type: "string" },
+                    description:
+                        "Keyword/phrase terms to match literally against message text (names, distinctive words)",
+                },
+                maxMatches: {
+                    type: "number",
+                    description:
+                        "Maximum number of conversations to return (default 10)",
+                },
+            },
+            required: [],
+        },
+        handler: async (args: Record<string, unknown>) => {
+            const search = systemContext.searchConversations;
+            if (search === undefined) {
+                return {
+                    textResultForLlm:
+                        "Cross-conversation content search is not available in this host.",
+                    resultType: "success" as const,
+                };
+            }
+            const question =
+                typeof args?.question === "string" ? args.question : undefined;
+            const terms = Array.isArray(args?.terms)
+                ? args.terms.map((t: unknown) => String(t))
+                : undefined;
+            if (!question && (terms === undefined || terms.length === 0)) {
+                return {
+                    textResultForLlm:
+                        "Provide a `question` and/or `terms` to search for.",
+                    resultType: "success" as const,
+                };
+            }
+            const maxMatches =
+                typeof args?.maxMatches === "number"
+                    ? args.maxMatches
+                    : undefined;
+            const matches = await search({ question, terms }, maxMatches);
+            if (matches.length === 0) {
+                const what = question ?? (terms ?? []).join(", ");
+                return {
+                    textResultForLlm: `No conversations with content matching "${what}" found.`,
+                    resultType: "success" as const,
+                };
+            }
+            return {
+                textResultForLlm: JSON.stringify(matches, null, 2),
                 resultType: "success" as const,
             };
         },
@@ -1285,6 +1919,8 @@ function getCopilotSessionConfig(
             rememberTool,
             getConversationInfoTool,
             readConversationTool,
+            listConversationsTool,
+            searchConversationsTool,
             getUserContextTool,
             ...subagentTools,
             findInstallableAgentTool,
@@ -1298,6 +1934,8 @@ function getCopilotSessionConfig(
             "remember",
             "get_conversation_info",
             "read_conversation",
+            "list_conversations",
+            "search_conversations",
             "get_user_context",
             ...(subagentsEnabled
                 ? [
@@ -1315,7 +1953,7 @@ function getCopilotSessionConfig(
             "shell",
         ],
         workingDirectory: getRepoRoot(),
-        onPermissionRequest: approveAll,
+        onPermissionRequest: createCopilotPermissionHandler(context),
         systemMessage: {
             mode: "append" as const,
             content: [
@@ -1341,6 +1979,8 @@ function getCopilotSessionConfig(
                 "- `remember`: Durably save a new memory so it can be recalled later",
                 "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
                 "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
+                "- `list_conversations`: List ALL conversations (id + name) across the session store — use to resolve a conversation the user names",
+                "- `search_conversations`: Search the CONTENT of ALL conversations and read back matching snippets (use for 'what did we discuss in X')",
                 "",
                 "## Editor Context Tools",
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file path, language, cursor/selection ranges, workspace, diagnostic counts). Contains NO file or selection text.",
@@ -1447,15 +2087,26 @@ async function executeReasoningWithoutPlanning(
     debug(`Executing reasoning request: ${originalRequest}`);
     context.actionIO.appendDisplay("Thinking...", "temporary");
     const displayMode = resolveReasoningDisplayMode(context);
-    // Fold runs of identical, back-to-back tool-call lines into one "xN" line.
+    // A tool call and its result share one reasoning-step bubble: the call is
+    // buffered at execution_start and emitted with its result at
+    // execution_complete (toolFolder.result). A failed result is styled as a
+    // warning bubble.
     const toolFolder = new ToolRunFolder(
-        (content) =>
+        (content, isError) =>
             context.actionIO.appendDisplay(
-                { type: "markdown", content, kind: "info" },
+                {
+                    type: "markdown",
+                    content,
+                    kind: isError ? "warning" : "info",
+                },
                 displayMode,
             ),
         formatToolCallDisplay,
     );
+    // 1-based counter for reasoning.tool_loop.iteration events. Emitted
+    // per tool.execution_start below. Bounded by
+    // REASONING_TOOL_LOOP_ITERATION_CAP inside the wrapper.
+    let copilotToolLoopIteration = 0;
 
     const client = await getCopilotClient(context.sessionContext.agentContext);
     const config = getCopilotSessionConfig(context);
@@ -1606,6 +2257,11 @@ async function executeReasoningWithoutPlanning(
                 event.data?.parameters ||
                 {};
             debug(`Tool execution started: ${toolName}`);
+            // Emit one reasoning tool-loop iteration event per tool
+            // execution start. Only the enumerated counter reaches the
+            // span; tool name / arguments / results NEVER do.
+            copilotToolLoopIteration++;
+            emitReasoningToolCall(copilotToolLoopIteration);
             toolFolder.tool(toolName, parameters);
         },
     );
@@ -1619,6 +2275,11 @@ async function executeReasoningWithoutPlanning(
                 event.name ||
                 "unknown";
             debug(`Tool execution completed: ${toolName}`);
+            // Emit the buffered call and its result together in one bubble so
+            // the output the model acted on sits with the call that produced it
+            // (and can be opened in a viewer).
+            const { content, isError } = copilotToolResultDisplay(event);
+            toolFolder.result(content, isError);
         },
     );
 
@@ -1667,8 +2328,9 @@ async function executeReasoningWithoutPlanning(
             throw new Error("Prompt is undefined or empty");
         }
 
-        const response: any = await withAbortSignal(
-            session.sendAndWait({ prompt }, resolveReasoningTimeoutMs()),
+        const response: any = await sendAndWaitWithCancellation(
+            session,
+            prompt,
             context.abortSignal,
         );
         debug("Received response from Copilot");
@@ -1778,15 +2440,26 @@ async function executeReasoningWithTracing(
         debug(`Executing reasoning with tracing: ${originalRequest}`);
         context.actionIO.appendDisplay("Thinking...", "temporary");
         const displayMode = resolveReasoningDisplayMode(context);
-        // Fold runs of identical, back-to-back tool-call lines into one "xN" line.
+        // A tool call and its result share one reasoning-step bubble: the call
+        // is buffered at execution_start and emitted with its result at
+        // execution_complete (toolFolder.result). A failed result is styled as a
+        // warning bubble.
         const toolFolder = new ToolRunFolder(
-            (content) =>
+            (content, isError) =>
                 context.actionIO.appendDisplay(
-                    { type: "markdown", content, kind: "info" },
+                    {
+                        type: "markdown",
+                        content,
+                        kind: isError ? "warning" : "info",
+                    },
                     displayMode,
                 ),
             formatToolCallDisplay,
         );
+        // 1-based counter for reasoning.tool_loop.iteration events in the
+        // tracing path. Bounded by REASONING_TOOL_LOOP_ITERATION_CAP in
+        // the wrapper.
+        let copilotToolLoopIteration = 0;
 
         const client = await getCopilotClient(
             context.sessionContext.agentContext,
@@ -1944,6 +2617,13 @@ async function executeReasoningWithTracing(
                     {};
                 debug(`Tool execution started: ${toolName}`);
 
+                // Emit one reasoning tool-loop iteration event per
+                // tool execution start. Only the enumerated counter
+                // reaches the span; tool name / arguments / results
+                // NEVER do.
+                copilotToolLoopIteration++;
+                emitReasoningToolCall(copilotToolLoopIteration);
+
                 // Record tool call for trace
                 tracer.recordToolCall(toolName, parameters);
 
@@ -1960,6 +2640,14 @@ async function executeReasoningWithTracing(
                     event.name ||
                     "unknown";
                 debug(`Tool execution completed: ${toolName}`);
+                const { content, isError } = copilotToolResultDisplay(event);
+                tracer.recordToolResult(
+                    toolName,
+                    content,
+                    isError ? content : undefined,
+                );
+                // Emit the buffered call and its result together in one bubble.
+                toolFolder.result(content, isError);
             },
         );
 
@@ -2001,8 +2689,9 @@ async function executeReasoningWithTracing(
             const prompt = buildPromptWithContext(originalRequest, context);
             debug(`Sending prompt: ${prompt.substring(0, 100)}...`);
 
-            const response: any = await withAbortSignal(
-                session.sendAndWait({ prompt }, resolveReasoningTimeoutMs()),
+            const response: any = await sendAndWaitWithCancellation(
+                session,
+                prompt,
                 context.abortSignal,
             );
             debug("Received response from Copilot");
@@ -2293,11 +2982,19 @@ export async function executeReasoning(
 
     const planReuseEnabled = options?.planReuseEnabled ?? false;
 
-    if (!planReuseEnabled) {
-        // Standard reasoning without planning
-        return executeReasoningWithoutPlanning(request, context);
-    }
-
-    // Trace capture + auto recipe generation
-    return executeReasoningWithTracing(request, context);
+    return runInReasoningSpan(
+        context,
+        () => {
+            if (!planReuseEnabled) {
+                // Standard reasoning without planning
+                return executeReasoningWithoutPlanning(request, context);
+            }
+            // Trace capture + auto recipe generation
+            return executeReasoningWithTracing(request, context);
+        },
+        {
+            genAiSystem: "github_copilot",
+            genAiRequestModel: resolveModel(context),
+        },
+    );
 }

@@ -3,6 +3,7 @@
 
 import * as vscode from "vscode";
 import * as os from "os";
+import * as path from "node:path";
 import {
     connectAgentServer,
     type AgentServerConnection,
@@ -24,6 +25,45 @@ import {
     type Backoff,
 } from "@typeagent/websocket-utils/backoff";
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
+
+function isAllowedConfigPath(candidate: string): boolean {
+    if (
+        candidate.length === 0 ||
+        candidate.includes("\0") ||
+        !path.isAbsolute(candidate) ||
+        candidate.startsWith("\\\\") ||
+        candidate.startsWith("//") ||
+        candidate.split(/[\\/]/).some((segment) => segment === "..")
+    ) {
+        return false;
+    }
+    const normalize = (value: string) => {
+        const resolved = path.resolve(value);
+        return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+    };
+    const allowed = new Set<string>();
+    const add = (value: string | undefined) => {
+        if (value !== undefined) {
+            allowed.add(normalize(value));
+        }
+    };
+    add(process.env.TYPEAGENT_CONFIG_LOCAL);
+    if (process.env.TYPEAGENT_CONFIG_DIR !== undefined) {
+        add(path.join(process.env.TYPEAGENT_CONFIG_DIR, "config.local.yaml"));
+    }
+    add(
+        path.join(
+            process.env.TYPEAGENT_USER_DATA_DIR ??
+                path.join(os.homedir(), ".typeagent"),
+            "config.local.yaml",
+        ),
+    );
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+        add(path.join(folder.uri.fsPath, "config.local.yaml"));
+        add(path.join(folder.uri.fsPath, "ts", "config.local.yaml"));
+    }
+    return allowed.has(normalize(candidate));
+}
 
 import {
     wrapLegacy,
@@ -1492,6 +1532,15 @@ export class AgentServerBridge {
                     void vscode.env.openExternal(vscode.Uri.parse(msg.href));
                 }
                 break;
+            case "openFile":
+                // `typeagent-file:` link — show it in an editor tab rather
+                // than handing it to the OS; the user is already in VS Code.
+                if (msg.path && isAllowedConfigPath(msg.path)) {
+                    void vscode.window.showTextDocument(
+                        vscode.Uri.file(msg.path),
+                    );
+                }
+                break;
             case "openMessageWindow":
                 // Open the message content in a new editor panel (a movable
                 // window). The extension owns the panel.
@@ -1988,6 +2037,8 @@ export class AgentServerBridge {
             const userContext = gatherUserContext();
             const options: ProcessCommandOptions = {
                 userContext,
+                workingDirectory:
+                    userContext.editor?.workspaceFolders?.[0] ?? process.cwd(),
             };
             const result = await awaitCommand(
                 this.session.dispatcher,
@@ -2131,8 +2182,6 @@ export class AgentServerBridge {
                     }
                 }
             },
-            handleShellAction: (requestId, data) =>
-                this.handleShellAction(requestId, data),
             handleManageConversation: (requestId, data) =>
                 this.handleManageConversation(requestId, data),
         });
@@ -2153,7 +2202,7 @@ export class AgentServerBridge {
                   kind?: "info" | "warning" | "error" | "success";
               }
             | ReturnType<typeof renderConversationActionResult>,
-        source: string = "code.code-vscode-shell",
+        source: string = "conversation",
     ): void {
         this.broadcastToWebviews({
             type: "setDisplay",
@@ -2181,222 +2230,6 @@ export class AgentServerBridge {
             content,
             kind,
         });
-    }
-
-    /**
-     * Handle a "vscode-shell-action" routed from the code agent. Targeted
-     * to the originating client by the agent server's takeAction routing,
-     * so only this bridge (the originator's bridge) receives it.
-     */
-    private async handleShellAction(requestId: any, data: any): Promise<void> {
-        if (!data || typeof data !== "object") return;
-        const actionName = data.actionName as string | undefined;
-        const params = (data.parameters ?? {}) as {
-            name?: string;
-            newName?: string;
-        };
-
-        switch (actionName) {
-            case "newConversation":
-                await this.newConversationFromAgent(requestId, params.name);
-                break;
-            case "renameConversation":
-                if (params.newName) {
-                    await this.renameCurrentConversationFromAgent(
-                        params.newName,
-                    );
-                }
-                break;
-            case "switchConversation":
-                await this.switchConversationFromAgent(params.name);
-                break;
-            case "deleteConversation":
-                await this.deleteConversationFromAgent(requestId, params.name);
-                break;
-        }
-    }
-
-    /**
-     * Create a new conversation programmatically (from a chat-issued
-     * action). If `name` is omitted, falls back to the interactive prompt.
-     */
-    private async newConversationFromAgent(
-        requestId: any,
-        name?: string,
-    ): Promise<void> {
-        if (!this.connection) {
-            vscode.window.showWarningMessage("Not connected to agent server.");
-            return;
-        }
-        if (!name || !name.trim()) {
-            await this.newSession();
-            return;
-        }
-
-        const trimmed = name.trim();
-        const sessions = await this.connection.listSessions();
-        const existing = sessions.find(
-            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
-        );
-        if (existing) {
-            vscode.window.showWarningMessage(
-                `A conversation named "${trimmed}" already exists; switching to it.`,
-            );
-            this.overwriteActionBubble(
-                requestId,
-                `A conversation named "${trimmed}" already exists. Switching to it instead of creating a new one.`,
-            );
-            await this.joinSpecificSession(existing.sessionId, existing.name);
-            return;
-        }
-
-        const info = await this.connection.createSession(trimmed);
-        await this.joinSpecificSession(info.sessionId, trimmed);
-        vscode.window.showInformationMessage(
-            `Created and switched to conversation "${trimmed}"`,
-        );
-    }
-
-    /**
-     * Rename the current conversation programmatically (from chat).
-     */
-    private async renameCurrentConversationFromAgent(
-        newName: string,
-    ): Promise<void> {
-        if (!this.connection || !this.session) {
-            vscode.window.showWarningMessage("No active conversation.");
-            return;
-        }
-        const trimmed = newName.trim();
-        if (!trimmed) return;
-
-        const sessions = await this.connection.listSessions();
-        const collision = sessions.find(
-            (s) =>
-                s.sessionId !== this.session!.sessionId &&
-                s.name.toLowerCase() === trimmed.toLowerCase(),
-        );
-        if (collision) {
-            vscode.window.showErrorMessage(
-                `A conversation named "${trimmed}" already exists.`,
-            );
-            return;
-        }
-
-        await this.connection.renameSession(this.session.sessionId, trimmed);
-        this.nameOverride = trimmed;
-        this.broadcastToWebviews({
-            type: "status",
-            connected: true,
-            sessionId: this.session.sessionId,
-            sessionName: this.getDisplayName(),
-        });
-        this.onStatusChanged?.();
-        vscode.window.showInformationMessage(
-            `Renamed conversation to "${trimmed}"`,
-        );
-    }
-
-    /**
-     * Switch to a conversation by display name (from chat). Falls back to
-     * the interactive picker if no name was provided. If a name is given
-     * but no conversation matches, creates a new conversation with that
-     * name and switches to it.
-     */
-    private async switchConversationFromAgent(name?: string): Promise<void> {
-        if (!this.connection) {
-            vscode.window.showWarningMessage("Not connected to agent server.");
-            return;
-        }
-        if (!name || !name.trim()) {
-            await this.switchSession();
-            return;
-        }
-
-        const trimmed = name.trim();
-        const sessions = await this.connection.listSessions();
-        const match = sessions.find(
-            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
-        );
-        if (!match) {
-            // Create-on-switch: user asked to switch to a conversation
-            // that doesn't exist yet, so create it and switch to it.
-            const info = await this.connection.createSession(trimmed);
-            await this.joinSpecificSession(info.sessionId, trimmed);
-            vscode.window.showInformationMessage(
-                `Created and switched to new conversation "${trimmed}".`,
-            );
-            return;
-        }
-        if (match.sessionId === this.session?.sessionId) {
-            return;
-        }
-        await this.joinSpecificSession(match.sessionId, match.name);
-    }
-
-    /**
-     * Delete a conversation by display name (from chat). Prompts the user
-     * for confirmation before deleting. Falls back to the interactive
-     * picker if no name was provided. Refuses to delete the currently
-     * active conversation.
-     */
-    private async deleteConversationFromAgent(
-        requestId: any,
-        name?: string,
-    ): Promise<void> {
-        if (!this.connection) {
-            vscode.window.showWarningMessage("Not connected to agent server.");
-            return;
-        }
-        if (!name || !name.trim()) {
-            await this.deleteSession();
-            return;
-        }
-
-        const trimmed = name.trim();
-        const sessions = await this.connection.listSessions();
-        const match = sessions.find(
-            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
-        );
-        if (!match) {
-            vscode.window.showWarningMessage(
-                `No conversation named "${trimmed}" found.`,
-            );
-            this.overwriteActionBubble(
-                requestId,
-                `No conversation named "${trimmed}" found to delete.`,
-            );
-            return;
-        }
-        if (match.sessionId === this.session?.sessionId) {
-            vscode.window.showWarningMessage(
-                `Cannot delete the currently active conversation "${trimmed}".`,
-            );
-            this.overwriteActionBubble(
-                requestId,
-                `Cannot delete the currently active conversation "${match.name}". Switch to a different conversation first.`,
-            );
-            return;
-        }
-
-        const confirm = await vscode.window.showWarningMessage(
-            `Delete conversation "${match.name}"? This cannot be undone.`,
-            { modal: true },
-            "Delete",
-        );
-        if (confirm !== "Delete") {
-            this.overwriteActionBubble(
-                requestId,
-                `Delete of conversation "${match.name}" was cancelled.`,
-            );
-            return;
-        }
-
-        await this.connection.deleteSession(match.sessionId);
-        vscode.window.showInformationMessage(
-            `Deleted conversation "${match.name}".`,
-        );
-        this.onStatusChanged?.();
     }
 
     // manage-conversation handler — routed from NL and `@conversation` slash

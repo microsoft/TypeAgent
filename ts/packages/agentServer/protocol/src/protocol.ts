@@ -5,6 +5,61 @@ import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
 import type { QueueSnapshot } from "@typeagent/dispatcher-types";
 import type { AppAgentManifest } from "@typeagent/agent-sdk";
 import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
+import type {
+    ApproveMacroRequest,
+    ArmRecordingRequest,
+    ClaimRecordingRequest,
+    CopilotToolMacro,
+    CreateMacroFromTraceRequest,
+    DeleteMacroRequest,
+    DisableMacroRequest,
+    FinalizeRecordingRequest,
+    InspectMacroRequest,
+    ListMacrosRequest,
+    MacroMatch,
+    MacroRequirements,
+    MacroRunRecord,
+    MacroSummary,
+    MacroValidationReport,
+    MacroVersionRef,
+    RecordingState,
+    RecordingToken,
+    RunMacroRequest,
+    RunMacroResponse,
+    SearchMacrosRequest,
+    SubmitMacroCandidateRequest,
+    TraceSummary,
+    ValidateMacroRequest,
+} from "@typeagent/copilot-macros";
+
+export type {
+    ApproveMacroRequest,
+    ArmRecordingRequest,
+    ClaimRecordingRequest,
+    CopilotToolMacro,
+    CreateMacroFromTraceRequest,
+    DeleteMacroRequest,
+    DisableMacroRequest,
+    FinalizeRecordingRequest,
+    InspectMacroRequest,
+    ListMacrosRequest,
+    MacroMatch,
+    MacroRequirements,
+    MacroRunRecord,
+    MacroSummary,
+    MacroValidationReport,
+    MacroVersionRef,
+    RecordedInteractionTrace,
+    RecordedToolCall,
+    RecordingState,
+    RecordingToken,
+    RunMacroRequest,
+    RunMacroResponse,
+    SearchMacrosRequest,
+    SubmitMacroCandidateRequest,
+    TraceSummary,
+    ValidateMacroRequest,
+} from "@typeagent/copilot-macros";
 
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
@@ -31,6 +86,13 @@ export type ConversationInfo = {
      */
     messageCount: number;
     /**
+     * How many of this conversation's user turns are in the cross-conversation
+     * content index. Compared with {@link messageCount} it shows how completely
+     * the conversation is indexed (0 = not indexed; == messageCount = fully).
+     * Omitted by hosts without a unified content index.
+     */
+    indexedMessageCount?: number;
+    /**
      * Where this conversation came from. Omitted for native TypeAgent
      * conversations; set to `"copilot"` for imported mirrors. Clients use it to
      * badge the conversation and (together with {@link readOnly}) decide whether
@@ -52,6 +114,17 @@ export type ConversationInfo = {
 export type ConversationMatch = {
     conversation: ConversationInfo;
     score: number;
+};
+
+/**
+ * A conversation whose message *content* matched a search, with a relevance
+ * score in [0, 1] and representative snippets (best match first). Distinct
+ * from {@link ConversationMatch}, which matches on the conversation name.
+ */
+export type ConversationContentMatch = {
+    conversation: ConversationInfo;
+    score: number;
+    snippets: string[];
 };
 
 export type ConversationNameCollisionBehavior = "error" | "appendNumber";
@@ -110,6 +183,44 @@ export type SpeechToken = {
 };
 
 export type AgentServerInvokeFunctions = {
+    armMacroRecording: (
+        request: ArmRecordingRequest,
+    ) => Promise<RecordingToken>;
+    getMacroRecordingState: (sessionId: string) => Promise<RecordingState>;
+    claimMacroRecording: (
+        request: ClaimRecordingRequest,
+    ) => Promise<RecordingToken | undefined>;
+    cancelMacroRecording: (sessionId: string) => Promise<void>;
+    failMacroRecording: (
+        sessionId: string,
+        tokenId: string,
+        error: string,
+    ) => Promise<void>;
+    finalizeMacroRecording: (
+        request: FinalizeRecordingRequest,
+    ) => Promise<TraceSummary>;
+    listMacros: (request?: ListMacrosRequest) => Promise<MacroSummary[]>;
+    searchMacros: (request: SearchMacrosRequest) => Promise<MacroMatch[]>;
+    inspectMacro: (request: InspectMacroRequest) => Promise<CopilotToolMacro>;
+    getMacroRequirements: (
+        request: InspectMacroRequest,
+    ) => Promise<MacroRequirements>;
+    createMacroFromTrace: (
+        request: CreateMacroFromTraceRequest,
+    ) => Promise<MacroVersionRef>;
+    validateMacro: (
+        request: ValidateMacroRequest,
+    ) => Promise<MacroValidationReport>;
+    approveMacro: (request: ApproveMacroRequest) => Promise<MacroVersionRef>;
+    disableMacro: (request: DisableMacroRequest) => Promise<MacroVersionRef>;
+    deleteMacro: (request: DeleteMacroRequest) => Promise<void>;
+    runMacro: (request: RunMacroRequest) => Promise<RunMacroResponse>;
+    submitMacroCandidate: (
+        request: SubmitMacroCandidateRequest,
+    ) => Promise<MacroVersionRef>;
+    cancelMacroRun: (runId: string) => Promise<void>;
+    getMacroRun: (runId: string) => Promise<MacroRunRecord>;
+
     joinConversation: (
         options?: DispatcherConnectOptions,
     ) => Promise<JoinConversationResult>;
@@ -129,6 +240,16 @@ export type AgentServerInvokeFunctions = {
         query: string,
         maxMatches?: number,
     ) => Promise<ConversationMatch[]>;
+    /**
+     * Search conversation *content* (the knowPro unified message index) and
+     * rank conversations by how well their messages match the query. Distinct
+     * from {@link findConversations}, which matches on conversation names.
+     * Returns [] when the content index has no model provider configured.
+     */
+    searchConversationContent: (
+        query: string,
+        maxMatches?: number,
+    ) => Promise<ConversationContentMatch[]>;
     renameConversation: (
         conversationId: string,
         newName: string,

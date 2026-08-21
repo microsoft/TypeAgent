@@ -7,23 +7,24 @@ export type ListAction =
     | CreateListAction
     | GetListAction
     | ClearListAction
+    | DeleteListAction
     | ListListsAction;
 
 export type ListActivity = StartEditList;
+
+// Name of a list such as "grocery", "to do", "shopping", "packing", "gift",
+// "book", "idea", "movie", "garden task", "place to visit". Names should be
+// lower case and stemmed to the singular form (e.g., "movies" -> "movie").
+export type ListName = string;
 
 // add one or more items to a list; if the list does not exist, create it
 export type AddItemsAction = {
     actionName: "addItems";
     parameters: {
         items: string[];
-        // name of the list such as "grocery", "to do", "shopping", "packing", "gift","book","idea","movie","garden task","place to visit"
-        // names should be lower case and should be stemmed to the singular form (e.g., "movies" should be "movie")
-        // IMPORTANT: Do not invent a list name.
-        // If the user uses a reference phrase ("the list", "that list",etc.) we should clarify
-        // with the user which list they meant unless it is obvious from the conversation history.
-        // Grammar may still capture a determiner as listName; the handler rejects those
-        // placeholders via validateWildcardMatch (checked_wildcard) so the LLM can clarify.
-        listName: string;
+        // name of the list such as "grocery", "to do", "shopping", "packing",
+        // "gift", "book", "idea", "movie", "garden task", "place to visit"
+        listName: ListName;
     };
 };
 
@@ -32,33 +33,56 @@ export type RemoveItemsAction = {
     actionName: "removeItems";
     parameters: {
         items: string[];
-        listName: string;
+        listName: ListName;
     };
 };
+// create a new, empty list, for example "create a new list named grocery",
+// "make a to do list", "start a packing list"
 export type CreateListAction = {
     actionName: "createList";
     parameters: {
-        listName: string;
+        listName: ListName;
     };
 };
 
-// use this action to show the user what's on the list, for example, "What's on my grocery list?" or "what are the contents of my to do list?"
+// use this action to show the user what's on a specific, named list, for
+// example, "What's on my grocery list?" or "what are the contents of my to
+// do list?" Do NOT use this for questions about whether any list(s) exist at
+// all (e.g., "is there a list available", "do I have any lists") — those are
+// "listLists" instead.
 export type GetListAction = {
     actionName: "getList";
     parameters: {
-        listName: string;
+        listName: ListName;
     };
 };
 
+// remove all items from a list but keep the (now empty) list itself, for
+// example "clear my grocery list", "empty the to do list". Use "deleteList"
+// instead if the user wants the list itself gone, not just emptied.
 export type ClearListAction = {
     actionName: "clearList";
     parameters: {
-        listName: string;
+        listName: ListName;
     };
 };
 
-// use this action to show the user which lists exist, for example,
-// "what lists are there?", "show me my lists", "what lists do I have?"
+// permanently remove a list itself (not just its items), for example
+// "delete my grocery list", "remove the to do list", "get rid of the packing
+// list". Use "clearList" instead if the user only wants the items emptied
+// while keeping the list.
+export type DeleteListAction = {
+    actionName: "deleteList";
+    parameters: {
+        listName: ListName;
+    };
+};
+
+// use this action to show the user which lists exist (an existence/inventory
+// question about lists in general, not any specific list's contents), for
+// example, "what lists are there?", "show me my lists", "what lists do I
+// have?", "is there a list available?", "is there a list?", "do I have any
+// lists?"
 export type ListListsAction = {
     actionName: "listLists";
     parameters: {};
@@ -67,6 +91,6 @@ export type ListListsAction = {
 export type StartEditList = {
     actionName: "startEditList";
     parameters: {
-        listName: string;
+        listName: ListName;
     };
 };

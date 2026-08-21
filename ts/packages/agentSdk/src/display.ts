@@ -200,11 +200,6 @@ export type DisplayAppendMode = "inline" | "block" | "temporary" | "step";
 export type ClientAction =
     | "show-camera"
     | "show-notification"
-    | "set-alarm"
-    | "call-phonenumber"
-    | "send-sms"
-    | "search-nearby"
-    | "automate-phone-ui"
     | "open-folder"
     | "trash-restore"
     | "trash-flush";

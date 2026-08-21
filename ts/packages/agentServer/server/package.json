@@ -49,16 +49,19 @@
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/conversation-memory": "workspace:*",
+    "@typeagent/copilot-macros": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*",
     "@typeagent/websocket-channel-server": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "better-sqlite3": "12.6.2",
+    "better-sqlite3": "12.8.0",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dispatcher-node-providers": "workspace:*",
     "dotenv": "^16.3.1",
-    "ws": "^8.21.1"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

@@ -36,7 +36,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/client": "^2.0.0",
     "@modelcontextprotocol/server-filesystem": "2026.1.14",
     "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-schema": "workspace:*",
@@ -51,6 +51,7 @@
     "@typeagent/code-agent": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
+    "@typeagent/copilot-macros": "workspace:*",
     "@typeagent/desktop-automation": "workspace:*",
     "@typeagent/discord-agent": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
@@ -68,7 +69,6 @@
     "@typeagent/photo-agent": "workspace:*",
     "@typeagent/powershell-typeagent": "workspace:*",
     "@typeagent/screencapture-agent": "workspace:*",
-    "@typeagent/selfhelp-agent": "workspace:*",
     "@typeagent/studio-agent": "workspace:*",
     "@typeagent/taskflow-typeagent": "workspace:*",
     "@typeagent/telemetry": "workspace:*",
@@ -94,7 +94,7 @@
     "typechat": "^0.1.1",
     "windowsclock-agent": "workspace:*",
     "workflow-agent": "workspace:*",
-    "ws": "^8.21.1",
+    "ws": "^8.21.3",
     "zod": "^4.1.13"
   },
   "devDependencies": {

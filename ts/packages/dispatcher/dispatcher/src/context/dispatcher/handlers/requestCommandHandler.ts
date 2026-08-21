@@ -54,13 +54,83 @@ import {
     isUnknownAction,
 } from "../dispatcherUtils.js";
 import { executeReasoning as executeClaudeReasoning } from "../../../reasoning/claude.js";
-import { executeReasoning as executeCopilotReasoning } from "../../../reasoning/copilot.js";
+import {
+    executeCodingRequest,
+    executeReasoning as executeCopilotReasoning,
+} from "../../../reasoning/copilot.js";
+import {
+    classifyCodingRequest,
+    clearCodingAffinity,
+    establishCodingAffinity,
+    isCodeAgentRequest,
+    isCodingWorkingDirectorySelection,
+    isGenericFallbackCandidate,
+} from "../../../reasoning/codingRouting.js";
+import {
+    parseRecordingDirective,
+    type CommandDisposition,
+} from "@typeagent/dispatcher-types";
+import { resolveActiveSchemaScope } from "../../../translation/activeSchemaScope.js";
+import {
+    getPowerShellCapabilityDisposition,
+    getPowerShellCapabilityOutcome,
+} from "../../../reasoning/powershellCapabilityOutcome.js";
+import {
+    logTranslationCompleted,
+    logTranslationStarted,
+} from "../../../otel/structuredEvents.js";
+import { readTranslationRoutingFromError } from "../../../otel/translationSpan.js";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 
 type ReasoningFallbackContext = {
     failedSchema: string;
     failedAction: string;
     error: string;
 };
+
+function setDisposition(
+    context: CommandHandlerContext,
+    disposition: CommandDisposition,
+): void {
+    ensureCommandResult(context).disposition = disposition;
+}
+
+function getActionSchemas(
+    actions: { action: { schemaName: string } }[],
+): string[] {
+    return [...new Set(actions.map(({ action }) => action.schemaName))];
+}
+
+function applyPowerShellCapabilityOutcome(
+    context: CommandHandlerContext,
+): boolean {
+    if (
+        context.currentOptions?.reasoningProfile !==
+        "powershellCapabilityFallback"
+    ) {
+        return false;
+    }
+
+    const commandResult = ensureCommandResult(context);
+    const outcome = getPowerShellCapabilityOutcome(commandResult.actions);
+    if (!outcome) {
+        commandResult.lastError =
+            "PowerShell capability reasoning did not report a typed outcome.";
+        setDisposition(context, {
+            status: "failed",
+            path: "reasoning",
+            mayHaveSideEffects: false,
+        });
+        return true;
+    }
+
+    commandResult.capabilityOutcome = outcome;
+    if (outcome.status === "failed") {
+        commandResult.lastError = outcome.reason;
+    }
+    setDisposition(context, getPowerShellCapabilityDisposition(outcome));
+    return true;
+}
 
 async function runConfiguredReasoning(
     request: string,
@@ -231,13 +301,17 @@ async function canTranslateWithoutContext(
             newActions,
         });
     } catch (e: any) {
-        logger?.logEvent("contextlessTranslation", {
-            requestAction,
-            actions: oldActions,
-            history: requestAction.history,
-            newActions,
-            error: e.message,
-        });
+        logger?.logEvent(
+            "contextlessTranslation",
+            {
+                requestAction,
+                actions: oldActions,
+                history: requestAction.history,
+                newActions,
+                error: e.message,
+            },
+            "error",
+        );
         throw e;
     }
 }
@@ -433,6 +507,7 @@ function findMatchedGrammarRule(
     );
     return matched ? { rule: matched.text, segments: matched.segments } : {};
 }
+
 // Derive example same-meaning rephrasings from a V5 explanation, each broken
 // into per-category segments (so the client can color them like the phrase):
 // substitute each non-property sub-phrase's synonyms, and add the explainer's
@@ -495,195 +570,6 @@ function buildGeneralizations(
     return result;
 }
 
-async function cacheUserAttachments(
-    systemContext: CommandHandlerContext,
-    attachments?: string[],
-): Promise<CachedImageWithDetails[]> {
-    const cachedAttachments: CachedImageWithDetails[] = [];
-    if (!attachments || systemContext.session.sessionDirPath === undefined) {
-        return cachedAttachments;
-    }
-    for (const attachment of attachments) {
-        const [attachmentName, tags]: [string, ExifReader.Tags] =
-            await systemContext.session.storeUserSuppliedFile(attachment);
-        cachedAttachments.push(
-            new CachedImageWithDetails(tags, attachmentName, attachment),
-        );
-    }
-    return cachedAttachments;
-}
-
-function shouldBypassTranslationForReasoning(
-    request: string,
-    systemContext: CommandHandlerContext,
-): boolean {
-    if (systemContext.noReasoning) {
-        return false;
-    }
-    const reasoningPrefixes = ["learn:", "dev:", "remember how to ", "record "];
-    const lowerRequest = request.trimStart().toLowerCase();
-    return (
-        process.env.CLAUDE_FORCE_REASONING === "1" ||
-        reasoningPrefixes.some((prefix) => lowerRequest.startsWith(prefix))
-    );
-}
-
-function recordRequestContext(
-    context: ActionContext<CommandHandlerContext>,
-    systemContext: CommandHandlerContext,
-    request: string,
-    cachedAttachments: CachedImageWithDetails[],
-    history: ReturnType<typeof getHistoryContext>,
-): void {
-    context.actionIO.appendDiagnosticData({
-        type: "translationContext",
-        entities: history?.entities ?? [],
-        activityContext: history?.activityContext,
-    });
-    if (systemContext.session.getConfig().execution.recordUserMessages) {
-        addUserMessageToHistory(systemContext, request, cachedAttachments);
-    }
-    if (systemContext.userRequestKnowledgeExtraction === true) {
-        addRequestToMemory(systemContext, request);
-    }
-}
-
-async function interpretRequestWithLogging(
-    context: ActionContext<CommandHandlerContext>,
-    systemContext: CommandHandlerContext,
-    request: string,
-    cachedAttachments: CachedImageWithDetails[],
-    history: ReturnType<typeof getHistoryContext>,
-): Promise<InterpretResult> {
-    try {
-        return await interpretRequest(
-            context,
-            request,
-            cachedAttachments,
-            history,
-        );
-    } catch (e: any) {
-        if (systemContext.userRequestKnowledgeExtraction === true) {
-            addResultToMemory(
-                systemContext,
-                `Error translating request '${request}': ${e.message}`,
-                DispatcherName,
-            );
-        }
-        systemContext?.logger?.logEvent("request:exception", {
-            request,
-            message: e.message,
-            stack: e.stack,
-        });
-        throw e;
-    }
-}
-
-function canUseInteractiveCollisionClarify(
-    systemContext: CommandHandlerContext,
-): boolean {
-    return (
-        systemContext.session.getConfig().collision.preference.enabled &&
-        systemContext.session.getConfig().collision.preference.remember !==
-            "never"
-    );
-}
-
-function needsReasoningFallback(
-    requestAction: RequestAction,
-    systemContext: CommandHandlerContext,
-): boolean {
-    const interactiveCollisionClarify =
-        canUseInteractiveCollisionClarify(systemContext);
-    return requestAction.actions.some(
-        ({ action }) =>
-            isUnknownAction(action) ||
-            (action.schemaName === DispatcherClarifyName &&
-                !(
-                    interactiveCollisionClarify &&
-                    action.actionName === "clarifyMultipleAgentMatches"
-                )),
-    );
-}
-
-async function tryReasoningFallback(
-    systemContext: CommandHandlerContext,
-    context: ActionContext<CommandHandlerContext>,
-    request: string,
-    requestAction: RequestAction,
-): Promise<boolean> {
-    if (
-        systemContext.noReasoning ||
-        !needsReasoningFallback(requestAction, systemContext)
-    ) {
-        return false;
-    }
-    try {
-        await runConfiguredReasoning(request, context);
-        return true;
-    } catch (e: any) {
-        debugRequest(
-            `Reasoning fallback failed, using default handler: ${e.message}`,
-        );
-        return false;
-    }
-}
-
-function needsErrorReasoning(
-    systemContext: CommandHandlerContext,
-    requestAction: RequestAction,
-): boolean {
-    return requestAction.actions.some(({ action }) => {
-        try {
-            return (
-                systemContext.agents.getActionConfig(action.schemaName)
-                    .errorReasoning === true
-            );
-        } catch {
-            return false;
-        }
-    });
-}
-
-async function tryErrorReasoningFallback(
-    systemContext: CommandHandlerContext,
-    context: ActionContext<CommandHandlerContext>,
-    request: string,
-    requestAction: RequestAction,
-    execResult: NonNullable<Awaited<ReturnType<typeof executeActions>>>,
-): Promise<boolean> {
-    if (
-        systemContext.noReasoning ||
-        !execResult.fallbackToReasoning ||
-        !needsErrorReasoning(systemContext, requestAction)
-    ) {
-        return false;
-    }
-
-    const { error, failedAction } = execResult;
-    const augmentedRequest =
-        `[Context: A direct action dispatch failed.\n` +
-        `Action: ${JSON.stringify(failedAction.action, undefined, 2)}\n` +
-        `Error: "${error}"\n` +
-        `Please handle the following request using the available tools.]\n\n` +
-        request;
-    try {
-        displayStatus("Action failed — retrying with reasoning...", context);
-        await runConfiguredReasoning(augmentedRequest, context, {
-            fallbackContext: {
-                failedSchema: failedAction.action.schemaName,
-                failedAction: failedAction.action.actionName,
-                error,
-            },
-        });
-        return true;
-    } catch (e: any) {
-        debugRequest(
-            `Error-triggered reasoning failed, keeping original error: ${e.message}`,
-        );
-        return false;
-    }
-}
 async function requestExplain(
     context: CommandHandlerContext,
     attachments: CachedImageWithDetails[] | undefined,
@@ -797,10 +683,22 @@ async function requestExplain(
         return;
     }
 
-    const processRequestActionP = context.agentCache.processRequestAction(
-        requestAction,
-        true,
-        options,
+    const processRequestActionP = withChatModelTelemetryContext(
+        {
+            phase: context.explanationAsynchronousMode
+                ? "explanation"
+                : "translation",
+            purpose: "cache-generation",
+            scope: context.explanationAsynchronousMode
+                ? "background"
+                : "foreground",
+        },
+        () =>
+            context.agentCache.processRequestAction(
+                requestAction,
+                true,
+                options,
+            ),
     );
 
     if (context.explanationAsynchronousMode) {
@@ -831,6 +729,7 @@ export class RequestCommandHandler implements CommandHandler {
             },
         },
     } as const;
+    // code-complexity-allow: helper logic inlined from removed stand-alone helpers; request dispatch is inherently branchy
     public async run(
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
@@ -851,10 +750,26 @@ export class RequestCommandHandler implements CommandHandler {
             }
 
             // store attachments for later reuse
-            const cachedAttachments = await cacheUserAttachments(
-                systemContext,
-                attachments,
-            );
+            const cachedAttachments: CachedImageWithDetails[] = [];
+            if (
+                attachments &&
+                systemContext.session.sessionDirPath !== undefined
+            ) {
+                for (let i = 0; i < attachments?.length; i++) {
+                    const [attachmentName, tags]: [string, ExifReader.Tags] =
+                        await systemContext.session.storeUserSuppliedFile(
+                            attachments![i],
+                        );
+
+                    cachedAttachments.push(
+                        new CachedImageWithDetails(
+                            tags,
+                            attachmentName,
+                            attachments![i],
+                        ),
+                    );
+                }
+            }
 
             // Make sure we clear any left over streaming context
             systemContext.streamingActionContext?.closeActionContext();
@@ -862,31 +777,129 @@ export class RequestCommandHandler implements CommandHandler {
 
             // Translate to action
 
-            // Requests with recording/reasoning prefixes bypass translation entirely
-            // and go straight to Claude reasoning.
-            if (shouldBypassTranslationForReasoning(request, systemContext)) {
-                await runConfiguredReasoning(request, context);
+            // Recording directives bypass translation and go straight to the
+            // configured reasoning engine.
+            const recordingDirective = parseRecordingDirective(request);
+            const forceReasoningEnv =
+                process.env.CLAUDE_FORCE_REASONING === "1";
+            if (
+                !systemContext.noReasoning &&
+                (forceReasoningEnv || recordingDirective !== undefined)
+            ) {
+                try {
+                    await runConfiguredReasoning(request, context);
+                    setDisposition(systemContext, {
+                        status: "handled",
+                        path: "reasoning",
+                    });
+                } catch (error) {
+                    setDisposition(systemContext, {
+                        status: "failed",
+                        path: "reasoning",
+                        mayHaveSideEffects: true,
+                    });
+                    throw error;
+                }
+                return;
+            }
+
+            const activeSchemaScope = resolveActiveSchemaScope(
+                systemContext.agents.getActiveSchemas(),
+                systemContext.currentOptions?.activeSchemas,
+                systemContext.currentOptions?.activeSchemaFamilies,
+            );
+            if (activeSchemaScope.unavailable.length > 0) {
+                setDisposition(systemContext, {
+                    status: "notHandled",
+                    reason: "noActiveSchema",
+                });
                 return;
             }
 
             // Get the history context before adding the request to memory
             const history = getHistoryContext(systemContext);
-            recordRequestContext(
-                context,
-                systemContext,
-                request,
-                cachedAttachments,
-                history,
-            );
-            const interpretResult = await interpretRequestWithLogging(
-                context,
-                systemContext,
-                request,
-                cachedAttachments,
-                history,
-            );
+            context.actionIO.appendDiagnosticData({
+                type: "translationContext",
+                entities: history?.entities ?? [],
+                activityContext: history?.activityContext,
+            });
+            if (
+                systemContext.session.getConfig().execution.recordUserMessages
+            ) {
+                addUserMessageToHistory(
+                    systemContext,
+                    request,
+                    cachedAttachments,
+                );
+            }
+            if (systemContext.userRequestKnowledgeExtraction === true) {
+                addRequestToMemory(systemContext, request);
+            }
+            let interpretResult: InterpretResult;
+            const requestId = getRequestId(systemContext).requestId;
+            logTranslationStarted(systemContext.logger, {
+                requestId,
+                schemaNames: activeSchemaScope.schemaNames,
+            });
+            // Measure the translation phase at this call boundary with a
+            // monotonic-ish wall clock (consistent with the reasoning span's
+            // `Date.now()` convention) so the duration is a real fact on the
+            // event, not something the exporter has to reconstruct from span
+            // timestamps. Covers the success, failure, and cancellation paths.
+            const translationStartedAt = Date.now();
+            try {
+                interpretResult = await interpretRequest(
+                    context,
+                    request,
+                    cachedAttachments,
+                    history,
+                    activeSchemaScope.schemaNames,
+                );
+            } catch (e: any) {
+                setDisposition(systemContext, {
+                    status: "failed",
+                    path: "command",
+                    mayHaveSideEffects: false,
+                });
+                if (systemContext.userRequestKnowledgeExtraction === true) {
+                    addResultToMemory(
+                        systemContext,
+                        `Error translating request '${request}': ${e.message}`,
+                        DispatcherName,
+                    );
+                }
+                logTranslationCompleted(systemContext.logger, {
+                    requestId,
+                    // `strategy` is only a placeholder on the failure path (the
+                    // terminal route is unknown). The routing summary carried on
+                    // the error is the source of truth: `logTranslationCompleted`
+                    // derives `routingReason` from the routes actually observed
+                    // and omits it when none reached a terminal decision, so a
+                    // cache-stage failure is never mislabelled `llm_translation`.
+                    strategy: "translate",
+                    success: false,
+                    cancelled:
+                        e?.name === "AbortError" ||
+                        systemContext.currentAbortSignal?.aborted === true,
+                    elapsedMs: Date.now() - translationStartedAt,
+                    routing: readTranslationRoutingFromError(e),
+                    actions: [],
+                });
+                debugRequest(`Request translation failed: ${e.message}`);
+                throw e;
+            }
 
             const { requestAction, tokenUsage } = interpretResult;
+            logTranslationCompleted(systemContext.logger, {
+                requestId,
+                strategy: interpretResult.fromUser
+                    ? "user"
+                    : interpretResult.fromCache || "translate",
+                success: true,
+                elapsedMs: Date.now() - translationStartedAt,
+                routing: interpretResult.routing,
+                actions: requestAction.actions,
+            });
 
             if (tokenUsage) {
                 ensureCommandResult(systemContext).tokenUsage = tokenUsage;
@@ -909,6 +922,74 @@ export class RequestCommandHandler implements CommandHandler {
                 }
             }
 
+            const genericFallback = isGenericFallbackCandidate(requestAction);
+            if (genericFallback) {
+                const codingDecision = classifyCodingRequest(
+                    request,
+                    systemContext.codingAffinity !== undefined,
+                    attachments?.length ?? 0,
+                );
+                if (codingDecision === "coding") {
+                    if (establishCodingAffinity(systemContext) === undefined) {
+                        displayError(
+                            "Coding requires a valid server-side working directory. " +
+                                "Configure TYPEAGENT_CODE_DEFAULT_WORKING_DIRECTORY or " +
+                                "TYPEAGENT_CODE_ALLOWED_ROOTS on agent-server, or submit an authorized workingDirectory.",
+                            context,
+                        );
+                        setDisposition(systemContext, {
+                            status: "failed",
+                            path: "reasoning",
+                            mayHaveSideEffects: false,
+                            schemas: ["code.swe"],
+                        });
+                        return;
+                    }
+                    if (isCodingWorkingDirectorySelection(request)) {
+                        displayStatus(
+                            `Coding working directory: ${systemContext.codingAffinity!.workingDirectory}`,
+                            context,
+                        );
+                        setDisposition(systemContext, {
+                            status: "handled",
+                            path: "reasoning",
+                            schemas: ["code.swe"],
+                        });
+                        return;
+                    }
+                    delete ensureCommandResult(systemContext).actionTokenUsage;
+                    try {
+                        await executeCodingRequest(
+                            request,
+                            context,
+                            attachments,
+                        );
+                        setDisposition(systemContext, {
+                            status: "handled",
+                            path: "reasoning",
+                            schemas: ["code.swe"],
+                        });
+                    } catch (error) {
+                        setDisposition(systemContext, {
+                            status: "failed",
+                            path: "reasoning",
+                            mayHaveSideEffects: true,
+                            schemas: ["code.swe"],
+                        });
+                        throw error;
+                    }
+                    return;
+                }
+                if (systemContext.codingAffinity !== undefined) {
+                    clearCodingAffinity(systemContext);
+                }
+            } else if (
+                systemContext.codingAffinity !== undefined &&
+                !isCodeAgentRequest(requestAction)
+            ) {
+                clearCodingAffinity(systemContext);
+            }
+
             // If translation produced unknown or clarification actions,
             // fall back to reasoning which can handle ambiguity directly.
             // If reasoning is unavailable (no API key, model error, etc.),
@@ -919,40 +1000,166 @@ export class RequestCommandHandler implements CommandHandler {
             // `preference-clarify` feature is meant to render its own
             // interactive pick + "remember" card via executeActions, so it
             // must NOT be diverted to reasoning.
-            const reasoningHandled = await tryReasoningFallback(
-                systemContext,
-                context,
-                request,
-                requestAction,
+            const interactiveCollisionClarify =
+                systemContext.session.getConfig().collision.preference
+                    .enabled &&
+                systemContext.session.getConfig().collision.preference
+                    .remember !== "never";
+            const needsReasoning = requestAction.actions.some(
+                ({ action }) =>
+                    isUnknownAction(action) ||
+                    (action.schemaName === DispatcherClarifyName &&
+                        !(
+                            interactiveCollisionClarify &&
+                            action.actionName === "clarifyMultipleAgentMatches"
+                        )),
             );
+            const hasUnknownAction = requestAction.actions.some(({ action }) =>
+                isUnknownAction(action),
+            );
+            const hasClarificationAction = requestAction.actions.some(
+                ({ action }) => action.schemaName === DispatcherClarifyName,
+            );
+            if (
+                needsReasoning &&
+                systemContext.noReasoning &&
+                (systemContext.currentOptions?.activeSchemas !== undefined ||
+                    systemContext.currentOptions?.activeSchemaFamilies !==
+                        undefined)
+            ) {
+                const commandResult = ensureCommandResult(systemContext);
+                commandResult.actions = requestAction.actions.map(
+                    ({ action }) => action,
+                );
+                setDisposition(systemContext, {
+                    status: "notHandled",
+                    reason: hasUnknownAction ? "unknown" : "clarification",
+                });
+                return;
+            }
+            let reasoningHandled = false;
+            if (needsReasoning && !systemContext.noReasoning) {
+                try {
+                    await runConfiguredReasoning(request, context);
+                    reasoningHandled = true;
+                    if (!applyPowerShellCapabilityOutcome(systemContext)) {
+                        setDisposition(systemContext, {
+                            status: "handled",
+                            path: "reasoning",
+                        });
+                    }
+                } catch (e: any) {
+                    debugRequest(
+                        `Reasoning fallback failed, using default handler: ${e.message}`,
+                    );
+                }
+            }
             if (!reasoningHandled) {
                 const execResult = await executeActions(
                     requestAction.actions,
                     requestAction.history?.entities,
                     context,
                 );
+                const actionSchemas = getActionSchemas(requestAction.actions);
 
                 // Error-triggered reasoning: if an action failed and at least one
                 // schema in the request opts in via errorReasoning: true, give Claude
                 // a second chance using the same reasoning loop as UnknownAction.
-                if (execResult !== undefined) {
-                    const errorReasoningResolved =
-                        await tryErrorReasoningFallback(
-                            systemContext,
-                            context,
-                            request,
-                            requestAction,
-                            execResult,
-                        );
+                if (
+                    !systemContext.noReasoning &&
+                    execResult !== undefined &&
+                    execResult.fallbackToReasoning
+                ) {
+                    const needsErrorReasoning = requestAction.actions.some(
+                        ({ action }) => {
+                            try {
+                                return (
+                                    systemContext.agents.getActionConfig(
+                                        action.schemaName,
+                                    ).errorReasoning === true
+                                );
+                            } catch {
+                                return false;
+                            }
+                        },
+                    );
+                    let errorReasoningResolved = false;
+                    if (needsErrorReasoning) {
+                        const { error, failedAction } = execResult;
+                        const augmentedRequest =
+                            `[Context: A direct action dispatch failed.\n` +
+                            `Action: ${JSON.stringify(failedAction.action, undefined, 2)}\n` +
+                            `Error: "${error}"\n` +
+                            `Please handle the following request using the available tools.]\n\n` +
+                            request;
+                        try {
+                            displayStatus(
+                                "Action failed — retrying with reasoning...",
+                                context,
+                            );
+                            await runConfiguredReasoning(
+                                augmentedRequest,
+                                context,
+                                {
+                                    fallbackContext: {
+                                        failedSchema:
+                                            failedAction.action.schemaName,
+                                        failedAction:
+                                            failedAction.action.actionName,
+                                        error,
+                                    },
+                                },
+                            );
+                            errorReasoningResolved = true;
+                            setDisposition(systemContext, {
+                                status: "handled",
+                                path: "reasoning",
+                                schemas: actionSchemas,
+                            });
+                        } catch (e: any) {
+                            debugRequest(
+                                `Error-triggered reasoning failed, keeping original error: ${e.message}`,
+                            );
+                        }
+                    }
                     // If error-triggered reasoning did not run (schema opted out)
                     // or failed to resolve the failure, surface the original
                     // action error instead of silently reporting success.
-                    if (
-                        execResult.fallbackToReasoning &&
-                        !errorReasoningResolved
-                    ) {
+                    if (!errorReasoningResolved) {
+                        setDisposition(systemContext, {
+                            status: "failed",
+                            path: "action",
+                            mayHaveSideEffects: true,
+                            schemas: actionSchemas,
+                        });
                         displayError(execResult.error, context);
                     }
+                } else if (execResult !== undefined) {
+                    setDisposition(systemContext, {
+                        status: "failed",
+                        path: "action",
+                        mayHaveSideEffects: true,
+                        schemas: actionSchemas,
+                    });
+                } else if (hasUnknownAction) {
+                    setDisposition(systemContext, {
+                        status: "notHandled",
+                        reason: "unknown",
+                    });
+                } else if (
+                    hasClarificationAction &&
+                    systemContext.noReasoning
+                ) {
+                    setDisposition(systemContext, {
+                        status: "notHandled",
+                        reason: "clarification",
+                    });
+                } else {
+                    setDisposition(systemContext, {
+                        status: "handled",
+                        path: "action",
+                        schemas: actionSchemas,
+                    });
                 }
             }
 

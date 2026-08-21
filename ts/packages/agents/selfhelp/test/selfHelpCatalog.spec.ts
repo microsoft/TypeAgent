@@ -10,12 +10,15 @@ import {
     Catalog,
     cleanDescription,
     cleanPhrasing,
+    findAgent,
+    formatAgentRoster,
     formatGrounding,
+    groupForAgent,
     indexCatalog,
     selectRelevantGroups,
 } from "../src/catalog.js";
-import { CommandHelpResponse } from "../src/commandHelpResponseSchema.js";
-import { renderStructured } from "../src/render.js";
+import { HelpResponse } from "../src/helpResponseSchema.js";
+import { renderHelp } from "../src/render.js";
 
 function makeCatalog(): Catalog {
     return {
@@ -132,18 +135,18 @@ describe("formatGrounding", () => {
     });
 });
 
-describe("renderStructured", () => {
+describe("renderHelp", () => {
     test("renders the command as a card with the paired phrasing from the link alone", () => {
         const index = indexCatalog(makeCatalog());
         // The model returned only the command; the phrasings come from the
         // command's declared action link, not from the model.
-        const response: CommandHelpResponse = {
+        const response: HelpResponse = {
             summary: "Use the conversation command.",
             ways: [
                 { host: "system", commandPath: "conversation new", does: "" },
             ],
         };
-        const blocks = renderStructured(response, index);
+        const blocks = renderHelp(response, index);
         expect(blocks[0]).toMatchObject({
             kind: "text",
             text: "Use the conversation command.",
@@ -160,11 +163,11 @@ describe("renderStructured", () => {
 
     test("a command with no action link has no phrasing field", () => {
         const index = indexCatalog(makeCatalog());
-        const response: CommandHelpResponse = {
+        const response: HelpResponse = {
             summary: "Save it.",
             ways: [{ host: "system", commandPath: "history save", does: "" }],
         };
-        const card = renderStructured(response, index).find(
+        const card = renderHelp(response, index).find(
             (b) => b.kind === "card",
         ) as any;
         expect(card.title).toBe("@history save <file>");
@@ -173,7 +176,7 @@ describe("renderStructured", () => {
 
     test("empty ways points the user at @help", () => {
         const index = indexCatalog(makeCatalog());
-        const blocks = renderStructured({ summary: "", ways: [] }, index);
+        const blocks = renderHelp({ summary: "", ways: [] }, index);
         const text = blocks
             .filter((b) => b.kind === "text")
             .map((b) => (b as any).text)
@@ -200,5 +203,131 @@ describe("cleanDescription", () => {
                 'Create a new conversation. Example: User: new conversation Agent: { actionName: "newConversation", parameters: {} }',
             ),
         ).toBe("Create a new conversation.");
+    });
+});
+
+// A two-agent catalog for the agent-scoped selection used by describeAgent.
+function makeMultiCatalog(): Catalog {
+    return {
+        generatedAt: "test",
+        agents: [
+            {
+                name: "browser",
+                category: "App",
+                emoji: "🌐",
+                description: "Control the web browser",
+                schemas: [
+                    {
+                        schemaName: "browser",
+                        description: "browser",
+                        defaultEnabled: true,
+                        transient: false,
+                        actions: [
+                            {
+                                actionName: "openTab",
+                                description: "Open a new browser tab",
+                                parameters: [],
+                                phrasings: ["open a new tab"],
+                            },
+                            {
+                                actionName: "closeTab",
+                                description: "Close the current tab",
+                                parameters: [],
+                                phrasings: ["close this tab"],
+                            },
+                        ],
+                    },
+                ],
+            },
+            {
+                name: "list",
+                category: "App",
+                emoji: "📝",
+                description: "Manage lists",
+                schemas: [
+                    {
+                        schemaName: "list",
+                        description: "list",
+                        defaultEnabled: true,
+                        transient: false,
+                        actions: [
+                            {
+                                actionName: "removeItem",
+                                description: "Remove an item from a list",
+                                parameters: [],
+                                phrasings: ["remove eggs from my grocery list"],
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+        commands: [
+            {
+                host: "browser",
+                path: "browser open",
+                description: "Open a browser tab",
+                group: false,
+                args: [],
+                flags: [],
+                action: { actionName: "openTab" },
+            },
+        ],
+        counts: { agents: 2, actions: 3, commands: 1 },
+    };
+}
+
+describe("findAgent", () => {
+    test("resolves an explicit agent name exactly", () => {
+        const index = indexCatalog(makeMultiCatalog());
+        const agent = findAgent(index, "does it remove things", "list");
+        expect(agent?.name).toBe("list");
+    });
+
+    test("resolves the agent named in the question", () => {
+        const index = indexCatalog(makeMultiCatalog());
+        const agent = findAgent(index, "what can the browser agent do");
+        expect(agent?.name).toBe("browser");
+    });
+
+    test("matches on an action phrasing when no agent is named", () => {
+        const index = indexCatalog(makeMultiCatalog());
+        const agent = findAgent(index, "how do I remove eggs from a list");
+        expect(agent?.name).toBe("list");
+    });
+
+    test("returns undefined when nothing overlaps", () => {
+        const index = indexCatalog(makeMultiCatalog());
+        expect(findAgent(index, "xyzzy nothing here")).toBeUndefined();
+    });
+});
+
+describe("groupForAgent", () => {
+    test("returns all of the agent's actions and its commands", () => {
+        const index = indexCatalog(makeMultiCatalog());
+        const agent = findAgent(index, "browser")!;
+        const group = groupForAgent(index, agent);
+        expect(group.host).toBe("browser");
+        expect(group.actions.map((a) => a.actionName).sort()).toEqual([
+            "closeTab",
+            "openTab",
+        ]);
+        expect(group.commands.map((c) => c.path)).toEqual(["browser open"]);
+    });
+});
+
+describe("formatAgentRoster", () => {
+    test("summarizes the installed agents with a count and names", () => {
+        const index = indexCatalog(makeMultiCatalog());
+        const roster = formatAgentRoster(index);
+        expect(roster).toContain("Installed agents (2)");
+        expect(roster).toContain("browser");
+        expect(roster).toContain("list");
+    });
+
+    test("truncates to the sample size and reports the remainder", () => {
+        const index = indexCatalog(makeMultiCatalog());
+        const roster = formatAgentRoster(index, 1);
+        expect(roster).toContain("and 1 more");
     });
 });

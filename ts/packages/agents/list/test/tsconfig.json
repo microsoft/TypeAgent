@@ -10,5 +10,9 @@
   "ts-node": {
     "esm": true
   },
-  "references": [{ "path": "../src" }]
+  "references": [
+    {
+      "path": "../src"
+    }
+  ]
 }

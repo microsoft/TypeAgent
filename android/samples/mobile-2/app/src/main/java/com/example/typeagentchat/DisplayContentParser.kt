@@ -5,7 +5,8 @@ import org.json.JSONObject
 
 internal data class ParsedDisplayContent(
     val text: String,
-    val format: MessageFormat
+    val format: MessageFormat,
+    val kind: MessageKind = MessageKind.NONE
 )
 
 internal fun extractAgentMessageContent(value: Any?): ParsedDisplayContent {
@@ -14,6 +15,16 @@ internal fun extractAgentMessageContent(value: Any?): ParsedDisplayContent {
         format = MessageFormat.TEXT
     )
     return extractDisplayContent(agentMessage.optNullable("message"))
+}
+
+/**
+ * `IAgentMessage.kind` (AgentMessageKind). The shell routes "toast" and
+ * "inline" kinds outside of the chat bubble entirely.
+ */
+internal fun extractAgentMessageKind(value: Any?): String? {
+    val agentMessage = value as? JSONObject ?: return null
+    val kind = agentMessage.optString("kind")
+    return kind.ifBlank { null }
 }
 
 private fun extractDisplayContent(value: Any?): ParsedDisplayContent {
@@ -26,12 +37,14 @@ private fun extractDisplayContent(value: Any?): ParsedDisplayContent {
         )
 
         is JSONObject -> {
+            val kind = MessageKind.parse(value.optString("kind"))
             when {
                 value.optString("type") == "structured" -> {
-                    extractBestAlternate(value.optJSONArray("alternates"))
+                    extractBestAlternate(value.optJSONArray("alternates"), kind)
                         ?: ParsedDisplayContent(
                             text = "Structured content is not supported in this client yet.",
-                            format = MessageFormat.TEXT
+                            format = MessageFormat.TEXT,
+                            kind = kind
                         )
                 }
 
@@ -40,7 +53,8 @@ private fun extractDisplayContent(value: Any?): ParsedDisplayContent {
                     extractSupportedTypedContent(
                         declaredType = declaredType,
                         content = value.optNullable("content"),
-                        alternates = value.optJSONArray("alternates")
+                        alternates = value.optJSONArray("alternates"),
+                        kind = kind
                     )
                 }
 
@@ -56,45 +70,53 @@ private fun extractDisplayContent(value: Any?): ParsedDisplayContent {
 private fun extractSupportedTypedContent(
     declaredType: String,
     content: Any?,
-    alternates: JSONArray?
+    alternates: JSONArray?,
+    kind: MessageKind
 ): ParsedDisplayContent {
     val normalizedType = declaredType.lowercase()
     return when (normalizedType) {
         "markdown" -> ParsedDisplayContent(
             text = messageContentToText(content, declaredType),
-            format = MessageFormat.MARKDOWN
+            format = MessageFormat.MARKDOWN,
+            kind = kind
         )
 
         "text" -> ParsedDisplayContent(
             text = messageContentToText(content, declaredType),
-            format = MessageFormat.TEXT
+            format = MessageFormat.TEXT,
+            kind = kind
         )
 
-        else -> extractBestAlternate(alternates) ?: fallbackTypedContent(normalizedType, content)
+        else -> extractBestAlternate(alternates, kind)
+            ?: fallbackTypedContent(normalizedType, content, kind)
     }
 }
 
 private fun fallbackTypedContent(
     declaredType: String,
-    content: Any?
+    content: Any?,
+    kind: MessageKind
 ): ParsedDisplayContent {
     val fallbackText = messageContentToText(content, declaredType)
     return when (declaredType) {
         "html", "iframe" -> ParsedDisplayContent(
-            text = stripHtmlTags(fallbackText).ifBlank {
-                "Rich content is not supported in this client yet."
-            },
-            format = MessageFormat.TEXT
+            text = htmlFallbackText(fallbackText),
+            format = MessageFormat.TEXT,
+            kind = kind
         )
 
         else -> ParsedDisplayContent(
             text = fallbackText,
-            format = MessageFormat.TEXT
+            format = MessageFormat.TEXT,
+            kind = kind
         )
     }
 }
 
-private fun extractBestAlternate(alternates: JSONArray?): ParsedDisplayContent? {
+private fun extractBestAlternate(
+    alternates: JSONArray?,
+    kind: MessageKind
+): ParsedDisplayContent? {
     if (alternates == null || alternates.length() == 0) {
         return null
     }
@@ -111,7 +133,8 @@ private fun extractBestAlternate(alternates: JSONArray?): ParsedDisplayContent? 
                 return extractSupportedTypedContent(
                     declaredType = alternateType,
                     content = alternate.optNullable("content"),
-                    alternates = null
+                    alternates = null,
+                    kind = kind
                 )
             }
         }
@@ -197,6 +220,22 @@ private fun stripHtmlTags(value: String): String {
         .replace(Regex("<[^>]*>"), " ")
         .replace(Regex("\\s+"), " ")
         .trim()
+}
+
+private fun htmlFallbackText(value: String): String {
+    if (isReasoningTrace(value)) {
+        return ""
+    }
+    return stripHtmlTags(value).ifBlank {
+        "Rich content is not supported in this client yet."
+    }
+}
+
+private fun isReasoningTrace(value: String): Boolean {
+    val normalized = value.lowercase()
+    return normalized.contains("reasoning-tools-call") ||
+        normalized.contains("execute_actions") ||
+        normalized.contains("discover-actions")
 }
 
 private fun JSONObject.optNullable(name: String): Any? {
