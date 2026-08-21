@@ -201,32 +201,43 @@ function parseSeedQaRow(
     >;
 }
 
-function parseJsonl(text: string): unknown[] {
-    const lines = text
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0 && !line.startsWith("#"));
-    if (lines.length === 0) {
-        const trimmed = text.trim();
-        if (trimmed.startsWith("[")) {
-            const parsed = parseWithZod(
-                z.array(z.unknown()),
-                parseJsonText(trimmed, "seed-qa array"),
-                "seed-qa array",
-            );
-            // Same versioned row gate as JSONL lines.
-            return parsed.map((row, index) =>
-                parseSeedQaRow(row, `seed-qa array[${index}]`),
-            );
-        }
+function parseJsonl(text: string, skipInvalidRows: boolean): unknown[] {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) {
         throw new Error("seed-qa source is empty");
     }
-    return lines.map((line, index) =>
-        parseSeedQaRow(
-            parseJsonText(line, `seed-qa line ${index + 1}`),
-            `seed-qa line ${index + 1}`,
-        ),
-    );
+    if (trimmed.startsWith("[")) {
+        const parsed = parseWithZod(
+            z.array(z.unknown()),
+            parseJsonText(trimmed, "seed-qa array"),
+            "seed-qa array",
+        );
+        return parsed.map((row, index) => {
+            try {
+                return parseSeedQaRow(row, `seed-qa array[${index}]`);
+            } catch (error) {
+                if (!skipInvalidRows) throw error;
+                return undefined;
+            }
+        });
+    }
+
+    const lines = text
+        .split(/\r?\n/)
+        .map((line, index) => ({ text: line.trim(), number: index + 1 }))
+        .filter((line) => line.text.length > 0 && !line.text.startsWith("#"));
+    if (lines.length === 0) {
+        throw new Error("seed-qa source is empty");
+    }
+    return lines.map((line) => {
+        const label = `seed-qa line ${line.number}`;
+        try {
+            return parseSeedQaRow(parseJsonText(line.text, label), label);
+        } catch (error) {
+            if (!skipInvalidRows) throw error;
+            return undefined;
+        }
+    });
 }
 
 function scalarDimensions(
@@ -264,7 +275,9 @@ function importCandidateFromRow(
     const rowId =
         typeof row.id === "string" && row.id.trim()
             ? row.id.trim()
-            : `row-${rowIndex}`;
+            : typeof row.id === "number"
+              ? String(row.id)
+              : `row-${rowIndex}`;
     const utterance = requireString(
         row.query ?? row.question ?? row.utterance,
         `${rowLabel} query`,
@@ -351,18 +364,22 @@ function importCandidates(
     if (sha256Text(sourceText) !== options.manifest.sourceFileHash) {
         throw new Error("source file hash does not match the pinned manifest");
     }
-    const rows = parseJsonl(sourceText);
+    const rows = parseJsonl(sourceText, options.skipInvalidRows === true);
     const selectedRows =
         options.rowIndices ?? rows.map((_, rowIndex) => rowIndex);
     if (new Set(selectedRows).size !== selectedRows.length) {
         throw new Error("source row selection contains duplicates");
     }
     const maxCandidates = options.maxCandidates ?? Number.POSITIVE_INFINITY;
-    if (!(maxCandidates > 0)) {
-        throw new Error("source maxCandidates must be positive");
+    if (
+        options.maxCandidates !== undefined &&
+        (!Number.isInteger(maxCandidates) || maxCandidates <= 0)
+    ) {
+        throw new Error("source maxCandidates must be a positive integer");
     }
 
     const candidates: TranslationBenchSourceCandidate[] = [];
+    const candidateIds = new Set<string>();
     for (const rowIndex of selectedRows) {
         if (
             !Number.isInteger(rowIndex) ||
@@ -372,9 +389,18 @@ function importCandidates(
             throw new Error(`source row index ${rowIndex} is out of range`);
         }
         try {
-            candidates.push(
-                importCandidateFromRow(rows[rowIndex], rowIndex, options),
+            const candidate = importCandidateFromRow(
+                rows[rowIndex],
+                rowIndex,
+                options,
             );
+            if (candidateIds.has(candidate.candidateId)) {
+                throw new Error(
+                    `duplicate source candidate id '${candidate.candidateId}'`,
+                );
+            }
+            candidateIds.add(candidate.candidateId);
+            candidates.push(candidate);
             if (candidates.length >= maxCandidates) {
                 return candidates;
             }

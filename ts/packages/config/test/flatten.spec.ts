@@ -126,6 +126,27 @@ describe("flatten", () => {
         expect(out).toEqual({ AZURE_OPENAI_RESPONSE_FORMAT: "1" });
     });
 
+    test("preserves explicit false values for telemetry controls", () => {
+        const out = flatten({
+            telemetry: {
+                debugBridge: false,
+                structuredLogs: false,
+                local: {
+                    enabled: false,
+                    debugBridge: false,
+                    structuredLogs: false,
+                },
+            },
+        });
+        expect(out).toEqual({
+            TELEMETRY_DEBUGBRIDGE: "0",
+            TELEMETRY_STRUCTUREDLOGS: "0",
+            TELEMETRY_LOCAL_ENABLED: "0",
+            TELEMETRY_LOCAL_DEBUGBRIDGE: "0",
+            TELEMETRY_LOCAL_STRUCTUREDLOGS: "0",
+        });
+    });
+
     test("numbers are stringified", () => {
         const out = flatten({
             azure: { openai: { max_timeout: 120000, max_concurrency: 4 } },

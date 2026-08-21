@@ -10,6 +10,7 @@ export {
 export {
     getChatModelTelemetryContext,
     withChatModelTelemetryContext,
+    withChatModelTelemetryPurpose,
     type ChatModelTelemetryContext,
     type ChatModelTelemetryPhase,
     type ChatModelTelemetryPurpose,

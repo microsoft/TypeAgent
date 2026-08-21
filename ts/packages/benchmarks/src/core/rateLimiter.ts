@@ -223,6 +223,13 @@ export function createRateLimiter(
     limits: TpmLimits,
     options: RateLimiterOptions,
 ): RateLimiter {
+    if (
+        options.maxWaitMs !== undefined &&
+        (!Number.isFinite(options.maxWaitMs) || options.maxWaitMs < 0)
+    ) {
+        throw new Error("rate limiter: maxWaitMs must be non-negative");
+    }
+
     const tpmLimits: Record<string, number> = {};
     for (const [model, tpm] of Object.entries(limits)) {
         if (Number.isFinite(tpm) && tpm > 0) {
@@ -240,13 +247,11 @@ export function createRateLimiter(
     async function admit(model: string, estCost: number): Promise<string> {
         const activeLedger = ledger as Ledger;
         const startedAt = Date.now();
+        let attempted = false;
         for (;;) {
-            const reservation = activeLedger.reserve(model, estCost);
-            if (reservation.id !== undefined) {
-                return reservation.id;
-            }
             const waited = Date.now() - startedAt;
             if (
+                attempted &&
                 options.maxWaitMs !== undefined &&
                 waited >= options.maxWaitMs
             ) {
@@ -254,8 +259,22 @@ export function createRateLimiter(
                     `rate limiter: exceeded max wait ${options.maxWaitMs}ms for ${model}`,
                 );
             }
-            options.onWait?.(model, waited, reservation.waitMs);
-            await sleep(Math.min(reservation.waitMs, MAX_SLEEP_MS));
+            attempted = true;
+            const reservation = activeLedger.reserve(model, estCost);
+            if (reservation.id !== undefined) {
+                return reservation.id;
+            }
+            const remainingWait =
+                options.maxWaitMs === undefined
+                    ? Number.POSITIVE_INFINITY
+                    : Math.max(0, options.maxWaitMs - waited);
+            const waitMs = Math.min(
+                reservation.waitMs,
+                MAX_SLEEP_MS,
+                remainingWait,
+            );
+            options.onWait?.(model, waited, waitMs);
+            await sleep(waitMs);
         }
     }
 

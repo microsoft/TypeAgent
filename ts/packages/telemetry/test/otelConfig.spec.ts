@@ -279,7 +279,10 @@ describe("resolveTelemetryConfig", () => {
             const cfg = resolve(root);
             expect(cfg.traces).toBeUndefined();
             expect(cfg.metrics).toBeUndefined();
-            expect(cfg.logs).toEqual({ logFile: "/tmp/typeagent.jsonl" });
+            expect(cfg.logs).toEqual({
+                logFile: "/tmp/typeagent.jsonl",
+                retentionBytes: 524_288_000,
+            });
         });
     });
 
@@ -698,7 +701,12 @@ describe("resolveTelemetryConfig", () => {
                 env: { TYPEAGENT_OTEL_LOG_FILE: "/tmp/only.jsonl" },
             });
             expect(cfg).toEqual({
-                logs: { logFile: "/tmp/only.jsonl" },
+                logs: {
+                    logFile: "/tmp/only.jsonl",
+                    // Default 500 MiB retention is applied whenever a log
+                    // file is configured and nothing overrides it.
+                    retentionBytes: 524_288_000,
+                },
             });
         });
     });
@@ -733,6 +741,7 @@ describe("resolveTelemetryConfig", () => {
                 "OTEL_METRICS_EXPORTER",
                 "OTEL_LOGS_EXPORTER",
                 "TYPEAGENT_OTEL_LOG_FILE",
+                "TYPEAGENT_OTEL_LOG_RETENTION_BYTES",
             ];
             const before: Record<string, string | undefined> = {};
             for (const k of trackedKeys) {
@@ -787,6 +796,426 @@ describe("resolveTelemetryConfig", () => {
                 "http://defaults.example:4318/v1/traces",
             );
             expect(cfg.traces?.sampler).toBe("always_on");
+        });
+    });
+
+    /* ------------------------------------------------------------------ */
+    /* Local (Grafana LGTM) sink                                          */
+    /* ------------------------------------------------------------------ */
+
+    it("promotes the local sink to primary when only telemetry.local is configured", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  local:",
+                    '    enabled: "true"',
+                    "    otlpEndpoint: http://localhost:4318",
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg.traces?.otlp?.endpoint).toBe(
+                "http://localhost:4318/v1/traces",
+            );
+            expect(cfg.metrics?.otlp?.endpoint).toBe(
+                "http://localhost:4318/v1/metrics",
+            );
+            expect(cfg.logs?.otlp?.endpoint).toBe(
+                "http://localhost:4318/v1/logs",
+            );
+            expect(cfg.traces?.additionalOtlp).toBeUndefined();
+            expect(cfg.metrics?.additionalOtlp).toBeUndefined();
+            expect(cfg.logs?.additionalOtlp).toBeUndefined();
+        });
+    });
+
+    it("supplies default local otlpEndpoint / logFile / debugBridge / structuredLogs when enabled", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                ["telemetry:", "  local:", '    enabled: "true"', ""].join(
+                    "\n",
+                ),
+            );
+            const cfg = resolve(root);
+            expect(cfg.traces?.otlp?.endpoint).toBe(
+                "http://localhost:4318/v1/traces",
+            );
+            expect(cfg.logs?.logFile).toContain(
+                "/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl",
+            );
+            expect(cfg.debugBridge).toBe(true);
+            expect(cfg.structuredLogs).toBe(true);
+        });
+    });
+
+    it("keeps the standard backend as primary and adds the local sink as additional when both are configured", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  otlpEndpoint: http://backend.example:4318",
+                    "  local:",
+                    '    enabled: "true"',
+                    "    otlpEndpoint: http://localhost:4318",
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg.traces?.otlp?.endpoint).toBe(
+                "http://backend.example:4318/v1/traces",
+            );
+            expect(cfg.traces?.additionalOtlp).toEqual([
+                { endpoint: "http://localhost:4318/v1/traces" },
+            ]);
+            expect(cfg.metrics?.additionalOtlp).toEqual([
+                { endpoint: "http://localhost:4318/v1/metrics" },
+            ]);
+            expect(cfg.logs?.additionalOtlp).toEqual([
+                { endpoint: "http://localhost:4318/v1/logs" },
+            ]);
+        });
+    });
+
+    it("deduplicates the local sink when its endpoint matches the standard backend", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  otlpEndpoint: http://localhost:4318",
+                    "  local:",
+                    '    enabled: "true"',
+                    "    otlpEndpoint: http://localhost:4318",
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg.traces?.additionalOtlp).toBeUndefined();
+            expect(cfg.metrics?.additionalOtlp).toBeUndefined();
+            expect(cfg.logs?.additionalOtlp).toBeUndefined();
+            expect(cfg.traces?.otlp?.endpoint).toBe(
+                "http://localhost:4318/v1/traces",
+            );
+        });
+    });
+
+    it('has no effect when telemetry.local.enabled is "false"', () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  otlpEndpoint: http://backend.example:4318",
+                    "  local:",
+                    '    enabled: "false"',
+                    "    otlpEndpoint: http://localhost:4318",
+                    "    debugBridge: true",
+                    "    structuredLogs: true",
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg.traces?.otlp?.endpoint).toBe(
+                "http://backend.example:4318/v1/traces",
+            );
+            expect(cfg.traces?.additionalOtlp).toBeUndefined();
+            expect(cfg.debugBridge).toBeUndefined();
+            expect(cfg.structuredLogs).toBeUndefined();
+            expect(cfg.logs?.logFile).toBeUndefined();
+        });
+    });
+
+    it("has no effect when telemetry.local block is present but enabled is missing", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  local:",
+                    "    otlpEndpoint: http://localhost:4318",
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg).toEqual({});
+        });
+    });
+
+    it("does not override an explicit standard debugBridge / structuredLogs setting", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                ["telemetry:", "  local:", '    enabled: "true"', ""].join(
+                    "\n",
+                ),
+            );
+            // Environment overrides must win over the local sink's defaults.
+            const cfg = resolve(root, {
+                env: {
+                    TYPEAGENT_OTEL_DEBUG_BRIDGE: "off",
+                    TYPEAGENT_OTEL_STRUCTURED_LOGS: "off",
+                },
+            });
+            expect(cfg.debugBridge).toBe(false);
+            expect(cfg.structuredLogs).toBe(false);
+        });
+    });
+
+    it("does not override explicit standard YAML false values", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  debugBridge: false",
+                    "  structuredLogs: false",
+                    "  local:",
+                    '    enabled: "true"',
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg.debugBridge).toBe(false);
+            expect(cfg.structuredLogs).toBe(false);
+        });
+    });
+
+    it("does not override an explicit standard logFile when local is enabled", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  logFile: /tmp/standard.jsonl",
+                    "  local:",
+                    '    enabled: "true"',
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root);
+            expect(cfg.logs?.logFile).toBe("/tmp/standard.jsonl");
+        });
+    });
+
+    it("OTEL_TRACES_EXPORTER=none disables the entire traces signal even when local is enabled", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  otlpEndpoint: http://backend.example:4318",
+                    "  local:",
+                    '    enabled: "true"',
+                    "    otlpEndpoint: http://localhost:4318",
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root, {
+                env: { OTEL_TRACES_EXPORTER: "none" },
+            });
+            expect(cfg.traces).toBeUndefined();
+            expect(cfg.metrics?.otlp?.endpoint).toBe(
+                "http://backend.example:4318/v1/metrics",
+            );
+            expect(cfg.metrics?.additionalOtlp).toEqual([
+                { endpoint: "http://localhost:4318/v1/metrics" },
+            ]);
+        });
+    });
+
+    it("rejects an unrecognized telemetry.local.enabled value", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                ["telemetry:", "  local:", "    enabled: sometimes", ""].join(
+                    "\n",
+                ),
+            );
+            expect(() => resolve(root)).toThrow(
+                /telemetry.local.enabled.*expected true\/false/,
+            );
+        });
+    });
+
+    /* ------------------------------------------------------------------ */
+    /* Log retention                                                      */
+    /* ------------------------------------------------------------------ */
+
+    it("does not set retentionBytes when no log file is configured", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                "telemetry:\n  otlpEndpoint: http://localhost:4318\n",
+            );
+            const cfg = resolve(root);
+            expect(cfg.logs?.logFile).toBeUndefined();
+            expect(cfg.logs?.retentionBytes).toBeUndefined();
+        });
+    });
+
+    it("applies the 500 MiB default retention when a log file is configured", () => {
+        withTempWorkspace((root) => {
+            const cfg = resolve(root, {
+                env: { TYPEAGENT_OTEL_LOG_FILE: "/tmp/a.jsonl" },
+            });
+            expect(cfg.logs?.retentionBytes).toBe(524_288_000);
+        });
+    });
+
+    it("YAML telemetry.logRetentionBytes overrides the default", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  logFile: /tmp/a.jsonl",
+                    "  logRetentionBytes: 1048576",
+                    "",
+                ].join("\n"),
+            );
+            expect(resolve(root).logs?.retentionBytes).toBe(1_048_576);
+        });
+    });
+
+    it("env TYPEAGENT_OTEL_LOG_RETENTION_BYTES overrides YAML", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  logFile: /tmp/a.jsonl",
+                    "  logRetentionBytes: 1048576",
+                    "",
+                ].join("\n"),
+            );
+            const cfg = resolve(root, {
+                env: { TYPEAGENT_OTEL_LOG_RETENTION_BYTES: "42" },
+            });
+            expect(cfg.logs?.retentionBytes).toBe(42);
+        });
+    });
+
+    it("telemetry.local.logRetentionBytes supplies a default only when local is enabled", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  local:",
+                    '    enabled: "true"',
+                    "    otlpEndpoint: http://localhost:4318",
+                    "    logRetentionBytes: 200",
+                    "",
+                ].join("\n"),
+            );
+            expect(resolve(root).logs?.retentionBytes).toBe(200);
+        });
+    });
+
+    it("telemetry.logRetentionBytes wins over telemetry.local.logRetentionBytes", () => {
+        withTempWorkspace((root) => {
+            writeYaml(
+                root,
+                "config.local.yaml",
+                [
+                    "telemetry:",
+                    "  logFile: /tmp/a.jsonl",
+                    "  logRetentionBytes: 300",
+                    "  local:",
+                    '    enabled: "true"',
+                    "    otlpEndpoint: http://localhost:4318",
+                    "    logRetentionBytes: 200",
+                    "",
+                ].join("\n"),
+            );
+            expect(resolve(root).logs?.retentionBytes).toBe(300);
+        });
+    });
+
+    it("accepts 0 as an explicit 'cleanup disabled' value", () => {
+        withTempWorkspace((root) => {
+            const cfg = resolve(root, {
+                env: {
+                    TYPEAGENT_OTEL_LOG_FILE: "/tmp/a.jsonl",
+                    TYPEAGENT_OTEL_LOG_RETENTION_BYTES: "0",
+                },
+            });
+            expect(cfg.logs?.retentionBytes).toBe(0);
+        });
+    });
+
+    it("rejects a negative retention value", () => {
+        withTempWorkspace((root) => {
+            expect(() =>
+                resolve(root, {
+                    env: {
+                        TYPEAGENT_OTEL_LOG_FILE: "/tmp/a.jsonl",
+                        TYPEAGENT_OTEL_LOG_RETENTION_BYTES: "-1",
+                    },
+                }),
+            ).toThrow(
+                /TYPEAGENT_OTEL_LOG_RETENTION_BYTES.*non-negative integer/,
+            );
+        });
+    });
+
+    it("rejects a non-integer retention value", () => {
+        withTempWorkspace((root) => {
+            expect(() =>
+                resolve(root, {
+                    env: {
+                        TYPEAGENT_OTEL_LOG_FILE: "/tmp/a.jsonl",
+                        TYPEAGENT_OTEL_LOG_RETENTION_BYTES: "1.5",
+                    },
+                }),
+            ).toThrow(
+                /TYPEAGENT_OTEL_LOG_RETENTION_BYTES.*non-negative integer/,
+            );
+        });
+    });
+
+    it("rejects an out-of-range retention value", () => {
+        withTempWorkspace((root) => {
+            // 2^53 exceeds Number.MAX_SAFE_INTEGER (2^53 - 1).
+            expect(() =>
+                resolve(root, {
+                    env: {
+                        TYPEAGENT_OTEL_LOG_FILE: "/tmp/a.jsonl",
+                        TYPEAGENT_OTEL_LOG_RETENTION_BYTES: "9007199254740992",
+                    },
+                }),
+            ).toThrow(/TYPEAGENT_OTEL_LOG_RETENTION_BYTES.*out of range/);
+        });
+    });
+
+    it("does not mutate the caller's env for retention overrides", () => {
+        withTempWorkspace((root) => {
+            const originalEnv = {
+                TYPEAGENT_OTEL_LOG_FILE: "/tmp/a.jsonl",
+                TYPEAGENT_OTEL_LOG_RETENTION_BYTES: "42",
+            };
+            const env = { ...originalEnv };
+            resolveTelemetryConfig({ workspaceRoot: root, env });
+            expect(env).toEqual(originalEnv);
         });
     });
 });

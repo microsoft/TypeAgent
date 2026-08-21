@@ -11,6 +11,22 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 
+/**
+ * Actions we never evaluate in translation bench, regardless of grader
+ * classification. These are not translatable "tool fires":
+ *  - `chat.generateResponse` is a benign conversational acknowledgment, not a
+ *    tool action; on empty-gold negatives it would otherwise be counted as a
+ *    false fire.
+ *  - `utility.claudeTask` is an internal utility escape hatch, not a targetable
+ *    catalog action.
+ * Kept as an explicit, hand-maintained list (single source of truth) so both
+ * synth scheduling and coverage validation exclude them from targeting.
+ */
+export const HARDCODED_NON_EVAL_ACTION_IDS: ReadonlySet<string> = new Set([
+    "chat.generateResponse",
+    "utility.claudeTask",
+]);
+
 let cachedPackagedLlmJudgeExcludedActions: ReadonlySet<string> | undefined;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -60,9 +76,10 @@ export function getPackagedLlmJudgeExcludedActions(): ReadonlySet<string> {
                 `Unsupported or corrupt packaged action-parameters grader at ${graderPath}`,
             );
         }
-        cachedPackagedLlmJudgeExcludedActions = new Set(
-            listLlmAsAJudgeExcludedActionIds(raw.byAction),
-        );
+        cachedPackagedLlmJudgeExcludedActions = new Set([
+            ...listLlmAsAJudgeExcludedActionIds(raw.byAction),
+            ...HARDCODED_NON_EVAL_ACTION_IDS,
+        ]);
     }
     return cachedPackagedLlmJudgeExcludedActions;
 }

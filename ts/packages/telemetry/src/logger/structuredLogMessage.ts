@@ -27,6 +27,8 @@ export function getStructuredLogMessage(
             return `Request cancelled while ${stringValue(data, "phase", "queued")}`;
         case "dispatcher:request:received":
             return "Dispatcher began processing request";
+        case "dispatcher:command:exception":
+            return `Command failed: ${formatErrorClassification(data)}`;
         case "dispatcher:translation:started":
             return `Translation started with ${numberValue(data, "count", 0)} candidate schemas`;
         case "dispatcher:translation:completed":
@@ -38,7 +40,7 @@ export function getStructuredLogMessage(
         case "dispatcher:action:started":
             return `Action started: ${formatAction(data)}`;
         case "dispatcher:action:completed":
-            return `Action ${stringValue(data, "status", "completed")}: ${formatAction(data)}`;
+            return `Action ${stringValue(data, "status", "completed")}: ${formatAction(data)}${formatElapsed(data)}${formatFailureNote(data)}`;
         case "dispatcher:request:completed":
             return `Request completed: ${stringValue(data, "status", "completed")}`;
         case "aiclient:llm:started":
@@ -54,9 +56,70 @@ function formatTranslationCompleted(data: Record<string, unknown>): string {
     const status = stringValue(data, "status", "completed");
     const strategy = stringValue(data, "strategy", "unknown strategy");
     const actions = stringArrayValue(data, "actionNames");
-    return `Translation ${status} via ${strategy}${
-        actions.length === 0 ? "" : `: ${actions.join(", ")}`
-    }`;
+    return `Translation ${status} via ${strategy}${formatRoutingNote(
+        data,
+    )}${formatElapsed(data)}${formatFailureNote(data)}${actions.length === 0 ? "" : `: ${actions.join(", ")}`}`;
+}
+
+/**
+ * Render the bounded classification fields only - the original message and
+ * stack are never part of a rendered message.
+ */
+function formatErrorClassification(data: Record<string, unknown>): string {
+    const category = stringValue(data, "errorCategory", "internal");
+    const details: string[] = [];
+    const code = data.errorCode;
+    if (typeof code === "string" && code.length > 0) {
+        details.push(code);
+    }
+    const httpStatus = data.httpStatus;
+    if (typeof httpStatus === "number" && Number.isFinite(httpStatus)) {
+        details.push(`HTTP ${httpStatus}`);
+    }
+    if (data.retryable === true) {
+        details.push("retryable");
+    }
+    return details.length === 0
+        ? category
+        : `${category} (${details.join(", ")})`;
+}
+
+/**
+ * Append the failure classification to a lifecycle message, but only when the
+ * event carries one.
+ */
+function formatFailureNote(data: Record<string, unknown>): string {
+    return typeof data.errorCategory === "string" && data.errorCategory !== ""
+        ? ` [${formatErrorClassification(data)}]`
+        : "";
+}
+
+// Note only the routing nuance that `strategy` does not already convey: a
+// mixed activity-context translation that reached the model despite a
+// cache/grammar strategy (`+llm`), assistant-switch fallback, and retries. JSON
+// fields remain primary.
+function formatRoutingNote(data: Record<string, unknown>): string {
+    const parts: string[] = [];
+    const strategy = stringValue(data, "strategy", "");
+    const routes = stringArrayValue(data, "routes");
+    if (routes.includes("llm") && strategy !== "" && strategy !== "translate") {
+        parts.push("+llm");
+    }
+    if (data.fallback === true) {
+        parts.push("fallback");
+    }
+    const retryCount = numberValue(data, "retryCount", 0);
+    if (retryCount > 0) {
+        parts.push(`retry x${retryCount}`);
+    }
+    return parts.length === 0 ? "" : ` [${parts.join(", ")}]`;
+}
+
+function formatElapsed(data: Record<string, unknown>): string {
+    const value = data.elapsedMs;
+    return typeof value === "number" && Number.isFinite(value)
+        ? ` in ${value} ms`
+        : "";
 }
 
 function formatLlmCompleted(data: Record<string, unknown>): string {
@@ -65,7 +128,7 @@ function formatLlmCompleted(data: Record<string, unknown>): string {
     const totalTokens = data.totalTokens;
     return `LLM ${status}: ${formatLlmOperation(data)}${formatScope(data)}${formatModel(data)} in ${elapsedMs} ms${
         typeof totalTokens === "number" ? ` (${totalTokens} tokens)` : ""
-    }`;
+    }${formatFailureNote(data)}`;
 }
 
 function formatLlmOperation(data: Record<string, unknown>): string {

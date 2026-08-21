@@ -41,11 +41,19 @@ type LlmCallState = {
     readonly activeContext: Context;
     readonly startedAt: number;
     readonly correlation: LlmCorrelation;
-    readonly classification: ChatModelTelemetryContext;
+    readonly classification: LlmClassification;
     readonly logger: Logger;
     usage?: CompletionUsageStats;
     ended: boolean;
 };
+
+type LlmClassification =
+    | ChatModelTelemetryContext
+    | {
+          readonly phase: "unclassified";
+          readonly purpose: "unclassified";
+          readonly scope: "unclassified";
+      };
 
 type LlmCorrelation = {
     -readonly [Key in
@@ -121,6 +129,14 @@ export function instrumentChatModel(
     return model;
 }
 
+function safely(body: () => void): void {
+    try {
+        body();
+    } catch {
+        // Telemetry must not fail the model call it is describing.
+    }
+}
+
 function startLlmCall(
     info: ChatModelTelemetryInfo,
     streaming: boolean,
@@ -132,7 +148,12 @@ function startLlmCall(
     );
     const span = tracer.startSpan(otel.TYPEAGENT_SPAN_NAMES.LLM);
     const inherited = otel.getActiveTypeAgentSpanAttributes();
-    const classification = getChatModelTelemetryContext();
+    const classification: LlmClassification =
+        getChatModelTelemetryContext() ?? {
+            phase: "unclassified",
+            purpose: "unclassified",
+            scope: "unclassified",
+        };
     const attributes = {
         ...inherited,
         genAiSystem: info.provider,
@@ -142,6 +163,9 @@ function startLlmCall(
         llmScope: classification.scope,
     };
     otel.setTypeAgentSpanAttributes(span, attributes);
+    if (classification.phase === "unclassified") {
+        span.addEvent("typeagent.llm.classification.missing");
+    }
     const activeContext = otel.setActiveTypeAgentSpanAttributes(
         trace.setSpan(context.active(), span),
         attributes,
@@ -210,7 +234,7 @@ async function* instrumentStream(
         throw error;
     } finally {
         if (!state.ended) {
-            failLlmCall(state, info, { name: "AbortError" });
+            cancelLlmCall(state, info);
             await source.return?.();
         }
     }
@@ -223,6 +247,12 @@ function cancelLlmCall(
     failLlmCall(state, info, { name: "AbortError" });
 }
 
+/**
+ * Record a call that returned rather than threw. A failure `Result` carries
+ * only typechat's message string, which is never parsed here; the transport
+ * attaches the bounded classification it knew, and `provider` is the fallback
+ * when it recognized nothing.
+ */
 function finishLlmCall(
     state: LlmCallState,
     info: ChatModelTelemetryInfo,
@@ -232,17 +262,40 @@ function finishLlmCall(
         return;
     }
     state.ended = true;
-    const success = result.success;
-    if (!success) {
-        state.span.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: "model returned failure",
-        });
+    try {
+        const success = result.success;
+        const classification = success
+            ? undefined
+            : (otel.readTelemetryErrorClassification(result) ?? {
+                  errorCategory: "provider" as const,
+              });
+        const cancelled = classification?.errorCategory === "cancelled";
+        if (!success) {
+            const message = cancelled ? "cancelled" : "model returned failure";
+            safely(() =>
+                state.span.setStatus({
+                    code: SpanStatusCode.ERROR,
+                    message,
+                }),
+            );
+        }
+        emitCompleted(
+            state,
+            info,
+            success,
+            success ? "succeeded" : cancelled ? "cancelled" : "failed",
+            classification,
+        );
+    } finally {
+        endSpan(state);
     }
-    emitCompleted(state, info, success, success ? "succeeded" : "failed");
-    state.span.end();
 }
 
+/**
+ * Record a call that threw. Span status, event status, and severity all derive
+ * from one classification, so a wrapped cancellation cannot be reported as a
+ * failure on one signal and a cancellation on another.
+ */
 function failLlmCall(
     state: LlmCallState,
     info: ChatModelTelemetryInfo,
@@ -252,20 +305,35 @@ function failLlmCall(
         return;
     }
     state.ended = true;
-    const cancelled =
-        error !== null &&
-        typeof error === "object" &&
-        (error as { name?: unknown }).name === "AbortError";
-    state.span.recordException({
-        name: cancelled ? "AbortError" : "ModelError",
-        message: cancelled ? "cancelled" : "model call failed",
-    });
-    state.span.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: cancelled ? "cancelled" : "model call failed",
-    });
-    emitCompleted(state, info, false, cancelled ? "cancelled" : "failed");
-    state.span.end();
+    try {
+        const classification = otel.classifyTelemetryError(error);
+        const cancelled = classification.errorCategory === "cancelled";
+        const message = cancelled ? "cancelled" : "model call failed";
+        safely(() => {
+            state.span.recordException({
+                name: cancelled ? "AbortError" : "ModelError",
+                message,
+            });
+            state.span.setStatus({ code: SpanStatusCode.ERROR, message });
+        });
+        emitCompleted(
+            state,
+            info,
+            false,
+            cancelled ? "cancelled" : "failed",
+            classification,
+        );
+    } finally {
+        endSpan(state);
+    }
+}
+
+/**
+ * End the span even when emitting the completion event failed, so a broken
+ * logger cannot leak an unfinished span per call.
+ */
+function endSpan(state: LlmCallState): void {
+    safely(() => state.span.end());
 }
 
 function emitCompleted(
@@ -273,36 +341,44 @@ function emitCompleted(
     info: ChatModelTelemetryInfo,
     success: boolean,
     status: "succeeded" | "failed" | "cancelled",
+    classification: otel.TelemetryErrorClassification | undefined,
 ): void {
     if (!otel.isStructuredLoggingEnabled()) {
         return;
     }
-    context.with(state.activeContext, () =>
-        state.logger.logEvent(
-            "llm:completed",
-            {
-                provider: info.provider,
-                ...(info.model === undefined ? {} : { model: info.model }),
-                operation: "chat",
-                ...state.classification,
-                ...state.correlation,
-                success,
-                status,
-                elapsedMs: Date.now() - state.startedAt,
-                ...(state.usage === undefined
-                    ? {}
-                    : {
-                          inputTokens: state.usage.prompt_tokens,
-                          outputTokens: state.usage.completion_tokens,
-                          totalTokens: state.usage.total_tokens,
-                          ...(state.usage.cached_tokens === undefined
-                              ? {}
-                              : {
-                                    cachedTokens: state.usage.cached_tokens,
-                                }),
-                      }),
-            },
-            success ? "info" : status === "cancelled" ? "warning" : "error",
+    safely(() =>
+        context.with(state.activeContext, () =>
+            state.logger.logEvent(
+                "llm:completed",
+                {
+                    provider: info.provider,
+                    ...(info.model === undefined ? {} : { model: info.model }),
+                    operation: "chat",
+                    ...state.classification,
+                    ...state.correlation,
+                    success,
+                    status,
+                    elapsedMs: Date.now() - state.startedAt,
+                    // A cancellation is a disposition, not a failure to
+                    // classify.
+                    ...(status === "failed" && classification !== undefined
+                        ? classification
+                        : {}),
+                    ...(state.usage === undefined
+                        ? {}
+                        : {
+                              inputTokens: state.usage.prompt_tokens,
+                              outputTokens: state.usage.completion_tokens,
+                              totalTokens: state.usage.total_tokens,
+                              ...(state.usage.cached_tokens === undefined
+                                  ? {}
+                                  : {
+                                        cachedTokens: state.usage.cached_tokens,
+                                    }),
+                          }),
+                },
+                success ? "info" : status === "cancelled" ? "warning" : "error",
+            ),
         ),
     );
 }

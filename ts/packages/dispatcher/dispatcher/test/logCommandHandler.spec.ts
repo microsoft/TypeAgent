@@ -36,7 +36,7 @@ function makeContext(): {
 }
 
 async function runSub(
-    name: "status" | "profile" | "debug-copy" | "clear",
+    name: "status" | "profile" | "clear",
     argv: string,
     ctx: any,
 ) {
@@ -65,7 +65,7 @@ describe("@log command handler", () => {
         otel.setLocalTelemetryState(undefined);
     });
 
-    it("status prints profile, debug-copy, and preset registry", async () => {
+    it("status prints profile, behavior, and preset registry", async () => {
         const { context, captured } = makeContext();
         await runSub("status", "", context);
 
@@ -73,11 +73,10 @@ describe("@log command handler", () => {
             .map((c) => (typeof c.content === "string" ? c.content : ""))
             .join("\n");
         expect(text).toContain("Local OTel profile: focused");
-        expect(text).toContain("debug-copy:         off");
         expect(text).toContain("debug bridge:       available");
         expect(text).toContain("local JSONL:        configured");
         expect(text).toContain(
-            "focused, diagnostic, and verbose are equivalent in Phase 1",
+            "profile behavior:   structured events only (no debug logs)",
         );
         expect(text).toContain("Trace preset registry");
         for (const name of Object.keys(otel.TRACE_PRESETS)) {
@@ -105,41 +104,25 @@ describe("@log command handler", () => {
         expect(errored).toBeDefined();
     });
 
-    it("debug-copy on/off toggles state", async () => {
-        const { context } = makeContext();
-        await runSub("debug-copy", "on", context);
-        expect(otel.getLocalTelemetryState().getSnapshot().debugCopy).toBe(
-            true,
-        );
-        await runSub("debug-copy", "off", context);
-        expect(otel.getLocalTelemetryState().getSnapshot().debugCopy).toBe(
-            false,
-        );
-    });
-
-    it("debug-copy rejects invalid state without mutating", async () => {
+    it.each([
+        ["focused", "structured events only (no debug logs)"],
+        ["diagnostic", "structured events + error/warn/info debug logs"],
+        ["verbose", "structured events + all debug logs"],
+        ["off", "local OTel sink disabled"],
+    ])("status describes %s profile behavior", async (profile, behavior) => {
+        const { context: setCtx } = makeContext();
+        await runSub("profile", profile, setCtx);
         const { context, captured } = makeContext();
-        await runSub("debug-copy", "yes", context);
-        expect(otel.getLocalTelemetryState().getSnapshot().debugCopy).toBe(
-            false,
-        );
-        expect(captured.some((c) => c.kind === "error")).toBe(true);
+        await runSub("status", "", context);
+        const text = captured
+            .map((c) => (typeof c.content === "string" ? c.content : ""))
+            .join("\n");
+        expect(text).toContain(`profile behavior:   ${behavior}`);
     });
 
-    it("debug-copy on reports missing local capabilities", async () => {
-        otel.setLocalTelemetryState(otel.createLocalTelemetryState());
-        const { context, captured } = makeContext();
-        await runSub("debug-copy", "on", context);
-        expect(otel.getLocalTelemetryState().getSnapshot().debugCopy).toBe(
-            false,
-        );
-        expect(captured.some((c) => c.kind === "error")).toBe(true);
-    });
-
-    it("clear resets to focused + debug-copy off", async () => {
+    it("clear resets to focused", async () => {
         const { context } = makeContext();
         await runSub("profile", "verbose", context);
-        await runSub("debug-copy", "on", context);
         expect(otel.getLocalTelemetryState().getSnapshot().profile).toBe(
             "verbose",
         );
@@ -147,13 +130,12 @@ describe("@log command handler", () => {
         await runSub("clear", "", context);
         const snap = otel.getLocalTelemetryState().getSnapshot();
         expect(snap.profile).toBe("focused");
-        expect(snap.debugCopy).toBe(false);
     });
 
     it("registers the expected subcommands and defaults to status", () => {
         const table = getLogCommandHandlers();
         expect(Object.keys(table.commands ?? {}).sort()).toEqual(
-            ["clear", "debug-copy", "profile", "status"].sort(),
+            ["clear", "profile", "status"].sort(),
         );
         expect(table.defaultSubCommand).toBeDefined();
     });

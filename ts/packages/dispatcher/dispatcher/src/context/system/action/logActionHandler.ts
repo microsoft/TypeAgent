@@ -5,7 +5,6 @@ import type { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
 
 import {
     clearLogSettings,
-    setLogDebugCopy,
     setLogProfile,
     showLogStatus,
 } from "../handlers/logCommandHandler.js";
@@ -21,9 +20,6 @@ export async function executeLogAction(
             return;
         case "setLogProfile":
             setLogProfile(action.parameters.profile, context);
-            return;
-        case "setLogDebugCopy":
-            setLogDebugCopy(action.parameters.enabled ? "on" : "off", context);
             return;
         case "clearLogSettings":
             clearLogSettings(context);

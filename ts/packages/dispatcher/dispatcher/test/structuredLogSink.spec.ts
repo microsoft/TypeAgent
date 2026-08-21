@@ -35,6 +35,12 @@ describe("dispatcher structured log projection", () => {
                 path: "action",
                 cancelled: false,
                 schemaNames: ["calendar", "email"],
+                routingReason: "llm_translation",
+                matchOutcome: "miss",
+                cacheBypassReason: "cache_disabled",
+                routes: ["cache", "llm"],
+                fallback: true,
+                retryCount: 2,
                 request: "PRIVATE_REQUEST_MARKER",
                 history: ["PRIVATE_HISTORY_MARKER"],
                 actions: [{ parameters: "PRIVATE_ACTION_MARKER" }],
@@ -68,9 +74,51 @@ describe("dispatcher structured log projection", () => {
                     path: "action",
                     cancelled: false,
                     schemaNames: ["calendar", "email"],
+                    routingReason: "llm_translation",
+                    matchOutcome: "miss",
+                    cacheBypassReason: "cache_disabled",
+                    routes: ["cache", "llm"],
+                    fallback: true,
+                    retryCount: 2,
                 },
             },
         ]);
+        expect(JSON.stringify(captured)).not.toContain("PRIVATE_");
+    });
+
+    it("keeps the failure classification and drops the raw error", () => {
+        const captured: LogEvent[] = [];
+        const sink = createDispatcherOtelLoggerSink({
+            logEvent(event) {
+                captured.push(event);
+            },
+        });
+
+        // Exactly the shape `logCommandException` produces.
+        sink.logEvent({
+            eventName: "command:exception",
+            timestamp: new Date().toISOString(),
+            severity: "error",
+            event: {
+                requestId: "request",
+                errorCategory: "rate_limit",
+                errorCode: "ERR_TOO_MANY",
+                httpStatus: 429,
+                retryable: true,
+                request: "PRIVATE_REQUEST_MARKER",
+                name: "PRIVATE_NAME_MARKER",
+                message: "PRIVATE_ERROR_MARKER",
+                stack: "PRIVATE_STACK_MARKER",
+            },
+        });
+
+        expect(captured[0]?.event).toEqual({
+            requestId: "request",
+            errorCategory: "rate_limit",
+            errorCode: "ERR_TOO_MANY",
+            httpStatus: 429,
+            retryable: true,
+        });
         expect(JSON.stringify(captured)).not.toContain("PRIVATE_");
     });
 
