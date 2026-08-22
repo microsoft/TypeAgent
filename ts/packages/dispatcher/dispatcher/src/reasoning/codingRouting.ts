@@ -9,6 +9,7 @@ import {
     DispatcherClarifyName,
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
+import { isMutatingCodingRequest } from "./codingRequestClassification.js";
 
 export type CodingRouteDecision = "coding" | "notCoding";
 
@@ -43,8 +44,8 @@ export function isCodeAgentRequest(requestAction: RequestAction): boolean {
     );
 }
 
-const ACTION_PATTERN =
-    /\b(add|build|compile|create|debug|delete|edit|fix|format|implement|lint|migrate|modify|refactor|remove|rename|run|test|typecheck|update|write)\b/i;
+const NON_MUTATING_ACTION_PATTERN =
+    /\b(compile|debug|lint|run|test|typecheck)\b/i;
 const ANALYSIS_PATTERN =
     /\b(analyze|explain|find|inspect|review|search|trace|understand)\b/i;
 const CODE_TARGET_PATTERN =
@@ -77,7 +78,8 @@ export function classifyCodingRequest(
     if (CODING_COMMAND_PATTERN.test(text)) {
         return "coding";
     }
-    const hasAction = ACTION_PATTERN.test(text);
+    const hasAction =
+        isMutatingCodingRequest(text) || NON_MUTATING_ACTION_PATTERN.test(text);
     const hasTarget =
         CODE_TARGET_PATTERN.test(text) ||
         FILE_PATTERN.test(text) ||
