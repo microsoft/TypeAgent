@@ -81,15 +81,16 @@ describe("agent-server working-directory policy", () => {
     });
 
     test.each(["", " ", path.delimiter])(
-        "rejects an explicitly configured empty allowlist",
+        "treats an explicitly configured empty allowlist as unrestricted",
         (configuredRoots) => {
-            expect(() =>
+            expect(
                 loadWorkingDirectoryPolicy({
                     TYPEAGENT_CODE_ALLOWED_ROOTS: configuredRoots,
                 }),
-            ).toThrow(
-                "TYPEAGENT_CODE_ALLOWED_ROOTS does not contain an existing directory",
-            );
+            ).toEqual({
+                allowedRoots: [],
+                defaultRoot: fs.realpathSync(process.cwd()),
+            });
         },
     );
 
