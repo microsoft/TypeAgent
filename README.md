@@ -77,6 +77,7 @@ Code in this repo does not collect telemetry by default.
 ## Roadmap
 
 - Publish libraries for agent memory and action dispatch.
+- Create shareable install vehicles and dynamic agent discovery and loading.
 
 ## Limitations
 
