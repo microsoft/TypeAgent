@@ -76,7 +76,10 @@ function parseTool(value: PythonLiteral): SealToolsTool {
     if (typeof source.api_name !== "string") {
         throw new Error("tool api_name must be a string");
     }
-    const parameters: Record<string, SealToolsParameter> = {};
+    const parameters = Object.create(null) as Record<
+        string,
+        SealToolsParameter
+    >;
     if (source.parameters !== undefined) {
         const rawParameters = asRecord(source.parameters, "tool parameters");
         for (const [name, value] of Object.entries(rawParameters)) {
@@ -199,16 +202,20 @@ export function parseSealToolsRow(
 export function toSealToolsFunctionTool(
     tool: SealToolsTool,
 ): OpenAIFunctionTool {
+    for (const name of tool.required) {
+        if (!Object.prototype.hasOwnProperty.call(tool.parameters, name)) {
+            throw new Error(`Required parameter '${name}' is not declared`);
+        }
+    }
     const properties = Object.fromEntries(
         Object.entries(tool.parameters).map(([name, parameter]) => {
             const type =
-                JSON_TYPES[parameter.type.toLocaleLowerCase("en-US")] ??
+                JSON_TYPES[parameter.type.trim().toLocaleLowerCase("en-US")] ??
                 "string";
             return [
                 name,
                 {
                     type,
-                    ...(type === "array" ? { items: { type: "string" } } : {}),
                     ...(parameter.description === undefined
                         ? {}
                         : { description: parameter.description }),
