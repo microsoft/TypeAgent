@@ -33,8 +33,8 @@ jobs:
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
-      - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         continue-on-error: true
         with:
@@ -45,18 +45,18 @@ jobs:
               - ".github/workflows/build-dotnet.yml"
       - name: Setup MSBuild
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
       - name: Setup NuGet
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
-        uses: NuGet/setup-nuget@v2.0.0
+        uses: NuGet/setup-nuget@b26b823c478ee115be5c9403e62c90b0bf943843 # v3.1.0
       - name: Install pnpm
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           package_json_file: ts/package.json
       - name: Setup Node.js
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: "pnpm"

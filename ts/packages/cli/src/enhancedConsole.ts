@@ -68,6 +68,7 @@ import {
 } from "./debugInterceptor.js";
 import { stopAgentServer } from "@typeagent/agent-server-client";
 import { randomUUID } from "crypto";
+import { exitCli, removeEarlyTelemetrySigintHandler } from "./telemetry.js";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
@@ -959,6 +960,45 @@ export function createEnhancedClientIO(
         }
     }
 
+    function completeCommandNotification(
+        requestId: RequestId,
+        data: any,
+        source: string,
+    ): void {
+        const completedId =
+            typeof requestId === "object" &&
+            requestId !== null &&
+            "requestId" in requestId
+                ? requestId.requestId
+                : typeof requestId === "string"
+                  ? requestId
+                  : undefined;
+        if (completedId !== undefined && currentRequestId === completedId) {
+            currentRequestId = undefined;
+        }
+        if (completedId !== undefined) {
+            consumeSubmittedId(completedId);
+        }
+
+        const traceId =
+            typeof data?.result?.traceId === "string"
+                ? data.result.traceId
+                : undefined;
+        if (terminalLayout?.isActive) {
+            terminalLayout.flushInline();
+            if (traceId) {
+                terminalLayout.writeContent(
+                    chalk.dim(`[💬 ${source}] TraceID: ${traceId}\n`),
+                );
+            }
+            activePromptRenderer?.redraw();
+        } else if (traceId) {
+            process.stdout.write(
+                chalk.dim(`[💬 ${source}] TraceID: ${traceId}\n`),
+            );
+        }
+    }
+
     return {
         clear(): void {
             console.clear();
@@ -968,7 +1008,7 @@ export function createEnhancedClientIO(
                 currentSpinner.stop();
                 currentSpinner = null;
             }
-            process.exit(0);
+            exitCli(0);
         },
         shutdown(): void {
             if (currentSpinner) {
@@ -994,7 +1034,7 @@ export function createEnhancedClientIO(
                     // Best-effort: server may already be stopped.
                 })
                 .finally(() => {
-                    process.exit(0);
+                    exitCli(0);
                 });
         },
 
@@ -1150,32 +1190,11 @@ export function createEnhancedClientIO(
                     break;
 
                 case "commandComplete": {
-                    // Clear currentRequestId if the completed id matches so SIGINT doesn't target a stale id.
-                    const completedId =
-                        typeof requestId === "object" &&
-                        requestId !== null &&
-                        "requestId" in (requestId as any)
-                            ? (requestId as { requestId: string }).requestId
-                            : typeof requestId === "string"
-                              ? requestId
-                              : undefined;
-                    if (
-                        completedId !== undefined &&
-                        currentRequestId === completedId
-                    ) {
-                        currentRequestId = undefined;
-                    }
-                    if (completedId !== undefined) {
-                        consumeSubmittedId(completedId);
-                    }
                     // Commit any buffered inline output: actionIO.appendDisplay
                     // defaults to "inline" mode and the non-blocking submit path
                     // has no spinner, so one-shot commands (e.g. @config agent)
                     // would otherwise leave their only message in inlineBuffer.
-                    if (terminalLayout?.isActive) {
-                        terminalLayout.flushInline();
-                        activePromptRenderer?.redraw();
-                    }
+                    completeCommandNotification(requestId, data, source);
                     break;
                 }
 
@@ -2205,7 +2224,7 @@ async function questionWithCompletion(
                 // Ctrl+C — clear bottom rule + hint before exit
                 stdout.write("\n\n\x1b[K\n");
                 cleanup();
-                process.exit(0);
+                exitCli(0);
             } else if (code === 4) {
                 // Ctrl+D — cycle debug panel: off → compact → full → off
                 const dp = getDebugPanel();
@@ -2405,6 +2424,7 @@ function initializeEnhancedConsole(
     _rl?: readline.promises.Interface,
     dispatcherRef?: { current?: Dispatcher },
 ) {
+    removeEarlyTelemetrySigintHandler();
     process.on("SIGINT", () => {
         if (isProcessing && dispatcherRef?.current) {
             const now = Date.now();
@@ -2414,7 +2434,7 @@ function initializeEnhancedConsole(
                     currentSpinner.stop();
                     currentSpinner = null;
                 }
-                process.exit(0);
+                exitCli(0);
             }
             lastCtrlCTime = now;
             if (currentRequestId) {
@@ -2430,7 +2450,7 @@ function initializeEnhancedConsole(
             currentSpinner.stop();
             currentSpinner = null;
         }
-        process.exit(0);
+        exitCli(0);
     });
 }
 
@@ -2598,7 +2618,7 @@ function startExecutionKeyListener(
                     currentSpinner.stop();
                     currentSpinner = null;
                 }
-                process.exit(0);
+                exitCli(0);
             }
             lastCtrlCTime = now;
             if (!tryCancelRunning()) {
@@ -2674,7 +2694,7 @@ export async function processCommandsEnhanced<T>(
         rl.on("SIGINT", () => {
             const now = Date.now();
             if (now - lastCtrlCTime < 1000) {
-                process.exit(0);
+                exitCli(0);
             }
             lastCtrlCTime = now;
             if (tryCancelRunningHead(getDispatcher())) {
@@ -2780,7 +2800,7 @@ export async function processCommandsEnhanced<T>(
                         result = await liveDispatcher.submitCommand(
                             request,
                             undefined,
-                            undefined,
+                            { workingDirectory: process.cwd() },
                             clientRequestId,
                         );
                     } catch (err) {

@@ -81,7 +81,6 @@ export interface TypeChatJsonTranslatorWithSignal<T extends object>
         request: string,
         promptPreamble?: string | PromptSection[],
         signal?: AbortSignal,
-        usageCallback?: CompleteUsageStatsCallback,
     ) => Promise<Result<T>>;
 }
 
@@ -430,7 +429,6 @@ export function createJsonTranslatorWithValidator<T extends object>(
             request: string,
             promptPreamble?: string | PromptSection[],
             signal?: AbortSignal,
-            usageCallback?: CompleteUsageStatsCallback,
         ) => {
             patchStreamCallback(promptPreamble);
             const result = await innerFn(
@@ -438,7 +436,7 @@ export function createJsonTranslatorWithValidator<T extends object>(
                 addModelParamSection(
                     promptPreamble,
                     undefined,
-                    usageCallback,
+                    undefined,
                     signal,
                 ),
             );
@@ -452,7 +450,6 @@ export function createJsonTranslatorWithValidator<T extends object>(
         request: string,
         promptPreamble?: string | PromptSection[],
         signal?: AbortSignal,
-        usageCallback?: CompleteUsageStatsCallback,
     ) => {
         patchStreamCallback(promptPreamble);
         const result = await innerFn(
@@ -460,7 +457,7 @@ export function createJsonTranslatorWithValidator<T extends object>(
             addModelParamSection(
                 toPromptSections(instructions, promptPreamble),
                 undefined,
-                usageCallback,
+                undefined,
                 signal,
             ),
         );

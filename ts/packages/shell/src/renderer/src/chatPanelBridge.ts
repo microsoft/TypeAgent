@@ -26,6 +26,7 @@ import {
     parseStatusNotice,
     type TemplateEditServices,
     type ConnectionStatus,
+    fileLinkToPath,
 } from "@typeagent/chat-ui";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import {
@@ -89,6 +90,7 @@ function mapResult(result: any):
           actionTokenUsage?: any;
           parsePhase?: any;
           cancelled?: boolean;
+          traceId?: string;
       }
     | undefined {
     if (!result) return undefined;
@@ -103,6 +105,7 @@ function mapResult(result: any):
         actionTokenUsage: result.actionTokenUsage,
         parsePhase: metrics?.parse,
         cancelled: result.cancelled === true,
+        traceId: result.traceId,
     };
 }
 
@@ -219,6 +222,7 @@ function toHistoryEntries(entries: any[]): HistoryEntry[] {
                     firstMessageMs: rid
                         ? firstMessageMsByRequestId.get(rid)
                         : undefined,
+                    traceId: e.traceId,
                 });
                 break;
             }
@@ -654,6 +658,14 @@ export function createChatPanelClient(
     const chatPanel = new ChatPanel(rootElement, {
         platformAdapter: {
             handleLinkClick: (href: string) => {
+                // Local-file links open in the OS default editor; the
+                // `openFolder` channel is just `shell.openPath`, which
+                // handles files as well as directories.
+                const filePath = fileLinkToPath(href);
+                if (filePath !== undefined) {
+                    getClientAPI().openConfigFile(filePath);
+                    return;
+                }
                 getClientAPI().openUrlExternal(href);
             },
         },
@@ -1273,8 +1285,8 @@ export function createChatPanelClient(
                     );
                     break;
                 default:
-                    // Android-only actions (set-alarm, call-phonenumber, etc.)
-                    // are not supported in the Electron shell.
+                    // Client-agent actions handled by other hosts (e.g. the
+                    // Android sample) are not supported in the Electron shell.
                     break;
             }
         } catch (e) {

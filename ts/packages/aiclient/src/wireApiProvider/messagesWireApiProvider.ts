@@ -58,6 +58,55 @@ function toTools(schemas: FunctionCallingJsonSchema[]): Tool[] {
     });
 }
 
+/**
+ * Normalize Anthropic Messages usage to OpenAI-style accounting.
+ *
+ * OpenAI (chat/responses): `prompt_tokens`/`input_tokens` is the full input;
+ * `cached_tokens` is a subset of that total (cache reads).
+ *
+ * Anthropic splits input into three exclusive buckets:
+ *   total_input = input_tokens
+ *               + cache_creation_input_tokens
+ *               + cache_read_input_tokens
+ * So we fold creation+read into `prompt_tokens` and surface only cache reads
+ * as `cached_tokens` (matching OpenAI's subset semantics).
+ */
+function usageFromMessagesUsage(
+    usage:
+        | {
+              input_tokens?: number | null;
+              output_tokens?: number | null;
+              cache_creation_input_tokens?: number | null;
+              cache_read_input_tokens?: number | null;
+          }
+        | null
+        | undefined,
+): CompletionUsageStats | undefined {
+    if (usage == null) {
+        return undefined;
+    }
+    const uncached = usage.input_tokens;
+    const output = usage.output_tokens;
+    const cacheCreate = usage.cache_creation_input_tokens;
+    const cacheRead = usage.cache_read_input_tokens;
+    if (
+        uncached == null &&
+        output == null &&
+        cacheCreate == null &&
+        cacheRead == null
+    ) {
+        return undefined;
+    }
+    // OpenAI-style total input (Anthropic buckets are exclusive, not nested).
+    const promptTokens =
+        (uncached ?? 0) + (cacheCreate ?? 0) + (cacheRead ?? 0);
+    return usageFromInputOutput(
+        promptTokens,
+        output ?? undefined,
+        cacheRead == null ? undefined : cacheRead,
+    );
+}
+
 export class MessagesWireApiProvider implements ProviderAdapter {
     readonly wireApi: WireApi = "messages";
 
@@ -131,8 +180,7 @@ export class MessagesWireApiProvider implements ProviderAdapter {
     }
 
     extractUsage(data: unknown): CompletionUsageStats | undefined {
-        const usage = (data as Message).usage;
-        return usageFromInputOutput(usage?.input_tokens, usage?.output_tokens);
+        return usageFromMessagesUsage((data as Message).usage);
     }
 
     createStreamDecoder(): StreamDecoder {
@@ -149,15 +197,9 @@ export class MessagesWireApiProvider implements ProviderAdapter {
                 }
 
                 if (evt.type === "message_delta") {
-                    piece.usage = usageFromInputOutput(
-                        evt.usage.input_tokens ?? undefined,
-                        evt.usage.output_tokens,
-                    );
+                    piece.usage = usageFromMessagesUsage(evt.usage);
                 } else if (evt.type === "message_start") {
-                    piece.usage = usageFromInputOutput(
-                        evt.message.usage.input_tokens,
-                        evt.message.usage.output_tokens,
-                    );
+                    piece.usage = usageFromMessagesUsage(evt.message.usage);
                 }
 
                 return piece;

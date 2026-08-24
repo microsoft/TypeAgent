@@ -11,6 +11,17 @@ import {
     getRequestId,
     requestIdToString,
 } from "../context/commandHandlerContext.js";
+import {
+    context as otelContext,
+    isSpanContextValid,
+    SpanStatusCode,
+    trace,
+    type Context,
+} from "@opentelemetry/api";
+import { otel } from "@typeagent/telemetry";
+import { wrapRootRequestSpan } from "../otel/rootRequestSpan.js";
+import { recordSpanFailure } from "../otel/spanFailure.js";
+import { getSessionName } from "../context/session.js";
 
 import {
     CommandDescriptor,
@@ -18,6 +29,7 @@ import {
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
 import { executeCommand } from "../execute/actionHandlers.js";
+import { getErrorDisplayContent } from "../execute/agentNotReadyError.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";
 import { parseParams } from "./parameters.js";
 import { getHandlerTableUsage, getUsage } from "./commandHelp.js";
@@ -29,9 +41,16 @@ import {
 } from "@typeagent/dispatcher-types";
 import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 import { getAppAgentName } from "../internal.js";
+import {
+    logCommandException,
+    logRequestCompleted,
+    logRequestReceived,
+} from "../otel/structuredEvents.js";
 
-const debugCommand = registerDebug("typeagent:dispatcher:command");
-const debugCommandError = registerDebug("typeagent:dispatcher:command:error");
+const debugCommandInfo = registerDebug("typeagent:dispatcher:command:info");
+const debugCommandVerbose = registerDebug(
+    "typeagent:dispatcher:command:verbose",
+);
 
 export type ResolveCommandResult = {
     // the app agent name parsed from the input.
@@ -139,7 +158,7 @@ export function getDefaultSubCommandDescriptor(
 //                in the table.  false when descriptor is the default
 //                subcommand or when descriptor is undefined.
 //
-export async function resolveCommand(
+async function resolveCommandCore(
     input: string,
     context: CommandHandlerContext,
 ): Promise<ResolveCommandResult> {
@@ -231,14 +250,36 @@ export async function resolveCommand(
         matched,
     };
 
-    if (debugCommand.enabled) {
-        debugCommand(`Resolved command:`, {
-            ...result,
+    return result;
+}
+
+function logResolvedCommand(
+    result: ResolveCommandResult,
+    submitted: boolean,
+): void {
+    const debug = submitted ? debugCommandInfo : debugCommandVerbose;
+    if (debug.enabled) {
+        debug(`Resolved command:`, {
+            parsedAppAgentName: result.parsedAppAgentName,
+            actualAppAgentName: result.actualAppAgentName,
+            commands: result.commands,
+            matched: result.matched,
             table: result.table !== undefined,
             descriptor: result.descriptor !== undefined,
         });
     }
+}
 
+/**
+ * Resolve a command outside the submitted-command path, including completion
+ * RPCs. These calls are verbose because completion invokes this per keystroke.
+ */
+export async function resolveCommand(
+    input: string,
+    context: CommandHandlerContext,
+): Promise<ResolveCommandResult> {
+    const result = await resolveCommandCore(input, context);
+    logResolvedCommand(result, false);
     return result;
 }
 
@@ -259,7 +300,8 @@ async function parseCommand(
     context: CommandHandlerContext,
 ) {
     const input = normalizeCommand(originalInput, context);
-    const result = await resolveCommand(input, context);
+    const result = await resolveCommandCore(input, context);
+    logResolvedCommand(result, true);
     if (result.descriptor !== undefined) {
         context.logger?.logEvent("command", {
             originalInput,
@@ -352,13 +394,25 @@ export async function processCommandNoLock(
             attachments,
         );
     } catch (e: any) {
-        if (e.name === "AbortError" || context.currentAbortSignal?.aborted) {
+        if (
+            otel.isTelemetryCancellation(
+                e,
+                context.currentAbortSignal?.aborted === true,
+            )
+        ) {
             throw new DOMException("The operation was aborted.", "AbortError");
+        }
+        const activeSpan = trace.getActiveSpan();
+        if (activeSpan !== undefined) {
+            recordSpanFailure(activeSpan, e, {
+                errorName: "CommandError",
+                failureMessage: "command failed",
+            });
         }
         context.clientIO.appendDisplay(
             makeClientIOMessage(
                 context,
-                {
+                getErrorDisplayContent(e) ?? {
                     type: "text",
                     content: `ERROR: ${e.message}`,
                     kind: "error",
@@ -369,12 +423,16 @@ export async function processCommandNoLock(
             ),
             "block",
         );
-        debugCommandError(e.stack);
 
-        context?.logger?.logEvent("command:exception", {
+        ensureCommandResult(context).disposition = {
+            status: "failed",
+            path: "command",
+            mayHaveSideEffects: false,
+        };
+        logCommandException(context?.logger, {
+            requestId: requestIdToString(getRequestId(context)),
             request: originalInput,
-            message: e.message,
-            stack: e.stack,
+            error: e,
         });
     }
 }
@@ -441,6 +499,7 @@ export async function processCommand(
     requestId: RequestId,
     attachments?: string[],
     options?: ProcessCommandOptions,
+    parentContext?: Context,
 ): Promise<CommandResult | undefined> {
     // Create the AbortController *before* acquiring the lock so that a
     // cancelCommandByClientId() call that arrives while we are queued can
@@ -452,38 +511,113 @@ export async function processCommand(
             abortController,
         );
     }
-    try {
-        // Process one command at a time.
-        return await context.commandLock(async () => {
-            const requestIdStr = requestId.requestId;
-            context.activeRequests.set(requestIdStr, abortController);
-            context.currentOptions = options;
-            beginProcessCommand(
-                requestId,
-                context,
-                options,
-                abortController.signal,
-            );
-            context.clientIO.setUserRequest(requestId, originalInput);
+    // Compute the correlation attributes ONCE, before opening the root
+    // `typeagent.request` span. Values that only become known later
+    // (agent name, action name) are set on the active span by downstream
+    // steps in later phases; the root span carries only the values known
+    // at the outermost async boundary. Everything the wrapper receives is
+    // an identifier, not user text - see setTypeAgentSpanAttributes.
+    const sessionId = context.session.sessionDirPath
+        ? getSessionName(context.session.sessionDirPath)
+        : undefined;
+    const rootAttributes: {
+        -readonly [K in keyof otel.TypeAgentSpanAttributes]: otel.TypeAgentSpanAttributes[K];
+    } = {};
+    if (sessionId !== undefined) rootAttributes.sessionId = sessionId;
+    if (context.activationId !== undefined)
+        rootAttributes.activationId = context.activationId;
+    rootAttributes.requestId = requestId.requestId;
+    if (context.traceId !== undefined) rootAttributes.traceId = context.traceId;
+    // wrapRootRequestSpan opens `typeagent.request` and applies the
+    // correlation attributes; the callback body preserves the original
+    // command flow. startActiveSpan uses AsyncHooks context propagation
+    // so every downstream await (commandLock, processCommandNoLock,
+    // translation/reasoning/action) automatically nests under this span.
+    const rootParentContext =
+        parentContext ??
+        (context.telemetryOptions.joinActiveTrace
+            ? otelContext.active()
+            : undefined);
+    return await wrapRootRequestSpan(
+        rootAttributes,
+        async (span) => {
+            logRequestReceived(context.logger, {
+                requestId: requestId.requestId,
+                ...(requestId.connectionId === undefined
+                    ? {}
+                    : { connectionId: requestId.connectionId }),
+                kind: originalInput.trimStart().startsWith("@")
+                    ? "command"
+                    : "request",
+                attachmentCount: attachments?.length ?? 0,
+            });
             try {
-                await processCommandNoLock(originalInput, context, attachments);
-            } catch (e: any) {
-                if (e.name === "AbortError") {
-                    ensureCommandResult(context).cancelled = true;
-                } else {
-                    throw e;
-                }
+                // Process one command at a time.
+                return await context.commandLock(async () => {
+                    const requestIdStr = requestId.requestId;
+                    context.activeRequests.set(requestIdStr, abortController);
+                    context.currentOptions = options;
+                    beginProcessCommand(
+                        requestId,
+                        context,
+                        options,
+                        abortController.signal,
+                    );
+                    const rootSpanContext = span.spanContext();
+                    const rootTraceId = isSpanContextValid(rootSpanContext)
+                        ? rootSpanContext.traceId
+                        : undefined;
+                    context.clientIO.setUserRequest(requestId, originalInput);
+                    try {
+                        await processCommandNoLock(
+                            originalInput,
+                            context,
+                            attachments,
+                        );
+                    } catch (e: any) {
+                        if (e.name === "AbortError") {
+                            const activeSpan = trace.getActiveSpan();
+                            if (activeSpan !== undefined) {
+                                activeSpan.recordException({
+                                    name: "AbortError",
+                                    message: "cancelled",
+                                });
+                                activeSpan.setStatus({
+                                    code: SpanStatusCode.ERROR,
+                                    message: "cancelled",
+                                });
+                            }
+                            ensureCommandResult(context).cancelled = true;
+                        } else {
+                            throw e;
+                        }
+                    } finally {
+                        context.activeRequests.delete(requestIdStr);
+                        context.currentOptions = undefined;
+                        const result = endProcessCommand(requestId, context);
+                        if (result !== undefined && rootTraceId !== undefined) {
+                            result.traceId = rootTraceId;
+                        }
+                        logRequestCompleted(
+                            context.logger,
+                            requestId.requestId,
+                            result,
+                        );
+                        return result;
+                    }
+                });
             } finally {
-                context.activeRequests.delete(requestIdStr);
-                context.currentOptions = undefined;
-                return endProcessCommand(requestId, context);
+                if (requestId.clientRequestId !== undefined) {
+                    context.activeRequestsByClientId.delete(
+                        requestId.clientRequestId,
+                    );
+                }
             }
-        });
-    } finally {
-        if (requestId.clientRequestId !== undefined) {
-            context.activeRequestsByClientId.delete(requestId.clientRequestId);
-        }
-    }
+        },
+        {
+            parentContext: rootParentContext,
+        },
+    );
 }
 
 export const enum unicodeChar {

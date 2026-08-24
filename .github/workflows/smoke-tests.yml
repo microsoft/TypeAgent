@@ -49,7 +49,7 @@ jobs:
       - name: Get User Permission
         if: ${{ github.event_name == 'pull_request_target' && !contains('github-merge-queue[bot],typeagent-bot[bot]', github.triggering_actor) }}
         id: checkAccess
-        uses: actions-cool/check-user-permission@v2
+        uses: actions-cool/check-user-permission@c21884f3dda18dafc2f8b402fe807ccc9ec1aa5e # v2.4.0
         with:
           require: write
           username: ${{ github.triggering_actor }}
@@ -72,11 +72,11 @@ jobs:
           git config --global core.autocrlf false
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         continue-on-error: true
         with:
@@ -85,13 +85,13 @@ jobs:
               - "ts/**"
               - ".github/workflows/smoke-tests.yml"
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         if: ${{ steps.filter.outputs.ts != 'false' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: ${{ steps.filter.outputs.ts != 'false' }}
         with:
           node-version: ${{ matrix.version }}
@@ -117,7 +117,7 @@ jobs:
 
       - name: Login to Azure
         if: ${{ steps.filter.outputs.ts != 'false' }}
-        uses: azure/login@v2.2.0
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA }}

@@ -5,6 +5,7 @@ import {
     CopilotClient,
     RuntimeConnection,
     approveAll,
+    type ModelInfo,
     type SessionConfig,
 } from "@github/copilot-sdk";
 import { execSync } from "node:child_process";
@@ -26,7 +27,6 @@ import {
 import {
     CopilotApiSettings,
     copilotApiSettingsFromConfig,
-    COPILOT_FALLBACK_MODEL,
 } from "./copilotSettings.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
 import { EndpointPool, makeSingleMemberPool } from "./endpointPool.js";
@@ -37,12 +37,9 @@ import {
 } from "./restClient.js";
 import { readServerEventStream } from "./serverEvents.js";
 import { TokenCounter } from "./tokenCounter.js";
-import {
-    CompletionUsageStats,
-    normalizeOpenAICompatibleUsage,
-    OpenAICompatibleCompletionUsageStats,
-} from "./apiTypes.js";
+import { CompletionUsageStats } from "./apiTypes.js";
 import { registerProviderChatModel } from "./providerChatModelRegistry.js";
+import { otel } from "@typeagent/telemetry";
 
 const debug = registerDebug("typeagent:aiclient:copilot");
 // Per-phase latency breakdown (client start / session create / send / total)
@@ -81,11 +78,43 @@ export interface CopilotEndpointProvider {
  * requested model (e.g. the tenant doesn't offer it and only "auto" is left, or
  * the SDK gate is disabled).
  */
-export class CopilotEndpointUnavailableError extends Error {
+export class CopilotEndpointUnavailableError
+    extends Error
+    implements otel.TelemetryClassifiedError
+{
+    public readonly errorCategory = "provider";
+    public readonly retryable = false;
     constructor(message: string) {
         super(message);
         this.name = "CopilotEndpointUnavailableError";
     }
+}
+
+/**
+ * Turn a thrown value into a failure `Result` that still carries what the
+ * throw said. The message is a private diagnostic never parsed downstream; the
+ * attached classification is the bounded part telemetry reports. An
+ * unrecognized throw gets no classification, leaving the model wrapper's
+ * `provider` fallback as the truthful description.
+ */
+function classifiedFailure(message: string, thrown: unknown): Result<never> {
+    const classification = otel.classifyTelemetryErrorIfRecognized(thrown);
+    const result = error(message);
+    return classification === undefined
+        ? result
+        : otel.attachTelemetryErrorClassification(result, classification);
+}
+
+/**
+ * The failure `Result` for a caller-cancelled call. Stated rather than derived
+ * from the thrown value, because `isAbort` also treats an aborted caller
+ * signal as cancellation when the throw is not shaped like an `AbortError`.
+ */
+function cancelledFailure(): Result<never> {
+    return otel.attachTelemetryErrorClassification(error("Request aborted"), {
+        errorCategory: "cancelled",
+        retryable: false,
+    });
 }
 
 type CopilotSdkLogLevel =
@@ -315,63 +344,125 @@ export async function warmupCopilotFromConfig(): Promise<void> {
     }
 }
 
-// Cached per-model capability info, populated from client.listModels() once per
-// process. Used to (a) fall back to an available model when the configured one
-// isn't offered by the tenant, and (b) decide reasoningEffort (invalid for
-// non-reasoning models; forced to minimal for reasoning models on translation).
-const reasoningSupportCache = new Map<string, boolean>();
-let modelListPromise: Promise<void> | undefined;
+let modelListPromise: Promise<readonly ModelInfo[] | undefined> | undefined;
 
-async function ensureModelList(client: CopilotClient): Promise<void> {
+async function ensureModelList(
+    client: CopilotClient,
+): Promise<readonly ModelInfo[] | undefined> {
     if (modelListPromise === undefined) {
-        modelListPromise = (async () => {
-            try {
-                const models = await client.listModels();
-                for (const m of models) {
-                    reasoningSupportCache.set(
-                        m.id,
-                        m.capabilities?.supports?.reasoningEffort === true,
-                    );
-                }
-            } catch (err) {
-                debug(
-                    `listModels failed; model capabilities unknown: ${
-                        err instanceof Error ? err.message : String(err)
-                    }`,
-                );
-            }
-        })();
+        const pending = client.listModels().catch((err) => {
+            debug(
+                `listModels failed; model capabilities unknown: ${
+                    err instanceof Error ? err.message : String(err)
+                }`,
+            );
+            return undefined;
+        });
+        modelListPromise = pending;
+        const models = await pending;
+        if (models === undefined && modelListPromise === pending) {
+            modelListPromise = undefined;
+        }
+        return models;
     }
-    await modelListPromise;
+    return modelListPromise;
 }
 
-// Resolve the model to actually use for a session, falling back to
-// COPILOT_FALLBACK_MODEL when the requested model isn't offered by the tenant,
-// and reporting whether that model supports reasoning effort. When the model
-// list is unavailable (e.g. listModels failed), the requested model is used
-// as-is and reasoning support is left unknown.
+function isConcreteAvailableModel(model: ModelInfo): boolean {
+    return model.id !== "auto" && model.policy?.state !== "disabled";
+}
+
+function versionedFamily(
+    modelId: string,
+): { family: string; version: number[] } | undefined {
+    const match = /^(.*?)-(\d+(?:\.\d+)*)$/.exec(modelId);
+    if (match === null) return undefined;
+    return {
+        family: match[1],
+        version: match[2].split(".").map(Number),
+    };
+}
+
+function compareVersionsDescending(a: number[], b: number[]): number {
+    const count = Math.max(a.length, b.length);
+    for (let i = 0; i < count; i++) {
+        const difference = (b[i] ?? 0) - (a[i] ?? 0);
+        if (difference !== 0) return difference;
+    }
+    return 0;
+}
+
+export function selectCopilotModel(
+    requested: string,
+    fallbackModels: readonly string[],
+    models: readonly ModelInfo[],
+): ModelInfo | undefined {
+    const available = models.filter(isConcreteAvailableModel);
+    const byId = new Map(available.map((model) => [model.id, model]));
+
+    const requestedModel = byId.get(requested);
+    if (requestedModel !== undefined) return requestedModel;
+
+    for (const fallback of fallbackModels) {
+        const fallbackModel = byId.get(fallback);
+        if (fallbackModel !== undefined) return fallbackModel;
+    }
+
+    const requestedFamily = versionedFamily(requested);
+    if (requestedFamily !== undefined) {
+        const familyModels = available
+            .map((model) => ({
+                model,
+                version: versionedFamily(model.id),
+            }))
+            .filter(
+                (
+                    candidate,
+                ): candidate is {
+                    model: ModelInfo;
+                    version: { family: string; version: number[] };
+                } => candidate.version?.family === requestedFamily.family,
+            )
+            .sort((a, b) =>
+                compareVersionsDescending(a.version.version, b.version.version),
+            );
+        if (familyModels.length > 0) return familyModels[0].model;
+    }
+
+    return available.sort((a, b) => a.id.localeCompare(b.id))[0];
+}
+
+type ResolvedCopilotModel = {
+    model: string;
+    reasoningSupported: boolean | undefined;
+};
+
+// Resolve a concrete model for the direct HTTP transport. If model discovery
+// fails, preserve the requested model so endpoint acquisition can still work.
 async function resolveModel(
     client: CopilotClient,
-    requested: string,
-): Promise<{ model: string; reasoningSupported: boolean | undefined }> {
-    await ensureModelList(client);
-    if (reasoningSupportCache.size === 0) {
-        return { model: requested, reasoningSupported: undefined };
+    settings: CopilotApiSettings,
+): Promise<ResolvedCopilotModel | undefined> {
+    const models = await ensureModelList(client);
+    if (models === undefined) {
+        return { model: settings.modelName, reasoningSupported: undefined };
     }
-    if (reasoningSupportCache.has(requested)) {
-        return {
-            model: requested,
-            reasoningSupported: reasoningSupportCache.get(requested),
-        };
-    }
-    debug(
-        `model "${requested}" not available in this tenant; ` +
-            `falling back to "${COPILOT_FALLBACK_MODEL}"`,
+    const selected = selectCopilotModel(
+        settings.modelName,
+        settings.fallbackModels,
+        models,
     );
+    if (selected === undefined) return undefined;
+    if (selected.id !== settings.modelName) {
+        debug(
+            `model "${settings.modelName}" not available in this tenant; ` +
+                `falling back to "${selected.id}"`,
+        );
+    }
     return {
-        model: COPILOT_FALLBACK_MODEL,
+        model: selected.id,
         reasoningSupported:
-            reasoningSupportCache.get(COPILOT_FALLBACK_MODEL) ?? false,
+            selected.capabilities?.supports?.reasoningEffort === true,
     };
 }
 
@@ -392,7 +483,7 @@ function buildSessionConfig(
             | undefined) ?? settings.reasoningEffort;
     // Simple translation calls don't benefit from model-side "thinking" and it
     // adds significant latency, so we disable it wherever possible:
-    //  - Non-reasoning models (e.g. claude-haiku-4.5): never send reasoningEffort.
+    //  - Non-reasoning models: never send reasoningEffort.
     //    The SDK/CLI rejects it for models where capabilities.supports.reasoningEffort
     //    is false, and these models don't think anyway.
     //  - Reasoning-capable models with no explicit override: force the lowest
@@ -477,10 +568,7 @@ function mapEndpoint(ep: SdkProviderEndpoint, model: string): CopilotEndpoint {
 }
 
 // Acquire a fresh endpoint snapshot through a short-lived SDK session. Passing a
-// concrete `modelId` binds the endpoint to that model; when the requested model
-// isn't offered by the tenant (resolveModel falls back to "auto"), we throw
-// `CopilotEndpointUnavailableError` rather than dealing with an auto-bound
-// session token.
+// concrete `modelId` binds the endpoint and its token to that model.
 async function acquireEndpoint(
     settings: CopilotApiSettings,
 ): Promise<CopilotEndpoint> {
@@ -494,11 +582,31 @@ async function acquireEndpoint(
         cliPath: settings.cliPath,
         cliUrl: settings.cliUrl,
     });
-    const resolved = await resolveModel(client, settings.modelName);
-    if (resolved.model === COPILOT_FALLBACK_MODEL) {
+    try {
+        return await acquireEndpointForCurrentModelList(client, settings);
+    } catch (err) {
+        if (!isModelUnavailableError(err)) throw err;
+        modelListPromise = undefined;
+        return acquireEndpointForCurrentModelList(client, settings);
+    }
+}
+
+function isModelUnavailableError(err: unknown): boolean {
+    const message = err instanceof Error ? err.message : String(err);
+    return /model.*(?:not available|unavailable|not found|disabled)/i.test(
+        message,
+    );
+}
+
+async function acquireEndpointForCurrentModelList(
+    client: CopilotClient,
+    settings: CopilotApiSettings,
+): Promise<CopilotEndpoint> {
+    const resolved = await resolveModel(client, settings);
+    if (resolved === undefined) {
         throw new CopilotEndpointUnavailableError(
-            `Model "${settings.modelName}" is not available in this tenant; ` +
-                `the HTTP transport requires a concrete model.`,
+            `Model "${settings.modelName}" is not available in this tenant, ` +
+                `and no concrete fallback model was found.`,
         );
     }
     const tCreate = Date.now();
@@ -590,13 +698,13 @@ export function createCopilotChatModel(
 // Minimal shape of the CAPI chat-completions response we consume.
 type CapiChatCompletion = {
     choices?: Array<{ message?: { content?: string | null } | undefined }>;
-    usage?: OpenAICompatibleCompletionUsageStats | null | undefined;
+    usage?: CompletionUsageStats | undefined;
 };
 
 // Minimal shape of a streamed CAPI chat-completions chunk.
 type CapiChatCompletionChunk = {
     choices?: Array<{ delta?: { content?: string | null } | undefined }>;
-    usage?: OpenAICompatibleCompletionUsageStats | null | undefined;
+    usage?: CompletionUsageStats | undefined;
 };
 
 function isAbort(err: unknown, signal?: AbortSignal): boolean {
@@ -663,10 +771,11 @@ export function createCopilotTransportModel(
             try {
                 ep = await endpointProvider.getEndpoint();
             } catch (err) {
-                return error(
+                return classifiedFailure(
                     `getEndpoint failed: ${
                         err instanceof Error ? err.message : String(err)
                     }`,
+                    err,
                 );
             }
             member.settings.endpoint = ep.url;
@@ -685,16 +794,14 @@ export function createCopilotTransportModel(
     }
 
     function reportUsage(
-        usage: OpenAICompatibleCompletionUsageStats | null | undefined,
+        usage: CompletionUsageStats | undefined,
         usageCallback?: CompleteUsageStatsCallback,
-    ): CompletionUsageStats | undefined {
-        if (usage == null) return;
-        const normalized = normalizeOpenAICompatibleUsage(usage);
+    ) {
+        if (usage === undefined) return;
         try {
-            TokenCounter.getInstance().add(normalized, tags);
-            usageCallback?.(normalized);
+            TokenCounter.getInstance().add(usage, tags);
+            usageCallback?.(usage);
         } catch {}
-        return normalized;
     }
 
     async function complete(
@@ -722,10 +829,12 @@ export function createCopilotTransportModel(
         try {
             result = await callJsonApiWithPool(pool, request, options);
         } catch (err) {
-            if (isAbort(err, signal)) {
-                return error("Request aborted");
-            }
-            return error(err instanceof Error ? err.message : String(err));
+            return isAbort(err, signal)
+                ? cancelledFailure()
+                : classifiedFailure(
+                      err instanceof Error ? err.message : String(err),
+                      err,
+                  );
         }
 
         // A returned (non-thrown) error means a non-transient status (e.g.
@@ -739,10 +848,12 @@ export function createCopilotTransportModel(
             try {
                 result = await callJsonApiWithPool(pool, request, options);
             } catch (err) {
-                if (isAbort(err, signal)) {
-                    return error("Request aborted");
-                }
-                return error(err instanceof Error ? err.message : String(err));
+                return isAbort(err, signal)
+                    ? cancelledFailure()
+                    : classifiedFailure(
+                          err instanceof Error ? err.message : String(err),
+                          err,
+                      );
             }
             if (!result.success) {
                 return result;
@@ -754,9 +865,6 @@ export function createCopilotTransportModel(
             return error("Copilot chat call returned no choices");
         }
         const content = data.choices[0].message?.content ?? "";
-        if (data.usage != null) {
-            data.usage = normalizeOpenAICompatibleUsage(data.usage);
-        }
 
         if (model.completionCallback) {
             model.completionCallback(params, data);
@@ -861,7 +969,8 @@ export function createCopilotTransportModel(
                         yield delta;
                     }
                     if (chunk.usage) {
-                        tokenUsage = reportUsage(chunk.usage, usageCallback);
+                        tokenUsage = chunk.usage;
+                        reportUsage(chunk.usage, usageCallback);
                     }
                 }
             })(),

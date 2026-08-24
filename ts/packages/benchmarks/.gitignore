@@ -3,3 +3,4 @@ dist/
 data/
 results/
 *.tsbuildinfo
+seal-tools-*.jsonl

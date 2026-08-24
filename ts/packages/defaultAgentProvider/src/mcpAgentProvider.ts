@@ -1,15 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
-import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import {
-    parseToolsJsonSchema,
-    toJSONParsedActionSchema,
-} from "@typeagent/action-schema";
+import { McpConnection, McpTransportConfig } from "./mcp/mcpConnection.js";
+import { convertToolResult } from "./mcp/mcpResult.js";
+import { convertToolsSchema } from "./mcp/mcpSchema.js";
 import { AppAgentProvider } from "agent-dispatcher";
 import {
     ArgDefinitions,
@@ -45,7 +40,7 @@ export type McpAppAgentInfo = {
 export type McpAppAgent = {
     manifest: AppAgentManifest;
     agent: AppAgent;
-    transport: StdioClientTransport | StreamableHTTPClientTransport | undefined;
+    connection: McpConnection | undefined;
     serverProcess?: ChildProcess | undefined;
 };
 export type McpAppAgentRecord = {
@@ -58,10 +53,6 @@ export type McpAppAgentConfig = {
 };
 
 const entryTypeName = "AgentActions";
-function convertSchema(tools: any) {
-    const pas = parseToolsJsonSchema(tools, entryTypeName);
-    return JSON.stringify(toJSONParsedActionSchema(pas));
-}
 
 // Check if anything is already listening on the port — raw TCP, no MCP handshake.
 // This prevents us from launching a second server when one (even a broken one) is
@@ -138,9 +129,9 @@ function createMcpAppAgentTransport(
     appAgentName: string,
     info: McpAppAgentInfo,
     instanceConfig?: McpAppAgentConfig,
-): StdioClientTransport | StreamableHTTPClientTransport {
+): McpTransportConfig {
     if (info.serverUrl !== undefined) {
-        return new StreamableHTTPClientTransport(new URL(info.serverUrl));
+        return { kind: "http", url: info.serverUrl };
     }
 
     const serverScriptPath = info.serverScript;
@@ -174,11 +165,11 @@ function createMcpAppAgentTransport(
             ? "python"
             : "python3"
         : "node";
-    return new StdioClientTransport({
+    return {
+        kind: "stdio",
         command,
         args: [serverScriptPath, ...serverScriptArgs],
-        stderr: "pipe",
-    });
+    };
 }
 
 function getMcpCommandHandlerTable(
@@ -249,10 +240,7 @@ function createMcpAppAgentRecord(
     }
 
     const createMcpAppAgent = async (): Promise<McpAppAgent> => {
-        let transport:
-            | StdioClientTransport
-            | StreamableHTTPClientTransport
-            | undefined;
+        let connection: McpConnection | undefined;
         let serverProcess: ChildProcess | undefined;
         let agent: AppAgent;
         try {
@@ -283,15 +271,19 @@ function createMcpAppAgentRecord(
             const transportUrl =
                 info.serverUrl ?? info.serverScript ?? "(stdio)";
             debug(`[${appAgentName}] connecting transport to ${transportUrl}`);
-            transport = createMcpAppAgentTransport(
+            const config = createMcpAppAgentTransport(
                 appAgentName,
                 info,
                 instanceConfig,
             );
-            const client = new Client({ name: clientName, version });
-            await client.connect(transport as any);
-            debug(`[${appAgentName}] connected, listing tools...`);
-            const tools = (await client.listTools()).tools;
+            connection = await McpConnection.create(
+                { name: clientName, version },
+                config,
+            );
+            debug(
+                `[${appAgentName}] connected (era=${connection.protocolEra}, version=${connection.protocolVersion}), listing tools...`,
+            );
+            const tools = await connection.listTools();
             debug(
                 `[${appAgentName}] found ${tools.length} tool(s): ${tools.map((t) => t.name).join(", ")}`,
             );
@@ -300,38 +292,38 @@ function createMcpAppAgentRecord(
                     `Invalid app agent config ${appAgentName}: No tools found`,
                 );
             }
-            schemaFile.content = convertSchema(tools);
+            const schema = convertToolsSchema(tools, entryTypeName);
+            if (schema.skipped.length > 0) {
+                debugError(
+                    `[${appAgentName}] ${schema.skipped.length} tool(s) skipped: ${schema.skipped
+                        .map((s) => `${s.name} (${s.reason})`)
+                        .join("; ")}`,
+                );
+            }
+            debug(
+                `[${appAgentName}] schema generated for ${schema.accepted.length} tool(s)`,
+            );
+            schemaFile.content = schema.content;
 
+            const activeConnection = connection;
             agent = {
                 executeAction: async (action, context) => {
-                    const result = await client.callTool({
-                        name: action.actionName,
-                        arguments: action.parameters,
-                    });
-
-                    const content: any = result.content;
-                    const text: string[] = [];
-                    for (const item of content) {
-                        switch (item.type) {
-                            case "text":
-                                text.push(item.text);
-                                break;
-                            default:
-                                throw new Error(
-                                    `Action ${action.actionName} return an unsupported content type ${item.type}`,
-                                );
-                        }
-                    }
-                    return createActionResult(text.join("\n"));
+                    const result = await activeConnection.callTool(
+                        action.actionName,
+                        action.parameters as
+                            | Record<string, unknown>
+                            | undefined,
+                    );
+                    return convertToolResult(action.actionName, result);
                 },
             };
         } catch (error: any) {
             debugError(
                 `[${appAgentName}] failed to connect: ${error?.message ?? error}`,
             );
-            if (transport !== undefined) {
-                transport.close();
-                transport = undefined;
+            if (connection !== undefined) {
+                await connection.close().catch(() => {});
+                connection = undefined;
             }
             if (serverProcess !== undefined) {
                 serverProcess.kill();
@@ -359,7 +351,7 @@ function createMcpAppAgentRecord(
         }
         return {
             manifest,
-            transport,
+            connection,
             agent,
             serverProcess,
         };
@@ -416,7 +408,7 @@ export function createMcpAppAgentProvider(
 
         record.agentP
             .then((agentData) => {
-                if (agentData.transport !== undefined) {
+                if (agentData.connection !== undefined) {
                     resolvedManifests.set(appAgentName, agentData.manifest);
                     for (const cb of schemaReadyCallbacks) {
                         cb(appAgentName, agentData.manifest);
@@ -522,16 +514,9 @@ export function createMcpAppAgentProvider(
             if (--record.count === 0) {
                 mcpAppAgents.delete(appAgentName);
                 const agent = await record.agentP;
-                const transport = agent.transport;
-                if (transport !== undefined) {
-                    if (transport instanceof StreamableHTTPClientTransport) {
-                        await transport.close();
-                    } else {
-                        return new Promise<void>((resolve) => {
-                            transport.onclose = resolve;
-                            transport.close();
-                        });
-                    }
+                const connection = agent.connection;
+                if (connection !== undefined) {
+                    await connection.close();
                 }
                 agent.serverProcess?.kill();
             }

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createRpc } from "@typeagent/agent-rpc/rpc";
+import { createRpc, type RpcOptions } from "@typeagent/agent-rpc/rpc";
 import type { RpcChannel } from "@typeagent/agent-rpc/channel";
 import type { Dispatcher, SubmitResult } from "@typeagent/dispatcher-types";
 import type {
@@ -9,6 +9,7 @@ import type {
     DispatcherInvokeFunctions,
     WireSubmitResult,
 } from "./dispatcherTypes.js";
+import type { DispatcherRpcOptions } from "./dispatcherClient.js";
 
 /**
  * Drop the in-process-only `completion` promise from a `SubmitResult` so it
@@ -26,7 +27,24 @@ function toWire(result: SubmitResult): WireSubmitResult {
 export function createDispatcherRpcServer(
     dispatcher: Dispatcher,
     channel: RpcChannel,
+    options?: DispatcherRpcOptions,
 ) {
+    const rpcOptions: RpcOptions | undefined =
+        options?.trustedContextPropagation === true ||
+        options?.logger !== undefined
+            ? {
+                  ...(options.trustedContextPropagation === true
+                      ? {
+                            tracing: {
+                                trustRemoteContext: true,
+                            },
+                        }
+                      : {}),
+                  ...(options.logger === undefined
+                      ? {}
+                      : { logger: options.logger }),
+              }
+            : undefined;
     const dispatcherCallHandler: DispatcherCallFunctions = {
         cancelCommandByClientId(...args) {
             dispatcher.cancelCommandByClientId(...args);
@@ -107,5 +125,6 @@ export function createDispatcherRpcServer(
         channel,
         dispatcherInvokeHandler,
         dispatcherCallHandler,
+        rpcOptions,
     );
 }

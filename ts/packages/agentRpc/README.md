@@ -86,6 +86,76 @@ if (rpc) {
   `docs/plans/.../rpc-rebindable-channel-design.md` (where maintained) for the full
   rationale and the per-consumer assessment.
 
+## OpenTelemetry context propagation
+
+Every `invoke` creates one `CLIENT` span and one `SERVER` span. One-way `send`
+notifications are not traced. The request may carry a versioned metadata envelope
+with bounded W3C `traceparent`/`tracestate` values and the allowlisted TypeAgent
+`agentName`, `actionName`, `traceId`, `sessionId`, and `activationId` metadata
+fields. Values that fail bounds, character validation, or telemetry secret
+filtering are omitted.
+
+Outbound metadata and inbound trust are separate opt-ins. Enable each only for an
+approved destination or transport:
+
+```ts
+createRpc(name, channel, handlers, undefined, {
+  tracing: {
+    propagateContext: true,
+    trustRemoteContext: true,
+    getCorrelationFields: ({ method, args }) =>
+      getCorrelationForInvocation(method, args),
+  },
+});
+```
+
+Additive envelope fields retain version 1. Increment the version only for an
+incompatible interpretation; unsupported versions are ignored during rolling
+upgrades.
+
+These are factory-level primitives. Higher-level RPC factories and their
+composition roots must deliberately thread these options to TypeAgent-owned IPC
+channels; adding the envelope type alone does not activate cross-process
+parenting.
+
+Code shared with browser RPC consumers must import active TypeAgent trace
+metadata from `@typeagent/telemetry/traceContext`. The main
+`@typeagent/telemetry` entry point is Node-only because it includes provider and
+exporter lifecycle support. Failure classification is likewise available
+through the browser-safe `@typeagent/telemetry/errorClassification` subpath.
+
+Cancellation continues to use each application protocol's existing mechanism.
+For example, agent actions send `cancelAction`, abort the server handler, and
+cause the original invoke to reject with `AbortError`. The RPC SERVER and CLIENT
+spans classify that handler rejection with the stable `cancelled` status; the
+telemetry layer does not introduce a second cancellation wire protocol.
+Malformed, oversized, untrusted, or unsupported metadata is ignored without
+failing the invocation.
+
+RPC spans use enqueue-time completion: a SERVER span ends after its terminal
+response is handed to `RpcChannel.send`. The callback is optional in the channel
+contract, so later transport-delivery failures are debug diagnostics rather than
+changes to an already-ended span.
+
+## Structured lifecycle events
+
+Pass a structural logger through `RpcOptions.logger` to emit exactly one
+`rpc:started` and one `rpc:completed` event for each client and server `invoke`
+boundary. Omitting the logger preserves existing behavior and emits nothing.
+Logger failures are isolated from the invocation.
+
+Events contain only bounded operational fields: `role`, `channel`, `method`,
+`callId`, and, on completion, `status`, `success`, `elapsedMs`, optional
+`cancelled`, and normalized failure classification. Invalid or oversized
+channel and method labels become `invalid_channel` and `invalid_method`.
+Arguments, results, raw error messages, stacks, and transport payloads are never
+included.
+
+Completion status is `succeeded`, `failed`, or `cancelled`. Both RPC spans and
+events use the shared cancellation classifier, including its bounded `cause`
+walk, so wrapped cancellation is reported consistently. Only real failures
+carry normalized classification fields.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

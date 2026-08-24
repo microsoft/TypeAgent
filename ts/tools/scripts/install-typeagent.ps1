@@ -17,13 +17,15 @@
        variant bundles those runtimes, so this step is skipped.
     3. Downloads the agent-server Universal package for this RID from the feed.
     4. Installs and registers the Copilot CLI plugin (from feed by default, or -PluginSource).
-    5. Runs config provisioning and starts the daemon via the artifact's
+    5. When VS Code 1.133 or newer is present, installs TypeAgent Chat and
+       creates a desktop shortcut that enables the proposed chat sessions API.
+    6. Runs config provisioning and starts the daemon via the artifact's
        typeagent-serve.mjs. Config provisioning depends on -Provider:
          aisystems (default) - getKeys + browser login (AI Systems Key Vault).
          ollama / copilot     - synthesize config.local.yaml locally (no Key Vault).
-    6. Registers a per-user Scheduled Task (logon trigger) so the agent-server
+    7. Registers a per-user Scheduled Task (logon trigger) so the agent-server
        starts again after logout/reboot. Skip with -NoAutoStart.
-    7. (Optional, -DevTunnel) sets up a Microsoft Dev Tunnel and hosts it so a
+    8. (Optional, -DevTunnel) sets up a Microsoft Dev Tunnel and hosts it so a
        client on another device can reach the service.
 
   Azure CLI (with az login) is used to download from the feed. This is the
@@ -38,7 +40,9 @@
   pwsh ./install-typeagent.ps1 -DevTunnel   # also expose the service via a Dev Tunnel
   pwsh ./install-typeagent.ps1 -BootstrapPrereqs
   pwsh ./install-typeagent.ps1 -Upgrade     # force fresh download, replacing existing assets
-    pwsh ./install-typeagent.ps1 -PluginSource C:\temp\typeagent-plugin   # install plugin from local folder
+  pwsh ./install-typeagent.ps1 -PluginSource C:\temp\typeagent-plugin   # install plugin from local folder
+  pwsh ./install-typeagent.ps1 -VsCodeChatSource C:\temp\typeagent-vscode-chat.vsix
+  pwsh ./install-typeagent.ps1 -NoVsCodeChat   # skip native VS Code integration
   pwsh ./install-typeagent.ps1 -Shell -ShellStorage myacct -ShellContainer mycontainer   # also install the desktop shell
 #>
 
@@ -60,6 +64,15 @@ param(
     [string]$PluginInstallDir = "$env:USERPROFILE\.copilot\available-plugins\typeagent",
     [string]$PluginMarketplaceName = "typeagent-local",
     [string]$PluginMarketplaceDir = "$env:USERPROFILE\.copilot\marketplaces\typeagent-local",
+    # Install the native TypeAgent Chat extension when compatible VS Code is
+    # present. Pass -NoVsCodeChat to skip this component.
+    [switch]$NoVsCodeChat,
+    # Local VSIX file or directory containing one VSIX. When omitted, the
+    # extension is downloaded from the TypeAgent Universal Package feed.
+    [string]$VsCodeChatSource = "",
+    [string]$VsCodeChatVersion = "latest",
+    [string]$VsCodeChatPackageName = "typeagent-vscode-chat",
+    [string]$VsCodeChatInstallDir = "$env:LOCALAPPDATA\TypeAgent\vscode-chat",
     [switch]$NoStart,
     # Opt-out: by default the installer registers a per-user Scheduled Task so the
     # agent-server starts again at logon. Pass -NoAutoStart to skip registration.
@@ -581,7 +594,95 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  Copilot plugin '$pluginName' registered successfully"
 
-# --- 5. Provision config + start the daemon ----------------------------------
+# --- 5. Install the native VS Code Chat extension ----------------------------
+$vscodeChatInstalled = $false
+if (-not $NoVsCodeChat) {
+    $vscodeChatHelper = Join-Path (Split-Path -Parent $PSScriptRoot) "installers\common\install-vscode-chat.ps1"
+    if (-not (Test-Path -LiteralPath $vscodeChatHelper)) {
+        Fail "Shared VS Code Chat installer not found: $vscodeChatHelper"
+    }
+
+    $psExe = (Get-Process -Id $PID).Path
+    if (-not $psExe) {
+        $psExe = "powershell.exe"
+    }
+
+    Write-Step "Checking for compatible VS Code"
+    & $psExe -NoProfile -ExecutionPolicy Bypass -File $vscodeChatHelper -Action Discover
+    $discoveryExitCode = $LASTEXITCODE
+    if ($discoveryExitCode -eq 2) {
+        Write-Host "  VS Code was not found. Skipping TypeAgent Chat and desktop shortcut." -ForegroundColor Yellow
+    } elseif ($discoveryExitCode -eq 3) {
+        Write-Host "  VS Code is older than 1.133.0. Skipping TypeAgent Chat and desktop shortcut." -ForegroundColor Yellow
+    } elseif ($discoveryExitCode -ne 0) {
+        Fail "VS Code discovery failed. See $env:LOCALAPPDATA\TypeAgent\logs\vscode-chat-install.log."
+    } else {
+        Write-Step "Installing TypeAgent Chat for VS Code"
+        $vscodeChatVsix = ""
+        if ($VsCodeChatSource) {
+            if (Test-Path -LiteralPath $VsCodeChatSource -PathType Leaf) {
+                $vscodeChatVsix = (Resolve-Path -LiteralPath $VsCodeChatSource).Path
+            } elseif (Test-Path -LiteralPath $VsCodeChatSource -PathType Container) {
+                $vsixFiles = @(Get-ChildItem -LiteralPath $VsCodeChatSource -Filter "*.vsix" -File)
+                if ($vsixFiles.Count -ne 1) {
+                    Fail "Expected exactly one VSIX in '$VsCodeChatSource'; found $($vsixFiles.Count)."
+                }
+                $vscodeChatVsix = $vsixFiles[0].FullName
+            } else {
+                Fail "VS Code Chat source not found: $VsCodeChatSource"
+            }
+        } else {
+            if (Test-Path -LiteralPath $VsCodeChatInstallDir) {
+                Remove-Item -LiteralPath $VsCodeChatInstallDir -Recurse -Force
+            }
+            New-Item -ItemType Directory -Force -Path $VsCodeChatInstallDir | Out-Null
+
+            $resolvedVsCodeChatVersion = $VsCodeChatVersion
+            if ($VsCodeChatVersion -eq "latest") {
+                Write-Host "  Resolving latest version for $VsCodeChatPackageName..."
+                $resolvedVsCodeChatVersion = Resolve-LatestUniversalPackageVersion `
+                    -Organization $Org `
+                    -ProjectName $Project `
+                    -FeedName $Feed `
+                    -PackageName $VsCodeChatPackageName
+                Write-Host "  Resolved VS Code Chat version: $resolvedVsCodeChatVersion"
+            }
+
+            Write-Host "  Downloading $VsCodeChatPackageName ($resolvedVsCodeChatVersion) -> $VsCodeChatInstallDir"
+            $vscodeChatDownloadArgs = @(
+                "artifacts", "universal", "download",
+                "--organization", $Org,
+                "--project", $Project,
+                "--scope", "project",
+                "--feed", $Feed,
+                "--name", $VsCodeChatPackageName,
+                "--version", $resolvedVsCodeChatVersion,
+                "--path", $VsCodeChatInstallDir,
+                "--only-show-errors"
+            )
+            [void](Invoke-UniversalPackageDownload `
+                -Arguments $vscodeChatDownloadArgs `
+                -PackageName $VsCodeChatPackageName)
+
+            $vsixFiles = @(Get-ChildItem -LiteralPath $VsCodeChatInstallDir -Filter "*.vsix" -File)
+            if ($vsixFiles.Count -ne 1) {
+                Fail "Expected exactly one VSIX in '$VsCodeChatInstallDir'; found $($vsixFiles.Count)."
+            }
+            $vscodeChatVsix = $vsixFiles[0].FullName
+        }
+
+        & $psExe -NoProfile -ExecutionPolicy Bypass -File $vscodeChatHelper `
+            -Action Install `
+            -Owner standalone `
+            -VsixPath $vscodeChatVsix
+        if ($LASTEXITCODE -ne 0) {
+            Fail "TypeAgent Chat installation failed. See $env:LOCALAPPDATA\TypeAgent\logs\vscode-chat-install.log."
+        }
+        $vscodeChatInstalled = $true
+    }
+}
+
+# --- 6. Provision config + start the daemon ----------------------------------
 if ($Provider -eq "aisystems") {
     Write-Step "Provisioning config (getKeys, browser login)"
     $provisionOutput = & node $serve provision 2>&1
@@ -689,7 +790,7 @@ if (-not $hasEmbeddingEnv -and -not $hasEmbeddingInFile) {
     Write-Warning $msg
 }
 
-# --- 6. Optional: set up + host a Dev Tunnel for cross-device access ----------
+# --- 7. Optional: set up + host a Dev Tunnel for cross-device access ----------
 if ($DevTunnel) {
     Write-Step "Setting up Dev Tunnel (cross-device access)"
     if (-not (Test-Command devtunnel)) {
@@ -770,8 +871,11 @@ Write-Host "  Autostart: node `"$serve`" autostart status"
 if ($DevTunnel) {
     Write-Host "  Tunnel:   node `"$serve`" tunnel status   (list-tunnels.mjs shows the client URL + token)"
 }
+if ($vscodeChatInstalled) {
+    Write-Host "  VS Code:  TypeAgent Chat installed; launch from the 'TypeAgent Chat' desktop shortcut"
+}
 
-# --- 7. Optional: install the TypeAgent Shell desktop app --------------------
+# --- 8. Optional: install the TypeAgent Shell desktop app --------------------
 if ($Shell) {
     Write-Step "Installing TypeAgent Shell (desktop app)"
     $installShellScript = Join-Path $PSScriptRoot "install-shell.ps1"

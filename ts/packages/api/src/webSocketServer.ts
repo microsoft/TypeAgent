@@ -10,6 +10,7 @@ export class TypeAgentAPIWebSocketServer {
     constructor(
         webServer: Server<any, any>,
         connectCallback: (ws: WebSocket) => void,
+        requestExit: (exitCode: number) => void,
     ) {
         this.server = new WebSocketServer({
             server: webServer,
@@ -23,8 +24,8 @@ export class TypeAgentAPIWebSocketServer {
         this.server.on("error", (error: string) => {
             console.error(`WebSocket server error: ${error}`);
             this.server.close();
-            process.send!("Failure");
-            process.exit(1);
+            process.send?.("Failure");
+            requestExit(1);
         });
 
         this.server.on("connection", (ws: WebSocket, req: IncomingMessage) => {
@@ -50,12 +51,6 @@ export class TypeAgentAPIWebSocketServer {
 
             // messages from web clients arrive here
             connectCallback(ws);
-        });
-
-        process.on("disconnect", () => {
-            // Parent process has disconnected, close the WebSocket server and exit
-            this.server.close();
-            process.exit(1);
         });
     }
 

@@ -10,6 +10,7 @@ import {
 } from "@typeagent/agent-server-client";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { awaitCommand } from "@typeagent/dispatcher-types";
+import { exitCli } from "../../telemetry.js";
 
 const CLI_CONVERSATION_NAME = "CLI";
 
@@ -94,6 +95,6 @@ export default class TranslateCommand extends Command {
             await connection?.close();
         }
 
-        process.exit(0);
+        exitCli(0);
     }
 }

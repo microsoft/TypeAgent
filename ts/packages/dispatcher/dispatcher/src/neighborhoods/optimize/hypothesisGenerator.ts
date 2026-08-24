@@ -12,6 +12,7 @@
 // for diffing two attempts archives produced by the same corpus).
 
 import type { AttemptRecord, CaseDescription, Hypothesis } from "./types.js";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 import {
     listLevers,
     type LeverPlugin,
@@ -49,10 +50,18 @@ export async function generateHypotheses(
     const out: Hypothesis[] = [];
 
     for (const lever of levers) {
-        const proposed = await lever.proposeHypotheses(
-            opts.caseDesc,
-            opts.priorAttempts,
-            opts.ctx,
+        const proposed = await withChatModelTelemetryContext(
+            {
+                phase: "background",
+                purpose: "optimization-hypothesis-generation",
+                scope: "background",
+            },
+            () =>
+                lever.proposeHypotheses(
+                    opts.caseDesc,
+                    opts.priorAttempts,
+                    opts.ctx,
+                ),
         );
         for (const h of proposed) {
             // Levers MAY return IDs (typically of the form

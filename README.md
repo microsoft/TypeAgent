@@ -77,6 +77,7 @@ Code in this repo does not collect telemetry by default.
 ## Roadmap
 
 - Publish libraries for agent memory and action dispatch.
+- Create shareable install vehicles and dynamic agent discovery and loading.
 
 ## Limitations
 
@@ -136,7 +137,6 @@ See more information about working with the repo [here](./docs/content/help/dev.
   - [Turtle](./ts/packages/agents/turtle/)
   - [Phone](.ts/packages/agents/phone/)
   - [Photo](.ts/packages/agents/photo/)
-  - [androidMobile](.ts/packages/agents/androidMobile/)
 
 ## Questions
 

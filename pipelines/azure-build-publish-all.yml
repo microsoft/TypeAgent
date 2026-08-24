@@ -42,6 +42,10 @@ parameters:
     type: boolean
     default: true
     displayName: "Publish copilot-plugin Universal package"
+  - name: publishVsCodeChat
+    type: boolean
+    default: true
+    displayName: "Publish TypeAgent VS Code Chat Universal package"
   - name: publishMcp
     type: boolean
     default: true
@@ -172,6 +176,23 @@ stages:
             displayName: "Upload artifact: copilot-plugin"
             artifact: copilot-plugin
 
+          - script: |
+              pnpm --filter vscode-chat run package
+            displayName: "Package TypeAgent VS Code Chat"
+            workingDirectory: $(buildDirectory)
+
+          - bash: |
+              set -euo pipefail
+              mkdir -p "$(stagingDir)/vscode-chat"
+              cp "packages/vscode-chat/dist-pub/vscode-chat.vsix" \
+                "$(stagingDir)/vscode-chat/typeagent-vscode-chat.vsix"
+            displayName: "Stage TypeAgent VS Code Chat artifact"
+            workingDirectory: $(buildDirectory)
+
+          - publish: $(stagingDir)/vscode-chat
+            displayName: "Upload artifact: vscode-chat"
+            artifact: vscode-chat
+
       # ── Job 1b: Platform-specific artifacts (matrix) ──────────────
       # Produces: bundled agent-server, optional agent bundles, MCP exe per RID.
       - job: build_platform_artifacts
@@ -241,6 +262,13 @@ stages:
             env:
               PUPPETEER_SKIP_DOWNLOAD: "true"
               PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+
+          - bash: |
+              set -euo pipefail
+              sudo apt-get update
+              sudo apt-get install -y libsecret-1-0
+            displayName: "Install libsecret-1-0"
+            condition: eq(variables['Agent.OS'], 'Linux')
 
           - script: |
               node tools/scripts/validateBundledArtifact.mjs --dir "$(stagingDir)/agent-server"
@@ -694,6 +722,34 @@ stages:
             displayName: "Upload pipeline artifact (for inspection)"
             artifact: copilot-plugin-published
 
+      # ── Publish VS Code Chat Universal package ───────────────────
+      - job: publish_vscode_chat
+        displayName: "Publish TypeAgent VS Code Chat"
+        condition: eq('${{ parameters.publishVsCodeChat }}', 'true')
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: none
+
+          - download: current
+            artifact: vscode-chat
+            displayName: "Download vscode-chat artifact"
+
+          - bash: |
+              set -euo pipefail
+              az extension add --name azure-devops --only-show-errors || true
+              echo "Publishing typeagent-vscode-chat v$(packageVersion)"
+              az artifacts universal publish \
+                --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project \
+                --feed "$(adoFeed)" \
+                --name "typeagent-vscode-chat" \
+                --version "$(packageVersion)" \
+                --path "$(Pipeline.Workspace)/vscode-chat" \
+                --description "TypeAgent native VS Code Chat extension"
+            displayName: "Publish typeagent-vscode-chat"
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
       # ── Publish MCP exe Universal packages ────────────────────────
       - job: publish_mcp
         displayName: "Publish typeagent-mcp"
@@ -828,7 +884,7 @@ stages:
 
       # ── Build, sign, and publish MSI ──────────────────────────────
       # The MSI job must run on Windows (WiX + signtool). It downloads
-      # the agent-server and copilot-plugin artifacts built in Stage 1
+      # the agent-server, copilot-plugin, and vscode-chat artifacts built in Stage 1
       # instead of rebuilding from source.
       - job: build_sign_publish_msi
         displayName: "Build, sign & publish MSI"
@@ -858,6 +914,10 @@ stages:
           - download: current
             artifact: copilot-plugin
             displayName: "Download copilot-plugin"
+
+          - download: current
+            artifact: vscode-chat
+            displayName: "Download vscode-chat"
 
           # Set up internal npm registry (required by org policy).
           - bash: |
@@ -931,19 +991,23 @@ stages:
               Set-Location "$(buildDirectory)/tools/scripts"
               $agentDir  = "$(Pipeline.Workspace)/agent-server-win32-x64"
               $pluginDir = "$(Pipeline.Workspace)/copilot-plugin"
+              $vscodeChatVsix = "$(Pipeline.Workspace)/vscode-chat/typeagent-vscode-chat.vsix"
               Write-Host "Building MSI with:"
               Write-Host "  - RID:        $(msiRid)"
               Write-Host "  - Version:    $(packageVersion)"
               Write-Host "  - Agent dir:  $agentDir"
               Write-Host "  - Plugin dir: $pluginDir"
+              Write-Host "  - VSIX:       $vscodeChatVsix"
 
               node .\build-msi.mjs `
                 --rid "$(msiRid)" `
                 --skip-download `
                 --agent-dir "$agentDir" `
                 --plugin-dir "$pluginDir" `
+                --vscode-chat-vsix "$vscodeChatVsix" `
                 --version "$(packageVersion)" `
                 --plugin-version "$(packageVersion)" `
+                --vscode-chat-version "$(packageVersion)" `
                 --shell-storage "$(azureStorageAccountName)" `
                 --shell-container "$(azureStorageContainerName)" `
                 --shell-channel "$(resolvedChannel)" `

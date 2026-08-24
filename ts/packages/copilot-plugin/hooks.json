@@ -5,14 +5,14 @@
       {
         "type": "command",
         "command": "node ${PLUGIN_ROOT}/dist/hooks/hook-router.js",
-        "timeout": 30000
+        "timeout": 300000
       }
     ],
     "agentStop": [
       {
         "type": "command",
         "command": "node ${PLUGIN_ROOT}/dist/hooks/hook-agent-stop.js",
-        "timeout": 10000
+        "timeout": 30000
       }
     ],
     "postToolUse": [

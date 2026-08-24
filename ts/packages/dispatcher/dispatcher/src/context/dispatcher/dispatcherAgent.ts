@@ -43,6 +43,7 @@ import { MatchCommandHandler } from "./handlers/matchCommandHandler.js";
 import { DispatcherEmoji } from "./dispatcherUtils.js";
 import { getHistoryContext } from "../../translation/interpretRequest.js";
 import { processCommandNoLock } from "../../command/command.js";
+import { withChatModelTelemetryPurpose } from "@typeagent/aiclient";
 import { PreferenceMember } from "../collisionPreferences.js";
 import { ReasoningAction } from "./schema/reasoningActionSchema.js";
 import {
@@ -456,7 +457,10 @@ async function clarifyWithLookup(
     const translator = getLookupClarifyTranslator(systemContext);
 
     const question = `What is ${action.parameters.reference}?`;
-    const result = await translator.translate(question);
+    const result = await withChatModelTelemetryPurpose(
+        "entity-resolution",
+        () => translator.translate(question),
+    );
 
     if (!result.success) {
         return undefined;

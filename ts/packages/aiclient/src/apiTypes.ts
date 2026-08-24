@@ -25,32 +25,16 @@ export type ModelProviders = "openai" | "azure" | "ollama" | "copilot";
 export type CompletionUsageStats = {
     // Number of tokens in the generated completion
     completion_tokens: number;
-    // Number of tokens in the prompt
+    // Number of tokens in the prompt (full input, OpenAI-style).
+    // Includes any cached prompt tokens when the provider reports them.
     prompt_tokens: number;
     // Total tokens (prompt + completion)
     total_tokens: number;
-    // Cached tokens are a subset of prompt_tokens (prompt cache hits).
+    // Cache-read subset of prompt_tokens (OpenAI-style). Not additive —
+    // already counted inside prompt_tokens. Wire adapters normalize other
+    // providers (e.g. Anthropic exclusive cache buckets) to this shape.
     cached_tokens?: number;
 };
-
-/** OpenAI-compatible usage payloads may nest cache stats under details. */
-export type OpenAICompatibleCompletionUsageStats = CompletionUsageStats & {
-    prompt_tokens_details?: { cached_tokens?: number };
-};
-
-/** Flatten provider usage into CompletionUsageStats (cached_tokens only). */
-export function normalizeOpenAICompatibleUsage(
-    usage: OpenAICompatibleCompletionUsageStats,
-): CompletionUsageStats {
-    const cachedTokens =
-        usage.prompt_tokens_details?.cached_tokens ?? usage.cached_tokens;
-    return {
-        completion_tokens: usage.completion_tokens,
-        prompt_tokens: usage.prompt_tokens,
-        total_tokens: usage.total_tokens,
-        ...(cachedTokens !== undefined && { cached_tokens: cachedTokens }),
-    };
-}
 
 /**
  * Environment variables used to configure OpenAI clients
