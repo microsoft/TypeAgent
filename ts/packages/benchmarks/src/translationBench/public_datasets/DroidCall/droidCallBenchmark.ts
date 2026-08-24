@@ -86,7 +86,10 @@ export interface DroidCallBenchmarkCase {
 export function toDroidCallFunctionTool(
     tool: DroidCallTool,
 ): OpenAIFunctionTool {
-    const properties: Record<string, Record<string, unknown>> = {};
+    const properties = Object.create(null) as Record<
+        string,
+        Record<string, unknown>
+    >;
     const required: string[] = [];
     for (const [name, spec] of Object.entries(tool.arguments)) {
         const jsonType = JSON_TYPES[spec.type];
@@ -173,7 +176,9 @@ export function toDroidCallBenchmarkCase(
         sourceUrl: `https://huggingface.co/datasets/${DROIDCALL_SOURCE.dataset}`,
         sourcePart: "query+answers+tools",
         rawRowHash: hash(JSON.stringify(row)),
-        sourceSliceHash: hash(JSON.stringify([row.query, row.answers])),
+        sourceSliceHash: hash(
+            JSON.stringify([row.query, row.answers, row.tools]),
+        ),
         canonicalPayloadHash: hash(canonical),
         transformVersion: 1,
     };
