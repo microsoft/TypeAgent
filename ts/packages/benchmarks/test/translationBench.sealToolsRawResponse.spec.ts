@@ -5,7 +5,7 @@ import { PythonNumber } from "../src/translationBench/public_datasets/pythonLite
 import {
     parseSealToolsRawResponse,
     restoreSealToolsRawActions,
-} from "../src/translationBench/public_datasets/Seal-Tools/sealToolsRawResponse.js";
+} from "../src/translationBench/public_datasets/Seal-Tools/sealToolsScorer.js";
 
 describe("Seal-Tools raw responses", () => {
     it("restores the newest complete action list", () => {
