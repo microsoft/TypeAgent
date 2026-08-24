@@ -245,6 +245,34 @@ describe("seed-qa source import (generic adapter)", () => {
         expect(tea.history).toBeDefined();
     });
 
+    it("accepts array input and skips invalid rows without renumbering", () => {
+        const text = JSON.stringify([
+            {
+                id: 42,
+                query: "Set a timer.",
+                function_calls: [],
+            },
+        ]);
+        const candidates = importTranslationBenchSourceCandidates(text, {
+            adapter: "seed-qa-jsonl",
+            manifest: manifest(text),
+        });
+        expect(candidates).toHaveLength(1);
+        expect(candidates[0]?.candidateId).toBe("42:query");
+
+        const jsonl = [
+            "{bad json}",
+            JSON.stringify({ query: "Set a timer.", function_calls: [] }),
+        ].join("\n");
+        const recovered = importTranslationBenchSourceCandidates(jsonl, {
+            adapter: "seed-qa-jsonl",
+            manifest: manifest(jsonl),
+            skipInvalidRows: true,
+        });
+        expect(recovered[0]?.candidateId).toBe("row-1:query");
+        expect(recovered[0]?.lineage.rowIndex).toBe(1);
+    });
+
     it("rejects hash mismatches against the manifest pin", () => {
         const text = sourceText();
         expect(() =>

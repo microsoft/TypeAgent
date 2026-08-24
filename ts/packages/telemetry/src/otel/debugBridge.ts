@@ -10,6 +10,11 @@ import {
     INSTRUMENTATION_SCOPE_NAME,
     INSTRUMENTATION_SCOPE_VERSION,
 } from "./instrumentation.js";
+import {
+    classifyDebugNamespace,
+    DEBUG_CLASS_ATTRIBUTE,
+    DEBUG_NAMESPACE_ATTRIBUTE,
+} from "./debugClass.js";
 import { redactText, type RedactionOptions } from "./redaction.js";
 
 export interface DebugModule {
@@ -207,8 +212,10 @@ function emitDebugRecord(
             logger.enabled({
                 context: activeContext,
                 severityNumber: SeverityNumber.DEBUG,
+                eventName: "debug",
             })
         ) {
+            const cls = classifyDebugNamespace(namespace);
             const rendered = format(...args).replace(ANSI_ESCAPE, "");
             const redacted =
                 rendered.length <= MAX_BODY_LENGTH
@@ -225,7 +232,8 @@ function emitDebugRecord(
                 eventName: "debug",
                 body,
                 attributes: {
-                    "debug.namespace": namespace,
+                    [DEBUG_NAMESPACE_ATTRIBUTE]: namespace,
+                    [DEBUG_CLASS_ATTRIBUTE]: cls,
                 },
             });
         }

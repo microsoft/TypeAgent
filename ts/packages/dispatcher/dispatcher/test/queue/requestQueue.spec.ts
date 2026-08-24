@@ -548,6 +548,29 @@ describe("RequestQueue", () => {
         expect(callCount).toBe(2);
     });
 
+    it("marks a failed command result as a failed queue entry", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { queue } = makeQueue(dispatcher);
+        const entry = queue.submit({
+            text: "a",
+            originatorConnectionId: "c1",
+        });
+        await flush();
+        dispatcher.calls[0].resolve({
+            disposition: {
+                status: "failed",
+                path: "command",
+                mayHaveSideEffects: false,
+            },
+        });
+
+        await expect(entry.completion).resolves.toMatchObject({
+            disposition: { status: "failed" },
+        });
+        expect(entry.state).toBe("failed");
+        expect(entry.error).toBe("command failed");
+    });
+
     // T3
     it("a throwing broadcaster does not break internal state or subsequent broadcasts", async () => {
         const dispatcher = new ControllableDispatcher();
@@ -939,6 +962,26 @@ describe("RequestQueue", () => {
         expect(
             events.filter((e) => e.type === "snapshot").length,
         ).toBeGreaterThan(snapsBefore);
+    });
+
+    it("rejects cancellation after the inner command has settled", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { queue, events } = makeQueue(dispatcher);
+        const entry = queue.submit({
+            text: "a",
+            originatorConnectionId: "c1",
+        });
+        await flush();
+
+        const lateCancel = dispatcher.calls[0].promise.then(() =>
+            queue.cancelRunning(entry.requestId, "user"),
+        );
+        dispatcher.calls[0].resolve({});
+
+        await expect(lateCancel).resolves.toBe(false);
+        await expect(entry.completion).resolves.toEqual({});
+        expect(entry.state).toBe("succeeded");
+        expect(events.some((event) => event.type === "cancelled")).toBe(false);
     });
 
     // Reason captured by cancelRunning must surface as `cancelled:<reason>`

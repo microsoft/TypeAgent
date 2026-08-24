@@ -412,6 +412,13 @@ export type CommandHandlerContext = {
     currentRequestId: RequestId | undefined;
     currentAbortSignal: AbortSignal | undefined;
     currentOptions?: ProcessCommandOptions | undefined;
+    codingAffinity?:
+        | {
+              workingDirectory: string;
+              copilotSessionId?: string;
+          }
+        | undefined;
+    codingSessions: Map<string, { sessionId: string; lastUsedAt: number }>;
     activeRequests: Map<string, AbortController>;
     activeRequestsByClientId: Map<unknown, AbortController>;
     noReasoning: boolean;
@@ -1234,6 +1241,7 @@ export async function initializeCommandHandlerContext(
                     ? getSessionName(context.session.sessionDirPath)
                     : undefined,
             activationId,
+            requestId: () => context.currentRequestId?.requestId,
         });
 
         const cacheDir = persistDir ? ensureCacheDir(persistDir) : undefined;
@@ -1295,6 +1303,8 @@ export async function initializeCommandHandlerContext(
             commandLock: createLimiter(1), // Make sure we process one command at a time.
             currentRequestId: undefined,
             currentAbortSignal: undefined,
+            codingAffinity: undefined,
+            codingSessions: new Map(),
             activeRequests: new Map<string, AbortController>(),
             activeRequestsByClientId: new Map<unknown, AbortController>(),
             noReasoning: false,
@@ -1399,6 +1409,7 @@ export async function initializeCommandHandlerContext(
                         result?.metrics,
                         result?.tokenUsage,
                         result?.actionTokenUsage,
+                        result?.traceId,
                     );
                     context.displayLog.saveQueued();
                 } catch {

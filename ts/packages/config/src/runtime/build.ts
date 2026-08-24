@@ -865,6 +865,7 @@ function buildModelProvider(
 
 function buildCopilot(flat: Map<string, string>) {
     const defaultModel = popString(flat, "COPILOT_DEFAULT_MODEL");
+    const fallbackModelsRaw = popString(flat, "COPILOT_FALLBACK_MODELS");
     const cliPath = popString(flat, "COPILOT_CLI_PATH");
     const cliUrl = popString(flat, "COPILOT_CLI_URL");
     const reasoningEffortRaw = popString(flat, "COPILOT_REASONING_EFFORT");
@@ -879,6 +880,7 @@ function buildCopilot(flat: Map<string, string>) {
 
     if (
         defaultModel === undefined &&
+        fallbackModelsRaw === undefined &&
         cliPath === undefined &&
         cliUrl === undefined &&
         reasoningEffortRaw === undefined &&
@@ -907,9 +909,27 @@ function buildCopilot(flat: Map<string, string>) {
         enableLogging === undefined
             ? undefined
             : enableLogging === "1" || enableLogging.toLowerCase() === "true";
+    let fallbackModels: string[] | undefined;
+    if (fallbackModelsRaw !== undefined) {
+        try {
+            const parsed: unknown = JSON.parse(fallbackModelsRaw);
+            if (
+                Array.isArray(parsed) &&
+                parsed.every((value) => typeof value === "string")
+            ) {
+                fallbackModels = parsed;
+            }
+        } catch {
+            fallbackModels = fallbackModelsRaw
+                .split(",")
+                .map((value) => value.trim())
+                .filter((value) => value.length > 0);
+        }
+    }
 
     return {
         ...(defaultModel !== undefined ? { defaultModel } : {}),
+        ...(fallbackModels !== undefined ? { fallbackModels } : {}),
         ...(cliPath !== undefined ? { cliPath } : {}),
         ...(cliUrl !== undefined ? { cliUrl } : {}),
         ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),

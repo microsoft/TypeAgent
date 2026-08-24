@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/client";
 import type {
@@ -13,7 +11,7 @@ import type {
 } from "@typeagent/copilot-macros";
 import { JsonlMcpAuditSink, type McpAuditSink } from "./mcpAudit.js";
 import { McpConnection } from "./mcpConnection.js";
-import { importMcpConfig } from "./mcpConfigImport.js";
+import { McpConfigDiscovery } from "./mcpConfigDiscovery.js";
 import {
     SessionMcpCredentialStore,
     type McpCredentialStore,
@@ -230,59 +228,13 @@ export class McpReplayHost implements ReplayToolHost {
     private async discoverConfigs(
         cwd: string,
     ): Promise<NormalizedMcpServerConfig[]> {
-        const sources = [
-            { filePath: path.join(cwd, ".mcp.json"), source: "workspace" },
-            {
-                filePath: path.join(cwd, ".github", "mcp.json"),
-                source: "github-workspace",
-            },
-            {
-                filePath: path.join(cwd, ".vscode", "mcp.json"),
-                source: "vscode-workspace",
-            },
-            {
-                filePath: path.join(
-                    os.homedir(),
-                    ".copilot",
-                    "mcp-config.json",
-                ),
-                source: "copilot-user",
-            },
-        ];
-        const configs: NormalizedMcpServerConfig[] = [];
-        for (const source of sources) {
-            let parsed: unknown;
-            try {
-                parsed = JSON.parse(await readFile(source.filePath, "utf8"));
-            } catch (error) {
-                if ((error as NodeJS.ErrnoException).code === "ENOENT")
-                    continue;
-                throw new Error(
-                    `Unable to read MCP config '${source.filePath}': ${error instanceof Error ? error.message : String(error)}`,
-                );
-            }
-            const imported = importMcpConfig(parsed);
-            if (imported.errors.length > 0) {
-                throw new Error(
-                    `Invalid MCP config '${source.filePath}': ${imported.errors.map((error) => `${error.name}: ${error.reason}`).join("; ")}`,
-                );
-            }
-            for (const importedServer of imported.servers) {
-                if (importedServer.name === "typeagent-macros") continue;
-                configs.push({
-                    ...importedServer.config,
-                    id: `${source.source}:${importedServer.name}`,
-                    scope:
-                        source.source === "copilot-user" ? "user" : "workspace",
-                    provenance: {
-                        ...importedServer.config.provenance,
-                        source: source.filePath,
-                        sourceKind: source.source,
-                    },
-                });
-            }
-        }
-        return configs;
+        return new McpConfigDiscovery()
+            .discover({
+                workspacePath: cwd,
+                isFolderTrusted: () => true,
+            })
+            .configs.filter((entry) => entry.config.name !== "typeagent-macros")
+            .map((entry) => entry.config);
     }
 
     private async connect(

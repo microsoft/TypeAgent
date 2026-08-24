@@ -3,11 +3,19 @@
 
 import { context, propagation, trace, TraceFlags } from "@opentelemetry/api";
 import { createSecretFilter } from "@typeagent/common-utils";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
+    getActiveTypeAgentSpanAttributes,
+    installAmbientTypeAgentAttributeStore,
+    runInTypeAgentTelemetryContext,
+    setActiveTypeAgentSpanAttributes,
     setTypeAgentSpanAttributes,
     TYPEAGENT_SPAN_ATTRIBUTES,
     TYPEAGENT_SPAN_NAMES,
 } from "../src/otel/traceContract.js";
+import { installNodeAmbientTelemetryContext } from "../src/otel/traceContextNode.js";
 import {
     createInMemorySpanManager,
     type CapturedSpan,
@@ -21,6 +29,7 @@ import {
 // `@typeagent/telemetry/testing/inMemorySpanManager` do not silently pick up
 // a stale build.
 import * as managerSubpath from "@typeagent/telemetry/testing/inMemorySpanManager";
+import * as traceContextSubpath from "@typeagent/telemetry/traceContext";
 
 describe("trace contract span-name and attribute-key constants", () => {
     it("uses the frozen typeagent.* span-name namespace the design doc calls out", () => {
@@ -42,7 +51,12 @@ describe("trace contract span-name and attribute-key constants", () => {
             GEN_AI_REQUEST_MODEL: "gen_ai.request.model",
             SESSION_ID: "typeagent.session.id",
             ACTIVATION_ID: "typeagent.activation.id",
+            REQUEST_ID: "typeagent.request.id",
             TRACE_ID: "typeagent.trace.id",
+            LLM_PHASE: "typeagent.llm.phase",
+            LLM_PURPOSE: "typeagent.llm.purpose",
+            LLM_SCOPE: "typeagent.llm.scope",
+            LLM_CLASSIFICATION_SOURCE: "typeagent.llm.classification_source",
         });
         expect(Object.isFrozen(TYPEAGENT_SPAN_ATTRIBUTES)).toBe(true);
     });
@@ -381,5 +395,132 @@ describe("published testing subpath export", () => {
             // provider into whichever spec Jest schedules next.
             await manager.shutdown();
         }
+    });
+});
+
+describe("ambient TypeAgent attributes", () => {
+    const attributes = { sessionId: "session", requestId: "request" };
+
+    it("propagates across awaits without an OTel context manager", async () => {
+        const observed = await runInTypeAgentTelemetryContext(
+            setActiveTypeAgentSpanAttributes(context.active(), attributes),
+            attributes,
+            async () => {
+                await Promise.resolve();
+                return getActiveTypeAgentSpanAttributes();
+            },
+        );
+
+        expect(observed).toEqual(attributes);
+        expect(getActiveTypeAgentSpanAttributes()).toBeUndefined();
+    });
+
+    it("degrades without throwing when no ambient store or context manager exists", async () => {
+        const previous = installAmbientTypeAgentAttributeStore(undefined);
+        try {
+            const observed = await runInTypeAgentTelemetryContext(
+                setActiveTypeAgentSpanAttributes(context.active(), attributes),
+                attributes,
+                async () => {
+                    await Promise.resolve();
+                    return getActiveTypeAgentSpanAttributes();
+                },
+            );
+            expect(observed).toBeUndefined();
+        } finally {
+            installAmbientTypeAgentAttributeStore(previous);
+        }
+    });
+
+    it("restores Node ambient propagation after the browser fallback path", () => {
+        installNodeAmbientTelemetryContext();
+        expect(
+            runInTypeAgentTelemetryContext(
+                context.active(),
+                attributes,
+                getActiveTypeAgentSpanAttributes,
+            ),
+        ).toEqual(attributes);
+    });
+});
+
+describe("browser-safe traceContext boundary", () => {
+    const attributes = { sessionId: "session", requestId: "request" };
+    const otelSrcDir = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../src/otel",
+    );
+    const nodeBuiltins = new Set([
+        "async_hooks",
+        "buffer",
+        "child_process",
+        "crypto",
+        "events",
+        "fs",
+        "http",
+        "https",
+        "net",
+        "os",
+        "path",
+        "process",
+        "stream",
+        "timers",
+        "url",
+        "util",
+        "worker_threads",
+        "zlib",
+    ]);
+    const specifierPattern = /(?:\bfrom\s*|\bimport\s*\(?\s*)["']([^"']+)["']/g;
+
+    async function collectImports(entry: string): Promise<string[]> {
+        const visited = new Set<string>();
+        const external: string[] = [];
+        const queue = [entry];
+        while (queue.length > 0) {
+            const file = queue.shift();
+            if (file === undefined || visited.has(file)) {
+                continue;
+            }
+            visited.add(file);
+            const source = await readFile(path.join(otelSrcDir, file), "utf8");
+            for (const match of source.matchAll(specifierPattern)) {
+                const specifier = match[1];
+                if (specifier === undefined) {
+                    continue;
+                }
+                if (specifier.startsWith(".")) {
+                    queue.push(
+                        specifier.replace(/^\.\//, "").replace(/\.js$/, ".ts"),
+                    );
+                } else {
+                    external.push(specifier);
+                }
+            }
+        }
+        return external;
+    }
+
+    it("keeps the browser contract free of Node builtins", async () => {
+        const external = await collectImports("traceContract.ts");
+        expect(
+            external.filter(
+                (specifier) =>
+                    specifier.startsWith("node:") ||
+                    nodeBuiltins.has(specifier.split("/")[0] ?? ""),
+            ),
+        ).toEqual([]);
+    });
+
+    it("resolves the published Node subpath with ambient context installed", () => {
+        expect(
+            typeof traceContextSubpath.installNodeAmbientTelemetryContext,
+        ).toBe("function");
+        expect(
+            traceContextSubpath.runInTypeAgentTelemetryContext(
+                context.active(),
+                attributes,
+                () => traceContextSubpath.getActiveTypeAgentSpanAttributes(),
+            ),
+        ).toEqual(attributes);
     });
 });

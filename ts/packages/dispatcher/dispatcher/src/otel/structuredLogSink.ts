@@ -19,11 +19,24 @@ const SAFE_STRING_FIELDS = [
     "kind",
     "strategy",
     "classifier",
+    "provider",
+    "model",
+    "operation",
     "state",
     "status",
     "reason",
     "phase",
     "position",
+    "path",
+    "routingReason",
+    "matchOutcome",
+    "cacheBypassReason",
+    // Both come from closed vocabularies (a fixed union and a reviewed
+    // allowlist), so neither adds cardinality. The raw error `name`,
+    // `message`, `stack`, and the original `request` are absent from every
+    // list here so they never leave the local and opt-in database sinks.
+    "errorCategory",
+    "errorCode",
 ] as const;
 
 const SAFE_NUMBER_FIELDS = [
@@ -37,6 +50,13 @@ const SAFE_NUMBER_FIELDS = [
     "depth",
     "count",
     "attachmentCount",
+    "actionIndex",
+    "inputTokens",
+    "outputTokens",
+    "totalTokens",
+    "cachedTokens",
+    "retryCount",
+    "httpStatus",
 ] as const;
 
 const SAFE_BOOLEAN_FIELDS = [
@@ -44,9 +64,18 @@ const SAFE_BOOLEAN_FIELDS = [
     "running",
     "developerMode",
     "includeContext",
+    "cancelled",
+    "streaming",
+    "fallback",
+    "retryable",
 ] as const;
 
-const SAFE_STRING_ARRAY_FIELDS = ["schemaNames", "command"] as const;
+const SAFE_STRING_ARRAY_FIELDS = [
+    "schemaNames",
+    "actionNames",
+    "command",
+    "routes",
+] as const;
 const MAX_ARRAY_LENGTH = 64;
 const MAX_STRING_LENGTH = 256;
 

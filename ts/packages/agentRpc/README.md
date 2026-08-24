@@ -121,7 +121,8 @@ parenting.
 Code shared with browser RPC consumers must import active TypeAgent trace
 metadata from `@typeagent/telemetry/traceContext`. The main
 `@typeagent/telemetry` entry point is Node-only because it includes provider and
-exporter lifecycle support.
+exporter lifecycle support. Failure classification is likewise available
+through the browser-safe `@typeagent/telemetry/errorClassification` subpath.
 
 Cancellation continues to use each application protocol's existing mechanism.
 For example, agent actions send `cancelAction`, abort the server handler, and
@@ -135,6 +136,25 @@ RPC spans use enqueue-time completion: a SERVER span ends after its terminal
 response is handed to `RpcChannel.send`. The callback is optional in the channel
 contract, so later transport-delivery failures are debug diagnostics rather than
 changes to an already-ended span.
+
+## Structured lifecycle events
+
+Pass a structural logger through `RpcOptions.logger` to emit exactly one
+`rpc:started` and one `rpc:completed` event for each client and server `invoke`
+boundary. Omitting the logger preserves existing behavior and emits nothing.
+Logger failures are isolated from the invocation.
+
+Events contain only bounded operational fields: `role`, `channel`, `method`,
+`callId`, and, on completion, `status`, `success`, `elapsedMs`, optional
+`cancelled`, and normalized failure classification. Invalid or oversized
+channel and method labels become `invalid_channel` and `invalid_method`.
+Arguments, results, raw error messages, stacks, and transport payloads are never
+included.
+
+Completion status is `succeeded`, `failed`, or `cancelled`. Both RPC spans and
+events use the shared cancellation classifier, including its bounded `cause`
+walk, so wrapped cancellation is reported consistently. Only real failures
+carry normalized classification fields.
 
 ## Trademarks
 

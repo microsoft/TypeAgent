@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    context,
     SpanStatusCode,
     ROOT_CONTEXT,
     trace,
@@ -10,6 +11,12 @@ import {
     type Tracer,
 } from "@opentelemetry/api";
 import { otel } from "@typeagent/telemetry";
+import { recordSpanFailure, type SpanFailureNames } from "./spanFailure.js";
+
+const REQUEST_FAILURE: SpanFailureNames = {
+    errorName: "RequestError",
+    failureMessage: "request failed",
+};
 
 /**
  * Result-shaped signal the wrapper uses to detect the caller-visible failure
@@ -43,34 +50,35 @@ export async function wrapRootRequestSpan<
         options?.parentContext ?? ROOT_CONTEXT,
         async (span) => {
             otel.setTypeAgentSpanAttributes(span, attributes);
-            try {
-                const result = await body(span);
-                if (result?.cancelled === true) {
-                    span.setStatus({
-                        code: SpanStatusCode.ERROR,
-                        message: "cancelled",
-                    });
-                }
-                return result;
-            } catch (e) {
-                // Detect AbortError before wrapping: DOMException is not
-                // always `instanceof Error` in Node, so we can't rely on
-                // err.name after the wrapping fallback below.
-                const isAbort =
-                    e !== null &&
-                    typeof e === "object" &&
-                    (e as { name?: unknown }).name === "AbortError";
-                const name = isAbort ? "AbortError" : "RequestError";
-                const message = isAbort ? "cancelled" : "request failed";
-                span.recordException({ name, message });
-                span.setStatus({
-                    code: SpanStatusCode.ERROR,
-                    message,
-                });
-                throw e;
-            } finally {
-                span.end();
-            }
+            return otel.runInTypeAgentTelemetryContext(
+                otel.setActiveTypeAgentSpanAttributes(
+                    context.active(),
+                    attributes,
+                ),
+                attributes,
+                async () => {
+                    try {
+                        const result = await body(span);
+                        if (result?.cancelled === true) {
+                            span.setStatus({
+                                code: SpanStatusCode.ERROR,
+                                message: "cancelled",
+                            });
+                        }
+                        return result;
+                    } catch (e) {
+                        // Classified rather than name-checked: a cancellation
+                        // is frequently wrapped, and `DOMException` is not
+                        // always `instanceof Error` in Node. A cancellation the
+                        // request itself observed arrives as `result.cancelled`
+                        // above, not as a throw.
+                        recordSpanFailure(span, e, REQUEST_FAILURE);
+                        throw e;
+                    } finally {
+                        span.end();
+                    }
+                },
+            );
         },
     );
 }

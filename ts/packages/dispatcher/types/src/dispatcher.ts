@@ -143,6 +143,7 @@ export type CommandResult = {
     disposition?: CommandDisposition;
     // Machine-readable completion reported by PowerShell capability reasoning.
     capabilityOutcome?: PowerShellCapabilityOutcome;
+    codingOutcome?: CodingTaskOutcome;
     metrics?: RequestMetrics;
     // Token usage for translating the user's request into actions (the LLM
     // "translation" step). Absent for @-commands and cached translations.
@@ -152,6 +153,21 @@ export type CommandResult = {
     // reported usage (unknown). A present all-zero value => actions ran but
     // made no LLM call.
     actionTokenUsage?: CompletionUsageStats;
+    // Canonical OpenTelemetry trace id of the root request span.
+    traceId?: string;
+};
+
+export type CodingTaskOutcome = {
+    taskKind: "analysis" | "mutation";
+    validationRequired: boolean;
+    status: "completed" | "unvalidated" | "failed" | "cancelled";
+    filesChanged: boolean;
+    validationAttempted: boolean;
+    validationSucceeded: boolean;
+    sessionId: string;
+    taskComplete?: boolean;
+    taskCompleteSummary?: string;
+    error?: string;
 };
 
 // Architecture: docs/architecture/core/completion.md — Data flow / Key types
@@ -332,6 +348,12 @@ export type UserContext = {
 };
 
 export type ProcessCommandOptions = {
+    /**
+     * Host-selected filesystem root for this request. CLI and shell hosts
+     * normally provide their current working directory; editor hosts provide
+     * the active workspace folder.
+     */
+    workingDirectory?: string;
     /**
      * When true, skip reasoning, clarification, and chat fallback.
      * Use when the caller (e.g. an AI agent) handles reasoning itself

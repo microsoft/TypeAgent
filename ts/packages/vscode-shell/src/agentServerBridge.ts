@@ -2037,6 +2037,8 @@ export class AgentServerBridge {
             const userContext = gatherUserContext();
             const options: ProcessCommandOptions = {
                 userContext,
+                workingDirectory:
+                    userContext.editor?.workspaceFolders?.[0] ?? process.cwd(),
             };
             const result = await awaitCommand(
                 this.session.dispatcher,

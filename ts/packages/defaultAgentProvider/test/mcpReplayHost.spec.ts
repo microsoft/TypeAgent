@@ -133,7 +133,7 @@ describe("MCP replay host", () => {
         });
         expect(connectedConfigs).toMatchObject([
             {
-                id: "workspace:workspaceApi",
+                id: "discovered:workspace-mcp:workspaceApi",
                 trust: "untrusted",
                 provenance: { source: path.join(workspaceDir, ".mcp.json") },
             },

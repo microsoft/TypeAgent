@@ -31,7 +31,7 @@ import {
     ContextParams,
     OptionsFunctionCallBack,
 } from "./types.js";
-import { createRpc, type RpcOptions } from "./rpc.js";
+import { createRpc, type RpcOptions, type RpcStructuredLogger } from "./rpc.js";
 import { ChannelProvider, RpcChannel } from "./common.js";
 import {
     base64ToUint8Array,
@@ -42,19 +42,29 @@ import {
 
 export type AgentRpcServerOptions = {
     trustedContextPropagation?: boolean;
+    logger?: RpcStructuredLogger;
 };
 
 function getTrustedRpcOptions(
     options: AgentRpcServerOptions | undefined,
 ): RpcOptions | undefined {
-    return options?.trustedContextPropagation === true
-        ? {
-              tracing: {
-                  propagateContext: true,
-                  trustRemoteContext: true,
-              },
-          }
-        : undefined;
+    if (
+        options?.trustedContextPropagation !== true &&
+        options?.logger === undefined
+    ) {
+        return undefined;
+    }
+    return {
+        ...(options.trustedContextPropagation === true
+            ? {
+                  tracing: {
+                      propagateContext: true,
+                      trustRemoteContext: true,
+                  },
+              }
+            : {}),
+        ...(options.logger === undefined ? {} : { logger: options.logger }),
+    };
 }
 
 function createOptionsRpc(

@@ -9,6 +9,9 @@
 
 **Scope:** Node-hosted traces, logs, metrics, context propagation, and local telemetry files
 
+For setup commands and a step-by-step debugging workflow, see
+[Local Telemetry Debugging](./local-telemetry-debugging.md).
+
 ## Value Proposition
 
 OpenTelemetry gives TypeAgent one structured view of a request across
@@ -110,7 +113,8 @@ TypeAgent-owned Node composition roots attach `OtelLoggerSink` alongside the
 existing debug and database sinks when `telemetry.structuredLogs` is enabled.
 The setting defaults to false so embedded dispatcher consumers do not export
 event payloads merely because another component installed a global OTel logs
-provider. The environment override is
+provider. Central chat-model instrumentation uses the same process-level gate
+for LLM lifecycle logs; LLM spans remain available independently. The environment override is
 `TYPEAGENT_OTEL_STRUCTURED_LOGS=true`. Hosts also pass each process's `debug`
 module instance to `initTelemetry()` so the optional bridge can preserve
 existing output while copying eligible records into OTel.
@@ -144,6 +148,10 @@ and exports independently. Telemetry payloads do not pass through the dispatcher
 Browser-shared RPC code reads active TypeAgent metadata through the
 `@typeagent/telemetry/traceContext` subpath. It does not import the Node-only
 telemetry composition root.
+
+The trace-context contract is browser-safe. Its Node export adds ambient
+context so logs-only processes retain request correlation when tracing is
+disabled.
 
 The trusted dispatcher RPC channel extends the same trace from a client host
 into agent-server request processing:
@@ -188,6 +196,13 @@ processable telemetry record.**
   debug messages into span events.
 - Use manual LLM spans in v1. Do not enable HTTP or `undici`
   auto-instrumentation.
+- Classify each LLM operation explicitly at the high-level call site. The
+  central model wrapper records `typeagent.llm.phase`,
+  `typeagent.llm.purpose`, `typeagent.llm.scope`, and
+  `typeagent.llm.classification_source`. Nested scopes inherit unspecified
+  values.
+- Unclassified calls use `unknown` phase and purpose, `foreground` scope, and
+  `default` classification source.
 
 ### Logs
 
@@ -236,9 +251,11 @@ have matched. Redaction runs only after this bound and the result must also fit.
 
 The dispatcher places an allowlisted projection in front of `OtelLoggerSink`.
 Only bounded correlation identifiers, agent/schema/action names, state and
-reason fields, durations and counts, booleans, and command/schema-name arrays
-reach OTel. Prompt and response text, history, action parameters, errors and
-stacks, feedback comments and context, and all unknown fields are excluded.
+reason fields, the normalized failure classification
+(`errorCategory`/`errorCode`/`httpStatus`/`retryable`), durations and counts,
+booleans, and command/schema-name arrays reach OTel. Prompt and response text,
+history, action parameters, raw error names, messages and stacks, feedback
+comments and context, and all unknown fields are excluded.
 Other producers that attach `OtelLoggerSink` remain responsible for an
 equivalent source-specific projection. The sink applies known-secret and
 secret-format filtering as defense in depth, covering the promoted correlation
@@ -359,11 +376,21 @@ TypeAgent-owned processes support:
 
 ```yaml
 telemetry:
-  otlpEndpoint: http://localhost:4318
-  logFile: ~/.typeagent/logs/typeagent-{service}-{process}-{pid}.jsonl
+  otlpEndpoint: https://telemetry.example.com
+  logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
+  logRetentionBytes: 524288000
   debugBridge: true
   tracesSampler: always_on
+  local:
+    enabled: "true"
+    otlpEndpoint: http://127.0.0.1:24318
+    debugBridge: "true"
+    structuredLogs: "true"
 ```
+
+`telemetry.local.otlpEndpoint` is written by
+`pnpm run telemetry:grafana`. The script owns this value and uses the stable
+OTLP/HTTP loopback port `24318`.
 
 Standard `OTEL_*` variables override YAML. Relevant settings include:
 
@@ -373,11 +400,24 @@ Standard `OTEL_*` variables override YAML. Relevant settings include:
 - `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`
 - `TYPEAGENT_OTEL_LOG_FILE`
 - `TYPEAGENT_OTEL_DEBUG_BRIDGE`
+- `TYPEAGENT_OTEL_LOG_RETENTION_BYTES`
 
 TypeAgent resolves configuration and passes explicit, signal-specific
 components to the SDKs. It does not accept defaults that create exporters for
 unspecified signals. Signal-specific `OTEL_*_EXPORTER=none` settings are honored.
 Partner libraries use host configuration and do not read TypeAgent YAML.
+
+`pnpm run telemetry:grafana` manages `telemetry.local` in
+`config.local.yaml`. When enabled, the local OTLP exporter runs in parallel
+with the standard exporter; it does not replace or rewrite the backend
+endpoint (`telemetry.otlpEndpoint`). Identical resolved endpoints are
+deduplicated. The script does, however, own `telemetry.local.otlpEndpoint`
+itself: it writes the stable `http://127.0.0.1:24318` endpoint, so a stale or
+hand-edited value never lingers. The setting remains enabled when LGTM stops.
+This lets a configured TypeAgent process start while LGTM is absent and begin
+exporting when the collector becomes available. TypeAgent reads this
+configuration at process startup, so processes must restart only after the
+script changes it from an older configuration.
 
 Local development samples all traces by default when trace export is enabled.
 Deployments may configure standard OTel sampling. Partner hosts own sampling.
@@ -388,25 +428,40 @@ Set `TYPEAGENT_OTEL_LOG_FILE` or YAML `telemetry.logFile` to write OTel logs
 directly, without OTLP, a collector, or a backend:
 
 ```powershell
-$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\typeagent-{service}-{process}-{pid}.jsonl"
+$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\{process}-{timestamp}-p{pid}.jsonl"
 ```
 
-For dispatcher PID 12345, the resolved path may be:
+For an agent-server process started at `2026-08-17T08:38:59.123Z` with PID
+12345, the resolved path may be:
 
 ```text
-C:\Users\<user>\.typeagent\logs\typeagent-dispatcher-12345.jsonl
+C:\Users\<user>\.typeagent\logs\agent-server-20260817T083859Z-p12345.jsonl
 ```
 
-Read or tail it with normal tools:
+Find and tail the latest run with normal tools:
 
 ```powershell
-Get-Content -Wait C:\Users\<user>\.typeagent\logs\typeagent-dispatcher-12345.jsonl
+$log = Get-ChildItem "$HOME\.typeagent\logs\agent-server-*.jsonl" |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+Get-Content $log.FullName -Wait
 ```
 
 The file contains OTel **log records only**: Structured Logger events and, when
-enabled, bridged debug records. Each line is one valid JSON object with
-timestamp, severity, body, resource, event or namespace, trace/span IDs, and
-TypeAgent correlation. Traces and metrics still require OTLP.
+enabled, bridged debug records. Each line uses the reduced local envelope with
+timestamp, severity, message, body, event or namespace, trace/span IDs, and
+TypeAgent correlation. Repeated SDK resource metadata is omitted locally but
+remains available in full OTLP records. Traces and metrics still require OTLP.
+
+LLM lifecycle messages identify the operation, for example
+`LLM started: translation.schema-selection` or
+`LLM succeeded: translation.action-generation in 2659 ms`. The classification
+is assigned by the translation, reasoning, action, or cache operation that
+initiated the call. The default `focused` profile omits successful background
+LLM starts and completions, but keeps foreground calls and background failures.
+Use `@log profile diagnostic` or `@log profile verbose` to retain all local LLM
+events. OTLP export always receives the full event stream regardless of the
+local profile.
 
 The path is implemented as an OTel `LogRecordExporter` behind a bounded
 `BatchLogRecordProcessor`:
@@ -417,18 +472,37 @@ The path is implemented as an OTel `LogRecordExporter` behind a bounded
 - Rate-limit diagnostics and disable or retry under a documented policy.
 - Apply redaction before enqueueing records.
 
-Expand `~` before `path.resolve()`. Sanitize `{service}`, `{process}`, and
-`{pid}`. TypeAgent-owned hosts identify their process role as `agent-server`,
-`api-server`, `shell`, `cli`, or `agent-<name>`. If `{process}` or `{pid}` is
-absent, insert it before the extension so filenames remain identifiable and
-processes never share a writer. Create parent directories and report the
+Expand `~` before `path.resolve()`. Sanitize `{service}`, `{process}`,
+`{timestamp}`, and `{pid}`. The timestamp is the UTC process-start time and
+changes once per telemetry initialization, not per record. TypeAgent-owned
+hosts identify their process role as `agent-server`, `api-server`, `shell`,
+`cli`, or `agent-<name>`. Insert missing process, timestamp, and PID components
+before the extension so filenames remain identifiable and concurrent processes
+never share a writer. Create parent directories and report the
 resolved path once through a status or diagnostic path that cannot recurse into
 the exporter.
 
-The OS or external tools manage rotation and retention. JSONL and OTLP are
-additive. A JSONL-only configuration creates only the logs provider.
+Rotation is left to the OS or external tools. Retention is managed by
+TypeAgent for its own JSONL directory: on telemetry startup, an asynchronous
+cleanup enumerates `.jsonl` files in the log file's parent directory
+(non-recursive), and — if the total size exceeds `telemetry.logRetentionBytes`
+(default 500 MiB, env `TYPEAGENT_OTEL_LOG_RETENTION_BYTES`) — deletes the
+oldest inactive files first until the total is at or below the cap. The
+active log file and any path currently owned by another live
+`JsonlLogExporter` in the same process are never deleted. Cleanup runs in
+the background, does not delay provider initialization or request
+handling, reports every filesystem failure through a non-recursive
+diagnostic, and never fails telemetry startup. `logRetentionBytes: 0`
+disables cleanup. Retention scoping is intentionally narrow: it never
+touches subdirectories, non-`.jsonl` files, or the backend Grafana LGTM
+data. JSONL and OTLP are additive. A JSONL-only configuration creates only
+the logs provider.
 
 ## Local End-to-End Validation with Grafana
+
+This section summarizes the architecture validation path. Developers should use
+the shorter [Local Telemetry Debugging](./local-telemetry-debugging.md) guide
+for setup, day-to-day investigation, current limitations, and troubleshooting.
 
 This procedure runs the Grafana LGTM development stack locally, sends TypeAgent
 telemetry to it over OTLP/HTTP, and writes the same OTel logs to JSONL. It
@@ -449,10 +523,10 @@ Install the TypeAgent workspace dependencies with `pnpm run setup` from `ts/`
 if the checkout has not already been provisioned.
 
 Docker Desktop is the only external prerequisite. On Windows and macOS, the
-repository helper can install it explicitly:
+repository helper prompts to install it when it is missing:
 
 ```powershell
-pnpm run telemetry:grafana --install
+pnpm run telemetry:grafana
 ```
 
 This uses `winget` on Windows or Homebrew on macOS and may request elevation or
@@ -479,31 +553,30 @@ pnpm run telemetry:grafana
 
 The helper:
 
-- Optionally installs Docker Desktop when `--install` is specified.
+- Prompts to install Docker Desktop when it is missing on Windows or macOS.
 - Verifies that the Docker CLI is installed.
 - Starts Docker Desktop when needed on Windows or macOS and waits for its
   engine.
 - Pulls `grafana/otel-lgtm:latest` when it is not already installed.
 - Starts or reuses the `typeagent-otel` container.
+- Recreates an existing container if its port mappings are stale.
 - Waits for Grafana to become healthy.
-- Publishes Grafana and both collector receivers on `127.0.0.1` only.
+- Publishes fixed loopback ports for OTLP/gRPC (`24317`), OTLP/HTTP (`24318`),
+  and Grafana (`24319`).
+- Fails with an actionable error when a required host port is unavailable.
 
 The loopback binding keeps the services inaccessible from other machines on
 the network. Do not publish these ports on all interfaces unless remote access
 is intentional and protected separately.
 
-The relevant endpoints are:
-
-| Port | Endpoint                          |
-| ---- | --------------------------------- |
-| 3000 | Grafana UI                        |
-| 4317 | OTel collector OTLP/gRPC          |
-| 4318 | OTel collector OTLP/HTTP/protobuf |
+The fixed host ports are below the OS ephemeral range. The helper writes
+`http://127.0.0.1:24318` into `telemetry.local.otlpEndpoint` before starting
+Docker, and `--stop` leaves that configuration enabled.
 
 Verify that Grafana is ready:
 
 ```powershell
-Invoke-RestMethod http://localhost:3000/api/health
+Invoke-RestMethod http://127.0.0.1:24319/api/health
 ```
 
 ### 2. Configure and Start TypeAgent
@@ -514,9 +587,10 @@ From `ts/`, build the agent server and configure its process environment:
 pnpm run build agent-server
 
 $env:OTEL_SERVICE_NAME = "typeagent-local"
-$env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
+# `pnpm run telemetry:grafana` provisions telemetry.local with the stable
+# http://127.0.0.1:24318 endpoint. No OTLP endpoint env var is required.
 $env:OTEL_TRACES_SAMPLER = "always_on"
-$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\typeagent-{service}-{process}-{pid}.jsonl"
+$env:TYPEAGENT_OTEL_LOG_FILE = "$HOME\.typeagent\logs\{process}-{timestamp}-p{pid}.jsonl"
 $env:TYPEAGENT_OTEL_DEBUG_BRIDGE = "true"
 $env:TYPEAGENT_OTEL_STRUCTURED_LOGS = "true"
 $env:DEBUG = "typeagent:*,agent-server:*"
@@ -540,6 +614,31 @@ Only enabled `DEBUG` namespaces are bridged. Existing terminal debug output is
 unchanged. Structured logging must be enabled explicitly because dispatcher
 events can originate from user requests.
 
+Local JSONL starts in the `focused` profile. It therefore contains the
+structured lifecycle by default, even when the debug bridge is configured.
+Bridged debug records are surfaced by class: each bridged `debug` namespace
+carries a class (`error`, `warn`, `info`, or `verbose`) derived from its
+trailing `:`-delimited segment, and each profile admits a subset of those
+classes. Use `@trace` to select which terminal debug namespaces are produced,
+then raise the local profile to admit their classes into the file:
+
+```text
+@log status
+@trace --preset request
+@log profile diagnostic
+```
+
+Profiles filter bridged debug records by class (structured events are always
+emitted and are not governed by class):
+
+- `off` - local JSONL sink disabled.
+- `focused` - structured events only; no debug records.
+- `diagnostic` - structured events plus `error`, `warn`, and `info` debug.
+- `verbose` - structured events plus every debug class.
+
+`@log profile off` disables only the local JSONL sink. It does not change
+`DEBUG`, `@trace`, or OTLP export. `@log clear` restores `profile=focused`.
+
 ### 3. Generate Telemetry
 
 In another terminal, connect the CLI:
@@ -558,7 +657,7 @@ telemetry.
 Find the most recently written process log:
 
 ```powershell
-$log = Get-ChildItem "$HOME\.typeagent\logs\typeagent-local-*.jsonl" |
+$log = Get-ChildItem "$HOME\.typeagent\logs\agent-server-*.jsonl" |
   Sort-Object LastWriteTime -Descending |
   Select-Object -First 1
 
@@ -566,18 +665,160 @@ $log.FullName
 Get-Content $log.FullName -Wait
 ```
 
-Each line is a JSON object. Expected fields include `timestamp`,
-`severityText`, `body`, `eventName`, `traceId`, `spanId`, `attributes`, and
-`resource`.
+Each line uses a reduced local envelope intended for direct inspection:
+`timestamp`, `severity`, `event`, `message`, `body`, and, when available,
+`requestId`, `traceId`, `spanId`, `sessionId`, `activationId`, `namespace`,
+`correlationId`, and remaining `attributes`. `traceId` is the canonical OTel
+trace identifier; `correlationId` preserves a caller-supplied legacy trace
+identifier when present. The `message` is a payload-free lifecycle summary,
+such as `Request accepted and queued` or `Translation succeeded via grammar`.
+Use opt-in debug records for detailed diagnostics behind that lifecycle step.
+LLM messages include their explicit phase and purpose so parallel schema
+selection, action generation, and background cache generation are
+distinguishable without inspecting private model content.
+Correlation fields are elevated once rather than repeated in the body, and the
+redundant legacy `dispatcher:command` record is omitted from local JSONL.
+Repeated SDK metadata such as the observed timestamp, resource,
+instrumentation scope, numeric severity, trace flags, and dropped-attribute
+count is omitted from JSONL. The OTLP exporter still sends the full OTel log
+record, including the lifecycle message in its structured body.
 
 Structured dispatcher records include events such as `command` and
 `requestQueue:start`. Bridged debug records include their debug namespace.
 Prompt text, response text, action parameters, errors, stacks, and unknown
 dispatcher fields are excluded by the dispatcher projection.
 
+### LLM phase and purpose attribution
+
+`llm:started`, `llm:completed`, and the `typeagent.llm` span carry `phase`,
+`purpose`, `scope`, and `classificationSource`. `explicit` means a call site
+used `withChatModelTelemetryContext`; `default` means no call site classified
+the operation. Nested and retry calls inherit this context across async work.
+
+Known offline operations use background scope and a specific purpose. Detached
+workers and processes classify themselves at entry.
+
+Unclassified foreground calls emit one aggregate warning per minute. The
+warning contains only scope, count, and window length; it never includes model
+content or call-site identity.
+
+### Phase-completion durations and translation routing
+
+Each phase-completion lifecycle event carries `elapsedMs`, measured at the
+call boundary that owns the phase rather than reconstructed by an exporter from
+span timestamps: `translation:completed` and `action:completed` join
+`reasoning:completed` in reporting a real duration on the success, failure, and
+cancellation paths. The reduced local message appends it (for example,
+`Translation succeeded via grammar in 12 ms` and
+`Action completed: calendar.addEvent in 8 ms`).
+
+`translation:completed` also carries a bounded, stable routing rationale so an
+operator can answer why a request took the schema, cache, fallback, or retry
+path without inspecting user input. The fields reuse the translation
+span-event vocabulary and never include prompts or high-cardinality text:
+
+- `routingReason` - the terminal decision, one of `user_action`,
+  `cache_construction`, `cache_grammar`, or `llm_translation`. On success it is
+  derived from the terminal `strategy`. A failed or cancelled translation has no
+  trustworthy terminal strategy, so the reason is derived from the routes
+  actually observed and is **omitted** when none reached a terminal decision -
+  a failure during cache matching before any model call is never labelled
+  `llm_translation`.
+- `matchOutcome` - the terminal cache/grammar lookup result
+  (`grammar_hit`, `cache_hit`, or `miss`). A later lookup in a multi-stage
+  translation overwrites it, so it names the last lookup, not every one.
+- `routes` - the additive set of routing mechanisms actually exercised
+  (`grammar`, `cache`, and/or `llm`), sorted and de-duplicated. Unlike
+  `matchOutcome`/`strategy`, routes are only ever added, so a mixed
+  activity-context translation that hits the cache and then calls the model for
+  an unknown action reports `["cache", "llm"]` instead of collapsing to a
+  cache-only story. The closed three-value vocabulary keeps this
+  low-cardinality. Present only when at least one route was observed.
+- `cacheBypassReason` - why the cache lookup was skipped
+  (`request_constraints`, `reasoning_request`, or `cache_disabled`).
+- `fallback` - whether an assistant-switch fallback occurred.
+- `retryCount` - the number of translation retries (any tier).
+
+Cache, grammar, and user-selected translations never call an LLM, so no model
+event is emitted for them; their routing reason on `translation:completed` is
+the only signal for that decision. The routing summary is captured inside the
+translation span's async context and, on a failed or cancelled translation from
+either the span itself or the subsequent confirmation/translation-phase work,
+is carried to the completion boundary on a non-enumerable error property so the
+event stays truthful without re-deriving state. Reasons are never overstated:
+`routingReason` is present only when a terminal route is actually known, and the
+other fields are present only for decisions the code actually observed. The
+reduced local message appends `+llm` when a cache/grammar strategy still reached
+the model.
+
+### RPC lifecycle events
+
+`agentRpc` optionally emits `rpc:started` and `rpc:completed` at each `invoke`
+boundary: once for the outbound client call and once for inbound server handler
+dispatch. A logger is supplied structurally through `RpcOptions.logger`; when it
+is omitted, RPC behavior is unchanged and no events are emitted. Logger failures
+cannot fail an invocation.
+
+The events contain only bounded operational fields. Arguments, results, raw
+error messages, stacks, and transport payloads are never included.
+
+- `role` - `client` or `server`.
+- `channel` and `method` - validated labels capped at 256 characters. Invalid,
+  oversized, or secret-shaped values become `invalid_channel` or
+  `invalid_method`.
+- `callId` - the per-RPC-instance monotonic identifier.
+- `status` - `succeeded`, `failed`, or `cancelled` on `rpc:completed`.
+- `success`, optional `cancelled`, and `elapsedMs` on `rpc:completed`.
+- `errorCategory` and optional bounded `errorCode`, `httpStatus`, and
+  `retryable` only for real failures.
+
+Client and server spans and events use the same shared cancellation classifier,
+including its bounded `cause` walk. A wrapped `AbortError` therefore produces
+`cancelled` consistently and carries no failure classification. Each started
+event is paired with exactly one completed event, including local setup errors,
+handler failures, disconnect/rebind cancellation, and logger failure.
+
+`agentRpc` imports the classifier from the browser-safe
+`@typeagent/telemetry/errorClassification` subpath rather than the Node-only
+package root. Reduced local messages render role, method, channel, status,
+elapsed time, and bounded classification without consulting payload content.
+
+### Failure classification
+
+Structured failure events use a small, shared classification instead of
+exporting error messages or stacks. This makes failures useful in telemetry
+without exposing user or provider content. The same classifier is used for
+failed `rpc:completed` events.
+
+The classification can include:
+
+- `errorCategory` - for example `authentication`, `rate_limit`, `network`,
+  `timeout`, `provider`, or `internal`.
+- `errorCode` - only for codes in the reviewed allowlist.
+- `httpStatus` - only for HTTP failure statuses.
+- `retryable` - when the failure is known to be safe to retry.
+
+Use `classifyTelemetryError` from `@typeagent/telemetry` rather than creating
+classification logic at individual call sites. It handles wrapped errors and
+unknown thrown values, and does not inspect free-text messages.
+
+Provider clients should attach a classification before converting a transport
+error into a returned failure result. This preserves useful details such as an
+HTTP status or network failure after the original error is no longer available.
+
+Cancellation is handled separately from failure classification. Spans and
+structured completion events use the same cancellation check, including wrapped
+abort errors and abort signals, so they report the same outcome. Cancelled events
+do not include failure classification fields.
+
+The dispatcher OTel projection exports only the normalized classification. Raw
+request and error details remain limited to local, explicitly enabled diagnostic
+sinks. Existing lifecycle messages show a short summary such as
+`rate_limit (HTTP 429, retryable)`.
+
 ### 5. Inspect the Same Logs in Grafana
 
-Open [http://localhost:3000](http://localhost:3000), select **Explore**, choose
+Open [http://127.0.0.1:24319](http://127.0.0.1:24319), select **Explore**, choose
 the **Loki** data source, and switch the query editor to **Code** mode. Do not
 use Logs Drilldown or its search box; those use a different search API rather
 than executing the LogQL below. Query all records from this validation run:
@@ -616,6 +857,10 @@ name `typeagent-local`. A log emitted inside an active span contains `traceId`
 and `spanId`; use the trace ID from either Loki or the JSONL record to open the
 corresponding request trace in Tempo.
 
+The VS Code client also shows the canonical request trace ID in the request
+metrics hover, immediately below Action Tokens. This provides a direct lookup
+key when several client requests are in flight at the same time.
+
 This demonstrates the tangible improvement over terminal-only debug output:
 structured application events and familiar debug records are searchable in one
 backend and can be correlated with the request trace that produced them.
@@ -628,6 +873,10 @@ Grafana LGTM:
 ```powershell
 pnpm run telemetry:grafana --stop
 ```
+
+Stopping LGTM leaves `telemetry.local` enabled at the stable endpoint. A
+configured TypeAgent process can remain running and resumes export when LGTM
+starts again.
 
 ## Privacy and Reliability
 
@@ -731,7 +980,9 @@ await createDispatcher(hostName, {
 ```
 
 Original exception messages and stacks are omitted because they can contain user
-content. Record a stable classification and message at the catch site.
+content. Record a stable classification and message at the catch site. Use the
+shared helpers described in [Failure classification](#failure-classification)
+for structured events and span failures.
 
 ## Currently Captured Dispatcher Telemetry
 
@@ -842,6 +1093,16 @@ operation before the span ends. Cancellation records the privacy-safe
 `AbortError` / `cancelled` exception classification and sets error status.
 Other escaping exceptions use `ReasoningError` / `reasoning failed`. Original
 exception messages and stack traces are never exported.
+
+### LLM span
+
+Each instrumented model call creates one `typeagent.llm` span. A returned
+failure result sets `ERROR` with `model returned failure`; a thrown failure
+records `ModelError` / `model call failed`, or `AbortError` / `cancelled` for a
+cancellation. Prompts, responses, and provider messages are never recorded on
+the span. Lifecycle logs summarize attribution, outcome, elapsed time, token
+count, and bounded failure classification without recording model content or
+stacks. Telemetry failures do not affect the model call.
 
 | Signal          | Use                                          |
 | --------------- | -------------------------------------------- |
