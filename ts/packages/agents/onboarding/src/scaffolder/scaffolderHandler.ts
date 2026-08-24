@@ -12,6 +12,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { createActionResultFromMarkdownDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { AgentPattern, ScaffolderActions } from "./scaffolderSchema.js";
+import { stripEntryTypeComment } from "@typeagent/action-schema";
 import {
     loadState,
     updatePhase,
@@ -21,9 +22,11 @@ import {
 } from "../lib/workspace.js";
 import type { ApiSurface } from "../discovery/discoveryHandler.js";
 import { buildCliHandler } from "./cliHandlerTemplate.js";
+import { buildRestHandler, filterRestActions } from "./restHandlerTemplate.js";
 import { loadTemplate } from "./templateLoader.js";
 import { generateAgentKeywordFiles } from "./agentKeywordFiles.js";
 import type { KeywordSchemaTarget } from "./agentKeywordFiles.js";
+import { buildScaffoldedAgent } from "../lib/agentBuild.js";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -85,7 +88,7 @@ async function handleScaffoldAgent(
         };
     }
 
-    const schemaTs = await readArtifact(
+    let schemaTs = await readArtifact(
         integrationName,
         "schemaGen",
         "schema.ts",
@@ -116,6 +119,13 @@ async function handleScaffoldAgent(
     // original camelCase form.
     const packageName = `${integrationName.toLowerCase()}-agent`;
     const pascalName = toPascalCase(integrationName);
+
+    // The action-schema compiler (asc) rejects a doc comment attached to the
+    // entry union type ("entry type comments ... are not used for prompts").
+    // SchemaGen commonly emits one directly above `export type <Pascal>Actions`,
+    // which would fail the build; strip it deterministically before scaffolding
+    // so every downstream write (verbatim or sub-grouped) uses the clean form.
+    schemaTs = stripEntryTypeComment(schemaTs, `${pascalName}Actions`);
     const targetDir = path.resolve(
         outputDir ?? path.join(AGENTS_DIR, integrationName),
     );
@@ -311,8 +321,6 @@ async function handleScaffoldAgent(
         targetDir,
     );
 
-    await updatePhase(integrationName, "scaffolder", { status: "approved" });
-
     // Onboarding moment: generate committed keyword vectors beside each schema
     // source so the agent ships ready for context-weighted collision resolution.
     // `generateAgentKeywordFiles` never throws - each target that fails is
@@ -362,6 +370,25 @@ async function handleScaffoldAgent(
         keywordNote = parts.join("");
     }
 
+    // Build the scaffolded agent now so the Testing phase — which loads it as
+    // an npm agent provider and imports its compiled `dist/` handler — has
+    // something to run. Packaging later rebuilds idempotently. On failure the
+    // scaffolder phase stays un-approved and the compiler error surfaces to the
+    // wizard (previously this only failed later, at Testing, as an opaque
+    // module-not-found).
+    const buildOutcome = await buildScaffoldedAgent(targetDir);
+    if (!buildOutcome.success) {
+        return {
+            error:
+                `Scaffolded "${integrationName}" but the agent failed to build ` +
+                `(a built agent is required before Testing):\n${buildOutcome.output}`,
+        };
+    }
+
+    await updatePhase(integrationName, "scaffolder", { status: "approved" });
+
+    const buildNote = `\n\n**Build:** ✅ compiled to \`${path.join(targetDir, "dist")}\``;
+
     return createActionResultFromMarkdownDisplay(
         `## Agent scaffolded: ${integrationName}\n\n` +
             `**Output directory:** \`${targetDir}\`\n\n` +
@@ -369,6 +396,7 @@ async function handleScaffoldAgent(
             files.map((f) => `- \`${f}\``).join("\n") +
             subSchemaNote +
             keywordNote +
+            buildNote +
             `\n\n**Next step:** Phase 6 — use \`generateTests\` and \`runTests\` to validate.`,
     );
 }
@@ -726,7 +754,7 @@ function buildManifest(
     return manifest;
 }
 
-async function buildHandler(
+export async function buildHandler(
     name: string,
     pascalName: string,
     pattern: AgentPattern = "schema-grammar",
@@ -739,6 +767,27 @@ async function buildHandler(
     if (cliActions && cliActions.length > 0) {
         const cliCommand = cliActions[0].sourceUrl!.split(":")[1];
         return await buildCliHandler(name, pascalName, cliCommand, cliActions);
+    }
+
+    // If discovery data has a resolved OpenAPI base URL, generate a real
+    // fetch-based REST handler for the patterns that model a direct REST
+    // integration (schema-grammar is the default when a caller doesn't
+    // specify a pattern). Explicit non-REST patterns (websocket-bridge,
+    // native-platform, etc.) keep their own dedicated builders even if an
+    // apiSurface happens to be attached.
+    if (
+        apiSurface?.baseUrl &&
+        (pattern === "schema-grammar" || pattern === "external-api")
+    ) {
+        const restActions = filterRestActions(apiSurface.actions);
+        if (restActions.length > 0) {
+            return await buildRestHandler(
+                name,
+                pascalName,
+                apiSurface.baseUrl,
+                restActions,
+            );
+        }
     }
 
     switch (pattern) {
@@ -771,9 +820,10 @@ function buildSchemaGrammarHandler(name: string, pascalName: string): string {
 }
 
 // Map of TypeAgent workspace packages to their location relative to the
-// monorepo root. Used to emit `file:` deps when scaffolding outside the
-// monorepo (e.g. into a sibling SecretAgents repo) — `workspace:*` only
-// resolves inside the originating pnpm workspace.
+// monorepo root. Used to emit on-disk path deps (`link:` inside the monorepo,
+// `file:` outside) instead of `workspace:*` — a scaffolded agent is built in
+// isolation (`pnpm install --ignore-workspace`, see agentBuild.ts), so there is
+// no workspace in scope for pnpm to resolve a `workspace:*` alias against.
 const TYPEAGENT_WORKSPACE_PACKAGES: Record<string, string> = {
     "@typeagent/agent-sdk": "packages/agentSdk",
     aiclient: "packages/aiclient",
@@ -789,21 +839,26 @@ function getWorkspaceDepValue(
     depName: string,
     targetDir: string | undefined,
 ): string {
-    // If we're scaffolding inside the main TypeAgent workspace, plain
-    // `workspace:*` works. Outside it (e.g. SecretAgents), pnpm cannot
-    // resolve the workspace alias — emit a `file:` path relative to
-    // `targetDir` so install picks up the source on disk.
+    const pkgPath = TYPEAGENT_WORKSPACE_PACKAGES[depName];
+    if (!pkgPath) return "workspace:*"; // unknown — best-effort fallback
+
+    const absolute = path.join(TYPEAGENT_REPO_ROOT, pkgPath);
+    const fromDir = path.resolve(targetDir ?? path.join(AGENTS_DIR, "_"));
+    let rel = path.relative(fromDir, absolute).replace(/\\/g, "/");
+    if (!rel.startsWith(".")) rel = "./" + rel;
+
+    // A freshly scaffolded agent is built in ISOLATION with
+    // `pnpm install --ignore-workspace` (agentBuild.ts) so it never re-resolves
+    // or mutates the workspace lockfile. With no workspace in scope pnpm cannot
+    // resolve `workspace:*`, so we depend on the source package by path even
+    // inside the monorepo. Inside the repo use `link:` — a symlink to the
+    // prebuilt package that reuses its already-resolved dependency graph (a
+    // `file:` copy would instead re-resolve the package's own `workspace:*`
+    // deps, which fails outside a workspace). Outside the repo keep `file:`.
     const insideMonorepo =
         targetDir === undefined ||
         path.resolve(targetDir).startsWith(TYPEAGENT_REPO_ROOT + path.sep);
-    if (insideMonorepo) return "workspace:*";
-
-    const pkgPath = TYPEAGENT_WORKSPACE_PACKAGES[depName];
-    if (!pkgPath) return "workspace:*"; // unknown — best-effort fallback
-    const absolute = path.join(TYPEAGENT_REPO_ROOT, pkgPath);
-    let rel = path.relative(targetDir, absolute).replace(/\\/g, "/");
-    if (!rel.startsWith(".")) rel = "./" + rel;
-    return `file:${rel}`;
+    return insideMonorepo ? `link:${rel}` : `file:${rel}`;
 }
 
 function buildPackageJson(
@@ -871,6 +926,10 @@ function buildPackageJson(
             "@typeagent/action-grammar-compiler": depFor(
                 "@typeagent/action-grammar-compiler",
             ),
+            // The agent is built in isolation (pnpm install --ignore-workspace),
+            // so @types/node is not hoisted from the workspace. tsconfig.base.json
+            // sets `types: ["node"]`, so tsc needs it declared locally.
+            "@types/node": "^22.0.0",
             concurrently: "^9.1.2",
             rimraf: "^6.0.1",
             typescript: "~5.4.5",
@@ -997,7 +1056,7 @@ async function handleListPatterns(): Promise<ActionResult> {
         `| \`sub-agent-orchestrator\` | API surface too large for one schema; split into groups | desktop, code, browser |`,
         `| \`websocket-bridge\` | Automate an app via a host-side plugin over WebSocket | browser, code |`,
         `| \`state-machine\` | Multi-phase workflow with approval gates and disk persistence | onboarding, powershell |`,
-        `| \`native-platform\` | OS/device APIs via child_process or SDK; no cloud | androidMobile, playerLocal |`,
+        `| \`native-platform\` | OS/device APIs via child_process or SDK; no cloud | playerLocal, desktop |`,
         `| \`view-ui\` | Rich interactive UI rendered in a local web view | turtle, montage, markdown |`,
         `| \`command-handler\` | Simple settings-style agent; direct dispatch, no schema | settings, test |`,
     ];

@@ -38,11 +38,6 @@ export default class Schema extends Command {
             description: "Show all assistant selection schema",
             default: false,
         }),
-        generated: Flags.boolean({
-            description: "Generated schema",
-            allowNo: true,
-            default: true,
-        }),
         activity: Flags.boolean({
             description: "Show activity schema",
             allowNo: true,
@@ -92,7 +87,7 @@ export default class Schema extends Command {
                         activity: flags.activity,
                         multiple: flags.multiple,
                     },
-                    flags.generated ? { exact: true } : undefined,
+                    { exact: true },
                 ),
             );
         } else {

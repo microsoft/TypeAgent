@@ -14,6 +14,22 @@
   "exports": {
     ".": {
       "node": "./dist/indexNode.js"
+    },
+    "./testing/inMemorySpanManager": {
+      "types": "./dist/otel/testing/inMemorySpanManager.d.ts",
+      "node": "./dist/otel/testing/inMemorySpanManager.js"
+    },
+    "./traceContext": {
+      "node": {
+        "types": "./dist/otel/traceContextNode.d.ts",
+        "default": "./dist/otel/traceContextNode.js"
+      },
+      "types": "./dist/otel/traceContract.d.ts",
+      "default": "./dist/otel/traceContract.js"
+    },
+    "./errorClassification": {
+      "types": "./dist/otel/errorClassification.d.ts",
+      "default": "./dist/otel/errorClassification.js"
     }
   },
   "files": [
@@ -32,7 +48,21 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/api-logs": "0.221.0",
+    "@opentelemetry/context-async-hooks": "2.10.0",
+    "@opentelemetry/core": "2.10.0",
+    "@opentelemetry/exporter-logs-otlp-proto": "0.221.0",
+    "@opentelemetry/exporter-metrics-otlp-proto": "0.221.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "0.221.0",
+    "@opentelemetry/resources": "2.10.0",
+    "@opentelemetry/sdk-logs": "0.221.0",
+    "@opentelemetry/sdk-metrics": "2.10.0",
+    "@opentelemetry/sdk-trace-base": "2.10.0",
+    "@opentelemetry/sdk-trace-node": "2.10.0",
+    "@opentelemetry/semantic-conventions": "1.43.0",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/config": "workspace:*",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",

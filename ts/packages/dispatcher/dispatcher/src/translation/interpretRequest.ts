@@ -6,15 +6,12 @@ import { HistoryContext, RequestAction } from "@typeagent/agent-cache";
 import {
     getActivityActiveSchemas,
     getActivityCacheSpec,
+    getMatchRequestBypassReason,
     getNonActivityActiveSchemas,
     matchRequest,
 } from "./matchRequest.js";
 import { translateRequest } from "./translateRequest.js";
-import {
-    CommandHandlerContext,
-    getRequestId,
-    requestIdToString,
-} from "../context/commandHandlerContext.js";
+import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { CachedImageWithDetails } from "@typeagent/typechat-utils";
 import { unicodeChar } from "../command/command.js";
@@ -24,7 +21,14 @@ import {
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
 import registerDebug from "debug";
-import { ProfileNames } from "../utils/profileNames.js";
+import {
+    attachTranslationRoutingToError,
+    emitTranslationCacheBypass,
+    emitTranslationMatchResult,
+    readTranslationRoutingSummary,
+    runInTranslationSpan,
+    type TranslationRoutingSummary,
+} from "../otel/translationSpan.js";
 const debugInterpret = registerDebug("typeagent:interpret");
 export function getHistoryContext(context: CommandHandlerContext) {
     const config = context.session.getConfig();
@@ -73,6 +77,12 @@ export type InterpretResult = {
     fromUser: boolean;
     fromCache: "construction" | "grammar" | false;
     tokenUsage?: ai.CompletionUsageStats | undefined;
+    // The matched construction/rule pattern text (cache hits only), surfaced
+    // for the explained popover.
+    ruleText?: string | undefined;
+    // Bounded routing decisions taken during translation (fallback/retry/cache
+    // lookup outcome), for the `translation:completed` structured event.
+    routing?: TranslationRoutingSummary | undefined;
 };
 
 export function getCannotUseCacheReason(
@@ -114,15 +124,33 @@ async function interpretRequestWithActiveSchemas(
         history,
     );
     const canUseCacheMatch = cannotUseCacheReason === undefined;
-    const match = canUseCacheMatch
-        ? await matchRequest(
-              context,
-              request,
-              history,
-              activeSchemaNames,
-              systemContext.currentAbortSignal,
-          )
+    const matchBypassReason = canUseCacheMatch
+        ? getMatchRequestBypassReason(context, request)
         : undefined;
+    const match =
+        canUseCacheMatch && matchBypassReason === undefined
+            ? await matchRequest(
+                  context,
+                  request,
+                  history,
+                  activeSchemaNames,
+                  systemContext.currentAbortSignal,
+              )
+            : undefined;
+
+    // Activity-context translation may perform more than one lookup. Emit
+    // each result in order so the span reflects every cache/grammar decision.
+    if (!canUseCacheMatch) {
+        emitTranslationCacheBypass("request_constraints");
+    } else if (matchBypassReason !== undefined) {
+        emitTranslationCacheBypass(matchBypassReason);
+    } else if (match === undefined) {
+        emitTranslationMatchResult("miss");
+    } else if (match.type === "grammar") {
+        emitTranslationMatchResult("grammar_hit");
+    } else if (match.type === "construction") {
+        emitTranslationMatchResult("cache_hit");
+    }
 
     return (
         match ??
@@ -236,9 +264,11 @@ export async function interpretRequest(
     request: string,
     attachments: CachedImageWithDetails[] | undefined,
     history: HistoryContext | undefined,
+    activeSchemaNames?: string[],
 ): Promise<InterpretResult> {
     const systemContext = context.sessionContext.agentContext;
-    const activeSchemaNames = systemContext.agents.getActiveSchemas();
+    const requestActiveSchemaNames =
+        activeSchemaNames ?? systemContext.agents.getActiveSchemas();
 
     // Developer-mode capture: start a fresh prompt buffer for this request.
     systemContext.devTrace.beginTranslation();
@@ -255,25 +285,43 @@ export async function interpretRequest(
         tokenUsage.total_tokens += usage.total_tokens;
     };
 
-    const translateResult = history?.activityContext
-        ? await interpretRequestWithActivityContext(
-              context,
-              request,
-              attachments,
-              history,
-              0,
-              activeSchemaNames,
-              usageCallback,
-          )
-        : await interpretRequestWithActiveSchemas(
-              context,
-              request,
-              attachments,
-              history,
-              0,
-              activeSchemaNames,
-              usageCallback,
-          );
+    // Capture the span's routing decisions inside its async context (the
+    // summary is unreadable once `runInTranslationSpan` tears the context
+    // down). The `finally` records it on success and failure alike.
+    let routing: TranslationRoutingSummary | undefined;
+    let translateResult;
+    try {
+        translateResult = await runInTranslationSpan(context, async () => {
+            try {
+                return history?.activityContext
+                    ? await interpretRequestWithActivityContext(
+                          context,
+                          request,
+                          attachments,
+                          history,
+                          0,
+                          requestActiveSchemaNames,
+                          usageCallback,
+                      )
+                    : await interpretRequestWithActiveSchemas(
+                          context,
+                          request,
+                          attachments,
+                          history,
+                          0,
+                          requestActiveSchemaNames,
+                          usageCallback,
+                      );
+            } finally {
+                routing = readTranslationRoutingSummary();
+            }
+        });
+    } catch (error) {
+        // Surface the routing decisions the request made before it failed or
+        // was cancelled so the completion boundary can log a truthful reason.
+        attachTranslationRoutingToError(error, routing);
+        throw error;
+    }
 
     const { requestAction, replacedAction } = await confirmTranslation(
         translateResult.elapsedMs,
@@ -282,49 +330,46 @@ export async function interpretRequest(
             : DispatcherEmoji,
         translateResult.requestAction,
         context,
-    );
+    ).catch((error) => {
+        // confirmTranslation (and the wrap-up work below) runs after the
+        // translation span's async context has been torn down, so
+        // `readTranslationRoutingSummary` can no longer see the span state.
+        // Re-attach the summary captured inside the span so a cancellation or
+        // validation failure here still carries a truthful routing rationale
+        // to the completion boundary.
+        attachTranslationRoutingToError(error, routing);
+        throw error;
+    });
 
-    if (!systemContext.batchMode) {
-        systemContext.logger?.logEvent(translateResult.type, {
-            elapsedMs: translateResult.elapsedMs,
+    try {
+        // Developer-mode capture: persist the history + complete translation
+        // prompt(s) for this request so it can be inspected/reconstructed
+        // later. No-op unless developer mode is on and the session is
+        // persisted.
+        await systemContext.devTrace.writeTranslationCapture({
             request,
+            developerMode: systemContext.developerMode === true,
+            translationType: translateResult.type,
+            elapsedMs: translateResult.elapsedMs,
+            schemaNames: [...requestActiveSchemaNames],
+            config: translateResult.config,
             history,
+            attachmentCount: attachments?.length ?? 0,
             actions: translateResult.requestAction.actions,
             replacedAction,
-            schemaNames: activeSchemaNames,
-            developerMode: systemContext.developerMode,
-            config: translateResult.config,
-            metrics: systemContext.metricsManager?.getMeasures(
-                requestIdToString(getRequestId(systemContext)),
-                ProfileNames.translate,
-            ),
             allMatches: translateResult.allMatches,
             tokenUsage,
         });
+
+        // Record this completed user turn into the contextSelector signal
+        // *after* resolution, so it never contributes to its own context
+        // vector (history-only, §10). Runs once per user turn at this ungated
+        // ingress.
+        systemContext.conversationSignal.recordRequest(request);
+    } catch (error) {
+        attachTranslationRoutingToError(error, routing);
+        throw error;
     }
-
-    // Developer-mode capture: persist the history + complete translation
-    // prompt(s) for this request so it can be inspected/reconstructed later.
-    // No-op unless developer mode is on and the session is persisted.
-    await systemContext.devTrace.writeTranslationCapture({
-        request,
-        developerMode: systemContext.developerMode === true,
-        translationType: translateResult.type,
-        elapsedMs: translateResult.elapsedMs,
-        schemaNames: [...activeSchemaNames],
-        config: translateResult.config,
-        history,
-        attachmentCount: attachments?.length ?? 0,
-        actions: translateResult.requestAction.actions,
-        replacedAction,
-        allMatches: translateResult.allMatches,
-        tokenUsage,
-    });
-
-    // Record this completed user turn into the contextSelector signal *after*
-    // resolution, so it never contributes to its own context vector
-    // (history-only, §10). Runs once per user turn at this ungated ingress.
-    systemContext.conversationSignal.recordRequest(request);
 
     return {
         elapsedMs: translateResult.elapsedMs,
@@ -333,5 +378,7 @@ export async function interpretRequest(
         fromCache:
             translateResult.type === "translate" ? false : translateResult.type,
         tokenUsage,
+        ruleText: translateResult.ruleText,
+        routing,
     };
 }

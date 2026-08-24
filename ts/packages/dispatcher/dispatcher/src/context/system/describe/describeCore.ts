@@ -3,15 +3,19 @@
 
 // Shared resolution + rendering core for agent/action capability discovery.
 // Both entry points call into this module directly: the `@describe` command
-// (describeCommandHandlers.ts) and the NL path (describeActionHandler.ts).
+// (describeCommandHandlers.ts) and the NL path (the describeAgent/describeAction
+// actions of system.help, in action/helpActionHandler.ts).
 
 import type {
     ActionInfo,
     AgentSchemaInfo,
     AgentSubSchemaInfo,
 } from "@typeagent/dispatcher-types";
-import { openai } from "@typeagent/aiclient";
-import type { ChatModelWithStreaming } from "@typeagent/aiclient";
+import {
+    createJsonTranslatorFromSchemaDef,
+    type TypeChatJsonTranslatorWithSignal,
+} from "@typeagent/typechat-utils";
+import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { getAgentSchemas } from "./agentSchemaInfo.js";
 
@@ -406,23 +410,37 @@ export function extractActionParameters(
     return body === undefined ? [] : parseParameterFields(body);
 }
 
-export function renderActionView(match: ActionMatch): string {
+/** Render the bolded `emoji schema.action — summary` action heading line. */
+function renderActionHeader(match: ActionMatch, summaryText: string): string {
     const { agent, subSchema, action } = match;
-    const summary = action.description ? ` — ${action.description}` : "";
-    const lines: string[] = [
-        `**${agent.emoji} ${subSchema.schemaName}.${action.name}**${summary}`,
-    ];
+    const summary = summaryText ? ` — ${summaryText}` : "";
+    return `**${agent.emoji} ${subSchema.schemaName}.${action.name}**${summary}`;
+}
 
-    const params = extractActionParameters(subSchema.schemaText, action.name);
-    if (params.length > 0) {
-        lines.push("", "**Parameters**");
-        for (const p of params) {
-            const optionalTag = p.optional ? ", optional" : "";
-            const comment = p.comment ? ` — ${p.comment}` : "";
-            lines.push(`- \`${p.name}\` (${p.type}${optionalTag})${comment}`);
-        }
+/** Render the `**Parameters**` block lines, or `[]` when there are none. */
+function renderParameterLines(params: ActionParameter[]): string[] {
+    if (params.length === 0) return [];
+    const lines = ["**Parameters**"];
+    for (const p of params) {
+        const optionalTag = p.optional ? ", optional" : "";
+        const comment = p.comment ? ` — ${p.comment}` : "";
+        lines.push(`- \`${p.name}\` (${p.type}${optionalTag})${comment}`);
     }
+    return lines;
+}
 
+export function renderActionView(match: ActionMatch): string {
+    const params = extractActionParameters(
+        match.subSchema.schemaText,
+        match.action.name,
+    );
+    const lines: string[] = [
+        renderActionHeader(match, match.action.description),
+    ];
+    const paramLines = renderParameterLines(params);
+    if (paramLines.length > 0) {
+        lines.push("", ...paramLines);
+    }
     return lines.join("\n");
 }
 
@@ -495,36 +513,56 @@ export function renderCapabilitiesDiscoveryFallback(
 }
 
 // ---------------------------------------------------------------------------
-// LLM polish (always attempted when a model is configured; deterministic
-// rendering above is the fallback on missing/failed model — see G5).
+// Structured-output polish (always attempted when a model is configured;
+// deterministic rendering above is the fallback on a missing/failed model —
+// see G5).
+//
+// The model returns a typed JSON object validated against the schema text
+// below; describeCore renders the final markdown deterministically from it, so
+// the model only supplies prose (never markdown or formatting).
 // ---------------------------------------------------------------------------
 
-function tryCreateDescribeModel(): ChatModelWithStreaming | undefined {
-    try {
-        const apiSettings = openai.apiSettingsFromEnv();
-        return openai.createChatModel(
-            apiSettings,
-            { temperature: 0.7, max_tokens: 800 },
-            undefined,
-            ["describeAction"],
-        );
-    } catch {
-        return undefined;
-    }
-}
+// Structured description the model produces for an agent. Keep in sync with
+// `agentDescriptionSchema` below (the text handed to the JSON translator).
+export type AgentDescriptionView = {
+    // Fluent, friendly 2-3 sentence summary of what the agent does, based only
+    // on the provided facts. Plain prose: no markdown, headings, or emphasis.
+    summary: string;
+};
 
-async function tryComplete(
-    model: ChatModelWithStreaming,
-    prompt: string,
-): Promise<string | undefined> {
+// Structured description the model produces for a single action. Keep in sync
+// with `actionDescriptionSchema` below.
+export type ActionDescriptionView = {
+    // Fuller explanation (1-3 sentences) of what the action does, beyond its
+    // one-line summary. Plain prose: no markdown.
+    explanation: string;
+    // One short natural-language phrase a user might say to trigger the action.
+    example: string;
+};
+
+const agentDescriptionSchema = `export type AgentDescriptionView = {
+    // Fluent, friendly 2-3 sentence summary of what the agent does, based only
+    // on the provided facts. Plain prose: no markdown, headings, or emphasis.
+    summary: string;
+};`;
+
+const actionDescriptionSchema = `export type ActionDescriptionView = {
+    // Fuller explanation (1-3 sentences) of what the action does, beyond its
+    // one-line summary. Plain prose: no markdown.
+    explanation: string;
+    // One short natural-language phrase a user might say to trigger the action.
+    example: string;
+};`;
+
+function tryCreateDescribeTranslator<T extends object>(
+    typeName: string,
+    schema: string,
+): TypeChatJsonTranslatorWithSignal<T> | undefined {
     try {
-        const result = await model.complete(prompt);
-        if (!result.success) return undefined;
-        const text = result.data.trim();
-        // An empty completion isn't usable polish; let the caller fall back
-        // to the deterministic rendering instead of returning blank text.
-        return text.length > 0 ? text : undefined;
+        return createJsonTranslatorFromSchemaDef<T>(typeName, schema);
     } catch {
+        // createChatModel throws when no model provider is configured; the
+        // caller falls back to the deterministic rendering.
         return undefined;
     }
 }
@@ -539,27 +577,45 @@ export async function polishAgentView(
     agent: AgentSchemaInfo,
     deterministic: string,
 ): Promise<string> {
-    const model = tryCreateDescribeModel();
-    if (model === undefined) return deterministic;
+    const translator = tryCreateDescribeTranslator<AgentDescriptionView>(
+        "AgentDescriptionView",
+        agentDescriptionSchema,
+    );
+    if (translator === undefined) return deterministic;
 
     const actionList = agent.subSchemas
         .flatMap((s) => s.actions)
         .map((a) => `- ${a.name}: ${a.description}`)
         .join("\n");
-    const prompt =
-        `Write one fluent, friendly paragraph (2-3 sentences) describing what the "${agent.name}" agent does, ` +
-        `for a chat assistant's capability listing. Base it only on the facts below; do not invent features.\n\n` +
+    const request =
+        `Summarize what the "${agent.name}" agent does for a chat assistant's ` +
+        `capability listing. Base it only on these facts; do not invent features.\n\n` +
         `Agent description: ${agent.description}\n` +
-        `Actions:\n${actionList}\n\n` +
-        `Respond with just the paragraph, no heading or markdown emphasis.`;
-    const polished = await tryComplete(model, prompt);
-    if (polished === undefined) return deterministic;
+        `Actions:\n${actionList}`;
+    const result = await withChatModelTelemetryContext(
+        { purpose: "capability-description", scope: "foreground" },
+        () => translator.translate(request),
+    );
+    if (!result.success) return deterministic;
 
-    // Splice the polished paragraph in place of the deterministic summary
-    // line (first line of `deterministic`), keeping the rest (table/footer)
-    // unchanged and always deterministic.
+    return renderPolishedAgentView(agent, deterministic, result.data);
+}
+
+/**
+ * Splice the model's summary in place of the deterministic summary line (the
+ * first line of `deterministic`), keeping the rest (table/footer) unchanged
+ * and always deterministic. Returns the deterministic rendering unchanged when
+ * the model produced an empty summary.
+ */
+export function renderPolishedAgentView(
+    agent: AgentSchemaInfo,
+    deterministic: string,
+    view: AgentDescriptionView,
+): string {
+    const summary = view.summary.trim();
+    if (summary.length === 0) return deterministic;
     const rest = deterministic.split("\n").slice(1).join("\n");
-    return `${agentTitle(agent)} ${polished}\n${rest}`;
+    return `${agentTitle(agent)} ${summary}\n${rest}`;
 }
 
 /**
@@ -572,8 +628,11 @@ export async function polishActionView(
     match: ActionMatch,
     deterministic: string,
 ): Promise<string> {
-    const model = tryCreateDescribeModel();
-    if (model === undefined) return deterministic;
+    const translator = tryCreateDescribeTranslator<ActionDescriptionView>(
+        "ActionDescriptionView",
+        actionDescriptionSchema,
+    );
+    if (translator === undefined) return deterministic;
 
     const params = extractActionParameters(
         match.subSchema.schemaText,
@@ -585,17 +644,47 @@ export async function polishActionView(
                 `- ${p.name} (${p.type}${p.optional ? ", optional" : ""})${p.comment ? `: ${p.comment}` : ""}`,
         )
         .join("\n");
-    const prompt =
-        `Explain what the "${match.action.name}" action of the "${match.agent.name}" agent does, in more ` +
-        `detail than a one-line summary, for a chat assistant's capability listing. Base it only on the facts ` +
-        `below; do not invent parameters or behavior. Include the parameters and one example natural-language ` +
-        `phrasing a user might say to trigger it.\n\n` +
+    const request =
+        `Explain what the "${match.action.name}" action of the "${match.agent.name}" agent does, ` +
+        `in more detail than a one-line summary, for a chat assistant's capability listing. ` +
+        `Base it only on the facts below; do not invent parameters or behavior.\n\n` +
         `Action summary: ${match.action.description}\n` +
-        `Parameters:\n${paramList || "(none)"}\n\n` +
-        `Format as markdown: a short paragraph, then a "**Parameters**" bullet list (if any), then a ` +
-        `"**Example:**" line with a quoted phrase.`;
-    const polished = await tryComplete(model, prompt);
-    return polished ?? deterministic;
+        `Parameters:\n${paramList || "(none)"}`;
+    const result = await withChatModelTelemetryContext(
+        { purpose: "capability-description", scope: "foreground" },
+        () => translator.translate(request),
+    );
+    if (!result.success) return deterministic;
+
+    return renderPolishedActionView(match, result.data);
+}
+
+/**
+ * Render the detailed action view from the model's structured description: the
+ * heading (using the fuller explanation, falling back to the one-line
+ * description), the deterministic parameters block, and an example phrasing.
+ */
+export function renderPolishedActionView(
+    match: ActionMatch,
+    view: ActionDescriptionView,
+): string {
+    const explanation = view.explanation.trim() || match.action.description;
+    const lines: string[] = [renderActionHeader(match, explanation)];
+
+    const params = extractActionParameters(
+        match.subSchema.schemaText,
+        match.action.name,
+    );
+    const paramLines = renderParameterLines(params);
+    if (paramLines.length > 0) {
+        lines.push("", ...paramLines);
+    }
+
+    const example = view.example.trim();
+    if (example.length > 0) {
+        lines.push("", `**Example:** "${example}"`);
+    }
+    return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -612,7 +701,9 @@ export async function describeAction(
     actionName: string,
     agentName?: string,
 ): Promise<string> {
-    const schemas = await getAgentSchemas(context);
+    const schemas = await getAgentSchemas(context, undefined, {
+        includeSchemaless: true,
+    });
     const resolution = resolveAction(schemas, actionName, agentName);
     switch (resolution.kind) {
         case "ambiguous":
@@ -635,7 +726,9 @@ export async function describeAgentOrAction(
     name: string,
     all: boolean,
 ): Promise<string> {
-    const schemas = await getAgentSchemas(context);
+    const schemas = await getAgentSchemas(context, undefined, {
+        includeSchemaless: true,
+    });
     const agentResolution = resolveAgent(schemas, name);
     if (agentResolution.kind === "found") {
         // isSchemaEnabled can throw for an unregistered schema name; treat

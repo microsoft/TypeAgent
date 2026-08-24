@@ -16,7 +16,7 @@ import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import {
     getDefaultAppAgentProviders,
-    getDefaultAppAgentSource,
+    getDefaultAppAgentSources,
     getDefaultConstructionProvider,
     getIndexingServiceRegistry,
 } from "default-agent-provider";
@@ -30,11 +30,13 @@ registerDebug.enable("typeagent:webserver:*");
 
 export interface WebDispatcher {
     connect(ws: WebSocket): void;
-    close(): void;
+    close(): Promise<void>;
     handleAction(action: FullAction): Promise<CommandResult>;
 }
 
-export async function createWebDispatcher(): Promise<WebDispatcher> {
+export async function createWebDispatcher(
+    structuredLogs: boolean,
+): Promise<WebDispatcher> {
     let ws: WebSocket | null = null;
     const clientIOChannel = createChannelAdapter((message: any) =>
         ws?.send(
@@ -51,17 +53,18 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
     const clientIO = createClientIORpcClient(clientIOChannel.channel);
     const dispatcher = await createDispatcher("api", {
         appAgentProviders: getDefaultAppAgentProviders(instanceDir),
-        appAgentSources: [
-            getDefaultAppAgentSource(instanceDir, {
-                excludePathSources: true,
-            }),
-        ],
+        appAgentSources: getDefaultAppAgentSources(instanceDir, {
+            excludePathSources: true,
+        }),
         persistSession: true,
         persistDir: instanceDir,
         storageProvider: getFsStorageProvider(),
         metrics: true,
         dblogging: true,
         traceId: getTraceId(),
+        telemetry: {
+            structuredLogs,
+        },
         clientIO: clientIO,
         constructionProvider: getDefaultConstructionProvider(),
         indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),
@@ -191,8 +194,8 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
             // Always update setting on first connect
             updateSettingSummary(true);
         },
-        close: () => {
-            dispatcher.close();
+        close: async () => {
+            await dispatcher.close();
         },
         handleAction: handleAction,
     };

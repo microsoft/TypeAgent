@@ -11,7 +11,7 @@ import type { ActionSchemaTypeDefinition } from "@typeagent/action-schema";
 import type { AppAgentManifest, GrammarContent } from "@typeagent/agent-sdk";
 import { extractParams } from "./paramTypes.js";
 import { extractPhrasings, extractCompiledPhrasings } from "./phrasings.js";
-import { collectSystemCommands } from "./systemCommands.js";
+import { collectCommands } from "./commands.js";
 import { categoryForAgent } from "./categories.js";
 import { joinComments } from "./util.js";
 import type { ActionInfo, AgentInfo, Catalog, SchemaInfo } from "./types.js";
@@ -19,11 +19,12 @@ import type { ActionInfo, AgentInfo, Catalog, SchemaInfo } from "./types.js";
 /**
  * Collect the full capability catalog from the workspace's bundled agents.
  *
- * This is a purely static enumeration — it reads agent manifests, action
- * schemas, and grammar files from disk (no running dispatcher, no network,
- * no LLM). Dynamic, runtime-only capabilities (MCP tools, recorded web flows)
- * are intentionally out of scope so the catalog can be generated during the
- * documentation build.
+ * Agents, action schemas, and grammar-derived phrasings are read statically
+ * from disk. Commands are enumerated by booting a headless, read-only
+ * dispatcher (no network, no LLM, no API keys) so each host's `@command` table
+ * is captured the way it is assembled at runtime. Dynamic, runtime-only
+ * capabilities (MCP tools, recorded web flows) are intentionally out of scope
+ * so the catalog stays reproducible for the documentation build.
  */
 export async function collectCatalog(): Promise<Catalog> {
     // `undefined` builds only the static bundled-agent provider (no instance
@@ -90,16 +91,16 @@ export async function collectCatalog(): Promise<Catalog> {
         });
     }
 
-    const systemCommands = collectSystemCommands();
+    const commands = await collectCommands();
 
     return {
         generatedAt: new Date().toISOString(),
         agents,
-        systemCommands,
+        commands,
         counts: {
             agents: agents.length,
             actions: actionCount,
-            commands: systemCommands.length,
+            commands: commands.length,
         },
     };
 }

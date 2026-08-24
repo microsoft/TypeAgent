@@ -11,6 +11,7 @@ import type {
 import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
 import type { ConversationInfo } from "@typeagent/agent-server-client";
 import type { ConnectionStatus } from "@typeagent/chat-ui";
+import type { DisplayContent } from "@typeagent/agent-sdk";
 
 export type { ShellUserSettings };
 
@@ -69,6 +70,7 @@ export interface ClientAPI {
     saveSettings: (settings: ShellUserSettings) => void;
     openImageFile: () => void;
     openFolder: (path: string) => void;
+    openConfigFile: (path: string) => void;
     openUrlInBrowserTab: (url: string) => void;
     openUrlExternal: (url: string) => void;
 
@@ -107,8 +109,7 @@ export interface ClientAPI {
         { conversationId: string; name: string } | undefined
     >;
     conversationManageAction(payload: ManageConversationPayload): Promise<{
-        html: string;
-        kind: "info" | "warning" | "error";
+        content: DisplayContent;
         switched?: boolean;
     }>;
 

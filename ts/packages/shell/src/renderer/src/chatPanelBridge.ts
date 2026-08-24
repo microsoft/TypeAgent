@@ -26,6 +26,7 @@ import {
     parseStatusNotice,
     type TemplateEditServices,
     type ConnectionStatus,
+    fileLinkToPath,
 } from "@typeagent/chat-ui";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import {
@@ -89,6 +90,7 @@ function mapResult(result: any):
           actionTokenUsage?: any;
           parsePhase?: any;
           cancelled?: boolean;
+          traceId?: string;
       }
     | undefined {
     if (!result) return undefined;
@@ -103,6 +105,7 @@ function mapResult(result: any):
         actionTokenUsage: result.actionTokenUsage,
         parsePhase: metrics?.parse,
         cancelled: result.cancelled === true,
+        traceId: result.traceId,
     };
 }
 
@@ -187,6 +190,19 @@ function toHistoryEntries(entries: any[]): HistoryEntry[] {
                     requestId: ridStr(e.requestId),
                 });
                 break;
+            case "notify": {
+                // Persisted "explained" notifications restore the roadrunner
+                // icon + click-to-open popover on replayed user bubbles.
+                const rid = ridStr(e.notificationId ?? e.requestId);
+                if (e.event === "explained" && rid) {
+                    out.push({
+                        kind: "explained",
+                        requestId: rid,
+                        data: e.data,
+                    });
+                }
+                break;
+            }
             case "command-result": {
                 const m = e.metrics;
                 const actions: any[] | undefined = m?.actions;
@@ -206,6 +222,7 @@ function toHistoryEntries(entries: any[]): HistoryEntry[] {
                     firstMessageMs: rid
                         ? firstMessageMsByRequestId.get(rid)
                         : undefined,
+                    traceId: e.traceId,
                 });
                 break;
             }
@@ -641,6 +658,14 @@ export function createChatPanelClient(
     const chatPanel = new ChatPanel(rootElement, {
         platformAdapter: {
             handleLinkClick: (href: string) => {
+                // Local-file links open in the OS default editor; the
+                // `openFolder` channel is just `shell.openPath`, which
+                // handles files as well as directories.
+                const filePath = fileLinkToPath(href);
+                if (filePath !== undefined) {
+                    getClientAPI().openConfigFile(filePath);
+                    return;
+                }
                 getClientAPI().openUrlExternal(href);
             },
         },
@@ -672,6 +697,23 @@ export function createChatPanelClient(
             // RPC: permanent=true is a non-recoverable hard delete;
             // permanent=false is a recoverable soft delete (trash).
             void dispatcher?.recordUserHide(requestId, true, target, permanent);
+        },
+        // Live-updating displays (an agent's ActionResult.dynamicDisplayId,
+        // e.g. the player's now-playing "status" card). ChatPanel arms a
+        // refresh timer on setDynamicDisplay and calls this each tick to pull
+        // fresh content; it also only registers the bubble with the top rail
+        // once a refresh returns. Without this callback setDynamicDisplay is a
+        // no-op, so the card never updates and never pins. Read the dispatcher
+        // closure per call so it stays reconnect-safe; "html" because the shell
+        // renders HTML display content.
+        getDynamicDisplay: async (source, displayId) => {
+            const d = dispatcher;
+            if (d === undefined) {
+                throw new Error(
+                    "Dispatcher not ready for dynamic display refresh",
+                );
+            }
+            return d.getDynamicDisplay(source, "html", displayId);
         },
         speechProvider,
         ttsProvider,
@@ -853,13 +895,23 @@ export function createChatPanelClient(
             });
         },
         setDynamicDisplay: (
-            _requestId,
+            requestId,
             source,
             _actionIndex,
             displayId,
             nextRefreshMs,
         ) => {
-            chatPanel.setDynamicDisplay(source, displayId, nextRefreshMs);
+            afterReplay(() => {
+                if (isCancelledRequest(ridStr(requestId))) return;
+                // Pass the requestId so chat-ui refreshes the action's own
+                // bubble in place instead of a separate globe-icon card.
+                chatPanel.setDynamicDisplay(
+                    source,
+                    displayId,
+                    nextRefreshMs,
+                    ridStr(requestId),
+                );
+            });
         },
         question: async (requestId, message, choices, defaultId) => {
             if (requestId === undefined) {
@@ -1105,8 +1157,8 @@ export function createChatPanelClient(
                 chatPanel.addSystemMessage("Interaction cancelled.");
             }
         },
-        takeAction: (_requestId, action, data) => {
-            handleTakeAction(action, data);
+        takeAction: (requestId, action, data) => {
+            handleTakeAction(requestId, action, data);
         },
         onUserFeedback: (entry) => {
             chatPanel.applyFeedback(entry);
@@ -1192,7 +1244,11 @@ export function createChatPanelClient(
         },
     };
 
-    function handleTakeAction(action: string, data: unknown) {
+    function handleTakeAction(
+        requestId: RequestId,
+        action: string,
+        data: unknown,
+    ) {
         try {
             const d: any = data;
             switch (action) {
@@ -1215,20 +1271,22 @@ export function createChatPanelClient(
                     getClientAPI().openFolder(data as string);
                     break;
                 case "manage-conversation":
-                    void handleManageConversation(d).catch((e) =>
-                        chatPanel.showInline(
+                    void handleManageConversation(requestId, d).catch((e) =>
+                        chatPanel.replaceAgentMessage(
                             {
-                                type: "html",
+                                type: "text",
                                 content: `❌ ${e?.message ?? String(e)}`,
                                 kind: "warning",
                             },
                             "conversation",
+                            chatPanel.iconForSource("conversation"),
+                            ridStr(requestId),
                         ),
                     );
                     break;
                 default:
-                    // Android-only actions (set-alarm, call-phonenumber, etc.)
-                    // are not supported in the Electron shell.
+                    // Client-agent actions handled by other hosts (e.g. the
+                    // Android sample) are not supported in the Electron shell.
                     break;
             }
         } catch (e) {
@@ -1237,12 +1295,15 @@ export function createChatPanelClient(
     }
 
     async function handleManageConversation(
+        requestId: RequestId,
         payload: ManageConversationPayload,
     ) {
         const result = await getClientAPI().conversationManageAction(payload);
-        chatPanel.showInline(
-            { type: "html", content: result.html, kind: result.kind },
+        chatPanel.replaceAgentMessage(
+            result.content,
             "conversation",
+            chatPanel.iconForSource("conversation"),
+            ridStr(requestId),
         );
     }
 
@@ -1453,6 +1514,21 @@ export function createChatPanelClient(
             chatPanel.setDemoPaused(state === "paused");
         },
         reconnectStatusChanged(status: ConnectionStatus | undefined): void {
+            // Retract the "stale-build" notice when the connection drops
+            // (status defined), not when it returns. The notice describes the
+            // server we were connected to, so a stuck "Restarting..." toast
+            // must not outlive that link. Clearing on disconnect keeps the
+            // reconnected server's join-time push authoritative: a fresh
+            // successor stays silent (nothing to show) and a still-stale one
+            // re-pushes the notice, which arrives after this retract and
+            // renders correctly. Doing it here rather than on reconnect avoids
+            // racing that push - the Electron shell reuses its connection
+            // across reconnects (unlike vscode-shell's fresh connect), so the
+            // server's join-time retract can be dropped, and this makes the
+            // clear independent of it. Idempotent once the notice is gone.
+            if (status !== undefined) {
+                chatPanel.clearStatusNotice("stale-build");
+            }
             chatPanel.setConnectionStatus(status, (action) => {
                 // Manual recovery from the "stopped" banner — main owns the
                 // retry / server-start logic.

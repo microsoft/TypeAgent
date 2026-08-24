@@ -38,6 +38,14 @@ import {
     ImagePromptContent,
 } from "typechat";
 import { readServerEventStream } from "./serverEvents.js";
+import {
+    adapterFor,
+    createApiHeaders,
+    verifyFilterResults,
+    type ModelRequest,
+    type FilterResult,
+    type FilterError,
+} from "./wireApiProvider/index.js";
 import { priorityQueue } from "async";
 import registerDebug from "debug";
 import { TokenCounter } from "./tokenCounter.js";
@@ -56,7 +64,13 @@ import {
     copilotApiSettingsFromConfig,
 } from "./copilotSettings.js";
 import { getProviderChatModel } from "./providerChatModelRegistry.js";
-import { getActiveModelProvider, resolveTarget } from "./providerMode.js";
+import type { WireApi } from "@typeagent/config";
+import {
+    getActiveModelProvider,
+    resolveTarget,
+    usesProviderDefault,
+} from "./providerMode.js";
+import { instrumentChatModel } from "./otelChatModel.js";
 
 export { azureApiSettingsFromEnv, openAIApiSettingsFromEnv };
 
@@ -84,6 +98,11 @@ export type CommonApiSettings = {
     timeout?: number | undefined;
     maxRetryAttempts?: number | undefined;
     retryPauseMs?: number | undefined;
+    /**
+     * Wire protocol for chat calls. Absent ⇒ chat_completions
+     * (/chat/completions). Also supports responses and messages.
+     */
+    wireApi?: WireApi | undefined;
 };
 /**
  * Settings used by OpenAI clients
@@ -125,9 +144,12 @@ export function apiSettingsFromEnv(
     // and video stay on whatever the legacy resolver picks (Azure/OpenAI).
     const mode = getActiveModelProvider();
     if (mode !== undefined && modelType === ModelType.Chat) {
-        const target = resolveTarget(mode, endpointName ?? "DEFAULT");
+        const canonical = endpointName ?? "DEFAULT";
+        const target = resolveTarget(mode, canonical);
         if (mode === "copilot") {
-            return copilotApiSettingsFromConfig(target);
+            return copilotApiSettingsFromConfig(
+                usesProviderDefault(canonical) ? undefined : target,
+            );
         }
         if (mode === "ollama") {
             return ollamaApiSettingsFromEnv(modelType, env, target);
@@ -177,35 +199,6 @@ export function localOpenAIApiSettingsFromEnv(
     return openAIApiSettingsFromEnv(modelType, env, endpointName, true);
 }
 
-/**
- * Create an Open AI client. Supports both OpenAI and AzureOpenAI endpoints
- * @param settings settings to use for creating client
- * @returns headers used for API connections
- */
-async function createApiHeaders(settings: ApiSettings): Promise<Result<any>> {
-    let apiHeaders;
-    if (settings.provider === "azure") {
-        if (settings.tokenProvider) {
-            const tokenResult = await settings.tokenProvider.getAccessToken();
-            if (!tokenResult.success) {
-                return tokenResult;
-            }
-            apiHeaders = {
-                Authorization: `Bearer ${tokenResult.data}`,
-            };
-        } else {
-            apiHeaders = { "api-key": settings.apiKey };
-        }
-    } else if (settings.provider === "openai") {
-        apiHeaders = {
-            Authorization: `Bearer ${settings.apiKey}`,
-            "OpenAI-Organization": settings.organization ?? "",
-        };
-    }
-
-    return success(apiHeaders);
-}
-
 // Parse the endpoint name with the following naming conventions
 //
 // - By default, if endpoint name is not specified, it defaults to `OPENAI_ENDPOINT` if it exists, and `AZURE_OPENAI_ENDPOINT` otherwise.
@@ -220,6 +213,9 @@ function parseEndPointName(endpoint?: string): {
     if (endpoint === undefined || endpoint === "") {
         const mode = getActiveModelProvider();
         if (mode !== undefined) {
+            if (mode === "copilot") {
+                return { provider: mode };
+            }
             return { provider: mode, name: resolveTarget(mode, "DEFAULT") };
         }
         return {
@@ -251,6 +247,9 @@ function parseEndPointName(endpoint?: string): {
     // the active mode's mapping. Explicit prefixes above always win.
     const mode = getActiveModelProvider();
     if (mode !== undefined) {
+        if (mode === "copilot" && usesProviderDefault(endpoint)) {
+            return { provider: mode };
+        }
         const target = resolveTarget(mode, endpoint);
         return { provider: mode, name: target };
     }
@@ -374,70 +373,6 @@ export function supportsStreaming(
     return "completeStream" in model;
 }
 
-type FilterResult = {
-    hate?: Filter;
-    jailbreak?: Filter;
-    protected_material_code?: Filter;
-    protected_material_text?: Filter;
-    self_harm?: Filter;
-    sexual?: Filter;
-    violence?: Filter;
-    error?: FilterError;
-};
-
-type FilterError = {
-    code: string;
-    message: string;
-};
-
-type Filter = {
-    filtered: boolean;
-    severity: string;
-    detected?: boolean;
-};
-
-// NOTE: these are not complete
-type ChatCompletion = {
-    id: string;
-    choices: ChatCompletionChoice[];
-    usage: CompletionUsageStats;
-};
-
-type ToolCall = {
-    id: string;
-    type: "function";
-    function: {
-        name: string;
-        arguments: string;
-    };
-};
-
-type ChatCompletionChoice = {
-    message?: ChatContent;
-    content_filter_results?: FilterResult | FilterError;
-    finish_reason?: string;
-};
-
-type ChatCompletionChunk = {
-    id: string;
-    choices: ChatCompletionDelta[];
-    usage?: CompletionUsageStats;
-};
-
-type ToolCallDelta = { index: number } & ToolCall;
-
-type ChatCompletionDelta = {
-    delta: ChatContent<ToolCallDelta>;
-    content_filter_results?: FilterResult | FilterError;
-    finish_reason?: string;
-};
-
-type ChatContent<ToolCallType = ToolCall> = {
-    content?: string | null;
-    tool_calls?: ToolCallType[];
-    role: "assistant";
-};
-
 type ImageCompletion = {
     created: number;
     data: ImageData[];
@@ -495,29 +430,37 @@ export function createChatModel(
         completionSettings.temperature ??= 1;
     }
 
+    let model: ChatModelWithStreaming;
     if (settings.provider === "ollama") {
-        return createOllamaChatModel(
+        model = createOllamaChatModel(
             settings,
             completionSettings,
             completionCallback,
             tags,
         );
+    } else {
+        const providerFactory = getProviderChatModel(settings.provider);
+        model =
+            providerFactory !== undefined
+                ? providerFactory(
+                      settings,
+                      completionSettings,
+                      completionCallback,
+                      tags,
+                  )
+                : createAzureOpenAIChatModel(
+                      pool,
+                      completionSettings,
+                      completionCallback,
+                      tags,
+                  );
     }
-    const providerFactory = getProviderChatModel(settings.provider);
-    if (providerFactory !== undefined) {
-        return providerFactory(
-            settings,
-            completionSettings,
-            completionCallback,
-            tags,
-        );
-    }
-    return createAzureOpenAIChatModel(
-        pool,
-        completionSettings,
-        completionCallback,
-        tags,
-    );
+    return instrumentChatModel(model, {
+        provider: settings.provider,
+        ...("modelName" in settings && settings.modelName !== undefined
+            ? { model: settings.modelName }
+            : {}),
+    });
 }
 
 function createAzureOpenAIChatModel(
@@ -563,6 +506,12 @@ function createAzureOpenAIChatModel(
             : {
                   model: settings.modelName,
               };
+
+    // Select the wire adapter AFTER the pool has been built (routing is
+    // unchanged). Absent wireApi ⇒ chat_completions (legacy default).
+    const adapter = adapterFor(settings.wireApi);
+    const modelName = (settings as OpenAIApiSettings).modelName;
+
     const model: ChatModelWithStreaming = {
         completionSettings,
         completionCallback,
@@ -571,47 +520,34 @@ function createAzureOpenAIChatModel(
     };
     return model;
 
-    function buildRequest(params: any): BuildPoolRequest {
-        return async (member) => {
-            const headerResult = await createApiHeaders(member.settings);
-            if (!headerResult.success) return headerResult;
-            return success({ headers: headerResult.data, body: params });
+    // Package the normalized request for the adapter. `stream`/`streamOptions`
+    // only differ between complete() and completeStream().
+    function makeModelRequest(
+        messages: PromptSection[],
+        jsonSchema: CompletionJsonSchema | undefined,
+        stream: boolean,
+        streamOptions?: Record<string, unknown>,
+    ): ModelRequest {
+        return {
+            messages,
+            jsonSchema,
+            completionSettings: completionSettings!,
+            defaultParams,
+            disableResponseFormat,
+            modelName,
+            stream,
+            streamOptions,
         };
     }
 
-    function getParams(
-        messages: PromptSection[],
-        jsonSchema?: CompletionJsonSchema,
-        additionalParams?: any,
-    ) {
-        const params: any = {
-            ...defaultParams,
-            messages,
-            ...completionSettings,
-            ...additionalParams,
+    function buildRequest(body: unknown): BuildPoolRequest {
+        return async (member) => {
+            const headerResult = await adapter.buildHeaders(member.settings);
+            if (!headerResult.success) return headerResult;
+            return success({ headers: headerResult.data, body });
         };
-        if (jsonSchema !== undefined) {
-            if (disableResponseFormat) {
-                throw new Error(
-                    `Json schema not supported by model '${settings.modelName}'`,
-                );
-            }
-            if (Array.isArray(jsonSchema)) {
-                // function calling
-                params.tools = jsonSchema;
-                params.tool_choice = "required";
-                params.parallel_tool_calls = false;
-            } else {
-                if (params.response_format?.type === "json_object") {
-                    params.response_format = {
-                        type: "json_schema",
-                        json_schema: jsonSchema,
-                    };
-                }
-            }
-        }
-        return params;
     }
+
     async function complete(
         prompt: string | PromptSection[],
         usageCallback?: CompleteUsageStatsCallback,
@@ -626,58 +562,61 @@ function createAzureOpenAIChatModel(
                 ? [{ role: "user", content: prompt }]
                 : prompt;
 
-        const params = getParams(messages, jsonSchema);
-        const result = await callJsonApiWithPool(pool, buildRequest(params), {
+        const request = makeModelRequest(messages, jsonSchema, false);
+        const body = adapter.buildRequestBody(request);
+        const result = await callJsonApiWithPool(pool, buildRequest(body), {
             retryPauseMs: settings.retryPauseMs,
             signal,
         });
         if (!result.success) {
             return result;
         }
-        const data = result.data as ChatCompletion;
-        if (!data.choices || data.choices.length === 0) {
-            return error("No choices returned");
+        const data = result.data;
+
+        // Legacy chat_completions gate: empty/missing choices returns before
+        // side effects. Tool-call parse failures happen AFTER side effects.
+        // Only on the default adapter — messages/responses have no `choices`.
+        // Bare `.choices` access: null/undefined body throws TypeError (main).
+        if (adapter.wireApi === "chat_completions") {
+            const choices = (data as { choices?: unknown[] }).choices;
+            if (!choices || choices.length === 0) {
+                return error("No choices returned");
+            }
         }
 
         if (model.completionCallback) {
-            model.completionCallback(params, data);
+            model.completionCallback(body, data);
         }
 
         try {
+            const usage = adapter.extractUsage(data);
             if (settings.enableModelRequestLogging && logFn) {
-                // Log request
+                // Log raw assistant content (not unwrapped tool-call JSON).
+                // Bare choices[0]: null entry TypeErrors inside try (main),
+                // skipping logFn/TokenCounter/usageCallback before parse.
+                const rawContent =
+                    (
+                        data as {
+                            choices: {
+                                message?: { content?: string | null };
+                            }[];
+                        }
+                    ).choices[0].message?.content ?? "";
                 logFn({
                     prompt: messages as PromptSection[],
-                    response: data.choices[0].message?.content ?? "",
-                    tokenUsage: data.usage,
+                    response: rawContent,
+                    tokenUsage: usage,
                     tags: tags,
                 });
             }
-            // track token usage
-            TokenCounter.getInstance().add(data.usage, tags);
-            usageCallback?.(data.usage);
+            // Unconditional — matches pre-adapter TokenCounter/usageCallback
+            // (undefined usage was passed through at runtime).
+            TokenCounter.getInstance().add(usage as CompletionUsageStats, tags);
+            usageCallback?.(usage as CompletionUsageStats);
         } catch {}
 
-        if (Array.isArray(jsonSchema)) {
-            const tool_calls = data.choices[0].message?.tool_calls;
-            if (tool_calls === undefined) {
-                return error("No tool_calls returned");
-            }
-            if (tool_calls.length !== 1) {
-                return error("Invalid number of tool_calls");
-            }
-            const c = tool_calls[0];
-            if (c.type !== "function") {
-                return error("Invalid tool call type");
-            }
-            return success(
-                JSON.stringify({
-                    name: c.function.name,
-                    arguments: JSON.parse(c.function.arguments),
-                }),
-            );
-        }
-        return success(data.choices[0].message?.content ?? "");
+        // Tool-call validation / JSON.parse throw after bookkeeping.
+        return adapter.parseResponse(data, request);
     }
 
     async function completeStream(
@@ -708,11 +647,17 @@ function createAzureOpenAIChatModel(
             }
         });
 
-        const params = getParams(messages, jsonSchema, {
-            stream: true,
-            stream_options: { include_usage: true && !historyIncludesImages },
+        const request = makeModelRequest(messages, jsonSchema, true, {
+            include_usage: true && !historyIncludesImages,
         });
-        const result = await callApiWithPool(pool, buildRequest(params), {
+        const decoder = adapter.createStreamDecoder?.(request);
+        if (decoder === undefined) {
+            return error(
+                `Streaming is not supported by wire-api '${adapter.wireApi}'`,
+            );
+        }
+        const body = adapter.buildRequestBody(request);
+        const result = await callApiWithPool(pool, buildRequest(body), {
             retryPauseMs: settings.retryPauseMs,
             signal,
         });
@@ -742,112 +687,42 @@ function createAzureOpenAIChatModel(
                                 });
                             }
                         } catch {}
-                        if (Array.isArray(jsonSchema)) {
-                            fullResponseText += "}";
-                            yield "}";
+                        const tail = decoder.finish();
+                        if (tail) {
+                            fullResponseText += tail;
+                            yield tail;
                         }
                         break;
                     }
-                    const data = JSON.parse(evt.data) as ChatCompletionChunk;
-                    if (verifyContentSafety(data)) {
-                        if (data.choices && data.choices.length > 0) {
-                            if (Array.isArray(jsonSchema)) {
-                                const delta = data.choices[0].delta.tool_calls;
-                                if (delta) {
-                                    for (const d of delta) {
-                                        if (d.index !== 0) {
-                                            throw new Error(
-                                                "Invalid number of tool_calls",
-                                            );
-                                        }
-                                        if (fullResponseText === "") {
-                                            if (d.type !== "function") {
-                                                throw new Error(
-                                                    "Invalid tool call type",
-                                                );
-                                            }
-                                            if (!d.function.name) {
-                                                throw new Error(
-                                                    "Invalid function name",
-                                                );
-                                            }
-                                            fullResponseText = `{"name":"${d.function.name}","arguments":${d.function.arguments ?? ""}`;
-                                            yield fullResponseText;
-                                        } else {
-                                            const result = d.function.arguments;
-                                            fullResponseText += result;
-                                            yield result;
-                                        }
-                                    }
-                                }
-                            } else {
-                                const delta = data.choices[0].delta.content;
-                                if (delta) {
-                                    fullResponseText += delta;
-                                    yield delta;
-                                }
-                            }
+                    const piece = decoder.push(evt.data);
+                    // Function-calling may emit multiple yields per SSE event
+                    // (including undefined argument tails — legacy coercion).
+                    // Yield texts, then throw piece.error before usage — matches
+                    // legacy mid-loop yield-then-throw (usage skipped on throw).
+                    if (piece.texts !== undefined) {
+                        for (const chunk of piece.texts) {
+                            fullResponseText += chunk as string;
+                            yield chunk as string;
                         }
-                        if (data.usage) {
-                            tokenUsage = data.usage;
-                            try {
-                                // track token usage
-                                TokenCounter.getInstance().add(
-                                    data.usage,
-                                    tags,
-                                );
-                                usageCallback?.(data.usage);
-                            } catch {}
-                        }
+                    } else if (piece.text) {
+                        fullResponseText += piece.text;
+                        yield piece.text;
+                    }
+                    if (piece.error) {
+                        throw piece.error;
+                    }
+                    if (piece.usage) {
+                        tokenUsage = piece.usage;
+                        try {
+                            // track token usage
+                            TokenCounter.getInstance().add(piece.usage, tags);
+                            usageCallback?.(piece.usage);
+                        } catch {}
                     }
                 }
             })(),
         };
         // Stream chunks back
-    }
-
-    function verifyContentSafety(data: ChatCompletionChunk): boolean {
-        data.choices.map((c: ChatCompletionDelta) => {
-            if (c.finish_reason === "content_filter_error") {
-                const err = c.content_filter_results as FilterError;
-                throw new Error(
-                    `There was a content filter error (${err.code}): ${err.message}`,
-                );
-            }
-
-            verifyFilterResults(c.content_filter_results as FilterResult);
-        });
-
-        return true;
-    }
-}
-
-function verifyFilterResults(filterResult: FilterResult) {
-    const filters: string[] = new Array<string>();
-    if (filterResult) {
-        if (filterResult.hate?.filtered) {
-            filters.push("hate");
-        }
-        if (filterResult.self_harm?.filtered) {
-            filters.push("self_harm");
-        }
-        if (filterResult.sexual?.filtered) {
-            filters.push("sexual");
-        }
-        if (filterResult.violence?.filtered) {
-            filters.push("violence");
-        }
-        if (filterResult.protected_material_code?.filtered) {
-            filters.push("protected_material_code");
-        }
-        if (filterResult.protected_material_text?.filtered) {
-            filters.push("protected_material_text");
-        }
-
-        if (filters.length > 0) {
-            const msg = `A content filter has been triggered by one or more messages. The triggered filters are: ${filters.join(", ")}`;
-            throw new Error(`${msg}`);
-        }
     }
 }
 

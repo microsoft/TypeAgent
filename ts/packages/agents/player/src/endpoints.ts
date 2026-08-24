@@ -11,6 +11,14 @@ const debugSpotifyRestVerbose = registerDebug("typeagent:spotify-verbose:rest");
 // Default page size. Most paginated Spotify endpoints accept up to 50.
 export const limitMax = 50;
 
+const userDevicesCacheTtlMs = 30_000;
+type UserDevicesCacheEntry = {
+    value?: SpotifyApi.UserDevicesResponse;
+    expiresAt: number;
+    pending?: Promise<SpotifyApi.UserDevicesResponse>;
+};
+const userDevicesCache = new WeakMap<SpotifyService, UserDevicesCacheEntry>();
+
 // /v1/search silently caps `limit` at 10 (undocumented; >10 returns 400
 // "Invalid limit"). Other paginated endpoints still accept limitMax.
 export const searchLimitMax = 10;
@@ -411,6 +419,7 @@ export async function transferPlayback(
             "https://api.spotify.com/v1/me/player/",
             params,
         );
+        invalidateUserDevicesCache(service);
     } catch (error: any) {
         if (error.message && error.message.includes("404")) {
             throw new Error(
@@ -462,10 +471,44 @@ export async function play(
 }
 
 export async function getUserDevices(service: SpotifyService) {
-    return fetchGet<SpotifyApi.UserDevicesResponse>(
+    let cache = userDevicesCache.get(service);
+    if (cache?.value && cache.expiresAt > Date.now()) {
+        return cache.value;
+    }
+    if (cache?.pending) {
+        return cache.pending;
+    }
+
+    if (!cache) {
+        cache = { expiresAt: 0 };
+        userDevicesCache.set(service, cache);
+    }
+
+    const pending = fetchGet<SpotifyApi.UserDevicesResponse>(
         service,
         "https://api.spotify.com/v1/me/player/devices",
-    );
+    )
+        .then((value) => {
+            cache.value = value;
+            cache.expiresAt = Date.now() + userDevicesCacheTtlMs;
+            return value;
+        })
+        .catch((error: Error) => {
+            if (cache.value && error.message.includes("QUOTA_EXCEEDED")) {
+                cache.expiresAt = Date.now() + userDevicesCacheTtlMs;
+                return cache.value;
+            }
+            throw error;
+        })
+        .finally(() => {
+            delete cache.pending;
+        });
+    cache.pending = pending;
+    return pending;
+}
+
+export function invalidateUserDevicesCache(service: SpotifyService) {
+    userDevicesCache.delete(service);
 }
 
 export async function pause(service: SpotifyService, deviceId: string) {

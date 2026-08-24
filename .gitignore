@@ -446,7 +446,6 @@ FodyWeavers.xsd
 
 # Python virtual env
 .venv
-android/samples/mobile/.idea/deploymentTargetSelector.xml
 
 # Mac OS files
 .DS_Store
@@ -466,3 +465,4 @@ ts/packages/agentSdkWrapper/plans/
 /ts/packages/copilot-plugin/dist-exe
 /ts/msi-out
 ts/config.local.yaml.bak
+/ts/tmp/bundled-agent-server

@@ -4,6 +4,7 @@
 import { success, error, Result } from "typechat";
 import registerDebug from "debug";
 import { filterSecretsFromJsonString } from "@typeagent/common-utils";
+import { otel } from "@typeagent/telemetry";
 import type { EndpointPool, EndpointPoolMember } from "./endpointPool.js";
 import {
     markSuccess,
@@ -312,15 +313,47 @@ async function getErrorMessage(
     return `${response.status}: ${response.statusText}${bodyMessage ? `: ${bodyMessage}` : ""}${retries !== undefined ? ` Quitting after ${retries} retries` : ""}${timeTaken !== undefined ? ` in ${timeTaken}ms` : ""}`;
 }
 
+/**
+ * Shared by both "no `Response` at all" paths - the single-endpoint path
+ * throws {@link noResponseError}, the pool path uses this value inline - so
+ * they cannot describe the same event differently.
+ */
+const NO_RESPONSE_CLASSIFICATION: otel.TelemetryErrorClassification =
+    Object.freeze({
+        errorCategory: "network",
+        retryable: true,
+    });
+
+/**
+ * The error the single-endpoint path throws when `callFetch` resolves without
+ * a `Response`. It declares its own classification so the generic catch below
+ * classifies it as exactly what the pool path states directly.
+ */
+function noResponseError(): Error {
+    return Object.assign(new Error("fetch: No response"), {
+        ...NO_RESPONSE_CLASSIFICATION,
+    });
+}
+
 // Append the endpoint to a fetch error so failures name which
 // deployment/region was hit (e.g. an Azure "deployment does not exist" 404
 // points at the exact endpoint). The URL carries no secret - the api-key
 // rides in request headers, not the URL.
+//
+// The message quotes the provider's response body, so telemetry must never
+// parse or export it. `classification` carries the bounded facts instead,
+// since a `Result` failure has no room for them, letting the model wrapper
+// report a real 401/429/timeout instead of a blanket `provider`. `undefined`
+// is left off deliberately so that `provider` fallback still applies.
 function fetchErrorWithEndpoint(
     endpoint: string,
     detail: string,
+    classification: otel.TelemetryErrorClassification | undefined,
 ): Result<Response> {
-    return error(`fetch error: ${detail} (endpoint: ${endpoint})`);
+    const result = error(`fetch error: ${detail} (endpoint: ${endpoint})`);
+    return classification === undefined
+        ? result
+        : otel.attachTelemetryErrorClassification(result, classification);
 }
 
 /**
@@ -357,7 +390,7 @@ export async function fetchWithRetry(
         while (true) {
             const result = await callFetch(url, options, timeout, throttler);
             if (result === undefined) {
-                throw new Error("fetch: No response");
+                throw noResponseError();
             }
             debugHeader(result.status, result.statusText);
             debugHeader(result.headers);
@@ -386,6 +419,7 @@ export async function fetchWithRetry(
                 return fetchErrorWithEndpoint(
                     url,
                     await getErrorMessage(result, retryCount, elapsed),
+                    otel.classifyTelemetryHttpStatus(result.status),
                 );
             } else if (debugError.enabled) {
                 debugError(await getErrorMessage(result));
@@ -429,7 +463,11 @@ export async function fetchWithRetry(
         if (isAbortError(e)) {
             throw e;
         }
-        return fetchErrorWithEndpoint(url, e.cause?.message ?? e.message);
+        return fetchErrorWithEndpoint(
+            url,
+            e.cause?.message ?? e.message,
+            otel.classifyTelemetryErrorIfRecognized(e),
+        );
     }
 }
 
@@ -527,7 +565,12 @@ async function fetchWithTimeout(
             throw e;
         }
         if (isAbortError(ex)) {
-            throw new Error(`fetch timeout ${timeoutMs}ms`);
+            // Our own deadline fired, not the caller's cancellation. The
+            // standard `TimeoutError` name keeps it from being reported as a
+            // cancellation.
+            const timeout = new Error(`fetch timeout ${timeoutMs}ms`);
+            timeout.name = "TimeoutError";
+            throw timeout;
         }
         throw e;
     } finally {
@@ -751,6 +794,7 @@ async function fetchWithPool(
             lastError = fetchErrorWithEndpoint(
                 member.settings.endpoint,
                 e?.cause?.message ?? e?.message ?? String(e),
+                otel.classifyTelemetryErrorIfRecognized(e),
             );
             continue;
         }
@@ -771,6 +815,7 @@ async function fetchWithPool(
             lastError = fetchErrorWithEndpoint(
                 member.settings.endpoint,
                 "No response",
+                NO_RESPONSE_CLASSIFICATION,
             );
             continue;
         }
@@ -792,6 +837,7 @@ async function fetchWithPool(
                     attempts,
                     Date.now() - startTime,
                 ),
+                otel.classifyTelemetryHttpStatus(response.status),
             );
             continue;
         }
@@ -807,6 +853,7 @@ async function fetchWithPool(
                     attempts,
                     Date.now() - startTime,
                 ),
+                otel.classifyTelemetryHttpStatus(response.status),
             );
             continue;
         }
@@ -816,6 +863,7 @@ async function fetchWithPool(
         return fetchErrorWithEndpoint(
             member.settings.endpoint,
             await getErrorMessage(response, attempts, Date.now() - startTime),
+            otel.classifyTelemetryHttpStatus(response.status),
         );
     }
 }

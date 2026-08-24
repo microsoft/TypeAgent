@@ -48,8 +48,11 @@
     "build": "concurrently npm:tsc npm:asc:all npm:agc:all",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "compile": "node scripts/compileRecipes.mjs",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "test": "pnpm run test:local",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {
@@ -59,10 +62,13 @@
     "debug": "^4.3.4"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/debug": "^4.1.12",
+    "@types/jest": "^29.5.7",
     "concurrently": "^9.1.2",
+    "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
@@ -78,7 +84,8 @@
             "src/powershellSchema.agr"
           ],
           "outputGlobs": [
-            "dist/powershellSchema.ag.json"
+            "dist/powershellSchema.ag.json",
+            "dist/powershellSchema.ag.map.json"
           ]
         }
       },
@@ -91,7 +98,8 @@
             "src/namespaces/files/filesSchema.agr"
           ],
           "outputGlobs": [
-            "dist/filesSchema.ag.json"
+            "dist/filesSchema.ag.json",
+            "dist/filesSchema.ag.map.json"
           ]
         }
       },
@@ -104,7 +112,8 @@
             "src/namespaces/processes/processesSchema.agr"
           ],
           "outputGlobs": [
-            "dist/processesSchema.ag.json"
+            "dist/processesSchema.ag.json",
+            "dist/processesSchema.ag.map.json"
           ]
         }
       },
@@ -117,7 +126,8 @@
             "src/namespaces/system/systemSchema.agr"
           ],
           "outputGlobs": [
-            "dist/systemSchema.ag.json"
+            "dist/systemSchema.ag.json",
+            "dist/systemSchema.ag.map.json"
           ]
         }
       },
@@ -130,7 +140,8 @@
             "src/namespaces/services/servicesSchema.agr"
           ],
           "outputGlobs": [
-            "dist/servicesSchema.ag.json"
+            "dist/servicesSchema.ag.json",
+            "dist/servicesSchema.ag.map.json"
           ]
         }
       },
@@ -143,7 +154,8 @@
             "src/namespaces/network/networkSchema.agr"
           ],
           "outputGlobs": [
-            "dist/networkSchema.ag.json"
+            "dist/networkSchema.ag.json",
+            "dist/networkSchema.ag.map.json"
           ]
         }
       },
@@ -156,7 +168,8 @@
             "src/namespaces/data/dataSchema.agr"
           ],
           "outputGlobs": [
-            "dist/dataSchema.ag.json"
+            "dist/dataSchema.ag.json",
+            "dist/dataSchema.ag.map.json"
           ]
         }
       },
@@ -169,7 +182,8 @@
             "src/namespaces/archives/archivesSchema.agr"
           ],
           "outputGlobs": [
-            "dist/archivesSchema.ag.json"
+            "dist/archivesSchema.ag.json",
+            "dist/archivesSchema.ag.map.json"
           ]
         }
       },
@@ -280,6 +294,15 @@
     }
   },
   "typeagent": {
-    "defaultAgentName": "powershell"
+    "defaultAgentName": "powershell",
+    "bundle": {
+      "assetMappings": [
+        {
+          "package": "@typeagent/powershell-typeagent",
+          "source": "scripts/scriptHost.ps1",
+          "destination": "scripts/scriptHost.ps1"
+        }
+      ]
+    }
   }
 }

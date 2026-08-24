@@ -5,7 +5,7 @@
  * Hook entry point that routes to the appropriate handler based on configuration.
  *
  * Mode selection (in priority order):
- * 1. TYPEAGENT_MODE environment variable ("direct" | "mcp")
+ * 1. TYPEAGENT_MODE environment variable ("direct" | "mcp" | "dev" | "bypass")
  * 2. Config file at <configDir>/config.json
  * 3. Default: "direct"
  *
@@ -16,60 +16,195 @@
  *   @typeagent status        — show current configuration
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
 import { handleDirect } from "./hook-direct.js";
 import { handleMcpRedirect } from "./hook-mcp-redirect.js";
+import { handleDevActions } from "./hook-dev-actions.js";
 import { makeTurnId, writeDemoState } from "./demo-state.js";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import type { HookInput, HookOutput } from "./types.js";
+import { connectToAgentServer } from "../shared/typeagent-client.js";
+import { redactTraceValue } from "@typeagent/copilot-macros";
+import { getMacroFeatures } from "../shared/macro-features.js";
+import {
+    getConfigPath,
+    getMode,
+    readConfig,
+    writeConfig,
+    type Mode,
+} from "../shared/plugin-config.js";
 
-type Mode = "direct" | "mcp";
+const modeDescriptions: Record<Mode, string> = {
+    direct: "Hook handles requests directly, bypassing the LLM. Workspace macro tools remain available.",
+    mcp: "Hook redirects to the TypeAgent MCP tool. Workspace macro tools remain available.",
+    dev: "TypeAgent handles registered PowerShell flows and recording directives; other requests fall through to Copilot. Workspace macro tools remain available.",
+    bypass: "TypeAgent is disabled. All requests bypass TypeAgent routing and fall through to other handlers.",
+};
 
-interface PluginConfig {
-    mode: Mode;
-    powershell?: {
-        enabled?: boolean;
-    };
-    [key: string]: unknown;
-}
-
-function getConfigDir(): string {
-    return (
-        process.env.TYPEAGENT_PLUGIN_DATA ??
-        process.env.CLAUDE_PLUGIN_DATA ??
-        join(homedir(), ".typeagent-copilot")
+async function handleMacroCommand(
+    input: HookInput,
+    lower: string,
+): Promise<HookOutput | undefined> {
+    const match = lower.match(
+        /^@typeagent\s+macro\s+(record|cancel|status)\s*$/,
     );
-}
+    if (!match) return undefined;
 
-function getConfigPath(): string {
-    return join(getConfigDir(), "config.json");
-}
-
-function readConfig(): PluginConfig | undefined {
+    const command = match[1];
+    const connection = await connectToAgentServer();
     try {
-        return JSON.parse(readFileSync(getConfigPath(), "utf-8"));
-    } catch {
+        if (command === "record") {
+            const token = await connection.armMacroRecording({
+                sessionId: input.sessionId,
+            });
+            return {
+                handled: true,
+                responseContent: `Macro recording armed for the next interaction. Recording token: \`${token.id}\``,
+                handledBy: "typeagent",
+            };
+        }
+        if (command === "cancel") {
+            await connection.cancelMacroRecording(input.sessionId);
+            return {
+                handled: true,
+                responseContent: "Macro recording cancelled.",
+                handledBy: "typeagent",
+            };
+        }
+
+        const state = await connection.getMacroRecordingState(input.sessionId);
+        const detail =
+            state.status === "completed" && state.trace
+                ? ` Trace ID: \`${state.trace.traceId}\``
+                : state.status === "failed" && state.error
+                  ? ` ${state.error}`
+                  : state.token
+                    ? ` Recording token: \`${state.token.id}\``
+                    : "";
+        return {
+            handled: true,
+            responseContent: `Macro recording status: **${state.status}**.${detail}`,
+            handledBy: "typeagent",
+        };
+    } finally {
+        await connection.close();
+    }
+}
+
+function directCommand(input: HookInput, command: string): Promise<HookOutput> {
+    return handleDirect({
+        prompt: command,
+        sessionId: input.sessionId,
+        timestamp: input.timestamp,
+        cwd: input.cwd,
+    });
+}
+
+function handleRunCommand(
+    input: HookInput,
+    trimmed: string,
+): Promise<HookOutput> | undefined {
+    const match = trimmed.match(/^@typeagent\s+run\s+(.+)$/i);
+    return match ? directCommand(input, match[1]) : undefined;
+}
+
+function handleModeCommand(lower: string): HookOutput | undefined {
+    const match = lower.match(
+        /^@typeagent\s+mode(?:\s+(direct|mcp|dev|bypass))?\s*$/,
+    );
+    if (!match) return undefined;
+
+    const newMode = match[1] as Mode | undefined;
+    if (!newMode) {
+        const current = getMode();
+        return {
+            handled: true,
+            responseContent: `TypeAgent mode: **${current}**\n\nUse \`@typeagent mode direct\`, \`@typeagent mode mcp\`, \`@typeagent mode dev\`, or \`@typeagent mode bypass\` to switch.`,
+            handledBy: "typeagent",
+        };
+    }
+
+    const config = readConfig() ?? { mode: "direct" };
+    config.mode = newMode;
+    writeConfig(config);
+    return {
+        handled: true,
+        responseContent: `TypeAgent mode switched to **${newMode}**.  \n${modeDescriptions[newMode]}`,
+        handledBy: "typeagent",
+    };
+}
+
+function handlePowerShellCommand(lower: string): HookOutput | undefined {
+    const match = lower.match(/^@typeagent\s+powershell(?:\s+(on|off))?\s*$/);
+    if (!match) return undefined;
+
+    const setting = match[1] as "on" | "off" | undefined;
+    if (!setting) {
+        const config = readConfig();
+        const enabled = config?.powershell?.enabled ?? true;
+        return {
+            handled: true,
+            responseContent: `TypeAgent PowerShell: **${enabled ? "on" : "off"}**\n\nUse \`@typeagent powershell on\` or \`@typeagent powershell off\` to toggle.`,
+            handledBy: "typeagent",
+        };
+    }
+
+    const config = readConfig() ?? { mode: "direct" };
+    if (!config.powershell) config.powershell = {};
+    config.powershell.enabled = setting === "on";
+    writeConfig(config);
+    return {
+        handled: true,
+        responseContent:
+            `TypeAgent PowerShell guidance switched **${setting}**.` +
+            (setting === "on"
+                ? "  \nPowerShell commands will be guided toward TypeAgent PowerShell for reusability."
+                : "  \nPowerShell commands will execute directly without TypeAgent PowerShell guidance."),
+        handledBy: "typeagent",
+    };
+}
+
+function handleStatusCommand(lower: string): HookOutput | undefined {
+    if (lower !== "@typeagent status" && lower !== "@typeagent") {
         return undefined;
     }
-}
-
-function writeConfig(config: PluginConfig): void {
-    const dir = getConfigDir();
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(getConfigPath(), JSON.stringify(config, null, 2) + "\n");
-}
-
-function getMode(): Mode {
-    const envMode = process.env.TYPEAGENT_MODE;
-    if (envMode === "direct" || envMode === "mcp") {
-        return envMode;
-    }
+    const mode = getMode();
+    const host = process.env.TYPEAGENT_HOST || "localhost";
+    const port = process.env.TYPEAGENT_PORT || "8999";
+    const configPath = getConfigPath();
     const config = readConfig();
-    if (config?.mode === "direct" || config?.mode === "mcp") {
-        return config.mode;
-    }
-    return "direct";
+    const powershellEnabled = config?.powershell?.enabled ?? true;
+
+    return {
+        handled: true,
+        responseContent: [
+            "**TypeAgent Configuration**",
+            "",
+            `- Mode: **${mode}**`,
+            `- TypeAgent PowerShell: **${powershellEnabled ? "on" : "off"}**`,
+            `- Macro workspace tools: **${mode === "bypass" ? "disabled" : "available"}**`,
+            `- Server: ws://${host}:${port}`,
+            `- Config: ${configPath}`,
+            "",
+            "**Commands:**",
+            "- `@typeagent run <command>` — send command directly to TypeAgent",
+            "- `@typeagent mode direct` — switch to direct mode",
+            "- `@typeagent mode mcp` — switch to MCP mode",
+            "- `@typeagent mode dev` — route registered PowerShell flows and recording directives",
+            "- `@typeagent mode bypass` — disable TypeAgent routing",
+            "- `@typeagent powershell on/off` — toggle TypeAgent PowerShell redirect",
+            "- `@typeagent status` — show this info",
+        ].join("  \n"),
+        handledBy: "typeagent",
+    };
+}
+
+function handleCatchAllCommand(
+    input: HookInput,
+    trimmed: string,
+): Promise<HookOutput> | undefined {
+    const match = trimmed.match(/^@typeagent\s+(.+)$/i);
+    return match ? directCommand(input, match[1]) : undefined;
 }
 
 /**
@@ -77,167 +212,111 @@ function getMode(): Mode {
  * was handled, or undefined if the prompt is not a slash command.
  * Returns a Promise for commands that need async work (e.g., @typeagent run).
  */
-function handleSlashCommand(
-    prompt: string,
-): HookOutput | Promise<HookOutput> | undefined {
-    const trimmed = prompt.trim();
+async function handleSlashCommand(
+    input: HookInput,
+): Promise<HookOutput | undefined> {
+    const trimmed = input.prompt.trim();
     const lower = trimmed.toLowerCase();
 
-    // @typeagent run <command> — force-route to TypeAgent directly
-    const runMatch = trimmed.match(/^@typeagent\s+run\s+(.+)$/i);
-    if (runMatch) {
-        const command = runMatch[1];
-        return handleDirect({
-            prompt: command,
-            sessionId: "",
-            timestamp: 0,
-            cwd: "",
-        });
-    }
-
-    // @typeagent mode <direct|mcp>
-    const modeMatch = lower.match(/^@typeagent\s+mode(?:\s+(direct|mcp))?\s*$/);
-    if (modeMatch) {
-        const newMode = modeMatch[1] as Mode | undefined;
-
-        if (!newMode) {
-            // Show current mode
-            const current = getMode();
-            return {
-                handled: true,
-                responseContent: `TypeAgent mode: **${current}**\n\nUse \`@typeagent mode direct\` or \`@typeagent mode mcp\` to switch.`,
-                handledBy: "typeagent",
-            };
-        }
-
-        const config = readConfig() ?? { mode: "direct" };
-        config.mode = newMode;
-        writeConfig(config);
-
-        const description =
-            newMode === "direct"
-                ? "Hook handles requests directly, bypassing the LLM. Fastest response."
-                : "Hook redirects to MCP tool. LLM calls TypeAgent with streaming display.";
-
-        return {
-            handled: true,
-            responseContent: `TypeAgent mode switched to **${newMode}**.  \n${description}`,
-            handledBy: "typeagent",
-        };
-    }
-
-    // @typeagent powershell <on|off|status>
-    const psMatch = lower.match(/^@typeagent\s+powershell(?:\s+(on|off))?\s*$/);
-    if (psMatch) {
-        const setting = psMatch[1] as "on" | "off" | undefined;
-
-        if (!setting) {
-            const config = readConfig();
-            const enabled = config?.powershell?.enabled ?? true;
-            return {
-                handled: true,
-                responseContent: `TypeAgent PowerShell: **${enabled ? "on" : "off"}**\n\nUse \`@typeagent powershell on\` or \`@typeagent powershell off\` to toggle.`,
-                handledBy: "typeagent",
-            };
-        }
-
-        const config = readConfig() ?? { mode: "direct" };
-        if (!config.powershell) config.powershell = {};
-        config.powershell.enabled = setting === "on";
-        writeConfig(config);
-
-        return {
-            handled: true,
-            responseContent:
-                `TypeAgent PowerShell guidance switched **${setting}**.` +
-                (setting === "on"
-                    ? "  \nPowerShell commands will be guided toward TypeAgent PowerShell for reusability."
-                    : "  \nPowerShell commands will execute directly without TypeAgent PowerShell guidance."),
-            handledBy: "typeagent",
-        };
-    }
-
-    // @typeagent status
-    if (lower === "@typeagent status" || lower === "@typeagent") {
-        const mode = getMode();
-        const host = process.env.TYPEAGENT_HOST || "localhost";
-        const port = process.env.TYPEAGENT_PORT || "8999";
-        const configPath = getConfigPath();
-        const config = readConfig();
-        const powershellEnabled = config?.powershell?.enabled ?? true;
-
-        return {
-            handled: true,
-            responseContent: [
-                "**TypeAgent Configuration**",
-                "",
-                `- Mode: **${mode}**`,
-                `- TypeAgent PowerShell: **${powershellEnabled ? "on" : "off"}**`,
-                `- Server: ws://${host}:${port}`,
-                `- Config: ${configPath}`,
-                "",
-                "**Commands:**",
-                "- `@typeagent run <command>` — send command directly to TypeAgent",
-                "- `@typeagent mode direct` — switch to direct mode",
-                "- `@typeagent mode mcp` — switch to MCP mode",
-                "- `@typeagent powershell on/off` — toggle TypeAgent PowerShell redirect",
-                "- `@typeagent status` — show this info",
-            ].join("  \n"),
-            handledBy: "typeagent",
-        };
-    }
-
-    // @typeagent <anything else> — treat as a direct TypeAgent command
-    const catchAll = trimmed.match(/^@typeagent\s+(.+)$/i);
-    if (catchAll) {
-        const command = catchAll[1];
-        return handleDirect({
-            prompt: command,
-            sessionId: "",
-            timestamp: 0,
-            cwd: "",
-        });
-    }
-
-    return undefined;
+    return (
+        (await handleMacroCommand(input, lower)) ??
+        handleRunCommand(input, trimmed) ??
+        handleModeCommand(lower) ??
+        handlePowerShellCommand(lower) ??
+        handleStatusCommand(lower) ??
+        handleCatchAllCommand(input, trimmed)
+    );
 }
 
 async function main(): Promise<void> {
-    let inputData = "";
-    process.stdin.setEncoding("utf8");
+    const abortController = new AbortController();
+    const abortRequest = () => abortController.abort();
+    process.once("SIGINT", abortRequest);
+    process.once("SIGTERM", abortRequest);
 
-    for await (const chunk of process.stdin) {
-        inputData += chunk;
-    }
-
-    let input: HookInput;
     try {
-        input = JSON.parse(inputData);
-    } catch {
-        console.error("Failed to parse hook input");
-        process.exit(1);
+        let inputData = "";
+        process.stdin.setEncoding("utf8");
+
+        for await (const chunk of process.stdin) {
+            inputData += chunk;
+        }
+
+        let input: HookInput;
+        try {
+            input = JSON.parse(inputData);
+        } catch {
+            console.error("Failed to parse hook input");
+            process.exit(1);
+        }
+
+        // Check for slash commands first
+        const slashResult = await handleSlashCommand(input);
+        if (slashResult) {
+            console.log(JSON.stringify(slashResult));
+            emitDemoStateForOutput(input, slashResult, "direct");
+            return;
+        }
+
+        const mode = getMode();
+        const output = await routePrompt(input, mode, abortController.signal);
+
+        console.log(JSON.stringify(output));
+        emitDemoStateForOutput(input, output, mode);
+    } finally {
+        process.removeListener("SIGINT", abortRequest);
+        process.removeListener("SIGTERM", abortRequest);
     }
+}
 
-    // Check for slash commands first
-    const slashResult = await handleSlashCommand(input.prompt);
-    if (slashResult) {
-        console.log(JSON.stringify(slashResult));
-        emitDemoStateForOutput(input, slashResult, "direct");
-        return;
+export interface RoutePromptDependencies {
+    claimRecording: (input: HookInput) => Promise<boolean>;
+    direct: (input: HookInput) => Promise<HookOutput>;
+    mcp: (input: HookInput) => HookOutput;
+    dev: (input: HookInput, signal: AbortSignal) => Promise<HookOutput>;
+}
+
+const routePromptDefaults: RoutePromptDependencies = {
+    claimRecording: claimMacroRecording,
+    direct: handleDirect,
+    mcp: handleMcpRedirect,
+    dev: (input, signal) => handleDevActions(input, undefined, signal),
+};
+
+export async function routePrompt(
+    input: HookInput,
+    mode: Mode,
+    signal: AbortSignal,
+    dependencies: RoutePromptDependencies = routePromptDefaults,
+): Promise<HookOutput> {
+    if (mode === "bypass") return {};
+    if (await dependencies.claimRecording(input)) return {};
+    if (mode === "mcp") return dependencies.mcp(input);
+    if (mode === "dev") return dependencies.dev(input, signal);
+    return dependencies.direct(input);
+}
+
+async function claimMacroRecording(input: HookInput): Promise<boolean> {
+    if (!getMacroFeatures().recording) return false;
+    let connection;
+    try {
+        connection = await connectToAgentServer();
+        const token = await connection.claimMacroRecording({
+            sessionId: input.sessionId,
+            cwd: input.cwd,
+            promptHash: createHash("sha256")
+                .update(redactTraceValue(input.prompt) as string)
+                .digest("hex"),
+        });
+        return token !== undefined;
+    } catch (error) {
+        console.error(
+            `[macro] Unable to claim recording: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return false;
+    } finally {
+        await connection?.close();
     }
-
-    // Route based on current mode
-    const mode = getMode();
-    let output: HookOutput;
-
-    if (mode === "mcp") {
-        output = handleMcpRedirect(input);
-    } else {
-        output = await handleDirect(input);
-    }
-
-    console.log(JSON.stringify(output));
-    emitDemoStateForOutput(input, output, mode);
 }
 
 /**
@@ -263,7 +342,9 @@ function emitDemoStateForOutput(
     });
 }
 
-main().catch((error) => {
-    console.error("Hook error:", error);
-    process.exit(1);
-});
+if (fileURLToPath(import.meta.url) === process.argv[1]) {
+    main().catch((error) => {
+        console.error("Hook error:", error);
+        process.exit(1);
+    });
+}

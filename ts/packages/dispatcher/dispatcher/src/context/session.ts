@@ -122,7 +122,6 @@ export type DispatcherConfig = {
         };
         schema: {
             generation: {
-                enabled: boolean;
                 jsonSchema: boolean;
                 jsonSchemaFunction: boolean;
                 jsonSchemaWithTs: boolean; // only applies when jsonSchema or jsonSchemaFunction is true
@@ -203,6 +202,12 @@ export type DispatcherConfig = {
         // "inline": each reasoning phase (thinking, tool call, result, text) gets its own chat bubble.
         // "block": all reasoning output is appended into a single chat bubble (legacy behavior).
         reasoningDisplay: "inline" | "block";
+        // When true, client-forwarding actions run inside the reasoning loop
+        // (e.g. @conversation switch, which hands a manage-conversation payload
+        // to the client) reach the real client instead of being captured and
+        // dropped as "not supported". Off restores the capture-only behavior.
+        // Toggle via `@config execution reasoningForwardActions off`.
+        reasoningForwardActions: boolean;
         // When true, the dispatcher's pre-flight readiness gate auto-invokes
         // `AppAgent.setup` on agents reporting `setup-required` — instead of
         // throwing the "needs setup" error. The setup hook's ActionResult is
@@ -429,7 +434,6 @@ const defaultSessionConfig: SessionConfig = {
         },
         schema: {
             generation: {
-                enabled: true,
                 jsonSchema: false,
                 jsonSchemaFunction: false,
                 jsonSchemaWithTs: false,
@@ -466,6 +470,7 @@ const defaultSessionConfig: SessionConfig = {
         },
         reasoning: "copilot",
         reasoningDisplay: "inline",
+        reasoningForwardActions: true, // reasoning may forward client actions (e.g. @conversation) to the client
         conversationAnswer: "reasoning-first", // default: reasoning agent handles conversation Q&A; lookup kept as fallback
         reasoningHistoryTurns: 10, // recent chat turns injected into the reasoning prompt
         recordUserMessages: true, // record the user's own turns in the transcript
@@ -985,7 +990,12 @@ export async function setupBuiltInCache(
             builtInConstructions,
         );
     } catch (e: any) {
-        console.warn(`WARNING: Unable to load built-in cache: ${e.message}`);
+        // A corrupt or stale built-in cache disables request completions
+        // entirely, so make the failure loud rather than a passing mention.
+        console.warn(
+            `WARNING: Unable to load built-in cache '${builtInConstructions}': ${e.message}\n` +
+                `WARNING: Request completions will be unavailable. Regenerate it with 'pnpm cli data regenerate -b ${session.explainerName} --constructions --updateHash'.`,
+        );
     }
 }
 

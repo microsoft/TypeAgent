@@ -34,6 +34,7 @@ import {
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
 import { randomUUID } from "node:crypto";
+import { context as otelContext } from "@opentelemetry/api";
 import { getAgentSchemas } from "./context/system/describe/agentSchemaInfo.js";
 
 async function getDynamicDisplay(
@@ -216,6 +217,9 @@ export function createDispatcherFromContext(
         if (attachments != null) input.attachments = attachments;
         if (options != null) input.options = options;
         if (requestId !== undefined) input.requestId = requestId;
+        if (context.telemetryOptions.joinActiveTrace) {
+            input.traceContext = otelContext.active();
+        }
         return input;
     };
 
@@ -402,28 +406,51 @@ export function createDispatcherFromContext(
             return context.requestQueue.promote(requestId);
         },
         cancelCommandByClientId(clientRequestId: unknown) {
-            const controller =
-                context.activeRequestsByClientId.get(clientRequestId);
-            if (controller) {
-                controller.abort();
-                return;
-            }
-            // Entry may still be sitting in the queue (no AbortController yet).
-            // Walk the snapshot to find a matching clientRequestId and cancel
-            // it via the queue. Check the running head too — it's normally
-            // already in activeRequestsByClientId, but cover the race anyway.
-            const snap = context.requestQueue.getSnapshot();
-            const running = snap.running;
-            if (running && running.clientRequestId === clientRequestId) {
+            const cancelRunning = (): boolean => {
+                const running = context.requestQueue.getSnapshot().running;
+                if (
+                    running === null ||
+                    running.clientRequestId !== clientRequestId
+                ) {
+                    return false;
+                }
                 context.requestQueue.cancelRunning(running.requestId, "user");
+                const controller =
+                    context.activeRequests.get(running.requestId) ??
+                    context.activeRequestsByClientId.get(clientRequestId);
+                controller?.abort();
+                return true;
+            };
+
+            // Record a running cancellation before aborting so queue observers
+            // see the initiating event before command unwinding completes.
+            if (cancelRunning()) {
                 return;
             }
+
+            // A queued entry has no active controller. If it promotes between
+            // the snapshot and cancelQueued, retry through the running path.
+            const snap = context.requestQueue.getSnapshot();
             for (const entry of snap.queued) {
                 if (entry.clientRequestId === clientRequestId) {
-                    context.requestQueue.cancelQueued(entry.requestId, "user");
+                    if (
+                        !context.requestQueue.cancelQueued(
+                            entry.requestId,
+                            "user",
+                        )
+                    ) {
+                        cancelRunning();
+                    }
                     return;
                 }
             }
+
+            // Cover the race where the request starts after the first running
+            // check but before the queued snapshot is read.
+            if (cancelRunning()) {
+                return;
+            }
+            context.activeRequestsByClientId.get(clientRequestId)?.abort();
         },
         async recordUserHide(
             requestId: RequestId,

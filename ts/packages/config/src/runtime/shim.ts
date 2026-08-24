@@ -17,11 +17,13 @@
  */
 
 import { regionToEnvSuffix } from "./regions.js";
-import type {
+import { SIMPLE_CONFIG_MAPPING_LIST } from "../mappings.js";
+import {
     AuthMode,
     Config,
     Deployment,
     DeploymentEndpoint,
+    DEFAULT_WIRE_API,
 } from "./types.js";
 
 /** A flat env-var name → value map. Same shape as `FlatEnv`. */
@@ -34,6 +36,33 @@ export type EnvOutput = Record<string, string>;
  */
 function authToString(auth: AuthMode): string {
     return auth.kind === "identity" ? "identity" : auth.value;
+}
+
+function emitSimpleConfigMappings(config: Config, out: EnvOutput): void {
+    for (const mapping of SIMPLE_CONFIG_MAPPING_LIST) {
+        let value: unknown = config;
+        for (const segment of mapping.configPath.split(".")) {
+            if (
+                value === undefined ||
+                value === null ||
+                typeof value !== "object"
+            ) {
+                value = undefined;
+                break;
+            }
+            value = (value as Record<string, unknown>)[segment];
+        }
+        if (
+            value === undefined ||
+            (mapping.omitEmptyInProjection && value === "")
+        ) {
+            continue;
+        }
+        out[mapping.envVar] =
+            mapping.valueKind === "auth"
+                ? authToString(value as AuthMode)
+                : String(value);
+    }
 }
 
 function emitEndpoint(
@@ -56,12 +85,14 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
                 ? `${regionToEnvSuffix(endpoint.region)}_PTU`
                 : regionToEnvSuffix(endpoint.region);
         emitEndpoint(out, suffix, regionSuffix, endpoint);
-        // Capture capacity/priority/tpm into the legacy POOL override
-        // JSON so unmigrated consumers can still see them.
+        // Capture capacity/priority/tpm/wireApi into the legacy POOL
+        // override JSON so unmigrated consumers can still see them.
         if (
             endpoint.capacity !== undefined ||
             endpoint.tpm !== undefined ||
-            endpoint.priority !== (endpoint.mode === "PTU" ? 1 : 2)
+            endpoint.priority !== (endpoint.mode === "PTU" ? 1 : 2) ||
+            (endpoint.wireApi !== undefined &&
+                endpoint.wireApi !== DEFAULT_WIRE_API)
         ) {
             const o: Record<string, unknown> = {
                 suffix: `${suffix}_${regionSuffix}`,
@@ -71,6 +102,12 @@ function emitDeployment(out: EnvOutput, deployment: Deployment): void {
             if (endpoint.capacity !== undefined) o.capacity = endpoint.capacity;
             if (endpoint.tpm !== undefined) o.tpm = endpoint.tpm;
             o.priority = endpoint.priority;
+            if (
+                endpoint.wireApi !== undefined &&
+                endpoint.wireApi !== DEFAULT_WIRE_API
+            ) {
+                o.wireApi = endpoint.wireApi;
+            }
             overrides.push(o);
         }
     }
@@ -138,84 +175,7 @@ export function configToEnv(config: Config): EnvOutput {
         emitDeployment(out, deployment);
     }
 
-    // Speech.
-    if (config.speech) {
-        out.SPEECH_SDK_KEY = authToString(config.speech.auth);
-        out.SPEECH_SDK_REGION = config.speech.region;
-        if (config.speech.endpoint) {
-            out.SPEECH_SDK_ENDPOINT = config.speech.endpoint;
-        }
-    }
-
-    // Maps.
-    if (config.maps) {
-        out.AZURE_MAPS_CLIENTID = config.maps.clientId;
-        out.AZURE_MAPS_ENDPOINT = config.maps.endpoint;
-    }
-
-    // Microsoft Graph.
-    if (config.msGraph) {
-        out.MSGRAPH_APP_CLIENTID = config.msGraph.clientId;
-        out.MSGRAPH_APP_CLIENTSECRET = config.msGraph.clientSecret;
-        out.MSGRAPH_APP_TENANTID = config.msGraph.tenantId;
-        if (config.msGraph.username !== undefined) {
-            out.MSGRAPH_APP_USERNAME = config.msGraph.username;
-        }
-        if (config.msGraph.password !== undefined) {
-            out.MSGRAPH_APP_PASSWD = config.msGraph.password;
-        }
-    }
-
-    // Google Calendar.
-    if (config.googleCalendar) {
-        out.GOOGLE_CALENDAR_CLIENT_ID = config.googleCalendar.clientId;
-        out.GOOGLE_CALENDAR_CLIENT_SECRET = config.googleCalendar.clientSecret;
-    }
-
-    // Spotify.
-    if (config.spotify) {
-        out.SPOTIFY_APP_CLI = config.spotify.clientId;
-        out.SPOTIFY_APP_CLISEC = config.spotify.clientSecret;
-        out.SPOTIFY_APP_PORT = String(config.spotify.port);
-    }
-
-    // Wikipedia.
-    if (config.wikipedia) {
-        if (config.wikipedia.clientId) {
-            out.WIKIPEDIA_CLIENT_ID = config.wikipedia.clientId;
-        }
-        if (config.wikipedia.clientSecret) {
-            out.WIKIPEDIA_CLIENT_SECRET = config.wikipedia.clientSecret;
-        }
-        if (config.wikipedia.endpoint) {
-            out.WIKIPEDIA_ENDPOINT = config.wikipedia.endpoint;
-        }
-    }
-
-    // Storage.
-    if (config.storage.azure) {
-        out.AZURE_STORAGE_ACCOUNT = config.storage.azure.account;
-        out.AZURE_STORAGE_CONTAINER = config.storage.azure.container;
-    }
-    if (config.storage.aws) {
-        out.AWS_S3_BUCKET_NAME = config.storage.aws.bucketName;
-        out.AWS_S3_REGION = config.storage.aws.region;
-        out.AWS_ACCESS_KEY_ID = config.storage.aws.accessKeyId;
-        out.AWS_SECRET_ACCESS_KEY = config.storage.aws.secretAccessKey;
-    }
-    if (config.storage.database?.cosmosDbConnectionString) {
-        out.COSMOSDB_CONNECTION_STRING =
-            config.storage.database.cosmosDbConnectionString;
-    }
-    if (config.storage.database?.mongoDbConnectionString) {
-        out.MONGODB_CONNECTION_STRING =
-            config.storage.database.mongoDbConnectionString;
-    }
-
-    // Vault.
-    if (config.vault?.shared) {
-        out.TYPEAGENT_SHAREDVAULT = config.vault.shared;
-    }
+    emitSimpleConfigMappings(config, out);
 
     // OpenAI (main + named variants like LOCAL).
     if (config.openAI) {

@@ -17,7 +17,8 @@ import { CodeActions, CodeActivity } from "./codeActionsSchema.ts";
   | <newCodeFile>
   | <newMarkdownFile>
   | <newTextFile>
-  | <launchVSCode>;
+  | <launchVSCode>
+  | <launchCopilotChat>;
 
 // Theme name sub-rule — maps user-friendly tokens to canonical TS ColorTheme
 // literals. ColorTheme members contain '+' which isn't a valid literal token
@@ -94,5 +95,25 @@ import { CodeActions, CodeActivity } from "./codeActionsSchema.ts";
 // "workspace"); path is optional. Two branches give mode-only vs mode+path forms.
 <launchVSCode> = <Polite> ('launch' | 'open' | 'start') ('vs code' | 'vscode' | 'code') ('in')? $(mode:<LaunchMode>) ('mode')? ('at' | 'with' | 'for')? $(path:string) -> { actionName: "launchVSCode", parameters: { mode: mode, path: path } }
   | <Polite> ('launch' | 'open' | 'start') ('vs code' | 'vscode' | 'code') ('in')? $(mode:<LaunchMode>) ('mode')? -> { actionName: "launchVSCode", parameters: { mode: mode } };
+
+// Chat location — where to open the chat window
+<ChatLocation> = 'window' -> "window"
+  | ('view' | 'panel' | 'side') -> "view"
+  | 'editor' -> "editor";
+
+// Chat provider — which chat service to open
+<ChatProvider> = ('copilot' | 'github copilot' | 'gh copilot') -> "copilot"
+  | ('claude' | 'anthropic') -> "claude"
+  | ('chatgpt' | 'gpt' | 'openai') -> "gpt"
+  | ('chat' | 'ai') -> "generic";
+
+// Launch a new chat window
+// Examples: "create a new chat window", "open claude in a new window", "launch chat in the editor"
+<launchCopilotChat> = <Polite> ('create' | 'open' | 'launch' | 'start') ('a')? ('new')? $(provider:<ChatProvider>) ('chat' | 'chat session' | 'chat window') -> { actionName: "launchCopilotChat", parameters: { provider: provider, newSessionLocation: "window" } }
+  | <Polite> ('create' | 'open' | 'launch' | 'start') ('a')? ('new')? $(provider:<ChatProvider>) ('chat' | 'chat session' | 'chat window') ('in' | 'in a' | 'in the') $(location:<ChatLocation>) -> { actionName: "launchCopilotChat", parameters: { provider: provider, newSessionLocation: location } }
+  | <Polite> ('create' | 'open' | 'launch' | 'start') ('a')? ('new')? ('chat' | 'chat session' | 'chat window') ('for' | 'with') $(provider:<ChatProvider>) -> { actionName: "launchCopilotChat", parameters: { provider: provider, newSessionLocation: "window" } }
+  | <Polite> ('create' | 'open' | 'launch' | 'start') ('a')? ('new')? ('chat' | 'chat session' | 'chat window') ('for' | 'with') $(provider:<ChatProvider>) ('in' | 'in a' | 'in the') $(location:<ChatLocation>) -> { actionName: "launchCopilotChat", parameters: { provider: provider, newSessionLocation: location } }
+  | <Polite> ('create' | 'open' | 'launch' | 'start') ('a')? ('new')? ('copilot')? ('chat' | 'chat session' | 'chat window') -> { actionName: "launchCopilotChat", parameters: { newSessionLocation: "window" } }
+  | <Polite> ('create' | 'open' | 'launch' | 'start') ('a')? ('new')? ('copilot')? ('chat' | 'chat session' | 'chat window') ('in' | 'in a' | 'in the') $(location:<ChatLocation>) -> { actionName: "launchCopilotChat", parameters: { newSessionLocation: location } };
 
 <Polite> = ("can you" | "please" | "would you" | "i need" | "let's")?;

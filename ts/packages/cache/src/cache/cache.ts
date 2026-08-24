@@ -38,6 +38,16 @@ import {
 } from "./explainWorkQueue.js";
 import { GrammarStoreImpl } from "./grammarStore.js";
 import { GrammarStore, MatchResult } from "./types.js";
+import {
+    getSchemaNamespaceKeys,
+    splitSchemaNamespaceKey,
+} from "./schemaNamespace.js";
+
+export {
+    getSchemaNamespaceKey,
+    getSchemaNamespaceKeys,
+    splitSchemaNamespaceKey,
+} from "./schemaNamespace.js";
 
 export type ProcessRequestActionResult = {
     explanationResult: ProcessExplanationResult;
@@ -68,39 +78,6 @@ function getFailedResult(message: string): ProcessRequestActionResult {
             },
             elapsedMs: 0,
         },
-    };
-}
-
-export function getSchemaNamespaceKey(
-    name: string,
-    activityName: string | undefined,
-    schemaInfoProvider: SchemaInfoProvider | undefined,
-) {
-    return `${name},${schemaInfoProvider?.getActionSchemaFileHash(name) ?? ""},${activityName ?? ""}`;
-}
-
-// Namespace policy. Combines schema name, file hash, and activity name to indicate enabling/disabling of matching.
-export function getSchemaNamespaceKeys(
-    schemaNames: string[],
-    activityName: string | undefined,
-    schemaInfoProvider: SchemaInfoProvider | undefined,
-) {
-    // Current namespace keys policy is just combining schema name its file hash
-    return schemaNames.map((name) =>
-        getSchemaNamespaceKey(name, activityName, schemaInfoProvider),
-    );
-}
-
-export function splitSchemaNamespaceKey(namespaceKey: string): {
-    schemaName: string;
-    hash: string | undefined;
-    activityName: string | undefined;
-} {
-    const [schemaName, hash, activityName] = namespaceKey.split(",");
-    return {
-        schemaName,
-        hash: hash !== "" ? hash : undefined,
-        activityName: activityName !== "" ? activityName : undefined,
     };
 }
 
@@ -521,11 +498,15 @@ export class AgentCache {
                         message: `Grammar generation error: ${error.message}`,
                     };
 
-                    this.logger?.logEvent("grammarGeneration", {
-                        request: requestAction.request,
-                        success: false,
-                        error: error.message,
-                    });
+                    this.logger?.logEvent(
+                        "grammarGeneration",
+                        {
+                            request: requestAction.request,
+                            success: false,
+                            error: error.message,
+                        },
+                        "error",
+                    );
                 }
             }
 
@@ -541,15 +522,19 @@ export class AgentCache {
                 ...(grammarResult !== undefined && { grammarResult }),
             };
         } catch (e: any) {
-            this.logger?.logEvent("error", {
-                request: requestAction.request,
-                actions: requestAction.actions,
-                history: requestAction.history,
-                cache,
-                options,
-                message: e.message,
-                stack: e.stack,
-            });
+            this.logger?.logEvent(
+                "error",
+                {
+                    request: requestAction.request,
+                    actions: requestAction.actions,
+                    history: requestAction.history,
+                    cache,
+                    options,
+                    message: e.message,
+                    stack: e.stack,
+                },
+                "error",
+            );
             throw e;
         }
     }
@@ -598,7 +583,10 @@ export class AgentCache {
                 // TODO: Move this in the construction store
                 return constructionMatches.map((m) => {
                     const { construction, ...rest } = m;
-                    return rest;
+                    // Keep a lightweight string of the matched construction
+                    // (not the heavy object) so callers can display the rule
+                    // that was triggered.
+                    return { ...rest, ruleText: construction.toString() };
                 });
             }
             if (!grammarStore.isEnabled()) {

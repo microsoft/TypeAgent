@@ -6,20 +6,16 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai as ai } from "@typeagent/aiclient";
 import { QueryAnalysis, TemporalExpression } from "./schema/queryAnalysis.mjs";
 import registerDebug from "debug";
-import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
+import { getBrowserPackageFilePath } from "../utils/packageFilePath.mjs";
 
 const debug = registerDebug("typeagent:browser:query-analyzer");
 
 function getSchemaFileContents(fileName: string): string {
-    const packageRoot = path.join("..", "..", "..");
     return fs.readFileSync(
-        fileURLToPath(
-            new URL(
-                path.join(packageRoot, "./src/agent/search/schema", fileName),
-                import.meta.url,
-            ),
+        getBrowserPackageFilePath(
+            path.join("src", "agent", "search", "schema", fileName),
         ),
         "utf8",
     );

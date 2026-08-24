@@ -15,6 +15,7 @@ import {
     handleClipboardShortcut,
     STATUS_NOTICE_EVENT,
     parseStatusNotice,
+    fileLinkToPath,
     type ConnectionStatus,
 } from "@typeagent/chat-ui";
 import type {
@@ -183,6 +184,11 @@ const chatPanel = new ChatPanel(rootEl, {
         // Open links via the extension host — webviews can't call window.open
         // for arbitrary URLs in a useful way.
         handleLinkClick: (href: string, _target: string | null) => {
+            const filePath = fileLinkToPath(href);
+            if (filePath !== undefined) {
+                vscode.postMessage({ type: "openFile", path: filePath });
+                return;
+            }
             vscode.postMessage({ type: "openExternal", href });
         },
         // Open the message in a new VS Code editor panel (movable / snappable)
@@ -664,6 +670,7 @@ function mapResult(result: any):
           actionTokenUsage?: any;
           parsePhase?: any;
           cancelled?: boolean;
+          traceId?: string;
       }
     | undefined {
     if (!result) return undefined;
@@ -678,6 +685,8 @@ function mapResult(result: any):
         actionTokenUsage: result.actionTokenUsage,
         parsePhase: metrics?.parse,
         cancelled: result.cancelled === true,
+        traceId:
+            typeof result.traceId === "string" ? result.traceId : undefined,
     };
 }
 
@@ -785,7 +794,22 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
                     firstMessageMs: e.requestId
                         ? firstMessageMsByRequestId.get(e.requestId)
                         : undefined,
+                    traceId:
+                        typeof e.traceId === "string" ? e.traceId : undefined,
                 });
+                break;
+            }
+            case "notify": {
+                // Persisted "explained" notifications restore the roadrunner
+                // icon + click-to-open popover on replayed user bubbles.
+                const rid = e.notificationId ?? e.requestId;
+                if (e.event === "explained" && rid) {
+                    out.push({
+                        kind: "explained",
+                        requestId: rid,
+                        data: e.data,
+                    });
+                }
                 break;
             }
         }

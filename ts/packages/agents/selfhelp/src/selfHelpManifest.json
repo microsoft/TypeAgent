@@ -1,0 +1,13 @@
+{
+  "emojiChar": "💡",
+  "defaultEnabled": true,
+  "description": "Help agent that tells you the TypeAgent command or phrasing for what you want to do.",
+  "schema": {
+    "description": "Finds the TypeAgent command or action for what the user wants to do. Use for questions like 'what's the command for X', 'how do I X in TypeAgent', or 'is there a command to X'. Returns the matching @-command(s) and the equivalent natural-language phrasing(s). Do NOT use for general-knowledge questions, web lookups, or actually performing the task in another domain such as playing music, sending email, editing code, or controlling a browser.",
+    "originalSchemaFile": "./selfHelpSchema.ts",
+    "schemaFile": "../dist/selfHelpSchema.pas.json",
+    "schemaType": {
+      "action": "SelfHelpAction"
+    }
+  }
+}

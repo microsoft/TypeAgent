@@ -64,7 +64,7 @@
     "dotenv": "^16.3.1",
     "find-config": "^1.0.0",
     "typechat": "^0.1.1",
-    "ws": "^8.21.1"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
@@ -95,7 +95,8 @@
             "src/desktopSchema.agr"
           ],
           "outputGlobs": [
-            "dist/desktopSchema.ag.json"
+            "dist/desktopSchema.ag.json",
+            "dist/desktopSchema.ag.map.json"
           ]
         }
       },
@@ -108,7 +109,8 @@
             "src/windows/displaySchema.agr"
           ],
           "outputGlobs": [
-            "dist/displaySchema.ag.json"
+            "dist/displaySchema.ag.json",
+            "dist/displaySchema.ag.map.json"
           ]
         }
       },
@@ -121,7 +123,8 @@
             "src/windows/inputSchema.agr"
           ],
           "outputGlobs": [
-            "dist/inputSchema.ag.json"
+            "dist/inputSchema.ag.json",
+            "dist/inputSchema.ag.map.json"
           ]
         }
       },
@@ -134,7 +137,8 @@
             "src/windows/personalizationSchema.agr"
           ],
           "outputGlobs": [
-            "dist/personalizationSchema.ag.json"
+            "dist/personalizationSchema.ag.json",
+            "dist/personalizationSchema.ag.map.json"
           ]
         }
       },
@@ -147,7 +151,8 @@
             "src/windows/powerSchema.agr"
           ],
           "outputGlobs": [
-            "dist/powerSchema.ag.json"
+            "dist/powerSchema.ag.json",
+            "dist/powerSchema.ag.map.json"
           ]
         }
       },
@@ -160,7 +165,8 @@
             "src/windows/privacySchema.agr"
           ],
           "outputGlobs": [
-            "dist/privacySchema.ag.json"
+            "dist/privacySchema.ag.json",
+            "dist/privacySchema.ag.map.json"
           ]
         }
       },
@@ -173,7 +179,8 @@
             "src/windows/systemSchema.agr"
           ],
           "outputGlobs": [
-            "dist/systemSchema.ag.json"
+            "dist/systemSchema.ag.json",
+            "dist/systemSchema.ag.map.json"
           ]
         }
       },
@@ -186,7 +193,8 @@
             "src/windows/taskbarSchema.agr"
           ],
           "outputGlobs": [
-            "dist/taskbarSchema.ag.json"
+            "dist/taskbarSchema.ag.json",
+            "dist/taskbarSchema.ag.map.json"
           ]
         }
       },

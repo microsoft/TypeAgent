@@ -37,6 +37,7 @@ import {
     PartialParsedCommandParams,
     ReadinessReport,
     SessionContext,
+    DisplayContent,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -635,6 +636,26 @@ function getAgentReadinessOrThrow(
     return systemContext.agents.getReadiness(name);
 }
 
+export function getManualAgentSetupDisplay(
+    name: string,
+    report: ReadinessReport,
+): DisplayContent {
+    const lines = [
+        `Agent '${name}' needs configuration before it can be used.`,
+    ];
+    if (report.message) lines.push("", report.message);
+    if (report.details) lines.push("", report.details);
+    lines.push(
+        "",
+        `This agent does not have an in-chat setup flow. After fixing the underlying issue, run \`@config agent refresh ${name}\` to re-check.`,
+    );
+    return {
+        type: "markdown",
+        content: lines.join("\n"),
+        kind: "warning",
+    };
+}
+
 class AgentSetupCommandHandler implements CommandHandler {
     public readonly description =
         "Run setup for an agent that needs configuration before use";
@@ -728,21 +749,10 @@ class AgentSetupCommandHandler implements CommandHandler {
             closeActionContext();
         }
         if (result === undefined) {
-            // Agent reports setup-required but doesn't implement a setup
-            // hook — typically a manual-config case (env vars, files
-            // outside the agent's reach). Show the readiness message as
-            // the primary content and point at @config agent refresh so
-            // the user can re-check after fixing the underlying issue.
-            const lines = [
-                `Agent '${name}' needs configuration before it can be used.`,
-            ];
-            if (report.message) lines.push("", report.message);
-            if (report.details) lines.push("", report.details);
-            lines.push(
-                "",
-                `This agent does not have an in-chat setup flow. After fixing the underlying issue, run \`@config agent refresh ${name}\` to re-check.`,
+            context.actionIO.appendDisplay(
+                getManualAgentSetupDisplay(name, report),
+                "block",
             );
-            displayWarn(lines.join("\n"), context);
             return;
         }
         // emitActionResult above already rendered the display content and
@@ -1386,23 +1396,6 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                 generation: {
                     description: "Generated action schema",
                     commands: {
-                        ...getToggleCommandHandlers(
-                            "generated action schema",
-                            async (context, enable: boolean) => {
-                                await changeContextConfig(
-                                    {
-                                        translation: {
-                                            schema: {
-                                                generation: {
-                                                    enabled: enable,
-                                                },
-                                            },
-                                        },
-                                    },
-                                    context,
-                                );
-                            },
-                        ),
                         json: getToggleHandlerTable(
                             "use generate json schema if model supports it",
                             async (context, enable: boolean) => {
@@ -2159,6 +2152,15 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
             async (context, enable) => {
                 await changeContextConfig(
                     { execution: { subagents: enable } },
+                    context,
+                );
+            },
+        ),
+        reasoningForwardActions: getToggleHandlerTable(
+            "let the reasoning agent forward client actions (e.g. @conversation switch) to the client instead of capturing them",
+            async (context, enable) => {
+                await changeContextConfig(
+                    { execution: { reasoningForwardActions: enable } },
                     context,
                 );
             },

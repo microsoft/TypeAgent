@@ -31,6 +31,8 @@ import { PowerShellNetworkActions } from "./networkActionsSchema.mts";
       -> { actionName: "portListeners", parameters: {} }
   | (show|list) port listeners
       -> { actionName: "portListeners", parameters: {} }
+  | (show|list) (me)? (the)? (processes|programs) (using|on) (network)? ports (on my machine)?
+      -> { actionName: "portListeners", parameters: {} }
   | (which|what) (process|program) is (using|on) port $(port:number)
       -> { actionName: "portListeners", parameters: { port } }
   | netstat
@@ -45,7 +47,10 @@ import { PowerShellNetworkActions } from "./networkActionsSchema.mts";
       -> { actionName: "networkAdapters", parameters: { name } };
 
 <IpConfig> =
-    (show|get|my) ip (address|config|configuration)?
+    // "show my ip address" — needs both "show" and "my" (not covered by (show|get|my) alone)
+    (show|get) (me)? my ip (address|config|configuration)?
+      -> { actionName: "ipConfig", parameters: {} }
+  | (show|get|my) ip (address|config|configuration)?
       -> { actionName: "ipConfig", parameters: {} }
   | ipconfig
       -> { actionName: "ipConfig", parameters: {} }

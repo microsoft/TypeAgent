@@ -208,6 +208,11 @@ export type BridgeToWebviewMessage =
               metrics?: any;
               tokenUsage?: any;
               actionTokenUsage?: any;
+              traceId?: string;
+              // notify (persisted "explained")
+              event?: string;
+              data?: unknown;
+              notificationId?: string;
           }>;
       }
     | {
@@ -327,6 +332,8 @@ export type BridgeFromWebviewMessage =
     // Double-Esc gesture: cancel every queued + running entry on the session.
     | { type: "cancelAllQueuedAndRunning" }
     | { type: "openExternal"; href: string }
+    // Open a local file in an editor tab (from a `typeagent-file:` link).
+    | { type: "openFile"; path: string }
     // Open a message's content in a new editor panel (a movable window).
     | { type: "openMessageWindow"; html: string; title?: string }
     // Request a fresh Azure Speech authorization token from the server

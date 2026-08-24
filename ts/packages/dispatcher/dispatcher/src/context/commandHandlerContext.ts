@@ -51,6 +51,7 @@ import {
     ensureDirectory,
     lockInstanceDir,
 } from "../utils/fsUtils.js";
+import { createDispatcherOtelLoggerSink } from "../otel/structuredLogSink.js";
 import {
     ActionContext,
     AppAgentEvent,
@@ -192,6 +193,103 @@ export type CopilotImporter = (
     onProgress?: (progress: CopilotImportProgress) => void,
 ) => Promise<CopilotImportSummary>;
 
+/**
+ * Host-provided sink that mirrors each conversation turn (user request or
+ * assistant result) into a cross-conversation content index, tagged by the
+ * host's conversation id. Injected per-conversation by the agent-server;
+ * undefined for standalone hosts. Called independently of the knowledge-
+ * extraction flags (which connected mode disables), so the unified index still
+ * populates there.
+ */
+export type ConversationContentSink = (
+    text: string,
+    sender: "user" | "assistant",
+    turnKey?: string,
+) => void;
+
+/**
+ * Host-provided cross-conversation content search over the unified message
+ * index. Returns the best-matching conversations (id + name) with a relevance
+ * score in [0, 1] and representative snippets, best first. Injected by the
+ * agent-server; undefined for hosts without a unified content index.
+ */
+export type ConversationSearcher = (
+    query: { question?: string | undefined; terms?: string[] | undefined },
+    maxMatches?: number,
+) => Promise<
+    {
+        conversationId: string;
+        name: string;
+        score: number;
+        snippets: string[];
+    }[]
+>;
+
+/**
+ * The result of summarizing a conversation (see {@link ConversationSummarizer}):
+ * the summary text, or why one could not be produced.
+ */
+export type ConversationSummaryResult =
+    | { kind: "ok"; conversationId: string; name: string; summary: string }
+    | { kind: "not-found"; query: string }
+    | { kind: "empty"; conversationId: string; name: string }
+    | { kind: "unavailable"; reason: string };
+
+/**
+ * Host-provided conversation summarizer. Resolves a conversation by name or
+ * topic (or the current one when omitted), reads its stored transcript, and
+ * returns an LLM-written summary. Injected by the agent-server; undefined for
+ * hosts without stored conversations.
+ */
+export type ConversationSummarizer = (
+    nameOrTopic?: string | undefined,
+) => Promise<ConversationSummaryResult>;
+
+/**
+ * Which conversations a content-index backfill should cover: the one the
+ * command ran in (`current`), a specific one (`named`), or every conversation
+ * (`all`).
+ */
+export type ConversationIndexTarget =
+    | { scope: "current" }
+    | { scope: "all" }
+    | { scope: "named"; name: string };
+
+/** Per-conversation outcome of a content-index backfill. */
+export type ConversationIndexResult = {
+    indexed: {
+        name: string;
+        /** User turns newly added to the index by this backfill. */
+        newlyIndexed: number;
+        /** Total user turns in the conversation (already-indexed + new). */
+        totalMessages: number;
+    }[];
+    /** Set to the requested name when a `named` target matched nothing. */
+    notFound?: string;
+};
+
+/** Progress of an in-flight content-index backfill (user turns). */
+export type ConversationIndexProgress = {
+    /** User turns indexed and persisted so far. */
+    done: number;
+    /** Total user turns this backfill will index. */
+    total: number;
+    /** Name of the conversation whose turns are currently being indexed. */
+    name: string;
+};
+
+/**
+ * Host-provided backfill of conversation history into the unified content
+ * index (see {@link ConversationSearcher}). Indexes the user turns not already
+ * present so past conversations become searchable. `onProgress` (optional) is
+ * called as turns are indexed, for a live progress display. Injected by the
+ * agent-server; undefined for hosts without a unified content index.
+ */
+export type ConversationIndexer = (
+    target: ConversationIndexTarget,
+    onProgress?: (progress: ConversationIndexProgress) => void,
+) => Promise<ConversationIndexResult>;
+
 // A request-scoped route chosen by the registry-first contextSelector tier
 // (§11.4) when the topical winner is a neighborhood sibling with no cache
 // MatchResult. Unlike `collisionOneShotPicks` (durable, cross-turn, explicit
@@ -249,6 +347,30 @@ export type CommandHandlerContext = {
      * mode).
      */
     readonly copilotImport?: CopilotImporter | undefined;
+    /**
+     * Host-provided sink mirroring each turn into the cross-conversation
+     * content index (see {@link ConversationContentSink}). Undefined for hosts
+     * without a unified index.
+     */
+    readonly conversationContentSink?: ConversationContentSink | undefined;
+    /**
+     * Host-provided cross-conversation content search (see
+     * {@link ConversationSearcher}). Injected by the agent-server; undefined
+     * for hosts without a unified content index.
+     */
+    readonly searchConversations?: ConversationSearcher | undefined;
+    /**
+     * Host-provided conversation summarizer (see {@link ConversationSummarizer}).
+     * Injected by the agent-server; undefined for hosts without stored
+     * conversations.
+     */
+    readonly summarizeConversation?: ConversationSummarizer | undefined;
+    /**
+     * Host-provided backfill of conversation history into the unified content
+     * index (see {@link ConversationIndexer}). Injected by the agent-server;
+     * undefined for hosts without a unified content index.
+     */
+    readonly indexConversations?: ConversationIndexer | undefined;
     // Per activation configs
     developerMode?: boolean;
     // When true, each translated request is confirmed via the client
@@ -272,9 +394,31 @@ export type CommandHandlerContext = {
     persistedGrammarStore?: PersistedGrammarStore; // Persistence layer for dynamic grammar rules
     currentScriptDir: string;
     logger?: Logger | undefined;
+    /**
+     * Dispatcher activation id (created once per context, not per request).
+     * Mirrors what the logger stamps on events and is the correlation value
+     * used for the `typeagent.activation.id` OTel span attribute.
+     */
+    readonly activationId: string;
+    /**
+     * Preserved caller-supplied pre-OTel trace id. OTel owns the canonical
+     * trace id; this value is carried on spans and logs as
+     * `typeagent.trace.id` so existing logs can still be joined.
+     */
+    readonly traceId: string | undefined;
+    readonly telemetryOptions: {
+        readonly joinActiveTrace: boolean;
+    };
     currentRequestId: RequestId | undefined;
     currentAbortSignal: AbortSignal | undefined;
     currentOptions?: ProcessCommandOptions | undefined;
+    codingAffinity?:
+        | {
+              workingDirectory: string;
+              copilotSessionId?: string;
+          }
+        | undefined;
+    codingSessions: Map<string, { sessionId: string; lastUsedAt: number }>;
     activeRequests: Map<string, AbortController>;
     activeRequestsByClientId: Map<unknown, AbortController>;
     noReasoning: boolean;
@@ -285,6 +429,12 @@ export type CommandHandlerContext = {
     // is disposed on session close.
     subagentManager?: SubagentManager | undefined;
     commandResult?: CommandResult | undefined;
+    // Monotonic count of non-transient display output sent to the client this
+    // session. executeAction snapshots it around an agent's executeAction call
+    // to tell whether the action (or a command it delegated to) already showed
+    // visible output, so it can skip the redundant "Action ... completed."
+    // bubble. Transient status (appendDisplay mode "temporary") does not count.
+    displayCount: number;
     chatHistory: ChatHistory;
     constructionProvider?: ConstructionProvider | undefined;
     displayLog: DisplayLog;
@@ -407,6 +557,7 @@ async function getAgentCache(
  * - collectCommandResult: whether to collect command result in the return for `processCommand`. Default is false.
  * - dblogging: whether to enable database telemetry logging. Default is true; pass false to opt out.
  * - traceId: An optional trace ID to use for logging identification.
+ * - telemetry: OpenTelemetry request-span integration options.
  */
 export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     // Core options
@@ -450,6 +601,18 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     collectCommandResult?: boolean; // default to false
     dblogging?: boolean; // default to true
     traceId?: string; // optional additional for logging identification
+    telemetry?: {
+        /**
+         * Join the OTel context active when each request is submitted.
+         * Default false: each request starts a new trace.
+         */
+        joinActiveTrace?: boolean;
+        /**
+         * Export structured dispatcher events through the global OTel logs
+         * provider. Default false because event payloads may contain user data.
+         */
+        structuredLogs?: boolean;
+    };
 
     // Additional integration options
     constructionProvider?: ConstructionProvider;
@@ -486,6 +649,34 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
      * agent-server; omitted by hosts without a ConversationManager.
      */
     copilotImport?: CopilotImporter | undefined;
+
+    /**
+     * Sink mirroring each turn into the host's cross-conversation content
+     * index (see {@link ConversationContentSink}). Injected per-conversation
+     * by the agent-server; omitted by standalone hosts.
+     */
+    conversationContentSink?: ConversationContentSink | undefined;
+
+    /**
+     * Cross-conversation content search over the host's unified message index
+     * (see {@link ConversationSearcher}). Injected by the agent-server;
+     * omitted by standalone hosts without a unified index.
+     */
+    searchConversations?: ConversationSearcher | undefined;
+
+    /**
+     * Conversation summarizer over the host's stored transcripts (see
+     * {@link ConversationSummarizer}). Injected by the agent-server; omitted by
+     * standalone hosts.
+     */
+    summarizeConversation?: ConversationSummarizer | undefined;
+
+    /**
+     * Backfill of conversation history into the host's unified content index
+     * (see {@link ConversationIndexer}). Injected by the agent-server; omitted
+     * by standalone hosts without a unified index.
+     */
+    indexConversations?: ConversationIndexer | undefined;
 };
 
 async function getSession(
@@ -549,7 +740,11 @@ function getCosmosFactories(): PromptLoggerOptions {
     return result;
 }
 
-function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
+function getLoggerSink(
+    isDbEnabled: () => boolean,
+    clientIO: ClientIO,
+    structuredLogs: boolean,
+) {
     const debugLoggerSink = createDebugLoggerSink();
     let dbLoggerSink: LoggerSink | undefined;
 
@@ -581,11 +776,14 @@ function getLoggerSink(isDbEnabled: () => boolean, clientIO: ClientIO) {
         );
     }
 
-    return new MultiSinkLogger(
+    const sinks =
         dbLoggerSink === undefined
             ? [debugLoggerSink]
-            : [debugLoggerSink, dbLoggerSink],
-    );
+            : [debugLoggerSink, dbLoggerSink];
+    if (structuredLogs) {
+        sinks.push(createDispatcherOtelLoggerSink());
+    }
+    return new MultiSinkLogger(sinks);
 }
 
 async function lockEmbeddingCacheDir(context: CommandHandlerContext) {
@@ -1028,15 +1226,22 @@ export async function initializeCommandHandlerContext(
         const sessionDirPath = session.getSessionDirPath();
         debug(`Session directory: ${sessionDirPath}`);
         const clientIO = options?.clientIO ?? nullClientIO;
-        const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
+        const loggerSink = getLoggerSink(
+            () => context.dblogging,
+            clientIO,
+            options?.telemetry?.structuredLogs === true,
+        );
+        const activationId = randomUUID();
+        const traceId = options?.traceId;
         const logger = new ChildLogger(loggerSink, DispatcherName, {
             hostName,
-            traceId: options?.traceId,
+            traceId,
             sessionId: () =>
                 context.session.sessionDirPath
                     ? getSessionName(context.session.sessionDirPath)
                     : undefined,
-            activationId: randomUUID(),
+            activationId,
+            requestId: () => context.currentRequestId?.requestId,
         });
 
         const cacheDir = persistDir ? ensureCacheDir(persistDir) : undefined;
@@ -1089,11 +1294,17 @@ export async function initializeCommandHandlerContext(
             clientIO,
             getConversationList: options?.getConversationList,
             copilotImport: options?.copilotImport,
+            conversationContentSink: options?.conversationContentSink,
+            searchConversations: options?.searchConversations,
+            summarizeConversation: options?.summarizeConversation,
+            indexConversations: options?.indexConversations,
 
             // Runtime context
             commandLock: createLimiter(1), // Make sure we process one command at a time.
             currentRequestId: undefined,
             currentAbortSignal: undefined,
+            codingAffinity: undefined,
+            codingSessions: new Map(),
             activeRequests: new Map<string, AbortController>(),
             activeRequestsByClientId: new Map<unknown, AbortController>(),
             noReasoning: false,
@@ -1117,10 +1328,16 @@ export async function initializeCommandHandlerContext(
             ),
             displayLog: await DisplayLog.load(persistDir),
             logger,
+            activationId,
+            traceId,
+            telemetryOptions: {
+                joinActiveTrace: options?.telemetry?.joinActiveTrace ?? false,
+            },
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
             promptLogger,
             devTrace,
             batchMode: false,
+            displayCount: 0,
             pendingChoiceRoutes: new Map(),
             instanceDirLock,
             constructionProvider,
@@ -1184,6 +1401,7 @@ export async function initializeCommandHandlerContext(
                     reqId,
                     qctx.attachments,
                     qctx.options,
+                    qctx.traceContext,
                 );
                 try {
                     context.displayLog.logCommandResult(
@@ -1191,6 +1409,7 @@ export async function initializeCommandHandlerContext(
                         result?.metrics,
                         result?.tokenUsage,
                         result?.actionTokenUsage,
+                        result?.traceId,
                     );
                     context.displayLog.saveQueued();
                 } catch {
@@ -1224,8 +1443,8 @@ export async function initializeCommandHandlerContext(
             },
             context.logger
                 ? {
-                      logEvent: (name, data) =>
-                          context.logger?.logEvent(name, data as any),
+                      logEvent: (name, data, severity) =>
+                          context.logger?.logEvent(name, data as any, severity),
                   }
                 : undefined,
         );

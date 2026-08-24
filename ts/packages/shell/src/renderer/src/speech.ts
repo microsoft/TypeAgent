@@ -5,7 +5,6 @@ import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
 import { SpeechToken } from "./speechToken";
 import { WhisperRecognizer } from "./localWhisperClient";
 import registerDebug from "debug";
-import { getAndroidAPI } from "./main.js";
 
 const debug = registerDebug("typeagent:shell:speech");
 const debugError = registerDebug("typeagent:shell:speech:error");
@@ -105,10 +104,7 @@ function onRecognizedResult(
 }
 
 export function needSpeechToken(useLocalWhisper: boolean) {
-    return (
-        !useLocalWhisper &&
-        getAndroidAPI()?.isSpeechRecognitionSupported() !== true
-    );
+    return !useLocalWhisper;
 }
 export function recognizeOnce(
     token: SpeechToken | undefined,
@@ -135,27 +131,6 @@ export function recognizeOnce(
 
         reco.initialize().then(() => {
             reco.startRecording();
-        });
-    } else if (getAndroidAPI()?.isSpeechRecognitionSupported() === true) {
-        // use built-in device speech recognition
-        Bridge.interfaces.Android.recognize((text: string | undefined) => {
-            let result: speechSDK.SpeechRecognitionResult | undefined;
-
-            if (text === undefined || text === null) {
-                result = new speechSDK.SpeechRecognitionResult(
-                    undefined,
-                    speechSDK.ResultReason.NoMatch,
-                    text,
-                );
-            } else {
-                result = new speechSDK.SpeechRecognitionResult(
-                    undefined,
-                    speechSDK.ResultReason.RecognizedSpeech,
-                    text,
-                );
-            }
-
-            onRecognizedResult(result, onRecognized, onError);
         });
     } else {
         try {
@@ -225,8 +200,6 @@ export class ContinousSpeechRecognizer {
             this.whisperRecognizer.initialize().then(() => {
                 this.whisperRecognizer?.startRecording();
             });
-        } else if (getAndroidAPI()?.isSpeechRecognitionSupported() === true) {
-            throw new Error("Continuous recognition not supported on Android");
         } else {
             this.token = token;
             this.audioConfig = getAudioConfig();

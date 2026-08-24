@@ -19,7 +19,6 @@ import registerDebug from "debug";
 import chalk from "chalk";
 import {
     ChoiceManager,
-    createActionResult,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
@@ -521,48 +520,6 @@ export async function getActiveFileFromVSCode(
     });
 }
 
-import { VSCodeConversationActions } from "./vscode/vscodeConversationActionsSchema.js";
-
-async function executeConversationAction(
-    action: VSCodeConversationActions,
-    context: ActionContext<CodeActionContext>,
-) {
-    context.actionIO.takeAction("vscode-shell-action" as any, {
-        actionName: action.actionName,
-        parameters: action.parameters,
-    });
-    switch (action.actionName) {
-        case "newConversation":
-            return createActionResult(
-                action.parameters.name
-                    ? `Creating conversation "${action.parameters.name}".`
-                    : "Creating a new conversation.",
-            );
-        case "renameConversation":
-            return createActionResult(
-                `Renamed current conversation to "${action.parameters.newName}".`,
-            );
-        case "switchConversation":
-            return createActionResult(
-                action.parameters.name
-                    ? `Switching to conversation "${action.parameters.name}".`
-                    : "Switching conversation.",
-            );
-        case "deleteConversation":
-            return createActionResult(
-                action.parameters.name
-                    ? `Deleting conversation "${action.parameters.name}".`
-                    : "Deleting conversation.",
-            );
-        default: {
-            const _exhaustive: never = action;
-            throw new Error(
-                `Unhandled conversation action: ${(_exhaustive as VSCodeConversationActions).actionName}`,
-            );
-        }
-    }
-}
-
 async function executeCodeAction(
     action: AppAction,
     context: ActionContext<CodeActionContext>,
@@ -570,21 +527,6 @@ async function executeCodeAction(
     if (action.actionName === "launchVSCode") {
         await ensureVSCodeProcess();
         return undefined;
-    }
-
-    // Conversation-management actions (code-vscode-shell sub-schema) are
-    // handled locally and routed back to the originating extension webview
-    // via takeAction. All other code sub-schemas are forwarded to the Coda
-    // VS Code extension over the WebSocket bridge below.
-    //
-    // Note: sub-schema names are dot-prefixed with the parent agent name by
-    // the dispatcher (see actionConfig.collectActionConfigs), so the runtime
-    // schemaName here is "code.code-vscode-shell", not "code-vscode-shell".
-    if (action.schemaName === "code.code-vscode-shell") {
-        return executeConversationAction(
-            action as VSCodeConversationActions,
-            context,
-        );
     }
 
     const agentContext = context.sessionContext.agentContext;

@@ -50,7 +50,8 @@
             "src/vampireSchema.agr"
           ],
           "outputGlobs": [
-            "dist/vampireSchema.ag.json"
+            "dist/vampireSchema.ag.json",
+            "dist/vampireSchema.ag.map.json"
           ]
         }
       },

@@ -25,7 +25,8 @@ import {
 const loadHandlerParameters = {
     args: {
         file: {
-            description: "File to load",
+            description:
+                "File or directory to load (a directory loads all Spotify streaming history .json files in it)",
         },
     },
 } as const;
@@ -47,13 +48,21 @@ const loadHandler: CommandHandler = {
         }
         context.actionIO.setDisplay("Loading Spotify user data...");
 
-        await loadHistoryFile(
+        const result = await loadHistoryFile(
             sessionContext.instanceStorage,
             params.args.file,
             agentContext.spotify,
         );
 
-        context.actionIO.setDisplay("Spotify user data loaded.");
+        const skipped =
+            result.skipped.length !== 0
+                ? `\n\nSkipped ${result.skipped.length} file(s) that aren't Spotify streaming history: ${result.skipped
+                      .map((f) => f.replace(/^.*[\\/]/, ""))
+                      .join(", ")}.`
+                : "";
+        context.actionIO.setDisplay(
+            `Spotify user data loaded: ${result.records} track play(s) from ${result.loaded.length} file(s).${skipped}`,
+        );
     },
 };
 const handlers: CommandHandlerTable = {

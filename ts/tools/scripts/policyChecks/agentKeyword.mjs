@@ -17,6 +17,7 @@ const PROVIDER_CONFIG_FILES = [
     "config.json",
     "config.all.json",
     "config.agent.json",
+    "config.inbox.json",
     "config.service.json",
     "config.test.json",
 ];

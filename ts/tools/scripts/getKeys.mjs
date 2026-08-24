@@ -14,6 +14,7 @@ import {
 } from "@azure/identity";
 import { SecretClient } from "@azure/keyvault-secrets";
 import yaml from "js-yaml";
+import { mergeYamlForPull, mergeYamlForPush } from "./lib/yamlConfigMerge.mjs";
 
 const require = createRequire(import.meta.url);
 const config = require("./getKeys.config.json");
@@ -34,6 +35,7 @@ const yamlPath =
 const sharedKeys = config.env.shared;
 const privateKeys = config.env.private;
 const deleteKeys = config.env.delete;
+const localOnlyYamlPaths = config.vault.localOnly ?? [];
 const sharedPatterns = (config.env.sharedPatterns ?? []).map(
     (p) => new RegExp(p),
 );
@@ -472,6 +474,23 @@ function resolveFormat() {
     return "yaml";
 }
 
+function parseYamlTree(raw, source) {
+    const tree = yaml.load(raw);
+    if (tree === undefined || tree === null) return {};
+    if (typeof tree !== "object" || Array.isArray(tree)) {
+        throw new Error(`${source} must contain a YAML object.`);
+    }
+    return tree;
+}
+
+function dumpYamlTree(tree) {
+    return yaml.dump(tree, {
+        lineWidth: -1,
+        noRefs: true,
+        sortKeys: false,
+    });
+}
+
 /**
  * Read config from the appropriate format.
  */
@@ -609,15 +628,33 @@ async function pushYamlConfig() {
     );
     const vaultName = paramSharedVault ?? config.vault.shared;
     const secretName = config.vault.configSecret ?? "typeagent-config";
-    const yamlContent = await fs.promises.readFile(yamlPath, "utf8");
+    const localContent = await fs.promises.readFile(yamlPath, "utf8");
+    const localTree = parseYamlTree(localContent, yamlPath);
+
+    let remoteTree = {};
+    try {
+        const response = await keyVaultClient.readSecret(vaultName, secretName);
+        if (response.value) {
+            remoteTree = parseYamlTree(
+                response.value,
+                `vault secret '${secretName}'`,
+            );
+        }
+    } catch (e) {
+        if (e?.statusCode !== 404) throw e;
+    }
+
+    const yamlContent = dumpYamlTree(
+        mergeYamlForPush(localTree, remoteTree, localOnlyYamlPaths),
+    );
 
     console.log(
-        `Pushing ${chalk.cyanBright(yamlPath)} as '${chalk.cyanBright(secretName)}' to ${chalk.cyanBright(vaultName)} key vault.`,
+        `Merging ${chalk.cyanBright(yamlPath)} into '${chalk.cyanBright(secretName)}' in ${chalk.cyanBright(vaultName)} key vault.`,
     );
 
     if (!paramCommit) {
         console.log(
-            `\n[dry-run] Would write secret '${secretName}' to vault '${vaultName}'.\n` +
+            `\n[dry-run] Would merge and write secret '${secretName}' to vault '${vaultName}', excluding ${localOnlyYamlPaths.length} local-only path(s).\n` +
                 `Re-run without ${chalk.yellowBright("--dry-run")} to write.`,
         );
         return;
@@ -805,8 +842,8 @@ async function pullSecrets() {
 }
 
 /**
- * Pull the single typeagent-config YAML secret from Key Vault and write
- * it directly as config.local.yaml.
+ * Pull the single typeagent-config YAML secret from Key Vault and merge it
+ * into config.local.yaml, preserving configured local-only values.
  */
 async function pullYamlConfig(overallStart) {
     const keyVaultClient = await timed("az login check", () =>
@@ -851,18 +888,31 @@ async function pullYamlConfig(overallStart) {
 
     vlog(`pull total elapsed: ${Date.now() - overallStart}ms`);
 
+    const remoteTree = parseYamlTree(
+        secretValue,
+        `vault secret '${secretName}'`,
+    );
+    let localTree = {};
+    if (fs.existsSync(yamlPath)) {
+        const localContent = await fs.promises.readFile(yamlPath, "utf8");
+        localTree = parseYamlTree(localContent, yamlPath);
+    }
+    const mergedContent = dumpYamlTree(
+        mergeYamlForPull(localTree, remoteTree, localOnlyYamlPaths),
+    );
+
     if (!paramCommit) {
         console.log(
-            `\n[dry-run] Would write ${chalk.cyanBright(yamlPath)} from vault secret '${secretName}'.\n` +
+            `\n[dry-run] Would merge vault secret '${secretName}' into ${chalk.cyanBright(yamlPath)}, preserving ${localOnlyYamlPaths.length} local-only path(s).\n` +
                 `Re-run without ${chalk.yellowBright("--dry-run")} to write.`,
         );
         return;
     }
 
     await fs.promises.mkdir(path.dirname(yamlPath), { recursive: true });
-    await fs.promises.writeFile(yamlPath, secretValue, "utf8");
+    await fs.promises.writeFile(yamlPath, mergedContent, "utf8");
     console.log(
-        `\nWritten ${chalk.cyanBright(yamlPath)} from vault secret '${secretName}'.`,
+        `\nMerged vault secret '${secretName}' into ${chalk.cyanBright(yamlPath)}.`,
     );
 
     // If a legacy .env file exists alongside the new YAML config, warn the
@@ -1006,8 +1056,8 @@ ${chalk.bold("Default format:")}
   YAML is the default. Pass --dotenv to use the deprecated .env format.
 
 ${chalk.bold("YAML mode (default):")}
-  pull: Downloads the '${config.vault.configSecret}' secret as config.local.yaml
-  push: Uploads config.local.yaml as the '${config.vault.configSecret}' secret
+    pull: Merges '${config.vault.configSecret}' into config.local.yaml, preserving local-only paths
+    push: Merges config.local.yaml into '${config.vault.configSecret}', excluding local-only paths
 
 ${chalk.bold("Legacy .env mode (--dotenv):")}
   pull: Enumerates individual secrets and assembles .env file

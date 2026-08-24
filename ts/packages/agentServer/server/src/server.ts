@@ -15,9 +15,10 @@ import {
 } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
-    getDefaultAppAgentSource,
+    getDefaultAppAgentSources,
     getIndexingServiceRegistry,
     getDefaultConstructionProvider,
+    McpReplayHost,
 } from "default-agent-provider";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
@@ -33,11 +34,15 @@ import {
 } from "@typeagent/agent-server-client";
 import registerDebug from "debug";
 import os from "node:os";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { DefaultAzureCredential } from "@azure/identity";
+import { otel } from "@typeagent/telemetry";
+import { MacroManager } from "@typeagent/copilot-macros";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
 const RESTART_EXIT_CODE = 42;
+const SHUTDOWN_WORKER_MESSAGE = "shutdown";
+const WORKER_SHUTDOWN_TIMEOUT_MS = 15_000;
 
 // A dead stdout/stderr pipe (e.g. the launching wrapper exited) must never
 // crash or busy-loop the server: swallow write errors so an EPIPE can't become
@@ -68,8 +73,8 @@ function clearConsoleForRestart() {
 // a restart reuses the exact console instead of orphaning a dead-pipe zombie.
 // Restart = the worker exits RESTART_EXIT_CODE and we relaunch it in place; any
 // other exit ends the supervisor with that same code.
-if (process.env.TYPEAGENT_SUPERVISED !== "1") {
-    let code: number | null = RESTART_EXIT_CODE;
+async function superviseWorker(): Promise<number> {
+    let code = RESTART_EXIT_CODE;
     let relaunching = false;
     while (code === RESTART_EXIT_CODE) {
         // On an in-place restart (every iteration after the first), wipe the
@@ -77,33 +82,113 @@ if (process.env.TYPEAGENT_SUPERVISED !== "1") {
         if (relaunching) {
             clearConsoleForRestart();
         }
-        const result = spawnSync(
+        code = await runWorker();
+        relaunching = true;
+    }
+    return code;
+}
+
+function runWorker(): Promise<number> {
+    return new Promise((resolve) => {
+        const worker = spawn(
             process.execPath,
             [...process.execArgv, ...process.argv.slice(1)],
             {
-                stdio: "inherit",
+                stdio: ["inherit", "inherit", "inherit", "ipc"],
                 windowsHide: true,
                 env: { ...process.env, TYPEAGENT_SUPERVISED: "1" },
             },
         );
-        if (result.error) {
+        let terminating = false;
+        let shutdownTimer: NodeJS.Timeout | undefined;
+        const requestWorkerShutdown = () => {
+            if (terminating) {
+                return;
+            }
+            terminating = true;
+            shutdownTimer = setTimeout(() => {
+                worker.kill();
+            }, WORKER_SHUTDOWN_TIMEOUT_MS);
+            shutdownTimer.unref();
+
+            if (worker.connected) {
+                // The worker may already be handling the same terminal signal.
+                // Leave the hard kill to the deadline instead of racing cleanup.
+                worker.send(SHUTDOWN_WORKER_MESSAGE, () => {});
+            } else {
+                worker.kill();
+            }
+        };
+        const onSigint = () => requestWorkerShutdown();
+        const onSigterm = () => requestWorkerShutdown();
+        process.once("SIGINT", onSigint);
+        process.once("SIGTERM", onSigterm);
+
+        const cleanup = () => {
+            process.removeListener("SIGINT", onSigint);
+            process.removeListener("SIGTERM", onSigterm);
+            if (shutdownTimer !== undefined) {
+                clearTimeout(shutdownTimer);
+            }
+        };
+        worker.once("error", (error) => {
+            cleanup();
             console.error(
                 "[agent-server] supervisor could not launch the worker:",
-                result.error,
+                error,
             );
-            process.exit(1);
-        }
-        code = result.status;
-        relaunching = true;
-    }
-    process.exit(code ?? 0);
+            resolve(1);
+        });
+        worker.once("close", (exitCode) => {
+            cleanup();
+            resolve(exitCode ?? 1);
+        });
+    });
+}
+
+if (process.env.TYPEAGENT_SUPERVISED !== "1") {
+    process.exit(await superviseWorker());
 }
 
 // ===== From here down we are the worker: the real agent server. =====
 
+let workerExitPromise: Promise<void> | undefined;
+let exitWorker = (exitCode: number): Promise<void> => {
+    workerExitPromise ??= otel
+        .shutdownTelemetry()
+        .catch((error) => {
+            console.error("[agent-server] Telemetry shutdown failed:", error);
+        })
+        .then(() => {
+            process.exit(exitCode);
+        });
+    return workerExitPromise;
+};
+
+process.once("SIGINT", () => {
+    void exitWorker(0);
+});
+process.once("SIGTERM", () => {
+    void exitWorker(0);
+});
+process.once("message", (message) => {
+    if (message === SHUTDOWN_WORKER_MESSAGE) {
+        void exitWorker(0);
+    }
+});
+
 // Load config from YAML layers + Key Vault (replacing legacy dotenv).
 // vault.shared is auto-discovered from config.local.yaml / config.defaults.yaml.
 await loadConfig({ keyVault: {}, strict: false });
+const telemetryConfig = otel.resolveTelemetryConfig();
+const telemetryInit = otel.initTelemetry({
+    config: telemetryConfig,
+    processName: "agent-server",
+    debugModules: [registerDebug],
+    debugBridge: {
+        includedNamespacePrefixes: ["typeagent:", "agent-server:"],
+    },
+});
 
 // Snapshot whether this server's local config differs from the shared Key
 // Vault, so clients can be warned on connect (same delivery path as the
@@ -215,6 +300,7 @@ if (!process.env.TYPEAGENT_USER_NAME?.trim()) {
 }
 
 async function main() {
+    await telemetryInit;
     debugStartup(`pid=${process.pid} resolving instance dir + traceId`);
     const [instanceDir, traceId] = await Promise.all([
         getInstanceDirAsync(),
@@ -255,23 +341,32 @@ async function main() {
                     instanceDir,
                     configName,
                 ),
-                appAgentSources: [
-                    getDefaultAppAgentSource(instanceDir, { configName }),
-                ],
+                appAgentSources: getDefaultAppAgentSources(instanceDir, {
+                    configName,
+                }),
                 persistSession: true,
                 storageProvider: getFsStorageProvider(),
                 metrics: true,
                 dblogging: true,
                 developerMode,
                 traceId,
+                telemetry: {
+                    joinActiveTrace: true,
+                    structuredLogs: telemetryConfig.structuredLogs === true,
+                },
                 indexingServiceRegistry: await getIndexingServiceRegistry(
                     instanceDir,
                     configName,
                 ),
                 constructionProvider: getDefaultConstructionProvider(),
+                // Extract knowledge from user turns and action results into the
+                // per-conversation memory so lookupAndAnswerConversation can
+                // answer from the current conversation. Both paths queue the
+                // work (queueAddMessage), so the extraction LLM call runs in the
+                // background and does not block the turn.
                 conversationMemorySettings: {
-                    requestKnowledgeExtraction: false,
-                    actionResultKnowledgeExtraction: false,
+                    requestKnowledgeExtraction: true,
+                    actionResultKnowledgeExtraction: true,
                 },
                 collectCommandResult: true,
                 portRegistrar,
@@ -282,6 +377,10 @@ async function main() {
             },
             instanceDir,
         );
+    const macroManager = new MacroManager(
+        instanceDir,
+        new McpReplayHost(instanceDir),
+    );
 
     debugStartup("conversation manager ready; prewarming default conversation");
     // Pre-initialize the default conversation dispatcher before accepting clients,
@@ -309,21 +408,41 @@ async function main() {
 
     // Shared shutdown logic — used by RPC handler, idle timer, and clientIO intercept.
     // The wss variable is assigned after createWebSocketChannelServer resolves below.
-    let wss: Awaited<ReturnType<typeof createWebSocketChannelServer>>;
+    let wss:
+        | Awaited<ReturnType<typeof createWebSocketChannelServer>>
+        | undefined;
 
     // Stop listening, close conversations (which releases the instance-dir
     // lock), and drop the PID file. Shared by shutdown and restart so a
     // relaunched successor finds the port free and the lock released.
-    async function teardownServer() {
-        wss.close();
-        await conversationManager.close();
-        removeServerPid(port);
+    let teardownPromise: Promise<void> | undefined;
+    function teardownServer(): Promise<void> {
+        teardownPromise ??= (async () => {
+            wss?.close();
+            await conversationManager.close();
+            removeServerPid(port);
+        })();
+        return teardownPromise;
     }
+
+    async function exitServer(exitCode: number) {
+        try {
+            await teardownServer();
+        } catch (error) {
+            console.error("[agent-server] Server cleanup failed:", error);
+        }
+        try {
+            await otel.shutdownTelemetry();
+        } catch (error) {
+            console.error("[agent-server] Telemetry shutdown failed:", error);
+        }
+        process.exit(exitCode);
+    }
+    exitWorker = exitServer;
 
     async function shutdownServer() {
         console.log("Shutdown requested, stopping agent server...");
-        await teardownServer();
-        process.exit(0);
+        await exitServer(0);
     }
 
     // Restart in place: tear this process down, then exit with
@@ -337,8 +456,7 @@ async function main() {
         process.stderr.write(
             "\x1b[38;2;0;0;0;43m Restart requested - relaunching agent server... \x1b[0m\n",
         );
-        await teardownServer();
-        process.exit(RESTART_EXIT_CODE);
+        await exitServer(RESTART_EXIT_CODE);
     }
 
     function scheduleIdleShutdown() {
@@ -379,6 +497,7 @@ async function main() {
     const { handler: connectionHandler, broadcastStaleNotice } =
         createAgentServerConnectionHandler({
             conversationManager,
+            macroManager,
             shutdown: shutdownServer,
             restart: restartServer,
             isStale: isStaleBuild,
@@ -444,12 +563,22 @@ process.on("uncaughtException", (err) => {
 });
 
 await main().catch((err: any) => {
-    if (err?.code === "ERR_INSTANCE_LOCKED") {
-        // Friendly, single-line message — no stack trace for this expected
-        // case (another shell/server already owns the profile directory).
-        console.error(`\n[agent-server] ${err.message}\n`);
-        process.exit(1);
-    }
-    console.error("[agent-server] Fatal startup error:", err);
-    process.exit(1);
+    return otel
+        .shutdownTelemetry()
+        .catch((shutdownError) => {
+            console.error(
+                "[agent-server] Telemetry shutdown failed:",
+                shutdownError,
+            );
+        })
+        .then(() => {
+            if (err?.code === "ERR_INSTANCE_LOCKED") {
+                // Friendly, single-line message — no stack trace for this expected
+                // case (another shell/server already owns the profile directory).
+                console.error(`\n[agent-server] ${err.message}\n`);
+            } else {
+                console.error("[agent-server] Fatal startup error:", err);
+            }
+            process.exit(1);
+        });
 });

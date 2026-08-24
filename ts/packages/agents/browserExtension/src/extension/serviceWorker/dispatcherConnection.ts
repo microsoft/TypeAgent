@@ -532,6 +532,48 @@ function makeConnectionAdapter(): AgentServerConnection {
         throw new Error(`${op} not supported in browser extension adapter`);
     };
     return {
+        armMacroRecording: (request) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("armMacroRecording", request);
+        },
+        getMacroRecordingState: (sessionId: string) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("getMacroRecordingState", sessionId);
+        },
+        claimMacroRecording: (request) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("claimMacroRecording", request);
+        },
+        cancelMacroRecording: (sessionId: string) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("cancelMacroRecording", sessionId);
+        },
+        failMacroRecording: (
+            sessionId: string,
+            tokenId: string,
+            error: string,
+        ) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("failMacroRecording", sessionId, tokenId, error);
+        },
+        finalizeMacroRecording: (request) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("finalizeMacroRecording", request);
+        },
+        listMacros: () => notSupported("listMacros"),
+        searchMacros: () => notSupported("searchMacros"),
+        inspectMacro: () => notSupported("inspectMacro"),
+        getMacroRequirements: () => notSupported("getMacroRequirements"),
+        createMacroFromTrace: () => notSupported("createMacroFromTrace"),
+        validateMacro: () => notSupported("validateMacro"),
+        approveMacro: () => notSupported("approveMacro"),
+        disableMacro: () => notSupported("disableMacro"),
+        deleteMacro: () => notSupported("deleteMacro"),
+        runMacro: () => notSupported("runMacro"),
+        submitMacroCandidate: () => notSupported("submitMacroCandidate"),
+        cancelMacroRun: () => notSupported("cancelMacroRun"),
+        getMacroRun: () => notSupported("getMacroRun"),
+
         joinConversation: (
             _clientIO: ClientIO,
             options?: DispatcherConnectOptions,
@@ -558,6 +600,14 @@ function makeConnectionAdapter(): AgentServerConnection {
         listConversations: (name?: string) => {
             const { rpc } = requireFresh();
             return rpc.invoke("listConversations", name);
+        },
+        findConversations: (query: string, maxMatches?: number) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("findConversations", query, maxMatches);
+        },
+        searchConversationContent: (query: string, maxMatches?: number) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("searchConversationContent", query, maxMatches);
         },
         renameConversation: (id: string, newName: string) => {
             const { rpc } = requireFresh();
@@ -716,6 +766,64 @@ function renderActionResult(
                 })
                 .join("");
             return ok(`<ul>${items}</ul>`);
+        }
+        case "matches": {
+            const items = result.matches
+                .map((m) => {
+                    const c = m.conversation;
+                    const cur =
+                        c.conversationId === result.currentConversationId
+                            ? "▸ "
+                            : "";
+                    const pct = Math.round(m.score * 100);
+                    return `<li>${cur}${escapeHtml(c.name)} <span style="opacity:0.6;">(${pct}%)</span></li>`;
+                })
+                .join("");
+            return ok(
+                `<b>Matches for “${escapeHtml(result.query)}”:</b><ul>${items}</ul>`,
+            );
+        }
+        case "contentMatches": {
+            const items = result.matches
+                .map((m) => {
+                    const c = m.conversation;
+                    const cur =
+                        c.conversationId === result.currentConversationId
+                            ? "▸ "
+                            : "";
+                    const pct = Math.round(m.score * 100);
+                    const snippet = m.snippets[0];
+                    const snippetHtml = snippet
+                        ? `<br><span style="opacity:0.6;">${escapeHtml(snippet)}</span>`
+                        : "";
+                    return `<li>${cur}${escapeHtml(c.name)} <span style="opacity:0.6;">(${pct}%)</span>${snippetHtml}</li>`;
+                })
+                .join("");
+            return ok(
+                `<b>Content matches for “${escapeHtml(result.query)}”:</b><ul>${items}</ul>`,
+            );
+        }
+        case "help": {
+            const rows: [string, string][] = [
+                ["new [name]", "Create a new conversation"],
+                ["list", "List all conversations"],
+                ["find <name>", "Find conversations by name"],
+                ["search <text>", "Search conversation content"],
+                ["info", "Show the current conversation"],
+                ["switch [name]", "Switch to a conversation (or the next one)"],
+                ["next", "Switch to the next conversation"],
+                ["prev", "Switch to the previous conversation"],
+                ["rename [name] <newName>", "Rename a conversation"],
+                ["delete <name>", "Delete a conversation"],
+                ["help", "Show this help"],
+            ];
+            const items = rows
+                .map(
+                    ([usage, desc]) =>
+                        `<li><code>${escapeHtml(usage)}</code> — ${escapeHtml(desc)}</li>`,
+                )
+                .join("");
+            return ok(`<b>Conversation commands:</b><ul>${items}</ul>`);
         }
     }
 }

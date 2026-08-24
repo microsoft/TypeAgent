@@ -159,6 +159,15 @@ function main() {
         console.log("  recorded external-cli mode (.typeagent-external-cli)");
     }
 
+    // 2d. Remove package files that are not used at runtime.
+    if (!args.skipPrune) {
+        run(
+            "node",
+            [path.join(scriptsDir, "pruneDeployFiles.mjs"), "--dir", args.out],
+            tsRoot,
+        );
+    }
+
     // 3. Copy the config-provisioning tool (getKeys + its config/lib) and the
     //    config scaffold. getKeys' runtime deps are already in the deploy
     //    closure (chalk, @azure/keyvault-secrets, @azure/identity, js-yaml,
