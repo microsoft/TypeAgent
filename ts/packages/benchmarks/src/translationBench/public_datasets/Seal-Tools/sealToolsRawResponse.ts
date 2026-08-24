@@ -28,20 +28,8 @@ function asRecord(value: unknown): Record<string, unknown> {
         : {};
 }
 
-// Find one complete JSON object or array inside a model response.
-function findJsonDocument(text: string): string {
-    const objectStart = text.indexOf("{");
-    const arrayStart = text.indexOf("[");
-    const start =
-        objectStart < 0
-            ? arrayStart
-            : arrayStart < 0
-              ? objectStart
-              : Math.min(objectStart, arrayStart);
-    if (start < 0) {
-        throw new SyntaxError("Response does not contain JSON");
-    }
-
+// Return the end of one balanced object or array candidate.
+function findJsonEnd(text: string, start: number): number | undefined {
     const stack: string[] = [];
     let quote = false;
     let escaped = false;
@@ -67,29 +55,41 @@ function findJsonDocument(text: string): string {
         const matches =
             (opener === "{" && character === "}") ||
             (opener === "[" && character === "]");
-        if (!matches) throw new SyntaxError("Response contains invalid JSON");
-        if (stack.length === 0) return text.slice(start, index + 1);
+        if (!matches) return undefined;
+        if (stack.length === 0) return index + 1;
     }
-    throw new SyntaxError("Response contains incomplete JSON");
+    return undefined;
 }
 
 // Preserve JSON number lexemes because Seal compares their Python spellings.
 function parseJsonWithNumberLexemes(text: string): unknown {
-    const document = findJsonDocument(text);
-    return (
-        JSON.parse as unknown as (
-            source: string,
-            reviver: (
-                key: string,
-                value: unknown,
-                context?: { source?: string },
-            ) => unknown,
-        ) => unknown
-    )(document, (_key, value, context) =>
-        typeof value === "number" && context?.source !== undefined
-            ? new PythonNumber(context.source)
-            : value,
-    );
+    const parse = JSON.parse as unknown as (
+        source: string,
+        reviver: (
+            key: string,
+            value: unknown,
+            context?: { source?: string },
+        ) => unknown,
+    ) => unknown;
+    for (let start = 0; start < text.length; start++) {
+        if (text[start] !== "{" && text[start] !== "[") continue;
+        const end = findJsonEnd(text, start);
+        if (end === undefined) continue;
+        try {
+            return parse(text.slice(start, end), (_key, value, context) => {
+                if (typeof value !== "number") return value;
+                if (context?.source === undefined) {
+                    throw new Error(
+                        "JSON.parse does not expose number lexemes",
+                    );
+                }
+                return new PythonNumber(context.source);
+            });
+        } catch {
+            // A balanced prose fragment may precede the actual JSON document.
+        }
+    }
+    throw new SyntaxError("Response does not contain valid JSON");
 }
 
 // Add one action and the name produced after dispatcher finalization.

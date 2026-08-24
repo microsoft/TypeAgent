@@ -18,7 +18,7 @@ describe("Seal-Tools raw responses", () => {
                 ],
             },
         }).replace("100", "1e2");
-        const parsed = parseSealToolsRawResponse(complete);
+        const parsed = parseSealToolsRawResponse("use [option] " + complete);
 
         expect(parsed.actions[0]?.parameters).toEqual({
             limit: new PythonNumber("1e2"),
