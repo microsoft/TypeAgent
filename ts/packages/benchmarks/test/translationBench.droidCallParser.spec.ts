@@ -30,5 +30,16 @@ describe("DroidCall source parser", () => {
         );
 
         expect(classifyDroidCalls(calls)).toBe("multiCallWithoutNested");
+        expect(classifyDroidCalls([])).toBe("noCall");
+    });
+
+    it("parses positional and nested result arguments", () => {
+        const calls = parseDroidCallCode(
+            "result0 = find('Ada')\nresult1 = send(items=[result0])",
+        );
+
+        expect(calls[0]?.positionalArguments).toEqual(["Ada"]);
+        expect(calls[1]?.arguments).toEqual({ items: ["#0"] });
+        expect(classifyDroidCalls(calls)).toBe("multiCallNested");
     });
 });

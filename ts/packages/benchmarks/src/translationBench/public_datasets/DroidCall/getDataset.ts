@@ -1,11 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { mkdir, readFile, rename, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { Readable } from "node:stream";
-import { finished } from "node:stream/promises";
+import { pipeline } from "node:stream/promises";
 
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 
@@ -42,12 +43,11 @@ async function downloadFile(
 
     // Keep partial bytes outside the destination until the stream completes.
     await mkdir(dirname(outputPath), { recursive: true });
-    const temporaryPath = `${outputPath}.${process.pid}.tmp`;
+    const temporaryPath = `${outputPath}.${process.pid}.${randomUUID()}.tmp`;
     try {
-        await finished(
-            Readable.fromWeb(response.body as never).pipe(
-                createWriteStream(temporaryPath, { flags: "wx" }),
-            ),
+        await pipeline(
+            Readable.fromWeb(response.body as never),
+            createWriteStream(temporaryPath, { flags: "wx" }),
         );
         await rename(temporaryPath, outputPath);
     } catch (error) {
@@ -69,16 +69,14 @@ export async function downloadDroidCall(outputDir: string): Promise<string[]> {
 // Parse JSONL with source coordinates so corrupt upstream rows are actionable.
 export async function readDroidCallJsonl<T>(path: string): Promise<T[]> {
     const text = await readFile(path, "utf8");
-    return text
-        .split("\n")
-        .filter((line) => line.trim().length > 0)
-        .map((line, index) => {
-            try {
-                return JSON.parse(line) as T;
-            } catch (error) {
-                throw new Error(
-                    `${basename(path)}:${index + 1}: ${String(error)}`,
-                );
-            }
-        });
+    const rows: T[] = [];
+    for (const [index, line] of text.split("\n").entries()) {
+        if (line.trim().length === 0) continue;
+        try {
+            rows.push(JSON.parse(line) as T);
+        } catch (error) {
+            throw new Error(`${basename(path)}:${index + 1}: ${String(error)}`);
+        }
+    }
+    return rows;
 }
