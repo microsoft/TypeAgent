@@ -4,7 +4,7 @@
 import {
     classifyDroidCalls,
     parseDroidCallCode,
-} from "../src/translationBench/public_datasets/DroidCall/droidCallParser.js";
+} from "../src/translationBench/public_datasets/pythonLiteral.js";
 
 describe("DroidCall source parser", () => {
     it("parses nested calls and result references", () => {
