@@ -4,7 +4,7 @@
 import {
     parseSealToolsRow,
     toSealToolsFunctionTool,
-} from "../src/translationBench/public_datasets/Seal-Tools/sealToolsParser.js";
+} from "../src/translationBench/public_datasets/Seal-Tools/getDataset.js";
 
 describe("Seal-Tools source parser", () => {
     it("parses a source conversation and tool schema", () => {
