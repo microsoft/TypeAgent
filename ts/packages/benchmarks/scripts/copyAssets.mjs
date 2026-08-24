@@ -58,6 +58,14 @@ const files = [
         "dist/translationBench/config/run-config.example.json",
     ],
     [
+        "src/translationBench/policy/action-eligibility.json",
+        "dist/translationBench/policy/action-eligibility.json",
+    ],
+    [
+        "src/translationBench/policy/action-eligibility.schema.json",
+        "dist/translationBench/policy/action-eligibility.schema.json",
+    ],
+    [
         "src/core/model-prices.generated.json",
         "dist/core/model-prices.generated.json",
     ],

@@ -73,6 +73,29 @@ describe("translationBench runConfig", () => {
         }
     });
 
+    it("validates values and applies explicit concurrency caps", () => {
+        expect(() =>
+            resolveRunConfig({
+                base: { synthesizer: { concurrency: -1 } },
+            }),
+        ).toThrow(/concurrency/);
+        expect(() =>
+            resolveRunConfig({
+                base: { eval: { models: ["azure/x", "azure/x"] } },
+            }),
+        ).toThrow(/duplicates/);
+
+        const resolved = resolveRunConfig({
+            models: {
+                "azure/x": { concurrency: 20, maxConcurrency: 4 },
+                "azure/y": { maxConcurrency: 3 },
+            },
+            base: { eval: { models: ["azure/x", "azure/y"] } },
+        });
+        expect(resolved.concurrencyByModel["azure/x"]).toBe(4);
+        expect(resolved.concurrencyByModel["azure/y"]).toBe(3);
+    });
+
     it("defaults to the eval batch", () => {
         const resolved = resolveRunConfig(SAMPLE);
         expect(resolved.batch).toBe("eval");

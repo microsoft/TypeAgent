@@ -15,7 +15,7 @@ import {
 } from "@typeagent/action-schema";
 import { getCombinedActionSchemaTypeName } from "./agentTranslators.js";
 import { PromptLogger } from "@typeagent/telemetry";
-import { withChatModelTelemetryContext } from "@typeagent/aiclient";
+import { withChatModelTelemetryPurpose } from "@typeagent/aiclient";
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
 
 function createSelectionActionTypeDefinition(
@@ -158,7 +158,7 @@ export async function selectFromPartitions(
     );
     // Start all translations in parallel.
     const promises = partitions.map(({ translator }) =>
-        withChatModelTelemetryContext({ purpose: "schema-selection" }, () =>
+        withChatModelTelemetryPurpose("schema-selection", () =>
             translator.translate(request, signal),
         ).catch((err): Result<AssistantSelection> => {
             // Let AbortError propagate so callers see cancellation rather

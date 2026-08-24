@@ -402,7 +402,16 @@ typeagent:
 #                        `~`/`~/`/`~\` expands to your home dir. Supports
 #                        `{service}`, `{process}`, `{timestamp}`, and `{pid}`
 #                        placeholders.
+#   - logRetentionBytes  total-size cap in bytes for local JSONL logs in
+#                        the log file's parent directory. On telemetry
+#                        startup, an asynchronous cleanup deletes the
+#                        oldest inactive `.jsonl` files first until the
+#                        total is at or below the cap. Applies only when
+#                        `logFile` is set. Defaults to 524288000
+#                        (500 MiB). Set to 0 to disable cleanup. Env
+#                        override: TYPEAGENT_OTEL_LOG_RETENTION_BYTES.
 #   - debugBridge        copy enabled typeagent:* debug output to OTel logs
+#   - structuredLogs     export privacy-filtered dispatcher lifecycle events
 #   - tracesSampler      one of always_on, always_off, traceidratio,
 #                        parentbased_always_on, parentbased_always_off,
 #                        parentbased_traceidratio
@@ -410,8 +419,31 @@ typeagent:
 
 # telemetry:
 #   otlpEndpoint: http://localhost:4318
-#   logFile: ~/.typeagent/logs/typeagent-{service}-{process}-{timestamp}-{pid}.jsonl
+#   logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
+#   logRetentionBytes: 524288000
 #   debugBridge: true
 #   structuredLogs: true
 #   tracesSampler: parentbased_traceidratio
 #   tracesSamplerArg: 0.1
+#
+# Local Grafana LGTM sink (managed by `pnpm run telemetry:grafana`).
+#
+# You normally do not edit this section - `pnpm run telemetry:grafana` sets
+# `enabled: "true"` and the stable loopback endpoint while preserving other
+# custom values. The setting remains enabled when LGTM stops, so TypeAgent
+# can start first and export as soon as LGTM becomes available. When enabled
+# it runs alongside any standard backend above (deduplicated when they
+# resolve to the same URL); it becomes the primary exporter when no standard
+# backend is configured.
+#
+# `enabled` is a STRING because the flat env layer drops YAML booleans whose
+# value is `false` — a plain boolean would silently "stick" once enabled.
+
+# telemetry:
+#   local:
+#     enabled: "true"
+#     otlpEndpoint: http://127.0.0.1:24318
+#     logFile: ~/.typeagent/logs/{process}-{timestamp}-p{pid}.jsonl
+#     logRetentionBytes: 524288000
+#     debugBridge: "true"
+#     structuredLogs: "true"

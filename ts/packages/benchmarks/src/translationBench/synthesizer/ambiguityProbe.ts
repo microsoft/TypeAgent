@@ -198,16 +198,27 @@ export async function probeTranslationBenchAmbiguityCases(options: {
     const cases: TranslationBenchAmbiguityProbeCaseResult[] = [];
     for (const target of targets) {
         const observations = await Promise.all(
-            models.map((model) =>
-                options.translator.translate({
-                    model,
-                    utterance: target.utterance,
-                    ...(target.history !== undefined
-                        ? { history: target.history }
-                        : {}),
-                    activeSchemas: options.activeSchemas,
-                }),
-            ),
+            models.map(async (model) => {
+                try {
+                    return await options.translator.translate({
+                        model,
+                        utterance: target.utterance,
+                        ...(target.history !== undefined
+                            ? { history: target.history }
+                            : {}),
+                        activeSchemas: options.activeSchemas,
+                    });
+                } catch (error) {
+                    return {
+                        model,
+                        actions: [],
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    };
+                }
+            }),
         );
         const ordered = models.map((model) => {
             const hit = observations.find((o) => o.model === model);

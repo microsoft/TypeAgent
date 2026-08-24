@@ -83,6 +83,34 @@ describe("translationBench rateLimiter", () => {
         ).rejects.toThrow(/max wait/);
     });
 
+    it("does not sleep past the maximum wait", async () => {
+        const waits: number[] = [];
+        const limiter = createRateLimiter(
+            { "azure/m": 100 },
+            {
+                dbPath,
+                maxWaitMs: 25,
+                onWait: (_model, _waitedMs, waitMs) => waits.push(waitMs),
+            },
+        );
+        limiters.push(limiter);
+        await limiter.run("azure/m", 100, async () => ({
+            result: "first",
+            actualTokens: 100,
+        }));
+
+        const startedAt = Date.now();
+        await expect(
+            limiter.run("azure/m", 100, async () => ({
+                result: "blocked",
+                actualTokens: 100,
+            })),
+        ).rejects.toThrow(/max wait/);
+        expect(Date.now() - startedAt).toBeLessThan(500);
+        expect(waits).toEqual([expect.any(Number)]);
+        expect(waits[0]).toBeLessThanOrEqual(25);
+    });
+
     it("settles claims to the measured actual token count", async () => {
         const limiter = make({ "azure/m": 120_000 });
 

@@ -5,11 +5,15 @@ export * from "./common.js";
 export * from "./models.js";
 export {
     instrumentChatModel,
+    resetLlmClassificationDiagnostics,
     type ChatModelTelemetryInfo,
 } from "./otelChatModel.js";
 export {
     getChatModelTelemetryContext,
     withChatModelTelemetryContext,
+    withChatModelTelemetryPurpose,
+    type ChatModelTelemetryClassification,
+    type ChatModelTelemetryClassificationSource,
     type ChatModelTelemetryContext,
     type ChatModelTelemetryPhase,
     type ChatModelTelemetryPurpose,

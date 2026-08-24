@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createRpc } from "@typeagent/agent-rpc/rpc";
+import {
+    createRpc,
+    type RpcOptions,
+    type RpcStructuredLogger,
+} from "@typeagent/agent-rpc/rpc";
 import type { RpcChannel } from "@typeagent/agent-rpc/channel";
 import type {
     ClientIO,
@@ -49,6 +53,7 @@ export interface DispatcherRpcOptions {
      * Enable only when the destination is the trusted agent-server endpoint.
      */
     trustedContextPropagation?: boolean;
+    logger?: RpcStructuredLogger;
 }
 
 type PendingEntry = {
@@ -65,18 +70,28 @@ export function createDispatcherRpcClient(
     connectionId?: ConnectionId,
     options?: DispatcherRpcOptions,
 ): DispatcherRpcClient {
+    const rpcOptions: RpcOptions | undefined =
+        options?.trustedContextPropagation === true ||
+        options?.logger !== undefined
+            ? {
+                  ...(options.trustedContextPropagation === true
+                      ? {
+                            tracing: {
+                                propagateContext: true,
+                            },
+                        }
+                      : {}),
+                  ...(options.logger === undefined
+                      ? {}
+                      : { logger: options.logger }),
+              }
+            : undefined;
     const rpc = createRpc<DispatcherInvokeFunctions, DispatcherCallFunctions>(
         "dispatcher",
         channel,
         undefined,
         undefined,
-        options?.trustedContextPropagation === true
-            ? {
-                  tracing: {
-                      propagateContext: true,
-                  },
-              }
-            : undefined,
+        rpcOptions,
     );
 
     // requestId → pending submitCommand awaiter (set on submit, resolved by

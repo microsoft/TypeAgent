@@ -54,7 +54,18 @@ import {
     isUnknownAction,
 } from "../dispatcherUtils.js";
 import { executeReasoning as executeClaudeReasoning } from "../../../reasoning/claude.js";
-import { executeReasoning as executeCopilotReasoning } from "../../../reasoning/copilot.js";
+import {
+    executeCodingRequest,
+    executeReasoning as executeCopilotReasoning,
+} from "../../../reasoning/copilot.js";
+import {
+    classifyCodingRequest,
+    clearCodingAffinity,
+    establishCodingAffinity,
+    isCodeAgentRequest,
+    isCodingWorkingDirectorySelection,
+    isGenericFallbackCandidate,
+} from "../../../reasoning/codingRouting.js";
 import {
     parseRecordingDirective,
     type CommandDisposition,
@@ -68,6 +79,7 @@ import {
     logTranslationCompleted,
     logTranslationStarted,
 } from "../../../otel/structuredEvents.js";
+import { readTranslationRoutingFromError } from "../../../otel/translationSpan.js";
 import { withChatModelTelemetryContext } from "@typeagent/aiclient";
 
 type ReasoningFallbackContext = {
@@ -676,7 +688,7 @@ async function requestExplain(
     const processRequestActionP = withChatModelTelemetryContext(
         {
             phase: context.explanationAsynchronousMode
-                ? "background"
+                ? "explanation"
                 : "translation",
             purpose: "cache-generation",
             scope: context.explanationAsynchronousMode
@@ -831,6 +843,12 @@ export class RequestCommandHandler implements CommandHandler {
                 requestId,
                 schemaNames: activeSchemaScope.schemaNames,
             });
+            // Measure the translation phase at this call boundary with a
+            // monotonic-ish wall clock (consistent with the reasoning span's
+            // `Date.now()` convention) so the duration is a real fact on the
+            // event, not something the exporter has to reconstruct from span
+            // timestamps. Covers the success, failure, and cancellation paths.
+            const translationStartedAt = Date.now();
             try {
                 interpretResult = await interpretRequest(
                     context,
@@ -854,11 +872,21 @@ export class RequestCommandHandler implements CommandHandler {
                 }
                 logTranslationCompleted(systemContext.logger, {
                     requestId,
+                    // `strategy` is only a placeholder on the failure path (the
+                    // terminal route is unknown). The routing summary carried on
+                    // the error is the source of truth: `logTranslationCompleted`
+                    // derives `routingReason` from the routes actually observed
+                    // and omits it when none reached a terminal decision, so a
+                    // cache-stage failure is never mislabelled `llm_translation`.
                     strategy: "translate",
                     success: false,
+                    // Only what is known from outside the error; a cancellation
+                    // carried by the thrown value is recognized from `error`.
                     cancelled:
-                        e?.name === "AbortError" ||
                         systemContext.currentAbortSignal?.aborted === true,
+                    elapsedMs: Date.now() - translationStartedAt,
+                    routing: readTranslationRoutingFromError(e),
+                    error: e,
                     actions: [],
                 });
                 debugRequest(`Request translation failed: ${e.message}`);
@@ -872,6 +900,8 @@ export class RequestCommandHandler implements CommandHandler {
                     ? "user"
                     : interpretResult.fromCache || "translate",
                 success: true,
+                elapsedMs: Date.now() - translationStartedAt,
+                routing: interpretResult.routing,
                 actions: requestAction.actions,
             });
 
@@ -894,6 +924,74 @@ export class RequestCommandHandler implements CommandHandler {
                         ...tokenUsage,
                     };
                 }
+            }
+
+            const genericFallback = isGenericFallbackCandidate(requestAction);
+            if (genericFallback) {
+                const codingDecision = classifyCodingRequest(
+                    request,
+                    systemContext.codingAffinity !== undefined,
+                    attachments?.length ?? 0,
+                );
+                if (codingDecision === "coding") {
+                    if (establishCodingAffinity(systemContext) === undefined) {
+                        displayError(
+                            "Coding requires a valid server-side working directory. " +
+                                "Configure TYPEAGENT_CODE_DEFAULT_WORKING_DIRECTORY or " +
+                                "TYPEAGENT_CODE_ALLOWED_ROOTS on agent-server, or submit an authorized workingDirectory.",
+                            context,
+                        );
+                        setDisposition(systemContext, {
+                            status: "failed",
+                            path: "reasoning",
+                            mayHaveSideEffects: false,
+                            schemas: ["code.swe"],
+                        });
+                        return;
+                    }
+                    if (isCodingWorkingDirectorySelection(request)) {
+                        displayStatus(
+                            `Coding working directory: ${systemContext.codingAffinity!.workingDirectory}`,
+                            context,
+                        );
+                        setDisposition(systemContext, {
+                            status: "handled",
+                            path: "reasoning",
+                            schemas: ["code.swe"],
+                        });
+                        return;
+                    }
+                    delete ensureCommandResult(systemContext).actionTokenUsage;
+                    try {
+                        await executeCodingRequest(
+                            request,
+                            context,
+                            attachments,
+                        );
+                        setDisposition(systemContext, {
+                            status: "handled",
+                            path: "reasoning",
+                            schemas: ["code.swe"],
+                        });
+                    } catch (error) {
+                        setDisposition(systemContext, {
+                            status: "failed",
+                            path: "reasoning",
+                            mayHaveSideEffects: true,
+                            schemas: ["code.swe"],
+                        });
+                        throw error;
+                    }
+                    return;
+                }
+                if (systemContext.codingAffinity !== undefined) {
+                    clearCodingAffinity(systemContext);
+                }
+            } else if (
+                systemContext.codingAffinity !== undefined &&
+                !isCodeAgentRequest(requestAction)
+            ) {
+                clearCodingAffinity(systemContext);
             }
 
             // If translation produced unknown or clarification actions,

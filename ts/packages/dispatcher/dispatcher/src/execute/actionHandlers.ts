@@ -28,7 +28,6 @@ import type { Span } from "@opentelemetry/api";
 import {
     createActionResult,
     createActionResultNoDisplay,
-    actionResultToString,
     createActionResultFromError,
     serializeError,
 } from "@typeagent/agent-sdk/helpers/action";
@@ -82,6 +81,7 @@ import {
 } from "../otel/structuredEvents.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
+const debugActionsInfo = registerDebug("typeagent:dispatcher:actions:info");
 const debugCommandExecError = registerDebug(
     "typeagent:dispatcher:command:exec:error",
 );
@@ -360,12 +360,6 @@ export async function executeAction(
     actionIndex: number,
 ): Promise<ActionResult> {
     const action = executableAction.action;
-    if (debugActions.enabled) {
-        debugActions(
-            `Executing action: ${JSON.stringify(action, undefined, 2)}`,
-        );
-    }
-
     const schemaName = action.schemaName;
     // For nested action calls (e.g., from TaskFlow scripts), agentContext may be
     // the agent's own context rather than CommandHandlerContext. In that case,
@@ -377,6 +371,34 @@ export async function executeAction(
     const appAgentName = getAppAgentName(schemaName);
     const requestId = getRequestId(systemContext);
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
+
+    debugActionsInfo("executing action", {
+        requestId: requestId.requestId,
+        schema: schemaName,
+        action: action.actionName,
+        agent: appAgentName,
+        index: actionIndex,
+    });
+    if (debugActions.enabled) {
+        const parameters = Object.entries(action.parameters ?? {});
+        debugActions("executing action details", {
+            requestId: requestId.requestId,
+            schema: schemaName,
+            action: action.actionName,
+            agent: appAgentName,
+            index: actionIndex,
+            parameterCount: parameters.length,
+            parameters: parameters.slice(0, 20).map(([name, value]) => ({
+                name,
+                type:
+                    value === null
+                        ? "null"
+                        : Array.isArray(value)
+                          ? "array"
+                          : typeof value,
+            })),
+        });
+    }
 
     // Update the last action translator.
     systemContext.lastActionSchemaName = schemaName;
@@ -427,69 +449,79 @@ export async function executeAction(
         actionSpanAttributes.traceId = systemContext.traceId;
     }
 
-    return wrapActionSpan(actionSpanAttributes, async (actionSpan) => {
-        const eventData = {
-            requestId: requestId.requestId,
-            schemaName,
-            actionName: action.actionName,
-            appAgentName,
-            actionIndex,
-        };
-        logActionStarted(systemContext.logger, eventData);
-        try {
-            const outcome = await executeForActionSpan(actionSpan, {
-                executableAction,
-                context,
-                actionIndex,
-                systemContext,
-                appAgentName,
-                appAgent,
-                actionContext,
-            });
-            // If the agent ran to completion but a cancel arrived while it was executing,
-            // discard the result and treat this as a cancellation.
-            systemContext.currentAbortSignal?.throwIfAborted();
-            actionContext.profiler?.stop();
-            actionContext.profiler = undefined;
-
-            if (debugActions.enabled) {
-                debugActions(actionResultToString(outcome.result));
-            }
-
-            if (
-                !outcome.failureRecorded &&
-                !outcome.setupReplacementResult &&
-                outcome.result.error !== undefined
-            ) {
-                recordActionResultError(actionSpan);
-            }
-            emitActionResult(
-                outcome.result,
-                actionContext,
-                systemContext,
-                requestId,
-                appAgentName,
-                actionIndex,
+    return wrapActionSpan(
+        actionSpanAttributes,
+        async (actionSpan) => {
+            const eventData = {
+                requestId: requestId.requestId,
                 schemaName,
-            );
+                actionName: action.actionName,
+                appAgentName,
+                actionIndex,
+            };
+            // Measure the action-execution phase at this call boundary (same
+            // `Date.now()` convention as reasoning/translation) so success,
+            // failure, and cancellation completions all carry a real duration.
+            const actionStartedAt = Date.now();
+            logActionStarted(systemContext.logger, eventData);
+            try {
+                const outcome = await executeForActionSpan(actionSpan, {
+                    executableAction,
+                    context,
+                    actionIndex,
+                    systemContext,
+                    appAgentName,
+                    appAgent,
+                    actionContext,
+                });
+                // If the agent ran to completion but a cancel arrived while it was executing,
+                // discard the result and treat this as a cancellation.
+                systemContext.currentAbortSignal?.throwIfAborted();
+                actionContext.profiler?.stop();
+                actionContext.profiler = undefined;
 
-            logActionCompleted(systemContext.logger, {
-                ...eventData,
-                success: outcome.result.error === undefined,
-            });
-            closeActionContext();
-            return outcome.result;
-        } catch (error) {
-            logActionCompleted(systemContext.logger, {
-                ...eventData,
-                success: false,
-                cancelled:
-                    (error as { name?: unknown })?.name === "AbortError" ||
-                    systemContext.currentAbortSignal?.aborted === true,
-            });
-            throw error;
-        }
-    });
+                if (
+                    !outcome.failureRecorded &&
+                    !outcome.setupReplacementResult &&
+                    outcome.result.error !== undefined
+                ) {
+                    recordActionResultError(actionSpan);
+                }
+                emitActionResult(
+                    outcome.result,
+                    actionContext,
+                    systemContext,
+                    requestId,
+                    appAgentName,
+                    actionIndex,
+                    schemaName,
+                );
+
+                logActionCompleted(systemContext.logger, {
+                    ...eventData,
+                    success: outcome.result.error === undefined,
+                    elapsedMs: Date.now() - actionStartedAt,
+                });
+                closeActionContext();
+                return outcome.result;
+            } catch (error) {
+                logActionCompleted(systemContext.logger, {
+                    ...eventData,
+                    success: false,
+                    // Only what is known from outside the error; a cancellation
+                    // carried by the thrown value is recognized from `error`.
+                    cancelled:
+                        systemContext.currentAbortSignal?.aborted === true,
+                    elapsedMs: Date.now() - actionStartedAt,
+                    error,
+                });
+                throw error;
+            }
+        },
+        // The same signal the completion event above uses, so the span and
+        // `action:completed` classify a cancellation identically.
+        [systemContext.currentAbortSignal],
+    );
 }
 
 // Post-execution processing for an ActionResult: error / displayContent /
@@ -766,7 +798,6 @@ export async function executeActions(
         return;
     }
 
-    debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
     while (actionQueue.length !== 0) {
         systemContext.currentAbortSignal?.throwIfAborted();
@@ -865,9 +896,13 @@ export async function executeActions(
                 );
             }
 
-            debugActions(
-                `Result activity context: ${JSON.stringify(result.activityContext, undefined, 2)}`,
-            );
+            debugActionsInfo("result activity context", {
+                agent: appAgentName,
+                activity: result.activityContext?.activityName,
+                clearing: result.activityContext === null,
+                openLocalView: result.activityContext?.openLocalView,
+                restricted: result.activityContext?.restricted,
+            });
             const prevActivityContext = systemContext.activityContext;
             const openLocalView = setActivityContext(
                 action.schemaName,
@@ -897,14 +932,18 @@ export async function executeActions(
                 }
             }
             if (systemContext.activityContext !== undefined) {
-                debugActions(
-                    `Starting activity: ${JSON.stringify(systemContext.activityContext, undefined, 2)}`,
-                );
+                debugActionsInfo("activity started", {
+                    schema: action.schemaName,
+                    agent: systemContext.activityContext.appAgentName,
+                    activity: systemContext.activityContext.activityName,
+                });
             } else if (prevActivityContext !== undefined) {
                 // Activity context cleared.
-                debugActions(
-                    `Stopped activity: ${JSON.stringify(prevActivityContext, undefined, 2)}`,
-                );
+                debugActionsInfo("activity stopped", {
+                    schema: action.schemaName,
+                    agent: prevActivityContext.appAgentName,
+                    activity: prevActivityContext.activityName,
+                });
             }
         }
 
@@ -1112,7 +1151,14 @@ export async function executeCommand(
             } else {
                 displayError(`ERROR: ${e.message}`, actionContext);
             }
-            debugCommandExecError(e.stack);
+            debugCommandExecError("command execution exception", {
+                requestId: getRequestId(context).requestId,
+                agent: appAgentName,
+                command: commands.join(" "),
+                errorType: e?.name,
+                error: e?.message,
+                stack: e?.stack,
+            });
         }
     } finally {
         actionContext.profiler?.stop();

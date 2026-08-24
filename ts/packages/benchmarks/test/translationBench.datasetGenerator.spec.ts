@@ -169,6 +169,10 @@ function fairNegativeAssessments(genCaseCount = 20) {
             kind: "pure_refusal" as const,
             fairEmptyGold: true,
             reason: "pure refusal / leave-alone; fair empty gold",
+            opensAsHardAbstain: true,
+            hasAlternateOrSiblingTask: false,
+            hasQuestionOrExplanationRequest: false,
+            mapsToAnyLoadedTool: false,
         };
     });
 }

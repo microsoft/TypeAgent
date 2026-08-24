@@ -76,7 +76,11 @@ semantic_checker:
               unfair_contrastive | unfair_imperative | unfair_sibling_command |
               unknown),
         fairEmptyGold (boolean),
-        reason (short justification).
+        reason (short justification),
+        opensAsHardAbstain (boolean),
+        hasAlternateOrSiblingTask (boolean),
+        hasQuestionOrExplanationRequest (boolean),
+        mapsToAnyLoadedTool (boolean).
     - Paths are the join key: cover every negative path exactly once (no
       duplicates, no unknown paths, no index-only pairing).
     - Judge natural language intent. A deterministic shape gate ALSO rejects

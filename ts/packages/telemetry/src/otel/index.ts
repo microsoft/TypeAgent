@@ -3,6 +3,8 @@
 
 export {
     resolveTelemetryConfig,
+    getAllOtlpExporters,
+    DEFAULT_LOG_RETENTION_BYTES,
     type OtlpExporterConfig,
     type TraceSampler,
     type TraceConfig,
@@ -36,10 +38,27 @@ export {
 export {
     JsonlLogExporter,
     resolveJsonlLogPath,
+    getJsonlLogPathIdentity,
+    getActiveJsonlLogPaths,
     type JsonlLogExporterOptions,
 } from "./jsonlLogExporter.js";
 
+export {
+    runLogRetentionCleanup,
+    type LogRetentionFs,
+    type RunLogRetentionCleanupOptions,
+} from "./logRetention.js";
+
 export { LocalLogRecordProcessor } from "./localLogRecordProcessor.js";
+
+export {
+    classifyDebugNamespace,
+    debugClassAllowedByProfile,
+    readDebugClass,
+    DEBUG_CLASS_ATTRIBUTE,
+    DEBUG_NAMESPACE_ATTRIBUTE,
+    type DebugLogClass,
+} from "./debugClass.js";
 
 export {
     createTelemetryLifecycle,
@@ -94,14 +113,34 @@ export {
     TYPEAGENT_SPAN_NAMES,
     TYPEAGENT_SPAN_ATTRIBUTES,
     getActiveTypeAgentSpanAttributes,
+    installAmbientTypeAgentAttributeStore,
+    runInTypeAgentTelemetryContext,
     setActiveTypeAgentSpanAttributes,
     setTypeAgentSpanAttributes,
+    type AmbientTypeAgentAttributeStore,
     type TypeAgentSpanName,
     type TypeAgentSpanAttributeKey,
     type TypeAgentSpanAttributes,
 } from "./traceContract.js";
 
+export { installNodeAmbientTelemetryContext } from "./traceContextNode.js";
+
 export {
     isStructuredLoggingEnabled,
     setStructuredLoggingEnabled,
 } from "./structuredLogging.js";
+
+export {
+    attachTelemetryErrorClassification,
+    classifyTelemetryError,
+    classifyTelemetryErrorIfRecognized,
+    classifyTelemetryHttpStatus,
+    isTelemetryCancellation,
+    readTelemetryErrorClassification,
+    TELEMETRY_ERROR_CATEGORIES,
+    TELEMETRY_ERROR_CODES,
+    type TelemetryClassifiedError,
+    type TelemetryErrorCategory,
+    type TelemetryErrorClassification,
+    type TelemetryErrorCode,
+} from "./errorClassification.js";

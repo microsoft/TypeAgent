@@ -24,6 +24,7 @@
   "scripts": {
     "build": "tsc -b && node ./scripts/copyAssets.mjs",
     "clean": "node ./scripts/clean.mjs",
+    "download-seal-tools": "pnpm run build && node dist/translationBench/public_datasets/Seal-Tools/getDataset.js seal-tools-validation.jsonl",
     "gen-action-parameters-grader": "pnpm run gen-policy",
     "gen-catalog": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genCatalog.js && node --max-old-space-size=4096 dist/translationBench/scripts/genPolicy.js && node --max-old-space-size=4096 dist/translationBench/scripts/pickEligibleActions.js --model ${TB_PICKER_MODEL:-azure/gpt-5.6-sol} && node ./scripts/copyAssets.mjs",
     "gen-policy": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genPolicy.js && node ./scripts/copyAssets.mjs",

@@ -44,6 +44,61 @@ describe("getStructuredLogMessage", () => {
         ).toBe("Response ready: handled");
     });
 
+    it("includes phase duration and routing nuance when present", () => {
+        expect(
+            getStructuredLogMessage("dispatcher:translation:completed", {
+                status: "succeeded",
+                strategy: "translate",
+                elapsedMs: 42,
+                fallback: true,
+                retryCount: 2,
+                actionNames: ["chat.generateResponse"],
+            }),
+        ).toBe(
+            "Translation succeeded via translate [fallback, retry x2] in 42 ms: chat.generateResponse",
+        );
+        expect(
+            getStructuredLogMessage("dispatcher:translation:completed", {
+                status: "succeeded",
+                strategy: "grammar",
+                elapsedMs: 3,
+                actionNames: [],
+            }),
+        ).toBe("Translation succeeded via grammar in 3 ms");
+        expect(
+            getStructuredLogMessage("dispatcher:action:completed", {
+                status: "succeeded",
+                schemaName: "chat",
+                actionName: "generateResponse",
+                elapsedMs: 8,
+            }),
+        ).toBe("Action succeeded: chat.generateResponse in 8 ms");
+    });
+
+    it("notes a mixed cache-then-LLM route that strategy alone hides", () => {
+        expect(
+            getStructuredLogMessage("dispatcher:translation:completed", {
+                status: "succeeded",
+                strategy: "construction",
+                routes: ["cache", "llm"],
+                elapsedMs: 12,
+                actionNames: ["player.play"],
+            }),
+        ).toBe(
+            "Translation succeeded via construction [+llm] in 12 ms: player.play",
+        );
+        // A pure LLM translation already reads as "translate"; no +llm noise.
+        expect(
+            getStructuredLogMessage("dispatcher:translation:completed", {
+                status: "succeeded",
+                strategy: "translate",
+                routes: ["llm"],
+                elapsedMs: 5,
+                actionNames: [],
+            }),
+        ).toBe("Translation succeeded via translate in 5 ms");
+    });
+
     it("summarizes LLM calls without prompt or response content", () => {
         expect(
             getStructuredLogMessage("aiclient:llm:started", {
@@ -53,6 +108,7 @@ describe("getStructuredLogMessage", () => {
                 phase: "translation",
                 purpose: "schema-selection",
                 scope: "foreground",
+                classificationSource: "explicit",
             }),
         ).toBe(
             "LLM started: translation.schema-selection (azure/GPT_4_1) (streaming)",
@@ -64,13 +120,107 @@ describe("getStructuredLogMessage", () => {
                 status: "succeeded",
                 elapsedMs: 1234,
                 totalTokens: 456,
-                phase: "background",
+                phase: "explanation",
                 purpose: "cache-generation",
                 scope: "background",
+                classificationSource: "explicit",
             }),
         ).toBe(
-            "LLM succeeded: background.cache-generation [background] (azure/GPT_4_1) in 1234 ms (456 tokens)",
+            "LLM succeeded: explanation.cache-generation [background] (azure/GPT_4_1) in 1234 ms (456 tokens)",
         );
+        expect(
+            getStructuredLogMessage("aiclient:llm:started", {
+                phase: "unknown",
+                purpose: "unknown",
+                scope: "foreground",
+                classificationSource: "default",
+            }),
+        ).toBe("LLM started: unknown (unclassified)");
+        expect(
+            getStructuredLogMessage("aiclient:llm:classification:default", {
+                scope: "foreground",
+                count: 7,
+                windowMs: 60_000,
+            }),
+        ).toBe(
+            "7 foreground LLM call(s) ran with default (unclassified) phase/purpose",
+        );
+    });
+
+    it("summarizes a failure from its classification, never its message", () => {
+        expect(
+            getStructuredLogMessage("dispatcher:command:exception", {
+                requestId: "request-1",
+                errorCategory: "rate_limit",
+                httpStatus: 429,
+                retryable: true,
+                // Present in the raw event for the private diagnostic sinks;
+                // never rendered.
+                request: "play some private music",
+                name: "Error",
+                message: "secret provider detail",
+                stack: "at secret()",
+            }),
+        ).toBe("Command failed: rate_limit (HTTP 429, retryable)");
+        expect(
+            getStructuredLogMessage("dispatcher:command:exception", {
+                errorCategory: "internal",
+            }),
+        ).toBe("Command failed: internal");
+        expect(
+            getStructuredLogMessage("dispatcher:command:exception", {
+                errorCategory: "network",
+                errorCode: "ECONNREFUSED",
+            }),
+        ).toBe("Command failed: network (ECONNREFUSED)");
+    });
+
+    it("appends the classification to failed completions only", () => {
+        expect(
+            getStructuredLogMessage("dispatcher:action:completed", {
+                status: "failed",
+                schemaName: "player",
+                actionName: "play",
+                elapsedMs: 4,
+                errorCategory: "timeout",
+                retryable: true,
+            }),
+        ).toBe("Action failed: player.play in 4 ms [timeout (retryable)]");
+        expect(
+            getStructuredLogMessage("dispatcher:translation:completed", {
+                status: "failed",
+                strategy: "translate",
+                actionNames: [],
+                errorCategory: "provider",
+                httpStatus: 500,
+                retryable: true,
+            }),
+        ).toBe(
+            "Translation failed via translate [provider (HTTP 500, retryable)]",
+        );
+        expect(
+            getStructuredLogMessage("aiclient:llm:completed", {
+                provider: "azure",
+                status: "failed",
+                elapsedMs: 12,
+                phase: "translation",
+                purpose: "action-generation",
+                scope: "foreground",
+                errorCategory: "rate_limit",
+                httpStatus: 429,
+                retryable: true,
+            }),
+        ).toBe(
+            "LLM failed: translation.action-generation (azure) in 12 ms [rate_limit (HTTP 429, retryable)]",
+        );
+        // Cancellations carry no classification, so the line is unchanged.
+        expect(
+            getStructuredLogMessage("dispatcher:action:completed", {
+                status: "cancelled",
+                schemaName: "player",
+                actionName: "play",
+            }),
+        ).toBe("Action cancelled: player.play");
     });
 
     it("does not invent messages for diagnostic events", () => {
@@ -82,5 +232,66 @@ describe("getStructuredLogMessage", () => {
         expect(
             getStructuredLogMessage("custom:event", { value: "detail" }),
         ).toBeUndefined();
+    });
+
+    it("summarizes secondary queue lifecycle events", () => {
+        expect(
+            getStructuredLogMessage("dispatcher:requestQueue:promote", {}),
+        ).toBe("Queued request promoted to next");
+        expect(
+            getStructuredLogMessage("dispatcher:requestQueue:abandoned", {
+                count: 3,
+                reason: "server_stopping",
+            }),
+        ).toBe("Request queue abandoned 3 entries: server_stopping");
+        expect(
+            getStructuredLogMessage("dispatcher:requestQueue:abandoned", {
+                count: 1,
+                reason: "shutdown",
+            }),
+        ).toBe("Request queue abandoned 1 entry: shutdown");
+        expect(
+            getStructuredLogMessage(
+                "dispatcher:requestQueue:broadcastFailed",
+                {},
+            ),
+        ).toBe("Request queue broadcast failed");
+    });
+
+    it("summarizes RPC lifecycle events without payload content", () => {
+        expect(
+            getStructuredLogMessage("rpc:started", {
+                role: "client",
+                channel: "agent:calendar",
+                method: "executeAction",
+                callId: 3,
+            }),
+        ).toBe("RPC started: -> executeAction on agent:calendar");
+        expect(
+            getStructuredLogMessage("rpc:completed", {
+                role: "server",
+                channel: "agent:calendar",
+                method: "executeAction",
+                callId: 3,
+                status: "failed",
+                success: false,
+                elapsedMs: 12,
+                errorCategory: "network",
+                errorCode: "ECONNREFUSED",
+                retryable: true,
+                message: "private detail",
+            }),
+        ).toBe(
+            "RPC failed: <- executeAction on agent:calendar in 12 ms [network (ECONNREFUSED, retryable)]",
+        );
+        expect(
+            getStructuredLogMessage("agentRpc:rpc:completed", {
+                role: "client",
+                channel: "agent:calendar",
+                method: "executeAction",
+                status: "cancelled",
+                elapsedMs: 5,
+            }),
+        ).toBe("RPC cancelled: -> executeAction on agent:calendar in 5 ms");
     });
 });

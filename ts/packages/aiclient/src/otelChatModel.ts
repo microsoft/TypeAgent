@@ -31,6 +31,48 @@ const logger = new ChildLogger(
     "aiclient",
 );
 
+const DEFAULT_CLASSIFICATION_WINDOW_MS = 60_000;
+
+let defaultClassificationCount = 0;
+let defaultClassificationReportedAt: number | undefined;
+
+export function resetLlmClassificationDiagnostics(): void {
+    defaultClassificationCount = 0;
+    defaultClassificationReportedAt = undefined;
+}
+
+function noteClassificationSource(
+    classification: ChatModelTelemetryContext,
+    structuredLogger: Logger,
+): void {
+    if (
+        classification.scope !== "foreground" ||
+        classification.classificationSource !== "default"
+    ) {
+        return;
+    }
+    defaultClassificationCount += 1;
+    const now = Date.now();
+    if (
+        defaultClassificationReportedAt !== undefined &&
+        now - defaultClassificationReportedAt < DEFAULT_CLASSIFICATION_WINDOW_MS
+    ) {
+        return;
+    }
+    defaultClassificationReportedAt = now;
+    const count = defaultClassificationCount;
+    defaultClassificationCount = 0;
+    structuredLogger.logEvent(
+        "llm:classification:default",
+        {
+            scope: "foreground",
+            count,
+            windowMs: DEFAULT_CLASSIFICATION_WINDOW_MS,
+        },
+        "warning",
+    );
+}
+
 export type ChatModelTelemetryInfo = {
     provider: string;
     model?: string;
@@ -39,6 +81,7 @@ export type ChatModelTelemetryInfo = {
 type LlmCallState = {
     readonly span: Span;
     readonly activeContext: Context;
+    readonly attributes: otel.TypeAgentSpanAttributes;
     readonly startedAt: number;
     readonly correlation: LlmCorrelation;
     readonly classification: ChatModelTelemetryContext;
@@ -75,7 +118,7 @@ export function instrumentChatModel(
         const signal = args[4];
         args[1] = captureUsage(args[1], state);
         try {
-            const result = await context.with(state.activeContext, () =>
+            const result = await runInCallContext(state, () =>
                 complete(...args),
             );
             if (signal?.aborted === true) {
@@ -96,7 +139,7 @@ export function instrumentChatModel(
         const signal = args[4];
         args[1] = captureUsage(args[1], state);
         try {
-            const result = await context.with(state.activeContext, () =>
+            const result = await runInCallContext(state, () =>
                 completeStream(...args),
             );
             if (signal?.aborted === true) {
@@ -121,6 +164,22 @@ export function instrumentChatModel(
     return model;
 }
 
+function runInCallContext<T>(state: LlmCallState, body: () => T): T {
+    return otel.runInTypeAgentTelemetryContext(
+        state.activeContext,
+        state.attributes,
+        body,
+    );
+}
+
+function safely(body: () => void): void {
+    try {
+        body();
+    } catch {
+        // Telemetry must not fail the model call it is describing.
+    }
+}
+
 function startLlmCall(
     info: ChatModelTelemetryInfo,
     streaming: boolean,
@@ -140,15 +199,16 @@ function startLlmCall(
         llmPhase: classification.phase,
         llmPurpose: classification.purpose,
         llmScope: classification.scope,
+        llmClassificationSource: classification.classificationSource,
     };
-    otel.setTypeAgentSpanAttributes(span, attributes);
-    const activeContext = otel.setActiveTypeAgentSpanAttributes(
-        trace.setSpan(context.active(), span),
-        attributes,
-    );
+    safely(() => otel.setTypeAgentSpanAttributes(span, attributes));
     const state = {
         span,
-        activeContext,
+        activeContext: otel.setActiveTypeAgentSpanAttributes(
+            trace.setSpan(context.active(), span),
+            attributes,
+        ),
+        attributes,
         startedAt: Date.now(),
         correlation: getLlmCorrelation(inherited),
         classification,
@@ -156,14 +216,17 @@ function startLlmCall(
         ended: false,
     };
     if (otel.isStructuredLoggingEnabled()) {
-        context.with(activeContext, () =>
-            structuredLogger.logEvent("llm:started", {
-                provider: info.provider,
-                ...(info.model === undefined ? {} : { model: info.model }),
-                operation: "chat",
-                streaming,
-                ...classification,
-                ...state.correlation,
+        safely(() =>
+            runInCallContext(state, () => {
+                structuredLogger.logEvent("llm:started", {
+                    provider: info.provider,
+                    ...(info.model === undefined ? {} : { model: info.model }),
+                    operation: "chat",
+                    streaming,
+                    ...classification,
+                    ...state.correlation,
+                });
+                noteClassificationSource(classification, structuredLogger);
             }),
         );
     }
@@ -188,9 +251,7 @@ async function* instrumentStream(
 ): AsyncIterableIterator<string> {
     try {
         while (true) {
-            const next = await context.with(state.activeContext, () =>
-                source.next(),
-            );
+            const next = await runInCallContext(state, () => source.next());
             if (next.done) {
                 if (signal?.aborted === true) {
                     cancelLlmCall(state, info);
@@ -210,7 +271,7 @@ async function* instrumentStream(
         throw error;
     } finally {
         if (!state.ended) {
-            failLlmCall(state, info, { name: "AbortError" });
+            cancelLlmCall(state, info);
             await source.return?.();
         }
     }
@@ -223,6 +284,12 @@ function cancelLlmCall(
     failLlmCall(state, info, { name: "AbortError" });
 }
 
+/**
+ * Record a call that returned rather than threw. A failure `Result` carries
+ * only typechat's message string, which is never parsed here; the transport
+ * attaches the bounded classification it knew, and `provider` is the fallback
+ * when it recognized nothing.
+ */
 function finishLlmCall(
     state: LlmCallState,
     info: ChatModelTelemetryInfo,
@@ -232,17 +299,40 @@ function finishLlmCall(
         return;
     }
     state.ended = true;
-    const success = result.success;
-    if (!success) {
-        state.span.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: "model returned failure",
-        });
+    try {
+        const success = result.success;
+        const classification = success
+            ? undefined
+            : (otel.readTelemetryErrorClassification(result) ?? {
+                  errorCategory: "provider" as const,
+              });
+        const cancelled = classification?.errorCategory === "cancelled";
+        if (!success) {
+            const message = cancelled ? "cancelled" : "model returned failure";
+            safely(() =>
+                state.span.setStatus({
+                    code: SpanStatusCode.ERROR,
+                    message,
+                }),
+            );
+        }
+        emitCompleted(
+            state,
+            info,
+            success,
+            success ? "succeeded" : cancelled ? "cancelled" : "failed",
+            classification,
+        );
+    } finally {
+        endSpan(state);
     }
-    emitCompleted(state, info, success, success ? "succeeded" : "failed");
-    state.span.end();
 }
 
+/**
+ * Record a call that threw. Span status, event status, and severity all derive
+ * from one classification, so a wrapped cancellation cannot be reported as a
+ * failure on one signal and a cancellation on another.
+ */
 function failLlmCall(
     state: LlmCallState,
     info: ChatModelTelemetryInfo,
@@ -252,20 +342,35 @@ function failLlmCall(
         return;
     }
     state.ended = true;
-    const cancelled =
-        error !== null &&
-        typeof error === "object" &&
-        (error as { name?: unknown }).name === "AbortError";
-    state.span.recordException({
-        name: cancelled ? "AbortError" : "ModelError",
-        message: cancelled ? "cancelled" : "model call failed",
-    });
-    state.span.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: cancelled ? "cancelled" : "model call failed",
-    });
-    emitCompleted(state, info, false, cancelled ? "cancelled" : "failed");
-    state.span.end();
+    try {
+        const classification = otel.classifyTelemetryError(error);
+        const cancelled = classification.errorCategory === "cancelled";
+        const message = cancelled ? "cancelled" : "model call failed";
+        safely(() => {
+            state.span.recordException({
+                name: cancelled ? "AbortError" : "ModelError",
+                message,
+            });
+            state.span.setStatus({ code: SpanStatusCode.ERROR, message });
+        });
+        emitCompleted(
+            state,
+            info,
+            false,
+            cancelled ? "cancelled" : "failed",
+            classification,
+        );
+    } finally {
+        endSpan(state);
+    }
+}
+
+/**
+ * End the span even when emitting the completion event failed, so a broken
+ * logger cannot leak an unfinished span per call.
+ */
+function endSpan(state: LlmCallState): void {
+    safely(() => state.span.end());
 }
 
 function emitCompleted(
@@ -273,36 +378,44 @@ function emitCompleted(
     info: ChatModelTelemetryInfo,
     success: boolean,
     status: "succeeded" | "failed" | "cancelled",
+    classification: otel.TelemetryErrorClassification | undefined,
 ): void {
     if (!otel.isStructuredLoggingEnabled()) {
         return;
     }
-    context.with(state.activeContext, () =>
-        state.logger.logEvent(
-            "llm:completed",
-            {
-                provider: info.provider,
-                ...(info.model === undefined ? {} : { model: info.model }),
-                operation: "chat",
-                ...state.classification,
-                ...state.correlation,
-                success,
-                status,
-                elapsedMs: Date.now() - state.startedAt,
-                ...(state.usage === undefined
-                    ? {}
-                    : {
-                          inputTokens: state.usage.prompt_tokens,
-                          outputTokens: state.usage.completion_tokens,
-                          totalTokens: state.usage.total_tokens,
-                          ...(state.usage.cached_tokens === undefined
-                              ? {}
-                              : {
-                                    cachedTokens: state.usage.cached_tokens,
-                                }),
-                      }),
-            },
-            success ? "info" : status === "cancelled" ? "warning" : "error",
+    safely(() =>
+        runInCallContext(state, () =>
+            state.logger.logEvent(
+                "llm:completed",
+                {
+                    provider: info.provider,
+                    ...(info.model === undefined ? {} : { model: info.model }),
+                    operation: "chat",
+                    ...state.classification,
+                    ...state.correlation,
+                    success,
+                    status,
+                    elapsedMs: Date.now() - state.startedAt,
+                    // A cancellation is a disposition, not a failure to
+                    // classify.
+                    ...(status === "failed" && classification !== undefined
+                        ? classification
+                        : {}),
+                    ...(state.usage === undefined
+                        ? {}
+                        : {
+                              inputTokens: state.usage.prompt_tokens,
+                              outputTokens: state.usage.completion_tokens,
+                              totalTokens: state.usage.total_tokens,
+                              ...(state.usage.cached_tokens === undefined
+                                  ? {}
+                                  : {
+                                        cachedTokens: state.usage.cached_tokens,
+                                    }),
+                          }),
+                },
+                success ? "info" : status === "cancelled" ? "warning" : "error",
+            ),
         ),
     );
 }

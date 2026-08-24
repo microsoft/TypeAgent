@@ -5,3 +5,4 @@ results/
 local/
 src/translationBench/public_datasets/breakthrough_findings/
 *.tsbuildinfo
+seal-tools-*.jsonl

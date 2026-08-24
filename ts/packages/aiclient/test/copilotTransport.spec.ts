@@ -9,6 +9,7 @@ import {
     selectCopilotModel,
 } from "../src/copilotModels.js";
 import type { ModelInfo } from "@github/copilot-sdk";
+import { otel } from "@typeagent/telemetry";
 import { CopilotApiSettings } from "../src/copilotSettings.js";
 import { ModelType } from "../src/openai.js";
 import { PromptSection } from "typechat";
@@ -323,6 +324,12 @@ describe("createCopilotTransportModel", () => {
         expect(result.success).toBe(false);
         // A single reactive refresh was attempted before giving up.
         expect(forceCalls.filter((f) => f === true)).toHaveLength(1);
+        // The HTTP status survives the flattening into a `Result` message.
+        expect(otel.readTelemetryErrorClassification(result)).toEqual({
+            errorCategory: "authentication",
+            httpStatus: 401,
+            retryable: false,
+        });
     });
 
     test("returns an error when the endpoint is unavailable", async () => {
@@ -346,6 +353,41 @@ describe("createCopilotTransportModel", () => {
         expect(result.success).toBe(false);
         // No HTTP call is made when the endpoint can't be minted.
         expect(fetchCalls).toBe(0);
+        // The typed error's own classification survives being turned into a
+        // `Result` failure.
+        expect(otel.readTelemetryErrorClassification(result)).toEqual({
+            errorCategory: "provider",
+            retryable: false,
+        });
+    });
+
+    test("classifies a cancelled call as cancelled, not as a provider failure", async () => {
+        const controller = new AbortController();
+        globalThis.fetch = async () => {
+            controller.abort();
+            throw new DOMException("The operation was aborted.", "AbortError");
+        };
+        const { provider } = makeProvider([makeEndpoint()]);
+        const model = createCopilotTransportModel(
+            makeSettings(),
+            {},
+            undefined,
+            undefined,
+            provider,
+        );
+
+        const result = await model.complete(
+            "hi",
+            undefined,
+            undefined,
+            undefined,
+            controller.signal,
+        );
+        expect(result.success).toBe(false);
+        expect(otel.readTelemetryErrorClassification(result)).toEqual({
+            errorCategory: "cancelled",
+            retryable: false,
+        });
     });
 
     test("sends image content through as vision input", async () => {
