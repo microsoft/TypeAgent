@@ -79,12 +79,18 @@ function isWithinRoot(candidate: string, root: string): boolean {
 export function loadWorkingDirectoryPolicy(
     env: NodeJS.ProcessEnv = process.env,
 ): WorkingDirectoryPolicy {
-    const allowedRoots = (env.TYPEAGENT_CODE_ALLOWED_ROOTS ?? "")
+    const configuredRoots = (env.TYPEAGENT_CODE_ALLOWED_ROOTS ?? "")
         .split(path.delimiter)
         .map((entry) => entry.trim())
-        .filter(Boolean)
+        .filter(Boolean);
+    const allowedRoots = configuredRoots
         .map(canonicalDirectory)
         .filter((entry): entry is string => entry !== undefined);
+    if (configuredRoots.length > 0 && allowedRoots.length === 0) {
+        throw new Error(
+            "TYPEAGENT_CODE_ALLOWED_ROOTS does not contain an existing directory",
+        );
+    }
     const defaultRoot = canonicalDirectory(
         env.TYPEAGENT_CODE_DEFAULT_WORKING_DIRECTORY ?? process.cwd(),
     );

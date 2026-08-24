@@ -964,6 +964,26 @@ describe("RequestQueue", () => {
         ).toBeGreaterThan(snapsBefore);
     });
 
+    it("rejects cancellation after the inner command has settled", async () => {
+        const dispatcher = new ControllableDispatcher();
+        const { queue, events } = makeQueue(dispatcher);
+        const entry = queue.submit({
+            text: "a",
+            originatorConnectionId: "c1",
+        });
+        await flush();
+
+        const lateCancel = dispatcher.calls[0].promise.then(() =>
+            queue.cancelRunning(entry.requestId, "user"),
+        );
+        dispatcher.calls[0].resolve({});
+
+        await expect(lateCancel).resolves.toBe(false);
+        await expect(entry.completion).resolves.toEqual({});
+        expect(entry.state).toBe("succeeded");
+        expect(events.some((event) => event.type === "cancelled")).toBe(false);
+    });
+
     // Reason captured by cancelRunning must surface as `cancelled:<reason>`
     // on the wire `error` field so consumers can render the cause.
     it("cancelRunning reason is preserved on the wire as cancelled:<reason>", async () => {

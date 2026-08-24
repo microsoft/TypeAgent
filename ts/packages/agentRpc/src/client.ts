@@ -35,6 +35,7 @@ import {
     type RpcCorrelationFields,
     type RpcInvocation,
     type RpcOptions,
+    type RpcStructuredLogger,
 } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
 import { getObjectProperty, uint8ArrayToBase64 } from "@typeagent/common-utils";
@@ -44,6 +45,7 @@ import { getActiveTypeAgentSpanAttributes } from "@typeagent/telemetry/traceCont
 
 export type AgentRpcOptions = {
     trustedContextPropagation?: boolean;
+    logger?: RpcStructuredLogger;
 };
 
 /**
@@ -881,17 +883,26 @@ function getTrustedRpcOptions(
         invocation: RpcInvocation,
     ) => RpcCorrelationFields | undefined,
 ): RpcOptions | undefined {
-    return options?.trustedContextPropagation === true
-        ? {
-              tracing: {
-                  propagateContext: true,
-                  trustRemoteContext: true,
-                  ...(getCorrelationFields === undefined
-                      ? undefined
-                      : { getCorrelationFields }),
-              },
-          }
-        : undefined;
+    if (
+        options?.trustedContextPropagation !== true &&
+        options?.logger === undefined
+    ) {
+        return undefined;
+    }
+    return {
+        ...(options.trustedContextPropagation === true
+            ? {
+                  tracing: {
+                      propagateContext: true,
+                      trustRemoteContext: true,
+                      ...(getCorrelationFields === undefined
+                          ? undefined
+                          : { getCorrelationFields }),
+                  },
+              }
+            : {}),
+        ...(options.logger === undefined ? {} : { logger: options.logger }),
+    };
 }
 
 function getAgentRpcCorrelation(
