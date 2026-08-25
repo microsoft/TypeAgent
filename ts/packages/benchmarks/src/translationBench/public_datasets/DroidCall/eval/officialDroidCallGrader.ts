@@ -7,7 +7,9 @@ const SCORER_REVISION = "3f7ba458bee480a86c602edff6cc7ec9cfd555db";
 const NUMBER_LEXEME = "__pythonNumber";
 
 export type DroidCallContractName =
-    "paper-described" | "released" | "typeagent-adjusted";
+    | "paper-described"
+    | "released"
+    | "typeagent-adjusted";
 export type DroidCallMatchType = "strict" | "semantic" | "ignore";
 
 export type DroidCallArgumentSpec = {
