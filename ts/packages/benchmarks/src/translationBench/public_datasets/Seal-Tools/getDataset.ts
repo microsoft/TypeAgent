@@ -61,6 +61,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
 const API_LIST_MARKER = "api_list = ";
 const TASK_MARKER = "task_instruction = ";
+const OUTPUT_MARKER = "\nOutput:";
 
 const JSON_TYPES: Readonly<Record<string, string>> = {
     str: "string",
@@ -160,6 +161,35 @@ function parseTool(value: PythonLiteral): SealToolsTool {
     };
 }
 
+// Use the line delimiters because corpus text can contain unescaped quotes.
+function parseTaskInstruction(value: string, offset: number): string {
+    const outputIndex = value.indexOf(OUTPUT_MARKER, offset);
+    if (outputIndex < 0) throw new Error("human turn has no output marker");
+    const literal = value.slice(offset, outputIndex).trim();
+    const quote = literal[0];
+    if (
+        literal.length < 2 ||
+        (quote !== "'" && quote !== '"') ||
+        literal.at(-1) !== quote
+    ) {
+        throw new Error("task instruction has invalid delimiters");
+    }
+
+    // Escape interior delimiters, then reuse the Python escape decoder.
+    let escaped = quote;
+    let backslashes = 0;
+    for (const character of literal.slice(1, -1)) {
+        if (character === quote && backslashes % 2 === 0) escaped += "\\";
+        escaped += character;
+        backslashes = character === "\\" ? backslashes + 1 : 0;
+    }
+    const instruction = parsePythonLiteral(escaped + quote);
+    if (typeof instruction !== "string") {
+        throw new Error("task instruction must be a string");
+    }
+    return instruction;
+}
+
 // Parse the catalog and utterance embedded in the human turn.
 function parseHumanTurn(value: string): {
     tools: SealToolsTool[];
@@ -177,16 +207,10 @@ function parseHumanTurn(value: string): {
     const taskIndex = value.indexOf(TASK_MARKER, catalog.end);
     if (taskIndex < 0) throw new Error("human turn has no task instruction");
     const instructionStart = taskIndex + TASK_MARKER.length;
-    const parsedInstruction = parsePythonLiteralAt(value, {
-        offset: instructionStart,
-    });
-    if (typeof parsedInstruction.value !== "string") {
-        throw new Error("task instruction must be a string");
-    }
 
     return {
         tools: catalog.value.map(parseTool),
-        utterance: parsedInstruction.value,
+        utterance: parseTaskInstruction(value, instructionStart),
     };
 }
 
