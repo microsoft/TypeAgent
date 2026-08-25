@@ -33,6 +33,8 @@ function parseArgs(argv) {
         else if (arg === "--platform") args.platform = argv[++i];
         else if (arg === "--arch") args.arch = argv[++i];
         else if (arg === "--external-cli") args.externalCli = true;
+        else if (arg === "--pnpm-state-dir")
+            args.pnpmStateDir = path.resolve(argv[++i]);
         else throw new Error(`Unknown argument: ${arg}`);
     }
     if (!args.out) {
@@ -126,14 +128,20 @@ export async function bundleAgentServer(args) {
     const out = args.out;
     fs.rmSync(out, { recursive: true, force: true });
 
-    run("pnpm", [
+    const deployArgs = [
         "--filter",
         "agent-server-bundled-runtime",
         "--config.node-linker=hoisted",
-        "deploy",
-        "--prod",
-        out,
-    ]);
+    ];
+    if (args.pnpmStateDir) {
+        const modulesDir = path.join(args.pnpmStateDir, "node_modules");
+        deployArgs.push(
+            `--config.modules-dir=${modulesDir}`,
+            `--config.virtual-store-dir=${path.join(modulesDir, ".pnpm")}`,
+        );
+    }
+    deployArgs.push("deploy", "--prod", out);
+    run("pnpm", deployArgs);
     run("node", [
         path.join(scriptsDir, "pruneDeploy.mjs"),
         "--dir",

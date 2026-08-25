@@ -84,6 +84,29 @@ Use the local source build to validate WiX changes before pushing to CI. This is
 
 ### Option A: Build from local repo (recommended for WiX development)
 
+Run the complete local build from `ts/`:
+
+```powershell
+pnpm run build:msi:local
+```
+
+The default output is
+`$env:TEMP\typeagent-msi-stage\out\TypeAgent-<version>-win32-x64.msi`.
+The wrapper builds the workspace, packages the VSIX, stages the Copilot plugin,
+creates the same bundled agent-server artifact used by CI, and runs WiX. Its
+temporary pnpm deployment state is kept out of the development workspace, and
+the wrapper restores development dependency status after pnpm's legacy deploy.
+By default it detects the installed TypeAgent MSI and increments its
+MSI-comparable version; when TypeAgent is not installed, it uses `0.0.1-local`.
+Pass `--skip-build` when compiled outputs are already current, or use
+`--version`, `--stage-dir`, and `--output` to override their defaults.
+
+```powershell
+pnpm run build:msi:local -- --skip-build --version 0.0.1-local
+```
+
+The equivalent individual steps are below for troubleshooting.
+
 #### 1. Build the workspace
 
 ```powershell
@@ -93,9 +116,16 @@ pnpm run build
 
 #### 2. Stage agent-server
 
+The MSI uses `bundleAgentServer.mjs`, matching the published CI artifact. It
+bundles server entry points and profile agents to minimize files and installed
+size. `deployAgentServer.mjs` is the unbundled variant: it preserves workspace
+package boundaries and a conventional production `node_modules` for debugging
+a repo-less deployment, but produces a substantially larger artifact and is not
+intended for MSI packaging.
+
 ```powershell
 # From D:\repos\TypeAgent\ts
-node tools/scripts/deployAgentServer.mjs `
+node tools/scripts/bundleAgentServer.mjs `
   --out "$env:TEMP\typeagent-msi-stage\agent-server" `
   --platform win32 --arch x64 `
   --profile inbox `
@@ -420,6 +450,18 @@ az artifacts universal download: ... (404 or auth error)
 1. Run `az login` and authenticate
 2. Verify artifact exists: `az artifacts universal list --feed typeagent`
 3. Check RID matches published artifacts (e.g., `agent-server.win32-x64`)
+
+### "Unable to clear payload directory"
+
+An upgrade cannot replace the agent-server while TypeAgent or another process
+is using a native module from the install directory. Setup reports the process
+ID and loaded module when Windows allows module inspection. Close TypeAgent,
+stop the agent server, and retry setup. Restart Windows if the file remains
+locked.
+
+Detailed extraction diagnostics are written to
+`%LOCALAPPDATA%\TypeAgent\logs\msi-extract-payload.log` and to the verbose MSI
+log when setup is run with `/L*V`.
 
 ### "Certificate not found"
 
