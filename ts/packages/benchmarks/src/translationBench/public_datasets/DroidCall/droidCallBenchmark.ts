@@ -149,6 +149,12 @@ export function toDroidCallBenchmarkCase(
 ): DroidCallBenchmarkCase | undefined {
     if (row.answers.length < 2) return undefined;
 
+    // Exclude gold actions that the row's candidate tools cannot produce.
+    const toolNames = new Set(row.tools.map((tool) => tool.name));
+    if (row.answers.some((answer) => !toolNames.has(answer.name))) {
+        return undefined;
+    }
+
     const tools = row.tools.map(toDroidCallFunctionTool);
     const expectedActions = row.answers.map((answer) => ({
         schemaName: DROIDCALL_SCHEMA_NAME,
