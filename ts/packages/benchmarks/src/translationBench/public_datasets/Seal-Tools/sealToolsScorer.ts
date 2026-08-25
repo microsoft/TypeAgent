@@ -242,6 +242,7 @@ export function scoreSealTools(
 }
 
 const PENDING_ACTION_NAME = "pendingRequestAction";
+const MAX_RAW_RESPONSE_DEPTH = 100;
 
 export interface SealToolsRawAction {
     actionName: string;
@@ -257,13 +258,6 @@ export interface SealToolsTranslationResult {
 export interface SealToolsRawActionCandidates {
     actions: SealToolsRawAction[];
     finalizedActionNames: string[];
-}
-
-// Return objects as named records while rejecting arrays and scalar values.
-function asRecord(value: unknown): Record<string, unknown> {
-    return typeof value === "object" && value !== null && !Array.isArray(value)
-        ? (value as Record<string, unknown>)
-        : {};
 }
 
 // Return the end of one balanced object or array candidate.
@@ -332,7 +326,7 @@ function parseJsonWithNumberLexemes(text: string): unknown {
 
 // Add one action and the name produced after dispatcher finalization.
 function addAction(
-    action: Record<string, unknown>,
+    action: Readonly<Record<string, unknown>>,
     finalizedName: string,
     result: SealToolsRawActionCandidates,
 ): void {
@@ -350,9 +344,13 @@ function addAction(
 function collectRawActions(
     value: unknown,
     result: SealToolsRawActionCandidates,
+    depth = 0,
 ): void {
+    if (depth > MAX_RAW_RESPONSE_DEPTH) {
+        throw new SyntaxError("Response exceeds maxDepth");
+    }
     if (Array.isArray(value)) {
-        for (const item of value) collectRawActions(item, result);
+        for (const item of value) collectRawActions(item, result, depth + 1);
         return;
     }
     if (
@@ -365,12 +363,12 @@ function collectRawActions(
 
     const record = value as Record<string, unknown>;
     if (record.actionName === "multiple") {
-        const parameters = asRecord(record.parameters);
+        const parameters = parameterRecord(record.parameters);
         const requests = parameters.requests;
         if (Array.isArray(requests)) {
             for (const request of requests) {
-                const entry = asRecord(request);
-                const nestedAction = asRecord(entry.action);
+                const entry = parameterRecord(request);
+                const nestedAction = parameterRecord(entry.action);
                 if (typeof nestedAction.actionName === "string") {
                     addAction(
                         nestedAction,
@@ -401,7 +399,9 @@ function collectRawActions(
         addAction(record, record.actionName, result);
         return;
     }
-    for (const item of Object.values(record)) collectRawActions(item, result);
+    for (const item of Object.values(record)) {
+        collectRawActions(item, result, depth + 1);
+    }
 }
 
 // Parse one response without consulting runner state.

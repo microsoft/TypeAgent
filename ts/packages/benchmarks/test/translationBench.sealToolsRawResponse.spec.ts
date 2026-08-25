@@ -35,4 +35,11 @@ describe("Seal-Tools raw responses", () => {
             ),
         ).toHaveLength(2);
     });
+
+    it("rejects excessively nested responses", () => {
+        let response = "{}";
+        for (let depth = 0; depth <= 100; depth++) response = `[${response}]`;
+
+        expect(() => parseSealToolsRawResponse(response)).toThrow(/maxDepth/);
+    });
 });
