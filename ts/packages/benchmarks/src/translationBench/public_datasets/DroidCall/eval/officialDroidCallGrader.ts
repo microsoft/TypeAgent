@@ -7,9 +7,7 @@ const SCORER_REVISION = "3f7ba458bee480a86c602edff6cc7ec9cfd555db";
 const NUMBER_LEXEME = "__pythonNumber";
 
 export type DroidCallContractName =
-    | "paper-described"
-    | "released"
-    | "typeagent-adjusted";
+    "paper-described" | "released" | "typeagent-adjusted";
 export type DroidCallMatchType = "strict" | "semantic" | "ignore";
 
 export type DroidCallArgumentSpec = {
@@ -56,6 +54,9 @@ type DroidCallOverride = {
 type ValueRecord = Record<string, unknown>;
 function isRecord(value: unknown): value is ValueRecord {
     return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hasOwn(value: ValueRecord, key: string): boolean {
+    return Object.prototype.hasOwnProperty.call(value, key);
 }
 function isFieldNone(value: unknown): boolean {
     return (
@@ -123,7 +124,9 @@ function compare(
         const keys = Object.keys(left);
         return (
             keys.length === Object.keys(right).length &&
-            keys.every((key) => key in right && same(left[key], right[key]))
+            keys.every(
+                (key) => hasOwn(right, key) && same(left[key], right[key]),
+            )
         );
     }
     if (Array.isArray(left) && Array.isArray(right)) {
@@ -164,6 +167,113 @@ function settings(contract: DroidCallContractName) {
     throw new Error(`Unknown DroidCall scoring contract: ${contract}`);
 }
 
+type DroidCallSettings = ReturnType<typeof settings>;
+
+function scoreArgument(
+    apiName: string,
+    name: string,
+    spec: DroidCallArgumentSpec,
+    answerArguments: ValueRecord,
+    responseArguments: ValueRecord,
+    config: DroidCallSettings,
+    semanticScorer: DroidCallSemanticScorer,
+): boolean {
+    const answerHas = hasOwn(answerArguments, name);
+    const responseHas = hasOwn(responseArguments, name);
+    if (
+        config.mimePresenceOnly &&
+        apiName === "ACTION_OPEN_DOCUMENT" &&
+        name === "mime_types"
+    ) {
+        return answerHas && responseHas;
+    }
+    if (!answerHas && !responseHas) return true;
+    if (spec.required === true && !answerHas) return false;
+    return compare(
+        answerHas ? answerArguments[name] : (spec.default ?? null),
+        responseHas ? responseArguments[name] : (spec.default ?? null),
+        spec.match_type ?? "strict",
+        config.semanticThreshold,
+        semanticScorer,
+    );
+}
+
+function scoreCall(
+    answer: DroidCallOfficialRow["answers"][number],
+    response: DroidCallOfficialRow["response"][number] | undefined,
+    api: DroidCallTool,
+    config: DroidCallSettings,
+    semanticScorer: DroidCallSemanticScorer,
+): { correct: number; total: number; missing: boolean } {
+    const arguments_ = Object.entries(api.arguments);
+    if (response === undefined) {
+        return { correct: 0, total: arguments_.length, missing: true };
+    }
+    let correct = 0;
+    for (const [name, spec] of arguments_) {
+        if (
+            scoreArgument(
+                api.name,
+                name,
+                spec,
+                answer.arguments,
+                response.arguments,
+                config,
+                semanticScorer,
+            )
+        ) {
+            correct++;
+        }
+    }
+    return { correct, total: arguments_.length, missing: false };
+}
+
+function scoreRow(
+    row: DroidCallOfficialRow,
+    apiByName: ReadonlyMap<string, DroidCallTool>,
+    config: DroidCallSettings,
+    semanticScorer: DroidCallSemanticScorer,
+): {
+    score: number;
+    correct: number;
+    total: number;
+    callSoftTotal: number;
+    callCount: number;
+} {
+    const responseByName = new Map(
+        row.response.map((response) => [response.name, response]),
+    );
+    let correct = 0;
+    let total = 0;
+    let failed = false;
+    let callSoftTotal = 0;
+    let callCount = 0;
+    for (const answer of row.answers) {
+        const api = apiByName.get(answer.name);
+        if (api === undefined) {
+            throw new Error(`Unknown API '${answer.name}'`);
+        }
+        const call = scoreCall(
+            answer,
+            responseByName.get(answer.name),
+            api,
+            config,
+            semanticScorer,
+        );
+        failed ||= call.missing;
+        correct += call.correct;
+        total += call.total;
+        callSoftTotal += call.missing
+            ? 0
+            : call.total === 0
+              ? 1
+              : call.correct / call.total;
+        callCount++;
+    }
+    const score = failed ? 0 : total === 0 ? 1 : correct / total;
+    return { score, correct, total, callSoftTotal, callCount };
+}
+
 export function scoreDroidCallContract(
     rows: readonly DroidCallOfficialRow[],
     apis: readonly DroidCallTool[],
@@ -180,85 +290,13 @@ export function scoreDroidCallContract(
     let totalArguments = 0;
 
     for (const row of rows) {
-        const responseByName = new Map(
-            row.response.map((response) => [response.name, response]),
-        );
-        let rowCorrect = 0;
-        let rowTotal = 0;
-        let rowFailed = false;
-        for (const answer of row.answers) {
-            const api = apiByName.get(answer.name);
-            if (api === undefined)
-                throw new Error(`Unknown API '${answer.name}'`);
-            const response = responseByName.get(answer.name);
-            let callCorrect = 0;
-            let callTotal = 0;
-            if (response === undefined) {
-                rowFailed = true;
-                callTotal = Object.keys(api.arguments).length;
-                rowTotal += callTotal;
-                callCount++;
-                continue;
-            }
-            for (const [name, spec] of Object.entries(api.arguments)) {
-                const answerHas = name in answer.arguments;
-                const responseHas = name in response.arguments;
-                if (
-                    config.mimePresenceOnly &&
-                    api.name === "ACTION_OPEN_DOCUMENT" &&
-                    name === "mime_types"
-                ) {
-                    if (answerHas && responseHas) {
-                        rowCorrect++;
-                        callCorrect++;
-                    }
-                    rowTotal++;
-                    callTotal++;
-                    continue;
-                }
-                if (!answerHas && !responseHas) {
-                    rowCorrect++;
-                    callCorrect++;
-                    rowTotal++;
-                    callTotal++;
-                    continue;
-                }
-                if (spec.required === true && !answerHas) {
-                    rowTotal++;
-                    callTotal++;
-                    continue;
-                }
-                if (
-                    compare(
-                        answerHas
-                            ? answer.arguments[name]
-                            : (spec.default ?? null),
-                        responseHas
-                            ? response.arguments[name]
-                            : (spec.default ?? null),
-                        spec.match_type ?? "strict",
-                        config.semanticThreshold,
-                        semanticScorer,
-                    )
-                ) {
-                    rowCorrect++;
-                    callCorrect++;
-                }
-                rowTotal++;
-                callTotal++;
-            }
-            callSoftTotal += callTotal === 0 ? 1 : callCorrect / callTotal;
-            callCount++;
-        }
-        const rowScore = rowFailed
-            ? 0
-            : rowTotal === 0
-              ? 1
-              : rowCorrect / rowTotal;
-        rowSoftTotal += rowScore;
-        if (Math.abs(rowScore - 1) < 1e-6) perfectRows++;
-        correctArguments += rowCorrect;
-        totalArguments += rowTotal;
+        const scored = scoreRow(row, apiByName, config, semanticScorer);
+        rowSoftTotal += scored.score;
+        callSoftTotal += scored.callSoftTotal;
+        callCount += scored.callCount;
+        if (Math.abs(scored.score - 1) < 1e-6) perfectRows++;
+        correctArguments += scored.correct;
+        totalArguments += scored.total;
     }
     const rowCount = rows.length;
     return {
