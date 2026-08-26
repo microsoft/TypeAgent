@@ -40,11 +40,11 @@ const handlers = {
                     run: async () => {},
                 },
             },
-            throws: {
-                description: "Throwing test command",
-                run: async () => {
-                    throw new Error("handler boom");
-                },
+        },
+        throws: {
+            description: "Throwing test command",
+            run: async () => {
+                throw new Error("handler boom");
             },
         },
     },
@@ -273,6 +273,11 @@ describe("Command", () => {
             expect(result!.lastError).toContain(
                 "Command '@test test' does not accept parameters.",
             );
+            expect(result?.disposition).toEqual({
+                status: "failed",
+                path: "command",
+                mayHaveSideEffects: false,
+            });
         });
         it("resolves a default command with extra param error", async () => {
             const result = await awaitCommand(dispatcher, "@test param param");
@@ -296,7 +301,7 @@ describe("Command", () => {
             expect(result?.disposition).toEqual({
                 status: "failed",
                 path: "command",
-                mayHaveSideEffects: false,
+                mayHaveSideEffects: true,
             });
         });
         it("does not resolve command with extra param error", async () => {
