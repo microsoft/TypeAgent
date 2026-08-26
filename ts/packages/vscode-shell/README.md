@@ -138,7 +138,8 @@ Managed-policy and sandbox-bypass operations always require explicit approval.
 After the request completes, its final dispatcher message includes a
 `Permissions:` line listing the granted scope. Pressing `Esc` denies the visible
 permission prompt before cancelling its request; when the approval menu is open,
-the first `Esc` closes only the menu.
+the first `Esc` closes only the menu. Dismissing a completion popup with `Esc`
+does not deny the visible permission or arm the double-`Esc` cancel gesture.
 
 Automatic session approval can also be controlled directly:
 
@@ -147,8 +148,12 @@ Automatic session approval can also be controlled directly:
 @allow off
 ```
 
-Equivalent natural-language requests include “allow all permissions for this
-session” and “ask me to approve tool permissions again.”
+Equivalent natural-language requests include "allow all permissions for this
+session" and "ask me to approve tool permissions again." `@allow off` revokes
+both the blanket "Allow all for session" grant and every "Allow this tool for
+this session" grant recorded in the TypeAgent host. In-flight request-scoped
+approvals (`Allow all for request` / `Allow this tool for request`) are left
+alone so they still cover the currently executing request.
 
 ### Cancelling a running request
 

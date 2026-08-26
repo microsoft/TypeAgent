@@ -26,9 +26,10 @@ export type AskUserKind = (typeof ASK_USER_KIND_VALUES)[number];
 export const ASK_USER_KIND_DESCRIPTION = [
     'Classification of this ask. Use "question" (the default) for an ordinary',
     "clarification the user answers casually - picking among options or",
-    'resolving an ambiguity. Use "permission" only when this is a confirmation',
-    "before a destructive or otherwise irreversible action, such as restarting",
-    "a service, deleting data, overwriting files, or granting elevated access.",
+    'resolving an ambiguity. Use "permission" only for a destructive semantic',
+    "action that is not already protected by a permission-aware tool.",
+    "Never ask for permission before invoking shell, file, URL, MCP, or custom",
+    "tools; invoke the tool directly and let the host permission handler prompt.",
     "Permission asks are shown as a modal prompt; ordinary questions appear",
     'inline in the chat. For a permission ask, use choices ["Allow", "Deny"].',
 ].join(" ");

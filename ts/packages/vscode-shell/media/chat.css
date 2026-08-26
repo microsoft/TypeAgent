@@ -152,7 +152,7 @@ body {
 
 .copilot-permission-allow-menu {
   position: absolute;
-  right: 0;
+  left: 0;
   bottom: calc(100% + 5px);
   z-index: 1;
   min-width: 210px;

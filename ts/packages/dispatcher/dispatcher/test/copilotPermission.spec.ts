@@ -5,10 +5,11 @@ import {
     getCopilotPermissionDefault,
     getCopilotPermissionChoices,
     getCopilotPermissionScopeViolation,
-    getCopilotSessionApproval,
     getCopilotPermissionSessionApproval,
     formatCopilotPermissionRequest,
     setCopilotPermissionSessionApproval,
+    _getCopilotToolSessionApprovalsForTest,
+    _addCopilotToolSessionApprovalForTest,
 } from "../src/reasoning/copilot.js";
 import fs from "node:fs";
 import os from "node:os";
@@ -24,6 +25,31 @@ describe("Copilot host permission policy", () => {
         expect(getCopilotPermissionSessionApproval(second)).toBe(false);
         setCopilotPermissionSessionApproval(first, false);
         expect(getCopilotPermissionSessionApproval(first)).toBe(false);
+    });
+
+    it("@allow off clears both blanket and per-tool session approvals", () => {
+        // Model the state the interactive handler leaves behind: the user
+        // chose "Allow all for session" (blanket flag) and "Allow this tool
+        // for session" for two different tools. `@allow off` runs
+        // setCopilotPermissionSessionApproval(_, false) and must revoke all
+        // of them, because the SDK's own tool-session cache is unreachable
+        // from the host command.
+        const ctx = {};
+        setCopilotPermissionSessionApproval(ctx, true);
+        _addCopilotToolSessionApprovalForTest(
+            ctx,
+            "custom-tool:execute_action",
+        );
+        _addCopilotToolSessionApprovalForTest(ctx, "mcp:svc/tool");
+        expect(getCopilotPermissionSessionApproval(ctx)).toBe(true);
+        expect(_getCopilotToolSessionApprovalsForTest(ctx).sort()).toEqual([
+            "custom-tool:execute_action",
+            "mcp:svc/tool",
+        ]);
+
+        setCopilotPermissionSessionApproval(ctx, false);
+        expect(getCopilotPermissionSessionApproval(ctx)).toBe(false);
+        expect(_getCopilotToolSessionApprovalsForTest(ctx)).toEqual([]);
     });
 
     it("approves safe reads and readonly MCP tools", () => {
@@ -134,18 +160,6 @@ describe("Copilot host permission policy", () => {
             "Allow all for session",
             "Deny",
         ]);
-        expect(
-            getCopilotSessionApproval({
-                ...shell,
-                canOfferSessionApproval: true,
-            }),
-        ).toEqual({
-            kind: "approve-for-session",
-            approval: {
-                kind: "commands",
-                commandIdentifiers: ["echo"],
-            },
-        });
     });
 
     it("does not offer host-wide session approval for sandbox bypass", () => {
@@ -182,13 +196,6 @@ describe("Copilot host permission policy", () => {
             "Allow all for session",
             "Deny",
         ]);
-        expect(getCopilotSessionApproval(request)).toEqual({
-            kind: "approve-for-session",
-            approval: {
-                kind: "custom-tool",
-                toolName: "execute_action",
-            },
-        });
     });
 
     it("highlights sandbox bypass and consequential request details", () => {
@@ -209,16 +216,50 @@ describe("Copilot host permission policy", () => {
         expect(message).toContain("network policy blocked the request");
     });
 
-    it("shows only the custom tool identity", () => {
+    it("summarizes the custom tool schema, action, and arguments", () => {
         const message = formatCopilotPermissionRequest({
             kind: "custom-tool",
-            toolName: "discover_actions",
+            toolName: "execute_action",
             toolDescription: "Run a TypeAgent action",
-            args: { actionName: "listFiles", path: "src" },
+            args: {
+                schemaName: "list",
+                action: {
+                    actionName: "addItems",
+                    parameters: { listName: "groceries", items: ["milk"] },
+                },
+            },
         });
-        expect(message).toBe(
-            "Copilot wants to run custom tool 'discover_actions'.",
+        expect(message).toContain(
+            "Copilot wants to run custom tool 'execute_action'.",
         );
+        expect(message).toContain("Run a TypeAgent action");
+        expect(message).toContain("Arguments:");
+        expect(message).toContain('"schemaName": "list"');
+        expect(message).toContain('"actionName": "addItems"');
+        expect(message).toContain('"listName": "groceries"');
+    });
+
+    it("bounds custom tool argument disclosure so the prompt stays usable", () => {
+        const bigArgs = { blob: "x".repeat(20000) };
+        const message = formatCopilotPermissionRequest({
+            kind: "custom-tool",
+            toolName: "execute_action",
+            toolDescription: "Run a TypeAgent action",
+            args: bigArgs,
+        });
+        expect(message).toContain("(truncated)");
+        expect(message.length).toBeLessThan(2000);
+    });
+
+    it("bounds custom tool descriptions so the prompt stays usable", () => {
+        const message = formatCopilotPermissionRequest({
+            kind: "custom-tool",
+            toolName: "execute_action",
+            toolDescription: "x".repeat(2000),
+        });
+
+        expect(message).toContain("(truncated)");
+        expect(message.length).toBeLessThan(500);
     });
 
     it("rejects coding file access outside the authorized root", () => {

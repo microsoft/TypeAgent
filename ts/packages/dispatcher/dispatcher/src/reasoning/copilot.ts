@@ -270,6 +270,14 @@ const copilotToolRequestApprovals = new WeakMap<
     object,
     { requestId: string; tools: Set<string> }
 >();
+// Per-agent-context set of permission identities (`getCopilotPermissionIdentity`)
+// approved for the current TypeAgent session via the "Allow this tool for
+// session" choice. We keep this host-side rather than returning the SDK's
+// `approve-for-session` because the SDK's tool-session cache lives inside the
+// Copilot session and cannot be revoked by `@allow off`. Consulting this set
+// before prompting gives the same user experience while keeping the host as
+// the source of truth for what @allow off can actually clear.
+const copilotToolSessionApprovals = new WeakMap<object, Set<string>>();
 const COPILOT_ALLOW_ONCE = "Allow once";
 const COPILOT_ALLOW_TOOL_REQUEST = "Allow this tool for request";
 const COPILOT_ALLOW_REQUEST = "Allow all for request";
@@ -284,7 +292,14 @@ export function setCopilotPermissionSessionApproval(
     if (enabled) {
         copilotPermissionSessionApprovals.add(agentContext);
     } else {
+        // `@allow off` and the equivalent natural-language command must
+        // undo every session-scoped grant the host can actually revoke:
+        // the blanket "Allow all for session" flag and the per-tool
+        // "Allow this tool for session" identities. Request-scoped
+        // approvals live only for the current dispatcher request and
+        // are left in place - `@allow off` doesn't touch in-flight work.
         copilotPermissionSessionApprovals.delete(agentContext);
+        copilotToolSessionApprovals.delete(agentContext);
     }
 }
 
@@ -292,6 +307,25 @@ export function getCopilotPermissionSessionApproval(
     agentContext: object,
 ): boolean {
     return copilotPermissionSessionApprovals.has(agentContext);
+}
+
+export function _getCopilotToolSessionApprovalsForTest(
+    agentContext: object,
+): string[] {
+    const set = copilotToolSessionApprovals.get(agentContext);
+    return set ? [...set] : [];
+}
+
+export function _addCopilotToolSessionApprovalForTest(
+    agentContext: object,
+    identity: string,
+): void {
+    let identities = copilotToolSessionApprovals.get(agentContext);
+    if (identities === undefined) {
+        identities = new Set<string>();
+        copilotToolSessionApprovals.set(agentContext, identities);
+    }
+    identities.add(identity);
 }
 
 function generateCodingSessionId(
@@ -787,6 +821,31 @@ export function getCopilotPermissionDefault(
     return undefined;
 }
 
+function hasCachedCopilotPermissionApproval(
+    agentContext: object,
+    request: PermissionRequest,
+    requestId: string,
+    permissionIdentity: string,
+): boolean {
+    if (
+        request.managedApprovalRequired === true ||
+        requestsSandboxBypass(request)
+    ) {
+        return false;
+    }
+    const toolRequestApproval = copilotToolRequestApprovals.get(agentContext);
+    return (
+        (canOfferCopilotHostSessionApproval(request) &&
+            copilotPermissionSessionApprovals.has(agentContext)) ||
+        copilotPermissionRequestApprovals.get(agentContext) === requestId ||
+        (toolRequestApproval?.requestId === requestId &&
+            toolRequestApproval.tools.has(permissionIdentity)) ||
+        copilotToolSessionApprovals
+            .get(agentContext)
+            ?.has(permissionIdentity) === true
+    );
+}
+
 function createCopilotPermissionHandler(
     context: ActionContext<CommandHandlerContext>,
     allowedRoot?: string,
@@ -804,23 +863,14 @@ function createCopilotPermissionHandler(
             };
         }
         const requestId = getRequestId(agentContext);
-        const managedApprovalRequired =
-            request.managedApprovalRequired === true;
-        const canApproveForHostSession =
-            canOfferCopilotHostSessionApproval(request);
-        const toolRequestApproval =
-            copilotToolRequestApprovals.get(agentContext);
+        const permissionIdentity = getCopilotPermissionIdentity(request);
         if (
-            !managedApprovalRequired &&
-            !requestsSandboxBypass(request) &&
-            ((canApproveForHostSession &&
-                copilotPermissionSessionApprovals.has(agentContext)) ||
-                copilotPermissionRequestApprovals.get(agentContext) ===
-                    requestId.requestId ||
-                (toolRequestApproval?.requestId === requestId.requestId &&
-                    toolRequestApproval.tools.has(
-                        getCopilotPermissionIdentity(request),
-                    )))
+            hasCachedCopilotPermissionApproval(
+                agentContext,
+                request,
+                requestId.requestId,
+                permissionIdentity,
+            )
         ) {
             return { kind: "approve-once" };
         }
@@ -834,7 +884,7 @@ function createCopilotPermissionHandler(
             formatCopilotPermissionRequest(request),
             choices,
             choices.indexOf(COPILOT_DENY),
-            `copilotPermission:${getCopilotPermissionIdentity(request)}`,
+            `copilotPermission:${permissionIdentity}`,
         );
         const choice = choices[choiceIndex];
         if (choice === COPILOT_ALLOW_TOOL_REQUEST) {
@@ -846,20 +896,27 @@ function createCopilotPermissionHandler(
                 };
                 copilotToolRequestApprovals.set(agentContext, approval);
             }
-            approval.tools.add(getCopilotPermissionIdentity(request));
+            approval.tools.add(permissionIdentity);
         } else if (choice === COPILOT_ALLOW_REQUEST) {
             copilotPermissionRequestApprovals.set(
                 agentContext,
                 requestId.requestId,
             );
         } else if (choice === COPILOT_ALLOW_TOOL_SESSION) {
-            return (
-                getCopilotSessionApproval(request) ?? {
-                    kind: "reject",
-                    feedback:
-                        "Session approval is not available for this request.",
+            // The SDK also offers a `approve-for-session` result that caches
+            // the decision inside the Copilot session, but that cache lives
+            // in the SDK and cannot be revoked by `@allow off`. Track the
+            // grant in a host-owned identity set instead, so subsequent
+            // prompts for the same tool are auto-approved and `@allow off`
+            // can actually clear it. The SDK still sees a one-time approval.
+            if (canOfferCopilotSessionApproval(request)) {
+                let identities = copilotToolSessionApprovals.get(agentContext);
+                if (identities === undefined) {
+                    identities = new Set<string>();
+                    copilotToolSessionApprovals.set(agentContext, identities);
                 }
-            );
+                identities.add(permissionIdentity);
+            }
         } else if (choice === COPILOT_ALLOW_SESSION) {
             copilotPermissionSessionApprovals.add(agentContext);
         }
@@ -926,51 +983,6 @@ function canOfferCopilotSessionApproval(request: PermissionRequest): boolean {
     return request.kind === "mcp" || request.kind === "custom-tool";
 }
 
-export function getCopilotSessionApproval(
-    request: PermissionRequest,
-): PermissionRequestResult | undefined {
-    if (!canOfferCopilotSessionApproval(request)) {
-        return undefined;
-    }
-    if (request.kind === "shell") {
-        return {
-            kind: "approve-for-session",
-            approval: {
-                kind: "commands",
-                commandIdentifiers: request.commands.map(
-                    ({ identifier }) => identifier,
-                ),
-            },
-        };
-    }
-    if (request.kind === "write") {
-        return {
-            kind: "approve-for-session",
-            approval: { kind: "write" },
-        };
-    }
-    if (request.kind === "mcp") {
-        return {
-            kind: "approve-for-session",
-            approval: {
-                kind: "mcp",
-                serverName: request.serverName,
-                toolName: request.toolName,
-            },
-        };
-    }
-    if (request.kind === "custom-tool") {
-        return {
-            kind: "approve-for-session",
-            approval: {
-                kind: "custom-tool",
-                toolName: request.toolName,
-            },
-        };
-    }
-    return undefined;
-}
-
 function getCopilotPermissionIdentity(request: PermissionRequest): string {
     switch (request.kind) {
         case "mcp":
@@ -1006,6 +1018,19 @@ export function formatCopilotPermissionRequest(
             lines.push(
                 `Copilot wants to run custom tool '${request.toolName}'.`,
             );
+            if (
+                typeof request.toolDescription === "string" &&
+                request.toolDescription.length > 0
+            ) {
+                lines.push(
+                    formatPermissionDetail(request.toolDescription, 300),
+                );
+            }
+            if (request.args !== undefined) {
+                lines.push(
+                    `Arguments:\n${formatPermissionDetail(request.args, 1200)}`,
+                );
+            }
             break;
         case "shell":
             lines.push(
@@ -1960,8 +1985,10 @@ function getCopilotSessionConfig(
         description: [
             "Ask the user ONE multiple-choice question and block until they answer.",
             "Use ONLY when you are genuinely blocked on a decision that only the user",
-            "can make - an ambiguous choice among concrete options, or a confirmation",
-            "before a destructive or irreversible action. Put the exact options in",
+            "can make - an ambiguous choice among concrete options, or a semantic",
+            "confirmation not covered by a permission-aware tool. Do not ask before",
+            "calling shell, file, URL, MCP, or custom tools; their host permission",
+            "handler is authoritative. Put the exact options in",
             '`choices` (for a yes/no question use ["Yes", "No"]). Returns the option the',
             "user picked. Prefer acting autonomously; do not ask when a reasonable safe",
             "default exists.",
@@ -2296,7 +2323,7 @@ function getCopilotSessionConfig(
                       ]
                     : []),
                 "## User Interaction",
-                '- `ask_user`: Ask the user ONE multiple-choice question and block for their answer. Strongly prefer to act autonomously with a safe default; use this ONLY when genuinely blocked on a decision only the user can make (an ambiguous choice among concrete options, or confirmation before a destructive/irreversible action). Provide the exact options (for yes/no use ["Yes", "No"]), and ask at most one such question.',
+                "- `ask_user`: Ask the user ONE multiple-choice question and block for their answer. Use it only for ambiguity or a semantic confirmation not covered by a permission-aware tool. Never ask permission before shell, file, URL, MCP, or custom-tool calls; invoke them directly and let the host permission handler prompt. Provide exact options and ask at most one question.",
                 "- `ask_user_form`: Ask SEVERAL questions at once (pick / multiChoice / yesNo, optional free-text) in one form and block for all answers. Prefer this over multiple `ask_user` calls when a single blocking moment needs more than one answer.",
                 "",
                 "## Guidelines",

@@ -290,7 +290,17 @@ export type BridgeToWebviewMessage =
       }
     // Another client answered / the server cancelled the interaction; the
     // webview should tear down its in-progress prompt (identified by id).
-    | { type: "interactionResolved"; interactionId: string }
+    // `response` is the authoritative value the server accepted (from any
+    // client's `interactionResponse`). The webview uses it to reconcile a
+    // locally-staged permission grant: a scope selection is only committed
+    // to the request's `Permissions:` metadata line if this response matches
+    // what we submitted, so a scope that lost a race to another client is
+    // never displayed as if it had been granted.
+    | {
+          type: "interactionResolved";
+          interactionId: string;
+          response: unknown;
+      }
     | { type: "interactionCancelled"; interactionId: string }
     | {
           // Response to a webview-issued `bridgeRpcRequest` (template editor

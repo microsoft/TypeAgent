@@ -313,7 +313,24 @@ type PermissionPrompt = {
 };
 
 const permissionPrompts: PermissionPrompt[] = [];
+// Committed grants keyed by threadRequestId. A grant lands here only after
+// the authoritative `interactionResolved` value matches what this client
+// submitted. `appendPermissionGrants` reads from this map when the request
+// completes.
 const pendingPermissionGrants = new Map<string, Set<string>>();
+// Grants staged locally between choice submission and the server-side
+// `interactionResolved` broadcast. Keyed by interactionId so a race with
+// another client answering the same prompt can be reconciled: if that
+// client's answer wins, the staged entry is discarded and we never
+// display a scope the server didn't record for us.
+const stagedPermissionGrants = new Map<
+    string,
+    {
+        threadRequestId: string;
+        label: string;
+        submittedValue: number;
+    }
+>();
 let activePermissionPrompt = 0;
 let permissionPromptLayer: HTMLDivElement | undefined;
 let permissionReturnFocus: HTMLElement | undefined;
@@ -448,16 +465,43 @@ function denyActivePermissionPrompt(): boolean {
     return true;
 }
 
-function recordPermissionGrant(prompt: PermissionPrompt, label: string): void {
+function stagePermissionGrant(
+    prompt: PermissionPrompt,
+    label: string,
+    submittedValue: number,
+): void {
     if (prompt.threadRequestId === undefined) {
         return;
     }
-    let grants = pendingPermissionGrants.get(prompt.threadRequestId);
+    // Hold the grant here until `interactionResolved` confirms the server
+    // committed our answer. `commitStagedPermissionGrant` moves it into
+    // `pendingPermissionGrants` if the authoritative response matches;
+    // `discardStagedPermissionGrant` drops it if another client won the
+    // race. This avoids appending a `Permissions:` line that describes a
+    // scope the server never accepted from us.
+    stagedPermissionGrants.set(prompt.id, {
+        threadRequestId: prompt.threadRequestId,
+        label: permissionChoiceLabels[label] ?? label,
+        submittedValue,
+    });
+}
+
+function commitStagedPermissionGrant(interactionId: string): void {
+    const staged = stagedPermissionGrants.get(interactionId);
+    if (staged === undefined) {
+        return;
+    }
+    stagedPermissionGrants.delete(interactionId);
+    let grants = pendingPermissionGrants.get(staged.threadRequestId);
     if (grants === undefined) {
         grants = new Set<string>();
-        pendingPermissionGrants.set(prompt.threadRequestId, grants);
+        pendingPermissionGrants.set(staged.threadRequestId, grants);
     }
-    grants.add(permissionChoiceLabels[label] ?? label);
+    grants.add(staged.label);
+}
+
+function discardStagedPermissionGrant(interactionId: string): void {
+    stagedPermissionGrants.delete(interactionId);
 }
 
 function appendPermissionGrants(
@@ -480,10 +524,14 @@ function appendPermissionGrants(
         chatPanel.hasUserMessage(requestId) || aliasRequestId === undefined
             ? requestId
             : aliasRequestId;
+    const content = `Permissions: ${[...grants].join("; ")}.`;
+    if (chatPanel.appendRequestMetadata(targetRequestId, content)) {
+        return;
+    }
     chatPanel.addAgentMessage(
         {
             type: "text",
-            content: `Permissions: ${[...grants].join("; ")}.`,
+            content,
             kind: "info",
         },
         undefined,
@@ -517,10 +565,7 @@ function renderPermissionPrompts(): void {
     }
     card.tabIndex = -1;
     card.setAttribute("role", "dialog");
-    const dialogLabel =
-        prompt.variant === "reasoning"
-            ? "Permission request"
-            : "Copilot permission request";
+    const dialogLabel = "Permission request";
     card.setAttribute("aria-label", dialogLabel);
 
     const selector = document.createElement("div");
@@ -579,7 +624,12 @@ function renderPermissionPrompts(): void {
             choice: label,
         });
         if (label !== "Deny") {
-            recordPermissionGrant(prompt, label);
+            // Stage the grant; commit it only when interactionResolved
+            // returns the same value we submitted. If another client's
+            // response wins the race, the staged entry is discarded and
+            // the request's completion message never claims a scope the
+            // server didn't accept from us.
+            stagePermissionGrant(prompt, label, value);
         }
         resolvePermissionPrompts(prompt, label, value);
     };
@@ -660,15 +710,7 @@ function renderPermissionPrompts(): void {
                 option.textContent = permissionChoiceLabels[label] ?? label;
                 option.dataset.choice = label;
                 option.setAttribute("role", "menuitemradio");
-                option.addEventListener("pointerdown", () => {
-                    vscode.postMessage({
-                        type: "permissionDebug",
-                        event: "choice-pointerdown",
-                        interactionId: prompt.id,
-                        choice: label,
-                    });
-                });
-                option.addEventListener("click", () => {
+                const selectOption = () => {
                     updateSelectedChoice(label);
                     updateOptionSelection();
                     vscode.postMessage({
@@ -680,6 +722,13 @@ function renderPermissionPrompts(): void {
                     menu.hidden = true;
                     menuButton.setAttribute("aria-expanded", "false");
                     allowOnceButton.focus();
+                };
+                option.addEventListener("pointerdown", (event) => {
+                    event.preventDefault();
+                    selectOption();
+                });
+                option.addEventListener("click", () => {
+                    selectOption();
                 });
                 options.push(option);
                 menu.appendChild(option);
@@ -718,7 +767,7 @@ function renderPermissionPrompts(): void {
             });
             allowGroup.append(menuButton, menu);
         }
-        actions.append(denyButton, allowGroup);
+        actions.append(allowGroup, denyButton);
     }
     card.appendChild(actions);
     permissionPromptLayer.appendChild(card);
@@ -1369,6 +1418,10 @@ window.addEventListener("message", (event) => {
             chatPanel.setDeveloperMode(msg.enabled);
             break;
         case "sessionChanged":
+            for (const interaction of activeInteractions.values()) {
+                interaction.abort();
+            }
+            activeInteractions.clear();
             currentSessionId = msg.sessionId;
             isSwitching = false;
             conversationBar.setCurrentConversation(
@@ -1384,6 +1437,8 @@ window.addEventListener("message", (event) => {
             cancelledRequests.clear();
             cancelledRendered.clear();
             pendingQueueStatus.clear();
+            pendingPermissionGrants.clear();
+            stagedPermissionGrants.clear();
             queueMirror.reset(undefined);
             requestSessionList();
             break;
@@ -1467,6 +1522,7 @@ window.addEventListener("message", (event) => {
             cancelledRendered.clear();
             pendingQueueStatus.clear();
             pendingPermissionGrants.clear();
+            stagedPermissionGrants.clear();
             break;
         case "notify": {
             const rid = msg.requestId;
@@ -1823,10 +1879,37 @@ window.addEventListener("message", (event) => {
             // matching bubble.
             chatPanel.applyFeedback(msg.entry);
             break;
-        case "interactionResolved":
+        case "interactionResolved": {
+            // Any client's answer arrived - abort our local prompt so it
+            // stops waiting, and reconcile the staged permission grant
+            // (if any) against the authoritative response. If the server
+            // recorded the same choice we submitted, commit the grant so
+            // the completed request's Permissions: line reflects it. If a
+            // different client's response won the race, discard the stage
+            // so we never surface a scope the server didn't accept from us.
+            const staged = stagedPermissionGrants.get(msg.interactionId);
+            if (staged !== undefined) {
+                if (
+                    typeof msg.response === "number" &&
+                    msg.response === staged.submittedValue
+                ) {
+                    commitStagedPermissionGrant(msg.interactionId);
+                } else {
+                    discardStagedPermissionGrant(msg.interactionId);
+                }
+            }
+            const ac = activeInteractions.get(msg.interactionId);
+            if (ac) {
+                activeInteractions.delete(msg.interactionId);
+                ac.abort();
+            }
+            break;
+        }
         case "interactionCancelled": {
-            // Another client answered, or the server cancelled/timed out the
-            // interaction — abort our local prompt so it stops waiting.
+            // Server cancelled / timed out - drop any staged grant so a
+            // cancelled prompt never contributes to the request's
+            // Permissions: line.
+            discardStagedPermissionGrant(msg.interactionId);
             const ac = activeInteractions.get(msg.interactionId);
             if (ac) {
                 activeInteractions.delete(msg.interactionId);
@@ -1866,10 +1949,14 @@ vscode.postMessage({ type: "connect" });
 //   * Single Esc with an active request → cancel that request.
 //   * Two Esc presses within DOUBLE_ESCAPE_WINDOW_MS → cancel ALL
 //     queued + running entries on the session.
-// Chat-ui's own input-level handler (chatPanel.ts:712) takes care of
-// completion-popup dismissal and cancellation when the input is focused,
-// and calls `e.preventDefault()` when it consumes the keystroke. We
-// honor that flag here so the gesture isn't double-counted.
+// Chat-ui's own input-level handler (chatPanel.ts) handles completion-popup
+// dismissal when the input is focused. When Escape is consumed purely for
+// completion dismissal chat-ui stops propagation, so this listener never
+// sees those events — that's what we want, because a completion Esc should
+// not deny the visible permission prompt or arm the double-Esc clock.
+// When chat-ui calls `preventDefault` for an Escape that actually cancels
+// an active request, propagation still happens; we treat that path as a
+// permission deny + cancel and honor the double-Esc clock below.
 document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (e.defaultPrevented) {
