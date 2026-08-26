@@ -10,6 +10,7 @@ import {
 import {
     CommandHandlerContext,
     ensureCommandResult,
+    getRequestId,
 } from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import {
@@ -68,6 +69,11 @@ import {
     presentReasoningForm,
     type ReasoningFormArgs,
 } from "./askUserForm.js";
+import {
+    ASK_USER_KIND_DESCRIPTION,
+    ASK_USER_KIND_VALUES,
+    resolveAskUserSource,
+} from "./askUserSource.js";
 import {
     findInstallableAgents,
     formatInstallableAgents,
@@ -257,6 +263,36 @@ const copilotClientPromises = new WeakMap<object, Promise<CopilotClient>>();
 
 // Track Copilot session IDs per dispatcher instance (mirrors Claude's session tracking)
 const copilotSessionIds = new WeakMap<object, string>();
+
+const copilotPermissionSessionApprovals = new WeakSet<object>();
+const copilotPermissionRequestApprovals = new WeakMap<object, string>();
+const copilotToolRequestApprovals = new WeakMap<
+    object,
+    { requestId: string; tools: Set<string> }
+>();
+const COPILOT_ALLOW_ONCE = "Allow once";
+const COPILOT_ALLOW_TOOL_REQUEST = "Allow this tool for request";
+const COPILOT_ALLOW_REQUEST = "Allow all for request";
+const COPILOT_ALLOW_TOOL_SESSION = "Allow this tool for session";
+const COPILOT_ALLOW_SESSION = "Allow all for session";
+const COPILOT_DENY = "Deny";
+
+export function setCopilotPermissionSessionApproval(
+    agentContext: object,
+    enabled: boolean,
+): void {
+    if (enabled) {
+        copilotPermissionSessionApprovals.add(agentContext);
+    } else {
+        copilotPermissionSessionApprovals.delete(agentContext);
+    }
+}
+
+export function getCopilotPermissionSessionApproval(
+    agentContext: object,
+): boolean {
+    return copilotPermissionSessionApprovals.has(agentContext);
+}
 
 function generateCodingSessionId(
     context: ActionContext<CommandHandlerContext>,
@@ -756,6 +792,7 @@ function createCopilotPermissionHandler(
     allowedRoot?: string,
 ): PermissionHandler {
     return async (request) => {
+        const agentContext = context.sessionContext.agentContext;
         const scopeViolation = getCopilotPermissionScopeViolation(
             request,
             allowedRoot,
@@ -766,26 +803,251 @@ function createCopilotPermissionHandler(
                 feedback: scopeViolation,
             };
         }
+        const requestId = getRequestId(agentContext);
+        const managedApprovalRequired =
+            request.managedApprovalRequired === true;
+        const canApproveForSession = canOfferCopilotSessionApproval(request);
+        const toolRequestApproval =
+            copilotToolRequestApprovals.get(agentContext);
+        if (
+            !managedApprovalRequired &&
+            ((canApproveForSession &&
+                copilotPermissionSessionApprovals.has(agentContext)) ||
+                copilotPermissionRequestApprovals.get(agentContext) ===
+                    requestId.requestId ||
+                (toolRequestApproval?.requestId === requestId.requestId &&
+                    toolRequestApproval.tools.has(
+                        getCopilotPermissionIdentity(request),
+                    )))
+        ) {
+            return { kind: "approve-once" };
+        }
         const safe = getCopilotPermissionDefault(request);
         if (safe !== undefined) {
             return safe;
         }
-        const identity =
-            request.kind === "mcp"
-                ? `MCP tool '${request.serverName}/${request.toolName}'`
-                : `Copilot ${request.kind} operation`;
-        const choice = await context.sessionContext.popupQuestion(
-            `${identity} requests sensitive permission. Allow this request once?`,
-            ["Allow once", "Deny"],
-            1,
+        const choices = getCopilotPermissionChoices(request);
+        const choiceIndex = await agentContext.clientIO.question(
+            requestId,
+            formatCopilotPermissionRequest(request),
+            choices,
+            choices.indexOf(COPILOT_DENY),
+            `copilotPermission:${getCopilotPermissionIdentity(request)}`,
         );
-        return choice === 0
-            ? { kind: "approve-once" }
+        const choice = choices[choiceIndex];
+        if (choice === COPILOT_ALLOW_TOOL_REQUEST) {
+            let approval = copilotToolRequestApprovals.get(agentContext);
+            if (approval?.requestId !== requestId.requestId) {
+                approval = {
+                    requestId: requestId.requestId,
+                    tools: new Set<string>(),
+                };
+                copilotToolRequestApprovals.set(agentContext, approval);
+            }
+            approval.tools.add(getCopilotPermissionIdentity(request));
+        } else if (choice === COPILOT_ALLOW_REQUEST) {
+            copilotPermissionRequestApprovals.set(
+                agentContext,
+                requestId.requestId,
+            );
+        } else if (choice === COPILOT_ALLOW_TOOL_SESSION) {
+            return (
+                getCopilotSessionApproval(request) ?? {
+                    kind: "reject",
+                    feedback:
+                        "Session approval is not available for this request.",
+                }
+            );
+        } else if (choice === COPILOT_ALLOW_SESSION) {
+            copilotPermissionSessionApprovals.add(agentContext);
+        }
+        return choice === COPILOT_ALLOW_ONCE ||
+            choice === COPILOT_ALLOW_TOOL_REQUEST ||
+            choice === COPILOT_ALLOW_REQUEST ||
+            choice === COPILOT_ALLOW_TOOL_SESSION ||
+            choice === COPILOT_ALLOW_SESSION
+            ? { kind: "approve-once", approvedInteractively: true }
             : {
                   kind: "reject",
                   feedback: "Denied by the TypeAgent host permission policy.",
               };
     };
+}
+
+export function getCopilotPermissionChoices(
+    request: PermissionRequest,
+): string[] {
+    if (request.managedApprovalRequired === true) {
+        return [COPILOT_ALLOW_ONCE, COPILOT_DENY];
+    }
+    const choices = [
+        COPILOT_ALLOW_ONCE,
+        COPILOT_ALLOW_TOOL_REQUEST,
+        COPILOT_ALLOW_REQUEST,
+    ];
+    if (canOfferCopilotSessionApproval(request)) {
+        choices.push(COPILOT_ALLOW_TOOL_SESSION, COPILOT_ALLOW_SESSION);
+    }
+    choices.push(COPILOT_DENY);
+    return choices;
+}
+
+function canOfferCopilotSessionApproval(request: PermissionRequest): boolean {
+    if (request.managedApprovalRequired === true) {
+        return false;
+    }
+    if ("canOfferSessionApproval" in request) {
+        return request.canOfferSessionApproval === true;
+    }
+    return request.kind === "mcp" || request.kind === "custom-tool";
+}
+
+export function getCopilotSessionApproval(
+    request: PermissionRequest,
+): PermissionRequestResult | undefined {
+    if (!canOfferCopilotSessionApproval(request)) {
+        return undefined;
+    }
+    if (request.kind === "shell") {
+        return {
+            kind: "approve-for-session",
+            approval: {
+                kind: "commands",
+                commandIdentifiers: request.commands.map(
+                    ({ identifier }) => identifier,
+                ),
+            },
+        };
+    }
+    if (request.kind === "write") {
+        return {
+            kind: "approve-for-session",
+            approval: { kind: "write" },
+        };
+    }
+    if (request.kind === "mcp") {
+        return {
+            kind: "approve-for-session",
+            approval: {
+                kind: "mcp",
+                serverName: request.serverName,
+                toolName: request.toolName,
+            },
+        };
+    }
+    if (request.kind === "custom-tool") {
+        return {
+            kind: "approve-for-session",
+            approval: {
+                kind: "custom-tool",
+                toolName: request.toolName,
+            },
+        };
+    }
+    return undefined;
+}
+
+function getCopilotPermissionIdentity(request: PermissionRequest): string {
+    switch (request.kind) {
+        case "mcp":
+            return `mcp:${request.serverName}/${request.toolName}`;
+        case "custom-tool":
+            return `custom-tool:${request.toolName}`;
+        case "shell":
+            return `shell:${request.commands
+                .map(({ identifier }) => identifier)
+                .sort()
+                .join(",")}`;
+        default:
+            return request.kind;
+    }
+}
+
+export function formatCopilotPermissionRequest(
+    request: PermissionRequest,
+): string {
+    const lines: string[] = [];
+    switch (request.kind) {
+        case "mcp":
+            lines.push(
+                `Copilot wants to run MCP tool '${request.serverName}/${request.toolName}'.`,
+            );
+            if (request.args !== undefined) {
+                lines.push(
+                    `Arguments:\n${formatPermissionDetail(request.args)}`,
+                );
+            }
+            break;
+        case "custom-tool":
+            lines.push(
+                `Copilot wants to run custom tool '${request.toolName}'.`,
+            );
+            break;
+        case "shell":
+            lines.push(
+                `Copilot wants to run a shell command:\n${formatPermissionDetail(request.fullCommandText)}`,
+                `Reason: ${request.intention}`,
+            );
+            if (request.possibleUrls.length > 0) {
+                lines.push(
+                    `May access: ${request.possibleUrls.map(({ url }) => url).join(", ")}`,
+                );
+            }
+            if (request.warning) {
+                lines.push(`Warning: ${request.warning}`);
+            }
+            break;
+        case "read":
+            lines.push(
+                `Copilot wants to read:\n${request.path}`,
+                `Reason: ${request.intention}`,
+            );
+            break;
+        case "write":
+            lines.push(
+                `Copilot wants to write:\n${request.fileName}`,
+                `Reason: ${request.intention}`,
+                `Proposed change:\n${formatPermissionDetail(request.diff)}`,
+            );
+            break;
+        case "url":
+            lines.push(
+                `Copilot wants to access:\n${request.url}`,
+                `Reason: ${request.intention}`,
+            );
+            if (request.redirectedFrom) {
+                lines.push(`Redirected from: ${request.redirectedFrom}`);
+            }
+            break;
+        default:
+            lines.push(
+                `Copilot requests permission for a ${request.kind} operation.`,
+            );
+    }
+    if (
+        "requestSandboxBypass" in request &&
+        request.requestSandboxBypass === true
+    ) {
+        lines.push(
+            `ELEVATED RISK: This operation will run outside the sandbox.${
+                request.requestSandboxBypassReason
+                    ? `\nReason: ${request.requestSandboxBypassReason}`
+                    : ""
+            }`,
+        );
+    }
+    if (request.managedApprovalRequired === true) {
+        lines.push("Managed policy requires an explicit decision.");
+    }
+    return lines.join("\n\n");
+}
+
+function formatPermissionDetail(value: unknown, maxLength = 4000): string {
+    const text =
+        typeof value === "string" ? value : JSON.stringify(value, undefined, 2);
+    return text.length <= maxLength
+        ? text
+        : `${text.slice(0, maxLength)}\n… (truncated)`;
 }
 
 function isPathWithinRoot(candidatePath: string, root: string): boolean {
@@ -1679,6 +1941,8 @@ function getCopilotSessionConfig(
             '`choices` (for a yes/no question use ["Yes", "No"]). Returns the option the',
             "user picked. Prefer acting autonomously; do not ask when a reasonable safe",
             "default exists.",
+            "",
+            `\`kind\`: ${ASK_USER_KIND_DESCRIPTION}`,
         ].join("\n"),
         parameters: {
             type: "object",
@@ -1692,6 +1956,11 @@ function getCopilotSessionConfig(
                     items: { type: "string" },
                     description:
                         'The options to choose from (at least 2). For a yes/no question use ["Yes", "No"].',
+                },
+                kind: {
+                    type: "string",
+                    enum: [...ASK_USER_KIND_VALUES],
+                    description: ASK_USER_KIND_DESCRIPTION,
                 },
             },
             required: ["question", "choices"],
@@ -1718,7 +1987,7 @@ function getCopilotSessionConfig(
                 question,
                 choices,
                 undefined,
-                "reasoning",
+                resolveAskUserSource(args?.kind),
             );
             const answer = choices[selected] ?? choices[0] ?? "";
             return {

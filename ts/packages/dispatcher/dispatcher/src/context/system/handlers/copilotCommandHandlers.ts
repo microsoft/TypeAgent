@@ -24,6 +24,10 @@ import { FullAction, toExecutableActions } from "@typeagent/agent-cache";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { executeActions } from "../../../execute/actionHandlers.js";
 import { askYesNoWithContext } from "../../interactiveIO.js";
+import {
+    getCopilotPermissionSessionApproval,
+    setCopilotPermissionSessionApproval,
+} from "../../../reasoning/copilot.js";
 
 class CopilotImportCommandHandler implements CommandHandlerNoParams {
     public readonly description =
@@ -657,6 +661,83 @@ class CopilotLoginCommandHandler implements CommandHandler {
     }
 }
 
+class CopilotPermissionsCommandHandler implements CommandHandler {
+    public readonly description =
+        "Show or set automatic approval for eligible Copilot permissions in this session";
+    public readonly parameters = {
+        args: {
+            mode: {
+                description: "Permission mode: 'on', 'off', or 'status'",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const agentContext = context.sessionContext.agentContext;
+        const mode = (params.args.mode ?? "status").toLowerCase();
+        if (mode === "on") {
+            enableCopilotSessionApproval(context);
+            return;
+        }
+        if (mode === "off") {
+            setCopilotPermissionSessionApproval(agentContext, false);
+            displaySuccess(
+                "Copilot permissions require confirmation again.",
+                context,
+            );
+            return;
+        }
+        if (mode !== "status") {
+            displayError(
+                "Invalid permission mode. Use on, off, or status.",
+                context,
+            );
+            return;
+        }
+        displayInfo(
+            getCopilotPermissionSessionApproval(agentContext)
+                ? "Automatic approval is enabled for eligible Copilot permissions in this session."
+                : "Copilot permissions require confirmation.",
+            context,
+        );
+    }
+}
+
+function enableCopilotSessionApproval(
+    context: ActionContext<CommandHandlerContext>,
+): void {
+    setCopilotPermissionSessionApproval(
+        context.sessionContext.agentContext,
+        true,
+    );
+    displaySuccess(
+        "Eligible future Copilot permission prompts are allowed for this session. Existing prompts and managed-policy requests still require a response.",
+        context,
+    );
+}
+
+class AllowAllCommandHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Allow eligible Copilot permissions for the rest of this session";
+
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        enableCopilotSessionApproval(context);
+    }
+}
+
+export function getAllowCommandHandlers(): CommandHandlerTable {
+    return {
+        description: "Allow agent permissions",
+        commands: {
+            all: new AllowAllCommandHandler(),
+        },
+    };
+}
+
 export function getCopilotCommandHandlers(): CommandHandlerTable {
     return {
         description: "GitHub Copilot session commands",
@@ -665,6 +746,7 @@ export function getCopilotCommandHandlers(): CommandHandlerTable {
             import: new CopilotImportCommandHandler(),
             fix: new FixWithCopilotCommandHandler(),
             login: new CopilotLoginCommandHandler(),
+            permissions: new CopilotPermissionsCommandHandler(),
         },
     };
 }

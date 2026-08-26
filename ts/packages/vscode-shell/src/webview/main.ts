@@ -288,8 +288,11 @@ chatPanel.attachCompletion((msg) => vscode.postMessage(msg));
 // client answered, or a server timeout) can tear the local UI down.
 const activeInteractions = new Map<string, AbortController>();
 
+type PermissionPromptVariant = "copilot" | "reasoning";
+
 type PermissionPrompt = {
     id: string;
+    variant: PermissionPromptVariant;
     requestId?: string;
     permissionIdentity?: string;
     message: string;
@@ -312,13 +315,22 @@ function showPermissionPrompt(
     signal: AbortSignal,
 ): Promise<number> {
     const requestId = interaction.requestId?.requestId;
+    const isCopilot =
+        interaction.source === "copilotPermission" ||
+        interaction.source.startsWith("copilotPermission:");
+    const variant: PermissionPromptVariant = isCopilot
+        ? "copilot"
+        : "reasoning";
     const permissionIdentity = interaction.source.startsWith(
         "copilotPermission:",
     )
         ? interaction.source.slice("copilotPermission:".length)
         : undefined;
+    // Cached broader-scope approvals are Copilot-SDK-only. Reasoning
+    // permission asks are model-authored one-offs with no stable identity to
+    // key a session-wide cache against, so every ask is presented fresh.
     const rememberedChoice =
-        requestId === undefined
+        !isCopilot || requestId === undefined
             ? undefined
             : (permissionRequestApprovals.get(requestId) ??
               (permissionIdentity === undefined
@@ -335,6 +347,7 @@ function showPermissionPrompt(
     return new Promise<number>((resolve, reject) => {
         const prompt: PermissionPrompt = {
             id: interaction.interactionId,
+            variant,
             requestId: interaction.requestId?.requestId,
             permissionIdentity,
             message: interaction.message,
@@ -386,6 +399,7 @@ function resolvePermissionPrompts(
         selectedPrompt.requestId !== undefined
             ? permissionPrompts.filter(
                   (prompt) =>
+                      prompt.variant === "copilot" &&
                       prompt.choices.includes(selectedLabel) &&
                       prompt.requestId === selectedPrompt.requestId,
               )
@@ -394,16 +408,28 @@ function resolvePermissionPrompts(
                 selectedPrompt.permissionIdentity !== undefined
               ? permissionPrompts.filter(
                     (prompt) =>
+                        prompt.variant === "copilot" &&
                         prompt.choices.includes(selectedLabel) &&
                         prompt.requestId === selectedPrompt.requestId &&
                         prompt.permissionIdentity ===
                             selectedPrompt.permissionIdentity,
                 )
-              : selectedLabel === "Allow all for session"
-                ? permissionPrompts.filter((prompt) =>
-                      prompt.choices.includes(selectedLabel),
+              : selectedLabel === "Allow this tool for session" &&
+                  selectedPrompt.permissionIdentity !== undefined
+                ? permissionPrompts.filter(
+                      (prompt) =>
+                          prompt.variant === "copilot" &&
+                          prompt.choices.includes(selectedLabel) &&
+                          prompt.permissionIdentity ===
+                              selectedPrompt.permissionIdentity,
                   )
-                : [selectedPrompt];
+                : selectedLabel === "Allow all for session"
+                  ? permissionPrompts.filter(
+                        (prompt) =>
+                            prompt.variant === "copilot" &&
+                            prompt.choices.includes(selectedLabel),
+                    )
+                  : [selectedPrompt];
     for (const prompt of prompts) {
         const value =
             prompt === selectedPrompt
@@ -433,9 +459,16 @@ function renderPermissionPrompts(): void {
     const prompt = permissionPrompts[activePermissionPrompt];
     const card = document.createElement("section");
     card.className = "copilot-permission-card";
+    if (prompt.variant === "reasoning") {
+        card.classList.add("reasoning");
+    }
     card.tabIndex = -1;
     card.setAttribute("role", "dialog");
-    card.setAttribute("aria-label", "Copilot permission request");
+    const dialogLabel =
+        prompt.variant === "reasoning"
+            ? "Permission request"
+            : "Copilot permission request";
+    card.setAttribute("aria-label", dialogLabel);
 
     const selector = document.createElement("div");
     selector.className = "copilot-permission-selector";
@@ -466,183 +499,165 @@ function renderPermissionPrompts(): void {
     card.appendChild(selector);
 
     const title = document.createElement("h3");
-    title.textContent = "Copilot permission request";
+    title.textContent = dialogLabel;
     card.appendChild(title);
     const message = document.createElement("div");
     message.className = "copilot-permission-message";
-    if (prompt.permissionIdentity?.startsWith("custom-tool:")) {
+    // Reasoning permission asks are model-authored one-liners; render as
+    // plain text so short messages don't sit in a scroll box. Copilot custom
+    // tools also opt in via `custom-tool:` identity. Detailed SDK messages
+    // keep the scrollable code-style box.
+    if (
+        prompt.variant === "reasoning" ||
+        prompt.permissionIdentity?.startsWith("custom-tool:")
+    ) {
         message.classList.add("compact");
     }
     message.textContent = prompt.message;
     card.appendChild(message);
-    type ToolScope = "tool" | "all";
-    type ApprovalDuration = "invocation" | "request" | "session";
-    let toolScope: ToolScope = "tool";
-    let approvalDuration: ApprovalDuration = "invocation";
-    const choiceLabel = (
-        scope: ToolScope,
-        duration: ApprovalDuration,
-    ): string | undefined => {
-        if (scope === "tool" && duration === "invocation") return "Allow once";
-        if (scope === "tool" && duration === "request")
-            return "Allow this tool for request";
-        if (scope === "all" && duration === "request")
-            return "Allow all for request";
-        if (scope === "tool" && duration === "session")
-            return "Allow this tool for session";
-        if (scope === "all" && duration === "session")
-            return "Allow all for session";
-        return undefined;
-    };
-
-    const selectors = document.createElement("div");
-    selectors.className = "copilot-permission-options";
-    const scopeButtons = new Map<ToolScope, HTMLButtonElement>();
-    const durationButtons = new Map<ApprovalDuration, HTMLButtonElement>();
-
-    const createOptionGroup = <T extends string>(
-        label: string,
-        options: Array<{ value: T; text: string }>,
-        buttons: Map<T, HTMLButtonElement>,
-        onSelect: (value: T) => void,
-    ) => {
-        const row = document.createElement("div");
-        row.className = "copilot-permission-option-row";
-        const rowLabel = document.createElement("span");
-        rowLabel.className = "copilot-permission-option-label";
-        rowLabel.textContent = label;
-        const group = document.createElement("div");
-        group.className = "copilot-permission-segments";
-        group.setAttribute("role", "group");
-        group.setAttribute("aria-label", label);
-        for (const option of options) {
-            const button = document.createElement("button");
-            button.type = "button";
-            button.textContent = option.text;
-            button.addEventListener("click", () => onSelect(option.value));
-            buttons.set(option.value, button);
-            group.appendChild(button);
-        }
-        row.append(rowLabel, group);
-        selectors.appendChild(row);
-    };
-
-    const actions = document.createElement("div");
-    actions.className = "copilot-permission-actions";
-    const allowButton = document.createElement("button");
-    allowButton.type = "button";
-    allowButton.className = "allow";
-    allowButton.textContent = "Allow";
-    const denyButton = document.createElement("button");
-    denyButton.type = "button";
-    denyButton.className = "deny";
-    denyButton.textContent = "Deny";
-
-    const updateOptions = () => {
-        for (const [scope, button] of scopeButtons) {
-            button.disabled = !(
-                ["invocation", "request", "session"] as ApprovalDuration[]
-            ).some((duration) => {
-                const choice = choiceLabel(scope, duration);
-                return choice !== undefined && prompt.choices.includes(choice);
-            });
-            button.setAttribute("aria-pressed", String(scope === toolScope));
-        }
-        for (const [duration, button] of durationButtons) {
-            const choice = choiceLabel(toolScope, duration);
-            button.disabled =
-                choice === undefined || !prompt.choices.includes(choice);
-            button.setAttribute(
-                "aria-pressed",
-                String(duration === approvalDuration),
-            );
-        }
-        const choice = choiceLabel(toolScope, approvalDuration);
-        allowButton.disabled =
-            choice === undefined || !prompt.choices.includes(choice);
-    };
-
-    createOptionGroup(
-        "Apply to",
-        [
-            { value: "tool", text: "This tool" },
-            { value: "all", text: "All tools" },
-        ],
-        scopeButtons,
-        (scope) => {
-            toolScope = scope;
-            if (
-                scope === "all" &&
-                !prompt.choices.includes(
-                    choiceLabel(scope, approvalDuration) ?? "",
-                )
-            ) {
-                approvalDuration = "request";
-            }
-            updateOptions();
-        },
-    );
-    createOptionGroup(
-        "Duration",
-        [
-            { value: "invocation", text: "Once" },
-            { value: "request", text: "Current request" },
-            { value: "session", text: "This session" },
-        ],
-        durationButtons,
-        (duration) => {
-            approvalDuration = duration;
-            if (duration === "invocation") {
-                toolScope = "tool";
-            }
-            updateOptions();
-        },
-    );
-    card.appendChild(selectors);
 
     const resolveChoice = (label: string) => {
         const value = prompt.choices.indexOf(label);
         if (value < 0) return;
-        if (
-            label === "Allow all for request" &&
-            prompt.requestId !== undefined
-        ) {
-            permissionRequestApprovals.set(prompt.requestId, label);
-            while (permissionRequestApprovals.size > 100) {
-                const oldest = permissionRequestApprovals.keys().next().value;
-                if (oldest === undefined) break;
-                permissionRequestApprovals.delete(oldest);
-            }
-        } else if (
-            label === "Allow this tool for request" &&
-            prompt.requestId !== undefined &&
-            prompt.permissionIdentity !== undefined
-        ) {
-            permissionToolRequestApprovals.set(
-                `${prompt.requestId}\0${prompt.permissionIdentity}`,
-                label,
-            );
-            while (permissionToolRequestApprovals.size > 100) {
-                const oldest = permissionToolRequestApprovals
-                    .keys()
-                    .next().value;
-                if (oldest === undefined) break;
-                permissionToolRequestApprovals.delete(oldest);
+        // Broader-scope approval caching is Copilot-SDK-only. Reasoning
+        // permission asks intentionally do not remember approvals.
+        if (prompt.variant === "copilot") {
+            if (
+                label === "Allow all for request" &&
+                prompt.requestId !== undefined
+            ) {
+                permissionRequestApprovals.set(prompt.requestId, label);
+                while (permissionRequestApprovals.size > 100) {
+                    const oldest = permissionRequestApprovals
+                        .keys()
+                        .next().value;
+                    if (oldest === undefined) break;
+                    permissionRequestApprovals.delete(oldest);
+                }
+            } else if (
+                label === "Allow this tool for request" &&
+                prompt.requestId !== undefined &&
+                prompt.permissionIdentity !== undefined
+            ) {
+                permissionToolRequestApprovals.set(
+                    `${prompt.requestId}\0${prompt.permissionIdentity}`,
+                    label,
+                );
+                while (permissionToolRequestApprovals.size > 100) {
+                    const oldest = permissionToolRequestApprovals
+                        .keys()
+                        .next().value;
+                    if (oldest === undefined) break;
+                    permissionToolRequestApprovals.delete(oldest);
+                }
             }
         }
         resolvePermissionPrompts(prompt, label, value);
     };
-    allowButton.addEventListener("click", () => {
-        const label = choiceLabel(toolScope, approvalDuration);
-        if (label !== undefined) resolveChoice(label);
-    });
-    denyButton.addEventListener("click", () => {
-        const denyLabel = prompt.choices.find((label) => label === "Deny");
-        if (denyLabel !== undefined) resolveChoice(denyLabel);
-    });
-    actions.append(allowButton, denyButton);
+
+    const actions = document.createElement("div");
+    actions.className = "copilot-permission-actions";
+    if (prompt.variant === "reasoning") {
+        // Render the model-provided choices as simple centered buttons.
+        // Labels matching common negative phrasing get the secondary
+        // ("deny") styling; everything else gets the primary ("allow")
+        // styling. We intentionally do NOT surface Copilot's broader-scope
+        // approval labels here - the model's choices are the only choices.
+        const denyPattern = /^(deny|no|cancel|reject|dismiss|abort)$/i;
+        for (const label of prompt.choices) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = denyPattern.test(label.trim())
+                ? "deny"
+                : "allow";
+            button.textContent = label;
+            button.addEventListener("click", () => resolveChoice(label));
+            actions.appendChild(button);
+        }
+    } else {
+        const denyButton = document.createElement("button");
+        denyButton.type = "button";
+        denyButton.className = "deny";
+        denyButton.textContent = "Deny";
+        denyButton.addEventListener("click", () => {
+            const denyLabel = prompt.choices.find((label) => label === "Deny");
+            if (denyLabel !== undefined) resolveChoice(denyLabel);
+        });
+        const allowGroup = document.createElement("div");
+        allowGroup.className = "copilot-permission-allow-group";
+        const allowOnceButton = document.createElement("button");
+        allowOnceButton.type = "button";
+        allowOnceButton.className = "allow";
+        allowOnceButton.textContent = "Allow once";
+        allowOnceButton.addEventListener("click", () =>
+            resolveChoice("Allow once"),
+        );
+        allowGroup.appendChild(allowOnceButton);
+
+        const broaderChoices = prompt.choices.filter(
+            (label) => label !== "Allow once" && label !== "Deny",
+        );
+        if (broaderChoices.length > 0) {
+            const menuButton = document.createElement("button");
+            menuButton.type = "button";
+            menuButton.className = "allow-menu-button";
+            menuButton.textContent = "⌄";
+            menuButton.setAttribute("aria-label", "More approval options");
+            menuButton.setAttribute("aria-expanded", "false");
+            const menu = document.createElement("div");
+            menu.className = "copilot-permission-allow-menu";
+            menu.hidden = true;
+            const menuLabels: Record<string, string> = {
+                "Allow this tool for request": "This tool for current request",
+                "Allow all for request": "All tools for current request",
+                "Allow this tool for session": "This tool for this session",
+                "Allow all for session": "All tools for this session",
+            };
+            for (const label of broaderChoices) {
+                const option = document.createElement("button");
+                option.type = "button";
+                option.textContent = menuLabels[label] ?? label;
+                option.addEventListener("click", () => resolveChoice(label));
+                menu.appendChild(option);
+            }
+            menuButton.addEventListener("click", () => {
+                menu.hidden = !menu.hidden;
+                menuButton.setAttribute("aria-expanded", String(!menu.hidden));
+                if (!menu.hidden) {
+                    menu.querySelector<HTMLButtonElement>("button")?.focus();
+                }
+            });
+            const closeMenu = () => {
+                menu.hidden = true;
+                menuButton.setAttribute("aria-expanded", "false");
+            };
+            card.addEventListener("click", (event) => {
+                if (
+                    event.target instanceof Node &&
+                    !allowGroup.contains(event.target)
+                ) {
+                    closeMenu();
+                }
+            });
+            card.addEventListener("keydown", (event) => {
+                if (event.key === "Escape" && !menu.hidden) {
+                    closeMenu();
+                    menuButton.focus();
+                    event.stopPropagation();
+                }
+            });
+            allowGroup.addEventListener("focusout", () => {
+                queueMicrotask(() => {
+                    if (!allowGroup.contains(document.activeElement)) {
+                        closeMenu();
+                    }
+                });
+            });
+            allowGroup.append(menuButton, menu);
+        }
+        actions.append(denyButton, allowGroup);
+    }
     card.appendChild(actions);
-    updateOptions();
     permissionPromptLayer.appendChild(card);
     if (permissionReturnFocus === undefined) {
         permissionReturnFocus =
@@ -723,7 +738,8 @@ function handleRequestInteraction(
             if (interaction.type === "question") {
                 const value =
                     interaction.source === "copilotPermission" ||
-                    interaction.source.startsWith("copilotPermission:")
+                    interaction.source.startsWith("copilotPermission:") ||
+                    interaction.source === "reasoningPermission"
                         ? await showPermissionPrompt(interaction, ac.signal)
                         : await chatPanel.addChoicePrompt<number>(
                               interaction.message,

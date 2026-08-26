@@ -42,6 +42,11 @@ import {
     formatReasoningFormResponse,
     presentReasoningForm,
 } from "./askUserForm.js";
+import {
+    ASK_USER_KIND_DESCRIPTION,
+    ASK_USER_KIND_VALUES,
+    resolveAskUserSource,
+} from "./askUserSource.js";
 import { executeAction } from "../execute/actionHandlers.js";
 import {
     composeActionSchema,
@@ -964,6 +969,7 @@ function getClaudeOptions(
     const askUserSchema = {
         question: z.string(),
         choices: z.array(z.string()).min(2),
+        kind: z.enum(ASK_USER_KIND_VALUES).optional(),
     };
     const findInstallableAgentSchema = {};
     const findInstallableAgentTool: SdkMcpToolDefinition<
@@ -996,6 +1002,8 @@ function getClaudeOptions(
             'options in `choices` (for a yes/no question use ["Yes", "No"]). Returns',
             "the option the user picked. Prefer acting autonomously; do not ask when",
             "a reasonable safe default exists.",
+            "",
+            `\`kind\`: ${ASK_USER_KIND_DESCRIPTION}`,
         ].join("\n"),
         inputSchema: askUserSchema,
         handler: async (args) => {
@@ -1010,7 +1018,7 @@ function getClaudeOptions(
                 args.question,
                 choices,
                 undefined,
-                "reasoning",
+                resolveAskUserSource(args.kind),
             );
             const answer = choices[selected] ?? choices[0] ?? "";
             return {
