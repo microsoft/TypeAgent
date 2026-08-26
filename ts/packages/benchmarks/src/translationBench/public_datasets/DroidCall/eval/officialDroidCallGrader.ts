@@ -242,12 +242,21 @@ function scoreRow(
     callSoftTotal: number;
     callCount: number;
 } {
-    const responseByName = new Map(
-        row.response.map((response) => [response.name, response]),
-    );
+    const responsesByName = new Map<
+        string,
+        DroidCallOfficialRow["response"][number][]
+    >();
+    for (const response of row.response) {
+        const responses = responsesByName.get(response.name);
+        if (responses === undefined) {
+            responsesByName.set(response.name, [response]);
+        } else {
+            responses.push(response);
+        }
+    }
+    const responseIndexByName = new Map<string, number>();
     let correct = 0;
     let total = 0;
-    let failed = false;
     let callSoftTotal = 0;
     let callCount = 0;
     for (const answer of row.answers) {
@@ -255,14 +264,16 @@ function scoreRow(
         if (api === undefined) {
             throw new Error(`Unknown API '${answer.name}'`);
         }
+        const responses = responsesByName.get(answer.name) ?? [];
+        const responseIndex = responseIndexByName.get(answer.name) ?? 0;
+        responseIndexByName.set(answer.name, responseIndex + 1);
         const call = scoreCall(
             answer,
-            responseByName.get(answer.name),
+            responses[responseIndex],
             api,
             config,
             semanticScorer,
         );
-        failed ||= call.missing;
         correct += call.correct;
         total += call.total;
         callSoftTotal += call.missing
@@ -272,7 +283,7 @@ function scoreRow(
               : call.correct / call.total;
         callCount++;
     }
-    const score = failed ? 0 : total === 0 ? 1 : correct / total;
+    const score = total === 0 ? 1 : correct / total;
     return { score, correct, total, callSoftTotal, callCount };
 }
 
