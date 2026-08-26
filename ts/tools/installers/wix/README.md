@@ -107,14 +107,35 @@ pnpm run build:msi:local -- --skip-build --version 0.0.1-local
 
 The equivalent individual steps are below for troubleshooting.
 
-#### 1. Build the workspace
+#### 1. Verify dependencies and build the workspace
 
 ```powershell
 cd D:\repos\TypeAgent\ts
+pnpm install --prod=false --frozen-lockfile
 pnpm run build
 ```
 
-#### 2. Stage agent-server
+The install command ensures the workspace has development dependencies such as
+`vsce`. It also repairs dependency state left by an interrupted production
+deploy. Omit `pnpm run build` when compiled outputs are already current (the
+equivalent of `--skip-build`).
+
+#### 2. Package VS Code Chat and stage the Copilot plugin
+
+Package tools that require development dependencies before staging the
+agent-server:
+
+```powershell
+pnpm --filter vscode-chat run package
+
+node tools/scripts/stageCopilotPlugin.mjs `
+  --out "$env:TEMP\typeagent-msi-stage\copilot-plugin"
+```
+
+`stageCopilotPlugin.mjs` copies only the runtime files used by the installer and
+writes `bundle-manifest.json`; do not copy the entire plugin `dist` directory.
+
+#### 3. Stage agent-server
 
 The MSI uses `bundleAgentServer.mjs`, matching the published CI artifact. It
 bundles server entry points and profile agents to minimize files and installed
@@ -125,32 +146,29 @@ intended for MSI packaging.
 
 ```powershell
 # From D:\repos\TypeAgent\ts
-node tools/scripts/bundleAgentServer.mjs `
-  --out "$env:TEMP\typeagent-msi-stage\agent-server" `
-  --platform win32 --arch x64 `
-  --profile inbox `
-  --external-cli
+$pnpmState = "$env:TEMP\typeagent-msi-stage\pnpm-state"
+Remove-Item -Recurse -Force $pnpmState -ErrorAction SilentlyContinue
+
+try {
+  node tools/scripts/bundleAgentServer.mjs `
+    --out "$env:TEMP\typeagent-msi-stage\agent-server" `
+    --platform win32 --arch x64 `
+    --profile inbox `
+    --external-cli `
+    --pnpm-state-dir $pnpmState
+} finally {
+  pnpm install --prod=false --frozen-lockfile
+  Remove-Item -Recurse -Force $pnpmState -ErrorAction SilentlyContinue
+}
 ```
 
-#### 3. Stage copilot-plugin
-
-```powershell
-$plugin = "packages/copilot-plugin"
-$out    = "$env:TEMP\typeagent-msi-stage\copilot-plugin"
-New-Item -ItemType Directory -Force $out | Out-Null
-Copy-Item -Recurse "$plugin/dist"       "$out/dist"
-Copy-Item          "$plugin/hooks.json" "$out/hooks.json"
-Copy-Item          "$plugin/.mcp.json"  "$out/.mcp.json"
-Copy-Item          "$plugin/plugin.json" "$out/plugin.json"
-Copy-Item -Recurse "$plugin/agents"     "$out/agents"
-Copy-Item -Recurse "$plugin/skills"     "$out/skills"
-```
+The isolated pnpm state keeps the production deploy out of the workspace. The
+`finally` block restores the frozen development install even if bundling fails,
+matching the wrapper's cleanup behavior.
 
 #### 4. Run the WiX build with local staged artifacts
 
 ```powershell
-pnpm --filter vscode-chat run package
-
 node tools/scripts/build-msi.mjs `
   --skip-download `
   --agent-dir  "$env:TEMP\typeagent-msi-stage\agent-server" `
@@ -159,8 +177,13 @@ node tools/scripts/build-msi.mjs `
   --version 0.0.1-local `
   --plugin-version 0.0.1-local `
   --vscode-chat-version 0.0.1-local `
+  --skip-shell-feed-resolution `
   --output "$env:TEMP\typeagent-msi-stage\out"
 ```
+
+The local wrapper skips shell feed resolution so this path does not require an
+Azure CLI login. Remove `--skip-shell-feed-resolution` to resolve and bake the
+latest shell fallback package version, which requires feed access.
 
 **Output:**
 

@@ -50,11 +50,12 @@ function Write-PayloadCleanupDiagnostics([string]$target, [System.Exception]$exc
     Write-Log "ERROR: Unable to clear payload directory '$target'."
     Write-Log "ERROR: $($exception.GetType().FullName): $($exception.Message)"
 
+    $targetPrefix = $target + [System.IO.Path]::DirectorySeparatorChar
     $lockingProcesses = @{}
     foreach ($process in Get-Process -ErrorAction SilentlyContinue) {
         try {
             foreach ($module in $process.Modules) {
-                if ($module.FileName.StartsWith($target, [System.StringComparison]::OrdinalIgnoreCase)) {
+                if ($module.FileName.StartsWith($targetPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
                     $lockingProcesses[$process.Id] = @{
                         Name = $process.ProcessName
                         Module = $module.FileName
@@ -89,9 +90,10 @@ if ($Payload) {
     $payloads = @($payloads | Where-Object { $_.Name -eq $Payload })
 }
 
-$payloadDir = Join-Path $Root "payload"
-
 try {
+    $Root = [System.IO.Path]::GetFullPath($Root)
+    $payloadDir = Join-Path $Root "payload"
+
     if ($Uninstall) {
         foreach ($p in $payloads) {
             $target = Join-Path $Root $p.Name
