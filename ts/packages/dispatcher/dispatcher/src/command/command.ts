@@ -382,10 +382,14 @@ export async function processCommandNoLock(
     context: CommandHandlerContext,
     attachments?: string[],
 ) {
+    let errorSource = DispatcherName;
+    let mayHaveSideEffects = false;
     try {
         context.currentAbortSignal?.throwIfAborted();
         const result = await parseCommand(originalInput, context);
+        errorSource = result.appAgentName;
         context.currentAbortSignal?.throwIfAborted();
+        mayHaveSideEffects = true;
         return await executeCommand(
             result.command,
             result.params,
@@ -418,7 +422,7 @@ export async function processCommandNoLock(
                     kind: "error",
                 },
                 getRequestId(context),
-                DispatcherName,
+                errorSource,
                 undefined,
             ),
             "block",
@@ -427,7 +431,7 @@ export async function processCommandNoLock(
         ensureCommandResult(context).disposition = {
             status: "failed",
             path: "command",
-            mayHaveSideEffects: false,
+            mayHaveSideEffects,
         };
         logCommandException(context?.logger, {
             requestId: requestIdToString(getRequestId(context)),
