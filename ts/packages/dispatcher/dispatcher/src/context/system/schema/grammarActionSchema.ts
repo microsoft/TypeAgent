@@ -37,8 +37,17 @@ export type ClearRulesAction = {
     };
 };
 
+export type ScanGrammarCollisionsAction = {
+    actionName: "scanGrammarCollisions";
+    parameters?: {
+        // Optional path for writing the structured scan result as JSON.
+        jsonPath?: string;
+    };
+};
+
 export type GrammarAction =
     | ListRulesAction
     | ShowRuleAction
     | DeleteRuleAction
-    | ClearRulesAction;
+    | ClearRulesAction
+    | ScanGrammarCollisionsAction;

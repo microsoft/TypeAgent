@@ -29,7 +29,8 @@
     "build": "concurrently npm:tsc npm:asc npm:agc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
-    "test": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "test": "npm run test:local",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b src test"
   },
   "dependencies": {
@@ -40,6 +41,7 @@
     "play-sound": "^1.1.6"
   },
   "devDependencies": {
+    "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/debug": "^4.1.12",

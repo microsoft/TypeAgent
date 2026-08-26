@@ -7,6 +7,7 @@ import {
     ActionResult,
     ActionResultSuccess,
     ParsedCommandParams,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createTypeChat } from "@typeagent/agent-runtime";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
@@ -36,6 +37,7 @@ const debug = registerDebug("typeagent:greeting");
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeGreetingAgentContext,
+        executeAction: executeGreetingAction,
         ...getCommandInterface(handlers),
     };
 }
@@ -118,11 +120,18 @@ export interface GenericGreeting {
 `;
 
 /**
+ * Deterministic greeting used by `@greeting --mock`. Kept out of the action
+ * schema so the translator can't select it in place of a real greeting.
+ */
+export const MOCK_GREETING = "Hello.  How can I help you today?";
+
+/**
  * Implements the @greeting command.
  */
 export class GreetingCommandHandler implements CommandHandler {
     public readonly description =
         "Have the agent generate a personalized greeting.";
+    public readonly action = "personalizedGreetingAction";
     public readonly parameters = {
         flags: {
             mock: {
@@ -143,11 +152,11 @@ export class GreetingCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ): Promise<ActionResult | undefined> {
         if (params.flags.mock) {
-            context.actionIO.appendDisplay("Hello.  How can I help you today?");
-            // Mock path makes no LLM call — report all-zero usage so the UI
-            // can distinguish "no tokens used" from "not reported".
+            const result = createActionResult(
+                MOCK_GREETING,
+            ) as ActionResultSuccess;
             return {
-                entities: [],
+                ...result,
                 tokenUsage: {
                     prompt_tokens: 0,
                     completion_tokens: 0,
@@ -182,31 +191,14 @@ export class GreetingCommandHandler implements CommandHandler {
 
         if (response.success) {
             context.actionIO.appendDiagnosticData(response.data);
-
-            const action: GreetingAction = response.data as GreetingAction;
-            let result: ActionResultSuccess | undefined = undefined;
-            switch (action.actionName) {
-                case "personalizedGreetingAction":
-                    result = (await handlePersonalizedGreetingAction(
-                        action as PersonalizedGreetingAction,
-                        context,
-                    )) as ActionResultSuccess;
-
-                    context.actionIO.appendDisplay(
-                        result.displayContent,
-                        "block",
-                    );
-                    break;
-
-                // case "contextualGreetingAction":
-
-                //     result = await handleContextualGreetingAction(
-                //         action as ContextualGreetingAction,
-                //     ) as ActionResultSuccess;
-
-                //     displayResult(result.literalText!, context);
-                //     break;
-            }
+            const result = (await executeGreetingAction(
+                {
+                    ...response.data,
+                    schemaName: "greeting",
+                },
+                context,
+            )) as ActionResultSuccess;
+            return { ...result, tokenUsage };
         } else {
             displayError("Unable to generate greeting.", context);
         }
@@ -352,10 +344,14 @@ async function handlePersonalizedGreetingAction(
         //     }
 
         // } else if (index == 0) {
-        result = createActionResult(
-            greetingAction.parameters.possibleGreetings[randomInt(0, count)]
-                .generatedGreeting,
-        );
+        // randomInt throws when max === min, so an empty list keeps the "Hi!"
+        // fallback above.
+        if (count > 0) {
+            result = createActionResult(
+                greetingAction.parameters.possibleGreetings[randomInt(0, count)]
+                    .generatedGreeting,
+            );
+        }
         // } else {
         //     result = createActionResult(
         //         greetingAction.parameters.possibleGreetings[randomInt(0, count)]
@@ -364,6 +360,16 @@ async function handlePersonalizedGreetingAction(
         // }
     }
     return result;
+}
+
+async function executeGreetingAction(
+    action: TypeAgentAction<GreetingAction>,
+    context: ActionContext<GreetingAgentContext>,
+): Promise<ActionResult> {
+    switch (action.actionName) {
+        case "personalizedGreetingAction":
+            return handlePersonalizedGreetingAction(action, context);
+    }
 }
 
 // function handleContextualGreetingAction(

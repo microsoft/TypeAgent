@@ -16,6 +16,10 @@ import {
 export class EnvCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Echos environment variables to the user interface.";
+    public readonly action = {
+        schema: "system.diagnostics",
+        actionName: "listEnvironmentVariables",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         const table: string[][] = [["Variable Name", "Value"]];
 
@@ -45,6 +49,10 @@ export class EnvCommandHandler implements CommandHandlerNoParams {
 export class EnvVarCommandHandler implements CommandHandler {
     public readonly description: string =
         "Echos the value of a named environment variable to the user interface";
+    public readonly action = {
+        schema: "system.diagnostics",
+        actionName: "getEnvironmentVariable",
+    };
     public readonly parameters = {
         args: {
             name: {
@@ -67,13 +75,15 @@ export class EnvVarCommandHandler implements CommandHandler {
     }
 }
 
+export const envCommandHandlers: CommandHandlerTable = {
+    description: "Environment variable commands",
+    defaultSubCommand: "all",
+    commands: {
+        all: new EnvCommandHandler(),
+        get: new EnvVarCommandHandler(),
+    },
+};
+
 export function getEnvCommandHandlers(): CommandHandlerTable {
-    return {
-        description: "Environment variable commands",
-        defaultSubCommand: "all",
-        commands: {
-            all: new EnvCommandHandler(),
-            get: new EnvVarCommandHandler(),
-        },
-    };
+    return envCommandHandlers;
 }

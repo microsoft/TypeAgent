@@ -3,6 +3,7 @@
 
 import {
     IEmailProvider,
+    EmailUser,
     EmailMessage,
     EmailProviderType,
     EmailSearchQuery,
@@ -118,6 +119,7 @@ async function resolveRecipients(
 
 class EmailLoginCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Log into email service";
+    public readonly action = "emailLogin";
     public async run(context: ActionContext<EmailActionContext>) {
         const provider = context.sessionContext.agentContext.emailProvider;
         const providerType = context.sessionContext.agentContext.providerType;
@@ -131,16 +133,7 @@ class EmailLoginCommandHandler implements CommandHandlerNoParams {
             const name = user.displayName || "Unknown";
             const email = user.email || "Unknown";
             displayWarn(`Already logged in as ${name}<${email}>`, context);
-            // Re-emit the signed-in marker so the avatar (name + photo)
-            // resyncs even when the user was already authenticated — e.g.
-            // restored silently on launch before the photo had been fetched.
-            const photoAttr = user.photoUrl
-                ? ` data-photo="${escapeHtml(user.photoUrl)}"`
-                : "";
-            context.actionIO.appendDisplay({
-                type: "html",
-                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
-            });
+            await applyEmailLoginState(context, user, false);
             return;
         }
 
@@ -168,28 +161,7 @@ class EmailLoginCommandHandler implements CommandHandlerNoParams {
                 `Successfully logged in as ${name} <${email}>`,
                 context,
             );
-            // Hidden marker the chat-ui / shell scan for after each agent
-            // message. Lifts the signed-in identity into UI state so the
-            // user-letter avatar shows the real initial and stops triggering
-            // login on click. data-photo carries the base64 profile photo
-            // (when the provider has one) so the avatar can render the image.
-            const photoAttr = user.photoUrl
-                ? ` data-photo="${escapeHtml(user.photoUrl)}"`
-                : "";
-            context.actionIO.appendDisplay({
-                type: "html",
-                content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
-            });
-
-            // Kick off async index build/sync after successful login
-            const agentCtx = context.sessionContext.agentContext;
-            if (!agentCtx.kpIndex.loaded) {
-                // First time: build initial index in background
-                startBackgroundInitialIndex(agentCtx);
-            } else {
-                // Index exists: forward sync in background
-                startBackgroundSync(agentCtx);
-            }
+            await applyEmailLoginState(context, user, true);
         } else {
             displayWarn(
                 "Login failed. If using Google, you can also try '@email google-auth <code>' with a manual authorization code.",
@@ -201,6 +173,7 @@ class EmailLoginCommandHandler implements CommandHandlerNoParams {
 
 class EmailLogoutCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Log out of email service";
+    public readonly action = "emailLogout";
     public async run(context: ActionContext<EmailActionContext>) {
         const provider = context.sessionContext.agentContext.emailProvider;
         if (provider === undefined) {
@@ -219,12 +192,14 @@ class EmailLogoutCommandHandler implements CommandHandlerNoParams {
             type: "html",
             content: `<span class="typeagent-user-signed-out" hidden></span>`,
         });
+        await context.sessionContext.notifyReadinessChanged();
     }
 }
 
 class GoogleAuthCommandHandler implements CommandHandler {
     public readonly description =
         "Complete Google Gmail OAuth flow with authorization code";
+    public readonly action = "emailGoogleAuth";
     public readonly parameters = {
         args: {
             code: {
@@ -275,13 +250,7 @@ class GoogleAuthCommandHandler implements CommandHandler {
                 context,
             );
 
-            // Kick off async index build/sync after successful auth
-            const agentCtx = context.sessionContext.agentContext;
-            if (!agentCtx.kpIndex.loaded) {
-                startBackgroundInitialIndex(agentCtx);
-            } else {
-                startBackgroundSync(agentCtx);
-            }
+            await applyEmailLoginState(context, user, true);
         } else {
             displayWarn(
                 "Failed to complete authorization. Please try '@email login' again to get a new code.",
@@ -294,41 +263,25 @@ class GoogleAuthCommandHandler implements CommandHandler {
 class EmailIndexCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Build keyword index from inbox emails for fast search";
+    public readonly action = "indexInbox";
     public async run(context: ActionContext<EmailActionContext>) {
-        const provider = context.sessionContext.agentContext.emailProvider;
-        if (provider === undefined) {
-            throw new Error("Email provider not initialized");
-        }
-        if (!provider.isAuthenticated()) {
-            displayWarn("Please log in first with '@email login'", context);
-            return;
-        }
-
-        const agentCtx = context.sessionContext.agentContext;
-        if (agentCtx.indexingInProgress) {
-            displayWarn(
-                "Index build already in progress. Progress will appear as notifications.",
-                context,
-            );
-            return;
-        }
-
-        displayStatus(
-            "Starting email keyword index build in background...",
-            context,
-        );
-        startBackgroundInitialIndex(agentCtx);
+        runEmailIndex(context);
     }
 }
+
+const emailLoginHandler = new EmailLoginCommandHandler();
+const emailLogoutHandler = new EmailLogoutCommandHandler();
+const googleAuthHandler = new GoogleAuthCommandHandler();
+const emailIndexHandler = new EmailIndexCommandHandler();
 
 const handlers: CommandHandlerTable = {
     description: "Email commands",
     defaultSubCommand: "login",
     commands: {
-        login: new EmailLoginCommandHandler(),
-        logout: new EmailLogoutCommandHandler(),
-        "google-auth": new GoogleAuthCommandHandler(),
-        index: new EmailIndexCommandHandler(),
+        login: emailLoginHandler,
+        logout: emailLogoutHandler,
+        "google-auth": googleAuthHandler,
+        index: emailIndexHandler,
     },
 };
 
@@ -490,8 +443,9 @@ export async function runEmailLogin(
             );
         }
         const user = await provider.getUser();
+        await applyEmailLoginState(actionContext, user, true);
         return createActionResultFromTextDisplay(
-            `[${emailTs()}] Signed in as ${user.displayName || user.email || "Unknown"}. Re-run your email command — readiness was re-checked automatically.`,
+            `[${emailTs()}] Signed in as ${user.displayName || user.email || "Unknown"}. Re-run your email command - readiness was re-checked automatically.`,
         );
     } catch (e: any) {
         return createActionResultFromError(
@@ -544,6 +498,24 @@ async function executeEmailAction(
     action: TypeAgentAction<EmailAction>,
     context: ActionContext<EmailActionContext>,
 ) {
+    switch (action.actionName) {
+        case "emailLogin":
+            await emailLoginHandler.run(context);
+            return undefined;
+        case "emailLogout":
+            await emailLogoutHandler.run(context);
+            return undefined;
+        case "emailGoogleAuth":
+            await googleAuthHandler.run(context, {
+                args: { code: action.parameters.code },
+                flags: undefined,
+            });
+            return undefined;
+        case "indexInbox":
+            runEmailIndex(context);
+            return undefined;
+    }
+
     const { emailProvider } = context.sessionContext.agentContext;
     if (emailProvider === undefined) {
         throw new Error("Email provider not initialized");
@@ -568,6 +540,37 @@ async function executeEmailAction(
         actionResult.tokenUsage = tokenUsage;
         return actionResult;
     }
+}
+
+export function runEmailIndex(
+    context: ActionContext<EmailActionContext>,
+    startIndex: (
+        context: EmailActionContext,
+    ) => void = startBackgroundInitialIndex,
+): void {
+    const provider = context.sessionContext.agentContext.emailProvider;
+    if (provider === undefined) {
+        throw new Error("Email provider not initialized");
+    }
+    if (!provider.isAuthenticated()) {
+        displayWarn("Please log in first with '@email login'", context);
+        return;
+    }
+
+    const agentContext = context.sessionContext.agentContext;
+    if (agentContext.indexingInProgress) {
+        displayWarn(
+            "Index build already in progress. Progress will appear as notifications.",
+            context,
+        );
+        return;
+    }
+
+    displayStatus(
+        "Starting email keyword index build in background...",
+        context,
+    );
+    startIndex(agentContext);
 }
 
 async function handleEmailAction(
@@ -830,6 +833,31 @@ function escapeHtml(text: string): string {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+}
+
+async function applyEmailLoginState(
+    context: ActionContext<EmailActionContext>,
+    user: EmailUser,
+    startIndex: boolean,
+): Promise<void> {
+    const name = user.displayName || "Unknown";
+    const email = user.email || "Unknown";
+    const photoAttr = user.photoUrl
+        ? ` data-photo="${escapeHtml(user.photoUrl)}"`
+        : "";
+    context.actionIO.appendDisplay({
+        type: "html",
+        content: `<span class="typeagent-user-signed-in" data-name="${escapeHtml(name)}" data-email="${escapeHtml(email)}"${photoAttr} hidden></span>`,
+    });
+    if (startIndex) {
+        const agentContext = context.sessionContext.agentContext;
+        if (!agentContext.kpIndex.loaded) {
+            startBackgroundInitialIndex(agentContext);
+        } else {
+            startBackgroundSync(agentContext);
+        }
+    }
+    await context.sessionContext.notifyReadinessChanged();
 }
 
 // Attempt a silent, non-interactive sign-in using cached MS Graph

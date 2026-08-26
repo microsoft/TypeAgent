@@ -32,6 +32,267 @@
     },
     {
       "key": "packages/agents/browserExtension/src/extension/views/knowledgeUtilities.ts > packages/agents/browserExtension/src/extension/views/services/cachedAnalyticsService.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/actionContext.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/command/commandReference.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/command/commandReference.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/agentProvider/agentProviderUtils.ts > packages/dispatcher/dispatcher/src/translation/actionSchemaFileCache.ts > packages/dispatcher/dispatcher/src/execute/pendingActions.ts > packages/dispatcher/dispatcher/src/context/appAgentManager.ts > packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/diagnosticsActionHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/explainCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/execute/pendingActions.ts > packages/dispatcher/dispatcher/src/context/appAgentManager.ts > packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts > packages/dispatcher/dispatcher/src/translation/matchCollision.ts > packages/dispatcher/dispatcher/src/context/collisionResolution.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts > packages/dispatcher/dispatcher/src/translation/matchCollision.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts > packages/dispatcher/dispatcher/src/translation/translateRequest.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts > packages/dispatcher/dispatcher/src/translation/translateRequest.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts > packages/dispatcher/dispatcher/src/translation/translateRequest.ts > packages/dispatcher/dispatcher/src/translation/interpretRequest.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts > packages/dispatcher/dispatcher/src/translation/translateRequest.ts > packages/dispatcher/dispatcher/src/translation/interpretRequest.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts > packages/dispatcher/dispatcher/src/translation/translateRequest.ts > packages/dispatcher/dispatcher/src/translation/interpretRequest.ts > packages/dispatcher/dispatcher/src/translation/confirmTranslation.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/translation/actionSchemaFileCache.ts > packages/dispatcher/dispatcher/src/execute/pendingActions.ts > packages/dispatcher/dispatcher/src/context/appAgentManager.ts > packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts > packages/dispatcher/dispatcher/src/translation/translateRequest.ts > packages/dispatcher/dispatcher/src/translation/interpretRequest.ts > packages/dispatcher/dispatcher/src/translation/confirmTranslation.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts > packages/dispatcher/dispatcher/src/translation/translateRequest.ts > packages/dispatcher/dispatcher/src/translation/interpretRequest.ts > packages/dispatcher/dispatcher/src/translation/confirmTranslation.ts > packages/dispatcher/dispatcher/src/translation/actionTemplate.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts > packages/dispatcher/dispatcher/src/translation/translateRequest.ts > packages/dispatcher/dispatcher/src/translation/interpretRequest.ts > packages/dispatcher/dispatcher/src/translation/confirmTranslation.ts > packages/dispatcher/dispatcher/src/translation/actionTemplate.ts > packages/dispatcher/dispatcher/src/translation/requestCompletion.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/execute/pendingActions.ts > packages/dispatcher/dispatcher/src/context/appAgentManager.ts > packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts > packages/dispatcher/dispatcher/src/translation/translateRequest.ts > packages/dispatcher/dispatcher/src/translation/interpretRequest.ts > packages/dispatcher/dispatcher/src/translation/confirmTranslation.ts > packages/dispatcher/dispatcher/src/translation/actionTemplate.ts > packages/dispatcher/dispatcher/src/translation/requestCompletion.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/translation/actionSchemaFileCache.ts > packages/dispatcher/dispatcher/src/execute/pendingActions.ts > packages/dispatcher/dispatcher/src/context/appAgentManager.ts > packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/matchCommandHandler.ts > packages/dispatcher/dispatcher/src/translation/matchRequest.ts > packages/dispatcher/dispatcher/src/translation/translateRequest.ts > packages/dispatcher/dispatcher/src/translation/interpretRequest.ts > packages/dispatcher/dispatcher/src/translation/confirmTranslation.ts > packages/dispatcher/dispatcher/src/translation/actionTemplate.ts > packages/dispatcher/dispatcher/src/translation/requestCompletion.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/reasonCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/reasonCommandHandler.ts > packages/dispatcher/dispatcher/src/reasoning/claude.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/reasonCommandHandler.ts > packages/dispatcher/dispatcher/src/reasoning/claude.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/reasonCommandHandler.ts > packages/dispatcher/dispatcher/src/reasoning/copilot.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/reasonCommandHandler.ts > packages/dispatcher/dispatcher/src/reasoning/copilot.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/context/dispatcher/handlers/translateCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/execute/pendingActions.ts > packages/dispatcher/dispatcher/src/context/appAgentManager.ts > packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts > packages/dispatcher/dispatcher/src/search/search.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/action/conversationActionHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/actionCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/actionCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/translation/actionSchemaFileCache.ts > packages/dispatcher/dispatcher/src/execute/pendingActions.ts > packages/dispatcher/dispatcher/src/context/appAgentManager.ts > packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/actionCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionCommandHandlers.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionCorpusHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionCommandHandlers.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionCorpusHandlers.ts > packages/dispatcher/dispatcher/src/translation/translationProbeRunner.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionCommandHandlers.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionNeighborhoodHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionCommandHandlers.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionNeighborhoodHandlers.ts > packages/dispatcher/dispatcher/src/neighborhoods/optimize/util.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionCommandHandlers.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionOptimizeHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/translation/actionSchemaFileCache.ts > packages/dispatcher/dispatcher/src/execute/pendingActions.ts > packages/dispatcher/dispatcher/src/context/appAgentManager.ts > packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionCommandHandlers.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionOptimizeHandlers.ts > packages/dispatcher/dispatcher/src/neighborhoods/optimize/runPipeline.ts > packages/dispatcher/dispatcher/src/neighborhoods/optimize/sandboxProvider.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionCommandHandlers.ts > packages/dispatcher/dispatcher/src/context/system/handlers/collisionPreferenceHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/configCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/appAgentManager.ts > packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/configCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/configCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/configCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/constructionCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/constructionCommandHandlers.ts > packages/dispatcher/dispatcher/src/utils/commandHandlerUtils.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/conversationCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/copilotCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/copilotCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/debugCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/displayCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/envCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/feedbackCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/grammarCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/helpCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/helpCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/historyCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/historyCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/indexCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/notifyCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/openCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/portsCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/randomCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/randomCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/runScriptCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/runScriptCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/sessionCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/settingsCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/settingsCommandHandlers.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/tokenCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/traceCommandHandler.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/dispatcher.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/dispatcher.ts > packages/dispatcher/dispatcher/src/command/completion.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/dispatcher.ts > packages/dispatcher/dispatcher/src/command/completion.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/dispatcher.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/dispatcher.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/translation/actionSchemaFileCache.ts > packages/dispatcher/dispatcher/src/execute/pendingActions.ts > packages/dispatcher/dispatcher/src/context/appAgentManager.ts > packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/execute/activityContext.ts > packages/dispatcher/dispatcher/src/internal.ts"
     }
   ]
 }

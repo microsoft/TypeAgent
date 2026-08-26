@@ -3615,6 +3615,10 @@ function renderProbeSummaryText(probeFile: ProbeFile, label: string): string[] {
 class CollisionCorpusGenerateCommandHandler implements CommandHandler {
     public readonly description =
         "Generate an LLM-authored phrase corpus for every action in this dispatcher's loaded schemas (slow: ~12 min for the full set)";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "generateCollisionCorpus",
+    };
     public readonly parameters = {
         flags: {
             schemas: {
@@ -3786,6 +3790,10 @@ class CollisionCorpusGenerateCommandHandler implements CommandHandler {
 class CollisionCorpusProbeCommandHandler implements CommandHandler {
     public readonly description =
         "Replay a phrase corpus through the embedding ranker and classify each phrase as CLEAN / TIGHT / MISROUTE";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "probeCollisionCorpus",
+    };
     public readonly parameters = {
         flags: {
             in: {
@@ -3919,6 +3927,10 @@ class CollisionCorpusProbeCommandHandler implements CommandHandler {
 class CollisionCorpusTranslateCommandHandler implements CommandHandler {
     public readonly description =
         "Replay a phrase corpus through the LLM translator (cache/grammar/exec/fuzzy off) and classify each phrase as CLEAN / MISROUTE / CLARIFY / INVALID / ERROR. Distinct from 'corpus probe' — that one runs the embedding ranker; this runs the actual translator.";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "translateCollisionCorpus",
+    };
     public readonly parameters = {
         flags: {
             in: {
@@ -4174,6 +4186,10 @@ class CollisionCorpusTranslateCommandHandler implements CommandHandler {
 // =============================================================================
 
 class CollisionCorpusReanalyzeCommandHandler implements CommandHandler {
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "reanalyzeCollisionCorpus",
+    };
     public readonly description =
         "Re-classify saved probe results with prefix-aware action matching (recovers misroutes that were just naming differences)";
     public readonly parameters = {
@@ -4374,6 +4390,10 @@ async function runSimilarityScan(
 }
 
 class CollisionCorpusVisualizeCommandHandler implements CommandHandler {
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "visualizeCollisionCorpus",
+    };
     public readonly description =
         "Build an interactive HTML visualization of misroute hotspots from reclassified probe results, overlaid with a cross-schema similarity scan";
     public readonly parameters = {
@@ -4610,6 +4630,10 @@ type RunStep = (typeof RUN_STEPS)[number];
 class CollisionCorpusRunCommandHandler implements CommandHandler {
     public readonly description =
         "Run the full corpus pipeline (generate → probe → reanalyze → visualize) with consistent file naming";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "runCollisionCorpusPipeline",
+    };
     public readonly parameters = {
         flags: {
             from: {
@@ -5058,6 +5082,10 @@ function renderRecoveryText(analysis: RecoveryAnalysis): string[] {
 }
 
 class CollisionCorpusRecoveryCommandHandler implements CommandHandler {
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "analyzeCollisionRecovery",
+    };
     public readonly description =
         "Decompose MISROUTE results by where the correct target ranks among the top-K candidates (which fix lever applies?)";
     public readonly parameters = {
@@ -5125,6 +5153,10 @@ class CollisionCorpusRecoveryCommandHandler implements CommandHandler {
 const DEFAULT_FILES_RECOVERY_HTML = "recovery-viz.html";
 
 class CollisionCorpusVisualizeRecoveryCommandHandler implements CommandHandler {
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "visualizeCollisionRecovery",
+    };
     public readonly description =
         "Build an interactive HTML visualization of recovery-rank analysis (which fix lever applies, per action and per agent)";
     public readonly parameters = {

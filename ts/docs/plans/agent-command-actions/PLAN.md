@@ -1,33 +1,57 @@
-# Agent `@`-commands → natural-language actions — Plan
+# Natural-language actions for every TypeAgent `@` command
 
-Status: Ready to execute. This document is the single source of truth for
-giving agent-host `@`-commands equivalent natural-language **actions**.
-Progress tracking lives in [STATUS.md](./STATUS.md).
+Status: In progress. This document is the source of truth for giving every
+bundled executable TypeAgent `@` command a behaviorally equivalent
+natural-language action. Progress lives in [STATUS.md](./STATUS.md).
 
-Scope note: this effort covers **agent-host commands only** (browser,
-localPlayer, player, calendar, email, powershell, osNotifications, selfhelp).
-The `@system …` commands (config/session/const/…) are a deliberately separate,
-later effort.
+## Goal and completion contract
 
-## Motivation & reframing
+The coverage universe is every bundled command descriptor returned by the
+default providers: bare commands, explicit leaf descriptors, inline defaults,
+and string-referenced default aliases. Tables that only group children are
+namespaces and do not require actions.
 
-The Action Browser catalog reports 301 leaf commands "without an action." That
-metric measures whether a command handler declares a `readonly action` **link**
-— it does **not** mean natural-language invocation is impossible. When you
-reconcile the 64 non-system commands against the agents' existing action
-schemas, the picture is very different:
+No built-in command category is excluded. Agent and system commands, auth and
+OAuth callbacks, configuration, diagnostics, developer tools, lifecycle
+operations, browser controls, and platform-specific commands all remain in
+scope. Environment-specific commands may return the same unavailable result as
+their command path on an incompatible host.
 
-| Bucket                                                                                        | Count | Where                                                                                   |
-| --------------------------------------------------------------------------------------------- | ----: | --------------------------------------------------------------------------------------- |
-| Already have a matching action (NL works when the agent is enabled; only the link is missing) |   ~30 | localPlayer 14, browser 7 (+`ask` partial), powershell 4, osNotifications 2, selfhelp 1 |
-| Not a sensible NL action (auth / config / diagnostics)                                        |   ~32 | browser 16, player 3, calendar 3, email 3, dispatcher 6, powershell 1                   |
-| Genuinely missing an action (write a new one)                                                 |    ~1 | email `index`                                                                           |
+A command is covered only when:
 
-**Approach (confirmed):** declare the `action` link where an action already
-exists; author brand-new actions only for genuine gaps. Pilot on `localPlayer`,
-then roll out.
+1. Its action is exported by a registered schema and resolves unambiguously.
+2. Representative natural-language requests translate to that action with the
+   correct parameters and defaults.
+3. Action and command preserve the same side effects, errors, readiness gates,
+   confirmations, and result behavior.
+4. Both paths invoke the same command pipeline or typed helper.
+5. Translation and command/action parity are tested.
 
-## Mechanism & reference
+**Only condition 1 is machine-enforced.** `commandActionCoverage.spec.ts` checks
+that every executable endpoint declares an action name resolving to exactly one
+registered action, and that `ConfigCommandPath` stays in sync with the live
+config tree. Conditions 2, 3, and 5 are per-host work verified by hand and by
+whatever unit tests each host happens to have; no gate can currently detect a
+command and its action drifting apart. Treat a green gate as "every endpoint is
+linked", not "every endpoint is equivalent", and check STATUS.md for the hosts
+where parity is known to be partial.
+
+`CommandDescriptor.action` is metadata only. Adding a link never creates
+natural-language support and does not count as completion by itself.
+
+## Verified baseline
+
+Phase 0 replaced the old leaf estimate with executable-endpoint enumeration.
+The baseline on 2026-07-31 is:
+
+- 387 executable command endpoints
+- 13 endpoints with valid action links (including inherited defaults)
+- 374 endpoints with no action link
+- 0 invalid declared links
+- `mcpfilesystem` explicitly omitted because its action schema is generated at
+  runtime and has no static payload without server arguments
+
+## Mechanism and reference
 
 - SDK field: `packages/agentSdk/src/command.ts` (~L45) —
   `CommandDescriptor.action?: string | { schema: string; actionName: string }`.
@@ -45,39 +69,30 @@ history` commands are the only 12 that already declare the link):
     lives in exactly one place and the two paths cannot drift.
   - Tests: `.../test/conversationGrammar.spec.ts` and
     `.../test/conversationActionHandler.spec.ts`.
-- Catalog verifier (rebuild once, then regenerate to check counts each phase):
-  `node tools/actionBrowser/dist/cli.js --out tmp/action-browser.html --json`.
-  Baseline at planning time: 33 agents / 558 actions / 415 command entries;
-  313 leaf commands, 12 with an action link, 301 without.
+- Coverage verifier:
+  `node tools/actionBrowser/dist/cli.js --check`. During migration,
+  `--allow-missing` keeps missing actions visible without failing; invalid,
+  ambiguous, or dangling declarations always fail.
+- Object links use the fully qualified `ActionConfig.schemaName`, for example
+  `{ schema: "browser.actionDiscovery", actionName: "inferActions" }`. A bare
+  action name is valid only when unique across the host's registered schemas.
 
-## Link map — existing actions (add `readonly action`, no new logic)
+## Known corrections from review
 
-Add the link field to each command handler and rebuild. For actions that live in
-a **sub-schema** use the object form `{ schema, actionName }` (sub-schema names
-come from the manifest `subActionManifests`); a bare `actionName` is fine when
-unique within the agent.
+- localPlayer `play` was broader than `playFile`; `shuffle` and `mute` toggled
+  state while the old actions were explicit setters. The first implementation
+  slice resolved these with `play`, `toggleShuffle`, and `toggleMute` actions.
+- Browser `extractKnowledge` has no registered `extractPageKnowledge` action;
+  `ask` points at an inactive `searchWebMemories` type; and `actions record` is
+  not equivalent to `createWebFlowFromRecording`.
+- Calendar and email login actions are intercepted by readiness preflight when
+  signed out. Login must intentionally use the existing setup flow, and logout
+  must call `notifyReadinessChanged()`.
+- Action Browser previously discarded schema identity and counted any nonempty
+  declaration as linked. Phase 0 now resolves exact registered actions before
+  counting or rendering links.
 
-- **localPlayer** — `packages/agents/playerLocal/src/agent/localPlayerCommands.ts`:
-  play→`playFile`, pause→`pause`, resume→`resume`, stop→`stop`, next→`next`,
-  prev→`previous`, shuffle→`shuffle`, status→`status`, list→`listFiles`,
-  queue→`showQueue`, clear→`clearQueue`, mute→`mute`, volume→`setVolume`,
-  setfolder→`setMusicFolder`, folder→`showMusicFolder`.
-- **powershell** — `packages/agents/powershell/src/actionHandler.mts` (command
-  handlers ~L950–1150): list→`listPowerShellFlows`, run→`executePowerShellFlow`,
-  delete→`deletePowerShellFlow`, import→`importPowerShellFlow`.
-- **osNotifications** — `packages/agents/osNotifications/src/osNotificationsActionHandler.ts`:
-  sync→`syncOsNotifications`, test→`testOsNotification`.
-- **selfhelp** — `packages/agents/selfhelp/src/selfHelpActionHandler.ts` (~L175):
-  ask→`answerTypeAgentQuestion`.
-- **browser** — `packages/agents/browser/src/agent/browserActionHandler.mts`
-  (CommandHandlerTable ~L3468): open→`openWebPage`, close→`closeWebPage`,
-  extractKnowledge→`extractPageKnowledge` (knowledge sub-schema),
-  learn→`startGoalDrivenTask` (webFlows), actions match→`detectPageActions`
-  (actionDiscovery), actions infer→`inferActions`, actions record→`createWebFlowFromRecording`.
-  `ask`→`searchWebMemories` is a **partial** match — verify the grammar covers
-  "ask about this page," otherwise add a small page-scoped answer action.
-
-## New actions — genuine gaps
+## Action implementation rules
 
 Every new action type MUST follow the onboarding agent's **schema-authoring
 guidelines**: the shared `schemaGuidelines` constant in
@@ -105,62 +120,57 @@ to the **same** service/helper the command calls (no divergence); (4) add the
 `readonly action` link on the command; (5) add grammar + action-handler tests
 mirroring the conversation specs.
 
-Gaps to author:
-
-- **email `index`** — `packages/agents/email` (`emailActionsSchema.ts`,
-  `emailSchema.agr`, `emailActionHandler.ts`): new `indexInbox` action reusing the
-  `@email index` command logic. Phrasings like "index my inbox."
-- **auth login/logout** (agent-prefixed verb naming):
-  `calendarLogin`/`calendarLogout` (`packages/agents/calendar` — `calendarActionsSchemaV3.ts`,
-  grammar, `calendarActionHandlerV3.ts`); `emailLogin`/`emailLogout`
-  (`packages/agents/email`); `spotifyLogin`/`spotifyLogout`
-  (`packages/agents/player` — `playerSchema.ts`, `playerSchema.agr`,
-  `playerHandlers.ts`; the commands are `@player spotify login|logout`).
-- **browser config & search-provider management** (~13 actions, last & most
-  collision-prone): external on/off, resolver history/keyword/list, lookup
-  mode/status, search add/import/list/remove/set/show. Put these in a
-  config-oriented **sub-schema** and favor schema-based translation with narrow
-  phrasings so they don't collide with the main browser `search` action.
+Add metadata only after schema registration, execution, translation, and parity
+tests exist. Agent commands and actions share a typed helper or service. System
+actions delegate to `processCommandNoLock`, following conversation/history,
+unless command-string serialization cannot preserve a value; in that case both
+paths use a shared typed helper.
 
 ## Phases
 
-1. **Pilot — localPlayer (linking only).** Add the 15 links. Build; regenerate
-   the catalog; confirm "without action" drops by 15. Enable the agent
-   (`@config localPlayer on`) and smoke-test an NL phrasing. This proves the
-   rebuild + verify loop.
-2. **Link the remaining matches.** powershell (4), osNotifications (2), selfhelp
-   (1), browser page-ops (7). Verify the `ask` phrasing.
-3. **New auth actions.** calendar + email + Spotify login/logout.
-4. **New action.** email `index`.
-5. **New browser config / search-provider actions** (collision-aware; do last).
+1. **Coverage infrastructure.** Enumerate executable defaults, resolve links by
+   qualified schema, fail strict collection errors, report runtime-only
+   omissions, add missing/invalid counters, and generate the endpoint ledger.
+2. **Exact existing equivalents.** Audit parameters, defaults, toggles, side
+   effects, and readiness before linking PowerShell, OS notifications,
+   self-help, exact localPlayer operations, and exact browser operations.
+3. **Complete agent-host actions.** Add the known localPlayer and browser gaps,
+   auth/OAuth actions, browser configuration, and dispatcher diagnostics.
+   PowerShell `show` and email indexing were completed in the second
+   implementation slice. Every agent-host command endpoint is now linked to an
+   action; parity beyond linkage is per-host and tracked in STATUS.md.
+4. **Complete existing system families.** Finish `system.config`,
+   `system.conversation`, `system.help`, `system.grammar`, `system.history`,
+   `system.notify`, and `system.settings`.
+5. **Add remaining system families.** Register focused schemas for session,
+   memory, index, Copilot, collision, construction, feedback, demo, help,
+   diagnostics, and lifecycle commands.
+6. **Closure.** Make strict coverage a permanent regression test and finish
+   only when missing, ambiguous, dangling, inactive, and unverified counts are
+   all zero.
 
 ## Verification
 
-- Build per agent: `pnpm run build <agent>` (fluid-build from `ts/`) or
-  `pnpm --filter <pkg> build`.
-- Regenerate the catalog after each phase and diff the without-action count.
-- Add a grammar spec + an action-handler spec per new action (mirror the
-  conversation specs); `pnpm --filter <pkg> test`; `pnpm run prettier:fix`.
-- Manual: enable the agent, speak a phrasing, confirm the action fires with the
-  right parameters.
+- Build before tests because Jest runs compiled output.
+- After each host, run its focused grammar/translation and handler parity
+  specs, then `node tools/actionBrowser/dist/cli.js --check --allow-missing`.
+- Regenerate the catalog and update STATUS from executable endpoints, never
+  from namespace groups or stale estimates.
+- Before completion run `pnpm run test:local`, `pnpm run prettier`, and strict
+  coverage without `--allow-missing`.
+- Smoke-test an exact link, parameterized action, toggle, auth/setup flow,
+  browser configuration, diagnostic, lifecycle command, default-off agent, and
+  unavailable platform/client result.
 
-## Decisions (locked)
+## Decisions
 
-- Linking adds metadata only and reuses existing NL — no duplicated logic. New
-  actions must delegate to the same service/helper the command calls so the two
-  paths can't drift.
-- **Excluded for now:** `google-auth` OAuth callbacks (take an auth-code
-  argument, not spoken), dispatcher diagnostics (`request` / `match` /
-  `translate` / `reason` / `reasoning` / `explain` — circular), and the CLI-only
-  commands `powershell show`, browser `auto launch hidden|standalone`, `auto
-close`, and `actions stop recording`.
-- **Auth naming:** agent-prefixed verbs (`calendarLogin`, `emailLogout`,
-  `spotifyLogin`, …) — not `connect`/`disconnect`, not bare `login`/`logout`.
-- **Default-off agents stay off** (localPlayer, player, osNotifications); their
-  actions translate only when the agent is enabled (enable on demand).
-
-## Open design detail (non-blocking)
-
-- Browser config actions (phase 5): confirm main schema vs. a new config
-  sub-schema (recommend sub-schema) and the grammar-collision mitigation for
-  "search …" phrasings.
+- All bundled executable commands are in scope; there are no permanent waivers.
+- Fully qualified schema names are canonical in object links. Bare names are a
+  convenience only when unique within the host.
+- Existing enablement, readiness, confirmation, and host-capability rules are
+  authoritative behavior and must not be weakened.
+- Default-off agents stay off. Natural-language invocation follows the same
+  enable/readiness policy as the command, including enable-on-demand where
+  already supported.
+- Temporary blockers remain visible in STATUS and prevent the zero-gap
+  milestone.

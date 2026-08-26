@@ -35,6 +35,10 @@ const KNOWN_PROFILES = otel.LOCAL_TELEMETRY_PROFILES;
 class LogStatusCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Show local OTel sink profile and current @trace patterns";
+    public readonly action = {
+        schema: "system.log",
+        actionName: "showLogStatus",
+    };
     public async run(context: ActionContext<unknown>) {
         showLogStatus(context);
     }
@@ -109,6 +113,10 @@ export function showLogStatus(context: ActionContext<unknown>): void {
 class LogProfileCommandHandler implements CommandHandler {
     public readonly description =
         "Set the local OTel profile: focused (default), diagnostic, verbose, or off";
+    public readonly action = {
+        schema: "system.log",
+        actionName: "setLogProfile",
+    };
     public readonly parameters = {
         args: {
             profile: {
@@ -152,6 +160,10 @@ export function setLogProfile(
 class LogClearCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Reset local OTel sinks to defaults: profile=focused. Leaves @trace unchanged.";
+    public readonly action = {
+        schema: "system.log",
+        actionName: "clearLogSettings",
+    };
     public async run(context: ActionContext<unknown>) {
         clearLogSettings(context);
     }

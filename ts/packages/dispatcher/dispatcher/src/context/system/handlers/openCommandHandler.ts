@@ -14,6 +14,10 @@ import path from "node:path";
 
 export class OpenCommandHandler implements CommandHandler {
     public readonly description = "Shortcut for opening system related folders";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "openFolder",
+    };
     public readonly parameters = {
         args: {
             folder: {

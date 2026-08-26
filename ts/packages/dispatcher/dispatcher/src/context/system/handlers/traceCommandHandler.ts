@@ -34,6 +34,10 @@ if (registerDebug.inspectOpts !== undefined) {
 
 export class TraceCommandHandler implements CommandHandler {
     public readonly description = "Enable or disable trace namespaces";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "configureTrace",
+    };
     public readonly parameters = {
         flags: {
             clear: {

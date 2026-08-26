@@ -13,6 +13,10 @@ import {
 
 export class DebugCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Start node inspector";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "startDebugger",
+    };
     private debugging = false;
     public async run(context: ActionContext<CommandHandlerContext>) {
         if (this.debugging) {

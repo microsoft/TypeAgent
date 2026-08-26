@@ -85,4 +85,4 @@ export { initializeGeolocation } from "./context/geolocation.js";
 
 // System command handler tree — exposed for tooling that statically enumerates
 // the `@command` surface (e.g. the Action Browser documentation generator).
-export { systemHandlers } from "./context/system/systemAgent.js";
+export { getSystemHandlers } from "./context/system/systemAgent.js";

@@ -48,6 +48,10 @@ class RandomOfflineCommandHandler implements CommandHandlerNoParams {
 
     public readonly description =
         "Issues a random request from a dataset of pre-generated requests.";
+    public readonly action = {
+        schema: "system.diagnostics",
+        actionName: "runRandomOfflineRequest",
+    };
 
     public async run(context: ActionContext<CommandHandlerContext>) {
         displayStatus(`Selecting random request...`, context);
@@ -93,6 +97,10 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
     private instructions = `You are an Siri/Alexa/Cortana prompt generator. You create user prompts that are both supported and unsupported.`;
 
     public readonly description = "Uses the LLM to generate random requests.";
+    public readonly action = {
+        schema: "system.diagnostics",
+        actionName: "runRandomOnlineRequest",
+    };
 
     public async run(context: ActionContext<CommandHandlerContext>) {
         displayStatus(`Generating random request using LLM...`, context);
@@ -188,13 +196,15 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
     }
 }
 
+export const randomCommandHandlers: CommandHandlerTable = {
+    description: "Random request commands",
+    defaultSubCommand: "offline",
+    commands: {
+        online: new RandomOnlineCommandHandler(),
+        offline: new RandomOfflineCommandHandler(),
+    },
+};
+
 export function getRandomCommandHandlers(): CommandHandlerTable {
-    return {
-        description: "Random request commands",
-        defaultSubCommand: "offline",
-        commands: {
-            online: new RandomOnlineCommandHandler(),
-            offline: new RandomOfflineCommandHandler(),
-        },
-    };
+    return randomCommandHandlers;
 }

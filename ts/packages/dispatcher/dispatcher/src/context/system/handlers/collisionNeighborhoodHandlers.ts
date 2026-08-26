@@ -66,6 +66,10 @@ interface NeighborhoodsOutput {
 export class CollisionNeighborhoodsCommandHandler implements CommandHandler {
     public readonly description =
         "Build neighborhoods directly from translator misroute edges and write a persisted JSON index plus an HTML viz.";
+    public readonly action = {
+        schema: "system.collision",
+        actionName: "buildCollisionNeighborhoods",
+    };
     public readonly parameters = {
         flags: {
             corpus: {

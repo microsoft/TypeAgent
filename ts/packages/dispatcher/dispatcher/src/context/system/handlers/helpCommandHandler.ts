@@ -10,7 +10,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { systemHandlers } from "../systemAgent.js";
+import { getSystemHandlers } from "../systemAgent.js";
 import {
     getUsage,
     printAllCommandsWithUsage,
@@ -28,6 +28,10 @@ import {
 
 export class HelpCommandHandler implements CommandHandler {
     public readonly description = "Show help";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "showCommandHelp",
+    };
     public readonly defaultSubCommand = "command";
     public readonly parameters = {
         args: {
@@ -53,7 +57,7 @@ export class HelpCommandHandler implements CommandHandler {
         const systemContext = context.sessionContext.agentContext;
         if (params.flags.all) {
             // print all system handlers
-            printAllCommandsWithUsage(systemHandlers, undefined, context);
+            printAllCommandsWithUsage(getSystemHandlers(), undefined, context);
 
             // print all agent handlers
             const agentNames: string[] =
@@ -87,7 +91,7 @@ export class HelpCommandHandler implements CommandHandler {
             return;
         } else if (params.args.command === undefined) {
             printStructuredHandlerTableUsage(
-                systemHandlers,
+                getSystemHandlers(),
                 undefined,
                 context,
             );

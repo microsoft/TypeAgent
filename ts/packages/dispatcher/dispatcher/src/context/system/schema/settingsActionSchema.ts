@@ -2,10 +2,22 @@
 // Licensed under the MIT License.
 
 export type UserSettingsAction =
+    | ShowSettingsAction
+    | ResetSettingsAction
     | SetServerHiddenAction
     | SetIdleTimeoutAction
     | SetConversationResumeAction
     | SetAutoCompleteAction;
+
+// Show all persistent TypeAgent user settings.
+export type ShowSettingsAction = {
+    actionName: "showSettings";
+};
+
+// Reset all persistent TypeAgent user settings to their defaults.
+export type ResetSettingsAction = {
+    actionName: "resetSettings";
+};
 
 // Set whether the agent server starts as a hidden background process.
 // Use when the user says things like "start the server hidden", "run the server in the background",

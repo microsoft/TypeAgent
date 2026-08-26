@@ -73,6 +73,10 @@ function fmtEntry(e: UserFeedbackEntry): string {
 class FeedbackListCommandHandler implements CommandHandler {
     public readonly description =
         "List recent user-feedback entries (most recent first).";
+    public readonly action = {
+        schema: "system.feedback",
+        actionName: "listFeedback",
+    };
     public readonly parameters = {
         flags: {
             limit: {
@@ -117,6 +121,10 @@ class FeedbackListCommandHandler implements CommandHandler {
 class FeedbackTopCommandHandler implements CommandHandler {
     public readonly description =
         "Aggregate user feedback — counts by rating and category.";
+    public readonly action = {
+        schema: "system.feedback",
+        actionName: "summarizeFeedback",
+    };
     public readonly parameters = {
         flags: {
             limit: {
@@ -187,6 +195,10 @@ const categoryValues = [
 class FeedbackFilterCommandHandler implements CommandHandler {
     public readonly description =
         "Filter feedback by rating, category, and/or date range.";
+    public readonly action = {
+        schema: "system.feedback",
+        actionName: "filterFeedback",
+    };
     public readonly parameters = {
         flags: {
             rating: {
@@ -297,6 +309,10 @@ class FeedbackFilterCommandHandler implements CommandHandler {
 class FeedbackExportCommandHandler implements CommandHandler {
     public readonly description =
         "Export user-feedback entries to a local file (JSON or JSONL).";
+    public readonly action = {
+        schema: "system.feedback",
+        actionName: "exportFeedback",
+    };
     public readonly parameters = {
         args: {
             file: {
@@ -354,6 +370,10 @@ class FeedbackExportCommandHandler implements CommandHandler {
 // ---------------------------------------------------------------------------
 class FeedbackCountCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show the total number of feedback entries.";
+    public readonly action = {
+        schema: "system.feedback",
+        actionName: "countFeedback",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const all = getAllFeedback(systemContext);
@@ -365,16 +385,18 @@ class FeedbackCountCommandHandler implements CommandHandlerNoParams {
     }
 }
 
+export const feedbackCommandHandlers: CommandHandlerTable = {
+    description: "Inspect and export user-feedback entries",
+    defaultSubCommand: "list",
+    commands: {
+        list: new FeedbackListCommandHandler(),
+        top: new FeedbackTopCommandHandler(),
+        filter: new FeedbackFilterCommandHandler(),
+        export: new FeedbackExportCommandHandler(),
+        count: new FeedbackCountCommandHandler(),
+    },
+};
+
 export function getFeedbackCommandHandlers(): CommandHandlerTable {
-    return {
-        description: "Inspect and export user-feedback entries",
-        defaultSubCommand: "list",
-        commands: {
-            list: new FeedbackListCommandHandler(),
-            top: new FeedbackTopCommandHandler(),
-            filter: new FeedbackFilterCommandHandler(),
-            export: new FeedbackExportCommandHandler(),
-            count: new FeedbackCountCommandHandler(),
-        },
-    };
+    return feedbackCommandHandlers;
 }

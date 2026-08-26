@@ -41,6 +41,24 @@ import { HistoryAction } from "./schema/historyActionSchema.js";
 import { ConversationAction } from "./schema/conversationActionSchema.js";
 import { GrammarAction } from "./schema/grammarActionSchema.js";
 import { UserSettingsAction } from "./schema/settingsActionSchema.js";
+import { IndexAction } from "./schema/indexActionSchema.js";
+import { executeIndexAction } from "./action/indexActionHandler.js";
+import { SystemDiagnosticsAction } from "./schema/systemDiagnosticsActionSchema.js";
+import { executeSystemDiagnosticsAction } from "./action/systemDiagnosticsActionHandler.js";
+import { SessionAction } from "./schema/sessionActionSchema.js";
+import { executeSessionAction } from "./action/sessionActionHandler.js";
+import { MemoryAction } from "./schema/memoryActionSchema.js";
+import { executeMemoryAction } from "./action/memoryActionHandler.js";
+import { CopilotAction } from "./schema/copilotActionSchema.js";
+import { executeCopilotAction } from "./action/copilotActionHandler.js";
+import { FeedbackAction } from "./schema/feedbackActionSchema.js";
+import { executeFeedbackAction } from "./action/feedbackActionHandler.js";
+import { SystemOperationsAction } from "./schema/systemOperationsActionSchema.js";
+import { executeSystemOperationsAction } from "./action/systemOperationsActionHandler.js";
+import { ConstructionAction } from "./schema/constructionActionSchema.js";
+import { executeConstructionAction } from "./action/constructionActionHandler.js";
+import { CollisionAction } from "./schema/collisionActionSchema.js";
+import { executeCollisionAction } from "./action/collisionActionHandler.js";
 import { LogAction } from "./schema/logActionSchema.js";
 
 // handlers
@@ -52,7 +70,7 @@ import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js"
 import { getConversationCommandHandlers } from "./handlers/conversationCommandHandlers.js";
 import { getCopilotCommandHandlers } from "./handlers/copilotCommandHandlers.js";
 import { getDemoCommandHandlers } from "./handlers/demoCommandHandlers.js";
-import { getCollisionCommandHandlers } from "./handlers/collisionCommandHandlers.js";
+import { collisionCommandHandlers } from "./handlers/collisionCommandHandlers.js";
 import { getGrammarCommandHandlers } from "./handlers/grammarCommandHandlers.js";
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
@@ -74,6 +92,10 @@ import { PortsCommandHandler } from "./handlers/portsCommandHandler.js";
 
 class ClearConsoleCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Clear the console";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "clearConsole",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         systemContext.clientIO.clear(getRequestId(systemContext));
@@ -83,6 +105,10 @@ class ClearConsoleCommandHandler implements CommandHandlerNoParams {
 class ClearDeepCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Clear the console and wipe chat history, reasoning, activity, and persistent display log so nothing replays on rejoin";
+    public readonly action = {
+        schema: "system.operations",
+        actionName: "deepClearConsole",
+    };
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         systemContext.chatHistory.clear();
@@ -96,84 +122,114 @@ class ClearDeepCommandHandler implements CommandHandlerNoParams {
     }
 }
 
-export const systemHandlers: CommandHandlerTable = {
-    description: "Type Agent System Commands",
-    commands: {
-        action: new ActionCommandHandler(),
-        describe: new DescribeCommandHandler(),
-        demo: getDemoCommandHandlers(),
-        session: getSessionCommandHandlers(),
-        conversation: getConversationCommandHandlers(),
-        copilot: getCopilotCommandHandlers(),
-        collision: getCollisionCommandHandlers(),
-        grammar: getGrammarCommandHandlers(),
-        history: getHistoryCommandHandlers(),
-        memory: getMemoryCommandHandlers(),
-        const: getConstructionCommandHandlers(),
-        config: getConfigCommandHandlers(),
-        feedback: getFeedbackCommandHandlers(),
-        display: new DisplayCommandHandler(),
-        trace: new TraceCommandHandler(),
-        log: getLogCommandHandlers(),
-        help: new HelpCommandHandler(),
-        debug: new DebugCommandHandler(),
-        clear: {
-            description: "Clear the console",
-            defaultSubCommand: new ClearConsoleCommandHandler(),
-            commands: {
-                deep: new ClearDeepCommandHandler(),
+// Built lazily. Several of the getXCommandHandlers() modules below import back
+// into the dispatcher command pipeline, which imports this module, so building
+// the table during this module's own initialization turns that cycle into a
+// temporal dead zone error depending on which module is loaded first.
+let systemHandlersInstance: CommandHandlerTable | undefined;
+export function getSystemHandlers(): CommandHandlerTable {
+    if (systemHandlersInstance === undefined) {
+        systemHandlersInstance = createSystemHandlers();
+    }
+    return systemHandlersInstance;
+}
+
+function createSystemHandlers(): CommandHandlerTable {
+    return {
+        description: "Type Agent System Commands",
+        commands: {
+            action: new ActionCommandHandler(),
+            describe: new DescribeCommandHandler(),
+            demo: getDemoCommandHandlers(),
+            session: getSessionCommandHandlers(),
+            conversation: getConversationCommandHandlers(),
+            copilot: getCopilotCommandHandlers(),
+            collision: collisionCommandHandlers,
+            grammar: getGrammarCommandHandlers(),
+            history: getHistoryCommandHandlers(),
+            memory: getMemoryCommandHandlers(),
+            const: getConstructionCommandHandlers(),
+            config: getConfigCommandHandlers(),
+            feedback: getFeedbackCommandHandlers(),
+            display: new DisplayCommandHandler(),
+            trace: new TraceCommandHandler(),
+            log: getLogCommandHandlers(),
+            help: new HelpCommandHandler(),
+            debug: new DebugCommandHandler(),
+            clear: {
+                description: "Clear the console",
+                defaultSubCommand: new ClearConsoleCommandHandler(),
+                commands: {
+                    deep: new ClearDeepCommandHandler(),
+                },
             },
-        },
-        run: new RunCommandScriptHandler(),
-        exit: {
-            description: "Exit the program",
-            async run(context: ActionContext<CommandHandlerContext>) {
-                const systemContext = context.sessionContext.agentContext;
-                systemContext.clientIO.exit(getRequestId(systemContext));
+            run: new RunCommandScriptHandler(),
+            exit: {
+                description: "Exit the program",
+                action: {
+                    schema: "system.operations",
+                    actionName: "exitTypeAgent",
+                },
+                async run(context: ActionContext<CommandHandlerContext>) {
+                    const systemContext = context.sessionContext.agentContext;
+                    systemContext.clientIO.exit(getRequestId(systemContext));
+                },
             },
-        },
-        shutdown: {
-            description: "Shut down the agent server and exit",
-            async run(context: ActionContext<CommandHandlerContext>) {
-                const systemContext = context.sessionContext.agentContext;
-                systemContext.clientIO.shutdown(getRequestId(systemContext));
+            shutdown: {
+                description: "Shut down the agent server and exit",
+                action: {
+                    schema: "system.operations",
+                    actionName: "shutdownAgentServer",
+                },
+                async run(context: ActionContext<CommandHandlerContext>) {
+                    const systemContext = context.sessionContext.agentContext;
+                    systemContext.clientIO.shutdown(
+                        getRequestId(systemContext),
+                    );
+                },
             },
-        },
-        server: {
-            description: "Manage the agent server",
-            commands: {
-                restart: {
-                    description:
-                        "Restart the agent server so it loads rebuilt code",
-                    async run(context: ActionContext<CommandHandlerContext>) {
-                        const systemContext =
-                            context.sessionContext.agentContext;
-                        // The routing clientIO always defines restart but
-                        // throws when the connected host can't self-restart
-                        // (e.g. the in-process shell). A host whose clientIO
-                        // omits restart entirely lands here as undefined.
-                        if (systemContext.clientIO.restart === undefined) {
-                            throw new Error(
-                                "Restart is only available when connected to a standalone agent server.",
+            server: {
+                description: "Manage the agent server",
+                commands: {
+                    restart: {
+                        description:
+                            "Restart the agent server so it loads rebuilt code",
+                        action: {
+                            schema: "system.operations",
+                            actionName: "restartAgentServer",
+                        },
+                        async run(
+                            context: ActionContext<CommandHandlerContext>,
+                        ) {
+                            const systemContext =
+                                context.sessionContext.agentContext;
+                            // The routing clientIO always defines restart but
+                            // throws when the connected host can't self-restart
+                            // (e.g. the in-process shell). A host whose clientIO
+                            // omits restart entirely lands here as undefined.
+                            if (systemContext.clientIO.restart === undefined) {
+                                throw new Error(
+                                    "Restart is only available when connected to a standalone agent server.",
+                                );
+                            }
+                            systemContext.clientIO.restart(
+                                getRequestId(systemContext),
                             );
-                        }
-                        systemContext.clientIO.restart(
-                            getRequestId(systemContext),
-                        );
+                        },
                     },
                 },
             },
+            random: getRandomCommandHandlers(),
+            notify: getNotifyCommandHandlers(),
+            token: getTokenCommandHandlers(),
+            env: getEnvCommandHandlers(),
+            open: new OpenCommandHandler(),
+            index: getIndexCommandHandlers(),
+            settings: getSettingsCommandHandlers(),
+            ports: new PortsCommandHandler(),
         },
-        random: getRandomCommandHandlers(),
-        notify: getNotifyCommandHandlers(),
-        token: getTokenCommandHandlers(),
-        env: getEnvCommandHandlers(),
-        open: new OpenCommandHandler(),
-        index: getIndexCommandHandlers(),
-        settings: getSettingsCommandHandlers(),
-        ports: new PortsCommandHandler(),
-    },
-};
+    };
+}
 
 function executeSystemAction(
     action:
@@ -183,27 +239,105 @@ function executeSystemAction(
         | TypeAgentAction<HistoryAction, "system.history">
         | TypeAgentAction<GrammarAction, "system.grammar">
         | TypeAgentAction<UserSettingsAction, "system.settings">
+        | TypeAgentAction<HelpAction, "system.help">
         | TypeAgentAction<LogAction, "system.log">
-        | TypeAgentAction<HelpAction, "system.help">,
+        | TypeAgentAction<IndexAction, "system.index">
+        | TypeAgentAction<SystemDiagnosticsAction, "system.diagnostics">
+        | TypeAgentAction<SessionAction, "system.session">
+        | TypeAgentAction<MemoryAction, "system.memory">
+        | TypeAgentAction<CopilotAction, "system.copilot">
+        | TypeAgentAction<FeedbackAction, "system.feedback">
+        | TypeAgentAction<SystemOperationsAction, "system.operations">
+        | TypeAgentAction<ConstructionAction, "system.construction">
+        | TypeAgentAction<CollisionAction, "system.collision">,
     context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.schemaName) {
         case "system.conversation":
             return executeConversationAction(action, context);
         case "system.config":
-            return executeConfigAction(action, context);
+            return executeConfigAction(action, context, {
+                handlers: getSystemHandlers().commands
+                    .config as CommandHandlerTable,
+            });
         case "system.notify":
-            return executeNotificationAction(action, context);
+            return executeNotificationAction(
+                action,
+                context,
+                getSystemHandlers().commands.notify as CommandHandlerTable,
+            );
         case "system.history":
-            return executeHistoryAction(action, context);
+            return executeHistoryAction(
+                action,
+                context,
+                getSystemHandlers().commands.history as CommandHandlerTable,
+            );
         case "system.grammar":
-            return executeGrammarAction(action, context);
+            return executeGrammarAction(action, context, getSystemHandlers());
         case "system.settings":
-            return executeSettingsAction(action, context);
+            return executeSettingsAction(
+                action,
+                context,
+                getSystemHandlers().commands.settings as CommandHandlerTable,
+            );
         case "system.log":
             return executeLogAction(action, context);
         case "system.help":
             return executeHelpAction(action, context);
+        case "system.index":
+            return executeIndexAction(
+                action,
+                context,
+                getSystemHandlers().commands.index as CommandHandlerTable,
+            );
+        case "system.diagnostics":
+            return executeSystemDiagnosticsAction(
+                action,
+                context,
+                getSystemHandlers(),
+            );
+        case "system.session":
+            return executeSessionAction(
+                action,
+                context,
+                getSystemHandlers().commands.session as CommandHandlerTable,
+            );
+        case "system.memory":
+            return executeMemoryAction(
+                action,
+                context,
+                getSystemHandlers().commands.memory as CommandHandlerTable,
+            );
+        case "system.copilot":
+            return executeCopilotAction(
+                action,
+                context,
+                getSystemHandlers().commands.copilot as CommandHandlerTable,
+            );
+        case "system.feedback":
+            return executeFeedbackAction(
+                action,
+                context,
+                getSystemHandlers().commands.feedback as CommandHandlerTable,
+            );
+        case "system.operations":
+            return executeSystemOperationsAction(
+                action,
+                context,
+                getSystemHandlers(),
+            );
+        case "system.construction":
+            return executeConstructionAction(
+                action,
+                context,
+                getSystemHandlers().commands.const as CommandHandlerTable,
+            );
+        case "system.collision":
+            return executeCollisionAction(
+                action,
+                context,
+                collisionCommandHandlers,
+            );
         default:
             throw new Error(
                 `Invalid system sub-translator: ${(action as TypeAgentAction).schemaName}`,
@@ -216,6 +350,85 @@ export const systemManifest: AppAgentManifest = {
     description:
         "Built-in agent to manage system configuration and conversations",
     subActionManifests: {
+        collision: {
+            schema: {
+                description:
+                    "Inspect collision telemetry and run collision corpus, keyword, neighborhood, optimization, and preference workflows.",
+                schemaFile:
+                    "./src/context/system/schema/collisionActionSchema.ts",
+                schemaType: "CollisionAction",
+            },
+        },
+        construction: {
+            schema: {
+                description:
+                    "Create, load, save, inspect, import, prune, and configure TypeAgent construction stores.",
+                schemaFile:
+                    "./src/context/system/schema/constructionActionSchema.ts",
+                schemaType: "ConstructionAction",
+            },
+        },
+        operations: {
+            schema: {
+                description:
+                    "Run low-level TypeAgent operations including help, display, scripts, tracing, debugging, and process lifecycle commands.",
+                schemaFile:
+                    "./src/context/system/schema/systemOperationsActionSchema.ts",
+                schemaType: "SystemOperationsAction",
+            },
+        },
+        feedback: {
+            schema: {
+                description:
+                    "List, summarize, filter, export, and count user feedback.",
+                schemaFile:
+                    "./src/context/system/schema/feedbackActionSchema.ts",
+                schemaType: "FeedbackAction",
+            },
+        },
+        copilot: {
+            schema: {
+                description:
+                    "Import Copilot sessions, hand off a problem to Copilot Chat, or sign in to GitHub Copilot.",
+                schemaFile:
+                    "./src/context/system/schema/copilotActionSchema.ts",
+                schemaType: "CopilotAction",
+            },
+        },
+        memory: {
+            schema: {
+                description:
+                    "Configure, query, search, and answer from TypeAgent conversation memory.",
+                schemaFile: "./src/context/system/schema/memoryActionSchema.ts",
+                schemaType: "MemoryAction",
+            },
+        },
+        session: {
+            schema: {
+                description:
+                    "Create, open, reset, clear, list, delete, and inspect TypeAgent sessions.",
+                schemaFile:
+                    "./src/context/system/schema/sessionActionSchema.ts",
+                schemaType: "SessionAction",
+            },
+        },
+        diagnostics: {
+            schema: {
+                description:
+                    "Inspect environment and token diagnostics, or generate random test requests.",
+                schemaFile:
+                    "./src/context/system/schema/systemDiagnosticsActionSchema.ts",
+                schemaType: "SystemDiagnosticsAction",
+            },
+        },
+        index: {
+            schema: {
+                description:
+                    "Create, list, inspect, and delete TypeAgent indexes.",
+                schemaFile: "./src/context/system/schema/indexActionSchema.ts",
+                schemaType: "IndexAction",
+            },
+        },
         config: {
             schema: {
                 description:
@@ -323,7 +536,17 @@ export const systemManifest: AppAgentManifest = {
     },
 };
 
-const commandInterface = getCommandInterface(systemHandlers);
+// Also lazy: building the interface eagerly would build the handler table
+// during this module's initialization, which is what the cycle above avoids.
+let commandInterfaceInstance:
+    | ReturnType<typeof getCommandInterface>
+    | undefined;
+function getSystemCommandInterface() {
+    if (commandInterfaceInstance === undefined) {
+        commandInterfaceInstance = getCommandInterface(getSystemHandlers());
+    }
+    return commandInterfaceInstance;
+}
 
 // Route responses from the system agent's interactive choice/form cards (today
 // the `@demo` walkthrough) back to the shared per-context ChoiceManager, which
@@ -348,7 +571,9 @@ export const systemAgent: AppAgent = {
     getTemplateCompletion: getSystemTemplateCompletion,
     executeAction: executeSystemAction as unknown as AppAgent["executeAction"],
     handleChoice: handleSystemChoice,
-    getCommands: commandInterface.getCommands,
-    getCommandCompletion: commandInterface.getCommandCompletion,
-    executeCommand: commandInterface.executeCommand,
+    getCommands: (...args) => getSystemCommandInterface().getCommands(...args),
+    getCommandCompletion: (...args) =>
+        getSystemCommandInterface().getCommandCompletion!(...args),
+    executeCommand: (...args) =>
+        getSystemCommandInterface().executeCommand(...args),
 } as AppAgent;
