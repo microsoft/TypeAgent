@@ -288,6 +288,210 @@ chatPanel.attachCompletion((msg) => vscode.postMessage(msg));
 // client answered, or a server timeout) can tear the local UI down.
 const activeInteractions = new Map<string, AbortController>();
 
+type PermissionPrompt = {
+    id: string;
+    requestId?: string;
+    message: string;
+    choices: string[];
+    resolve: (value: number) => void;
+    reject: (reason: unknown) => void;
+    signal: AbortSignal;
+    abort: () => void;
+};
+
+const permissionPrompts: PermissionPrompt[] = [];
+const permissionRequestApprovals = new Map<string, string>();
+let activePermissionPrompt = 0;
+let permissionPromptLayer: HTMLDivElement | undefined;
+let permissionReturnFocus: HTMLElement | undefined;
+
+function showPermissionPrompt(
+    interaction: Extract<PendingInteractionRequest, { type: "question" }>,
+    signal: AbortSignal,
+): Promise<number> {
+    const requestId = interaction.requestId?.requestId;
+    const rememberedChoice =
+        requestId === undefined
+            ? undefined
+            : permissionRequestApprovals.get(requestId);
+    if (
+        rememberedChoice !== undefined &&
+        interaction.choices.includes(rememberedChoice)
+    ) {
+        return Promise.resolve(interaction.choices.indexOf(rememberedChoice));
+    }
+    return new Promise<number>((resolve, reject) => {
+        const prompt: PermissionPrompt = {
+            id: interaction.interactionId,
+            requestId: interaction.requestId?.requestId,
+            message: interaction.message,
+            choices: interaction.choices,
+            resolve,
+            reject,
+            signal,
+            abort: () => {
+                removePermissionPrompt(interaction.interactionId);
+                reject(
+                    new DOMException("Permission prompt aborted", "AbortError"),
+                );
+            },
+        };
+        signal.addEventListener("abort", prompt.abort, { once: true });
+        permissionPrompts.push(prompt);
+        activePermissionPrompt = permissionPrompts.length - 1;
+        renderPermissionPrompts();
+    });
+}
+
+function removePermissionPrompt(
+    id: string,
+    render = true,
+): PermissionPrompt | undefined {
+    const index = permissionPrompts.findIndex((prompt) => prompt.id === id);
+    if (index < 0) {
+        return undefined;
+    }
+    const [prompt] = permissionPrompts.splice(index, 1);
+    prompt.signal.removeEventListener("abort", prompt.abort);
+    activePermissionPrompt = Math.min(
+        activePermissionPrompt,
+        Math.max(0, permissionPrompts.length - 1),
+    );
+    if (render) {
+        renderPermissionPrompts();
+    }
+    return prompt;
+}
+
+function resolvePermissionPrompts(
+    selectedPrompt: PermissionPrompt,
+    selectedLabel: string,
+    selectedValue: number,
+): void {
+    const resolveWholeRequest =
+        selectedLabel === "Allow all for request" &&
+        selectedPrompt.requestId !== undefined;
+    const prompts = resolveWholeRequest
+        ? permissionPrompts.filter(
+              (prompt) =>
+                  prompt.choices.includes(selectedLabel) &&
+                  prompt.requestId === selectedPrompt.requestId,
+          )
+        : [selectedPrompt];
+    for (const prompt of prompts) {
+        const value =
+            prompt === selectedPrompt
+                ? selectedValue
+                : prompt.choices.indexOf(selectedLabel);
+        removePermissionPrompt(prompt.id, false)?.resolve(value);
+    }
+    renderPermissionPrompts();
+}
+
+function renderPermissionPrompts(): void {
+    if (permissionPrompts.length === 0) {
+        permissionPromptLayer?.remove();
+        permissionPromptLayer = undefined;
+        if (permissionReturnFocus?.isConnected) {
+            permissionReturnFocus.focus();
+        }
+        permissionReturnFocus = undefined;
+        return;
+    }
+    if (!permissionPromptLayer) {
+        permissionPromptLayer = document.createElement("div");
+        permissionPromptLayer.className = "copilot-permission-layer";
+        rootEl.appendChild(permissionPromptLayer);
+    }
+    permissionPromptLayer.replaceChildren();
+    const prompt = permissionPrompts[activePermissionPrompt];
+    const card = document.createElement("section");
+    card.className = "copilot-permission-card";
+    card.tabIndex = -1;
+    card.setAttribute("role", "dialog");
+    card.setAttribute("aria-label", "Copilot permission request");
+
+    const selector = document.createElement("div");
+    selector.className = "copilot-permission-selector";
+    const previous = document.createElement("button");
+    previous.type = "button";
+    previous.textContent = "‹";
+    previous.disabled = permissionPrompts.length === 1;
+    previous.setAttribute("aria-label", "Previous permission request");
+    previous.addEventListener("click", () => {
+        activePermissionPrompt =
+            (activePermissionPrompt - 1 + permissionPrompts.length) %
+            permissionPrompts.length;
+        renderPermissionPrompts();
+    });
+    const count = document.createElement("span");
+    count.textContent = `${activePermissionPrompt + 1} of ${permissionPrompts.length}`;
+    const next = document.createElement("button");
+    next.type = "button";
+    next.textContent = "›";
+    next.disabled = permissionPrompts.length === 1;
+    next.setAttribute("aria-label", "Next permission request");
+    next.addEventListener("click", () => {
+        activePermissionPrompt =
+            (activePermissionPrompt + 1) % permissionPrompts.length;
+        renderPermissionPrompts();
+    });
+    selector.append(previous, count, next);
+    card.appendChild(selector);
+
+    const title = document.createElement("h3");
+    title.textContent = "Copilot permission request";
+    card.appendChild(title);
+    const message = document.createElement("div");
+    message.className = "copilot-permission-message";
+    message.textContent = prompt.message;
+    card.appendChild(message);
+    const hint = document.createElement("p");
+    hint.className = "copilot-permission-hint";
+    hint.textContent = prompt.choices.includes("Allow for this session")
+        ? "Choose whether to approve once, for this user request, or for the rest of this session."
+        : prompt.choices.includes("Allow all for request")
+          ? "Choose whether to approve once or for this user request."
+          : "Managed policy requires an explicit decision for this operation.";
+    card.appendChild(hint);
+
+    const actions = document.createElement("div");
+    actions.className = "copilot-permission-actions";
+    prompt.choices.forEach((label, value) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = label;
+        button.className =
+            value === prompt.choices.length - 1 ? "deny" : "allow";
+        button.addEventListener("click", () => {
+            if (
+                label === "Allow all for request" &&
+                prompt.requestId !== undefined
+            ) {
+                permissionRequestApprovals.set(prompt.requestId, label);
+                while (permissionRequestApprovals.size > 100) {
+                    const oldest = permissionRequestApprovals
+                        .keys()
+                        .next().value;
+                    if (oldest === undefined) break;
+                    permissionRequestApprovals.delete(oldest);
+                }
+            }
+            resolvePermissionPrompts(prompt, label, value);
+        });
+        actions.appendChild(button);
+    });
+    card.appendChild(actions);
+    permissionPromptLayer.appendChild(card);
+    if (permissionReturnFocus === undefined) {
+        permissionReturnFocus =
+            document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : undefined;
+    }
+    card.focus();
+}
+
 // Template-editor services (schema refresh + per-field completion) for the
 // proposeAction edit flow. chat-ui is framework-free, so these are injected;
 // each call is routed through the host to the dispatcher and correlated by id.
@@ -347,20 +551,29 @@ const templateServices: TemplateEditServices = {
 function handleRequestInteraction(
     interaction: PendingInteractionRequest,
 ): void {
+    if (activeInteractions.has(interaction.interactionId)) {
+        return;
+    }
     const ac = new AbortController();
     activeInteractions.set(interaction.interactionId, ac);
     void (async () => {
         let response: PendingInteractionResponse;
         try {
             if (interaction.type === "question") {
-                const value = await chatPanel.addChoicePrompt<number>(
-                    interaction.message,
-                    interaction.choices.map((label, index) => ({
-                        label,
-                        value: index,
-                    })),
-                    { defaultValue: interaction.defaultId, signal: ac.signal },
-                );
+                const value =
+                    interaction.source === "copilotPermission"
+                        ? await showPermissionPrompt(interaction, ac.signal)
+                        : await chatPanel.addChoicePrompt<number>(
+                              interaction.message,
+                              interaction.choices.map((label, index) => ({
+                                  label,
+                                  value: index,
+                              })),
+                              {
+                                  defaultValue: interaction.defaultId,
+                                  signal: ac.signal,
+                              },
+                          );
                 response = {
                     interactionId: interaction.interactionId,
                     type: "question",

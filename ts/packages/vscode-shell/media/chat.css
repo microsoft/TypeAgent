@@ -28,6 +28,137 @@ body {
   height: 100vh;
 }
 
+.copilot-permission-layer {
+  position: absolute;
+  right: 12px;
+  bottom: 72px;
+  z-index: 130;
+  width: min(360px, calc(100vw - 24px));
+}
+
+.copilot-permission-card {
+  color: var(--vscode-notifications-foreground, var(--vscode-foreground));
+  background: var(
+    --vscode-notifications-background,
+    var(--vscode-editorWidget-background, #3c3c3c)
+  );
+  border: 1px solid
+    var(--vscode-notifications-border, var(--vscode-widget-border));
+  border-radius: 8px;
+  box-shadow:
+    4px 4px 0
+      color-mix(in srgb, var(--vscode-widget-shadow, #000) 18%, transparent),
+    0 8px 24px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.35));
+  padding: 10px 12px 12px;
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+
+.copilot-permission-selector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 22px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.copilot-permission-selector button {
+  width: 22px;
+  height: 22px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 18px;
+}
+
+.copilot-permission-selector button:hover:not(:disabled) {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.copilot-permission-selector button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.copilot-permission-card h3 {
+  margin: 3px 0 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.copilot-permission-message {
+  padding: 8px 9px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--vscode-input-foreground, var(--vscode-foreground));
+  background: var(--vscode-input-background, rgba(127, 127, 127, 0.14));
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 5px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11.5px;
+  line-height: 1.4;
+  max-height: min(45vh, 320px);
+  overflow: auto;
+}
+
+.copilot-permission-hint {
+  margin: 8px 0 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.copilot-permission-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.copilot-permission-actions button {
+  padding: 5px 9px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.copilot-permission-actions .allow {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+}
+
+.copilot-permission-actions .allow:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.copilot-permission-actions .deny {
+  color: var(
+    --vscode-button-secondaryForeground,
+    var(--vscode-button-foreground)
+  );
+  background: var(
+    --vscode-button-secondaryBackground,
+    var(--vscode-button-background)
+  );
+}
+
+.copilot-permission-actions .deny:hover {
+  background: var(
+    --vscode-button-secondaryHoverBackground,
+    var(--vscode-button-hoverBackground)
+  );
+}
+
 /* Shared ConversationBar theme mapping */
 
 body {
