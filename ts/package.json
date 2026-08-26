@@ -16,6 +16,7 @@
     "api": "pnpm -C packages/api exec npm run start",
     "build": "fluid-build . -t build",
     "build:ext:vscode": "fluid-build . -t build:ext:vscode",
+    "build:msi:local": "node tools/scripts/build-msi-local.mjs",
     "build:shell": "fluid-build agent-shell -t build --dep",
     "bundle:agent-server": "node tools/scripts/bundleAgentServer.mjs",
     "bundle:copilot-plugin": "node tools/scripts/stageCopilotPlugin.mjs",

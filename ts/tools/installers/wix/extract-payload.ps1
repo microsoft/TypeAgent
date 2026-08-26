@@ -46,6 +46,41 @@ function Write-Log([string]$message) {
     }
 }
 
+function Write-PayloadCleanupDiagnostics([string]$target, [System.Exception]$exception) {
+    Write-Log "ERROR: Unable to clear payload directory '$target'."
+    Write-Log "ERROR: $($exception.GetType().FullName): $($exception.Message)"
+
+    $targetPrefix = $target + [System.IO.Path]::DirectorySeparatorChar
+    $lockingProcesses = @{}
+    foreach ($process in Get-Process -ErrorAction SilentlyContinue) {
+        try {
+            foreach ($module in $process.Modules) {
+                if ($module.FileName.StartsWith($targetPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $lockingProcesses[$process.Id] = @{
+                        Name = $process.ProcessName
+                        Module = $module.FileName
+                    }
+                    break
+                }
+            }
+        } catch {
+            # Some protected processes do not allow module enumeration.
+        }
+    }
+
+    if ($lockingProcesses.Count -gt 0) {
+        Write-Log "Processes using files from the payload directory:"
+        foreach ($processId in ($lockingProcesses.Keys | Sort-Object)) {
+            $details = $lockingProcesses[$processId]
+            Write-Log "  PID $processId ($($details.Name)): $($details.Module)"
+        }
+    } else {
+        Write-Log "No locking process could be identified. Antivirus or another protected process may be using the directory."
+    }
+
+    Write-Log "Close TypeAgent and stop its agent server, then retry setup. Restart Windows if the file remains locked."
+}
+
 # <target-dir-name> = <zip-file-name> under <Root>\payload
 $payloads = @(
     @{ Name = "agent-server";   Zip = "agent-server.zip" },
@@ -55,9 +90,10 @@ if ($Payload) {
     $payloads = @($payloads | Where-Object { $_.Name -eq $Payload })
 }
 
-$payloadDir = Join-Path $Root "payload"
-
 try {
+    $Root = [System.IO.Path]::GetFullPath($Root)
+    $payloadDir = Join-Path $Root "payload"
+
     if ($Uninstall) {
         foreach ($p in $payloads) {
             $target = Join-Path $Root $p.Name
@@ -86,7 +122,12 @@ try {
         # Clean the target so upgrades don't leave stale files behind.
         if (Test-Path $target) {
             Write-Log "Clearing existing $target"
-            Remove-Item -Recurse -Force $target
+            try {
+                Remove-Item -Recurse -Force $target
+            } catch {
+                Write-PayloadCleanupDiagnostics $target $_.Exception
+                throw "Payload cleanup failed for '$target'. See '$LogPath' for process diagnostics."
+            }
         }
         New-Item -ItemType Directory -Force -Path $target | Out-Null
 
