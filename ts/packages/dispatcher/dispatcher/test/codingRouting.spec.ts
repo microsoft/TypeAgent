@@ -15,6 +15,7 @@ import fs from "node:fs";
 describe("coding request classification", () => {
     test.each([
         "fix the error in parser.ts",
+        "change parser.ts to reject empty input",
         "create a README.md for this project",
         "run pnpm test",
         "implement the missing function",

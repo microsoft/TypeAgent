@@ -13,6 +13,7 @@ describe("coding completion evidence", () => {
     test("distinguishes analysis from mutation requests", () => {
         expect(isMutatingCodingRequest("explain parser.ts")).toBe(false);
         expect(isMutatingCodingRequest("fix parser.ts")).toBe(true);
+        expect(isMutatingCodingRequest("change parser.ts")).toBe(true);
     });
 
     test("does not require code validation for documentation-only mutations", () => {
@@ -65,6 +66,36 @@ describe("coding completion evidence", () => {
             status: "completed",
             validationAttempted: true,
             validationSucceeded: true,
+        });
+    });
+
+    test("requires validation after the most recent write", () => {
+        const tracker = createCodingCompletionTracker("change the module");
+        tracker.onToolSuccess("edit", { path: "module.ts" });
+        tracker.onToolSuccess("shell", { command: "pnpm test" });
+        tracker.onToolSuccess("edit", { path: "module.ts" });
+
+        expect(tracker.onAgentStop(false)?.decision).toBe("block");
+        expect(tracker.outcome("session-3")).toMatchObject({
+            status: "unvalidated",
+            validationAttempted: true,
+            validationSucceeded: false,
+        });
+    });
+
+    test("invalidates validation when a write tool fails", () => {
+        const tracker = createCodingCompletionTracker("change the module");
+        tracker.onToolSuccess("edit", { path: "module.ts" });
+        tracker.onToolSuccess("shell", { command: "pnpm test" });
+        tracker.onToolFailure("shell", {
+            command: "Set-Content module.ts broken; exit 1",
+        });
+
+        expect(tracker.onAgentStop(false)?.decision).toBe("block");
+        expect(tracker.outcome("session-4")).toMatchObject({
+            status: "unvalidated",
+            filesChanged: true,
+            validationSucceeded: false,
         });
     });
 

@@ -160,6 +160,25 @@ Useful fields include:
 
 Press `Ctrl+C` to stop following the file.
 
+#### Show Agent Debug Logs
+
+By default the local JSONL uses the `focused` profile, which records only
+structured lifecycle events - no agent `debug` records. To include agent debug
+logs, run these from the CLI (`pnpm cli`):
+
+```text
+@trace typeagent:*
+@log profile diagnostic
+```
+
+- `@trace typeagent:*` scopes which terminal `debug` namespaces are produced,
+  so the bridge only forwards matching agent logs (narrow the pattern, e.g.
+  `@trace typeagent:dispatcher:*`, to focus further).
+- `@log profile diagnostic` raises the local profile so bridged `error`,
+  `warn`, and `info` debug records are written to the JSONL. Use
+  `@log profile verbose` to admit every debug class, or `@log clear` to return
+  to `focused`.
+
 ### 5. Find the Trace
 
 The easiest lookup key is the trace ID. Copy it from:
