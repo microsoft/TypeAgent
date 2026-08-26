@@ -109,16 +109,85 @@ body {
   overflow: auto;
 }
 
-.copilot-permission-hint {
-  margin: 8px 0 0;
+.copilot-permission-message.compact {
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: inherit;
+  overflow: visible;
+}
+
+.copilot-permission-options {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.copilot-permission-option-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+}
+
+.copilot-permission-option-label {
   color: var(--vscode-descriptionForeground);
   font-size: 11px;
-  line-height: 1.35;
+}
+
+.copilot-permission-segments {
+  display: flex;
+  min-width: 0;
+}
+
+.copilot-permission-segments button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  background: var(
+    --vscode-button-secondaryBackground,
+    rgba(127, 127, 127, 0.18)
+  );
+  border: 1px solid var(--vscode-widget-border);
+  border-right-width: 0;
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.copilot-permission-segments button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.copilot-permission-segments button:last-child {
+  border-right-width: 1px;
+  border-radius: 0 4px 4px 0;
+}
+
+.copilot-permission-segments button[aria-pressed="true"] {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border-color: var(--vscode-button-background);
+}
+
+.copilot-permission-segments
+  button:hover:not(:disabled):not([aria-pressed="true"]) {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.copilot-permission-segments button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .copilot-permission-actions {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
   margin-top: 10px;
 }
@@ -132,12 +201,17 @@ body {
   cursor: pointer;
 }
 
+.copilot-permission-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .copilot-permission-actions .allow {
   color: var(--vscode-button-foreground);
   background: var(--vscode-button-background);
 }
 
-.copilot-permission-actions .allow:hover {
+.copilot-permission-actions .allow:hover:not(:disabled) {
   background: var(--vscode-button-hoverBackground);
 }
 
