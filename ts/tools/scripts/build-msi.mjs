@@ -52,6 +52,7 @@ let shellPackage = "typeagent-shell.win32-x64";
 let shellFeedVersion = "";
 let shellOrg = "https://dev.azure.com/msctoproj";
 let shellProject = "AI_Systems";
+let skipShellFeedResolution = false;
 
 for (let i = 0; i < args.length; i++) {
     if (args[i] === "--rid") rid = args[++i];
@@ -72,6 +73,8 @@ for (let i = 0; i < args.length; i++) {
     else if (args[i] === "--shell-feed-version") shellFeedVersion = args[++i];
     else if (args[i] === "--shell-org") shellOrg = args[++i];
     else if (args[i] === "--shell-project") shellProject = args[++i];
+    else if (args[i] === "--skip-shell-feed-resolution")
+        skipShellFeedResolution = true;
 }
 if (vscodeChatVersion === "latest") vscodeChatVersion = version;
 
@@ -374,7 +377,12 @@ function downloadArtifact(packageName, ver, targetDir) {
     console.log(`✅ Downloaded ${packageName}: ${files.length} items`);
 }
 
-if (!shellFeedVersion && shellFeed && shellPackage) {
+if (
+    !skipShellFeedResolution &&
+    !shellFeedVersion &&
+    shellFeed &&
+    shellPackage
+) {
     console.log(
         `\n🔎 Resolving latest ${shellPackage} version from feed ${shellFeed}...`,
     );
