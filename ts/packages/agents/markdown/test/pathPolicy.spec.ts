@@ -31,13 +31,13 @@ describe("markdown path policy", () => {
 
     test("allows paths inside the root", () => {
         expect(resolvePathWithinRoot(root, "notes/example.md")).toBe(
-            path.join(root, "notes", "example.md"),
+            path.join(fs.realpathSync(root), "notes", "example.md"),
         );
     });
 
     test("allows names that begin with two dots inside the root", () => {
         expect(resolvePathWithinRoot(root, "..notes.md")).toBe(
-            path.join(root, "..notes.md"),
+            path.join(fs.realpathSync(root), "..notes.md"),
         );
     });
 
