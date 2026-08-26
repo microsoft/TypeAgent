@@ -46,6 +46,10 @@ parameters:
     type: boolean
     default: true
     displayName: "Publish TypeAgent VS Code Chat Universal package"
+  - name: publishVsCodeShell
+    type: boolean
+    default: true
+    displayName: "Publish TypeAgent VS Code Shell Universal package"
   - name: publishMcp
     type: boolean
     default: true
@@ -192,6 +196,23 @@ stages:
           - publish: $(stagingDir)/vscode-chat
             displayName: "Upload artifact: vscode-chat"
             artifact: vscode-chat
+
+          - script: |
+              pnpm --filter vscode-shell run package
+            displayName: "Package TypeAgent VS Code Shell"
+            workingDirectory: $(buildDirectory)
+
+          - bash: |
+              set -euo pipefail
+              mkdir -p "$(stagingDir)/vscode-shell"
+              cp "packages/vscode-shell/dist-pub/vscode-shell.vsix" \
+                "$(stagingDir)/vscode-shell/typeagent-vscode-shell.vsix"
+            displayName: "Stage TypeAgent VS Code Shell artifact"
+            workingDirectory: $(buildDirectory)
+
+          - publish: $(stagingDir)/vscode-shell
+            displayName: "Upload artifact: vscode-shell"
+            artifact: vscode-shell
 
       # ── Job 1b: Platform-specific artifacts (matrix) ──────────────
       # Produces: bundled agent-server, optional agent bundles, MCP exe per RID.
@@ -750,6 +771,34 @@ stages:
             env:
               AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
 
+      # ── Publish VS Code Shell Universal package ──────────────────
+      - job: publish_vscode_shell
+        displayName: "Publish TypeAgent VS Code Shell"
+        condition: eq('${{ parameters.publishVsCodeShell }}', 'true')
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: none
+
+          - download: current
+            artifact: vscode-shell
+            displayName: "Download vscode-shell artifact"
+
+          - bash: |
+              set -euo pipefail
+              az extension add --name azure-devops --only-show-errors || true
+              echo "Publishing typeagent-vscode-shell v$(packageVersion)"
+              az artifacts universal publish \
+                --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project \
+                --feed "$(adoFeed)" \
+                --name "typeagent-vscode-shell" \
+                --version "$(packageVersion)" \
+                --path "$(Pipeline.Workspace)/vscode-shell" \
+                --description "TypeAgent VS Code Shell extension"
+            displayName: "Publish typeagent-vscode-shell"
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
       # ── Publish MCP exe Universal packages ────────────────────────
       - job: publish_mcp
         displayName: "Publish typeagent-mcp"
@@ -884,7 +933,7 @@ stages:
 
       # ── Build, sign, and publish MSI ──────────────────────────────
       # The MSI job must run on Windows (WiX + signtool). It downloads
-      # the agent-server, copilot-plugin, and vscode-chat artifacts built in Stage 1
+      # the agent-server, copilot-plugin, vscode-chat, and vscode-shell artifacts built in Stage 1
       # instead of rebuilding from source.
       - job: build_sign_publish_msi
         displayName: "Build, sign & publish MSI"
@@ -918,6 +967,10 @@ stages:
           - download: current
             artifact: vscode-chat
             displayName: "Download vscode-chat"
+
+          - download: current
+            artifact: vscode-shell
+            displayName: "Download vscode-shell"
 
           # Set up internal npm registry (required by org policy).
           - bash: |
@@ -992,12 +1045,14 @@ stages:
               $agentDir  = "$(Pipeline.Workspace)/agent-server-win32-x64"
               $pluginDir = "$(Pipeline.Workspace)/copilot-plugin"
               $vscodeChatVsix = "$(Pipeline.Workspace)/vscode-chat/typeagent-vscode-chat.vsix"
+              $vscodeShellVsix = "$(Pipeline.Workspace)/vscode-shell/typeagent-vscode-shell.vsix"
               Write-Host "Building MSI with:"
               Write-Host "  - RID:        $(msiRid)"
               Write-Host "  - Version:    $(packageVersion)"
               Write-Host "  - Agent dir:  $agentDir"
               Write-Host "  - Plugin dir: $pluginDir"
-              Write-Host "  - VSIX:       $vscodeChatVsix"
+              Write-Host "  - Chat VSIX:  $vscodeChatVsix"
+              Write-Host "  - Shell VSIX: $vscodeShellVsix"
 
               node .\build-msi.mjs `
                 --rid "$(msiRid)" `
@@ -1005,9 +1060,11 @@ stages:
                 --agent-dir "$agentDir" `
                 --plugin-dir "$pluginDir" `
                 --vscode-chat-vsix "$vscodeChatVsix" `
+                --vscode-shell-vsix "$vscodeShellVsix" `
                 --version "$(packageVersion)" `
                 --plugin-version "$(packageVersion)" `
                 --vscode-chat-version "$(packageVersion)" `
+                --vscode-shell-version "$(packageVersion)" `
                 --shell-storage "$(azureStorageAccountName)" `
                 --shell-container "$(azureStorageContainerName)" `
                 --shell-channel "$(resolvedChannel)" `
