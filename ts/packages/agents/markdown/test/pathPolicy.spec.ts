@@ -33,6 +33,7 @@ describe("markdown path policy", () => {
         expect(resolvePathWithinRoot(root, "notes/example.md")).toBe(
             path.join(fs.realpathSync(root), "notes", "example.md"),
         );
+        expect(resolvePathWithinRoot(root, ".")).toBe(fs.realpathSync(root));
     });
 
     test("allows names that begin with two dots inside the root", () => {
@@ -119,5 +120,12 @@ describe("markdown path policy", () => {
         expect(
             resolveWritableFileWithinRoot(root, path.join("linked", "new.md")),
         ).toBeUndefined();
+    });
+
+    test("rejects a dangling link as a writable target", () => {
+        const link = path.join(root, "dangling");
+        fs.symlinkSync(path.join(sibling, "missing"), link, "junction");
+
+        expect(resolveWritableFileWithinRoot(root, "dangling")).toBeUndefined();
     });
 });
