@@ -1145,12 +1145,6 @@ export async function executeCommand(
                     "AbortError",
                 );
             }
-            const errorDisplay = getErrorDisplayContent(e);
-            if (errorDisplay !== undefined) {
-                actionContext.actionIO.appendDisplay(errorDisplay, "block");
-            } else {
-                displayError(`ERROR: ${e.message}`, actionContext);
-            }
             debugCommandExecError("command execution exception", {
                 requestId: getRequestId(context).requestId,
                 agent: appAgentName,
@@ -1159,6 +1153,7 @@ export async function executeCommand(
                 error: e?.message,
                 stack: e?.stack,
             });
+            throw e;
         }
     } finally {
         actionContext.profiler?.stop();
