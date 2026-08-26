@@ -2,8 +2,10 @@
 // Licensed under the MIT License.
 
 import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
     classifyDroidCalls,
@@ -12,7 +14,11 @@ import {
     type DroidCall,
     type DroidCallShape,
 } from "../pythonLiteral.js";
-import { DROIDCALL_SOURCE, readDroidCallJsonl } from "../huggingFaceRows.js";
+import {
+    DROIDCALL_SOURCE,
+    downloadDroidCall,
+    readDroidCallJsonl,
+} from "../huggingFaceRows.js";
 
 interface CanonicalRow {
     query: string;
@@ -261,4 +267,30 @@ export async function analyzeDroidCall(
         writeFile(join(docsDir, "DroidCall.md"), markdown(report)),
     ]);
     return report;
+}
+
+const DEFAULT_OUTPUT_DIR = join(
+    process.cwd(),
+    "src/translationBench/public_datasets/DroidCall",
+);
+
+async function main(): Promise<void> {
+    const args = new Set(process.argv.slice(2));
+    const outputArg = process.argv
+        .slice(2)
+        .find((arg) => !arg.startsWith("--"));
+    const outputDir = outputArg ?? DEFAULT_OUTPUT_DIR;
+    if (args.has("--download")) await downloadDroidCall(outputDir);
+    const report = await analyzeDroidCall(outputDir);
+    console.log(JSON.stringify(report.splits, null, 2));
+}
+
+if (
+    process.argv[1] !== undefined &&
+    realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+    main().catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : error);
+        process.exitCode = 1;
+    });
 }

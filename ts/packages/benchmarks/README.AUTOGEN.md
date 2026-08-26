@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=96856ac296478fc7f7de34adb8981938180ad1e7c7e07191ab6dbddefdbb8b96 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=8d50891f0ab57fd4fae0fbcf386b22a9d18b22fe11ae86f4d17acb1e36598b67 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -44,7 +44,6 @@ _None._
 
 - [./src/index.ts](./src/index.ts)
 - [./src/translationBench/index.ts](./src/translationBench/index.ts)
-- [./src/translationBench/public_datasets/DroidCall/index.ts](./src/translationBench/public_datasets/DroidCall/index.ts)
 - [./src/translationBench/synthesizer/catalogGenerator/index.ts](./src/translationBench/synthesizer/catalogGenerator/index.ts)
 - [./src/translationBench/synthesizer/goldSchema.ts](./src/translationBench/synthesizer/goldSchema.ts)
 - [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
@@ -52,10 +51,11 @@ _None._
 - [./src/core/paths.ts](./src/core/paths.ts)
 - [./src/core/prices.ts](./src/core/prices.ts)
 - [./src/core/rateLimiter.ts](./src/core/rateLimiter.ts)
-- _…and 54 more under `./src/`._
+- [./src/core/tokenEstimate.ts](./src/core/tokenEstimate.ts)
+- _…and 52 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `c2b6b4ffc29ad962c28c4a5c605ed4774df58a60` on `2026-08-26T23:51:00.019Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `cd45ef0980b0c41742fe01efb9f16b942a172335` on `2026-08-25T22:29:19.411Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
