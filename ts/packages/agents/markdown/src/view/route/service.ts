@@ -19,6 +19,11 @@ import * as decoding from "lib0/decoding";
 import registerDebug from "debug";
 import sanitizeFilename from "sanitize-filename";
 import { isAllowedViewOrigin } from "./originAllowlist.js";
+import {
+    resolveExistingFileWithinRoot,
+    resolvePathWithinRoot,
+    resolveWritableFileWithinRoot,
+} from "./pathPolicy.js";
 
 const debug = registerDebug("typeagent:markdown:service");
 
@@ -100,39 +105,52 @@ app.post(
             }
 
             // Construct and normalize file path
-            const documentPath = path.resolve(
+            const documentPath = resolvePathWithinRoot(
                 ROOT_DIR,
                 `${sanitizedDocumentName}.md`,
             );
 
             debug("Sanitized document path ", documentPath);
             // Verify that the file path is within the safe root directory
-            if (!documentPath.startsWith(ROOT_DIR)) {
+            if (documentPath === undefined) {
                 res.status(403).json({
                     error: "Access to the specified path is forbidden.",
                 });
                 return;
             }
 
-            if (!fs.existsSync(documentPath)) {
-                // Create new document if it doesn't exist
-                fs.writeFileSync(
-                    documentPath,
-                    `# ${documentName}\n\nThis is a new document.\n`,
-                );
+            let safeDocumentPath = resolveWritableFileWithinRoot(
+                ROOT_DIR,
+                documentPath,
+            );
+            if (safeDocumentPath === undefined) {
+                res.status(403).json({
+                    error: "Access to the specified path is forbidden.",
+                });
+                return;
             }
 
-            filePath = documentPath;
+            if (!fs.existsSync(safeDocumentPath)) {
+                // Create new document if it doesn't exist
+                fs.writeFileSync(
+                    safeDocumentPath,
+                    `# ${documentName}\n\nThis is a new document.\n`,
+                    { flag: "wx" },
+                );
+                safeDocumentPath = fs.realpathSync(safeDocumentPath);
+            }
+
+            filePath = safeDocumentPath;
 
             // Initialize collaboration for new document
             const documentId = sanitizedDocumentName;
             collaborationManager.initializeDocument(
                 sanitizedDocumentName,
-                documentPath,
+                safeDocumentPath,
             );
 
             // Load content into collaboration manager
-            const content = fs.readFileSync(documentPath, "utf-8");
+            const content = fs.readFileSync(safeDocumentPath, "utf-8");
             debug("Raw content: ", content);
             // collaborationManager.setDocumentContent(documentId, content);
 
@@ -147,7 +165,7 @@ app.post(
                 success: true,
                 documentName: documentName,
                 content: content,
-                documentPath: documentPath,
+                documentPath: safeDocumentPath,
             });
         } catch (error) {
             res.status(500).json({
@@ -559,8 +577,17 @@ app.post("/document", express.json(), (req: Request, res: Response) => {
     }
 
     try {
+        const writableFilePath = resolveWritableFileWithinRoot(
+            ROOT_DIR,
+            filePath,
+        );
+        if (writableFilePath === undefined) {
+            res.status(403).json({ error: "Access to the file is forbidden" });
+            return;
+        }
+
         // File mode: save to both authoritative document and file
-        const documentId = path.basename(filePath, ".md");
+        const documentId = path.basename(writableFilePath, ".md");
         const ydoc = getAuthoritativeDocument(documentId);
         const ytext = ydoc.getText("content");
 
@@ -569,10 +596,11 @@ app.post("/document", express.json(), (req: Request, res: Response) => {
         ytext.insert(0, markdownContent);
 
         // Then save to file
-        fs.writeFileSync(filePath, markdownContent, "utf-8");
+        fs.writeFileSync(writableFilePath, markdownContent, "utf-8");
+        filePath = writableFilePath;
 
         debug(
-            `Saved content to both Y.js doc and file: ${filePath}, ${markdownContent.length} chars`,
+            `Saved content to both Y.js doc and file: ${writableFilePath}, ${markdownContent.length} chars`,
         );
         res.json({ success: true });
     } catch (error) {
@@ -661,8 +689,11 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
             sanitizedFilePath += ".md";
         }
 
-        const resolvedFilePath = path.resolve(ROOT_DIR, sanitizedFilePath);
-        if (!resolvedFilePath.startsWith(ROOT_DIR)) {
+        const resolvedFilePath = resolvePathWithinRoot(
+            ROOT_DIR,
+            sanitizedFilePath,
+        );
+        if (resolvedFilePath === undefined) {
             res.status(403).json({ error: "Invalid file path" });
             return;
         }
@@ -812,16 +843,16 @@ app.post("/file/load", express.json(), (req: Request, res: Response) => {
     try {
         const { filePath: newFilePath } = req.body;
 
-        if (!newFilePath) {
+        if (typeof newFilePath !== "string" || !newFilePath) {
             res.status(400).json({ error: "File path is required" });
             return;
         }
 
-        const resolvedPath = path.resolve(ROOT_DIR, newFilePath);
-        if (
-            !resolvedPath.startsWith(ROOT_DIR) ||
-            !fs.existsSync(resolvedPath)
-        ) {
+        const resolvedPath = resolveExistingFileWithinRoot(
+            ROOT_DIR,
+            newFilePath,
+        );
+        if (resolvedPath === undefined) {
             res.status(403).json({
                 error: "Access to the file is forbidden or file not found",
             });
@@ -1471,11 +1502,11 @@ process.on("message", async (message: any) => {
     if (message.type == "setFile") {
         if (message.filePath) {
             // Resolve and validate the file path
-            const resolvedFilePath = path.resolve(
+            const resolvedFilePath = resolveWritableFileWithinRoot(
                 ROOT_DIR,
                 path.basename(message.filePath),
             );
-            if (!resolvedFilePath.startsWith(ROOT_DIR)) {
+            if (resolvedFilePath === undefined) {
                 debug("Invalid file path provided in message");
                 return;
             }
