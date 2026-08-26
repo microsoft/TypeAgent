@@ -118,6 +118,7 @@ describe("Copilot host permission policy", () => {
             "Allow once",
             "Allow this tool for request",
             "Allow all for request",
+            "Allow all for session",
             "Deny",
         ]);
         expect(
@@ -145,6 +146,26 @@ describe("Copilot host permission policy", () => {
                 commandIdentifiers: ["echo"],
             },
         });
+    });
+
+    it("does not offer host-wide session approval for sandbox bypass", () => {
+        const request = {
+            kind: "shell" as const,
+            intention: "run outside the sandbox",
+            fullCommandText: "curl https://example.com",
+            commands: [{ identifier: "curl", readOnly: false }],
+            possiblePaths: [],
+            possibleUrls: [{ url: "https://example.com" }],
+            hasWriteFileRedirection: false,
+            canOfferSessionApproval: true,
+            requestSandboxBypass: true,
+        };
+        expect(getCopilotPermissionChoices(request)).toEqual([
+            "Allow once",
+            "Allow this tool for request",
+            "Allow all for request",
+            "Deny",
+        ]);
     });
 
     it("offers scoped and blanket session choices for custom tools", () => {

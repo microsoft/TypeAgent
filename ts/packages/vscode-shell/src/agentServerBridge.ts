@@ -1357,6 +1357,13 @@ export class AgentServerBridge {
         webview: vscode.Webview,
     ): Promise<void> {
         switch (msg.type) {
+            case "permissionDebug":
+                console.warn(
+                    `[vscode-shell permission] ${msg.event}`,
+                    msg.interactionId,
+                    msg.choice ?? "",
+                );
+                break;
             case "sendCommand":
                 await this.sendCommand(
                     msg.command,

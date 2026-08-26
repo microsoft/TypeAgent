@@ -806,12 +806,14 @@ function createCopilotPermissionHandler(
         const requestId = getRequestId(agentContext);
         const managedApprovalRequired =
             request.managedApprovalRequired === true;
-        const canApproveForSession = canOfferCopilotSessionApproval(request);
+        const canApproveForHostSession =
+            canOfferCopilotHostSessionApproval(request);
         const toolRequestApproval =
             copilotToolRequestApprovals.get(agentContext);
         if (
             !managedApprovalRequired &&
-            ((canApproveForSession &&
+            !requestsSandboxBypass(request) &&
+            ((canApproveForHostSession &&
                 copilotPermissionSessionApprovals.has(agentContext)) ||
                 copilotPermissionRequestApprovals.get(agentContext) ===
                     requestId.requestId ||
@@ -886,14 +888,36 @@ export function getCopilotPermissionChoices(
         COPILOT_ALLOW_REQUEST,
     ];
     if (canOfferCopilotSessionApproval(request)) {
-        choices.push(COPILOT_ALLOW_TOOL_SESSION, COPILOT_ALLOW_SESSION);
+        choices.push(COPILOT_ALLOW_TOOL_SESSION);
+    }
+    if (canOfferCopilotHostSessionApproval(request)) {
+        choices.push(COPILOT_ALLOW_SESSION);
     }
     choices.push(COPILOT_DENY);
     return choices;
 }
 
+function requestsSandboxBypass(request: PermissionRequest): boolean {
+    return (
+        "requestSandboxBypass" in request &&
+        request.requestSandboxBypass === true
+    );
+}
+
+function canOfferCopilotHostSessionApproval(
+    request: PermissionRequest,
+): boolean {
+    return (
+        request.managedApprovalRequired !== true &&
+        !requestsSandboxBypass(request)
+    );
+}
+
 function canOfferCopilotSessionApproval(request: PermissionRequest): boolean {
-    if (request.managedApprovalRequired === true) {
+    if (
+        request.managedApprovalRequired === true ||
+        requestsSandboxBypass(request)
+    ) {
         return false;
     }
     if ("canOfferSessionApproval" in request) {

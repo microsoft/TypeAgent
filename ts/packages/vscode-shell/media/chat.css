@@ -181,13 +181,26 @@ body {
 }
 
 .copilot-permission-actions .copilot-permission-allow-menu button:hover,
-.copilot-permission-actions .copilot-permission-allow-menu button:focus {
+.copilot-permission-actions .copilot-permission-allow-menu button:focus,
+.copilot-permission-actions .copilot-permission-allow-menu button.selected {
   color: var(--vscode-menu-selectionForeground, var(--vscode-foreground));
   background: var(
     --vscode-menu-selectionBackground,
     var(--vscode-list-activeSelectionBackground)
   );
   outline: none;
+}
+
+.copilot-permission-actions .copilot-permission-allow-menu button::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+}
+
+.copilot-permission-actions
+  .copilot-permission-allow-menu
+  button.selected::before {
+  content: "✓";
 }
 
 .copilot-permission-actions {

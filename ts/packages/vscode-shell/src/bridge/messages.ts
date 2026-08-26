@@ -358,6 +358,16 @@ export type BridgeFromWebviewMessage =
     | { type: "pcDismiss"; input: string; direction: CompletionDirection }
     | { type: "pcHide" }
     | { type: "pcDispose" }
+    | {
+          type: "permissionDebug";
+          event:
+              | "menu-opened"
+              | "choice-pointerdown"
+              | "choice-selected"
+              | "choice-submitted";
+          interactionId: string;
+          choice?: string;
+      }
     | { type: "demoCommand"; action: "continue" | "cancel" }
     | { type: "demoLineCancelled"; requestId: string }
     // Reply to a `requestInteraction` prompt. Forwarded to the dispatcher

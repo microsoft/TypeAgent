@@ -115,6 +115,41 @@ You can manage conversations two ways:
 
 > Conversation-management results are rendered inline in the chat. Switching results (`new`/`switch`/`prev`/`next`) appear as a fresh agent bubble in the newly-joined conversation, after the switch completes.
 
+### Permission prompts
+
+When an agent requests permission, the prompt offers **Deny** and an approval
+scope. Open the approval menu, select a scope, then click the primary approval
+button. The selected scope is checkmarked in the menu and replaces the primary
+button label before submission.
+
+Available scopes depend on the request:
+
+- **Allow once** grants only the displayed operation.
+- **This tool for current request** grants matching tool operations until the
+  current request completes.
+- **All tools for current request** grants eligible operations until the current
+  request completes.
+- **This tool for this session** is shown when the Copilot SDK supports a
+  session rule for that tool.
+- **All tools for this session** grants eligible operations for the current
+  TypeAgent session.
+
+Managed-policy and sandbox-bypass operations always require explicit approval.
+After the request completes, its final dispatcher message includes a
+`Permissions:` line listing the granted scope. Pressing `Esc` denies the visible
+permission prompt before cancelling its request; when the approval menu is open,
+the first `Esc` closes only the menu.
+
+Automatic session approval can also be controlled directly:
+
+```text
+@allow all
+@allow off
+```
+
+Equivalent natural-language requests include “allow all permissions for this
+session” and “ask me to approve tool permissions again.”
+
 ### Cancelling a running request
 
 While a request is being processed the send arrow morphs into a **stop
