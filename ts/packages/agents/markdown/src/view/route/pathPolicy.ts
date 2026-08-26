@@ -4,17 +4,21 @@
 import fs from "node:fs";
 import path from "node:path";
 
+function isFileNotFoundError(error: unknown): boolean {
+    return (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "ENOENT"
+    );
+}
+
 function pathEntryExists(candidate: string): boolean {
     try {
         fs.lstatSync(candidate);
         return true;
     } catch (error) {
-        if (
-            typeof error === "object" &&
-            error !== null &&
-            "code" in error &&
-            error.code === "ENOENT"
-        ) {
+        if (isFileNotFoundError(error)) {
             return false;
         }
         throw error;
@@ -63,12 +67,7 @@ export function resolveExistingFileWithinRoot(
     try {
         canonicalPath = fs.realpathSync(resolvedPath);
     } catch (error) {
-        if (
-            typeof error === "object" &&
-            error !== null &&
-            "code" in error &&
-            error.code === "ENOENT"
-        ) {
+        if (isFileNotFoundError(error)) {
             return undefined;
         }
         throw error;
