@@ -10,6 +10,7 @@ import {
 import {
     CommandHandlerContext,
     ensureCommandResult,
+    getRequestId,
 } from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import {
@@ -69,6 +70,11 @@ import {
     type ReasoningFormArgs,
 } from "./askUserForm.js";
 import {
+    ASK_USER_KIND_DESCRIPTION,
+    ASK_USER_KIND_VALUES,
+    resolveAskUserSource,
+} from "./askUserSource.js";
+import {
     findInstallableAgents,
     formatInstallableAgents,
 } from "./installableAgents.js";
@@ -86,6 +92,13 @@ import {
     pruneStaleCodingSessions,
 } from "./codingSessionLifecycle.js";
 import { getCodingAttachmentPaths } from "./codingContext.js";
+import {
+    REASONING_DENY,
+    getReasoningPermissionChoices,
+    hasCachedReasoningApproval,
+    recordReasoningApprovalChoice,
+    type ReasoningPermissionPolicyRequest,
+} from "./reasoningPermissionPolicy.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -751,11 +764,34 @@ export function getCopilotPermissionDefault(
     return undefined;
 }
 
+// Build the provider-neutral policy request from a Copilot SDK
+// PermissionRequest. Managed-policy and sandbox-bypass requests must
+// bypass every cache and every session/request-scoped grant, which the
+// policy enforces when `cacheEligible` is false.
+function buildCopilotPolicyRequest(
+    request: PermissionRequest,
+    requestId: string,
+): ReasoningPermissionPolicyRequest {
+    const mandatory =
+        request.managedApprovalRequired === true ||
+        requestsSandboxBypass(request);
+    const sessionEligible =
+        !mandatory && canOfferCopilotSessionApproval(request);
+    return {
+        requestId,
+        permissionIdentity: getCopilotPermissionIdentity(request),
+        cacheEligible: !mandatory,
+        sessionEligible,
+        blanketSessionEligible: sessionEligible,
+    };
+}
+
 function createCopilotPermissionHandler(
     context: ActionContext<CommandHandlerContext>,
     allowedRoot?: string,
 ): PermissionHandler {
     return async (request) => {
+        const agentContext = context.sessionContext.agentContext;
         const scopeViolation = getCopilotPermissionScopeViolation(
             request,
             allowedRoot,
@@ -766,26 +802,171 @@ function createCopilotPermissionHandler(
                 feedback: scopeViolation,
             };
         }
+        const requestId = getRequestId(agentContext);
+        const policyRequest = buildCopilotPolicyRequest(
+            request,
+            requestId.requestId,
+        );
+        if (hasCachedReasoningApproval(agentContext, policyRequest)) {
+            return { kind: "approve-once" };
+        }
         const safe = getCopilotPermissionDefault(request);
         if (safe !== undefined) {
             return safe;
         }
-        const identity =
-            request.kind === "mcp"
-                ? `MCP tool '${request.serverName}/${request.toolName}'`
-                : `Copilot ${request.kind} operation`;
-        const choice = await context.sessionContext.popupQuestion(
-            `${identity} requests sensitive permission. Allow this request once?`,
-            ["Allow once", "Deny"],
-            1,
+        const choices = getReasoningPermissionChoices(policyRequest);
+        const choiceIndex = await agentContext.clientIO.question(
+            requestId,
+            formatCopilotPermissionRequest(request),
+            choices,
+            choices.indexOf(REASONING_DENY),
+            `copilotPermission:${policyRequest.permissionIdentity}`,
         );
-        return choice === 0
-            ? { kind: "approve-once" }
+        const choice = choices[choiceIndex];
+        const allowed = recordReasoningApprovalChoice(
+            agentContext,
+            policyRequest,
+            choice,
+        );
+        // The Copilot SDK also offers an `approve-for-session` result that
+        // caches the decision inside the Copilot session. We don't return
+        // it because that cache is unreachable from `@allow off`; the host
+        // policy above tracks session grants instead.
+        return allowed
+            ? { kind: "approve-once", approvedInteractively: true }
             : {
                   kind: "reject",
                   feedback: "Denied by the TypeAgent host permission policy.",
               };
     };
+}
+
+// Adapter shim over the shared policy: exposed for tests and (transitively)
+// callers that need Copilot's choice list. Adapters own translation from
+// their SDK's request into the policy's normalized shape.
+export function getCopilotPermissionChoices(
+    request: PermissionRequest,
+): string[] {
+    return getReasoningPermissionChoices(
+        buildCopilotPolicyRequest(request, "__preview__"),
+    );
+}
+
+function requestsSandboxBypass(request: PermissionRequest): boolean {
+    return (
+        "requestSandboxBypass" in request &&
+        request.requestSandboxBypass === true
+    );
+}
+
+function canOfferCopilotSessionApproval(request: PermissionRequest): boolean {
+    if ("canOfferSessionApproval" in request) {
+        return request.canOfferSessionApproval === true;
+    }
+    return request.kind === "mcp" || request.kind === "custom-tool";
+}
+
+function getCopilotPermissionIdentity(request: PermissionRequest): string {
+    switch (request.kind) {
+        case "mcp":
+            return `mcp:${request.serverName}/${request.toolName}`;
+        case "custom-tool":
+            return `custom-tool:${request.toolName}`;
+        case "shell":
+            return `shell:${request.commands
+                .map(({ identifier }) => identifier)
+                .sort()
+                .join(",")}`;
+        default:
+            return request.kind;
+    }
+}
+
+export function formatCopilotPermissionRequest(
+    request: PermissionRequest,
+): string {
+    const lines: string[] = [];
+    switch (request.kind) {
+        case "mcp":
+            lines.push(
+                `Copilot wants to run MCP tool '${request.serverName}/${request.toolName}'.`,
+            );
+            if (request.args !== undefined) {
+                lines.push(
+                    `Arguments:\n${formatPermissionDetail(request.args)}`,
+                );
+            }
+            break;
+        case "custom-tool":
+            lines.push(
+                `Copilot wants to run custom tool '${request.toolName}'.`,
+            );
+            break;
+        case "shell":
+            lines.push(
+                `Copilot wants to run a shell command:\n${formatPermissionDetail(request.fullCommandText)}`,
+                `Reason: ${request.intention}`,
+            );
+            if (request.possibleUrls.length > 0) {
+                lines.push(
+                    `May access: ${request.possibleUrls.map(({ url }) => url).join(", ")}`,
+                );
+            }
+            if (request.warning) {
+                lines.push(`Warning: ${request.warning}`);
+            }
+            break;
+        case "read":
+            lines.push(
+                `Copilot wants to read:\n${request.path}`,
+                `Reason: ${request.intention}`,
+            );
+            break;
+        case "write":
+            lines.push(
+                `Copilot wants to write:\n${request.fileName}`,
+                `Reason: ${request.intention}`,
+                `Proposed change:\n${formatPermissionDetail(request.diff)}`,
+            );
+            break;
+        case "url":
+            lines.push(
+                `Copilot wants to access:\n${request.url}`,
+                `Reason: ${request.intention}`,
+            );
+            if (request.redirectedFrom) {
+                lines.push(`Redirected from: ${request.redirectedFrom}`);
+            }
+            break;
+        default:
+            lines.push(
+                `Copilot requests permission for a ${request.kind} operation.`,
+            );
+    }
+    if (
+        "requestSandboxBypass" in request &&
+        request.requestSandboxBypass === true
+    ) {
+        lines.push(
+            `ELEVATED RISK: This operation will run outside the sandbox.${
+                request.requestSandboxBypassReason
+                    ? `\nReason: ${request.requestSandboxBypassReason}`
+                    : ""
+            }`,
+        );
+    }
+    if (request.managedApprovalRequired === true) {
+        lines.push("Managed policy requires an explicit decision.");
+    }
+    return lines.join("\n\n");
+}
+
+function formatPermissionDetail(value: unknown, maxLength = 4000): string {
+    const text =
+        typeof value === "string" ? value : JSON.stringify(value, undefined, 2);
+    return text.length <= maxLength
+        ? text
+        : `${text.slice(0, maxLength)}\n… (truncated)`;
 }
 
 function isPathWithinRoot(candidatePath: string, root: string): boolean {
@@ -1674,11 +1855,15 @@ function getCopilotSessionConfig(
         description: [
             "Ask the user ONE multiple-choice question and block until they answer.",
             "Use ONLY when you are genuinely blocked on a decision that only the user",
-            "can make - an ambiguous choice among concrete options, or a confirmation",
-            "before a destructive or irreversible action. Put the exact options in",
+            "can make - an ambiguous choice among concrete options, or a semantic",
+            "confirmation not covered by a permission-aware tool. Do not ask before",
+            "calling shell, file, URL, MCP, or custom tools; their host permission",
+            "handler is authoritative. Put the exact options in",
             '`choices` (for a yes/no question use ["Yes", "No"]). Returns the option the',
             "user picked. Prefer acting autonomously; do not ask when a reasonable safe",
             "default exists.",
+            "",
+            `\`kind\`: ${ASK_USER_KIND_DESCRIPTION}`,
         ].join("\n"),
         parameters: {
             type: "object",
@@ -1692,6 +1877,11 @@ function getCopilotSessionConfig(
                     items: { type: "string" },
                     description:
                         'The options to choose from (at least 2). For a yes/no question use ["Yes", "No"].',
+                },
+                kind: {
+                    type: "string",
+                    enum: [...ASK_USER_KIND_VALUES],
+                    description: ASK_USER_KIND_DESCRIPTION,
                 },
             },
             required: ["question", "choices"],
@@ -1718,7 +1908,7 @@ function getCopilotSessionConfig(
                 question,
                 choices,
                 undefined,
-                "reasoning",
+                resolveAskUserSource(args?.kind),
             );
             const answer = choices[selected] ?? choices[0] ?? "";
             return {
@@ -2003,7 +2193,7 @@ function getCopilotSessionConfig(
                       ]
                     : []),
                 "## User Interaction",
-                '- `ask_user`: Ask the user ONE multiple-choice question and block for their answer. Strongly prefer to act autonomously with a safe default; use this ONLY when genuinely blocked on a decision only the user can make (an ambiguous choice among concrete options, or confirmation before a destructive/irreversible action). Provide the exact options (for yes/no use ["Yes", "No"]), and ask at most one such question.',
+                "- `ask_user`: Ask the user ONE multiple-choice question and block for their answer. Use it only for ambiguity or a semantic confirmation not covered by a permission-aware tool. Never ask permission before shell, file, URL, MCP, or custom-tool calls; invoke them directly and let the host permission handler prompt. Provide exact options and ask at most one question.",
                 "- `ask_user_form`: Ask SEVERAL questions at once (pick / multiChoice / yesNo, optional free-text) in one form and block for all answers. Prefer this over multiple `ask_user` calls when a single blocking moment needs more than one answer.",
                 "",
                 "## Guidelines",
