@@ -899,19 +899,6 @@ export function formatCopilotPermissionRequest(
             lines.push(
                 `Copilot wants to run custom tool '${request.toolName}'.`,
             );
-            if (
-                typeof request.toolDescription === "string" &&
-                request.toolDescription.length > 0
-            ) {
-                lines.push(
-                    formatPermissionDetail(request.toolDescription, 300),
-                );
-            }
-            if (request.args !== undefined) {
-                lines.push(
-                    `Arguments:\n${formatPermissionDetail(request.args, 1200)}`,
-                );
-            }
             break;
         case "shell":
             lines.push(

@@ -189,49 +189,14 @@ describe("Copilot permission adapter: prompt formatting", () => {
         expect(message).toContain("network policy blocked the request");
     });
 
-    it("summarizes the custom tool schema, action, and arguments", () => {
+    it("shows only the custom tool identity", () => {
         const message = formatCopilotPermissionRequest({
             kind: "custom-tool",
-            toolName: "execute_action",
-            toolDescription: "Run a TypeAgent action",
-            args: {
-                schemaName: "list",
-                action: {
-                    actionName: "addItems",
-                    parameters: { listName: "groceries", items: ["milk"] },
-                },
-            },
+            toolName: "remember",
+            toolDescription: "Save information for future conversations",
+            args: { text: "Preference supplied by the user" },
         });
-        expect(message).toContain(
-            "Copilot wants to run custom tool 'execute_action'.",
-        );
-        expect(message).toContain("Run a TypeAgent action");
-        expect(message).toContain("Arguments:");
-        expect(message).toContain('"schemaName": "list"');
-        expect(message).toContain('"actionName": "addItems"');
-        expect(message).toContain('"listName": "groceries"');
-    });
-
-    it("bounds custom tool argument disclosure so the prompt stays usable", () => {
-        const bigArgs = { blob: "x".repeat(20000) };
-        const message = formatCopilotPermissionRequest({
-            kind: "custom-tool",
-            toolName: "execute_action",
-            toolDescription: "Run a TypeAgent action",
-            args: bigArgs,
-        });
-        expect(message).toContain("(truncated)");
-        expect(message.length).toBeLessThan(2000);
-    });
-
-    it("bounds custom tool descriptions so the prompt stays usable", () => {
-        const message = formatCopilotPermissionRequest({
-            kind: "custom-tool",
-            toolName: "execute_action",
-            toolDescription: "x".repeat(2000),
-        });
-        expect(message).toContain("(truncated)");
-        expect(message.length).toBeLessThan(500);
+        expect(message).toBe("Copilot wants to run custom tool 'remember'.");
     });
 });
 
