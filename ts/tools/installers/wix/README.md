@@ -261,6 +261,16 @@ msiexec /i "$env:TEMP\typeagent-msi-stage\out\TypeAgent-0.0.1-local-win32-x64.ms
 Get-Item "$env:LOCALAPPDATA\TypeAgent\agent-server" -ErrorAction SilentlyContinue
 ```
 
+Payload extraction failures always write the complete exception and PowerShell
+stack trace to
+`$env:LOCALAPPDATA\TypeAgent\logs\msi-extract-payload.log`. For interactive
+debugging, select **Show full error details if setup fails** on the endpoint
+providers page. The installer displays those details before rollback instead of
+leaving the underlying exception only in the log. The equivalent command-line
+property is `SHOWSTACKTRACE=1`. Error details are suppressed for quiet or basic
+UI installs so unattended deployment cannot block on the dialog; the full
+exception remains available in the log.
+
 ## Native VS Code Chat integration
 
 `VSCODECHAT=1` is enabled by default. During install, the MSI runs the shared
