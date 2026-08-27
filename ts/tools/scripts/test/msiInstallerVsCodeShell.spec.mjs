@@ -69,7 +69,7 @@ test("WiX declares the VSCODESHELL public property with a default of 1", () => {
 test("MSI UI exposes VSCODESHELL as an installation option", () => {
     assert.match(
         wxs,
-        /<Control Id="VsCodeShellCheckBox"[\s\S]*?Property="VSCODESHELL" CheckBoxValue="1"/,
+        /<Control Id="VsCodeShellCheckBox"[\s\S]*?Property="VSCODESHELL" CheckBoxValue="1"[\s\S]*?Text="Install TypeAgent Shell Extension for VS Code 1\.90 or newer"/,
     );
 });
 

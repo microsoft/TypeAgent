@@ -817,7 +817,7 @@
 
         <Control Id="VsCodeShellCheckBox" Type="CheckBox" X="20" Y="237" Width="340" Height="12"
                  Property="VSCODESHELL" CheckBoxValue="1"
-                 Text="Install TypeAgent Shell for VS Code 1.90 or newer" />
+                 Text="Install TypeAgent Shell Extension for VS Code 1.90 or newer" />
 
         <Control Id="ShellCheckBox" Type="CheckBox" X="20" Y="253" Width="340" Height="12"
                  Property="SHELL" CheckBoxValue="1"
