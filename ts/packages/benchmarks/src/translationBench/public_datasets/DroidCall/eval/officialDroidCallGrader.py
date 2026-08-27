@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 """DroidCall paper, released-code, and TypeAgent-adjusted scorers."""
 
 import json

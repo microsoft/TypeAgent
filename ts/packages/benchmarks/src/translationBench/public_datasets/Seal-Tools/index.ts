@@ -33,14 +33,20 @@ export async function generateSealToolsValidation(
     const { rows: hfRows } = await downloadSealToolsValidation(outputDir);
     const { rows, skipped } = buildSealToolsValidationRows(hfRows);
     const outputPath = join(outputDir, `${DATASET_NAME}.jsonl`);
-    await writeFile(outputPath, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
-    process.stderr.write(`built ${rows.length} eval rows (${skipped} skipped)\n`);
+    await writeFile(
+        outputPath,
+        rows.map((r) => JSON.stringify(r)).join("\n") + "\n",
+    );
+    process.stderr.write(
+        `built ${rows.length} eval rows (${skipped} skipped)\n`,
+    );
     return { outputPath, rowCount: rows.length };
 }
 
 async function main(): Promise<void> {
     const outputDir = process.argv[2] ?? DEFAULT_OUTPUT_DIR;
-    const { outputPath, rowCount } = await generateSealToolsValidation(outputDir);
+    const { outputPath, rowCount } =
+        await generateSealToolsValidation(outputDir);
     console.log(`\nwrote ${DATASET_NAME}: ${rowCount} eval rows`);
     console.log(outputPath);
 }

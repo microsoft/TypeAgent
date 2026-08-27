@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Run from ts/packages/benchmarks after pnpm build.
 // This calls the TypeAgent translator only. It does not execute any action.
 

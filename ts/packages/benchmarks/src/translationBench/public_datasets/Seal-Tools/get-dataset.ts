@@ -31,7 +31,9 @@ async function fetchWithRetry(url: URL, attempts = 4): Promise<Response> {
     let lastError: unknown;
     for (let attempt = 0; attempt < attempts; attempt++) {
         try {
-            const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+            const res = await fetch(url, {
+                signal: AbortSignal.timeout(30_000),
+            });
             if (res.status === 429 || res.status >= 500) {
                 throw new Error(`HF rows API transient ${res.status}`);
             }
@@ -44,9 +46,7 @@ async function fetchWithRetry(url: URL, attempts = 4): Promise<Response> {
             if (attempt < attempts - 1) await sleep(500 * 2 ** attempt);
         }
     }
-    throw lastError instanceof Error
-        ? lastError
-        : new Error(String(lastError));
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 async function fetchRowsPage(
@@ -65,7 +65,9 @@ async function fetchRowsPage(
         num_rows_total?: number;
     };
     if (!Array.isArray(body.rows) || typeof body.num_rows_total !== "number") {
-        throw new Error(`HF rows API returned an unexpected body @offset=${offset}`);
+        throw new Error(
+            `HF rows API returned an unexpected body @offset=${offset}`,
+        );
     }
     return {
         rows: body.rows.map((entry) => entry.row),
@@ -92,7 +94,10 @@ export async function downloadSealToolsValidation(
     let offset = 0;
     let total = Number.POSITIVE_INFINITY;
     while (offset < total) {
-        const { rows, total: pageTotal } = await fetchRowsPage(offset, pageSize);
+        const { rows, total: pageTotal } = await fetchRowsPage(
+            offset,
+            pageSize,
+        );
         total = pageTotal;
         if (rows.length === 0) break;
         all.push(...rows);

@@ -56,12 +56,15 @@ describe("translation bench checkpoints", () => {
 
     it("recovers a torn final row before appending", () => {
         const checkpointPath = path.join(directory, "checkpoint.jsonl");
-        appendTranslationBenchCheckpointRows(checkpointPath, header, [row("1")]);
-        fs.appendFileSync(checkpointPath, '{"kind":"translation-bench-row"');
-        appendTranslationBenchCheckpointRows(checkpointPath, header, [row("2")]);
-        expect(readTranslationBenchCheckpoint<string>(checkpointPath).rows).toEqual([
+        appendTranslationBenchCheckpointRows(checkpointPath, header, [
             row("1"),
+        ]);
+        fs.appendFileSync(checkpointPath, '{"kind":"translation-bench-row"');
+        appendTranslationBenchCheckpointRows(checkpointPath, header, [
             row("2"),
         ]);
+        expect(
+            readTranslationBenchCheckpoint<string>(checkpointPath).rows,
+        ).toEqual([row("1"), row("2")]);
     });
 });

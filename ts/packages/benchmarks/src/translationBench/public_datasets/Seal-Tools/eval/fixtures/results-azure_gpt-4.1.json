@@ -38,9 +38,7 @@
         "sourceHash": "655897b1b1c78dfbb0fe7748472f65a8607c3d1f2ea7fa404e078ab2ffeb3342"
       },
       "model": "azure/gpt-4.1",
-      "activeSchemas": [
-        "sealtools_dev_difficult_201"
-      ],
+      "activeSchemas": ["sealtools_dev_difficult_201"],
       "activeSchemaCount": 1,
       "activeActionCount": 5,
       "utterance": "I need to gather information about the Service Level Agreement (SLA) for a specific cloud service. Can you please find the SLA information for the AWS compute service in the us-east-1 region? Additionally, I need to backup some data to the cloud. The source data is located at '/home/user/data' and I want the backup to be stored at '/cloud_backup/data'. Finally, I need to update the details of a shipment in the logistics management software. The shipment identifier is 'ZzRpnklbRL' and I want to update the shipment details with 'updated item name, weight, dimensions'.",
@@ -209,9 +207,7 @@
         "sourceHash": "ca9ee4e645efb00508d1451696c23fbdae8233a9c57132348890e1210958e5d9"
       },
       "model": "azure/gpt-4.1",
-      "activeSchemas": [
-        "sealtools_dev_difficult_202"
-      ],
+      "activeSchemas": ["sealtools_dev_difficult_202"],
       "activeSchemaCount": 1,
       "activeActionCount": 5,
       "utterance": "I need information about the capacity of a warehouse with ID 44. Then I want to retrieve the layout and design of the Fiction section on the third floor of the Central Library. Finally, I would like to obtain metadata associated with the library's digital resources, specifically the author information based on the publication year filter criteria.",
@@ -381,9 +377,7 @@
         "sourceHash": "391d260f5b843d7ee5947afaf28af00632ca149a3d1c5938826283645d2f080b"
       },
       "model": "azure/gpt-4.1",
-      "activeSchemas": [
-        "sealtools_dev_difficult_209"
-      ],
+      "activeSchemas": ["sealtools_dev_difficult_209"],
       "activeSchemaCount": 1,
       "activeActionCount": 5,
       "utterance": "Please help me to track a package. I have a tracking number TRK987654321 and the package is shipped from New York to Paris. Could you please retrieve the estimated delivery time for me? In addition, could you update the shipment details of shipment ID vzuAqCcw6dOW with the following information: updated item name, weight, and dimensions? Also, I am interested in learning more about geological information. Can you provide me with information about mountains? Finally, I would like to know more about the Grand Canyon located in Arizona. Could you retrieve a description, age, and location of the formation?",
@@ -588,9 +582,7 @@
         "sourceHash": "0ecfe81b5600b22db410573e2ea7b6fc4e01173f960a7fbd68508122ef4a00d2"
       },
       "model": "azure/gpt-4.1",
-      "activeSchemas": [
-        "sealtools_dev_easy_0"
-      ],
+      "activeSchemas": ["sealtools_dev_easy_0"],
       "activeSchemaCount": 1,
       "activeActionCount": 5,
       "utterance": "Retrieve information about the number of nurses in a specific country.",
@@ -709,9 +701,7 @@
         "sourceHash": "0d5a4f989c64696b0656a133b47468e60d47f43e205af9fdfa457477c18f3a42"
       },
       "model": "azure/gpt-4.1",
-      "activeSchemas": [
-        "sealtools_dev_easy_1"
-      ],
+      "activeSchemas": ["sealtools_dev_easy_1"],
       "activeSchemaCount": 1,
       "activeActionCount": 5,
       "utterance": "Tell me the engagement metrics for the Facebook post with the ID \"rOBhSVKGVKe.\"",
@@ -2618,9 +2608,7 @@
     "sealtools_dev_difficult_699": "3d46218de7b49ecc8dba8367bcc1b15d38b578dc4550756f57e3118529868712"
   },
   "settings": {
-    "models": [
-      "azure/gpt-4.1"
-    ],
+    "models": ["azure/gpt-4.1"],
     "scenarios": [
       {
         "id": "baseline",
@@ -2654,9 +2642,7 @@
     "translation": {
       "baseline": {
         "enabled": true,
-        "model": [
-          "azure/gpt-4.1"
-        ],
+        "model": ["azure/gpt-4.1"],
         "reasoningEffort": "",
         "stream": false,
         "promptConfig": {
