@@ -64,7 +64,7 @@ const DROIDCALL_SOURCE_SHA256 = {
 const percent = (part: number, total: number): number =>
     total === 0 ? 0 : Number(((part * 100) / total).toFixed(2));
 
-const RESULT_REFERENCE = /^#(\d+)$/;
+const RESULT_REFERENCE = /#(\d+)\b/g;
 const DOWNLOAD_OPTION = "--download";
 
 function hasPriorResultReference(
@@ -72,8 +72,9 @@ function hasPriorResultReference(
     priorResultIds: ReadonlySet<number>,
 ): boolean {
     if (typeof value === "string") {
-        const match = RESULT_REFERENCE.exec(value);
-        return match !== null && priorResultIds.has(Number(match[1]));
+        return [...value.matchAll(RESULT_REFERENCE)].some((match) =>
+            priorResultIds.has(Number(match[1])),
+        );
     }
     if (Array.isArray(value)) {
         return value.some((item) =>
