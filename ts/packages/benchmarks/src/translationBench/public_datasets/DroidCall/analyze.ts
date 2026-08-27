@@ -3,22 +3,16 @@
 
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-    classifyDroidCalls,
-    hasDroidCallResultReference,
     parseDroidCallCode,
     type DroidCall,
     type DroidCallShape,
 } from "../pythonLiteral.js";
-import {
-    DROIDCALL_SOURCE,
-    downloadDroidCall,
-    readDroidCallJsonl,
-} from "../huggingFaceRows.js";
+import { DROIDCALL_SOURCE, downloadDroidCall } from "../huggingFaceRows.js";
 
 interface CanonicalRow {
     query: string;
@@ -70,6 +64,49 @@ const DROIDCALL_SOURCE_SHA256 = {
 const percent = (part: number, total: number): number =>
     total === 0 ? 0 : Number(((part * 100) / total).toFixed(2));
 
+const RESULT_REFERENCE = /^#(\d+)$/;
+
+function hasPriorResultReference(
+    value: unknown,
+    priorResultIds: ReadonlySet<number>,
+): boolean {
+    if (typeof value === "string") {
+        const match = RESULT_REFERENCE.exec(value);
+        return match !== null && priorResultIds.has(Number(match[1]));
+    }
+    if (Array.isArray(value)) {
+        return value.some((item) =>
+            hasPriorResultReference(item, priorResultIds),
+        );
+    }
+    if (typeof value === "object" && value !== null) {
+        return Object.values(value).some((item) =>
+            hasPriorResultReference(item, priorResultIds),
+        );
+    }
+    return false;
+}
+
+function nestedConsumerNames(calls: readonly DroidCall[]): string[] {
+    const priorResultIds = new Set<number>();
+    const names: string[] = [];
+    for (const call of calls) {
+        if (hasPriorResultReference(call.arguments, priorResultIds)) {
+            names.push(call.name);
+        }
+        priorResultIds.add(call.id);
+    }
+    return names;
+}
+
+function classifyCalls(calls: readonly DroidCall[]): DroidCallShape {
+    if (calls.length === 0) return "noCall";
+    if (calls.length === 1) return "singleTool";
+    return nestedConsumerNames(calls).length > 0
+        ? "multiCallNested"
+        : "multiCallWithoutNested";
+}
+
 function analyzeSplit(rows: CanonicalRow[]): SplitAnalysis {
     const bucketCounts: Record<DroidCallShape, number> = {
         noCall: 0,
@@ -82,18 +119,13 @@ function analyzeSplit(rows: CanonicalRow[]): SplitAnalysis {
     let calls = 0;
     for (const row of rows) {
         calls += row.answers.length;
-        bucketCounts[classifyDroidCalls(row.answers)]++;
+        bucketCounts[classifyCalls(row.answers)]++;
         distribution.set(
             row.answers.length,
             (distribution.get(row.answers.length) ?? 0) + 1,
         );
-        for (const call of row.answers) {
-            if (hasDroidCallResultReference(call.arguments)) {
-                nestedConsumers.set(
-                    call.name,
-                    (nestedConsumers.get(call.name) ?? 0) + 1,
-                );
-            }
+        for (const name of nestedConsumerNames(row.answers)) {
+            nestedConsumers.set(name, (nestedConsumers.get(name) ?? 0) + 1);
         }
     }
     return {
@@ -133,62 +165,44 @@ function sameCalls(left: DroidCall[], right: DroidCall[]): boolean {
     );
 }
 
-async function sourceFileInfo(
-    rawDir: string,
-): Promise<Record<string, SourceFileInfo>> {
-    const result: Record<string, SourceFileInfo> = {};
+type SourceFileName = (typeof DROIDCALL_SOURCE.files)[number];
+
+interface SourceSnapshot {
+    files: Record<string, SourceFileInfo>;
+    contents: Map<SourceFileName, Buffer>;
+}
+
+async function readSourceSnapshot(rawDir: string): Promise<SourceSnapshot> {
+    const files: Record<string, SourceFileInfo> = {};
+    const contents = new Map<SourceFileName, Buffer>();
     for (const relativePath of DROIDCALL_SOURCE.files) {
-        const path = join(rawDir, relativePath);
-        const [contents, fileStat] = await Promise.all([
-            readFile(path),
-            stat(path),
-        ]);
-        const sha256 = createHash("sha256").update(contents).digest("hex");
+        const content = await readFile(join(rawDir, relativePath));
+        const sha256 = createHash("sha256").update(content).digest("hex");
         if (sha256 !== DROIDCALL_SOURCE_SHA256[relativePath]) {
             throw new Error(
                 `${relativePath} does not match DroidCall revision ${DROIDCALL_SOURCE.revision}`,
             );
         }
-        result[relativePath] = { bytes: fileStat.size, sha256 };
+        files[relativePath] = { bytes: content.byteLength, sha256 };
+        contents.set(relativePath, content);
     }
-    return result;
+    return { files, contents };
 }
 
-function markdown(report: DroidCallAnalysis): string {
-    const row = (name: string, bucket: Bucket) =>
-        `| ${name} | ${bucket.rows.toLocaleString()} | ${bucket.percent.toFixed(2)}% |`;
-    const sections = Object.entries(report.splits)
-        .map(([name, split]) => {
-            const heading =
-                name === "full"
-                    ? "Full dataset"
-                    : name === "train"
-                      ? "Training split"
-                      : "Test split";
-            const multiCallRows =
-                split.buckets.multiCallNested.rows +
-                split.buckets.multiCallWithoutNested.rows;
-            const nestedShareOfMultiCall = percent(
-                split.buckets.multiCallNested.rows,
-                multiCallRows,
-            );
-            const distribution = Object.entries(split.callCountDistribution)
-                .map(([calls, rows]) => `${calls}: ${rows.toLocaleString()}`)
-                .join(", ");
-            return `## ${heading}\n\n${split.rows.toLocaleString()} rows contain ${split.calls.toLocaleString()} calls. ${multiCallRows.toLocaleString()} rows (${percent(multiCallRows, split.rows).toFixed(2)}%) have more than one call. Of those multi-call rows, ${nestedShareOfMultiCall.toFixed(2)}% pass a prior result into a later call.\n\n| Shape | Rows | Share of rows |\n| --- | ---: | ---: |\n${row("No call", split.buckets.noCall)}
-${row("Single tool", split.buckets.singleTool)}\n${row("Multi-call, nested", split.buckets.multiCallNested)}\n${row("Multi-call, without nesting", split.buckets.multiCallWithoutNested)}\n\nRows by call count: ${distribution}.`;
-        })
-        .join("\n\n");
-    const snapshotBytes = Object.values(report.source.files).reduce(
-        (sum, file) => sum + file.bytes,
-        0,
-    );
-    const full = report.splits.full!;
-    const fullMultiCallRows =
-        full.buckets.multiCallNested.rows +
-        full.buckets.multiCallWithoutNested.rows;
-    return `# DroidCall data analysis\n\nThe full DroidCall dataset has ${full.rows.toLocaleString()} rows and ${full.calls.toLocaleString()} gold calls. Single-tool requests account for ${full.buckets.singleTool.percent.toFixed(2)}% of rows. The other ${percent(fullMultiCallRows, full.rows).toFixed(2)}% are multi-call requests; ${percent(full.buckets.multiCallNested.rows, fullMultiCallRows).toFixed(2)}% of those pass a prior result into a later call.\n\nSource: [mllmTeam/DroidCall](https://huggingface.co/datasets/mllmTeam/DroidCall), revision \`${report.source.revision}\`. The local snapshot has ${Object.keys(report.source.files).length} files (${(snapshotBytes / 1024 / 1024).toFixed(2)} MiB). It includes every file listed by the HuggingFace repository at that revision.\n\n## Classification\n\nThe analysis reads the structured \`answers\` in \`DroidCall_train.jsonl\` and \`DroidCall_test.jsonl\`. The buckets are mutually exclusive:\n\n- No call: no gold calls.
-- Single tool: exactly one gold call.\n- Multi-call, nested: at least two calls and an argument contains a \`#N\` result reference. The reference can occur inside an array or object.\n- Multi-call, without nesting: at least two calls and no argument contains a result reference.\n\n${sections}\n\n## Parser reuse and validation\n\nDroidCall's assistant output uses Python-like function calls. \`parseDroidCallCode()\` handles the assignment and call syntax, then delegates strings, numbers, booleans, nulls, arrays, and objects to Seal-Tools' existing \`parsePythonLiteral()\`. This keeps one literal parser for both datasets.\n\nThe code-format file covers the ${report.parserValidation.rows.toLocaleString()} training rows. Parsed calls exactly match the canonical structured answers for ${report.parserValidation.exactMatches.toLocaleString()} rows (${percent(report.parserValidation.exactMatches, report.parserValidation.rows).toFixed(2)}%). There are ${report.parserValidation.parseFailures} parse failures and ${report.parserValidation.mismatches} source mismatches. Source mismatches include values that the code syntax cannot reproduce, such as a sentence-like function name or an argument key with leading whitespace.\n`;
+function parseJsonl<T>(fileName: SourceFileName, contents: Buffer): T[] {
+    const rows: T[] = [];
+    for (const [index, line] of contents
+        .toString("utf8")
+        .split("\n")
+        .entries()) {
+        if (line.trim().length === 0) continue;
+        try {
+            rows.push(JSON.parse(line) as T);
+        } catch (error) {
+            throw new Error(`${fileName}:${index + 1}: ${String(error)}`);
+        }
+    }
+    return rows;
 }
 
 export interface DroidCallAnalysis {
@@ -209,12 +223,19 @@ export interface DroidCallAnalysis {
 export async function analyzeDroidCall(
     outputDir: string,
 ): Promise<DroidCallAnalysis> {
-    const rawDir = join(outputDir, "raw");
-    const [train, test, chat] = await Promise.all([
-        readDroidCallJsonl<CanonicalRow>(join(rawDir, "DroidCall_train.jsonl")),
-        readDroidCallJsonl<CanonicalRow>(join(rawDir, "DroidCall_test.jsonl")),
-        readDroidCallJsonl<ChatRow>(join(rawDir, "DroidCall_code_short.jsonl")),
-    ]);
+    const source = await readSourceSnapshot(join(outputDir, "raw"));
+    const train = parseJsonl<CanonicalRow>(
+        "DroidCall_train.jsonl",
+        source.contents.get("DroidCall_train.jsonl")!,
+    );
+    const test = parseJsonl<CanonicalRow>(
+        "DroidCall_test.jsonl",
+        source.contents.get("DroidCall_test.jsonl")!,
+    );
+    const chat = parseJsonl<ChatRow>(
+        "DroidCall_code_short.jsonl",
+        source.contents.get("DroidCall_code_short.jsonl")!,
+    );
     if (chat.length !== train.length) {
         throw new Error(
             `DroidCall code and train row counts differ: ${chat.length} !== ${train.length}`,
@@ -243,7 +264,7 @@ export async function analyzeDroidCall(
         source: {
             dataset: DROIDCALL_SOURCE.dataset,
             revision: DROIDCALL_SOURCE.revision,
-            files: await sourceFileInfo(rawDir),
+            files: source.files,
         },
         splits: {
             full: analyzeSplit([...train, ...test]),
@@ -257,30 +278,21 @@ export async function analyzeDroidCall(
             mismatches,
         },
     };
-    const docsDir = join(outputDir, "docs");
-    await mkdir(docsDir, { recursive: true });
-    await Promise.all([
-        writeFile(
-            join(outputDir, "analysis.json"),
-            JSON.stringify(report, null, 2) + "\n",
-        ),
-        writeFile(join(docsDir, "DroidCall.md"), markdown(report)),
-    ]);
+    await writeFile(
+        join(outputDir, "analysis.json"),
+        JSON.stringify(report, null, 2) + "\n",
+    );
     return report;
 }
 
-const DEFAULT_OUTPUT_DIR = join(
-    process.cwd(),
-    "src/translationBench/public_datasets/DroidCall",
-);
-
 async function main(): Promise<void> {
-    const args = new Set(process.argv.slice(2));
-    const outputArg = process.argv
-        .slice(2)
-        .find((arg) => !arg.startsWith("--"));
-    const outputDir = outputArg ?? DEFAULT_OUTPUT_DIR;
-    if (args.has("--download")) await downloadDroidCall(outputDir);
+    const args = process.argv.slice(2);
+    const outputArgs = args.filter((arg) => !arg.startsWith("--"));
+    if (outputArgs.length !== 1) {
+        throw new Error("Usage: analyzeDroidCall [--download] <output-dir>");
+    }
+    const outputDir = outputArgs[0]!;
+    if (args.includes("--download")) await downloadDroidCall(outputDir);
     const report = await analyzeDroidCall(outputDir);
     console.log(JSON.stringify(report.splits, null, 2));
 }
