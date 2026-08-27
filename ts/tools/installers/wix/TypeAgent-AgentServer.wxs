@@ -75,6 +75,7 @@
     <Property Id="STARTSERVER" Value="1" Secure="yes" />
     <Property Id="AUTOSTART" Value="1" Secure="yes" />
     <Property Id="VSCODECHAT" Value="1" Secure="yes" />
+    <Property Id="SHOWSTACKTRACE" Secure="yes" />
 
     <!-- ═══════════════════════════════════════════════
          Optional TypeAgent Shell install (Electron app)
@@ -274,7 +275,7 @@
     <SetProperty Id="ExtractAgentServerPayload"
            Before="ExtractAgentServerPayload"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -Payload &quot;agent-server&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -Payload &quot;agent-server&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot; -ShowStackTrace &quot;[SHOWSTACKTRACE]&quot; -InstallerUiLevel &quot;[UILevel]&quot;" />
 
     <CustomAction Id="ExtractAgentServerPayload"
                   BinaryKey="WixCA"
@@ -286,7 +287,7 @@
     <SetProperty Id="ExtractCopilotPluginPayload"
            Before="ExtractCopilotPluginPayload"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -Payload &quot;copilot-plugin&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -Payload &quot;copilot-plugin&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot; -ShowStackTrace &quot;[SHOWSTACKTRACE]&quot; -InstallerUiLevel &quot;[UILevel]&quot;" />
 
     <CustomAction Id="ExtractCopilotPluginPayload"
                   BinaryKey="WixCA"
@@ -692,7 +693,7 @@
       <DialogRef Id="UserExit" />
 
       <!-- ═══ Provider / embedding selection dialog ═══ -->
-      <Dialog Id="ProviderDlg" Width="370" Height="290" Title="[ProductName] Setup">
+      <Dialog Id="ProviderDlg" Width="370" Height="310" Title="[ProductName] Setup">
         <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44"
                  TabSkip="no" Text="!(loc.InstallDirDlgBannerBitmap)" />
         <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
@@ -762,12 +763,16 @@
                  Property="SHELL" CheckBoxValue="1"
                  Text="Also install the TypeAgent Shell desktop app" />
 
-        <Control Id="BottomLine" Type="Line" X="0" Y="254" Width="370" Height="0" />
-        <Control Id="Back" Type="PushButton" X="180" Y="263" Width="56" Height="17"
+        <Control Id="StackTraceCheckBox" Type="CheckBox" X="20" Y="253" Width="340" Height="12"
+                 Property="SHOWSTACKTRACE" CheckBoxValue="1"
+                 Text="Show full error details if setup fails" />
+
+        <Control Id="BottomLine" Type="Line" X="0" Y="274" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="283" Width="56" Height="17"
                  Text="!(loc.WixUIBack)" />
-        <Control Id="Next" Type="PushButton" X="236" Y="263" Width="56" Height="17"
+        <Control Id="Next" Type="PushButton" X="236" Y="283" Width="56" Height="17"
                  Default="yes" Text="!(loc.WixUINext)" />
-        <Control Id="Cancel" Type="PushButton" X="304" Y="263" Width="56" Height="17"
+        <Control Id="Cancel" Type="PushButton" X="304" Y="283" Width="56" Height="17"
                  Cancel="yes" Text="!(loc.WixUICancel)">
           <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
         </Control>
