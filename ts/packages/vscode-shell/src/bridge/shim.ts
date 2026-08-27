@@ -12,6 +12,7 @@ import type {
     DispatcherConnectOptions,
 } from "@typeagent/agent-server-client";
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
+import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
 
 export type SessionInfo = ConversationInfo & { sessionId: string };
 
@@ -19,6 +20,7 @@ export type SessionDispatcher = {
     dispatcher: Dispatcher;
     sessionId: string;
     name: string;
+    pendingInteractions: PendingInteractionRequest[];
 };
 
 export type LegacyConnectOptions = Omit<
@@ -60,6 +62,7 @@ export function wrapLegacy(
                 dispatcher: r.dispatcher,
                 sessionId: r.conversationId,
                 name: r.name,
+                pendingInteractions: r.pendingInteractions ?? [],
             };
         },
         leaveSession: (id) => c.leaveConversation(id),

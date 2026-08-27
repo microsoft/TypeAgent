@@ -3,12 +3,18 @@
 
 <#
 .SYNOPSIS
-  Installs or removes the TypeAgent VS Code Chat extension and desktop shortcut.
+  Installs or removes a TypeAgent VS Code extension (chat or shell) and its
+  optional desktop shortcut.
 
 .DESCRIPTION
   Shared by install-typeagent.ps1 and the WiX MSI. Discovers a compatible
   per-user or system VS Code installation, installs the supplied VSIX, and
-  creates a desktop shortcut that enables the proposed chat sessions API.
+  (for the chat extension) creates a desktop shortcut that enables the
+  proposed chat sessions API.
+
+  Ownership is tracked under a per-extension HKCU key so multiple extensions
+  installed by the same MSI don't overwrite each other's uninstall metadata.
+  Pass -NoShortcut for extensions that don't need a launcher on the desktop.
 
   Exit codes:
     0  Success.
@@ -25,11 +31,19 @@ param(
     [string]$ExtensionId = "typeagent.vscode-chat",
     [string]$Owner = "standalone",
     [string]$ShortcutName = "VS Code with TypeAgent.lnk",
+    # HKCU key used to track ownership of the installed extension. Each
+    # TypeAgent-managed extension gets its own subkey so a Chat uninstall does
+    # not clobber the Shell record (and vice versa).
+    [string]$OwnershipKey = "HKCU:\Software\Microsoft\TypeAgent\VSCodeChat",
+    # Skip desktop-shortcut creation and removal. Use for extensions that don't
+    # need a dedicated VS Code launcher (e.g. the TypeAgent VS Code Shell,
+    # which doesn't require proposed APIs).
+    [switch]$NoShortcut,
     [string]$LogPath = "$env:LOCALAPPDATA\TypeAgent\logs\vscode-chat-install.log"
 )
 
 $ErrorActionPreference = "Stop"
-$ownershipKey = "HKCU:\Software\Microsoft\TypeAgent\VSCodeChat"
+$ownershipKey = $OwnershipKey
 
 function Write-Log {
     param([string]$Message)
@@ -217,11 +231,11 @@ function Find-CompatibleCode {
     }
 
     if ($foundVersion) {
-        Write-Log "VS Code $foundVersion is installed, but TypeAgent Chat requires $MinimumVersion or newer."
+        Write-Log "VS Code $foundVersion is installed, but $ExtensionId requires $MinimumVersion or newer."
         exit 3
     }
 
-    Write-Log "Compatible VS Code was not found. Skipping TypeAgent Chat integration."
+    Write-Log "Compatible VS Code was not found. Skipping $ExtensionId integration."
     exit 2
 }
 
@@ -277,7 +291,7 @@ function Save-Ownership {
         -PropertyType String -Force | Out-Null
     New-ItemProperty -Path $ownershipKey -Name VsCodePath -Value $Code.ExePath `
         -PropertyType String -Force | Out-Null
-    New-ItemProperty -Path $ownershipKey -Name ShortcutPath -Value $ShortcutPath `
+    New-ItemProperty -Path $ownershipKey -Name ShortcutPath -Value ([string]$ShortcutPath) `
         -PropertyType String -Force | Out-Null
 }
 
@@ -290,7 +304,7 @@ function Install-VsCodeChat {
     }
 
     $code = Find-CompatibleCode
-    Write-Log "Installing TypeAgent Chat into VS Code $($code.Version) using '$($code.CliPath)'."
+    Write-Log "Installing $ExtensionId into VS Code $($code.Version) using '$($code.CliPath)'."
     $result = Invoke-CodeCli -CliPath $code.CliPath -Arguments @(
         "--install-extension",
         $VsixPath,
@@ -306,26 +320,31 @@ function Install-VsCodeChat {
         throw "VS Code did not report '$ExtensionId' after installation."
     }
 
-    $shortcutPath = Get-DesktopShortcutPath
-    $shell = New-Object -ComObject WScript.Shell
-    $shortcut = $shell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = $code.ExePath
-    $shortcut.Arguments = "--new-window --enable-proposed-api=$ExtensionId"
-    $shortcut.WorkingDirectory = $env:USERPROFILE
-    $shortcut.IconLocation = "$($code.ExePath),0"
-    $shortcut.Description = "Launch VS Code with TypeAgent Chat enabled"
-    $shortcut.Save()
+    $shortcutPath = ""
+    if (-not $NoShortcut) {
+        $shortcutPath = Get-DesktopShortcutPath
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = $code.ExePath
+        $shortcut.Arguments = "--new-window --enable-proposed-api=$ExtensionId"
+        $shortcut.WorkingDirectory = $env:USERPROFILE
+        $shortcut.IconLocation = "$($code.ExePath),0"
+        $shortcut.Description = "Launch VS Code with TypeAgent Chat enabled"
+        $shortcut.Save()
+    }
 
     Save-Ownership -Code $code -ExtensionVersion $installedVersion `
         -ShortcutPath $shortcutPath
     Write-Log "Installed $ExtensionId@$installedVersion."
-    Write-Log "Created desktop shortcut: $shortcutPath"
+    if ($shortcutPath) {
+        Write-Log "Created desktop shortcut: $shortcutPath"
+    }
 }
 
 function Uninstall-VsCodeChat {
     $ownership = Get-ItemProperty -LiteralPath $ownershipKey -ErrorAction SilentlyContinue
     if (-not $ownership -or [string]$ownership.Owner -ne $Owner) {
-        Write-Log "No TypeAgent VS Code Chat installation owned by '$Owner' was found."
+        Write-Log "No $ExtensionId installation owned by '$Owner' was found."
         return
     }
 

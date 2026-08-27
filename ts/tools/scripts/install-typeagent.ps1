@@ -597,7 +597,7 @@ Write-Host "  Copilot plugin '$pluginName' registered successfully"
 # --- 5. Install the native VS Code Chat extension ----------------------------
 $vscodeChatInstalled = $false
 if (-not $NoVsCodeChat) {
-    $vscodeChatHelper = Join-Path (Split-Path -Parent $PSScriptRoot) "installers\common\install-vscode-chat.ps1"
+    $vscodeChatHelper = Join-Path (Split-Path -Parent $PSScriptRoot) "installers\common\install-vscode-typeagent.ps1"
     if (-not (Test-Path -LiteralPath $vscodeChatHelper)) {
         Fail "Shared VS Code Chat installer not found: $vscodeChatHelper"
     }

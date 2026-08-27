@@ -34,6 +34,7 @@ import { serializeEntityForPrompt } from "../context/chatHistoryPrompt.js";
 import {
     CommandHandlerContext,
     getCommandResult,
+    getRequestId,
 } from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import { nullClientIO } from "../context/interactiveIO.js";
@@ -42,6 +43,11 @@ import {
     formatReasoningFormResponse,
     presentReasoningForm,
 } from "./askUserForm.js";
+import {
+    ASK_USER_KIND_DESCRIPTION,
+    ASK_USER_KIND_VALUES,
+    resolveAskUserSource,
+} from "./askUserSource.js";
 import { executeAction } from "../execute/actionHandlers.js";
 import {
     composeActionSchema,
@@ -76,6 +82,16 @@ import {
     runInReasoningSpan,
 } from "../otel/reasoningSpan.js";
 import { getReasoningProfileGuidance } from "./reasoningProfile.js";
+import {
+    REASONING_DENY,
+    getReasoningPermissionChoices,
+    hasCachedReasoningApproval,
+    recordReasoningApprovalChoice,
+} from "./reasoningPermissionPolicy.js";
+import {
+    buildClaudePolicyRequest,
+    formatClaudePermissionRequest,
+} from "./claudePermission.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 // Separate channel for MCP tool invocations (discover_actions / execute_action)
 // so call counts can be traced without enabling the full messages channel.
@@ -142,7 +158,11 @@ export async function prewarmClaudeReasoning(
 }
 
 const mcpServerName = "action-executor";
-const allowedTools = [
+// Built-in Claude tools we make available to the reasoning loop. Under the
+// permission-aware setup below these are AVAILABLE tools, not auto-allowed
+// ones - decisions flow through `canUseTool` and the shared reasoning
+// permission policy.
+const availableBuiltInTools = [
     "Read",
     "Write",
     "Edit",
@@ -154,8 +174,6 @@ const allowedTools = [
     "Task",
     "NotebookEdit",
     "TodoWrite",
-    // Allow all tools from the command-executor MCP server
-    `mcp__${mcpServerName}__*`,
 ];
 
 /**
@@ -413,6 +431,62 @@ async function subagentToolResult(fn: () => Promise<string> | string): Promise<{
             isError: true,
         };
     }
+}
+
+function createClaudeCanUseTool(context: ActionContext<CommandHandlerContext>) {
+    return async (
+        toolName: string,
+        input: Record<string, unknown>,
+        options: {
+            signal: AbortSignal;
+            suggestions?: Array<{
+                behavior?: string;
+                destination: string;
+            }>;
+            title?: string;
+            displayName?: string;
+            description?: string;
+            blockedPath?: string;
+            decisionReason?: string;
+            toolUseID: string;
+        },
+    ) => {
+        const agentContext = context.sessionContext.agentContext;
+        const requestId = getRequestId(agentContext);
+        const policyRequest = buildClaudePolicyRequest(
+            toolName,
+            options,
+            requestId.requestId,
+        );
+        if (hasCachedReasoningApproval(agentContext, policyRequest)) {
+            return { behavior: "allow" as const };
+        }
+        const choices = getReasoningPermissionChoices(policyRequest);
+        const message = formatClaudePermissionRequest(toolName, input, options);
+        const choiceIndex = await agentContext.clientIO.question(
+            requestId,
+            message,
+            choices,
+            choices.indexOf(REASONING_DENY),
+            `claudePermission:${policyRequest.permissionIdentity}`,
+        );
+        const choice = choices[choiceIndex];
+        const allowed = recordReasoningApprovalChoice(
+            agentContext,
+            policyRequest,
+            choice,
+        );
+        // Do not surface `updatedPermissions` back to the SDK - the host
+        // policy is the single source of truth and must remain resettable
+        // via `@allow off`. Persisting rules inside Claude would put a
+        // session grant out of the host's reach.
+        return allowed
+            ? { behavior: "allow" as const }
+            : {
+                  behavior: "deny" as const,
+                  message: "Denied by the TypeAgent host permission policy.",
+              };
+    };
 }
 
 function getClaudeOptions(
@@ -964,6 +1038,7 @@ function getClaudeOptions(
     const askUserSchema = {
         question: z.string(),
         choices: z.array(z.string()).min(2),
+        kind: z.enum(ASK_USER_KIND_VALUES).optional(),
     };
     const findInstallableAgentSchema = {};
     const findInstallableAgentTool: SdkMcpToolDefinition<
@@ -991,11 +1066,15 @@ function getClaudeOptions(
         description: [
             "Ask the user ONE multiple-choice question and block until they answer.",
             "Use ONLY when you are genuinely blocked on a decision that only the",
-            "user can make - an ambiguous choice among concrete options, or a",
-            "confirmation before a destructive or irreversible action. Put the exact",
+            "user can make - an ambiguous choice among concrete options, or a semantic",
+            "confirmation not covered by a permission-aware tool. Do not ask before",
+            "calling shell, file, URL, MCP, or custom tools; their host permission",
+            "handler is authoritative. Put the exact",
             'options in `choices` (for a yes/no question use ["Yes", "No"]). Returns',
             "the option the user picked. Prefer acting autonomously; do not ask when",
             "a reasonable safe default exists.",
+            "",
+            `\`kind\`: ${ASK_USER_KIND_DESCRIPTION}`,
         ].join("\n"),
         inputSchema: askUserSchema,
         handler: async (args) => {
@@ -1010,7 +1089,7 @@ function getClaudeOptions(
                 args.question,
                 choices,
                 undefined,
-                "reasoning",
+                resolveAskUserSource(args.kind),
             );
             const answer = choices[selected] ?? choices[0] ?? "";
             return {
@@ -1096,10 +1175,12 @@ function getClaudeOptions(
 
     const claudeOptions: Options = {
         model,
-        permissionMode: "acceptEdits",
-        // Auto-allow all tool calls — we've already curated allowedTools
-        canUseTool: async () => ({ behavior: "allow" as const }),
-        allowedTools,
+        permissionMode: "default",
+        // Tool decisions flow through the shared reasoning permission
+        // policy so behavior matches the Copilot adapter. `tools` restricts
+        // AVAILABILITY; `canUseTool` decides ALLOW/DENY per call.
+        canUseTool: createClaudeCanUseTool(context),
+        tools: availableBuiltInTools,
         cwd: getRepoRoot(),
         settingSources: [],
         maxTurns: 20,
@@ -1188,7 +1269,7 @@ function getClaudeOptions(
                 "Strongly prefer to act autonomously. When information is ambiguous or missing, make a reasonable safe default choice and proceed.",
                 "Prefer non-destructive defaults: add rather than replace, use conservative values. Do NOT ask routine clarifying questions you can reasonably resolve yourself.",
                 "",
-                'The `ask_user` tool is available for the rare cases where you are genuinely blocked on a decision only the user can make: an ambiguous choice among concrete options, or confirmation before a destructive or irreversible action. It blocks until the user answers and returns their choice. Provide the exact options (for yes/no use ["Yes", "No"]). Ask at most one such question, and only when a wrong default would be costly to undo.',
+                "The `ask_user` tool is available only for ambiguity or a semantic confirmation not covered by a permission-aware tool. Never ask permission before shell, file, URL, MCP, or custom-tool calls; invoke them directly and let the host permission handler prompt. It blocks until the user answers. Ask at most one question, only when a wrong default would be costly to undo.",
                 "When a single blocking moment genuinely needs more than one answer from the user, use `ask_user_form` to ask them together in one form rather than a sequence of `ask_user` prompts.",
                 "Only stop without a result if you are truly unable to proceed — in that case, emit a clear error message explaining what is missing.",
                 "",

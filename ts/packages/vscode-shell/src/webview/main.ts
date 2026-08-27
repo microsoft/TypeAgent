@@ -288,6 +288,511 @@ chatPanel.attachCompletion((msg) => vscode.postMessage(msg));
 // client answered, or a server timeout) can tear the local UI down.
 const activeInteractions = new Map<string, AbortController>();
 
+type PermissionPromptVariant = "copilot" | "reasoning";
+
+const permissionChoiceLabels: Record<string, string> = {
+    "Allow this tool for request": "This tool for current request",
+    "Allow all for request": "All tools for current request",
+    "Allow this tool for session": "This tool for this session",
+    "Allow all for session": "All tools for this session",
+};
+
+type PermissionPrompt = {
+    id: string;
+    variant: PermissionPromptVariant;
+    requestId?: string;
+    threadRequestId?: string;
+    permissionIdentity?: string;
+    selectedLabel?: string;
+    message: string;
+    choices: string[];
+    resolve: (value: number) => void;
+    reject: (reason: unknown) => void;
+    signal: AbortSignal;
+    abort: () => void;
+};
+
+const permissionPrompts: PermissionPrompt[] = [];
+// Committed grants keyed by threadRequestId. A grant lands here only after
+// the authoritative `interactionResolved` value matches what this client
+// submitted. `appendPermissionGrants` reads from this map when the request
+// completes.
+const pendingPermissionGrants = new Map<string, Set<string>>();
+// Grants staged locally between choice submission and the server-side
+// `interactionResolved` broadcast. Keyed by interactionId so a race with
+// another client answering the same prompt can be reconciled: if that
+// client's answer wins, the staged entry is discarded and we never
+// display a scope the server didn't record for us.
+const stagedPermissionGrants = new Map<
+    string,
+    {
+        threadRequestId: string;
+        label: string;
+        submittedValue: number;
+    }
+>();
+let activePermissionPrompt = 0;
+let permissionPromptLayer: HTMLDivElement | undefined;
+let permissionReturnFocus: HTMLElement | undefined;
+
+const SDK_PERMISSION_SOURCE_RE =
+    /^(copilotPermission|claudePermission)(?::(.*))?$/;
+
+function parseSdkPermissionSource(source: string):
+    | {
+          provider: string;
+          permissionIdentity: string | undefined;
+      }
+    | undefined {
+    const match = SDK_PERMISSION_SOURCE_RE.exec(source);
+    if (match === null) return undefined;
+    const [, providerSource, identity] = match;
+    return {
+        provider: providerSource.slice(0, -"Permission".length),
+        permissionIdentity:
+            identity && identity.length > 0 ? identity : undefined,
+    };
+}
+
+function showPermissionPrompt(
+    interaction: Extract<PendingInteractionRequest, { type: "question" }>,
+    signal: AbortSignal,
+): Promise<number> {
+    const sdkSource = parseSdkPermissionSource(interaction.source);
+    const variant: PermissionPromptVariant = sdkSource
+        ? "copilot"
+        : "reasoning";
+    const permissionIdentity = sdkSource?.permissionIdentity;
+    return new Promise<number>((resolve, reject) => {
+        const prompt: PermissionPrompt = {
+            id: interaction.interactionId,
+            variant,
+            requestId: interaction.requestId?.requestId,
+            threadRequestId:
+                typeof interaction.requestId?.clientRequestId === "string"
+                    ? interaction.requestId.clientRequestId
+                    : interaction.requestId?.requestId,
+            permissionIdentity,
+            message: interaction.message,
+            choices: interaction.choices,
+            resolve,
+            reject,
+            signal,
+            abort: () => {
+                removePermissionPrompt(interaction.interactionId);
+                reject(
+                    new DOMException("Permission prompt aborted", "AbortError"),
+                );
+            },
+        };
+        signal.addEventListener("abort", prompt.abort, { once: true });
+        permissionPrompts.push(prompt);
+        activePermissionPrompt = permissionPrompts.length - 1;
+        renderPermissionPrompts();
+    });
+}
+
+function removePermissionPrompt(
+    id: string,
+    render = true,
+): PermissionPrompt | undefined {
+    const index = permissionPrompts.findIndex((prompt) => prompt.id === id);
+    if (index < 0) {
+        return undefined;
+    }
+    const [prompt] = permissionPrompts.splice(index, 1);
+    prompt.signal.removeEventListener("abort", prompt.abort);
+    activePermissionPrompt = Math.min(
+        activePermissionPrompt,
+        Math.max(0, permissionPrompts.length - 1),
+    );
+    if (render) {
+        renderPermissionPrompts();
+    }
+    return prompt;
+}
+
+function resolvePermissionPrompts(
+    selectedPrompt: PermissionPrompt,
+    selectedLabel: string,
+    selectedValue: number,
+): void {
+    const prompts =
+        selectedLabel === "Allow all for request" &&
+        selectedPrompt.requestId !== undefined
+            ? permissionPrompts.filter(
+                  (prompt) =>
+                      prompt.variant === "copilot" &&
+                      prompt.choices.includes(selectedLabel) &&
+                      prompt.requestId === selectedPrompt.requestId,
+              )
+            : selectedLabel === "Allow this tool for request" &&
+                selectedPrompt.requestId !== undefined &&
+                selectedPrompt.permissionIdentity !== undefined
+              ? permissionPrompts.filter(
+                    (prompt) =>
+                        prompt.variant === "copilot" &&
+                        prompt.choices.includes(selectedLabel) &&
+                        prompt.requestId === selectedPrompt.requestId &&
+                        prompt.permissionIdentity ===
+                            selectedPrompt.permissionIdentity,
+                )
+              : selectedLabel === "Allow this tool for session" &&
+                  selectedPrompt.permissionIdentity !== undefined
+                ? permissionPrompts.filter(
+                      (prompt) =>
+                          prompt.variant === "copilot" &&
+                          prompt.choices.includes(selectedLabel) &&
+                          prompt.permissionIdentity ===
+                              selectedPrompt.permissionIdentity,
+                  )
+                : selectedLabel === "Allow all for session"
+                  ? permissionPrompts.filter(
+                        (prompt) =>
+                            prompt.variant === "copilot" &&
+                            prompt.choices.includes(selectedLabel),
+                    )
+                  : [selectedPrompt];
+    for (const prompt of prompts) {
+        const value =
+            prompt === selectedPrompt
+                ? selectedValue
+                : prompt.choices.indexOf(selectedLabel);
+        removePermissionPrompt(prompt.id, false)?.resolve(value);
+    }
+    renderPermissionPrompts();
+}
+
+function denyActivePermissionPrompt(): boolean {
+    const prompt = permissionPrompts[activePermissionPrompt];
+    if (prompt === undefined) {
+        return false;
+    }
+    const denyIndex = prompt.choices.findIndex((label) =>
+        /^(deny|no|cancel|reject|dismiss|abort)$/i.test(label.trim()),
+    );
+    if (denyIndex < 0) {
+        return false;
+    }
+    resolvePermissionPrompts(prompt, prompt.choices[denyIndex], denyIndex);
+    return true;
+}
+
+function stagePermissionGrant(
+    prompt: PermissionPrompt,
+    label: string,
+    submittedValue: number,
+): void {
+    if (prompt.threadRequestId === undefined) {
+        return;
+    }
+    // Hold the grant here until `interactionResolved` confirms the server
+    // committed our answer. `commitStagedPermissionGrant` moves it into
+    // `pendingPermissionGrants` if the authoritative response matches;
+    // `discardStagedPermissionGrant` drops it if another client won the
+    // race. This avoids appending a `Permissions:` line that describes a
+    // scope the server never accepted from us.
+    stagedPermissionGrants.set(prompt.id, {
+        threadRequestId: prompt.threadRequestId,
+        label: permissionChoiceLabels[label] ?? label,
+        submittedValue,
+    });
+}
+
+function commitStagedPermissionGrant(interactionId: string): void {
+    const staged = stagedPermissionGrants.get(interactionId);
+    if (staged === undefined) {
+        return;
+    }
+    stagedPermissionGrants.delete(interactionId);
+    let grants = pendingPermissionGrants.get(staged.threadRequestId);
+    if (grants === undefined) {
+        grants = new Set<string>();
+        pendingPermissionGrants.set(staged.threadRequestId, grants);
+    }
+    grants.add(staged.label);
+}
+
+function discardStagedPermissionGrant(interactionId: string): void {
+    stagedPermissionGrants.delete(interactionId);
+}
+
+function appendPermissionGrants(
+    requestId: string,
+    aliasRequestId?: string,
+): void {
+    const grants = new Set<string>();
+    for (const id of [requestId, aliasRequestId]) {
+        if (id === undefined) continue;
+        const pending = pendingPermissionGrants.get(id);
+        if (pending !== undefined) {
+            pendingPermissionGrants.delete(id);
+            for (const grant of pending) grants.add(grant);
+        }
+    }
+    if (grants.size === 0) {
+        return;
+    }
+    const targetRequestId =
+        chatPanel.hasUserMessage(requestId) || aliasRequestId === undefined
+            ? requestId
+            : aliasRequestId;
+    const content = `Permissions: ${[...grants].join("; ")}.`;
+    if (chatPanel.appendRequestMetadata(targetRequestId, content)) {
+        return;
+    }
+    chatPanel.addAgentMessage(
+        {
+            type: "text",
+            content,
+            kind: "info",
+        },
+        undefined,
+        undefined,
+        "inline",
+        targetRequestId,
+    );
+}
+
+function renderPermissionPrompts(): void {
+    if (permissionPrompts.length === 0) {
+        permissionPromptLayer?.remove();
+        permissionPromptLayer = undefined;
+        if (permissionReturnFocus?.isConnected) {
+            permissionReturnFocus.focus();
+        }
+        permissionReturnFocus = undefined;
+        return;
+    }
+    if (!permissionPromptLayer) {
+        permissionPromptLayer = document.createElement("div");
+        permissionPromptLayer.className = "copilot-permission-layer";
+        rootEl.appendChild(permissionPromptLayer);
+    }
+    permissionPromptLayer.replaceChildren();
+    const prompt = permissionPrompts[activePermissionPrompt];
+    const card = document.createElement("section");
+    card.className = "copilot-permission-card";
+    if (prompt.variant === "reasoning") {
+        card.classList.add("reasoning");
+    }
+    card.tabIndex = -1;
+    card.setAttribute("role", "dialog");
+    const dialogLabel = "Permission request";
+    card.setAttribute("aria-label", dialogLabel);
+
+    const selector = document.createElement("div");
+    selector.className = "copilot-permission-selector";
+    const previous = document.createElement("button");
+    previous.type = "button";
+    previous.textContent = "‹";
+    previous.disabled = permissionPrompts.length === 1;
+    previous.setAttribute("aria-label", "Previous permission request");
+    previous.addEventListener("click", () => {
+        activePermissionPrompt =
+            (activePermissionPrompt - 1 + permissionPrompts.length) %
+            permissionPrompts.length;
+        renderPermissionPrompts();
+    });
+    const count = document.createElement("span");
+    count.textContent = `${activePermissionPrompt + 1} of ${permissionPrompts.length}`;
+    const next = document.createElement("button");
+    next.type = "button";
+    next.textContent = "›";
+    next.disabled = permissionPrompts.length === 1;
+    next.setAttribute("aria-label", "Next permission request");
+    next.addEventListener("click", () => {
+        activePermissionPrompt =
+            (activePermissionPrompt + 1) % permissionPrompts.length;
+        renderPermissionPrompts();
+    });
+    selector.append(previous, count, next);
+    card.appendChild(selector);
+
+    const title = document.createElement("h3");
+    title.textContent = dialogLabel;
+    card.appendChild(title);
+    const message = document.createElement("div");
+    message.className = "copilot-permission-message";
+    // Reasoning permission asks are model-authored one-liners; render as
+    // plain text so short messages don't sit in a scroll box. Copilot custom
+    // tools also opt in via `custom-tool:` identity. Detailed SDK messages
+    // keep the scrollable code-style box.
+    if (
+        prompt.variant === "reasoning" ||
+        prompt.permissionIdentity?.startsWith("custom-tool:")
+    ) {
+        message.classList.add("compact");
+    }
+    message.textContent = prompt.message;
+    card.appendChild(message);
+
+    const resolveChoice = (label: string) => {
+        const value = prompt.choices.indexOf(label);
+        if (value < 0) return;
+        vscode.postMessage({
+            type: "permissionDebug",
+            event: "choice-submitted",
+            interactionId: prompt.id,
+            choice: label,
+        });
+        if (label !== "Deny") {
+            // Stage the grant; commit it only when interactionResolved
+            // returns the same value we submitted. If another client's
+            // response wins the race, the staged entry is discarded and
+            // the request's completion message never claims a scope the
+            // server didn't accept from us.
+            stagePermissionGrant(prompt, label, value);
+        }
+        resolvePermissionPrompts(prompt, label, value);
+    };
+
+    const actions = document.createElement("div");
+    actions.className = "copilot-permission-actions";
+    if (prompt.variant === "reasoning") {
+        // Render the model-provided choices as simple centered buttons.
+        // Labels matching common negative phrasing get the secondary
+        // ("deny") styling; everything else gets the primary ("allow")
+        // styling. We intentionally do NOT surface Copilot's broader-scope
+        // approval labels here - the model's choices are the only choices.
+        const denyPattern = /^(deny|no|cancel|reject|dismiss|abort)$/i;
+        for (const label of prompt.choices) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = denyPattern.test(label.trim())
+                ? "deny"
+                : "allow";
+            button.textContent = label;
+            button.addEventListener("click", () => resolveChoice(label));
+            actions.appendChild(button);
+        }
+    } else {
+        const denyButton = document.createElement("button");
+        denyButton.type = "button";
+        denyButton.className = "deny";
+        denyButton.textContent = "Deny";
+        denyButton.addEventListener("click", () => {
+            const denyLabel = prompt.choices.find((label) => label === "Deny");
+            if (denyLabel !== undefined) resolveChoice(denyLabel);
+        });
+        const allowGroup = document.createElement("div");
+        allowGroup.className = "copilot-permission-allow-group";
+        const allowOnceButton = document.createElement("button");
+        allowOnceButton.type = "button";
+        allowOnceButton.className = "allow";
+        let selectedLabel = prompt.selectedLabel ?? "Allow once";
+        const updateSelectedChoice = (label: string) => {
+            selectedLabel = label;
+            prompt.selectedLabel = label;
+            const displayLabel = permissionChoiceLabels[label] ?? label;
+            allowOnceButton.textContent = displayLabel;
+            allowOnceButton.setAttribute(
+                "aria-label",
+                `Grant permission: ${displayLabel}`,
+            );
+        };
+        updateSelectedChoice(selectedLabel);
+        allowOnceButton.addEventListener("click", () =>
+            resolveChoice(selectedLabel),
+        );
+        allowGroup.appendChild(allowOnceButton);
+
+        const allowChoices = prompt.choices.filter((label) => label !== "Deny");
+        if (allowChoices.length > 1) {
+            const menuButton = document.createElement("button");
+            menuButton.type = "button";
+            menuButton.className = "allow-menu-button";
+            menuButton.textContent = "⌄";
+            menuButton.setAttribute("aria-label", "More approval options");
+            menuButton.setAttribute("aria-expanded", "false");
+            const menu = document.createElement("div");
+            menu.className = "copilot-permission-allow-menu";
+            menu.setAttribute("role", "menu");
+            menu.hidden = true;
+            const options: HTMLButtonElement[] = [];
+            const updateOptionSelection = () => {
+                for (const option of options) {
+                    const selected = option.dataset.choice === selectedLabel;
+                    option.classList.toggle("selected", selected);
+                    option.setAttribute("aria-checked", String(selected));
+                }
+            };
+            for (const label of allowChoices) {
+                const option = document.createElement("button");
+                option.type = "button";
+                option.textContent = permissionChoiceLabels[label] ?? label;
+                option.dataset.choice = label;
+                option.setAttribute("role", "menuitemradio");
+                const selectOption = () => {
+                    updateSelectedChoice(label);
+                    updateOptionSelection();
+                    vscode.postMessage({
+                        type: "permissionDebug",
+                        event: "choice-selected",
+                        interactionId: prompt.id,
+                        choice: label,
+                    });
+                    menu.hidden = true;
+                    menuButton.setAttribute("aria-expanded", "false");
+                    allowOnceButton.focus();
+                };
+                option.addEventListener("pointerdown", (event) => {
+                    event.preventDefault();
+                    selectOption();
+                });
+                option.addEventListener("click", () => {
+                    selectOption();
+                });
+                options.push(option);
+                menu.appendChild(option);
+            }
+            updateOptionSelection();
+            menuButton.addEventListener("click", () => {
+                menu.hidden = !menu.hidden;
+                menuButton.setAttribute("aria-expanded", String(!menu.hidden));
+                if (!menu.hidden) {
+                    vscode.postMessage({
+                        type: "permissionDebug",
+                        event: "menu-opened",
+                        interactionId: prompt.id,
+                    });
+                    menu.querySelector<HTMLButtonElement>("button")?.focus();
+                }
+            });
+            const closeMenu = () => {
+                menu.hidden = true;
+                menuButton.setAttribute("aria-expanded", "false");
+            };
+            card.addEventListener("click", (event) => {
+                if (
+                    event.target instanceof Node &&
+                    !allowGroup.contains(event.target)
+                ) {
+                    closeMenu();
+                }
+            });
+            card.addEventListener("keydown", (event) => {
+                if (event.key === "Escape" && !menu.hidden) {
+                    closeMenu();
+                    menuButton.focus();
+                    event.stopPropagation();
+                }
+            });
+            allowGroup.append(menuButton, menu);
+        }
+        actions.append(allowGroup, denyButton);
+    }
+    card.appendChild(actions);
+    permissionPromptLayer.appendChild(card);
+    if (permissionReturnFocus === undefined) {
+        permissionReturnFocus =
+            document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : undefined;
+    }
+    card.focus();
+}
+
 // Template-editor services (schema refresh + per-field completion) for the
 // proposeAction edit flow. chat-ui is framework-free, so these are injected;
 // each call is routed through the host to the dispatcher and correlated by id.
@@ -347,20 +852,31 @@ const templateServices: TemplateEditServices = {
 function handleRequestInteraction(
     interaction: PendingInteractionRequest,
 ): void {
+    if (activeInteractions.has(interaction.interactionId)) {
+        return;
+    }
     const ac = new AbortController();
     activeInteractions.set(interaction.interactionId, ac);
     void (async () => {
         let response: PendingInteractionResponse;
         try {
             if (interaction.type === "question") {
-                const value = await chatPanel.addChoicePrompt<number>(
-                    interaction.message,
-                    interaction.choices.map((label, index) => ({
-                        label,
-                        value: index,
-                    })),
-                    { defaultValue: interaction.defaultId, signal: ac.signal },
-                );
+                const value =
+                    parseSdkPermissionSource(interaction.source) !==
+                        undefined ||
+                    interaction.source === "reasoningPermission"
+                        ? await showPermissionPrompt(interaction, ac.signal)
+                        : await chatPanel.addChoicePrompt<number>(
+                              interaction.message,
+                              interaction.choices.map((label, index) => ({
+                                  label,
+                                  value: index,
+                              })),
+                              {
+                                  defaultValue: interaction.defaultId,
+                                  signal: ac.signal,
+                              },
+                          );
                 response = {
                     interactionId: interaction.interactionId,
                     type: "question",
@@ -915,6 +1431,10 @@ window.addEventListener("message", (event) => {
             chatPanel.setDeveloperMode(msg.enabled);
             break;
         case "sessionChanged":
+            for (const interaction of activeInteractions.values()) {
+                interaction.abort();
+            }
+            activeInteractions.clear();
             currentSessionId = msg.sessionId;
             isSwitching = false;
             conversationBar.setCurrentConversation(
@@ -930,6 +1450,8 @@ window.addEventListener("message", (event) => {
             cancelledRequests.clear();
             cancelledRendered.clear();
             pendingQueueStatus.clear();
+            pendingPermissionGrants.clear();
+            stagedPermissionGrants.clear();
             queueMirror.reset(undefined);
             requestSessionList();
             break;
@@ -1012,6 +1534,8 @@ window.addEventListener("message", (event) => {
             cancelledRequests.clear();
             cancelledRendered.clear();
             pendingQueueStatus.clear();
+            pendingPermissionGrants.clear();
+            stagedPermissionGrants.clear();
             break;
         case "notify": {
             const rid = msg.requestId;
@@ -1026,6 +1550,7 @@ window.addEventListener("message", (event) => {
                 const cancelled =
                     result?.cancelled === true &&
                     claimCancelledRender(rid, msg.aliasRequestId);
+                appendPermissionGrants(rid, msg.aliasRequestId);
                 chatPanel.completeRequest(
                     rid,
                     result ? { ...result, cancelled } : undefined,
@@ -1103,6 +1628,7 @@ window.addEventListener("message", (event) => {
                 const cancelled =
                     result?.cancelled === true &&
                     claimCancelledRender(rid, msg.aliasRequestId);
+                appendPermissionGrants(rid, msg.aliasRequestId);
                 chatPanel.completeRequest(
                     rid,
                     result ? { ...result, cancelled } : undefined,
@@ -1366,10 +1892,37 @@ window.addEventListener("message", (event) => {
             // matching bubble.
             chatPanel.applyFeedback(msg.entry);
             break;
-        case "interactionResolved":
+        case "interactionResolved": {
+            // Any client's answer arrived - abort our local prompt so it
+            // stops waiting, and reconcile the staged permission grant
+            // (if any) against the authoritative response. If the server
+            // recorded the same choice we submitted, commit the grant so
+            // the completed request's Permissions: line reflects it. If a
+            // different client's response won the race, discard the stage
+            // so we never surface a scope the server didn't accept from us.
+            const staged = stagedPermissionGrants.get(msg.interactionId);
+            if (staged !== undefined) {
+                if (
+                    typeof msg.response === "number" &&
+                    msg.response === staged.submittedValue
+                ) {
+                    commitStagedPermissionGrant(msg.interactionId);
+                } else {
+                    discardStagedPermissionGrant(msg.interactionId);
+                }
+            }
+            const ac = activeInteractions.get(msg.interactionId);
+            if (ac) {
+                activeInteractions.delete(msg.interactionId);
+                ac.abort();
+            }
+            break;
+        }
         case "interactionCancelled": {
-            // Another client answered, or the server cancelled/timed out the
-            // interaction — abort our local prompt so it stops waiting.
+            // Server cancelled / timed out - drop any staged grant so a
+            // cancelled prompt never contributes to the request's
+            // Permissions: line.
+            discardStagedPermissionGrant(msg.interactionId);
             const ac = activeInteractions.get(msg.interactionId);
             if (ac) {
                 activeInteractions.delete(msg.interactionId);
@@ -1409,13 +1962,18 @@ vscode.postMessage({ type: "connect" });
 //   * Single Esc with an active request → cancel that request.
 //   * Two Esc presses within DOUBLE_ESCAPE_WINDOW_MS → cancel ALL
 //     queued + running entries on the session.
-// Chat-ui's own input-level handler (chatPanel.ts:712) takes care of
-// completion-popup dismissal and cancellation when the input is focused,
-// and calls `e.preventDefault()` when it consumes the keystroke. We
-// honor that flag here so the gesture isn't double-counted.
+// Chat-ui's own input-level handler (chatPanel.ts) handles completion-popup
+// dismissal when the input is focused. When Escape is consumed purely for
+// completion dismissal chat-ui stops propagation, so this listener never
+// sees those events — that's what we want, because a completion Esc should
+// not deny the visible permission prompt or arm the double-Esc clock.
+// When chat-ui calls `preventDefault` for an Escape that actually cancels
+// an active request, propagation still happens; we treat that path as a
+// permission deny + cancel and honor the double-Esc clock below.
 document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (e.defaultPrevented) {
+        denyActivePermissionPrompt();
         // chat-ui (or another in-iframe handler) already consumed this
         // Escape — but we still update the double-Esc clock so a paired
         // second press within the window can fire cancelAllQueuedAndRunning.
@@ -1440,18 +1998,37 @@ document.addEventListener("keydown", (e) => {
     const activeId =
         chatPanel.getActiveRequestId() ??
         queueMirror.snapshot?.running?.requestId;
+    const deniedPermission = denyActivePermissionPrompt();
     if (activeId) {
         // Cancel just the running request on first Esc — uses the same
         // path the chat-ui input handler would use when focused, so the
         // bridge sees a uniform cancelCommand message.
         e.preventDefault();
-        vscode.postMessage({ type: "cancelCommand", requestId: activeId });
+        const cancel = () =>
+            vscode.postMessage({
+                type: "cancelCommand",
+                requestId: activeId,
+            });
+        if (deniedPermission) {
+            // Resolving the prompt resumes handleRequestInteraction in a
+            // microtask. Queue cancellation behind it so the deny response
+            // reaches the server before the request is cancelled.
+            queueMicrotask(cancel);
+        } else {
+            cancel();
+        }
     }
     if (isDouble) {
         // Reset so a third press doesn't immediately re-trigger.
         lastEscapeTime = 0;
         e.preventDefault();
-        vscode.postMessage({ type: "cancelAllQueuedAndRunning" });
+        const cancelAll = () =>
+            vscode.postMessage({ type: "cancelAllQueuedAndRunning" });
+        if (deniedPermission) {
+            queueMicrotask(cancelAll);
+        } else {
+            cancelAll();
+        }
     }
 });
 

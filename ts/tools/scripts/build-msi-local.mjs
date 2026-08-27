@@ -104,19 +104,21 @@ function run(command, commandArgs, cwd = tsRoot) {
 
 function requireWorkspaceDevDependencies() {
     const executableSuffix = process.platform === "win32" ? ".cmd" : "";
-    const vsce = path.join(
-        tsRoot,
-        "packages",
-        "vscode-chat",
-        "node_modules",
-        ".bin",
-        `vsce${executableSuffix}`,
-    );
-    if (!fs.existsSync(vsce)) {
-        throw new Error(
-            "Workspace development dependencies are missing. A previous production deploy may have replaced node_modules. " +
-                "Run 'pnpm install' once from ts/, then rerun this command.",
+    for (const pkg of ["vscode-chat", "vscode-shell"]) {
+        const vsce = path.join(
+            tsRoot,
+            "packages",
+            pkg,
+            "node_modules",
+            ".bin",
+            `vsce${executableSuffix}`,
         );
+        if (!fs.existsSync(vsce)) {
+            throw new Error(
+                `Workspace development dependencies are missing for '${pkg}'. A previous production deploy may have replaced node_modules. ` +
+                    "Run 'pnpm install' once from ts/, then rerun this command.",
+            );
+        }
     }
 }
 
@@ -130,6 +132,13 @@ const vscodeChatVsix = path.join(
     "vscode-chat",
     "dist-pub",
     "vscode-chat.vsix",
+);
+const vscodeShellVsix = path.join(
+    tsRoot,
+    "packages",
+    "vscode-shell",
+    "dist-pub",
+    "vscode-shell.vsix",
 );
 
 console.log(`Building local TypeAgent MSI ${args.version}`);
@@ -147,6 +156,7 @@ if (!args.skipBuild) {
 
 // Package tools that require devDependencies before the production deploy.
 run("npm", ["run", "package"], path.join(tsRoot, "packages", "vscode-chat"));
+run("npm", ["run", "package"], path.join(tsRoot, "packages", "vscode-shell"));
 run("node", [
     path.join(scriptsDir, "stageCopilotPlugin.mjs"),
     "--out",
@@ -186,11 +196,15 @@ run("node", [
     pluginDir,
     "--vscode-chat-vsix",
     vscodeChatVsix,
+    "--vscode-shell-vsix",
+    vscodeShellVsix,
     "--version",
     args.version,
     "--plugin-version",
     args.version,
     "--vscode-chat-version",
+    args.version,
+    "--vscode-shell-version",
     args.version,
     "--skip-shell-feed-resolution",
     "--output",
