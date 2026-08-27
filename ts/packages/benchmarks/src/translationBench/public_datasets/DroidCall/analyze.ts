@@ -300,7 +300,7 @@ async function main(): Promise<void> {
     const outputDir = outputArgs[0]!;
     if (args.includes(DOWNLOAD_OPTION)) await downloadDroidCall(outputDir);
     const report = await analyzeDroidCall(outputDir);
-    console.log(JSON.stringify(report.splits, null, 2));
+    process.stdout.write(`${JSON.stringify(report.splits, null, 2)}\n`);
 }
 
 if (
