@@ -92,6 +92,13 @@ import {
     pruneStaleCodingSessions,
 } from "./codingSessionLifecycle.js";
 import { getCodingAttachmentPaths } from "./codingContext.js";
+import {
+    REASONING_DENY,
+    getReasoningPermissionChoices,
+    hasCachedReasoningApproval,
+    recordReasoningApprovalChoice,
+    type ReasoningPermissionPolicyRequest,
+} from "./reasoningPermissionPolicy.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -263,70 +270,6 @@ const copilotClientPromises = new WeakMap<object, Promise<CopilotClient>>();
 
 // Track Copilot session IDs per dispatcher instance (mirrors Claude's session tracking)
 const copilotSessionIds = new WeakMap<object, string>();
-
-const copilotPermissionSessionApprovals = new WeakSet<object>();
-const copilotPermissionRequestApprovals = new WeakMap<object, string>();
-const copilotToolRequestApprovals = new WeakMap<
-    object,
-    { requestId: string; tools: Set<string> }
->();
-// Per-agent-context set of permission identities (`getCopilotPermissionIdentity`)
-// approved for the current TypeAgent session via the "Allow this tool for
-// session" choice. We keep this host-side rather than returning the SDK's
-// `approve-for-session` because the SDK's tool-session cache lives inside the
-// Copilot session and cannot be revoked by `@allow off`. Consulting this set
-// before prompting gives the same user experience while keeping the host as
-// the source of truth for what @allow off can actually clear.
-const copilotToolSessionApprovals = new WeakMap<object, Set<string>>();
-const COPILOT_ALLOW_ONCE = "Allow once";
-const COPILOT_ALLOW_TOOL_REQUEST = "Allow this tool for request";
-const COPILOT_ALLOW_REQUEST = "Allow all for request";
-const COPILOT_ALLOW_TOOL_SESSION = "Allow this tool for session";
-const COPILOT_ALLOW_SESSION = "Allow all for session";
-const COPILOT_DENY = "Deny";
-
-export function setCopilotPermissionSessionApproval(
-    agentContext: object,
-    enabled: boolean,
-): void {
-    if (enabled) {
-        copilotPermissionSessionApprovals.add(agentContext);
-    } else {
-        // `@allow off` and the equivalent natural-language command must
-        // undo every session-scoped grant the host can actually revoke:
-        // the blanket "Allow all for session" flag and the per-tool
-        // "Allow this tool for session" identities. Request-scoped
-        // approvals live only for the current dispatcher request and
-        // are left in place - `@allow off` doesn't touch in-flight work.
-        copilotPermissionSessionApprovals.delete(agentContext);
-        copilotToolSessionApprovals.delete(agentContext);
-    }
-}
-
-export function getCopilotPermissionSessionApproval(
-    agentContext: object,
-): boolean {
-    return copilotPermissionSessionApprovals.has(agentContext);
-}
-
-export function _getCopilotToolSessionApprovalsForTest(
-    agentContext: object,
-): string[] {
-    const set = copilotToolSessionApprovals.get(agentContext);
-    return set ? [...set] : [];
-}
-
-export function _addCopilotToolSessionApprovalForTest(
-    agentContext: object,
-    identity: string,
-): void {
-    let identities = copilotToolSessionApprovals.get(agentContext);
-    if (identities === undefined) {
-        identities = new Set<string>();
-        copilotToolSessionApprovals.set(agentContext, identities);
-    }
-    identities.add(identity);
-}
 
 function generateCodingSessionId(
     context: ActionContext<CommandHandlerContext>,
@@ -821,29 +764,24 @@ export function getCopilotPermissionDefault(
     return undefined;
 }
 
-function hasCachedCopilotPermissionApproval(
-    agentContext: object,
+// Build the provider-neutral policy request from a Copilot SDK
+// PermissionRequest. Managed-policy and sandbox-bypass requests must
+// bypass every cache and every session/request-scoped grant, which the
+// policy enforces when `cacheEligible` is false.
+function buildCopilotPolicyRequest(
     request: PermissionRequest,
     requestId: string,
-    permissionIdentity: string,
-): boolean {
-    if (
+): ReasoningPermissionPolicyRequest {
+    const mandatory =
         request.managedApprovalRequired === true ||
-        requestsSandboxBypass(request)
-    ) {
-        return false;
-    }
-    const toolRequestApproval = copilotToolRequestApprovals.get(agentContext);
-    return (
-        (canOfferCopilotHostSessionApproval(request) &&
-            copilotPermissionSessionApprovals.has(agentContext)) ||
-        copilotPermissionRequestApprovals.get(agentContext) === requestId ||
-        (toolRequestApproval?.requestId === requestId &&
-            toolRequestApproval.tools.has(permissionIdentity)) ||
-        copilotToolSessionApprovals
-            .get(agentContext)
-            ?.has(permissionIdentity) === true
-    );
+        requestsSandboxBypass(request);
+    return {
+        requestId,
+        permissionIdentity: getCopilotPermissionIdentity(request),
+        cacheEligible: !mandatory,
+        sessionEligible: !mandatory && canOfferCopilotSessionApproval(request),
+        blanketSessionEligible: !mandatory,
+    };
 }
 
 function createCopilotPermissionHandler(
@@ -863,68 +801,36 @@ function createCopilotPermissionHandler(
             };
         }
         const requestId = getRequestId(agentContext);
-        const permissionIdentity = getCopilotPermissionIdentity(request);
-        if (
-            hasCachedCopilotPermissionApproval(
-                agentContext,
-                request,
-                requestId.requestId,
-                permissionIdentity,
-            )
-        ) {
+        const policyRequest = buildCopilotPolicyRequest(
+            request,
+            requestId.requestId,
+        );
+        if (hasCachedReasoningApproval(agentContext, policyRequest)) {
             return { kind: "approve-once" };
         }
         const safe = getCopilotPermissionDefault(request);
         if (safe !== undefined) {
             return safe;
         }
-        const choices = getCopilotPermissionChoices(request);
+        const choices = getReasoningPermissionChoices(policyRequest);
         const choiceIndex = await agentContext.clientIO.question(
             requestId,
             formatCopilotPermissionRequest(request),
             choices,
-            choices.indexOf(COPILOT_DENY),
-            `copilotPermission:${permissionIdentity}`,
+            choices.indexOf(REASONING_DENY),
+            `copilotPermission:${policyRequest.permissionIdentity}`,
         );
         const choice = choices[choiceIndex];
-        if (choice === COPILOT_ALLOW_TOOL_REQUEST) {
-            let approval = copilotToolRequestApprovals.get(agentContext);
-            if (approval?.requestId !== requestId.requestId) {
-                approval = {
-                    requestId: requestId.requestId,
-                    tools: new Set<string>(),
-                };
-                copilotToolRequestApprovals.set(agentContext, approval);
-            }
-            approval.tools.add(permissionIdentity);
-        } else if (choice === COPILOT_ALLOW_REQUEST) {
-            copilotPermissionRequestApprovals.set(
-                agentContext,
-                requestId.requestId,
-            );
-        } else if (choice === COPILOT_ALLOW_TOOL_SESSION) {
-            // The SDK also offers a `approve-for-session` result that caches
-            // the decision inside the Copilot session, but that cache lives
-            // in the SDK and cannot be revoked by `@allow off`. Track the
-            // grant in a host-owned identity set instead, so subsequent
-            // prompts for the same tool are auto-approved and `@allow off`
-            // can actually clear it. The SDK still sees a one-time approval.
-            if (canOfferCopilotSessionApproval(request)) {
-                let identities = copilotToolSessionApprovals.get(agentContext);
-                if (identities === undefined) {
-                    identities = new Set<string>();
-                    copilotToolSessionApprovals.set(agentContext, identities);
-                }
-                identities.add(permissionIdentity);
-            }
-        } else if (choice === COPILOT_ALLOW_SESSION) {
-            copilotPermissionSessionApprovals.add(agentContext);
-        }
-        return choice === COPILOT_ALLOW_ONCE ||
-            choice === COPILOT_ALLOW_TOOL_REQUEST ||
-            choice === COPILOT_ALLOW_REQUEST ||
-            choice === COPILOT_ALLOW_TOOL_SESSION ||
-            choice === COPILOT_ALLOW_SESSION
+        const allowed = recordReasoningApprovalChoice(
+            agentContext,
+            policyRequest,
+            choice,
+        );
+        // The Copilot SDK also offers an `approve-for-session` result that
+        // caches the decision inside the Copilot session. We don't return
+        // it because that cache is unreachable from `@allow off`; the host
+        // policy above tracks session grants instead.
+        return allowed
             ? { kind: "approve-once", approvedInteractively: true }
             : {
                   kind: "reject",
@@ -933,25 +839,15 @@ function createCopilotPermissionHandler(
     };
 }
 
+// Adapter shim over the shared policy: exposed for tests and (transitively)
+// callers that need Copilot's choice list. Adapters own translation from
+// their SDK's request into the policy's normalized shape.
 export function getCopilotPermissionChoices(
     request: PermissionRequest,
 ): string[] {
-    if (request.managedApprovalRequired === true) {
-        return [COPILOT_ALLOW_ONCE, COPILOT_DENY];
-    }
-    const choices = [
-        COPILOT_ALLOW_ONCE,
-        COPILOT_ALLOW_TOOL_REQUEST,
-        COPILOT_ALLOW_REQUEST,
-    ];
-    if (canOfferCopilotSessionApproval(request)) {
-        choices.push(COPILOT_ALLOW_TOOL_SESSION);
-    }
-    if (canOfferCopilotHostSessionApproval(request)) {
-        choices.push(COPILOT_ALLOW_SESSION);
-    }
-    choices.push(COPILOT_DENY);
-    return choices;
+    return getReasoningPermissionChoices(
+        buildCopilotPolicyRequest(request, "__preview__"),
+    );
 }
 
 function requestsSandboxBypass(request: PermissionRequest): boolean {
@@ -961,22 +857,7 @@ function requestsSandboxBypass(request: PermissionRequest): boolean {
     );
 }
 
-function canOfferCopilotHostSessionApproval(
-    request: PermissionRequest,
-): boolean {
-    return (
-        request.managedApprovalRequired !== true &&
-        !requestsSandboxBypass(request)
-    );
-}
-
 function canOfferCopilotSessionApproval(request: PermissionRequest): boolean {
-    if (
-        request.managedApprovalRequired === true ||
-        requestsSandboxBypass(request)
-    ) {
-        return false;
-    }
     if ("canOfferSessionApproval" in request) {
         return request.canOfferSessionApproval === true;
     }

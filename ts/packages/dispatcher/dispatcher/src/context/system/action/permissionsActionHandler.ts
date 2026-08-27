@@ -4,7 +4,7 @@
 import type { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
 
 import type { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { setPermissionSessionApproval } from "../handlers/copilotCommandHandlers.js";
+import { setPermissionSessionApproval } from "../handlers/permissionCommandHandlers.js";
 import type { PermissionsAction } from "../schema/permissionsActionSchema.js";
 
 export function executePermissionsAction(

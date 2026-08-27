@@ -5,53 +5,18 @@ import {
     getCopilotPermissionDefault,
     getCopilotPermissionChoices,
     getCopilotPermissionScopeViolation,
-    getCopilotPermissionSessionApproval,
     formatCopilotPermissionRequest,
-    setCopilotPermissionSessionApproval,
-    _getCopilotToolSessionApprovalsForTest,
-    _addCopilotToolSessionApprovalForTest,
 } from "../src/reasoning/copilot.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-describe("Copilot host permission policy", () => {
-    it("tracks session approval per dispatcher context", () => {
-        const first = {};
-        const second = {};
-        expect(getCopilotPermissionSessionApproval(first)).toBe(false);
-        setCopilotPermissionSessionApproval(first, true);
-        expect(getCopilotPermissionSessionApproval(first)).toBe(true);
-        expect(getCopilotPermissionSessionApproval(second)).toBe(false);
-        setCopilotPermissionSessionApproval(first, false);
-        expect(getCopilotPermissionSessionApproval(first)).toBe(false);
-    });
+// Copilot-adapter-specific behavior. Shared session/request/tool policy is
+// covered by reasoningPermissionPolicy.spec.ts; these tests only exercise
+// the Copilot SDK -> policy translation and the Copilot-specific prompt
+// formatting, safe defaults, and coding-root scope check.
 
-    it("@allow off clears both blanket and per-tool session approvals", () => {
-        // Model the state the interactive handler leaves behind: the user
-        // chose "Allow all for session" (blanket flag) and "Allow this tool
-        // for session" for two different tools. `@allow off` runs
-        // setCopilotPermissionSessionApproval(_, false) and must revoke all
-        // of them, because the SDK's own tool-session cache is unreachable
-        // from the host command.
-        const ctx = {};
-        setCopilotPermissionSessionApproval(ctx, true);
-        _addCopilotToolSessionApprovalForTest(
-            ctx,
-            "custom-tool:execute_action",
-        );
-        _addCopilotToolSessionApprovalForTest(ctx, "mcp:svc/tool");
-        expect(getCopilotPermissionSessionApproval(ctx)).toBe(true);
-        expect(_getCopilotToolSessionApprovalsForTest(ctx).sort()).toEqual([
-            "custom-tool:execute_action",
-            "mcp:svc/tool",
-        ]);
-
-        setCopilotPermissionSessionApproval(ctx, false);
-        expect(getCopilotPermissionSessionApproval(ctx)).toBe(false);
-        expect(_getCopilotToolSessionApprovalsForTest(ctx)).toEqual([]);
-    });
-
+describe("Copilot permission adapter: safe defaults", () => {
     it("approves safe reads and readonly MCP tools", () => {
         expect(
             getCopilotPermissionDefault({
@@ -115,6 +80,11 @@ describe("Copilot host permission policy", () => {
                 managedApprovalRequired: true,
             }),
         ).toBeUndefined();
+    });
+});
+
+describe("Copilot permission adapter: choice eligibility", () => {
+    it("only offers Allow once + Deny for managed policy requests", () => {
         expect(
             getCopilotPermissionChoices({
                 kind: "read",
@@ -125,7 +95,7 @@ describe("Copilot host permission policy", () => {
         ).toEqual(["Allow once", "Deny"]);
     });
 
-    it("offers session approval only when the SDK permits it", () => {
+    it("offers session scopes only when the SDK permits it", () => {
         const shell = {
             kind: "shell" as const,
             intention: "write",
@@ -174,21 +144,22 @@ describe("Copilot host permission policy", () => {
             canOfferSessionApproval: true,
             requestSandboxBypass: true,
         };
+        // Sandbox bypass is a mandatory prompt in the shared policy, so only
+        // Allow once + Deny should surface.
         expect(getCopilotPermissionChoices(request)).toEqual([
             "Allow once",
-            "Allow this tool for request",
-            "Allow all for request",
             "Deny",
         ]);
     });
 
     it("offers scoped and blanket session choices for custom tools", () => {
-        const request = {
-            kind: "custom-tool" as const,
-            toolName: "execute_action",
-            toolDescription: "Run a TypeAgent action",
-        };
-        expect(getCopilotPermissionChoices(request)).toEqual([
+        expect(
+            getCopilotPermissionChoices({
+                kind: "custom-tool",
+                toolName: "execute_action",
+                toolDescription: "Run a TypeAgent action",
+            }),
+        ).toEqual([
             "Allow once",
             "Allow this tool for request",
             "Allow all for request",
@@ -197,7 +168,9 @@ describe("Copilot host permission policy", () => {
             "Deny",
         ]);
     });
+});
 
+describe("Copilot permission adapter: prompt formatting", () => {
     it("highlights sandbox bypass and consequential request details", () => {
         const message = formatCopilotPermissionRequest({
             kind: "shell",
@@ -257,11 +230,12 @@ describe("Copilot host permission policy", () => {
             toolName: "execute_action",
             toolDescription: "x".repeat(2000),
         });
-
         expect(message).toContain("(truncated)");
         expect(message.length).toBeLessThan(500);
     });
+});
 
+describe("Copilot permission adapter: coding root scope", () => {
     it("rejects coding file access outside the authorized root", () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), "coding-root-"));
         try {

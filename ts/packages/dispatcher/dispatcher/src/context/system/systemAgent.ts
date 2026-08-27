@@ -52,10 +52,8 @@ import { getConstructionCommandHandlers } from "./handlers/constructionCommandHa
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
 import { getConversationCommandHandlers } from "./handlers/conversationCommandHandlers.js";
-import {
-    getAllowCommandHandlers,
-    getCopilotCommandHandlers,
-} from "./handlers/copilotCommandHandlers.js";
+import { getCopilotCommandHandlers } from "./handlers/copilotCommandHandlers.js";
+import { getAllowCommandHandlers } from "./handlers/permissionCommandHandlers.js";
 import { getDemoCommandHandlers } from "./handlers/demoCommandHandlers.js";
 import { getCollisionCommandHandlers } from "./handlers/collisionCommandHandlers.js";
 import { getGrammarCommandHandlers } from "./handlers/grammarCommandHandlers.js";

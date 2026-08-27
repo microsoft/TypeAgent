@@ -117,10 +117,10 @@ You can manage conversations two ways:
 
 ### Permission prompts
 
-When an agent requests permission, the prompt offers **Deny** and an approval
-scope. Open the approval menu, select a scope, then click the primary approval
-button. The selected scope is checkmarked in the menu and replaces the primary
-button label before submission.
+Copilot and Claude tool permissions use the same prompt and approval policy.
+The prompt offers **Deny** and an approval scope. Open the approval menu, select
+a scope, then click the primary approval button. The selected scope is
+checkmarked in the menu and replaces the primary button label before submission.
 
 Available scopes depend on the request:
 
@@ -129,8 +129,8 @@ Available scopes depend on the request:
   current request completes.
 - **All tools for current request** grants eligible operations until the current
   request completes.
-- **This tool for this session** is shown when the Copilot SDK supports a
-  session rule for that tool.
+- **This tool for this session** is shown when the reasoning provider's
+  SDK supports a session-scoped rule for that tool.
 - **All tools for this session** grants eligible operations for the current
   TypeAgent session.
 

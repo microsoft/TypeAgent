@@ -24,7 +24,6 @@ import { FullAction, toExecutableActions } from "@typeagent/agent-cache";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { executeActions } from "../../../execute/actionHandlers.js";
 import { askYesNoWithContext } from "../../interactiveIO.js";
-import { setCopilotPermissionSessionApproval } from "../../../reasoning/copilot.js";
 
 class CopilotImportCommandHandler implements CommandHandlerNoParams {
     public readonly description =
@@ -656,50 +655,6 @@ class CopilotLoginCommandHandler implements CommandHandler {
             });
         });
     }
-}
-
-export function setPermissionSessionApproval(
-    context: ActionContext<CommandHandlerContext>,
-    enabled: boolean,
-): void {
-    setCopilotPermissionSessionApproval(
-        context.sessionContext.agentContext,
-        enabled,
-    );
-    displaySuccess(
-        enabled
-            ? "Eligible future agent permission prompts are allowed for this session. Existing prompts, managed-policy requests, and sandbox-bypass requests still require a response."
-            : "Agent permissions require confirmation again.",
-        context,
-    );
-}
-
-class AllowAllCommandHandler implements CommandHandlerNoParams {
-    public readonly description =
-        "Allow eligible Copilot permissions for the rest of this session";
-
-    public async run(context: ActionContext<CommandHandlerContext>) {
-        setPermissionSessionApproval(context, true);
-    }
-}
-
-class AllowOffCommandHandler implements CommandHandlerNoParams {
-    public readonly description =
-        "Require confirmation for agent permissions again";
-
-    public async run(context: ActionContext<CommandHandlerContext>) {
-        setPermissionSessionApproval(context, false);
-    }
-}
-
-export function getAllowCommandHandlers(): CommandHandlerTable {
-    return {
-        description: "Allow agent permissions",
-        commands: {
-            all: new AllowAllCommandHandler(),
-            off: new AllowOffCommandHandler(),
-        },
-    };
 }
 
 export function getCopilotCommandHandlers(): CommandHandlerTable {

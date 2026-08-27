@@ -34,6 +34,7 @@ import { serializeEntityForPrompt } from "../context/chatHistoryPrompt.js";
 import {
     CommandHandlerContext,
     getCommandResult,
+    getRequestId,
 } from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import { nullClientIO } from "../context/interactiveIO.js";
@@ -81,6 +82,16 @@ import {
     runInReasoningSpan,
 } from "../otel/reasoningSpan.js";
 import { getReasoningProfileGuidance } from "./reasoningProfile.js";
+import {
+    REASONING_DENY,
+    getReasoningPermissionChoices,
+    hasCachedReasoningApproval,
+    recordReasoningApprovalChoice,
+} from "./reasoningPermissionPolicy.js";
+import {
+    buildClaudePolicyRequest,
+    formatClaudePermissionRequest,
+} from "./claudePermission.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 // Separate channel for MCP tool invocations (discover_actions / execute_action)
 // so call counts can be traced without enabling the full messages channel.
@@ -147,7 +158,11 @@ export async function prewarmClaudeReasoning(
 }
 
 const mcpServerName = "action-executor";
-const allowedTools = [
+// Built-in Claude tools we make available to the reasoning loop. Under the
+// permission-aware setup below these are AVAILABLE tools, not auto-allowed
+// ones - decisions flow through `canUseTool` and the shared reasoning
+// permission policy.
+const availableBuiltInTools = [
     "Read",
     "Write",
     "Edit",
@@ -159,8 +174,6 @@ const allowedTools = [
     "Task",
     "NotebookEdit",
     "TodoWrite",
-    // Allow all tools from the command-executor MCP server
-    `mcp__${mcpServerName}__*`,
 ];
 
 /**
@@ -418,6 +431,62 @@ async function subagentToolResult(fn: () => Promise<string> | string): Promise<{
             isError: true,
         };
     }
+}
+
+function createClaudeCanUseTool(context: ActionContext<CommandHandlerContext>) {
+    return async (
+        toolName: string,
+        input: Record<string, unknown>,
+        options: {
+            signal: AbortSignal;
+            suggestions?: Array<{
+                behavior?: string;
+                destination: string;
+            }>;
+            title?: string;
+            displayName?: string;
+            description?: string;
+            blockedPath?: string;
+            decisionReason?: string;
+            toolUseID: string;
+        },
+    ) => {
+        const agentContext = context.sessionContext.agentContext;
+        const requestId = getRequestId(agentContext);
+        const policyRequest = buildClaudePolicyRequest(
+            toolName,
+            options,
+            requestId.requestId,
+        );
+        if (hasCachedReasoningApproval(agentContext, policyRequest)) {
+            return { behavior: "allow" as const };
+        }
+        const choices = getReasoningPermissionChoices(policyRequest);
+        const message = formatClaudePermissionRequest(toolName, input, options);
+        const choiceIndex = await agentContext.clientIO.question(
+            requestId,
+            message,
+            choices,
+            choices.indexOf(REASONING_DENY),
+            `claudePermission:${policyRequest.permissionIdentity}`,
+        );
+        const choice = choices[choiceIndex];
+        const allowed = recordReasoningApprovalChoice(
+            agentContext,
+            policyRequest,
+            choice,
+        );
+        // Do not surface `updatedPermissions` back to the SDK - the host
+        // policy is the single source of truth and must remain resettable
+        // via `@allow off`. Persisting rules inside Claude would put a
+        // session grant out of the host's reach.
+        return allowed
+            ? { behavior: "allow" as const }
+            : {
+                  behavior: "deny" as const,
+                  message: "Denied by the TypeAgent host permission policy.",
+              };
+    };
 }
 
 function getClaudeOptions(
@@ -1106,10 +1175,12 @@ function getClaudeOptions(
 
     const claudeOptions: Options = {
         model,
-        permissionMode: "acceptEdits",
-        // Auto-allow all tool calls — we've already curated allowedTools
-        canUseTool: async () => ({ behavior: "allow" as const }),
-        allowedTools,
+        permissionMode: "default",
+        // Tool decisions flow through the shared reasoning permission
+        // policy so behavior matches the Copilot adapter. `tools` restricts
+        // AVAILABILITY; `canUseTool` decides ALLOW/DENY per call.
+        canUseTool: createClaudeCanUseTool(context),
+        tools: availableBuiltInTools,
         cwd: getRepoRoot(),
         settingSources: [],
         maxTurns: 20,

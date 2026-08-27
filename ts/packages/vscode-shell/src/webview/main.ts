@@ -335,21 +335,34 @@ let activePermissionPrompt = 0;
 let permissionPromptLayer: HTMLDivElement | undefined;
 let permissionReturnFocus: HTMLElement | undefined;
 
+const SDK_PERMISSION_SOURCE_RE =
+    /^(copilotPermission|claudePermission)(?::(.*))?$/;
+
+function parseSdkPermissionSource(source: string):
+    | {
+          provider: string;
+          permissionIdentity: string | undefined;
+      }
+    | undefined {
+    const match = SDK_PERMISSION_SOURCE_RE.exec(source);
+    if (match === null) return undefined;
+    const [, providerSource, identity] = match;
+    return {
+        provider: providerSource.slice(0, -"Permission".length),
+        permissionIdentity:
+            identity && identity.length > 0 ? identity : undefined,
+    };
+}
+
 function showPermissionPrompt(
     interaction: Extract<PendingInteractionRequest, { type: "question" }>,
     signal: AbortSignal,
 ): Promise<number> {
-    const isCopilot =
-        interaction.source === "copilotPermission" ||
-        interaction.source.startsWith("copilotPermission:");
-    const variant: PermissionPromptVariant = isCopilot
+    const sdkSource = parseSdkPermissionSource(interaction.source);
+    const variant: PermissionPromptVariant = sdkSource
         ? "copilot"
         : "reasoning";
-    const permissionIdentity = interaction.source.startsWith(
-        "copilotPermission:",
-    )
-        ? interaction.source.slice("copilotPermission:".length)
-        : undefined;
+    const permissionIdentity = sdkSource?.permissionIdentity;
     return new Promise<number>((resolve, reject) => {
         const prompt: PermissionPrompt = {
             id: interaction.interactionId,
@@ -849,8 +862,8 @@ function handleRequestInteraction(
         try {
             if (interaction.type === "question") {
                 const value =
-                    interaction.source === "copilotPermission" ||
-                    interaction.source.startsWith("copilotPermission:") ||
+                    parseSdkPermissionSource(interaction.source) !==
+                        undefined ||
                     interaction.source === "reasoningPermission"
                         ? await showPermissionPrompt(interaction, ac.signal)
                         : await chatPanel.addChoicePrompt<number>(
