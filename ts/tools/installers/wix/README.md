@@ -30,7 +30,7 @@ ts/tools/installers/wix/
   └── register-plugin.ps1         # Deferred CA: register/unregister the Copilot CLI plugin
 
 ts/tools/installers/common/
-  └── install-vscode-chat.ps1     # Shared VSIX install + desktop shortcut lifecycle
+  └── install-vscode-typeagent.ps1 # Shared VSIX install + desktop shortcut lifecycle
 
 pipelines/
   └── azure-build-publish-all.yml   # ADO pipeline (build_sign_publish_msi job)
@@ -270,7 +270,7 @@ Get-Item "$env:LOCALAPPDATA\TypeAgent\agent-server" -ErrorAction SilentlyContinu
 ## Native VS Code Chat integration
 
 `VSCODECHAT=1` is enabled by default. During install, the MSI runs the shared
-`install-vscode-chat.ps1` helper as the current user. The helper:
+`install-vscode-typeagent.ps1` helper as the current user. The helper:
 
 1. Finds user- or system-installed VS Code.
 2. Requires VS Code 1.133.0 or newer.
@@ -297,7 +297,7 @@ TypeAgent, so it does not delete an independently upgraded extension.
 
 `VSCODESHELL=1` is enabled by default and is exposed as a checkbox in the
 interactive installer. During install, the MSI runs the shared
-`install-vscode-chat.ps1` helper with `-ExtensionId typeagent.vscode-shell`, a
+`install-vscode-typeagent.ps1` helper with `-ExtensionId typeagent.vscode-shell`, a
 distinct ownership subkey (`HKCU\Software\Microsoft\TypeAgent\VSCodeShell`), and
 `-NoShortcut`. The helper:
 

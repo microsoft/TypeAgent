@@ -41,7 +41,7 @@ const helper = readFileSync(
         "..",
         "installers",
         "common",
-        "install-vscode-chat.ps1",
+        "install-vscode-typeagent.ps1",
     ),
     "utf8",
 );
@@ -95,7 +95,7 @@ test("WiX registers Install/Uninstall custom actions for the shell", () => {
     }
 });
 
-test("Install CA reuses install-vscode-chat.ps1 with shell-specific arguments", () => {
+test("Install CA reuses install-vscode-typeagent.ps1 with shell-specific arguments", () => {
     // Locate the SetProperty command line for InstallVsCodeShell.
     const match = wxs.match(
         /<SetProperty Id="InstallVsCodeShell"[\s\S]*?Value="([^"]*)"/,
@@ -103,7 +103,7 @@ test("Install CA reuses install-vscode-chat.ps1 with shell-specific arguments", 
     assert.ok(match, "InstallVsCodeShell SetProperty must define a command");
     const commandLine = match[1];
     assert.ok(
-        commandLine.includes("install-vscode-chat.ps1"),
+        commandLine.includes("install-vscode-typeagent.ps1"),
         "Shell install must reuse the shared VSIX helper",
     );
     assert.ok(
@@ -158,7 +158,7 @@ test("build-msi-local.mjs packages vscode-shell and passes the resulting VSIX", 
     assert.match(buildMsiLocal, /"--vscode-shell-vsix",\s*vscodeShellVsix,/);
 });
 
-test("install-vscode-chat.ps1 exposes -OwnershipKey and -NoShortcut parameters", () => {
+test("install-vscode-typeagent.ps1 exposes -OwnershipKey and -NoShortcut parameters", () => {
     assert.match(
         helper,
         /\[string\]\$OwnershipKey\s*=\s*"HKCU:\\Software\\Microsoft\\TypeAgent\\VSCodeChat"/,

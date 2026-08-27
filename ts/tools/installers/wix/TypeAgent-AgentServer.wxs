@@ -80,7 +80,7 @@
          Optional TypeAgent VS Code Shell extension install
          VSCODESHELL=1 installs the bundled vscode-shell VSIX into a compatible
          VS Code (>= 1.90). Enabled by default; pass VSCODESHELL=0 to opt out.
-         Uses the same install-vscode-chat.ps1 helper as the Chat extension
+         Uses the same install-vscode-typeagent.ps1 helper as the Chat extension
          with a distinct ExtensionId, ownership key, and no desktop shortcut.
          ═══════════════════════════════════════════════ -->
     <Property Id="VSCODESHELL" Value="1" Secure="yes" />
@@ -245,8 +245,8 @@
               Source="$(var.InstallerSourceDir)\..\common\register-plugin.mjs" />
       </Component>
       <Component Id="InstallVsCodeChatPs1Component" Guid="*">
-        <File Id="InstallVsCodeChatPs1" Name="install-vscode-chat.ps1"
-              Source="$(var.InstallerSourceDir)\..\common\install-vscode-chat.ps1" />
+        <File Id="InstallVsCodeTypeAgentPs1" Name="install-vscode-typeagent.ps1"
+              Source="$(var.InstallerSourceDir)\..\common\install-vscode-typeagent.ps1" />
       </Component>
       <Component Id="InstallShellPs1Component" Guid="*">
         <File Id="InstallShellPs1" Name="install-shell.ps1"
@@ -370,7 +370,7 @@
     <SetProperty Id="InstallVsCodeChat"
            Before="InstallVsCodeChat"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-chat.ps1&quot; -Action Install -Owner msi -VsixPath &quot;[VSCODECHATFOLDER]typeagent-vscode-chat.vsix&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-chat-install.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-typeagent.ps1&quot; -Action Install -Owner msi -VsixPath &quot;[VSCODECHATFOLDER]typeagent-vscode-chat.vsix&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-chat-install.log&quot;" />
 
     <CustomAction Id="InstallVsCodeChat"
                   BinaryKey="WixCA"
@@ -382,7 +382,7 @@
     <SetProperty Id="UninstallVsCodeChat"
            Before="UninstallVsCodeChat"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-chat.ps1&quot; -Action Uninstall -Owner msi -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-chat-install.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-typeagent.ps1&quot; -Action Uninstall -Owner msi -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-chat-install.log&quot;" />
 
     <CustomAction Id="UninstallVsCodeChat"
                   BinaryKey="WixCA"
@@ -393,7 +393,7 @@
 
     <!-- ═══════════════════════════════════════════════
          Custom actions — TypeAgent VS Code Shell extension
-         Reuses the install-vscode-chat.ps1 helper with a different ExtensionId,
+         Reuses the install-vscode-typeagent.ps1 helper with a different ExtensionId,
          its own HKCU ownership subkey, and -NoShortcut (the Shell extension is
          a webview/sidebar view; no separate desktop launcher). Minimum VS Code
          version is 1.90 (matches the extension's engines.vscode). Missing or
@@ -403,7 +403,7 @@
     <SetProperty Id="InstallVsCodeShell"
            Before="InstallVsCodeShell"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-chat.ps1&quot; -Action Install -Owner msi -ExtensionId &quot;typeagent.vscode-shell&quot; -OwnershipKey &quot;HKCU:\Software\Microsoft\TypeAgent\VSCodeShell&quot; -MinimumVersion 1.90.0 -NoShortcut -VsixPath &quot;[VSCODESHELLFOLDER]typeagent-vscode-shell.vsix&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-shell-install.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-typeagent.ps1&quot; -Action Install -Owner msi -ExtensionId &quot;typeagent.vscode-shell&quot; -OwnershipKey &quot;HKCU:\Software\Microsoft\TypeAgent\VSCodeShell&quot; -MinimumVersion 1.90.0 -NoShortcut -VsixPath &quot;[VSCODESHELLFOLDER]typeagent-vscode-shell.vsix&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-shell-install.log&quot;" />
 
     <CustomAction Id="InstallVsCodeShell"
                   BinaryKey="WixCA"
@@ -415,7 +415,7 @@
     <SetProperty Id="UninstallVsCodeShell"
            Before="UninstallVsCodeShell"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-chat.ps1&quot; -Action Uninstall -Owner msi -ExtensionId &quot;typeagent.vscode-shell&quot; -OwnershipKey &quot;HKCU:\Software\Microsoft\TypeAgent\VSCodeShell&quot; -NoShortcut -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-shell-install.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-vscode-typeagent.ps1&quot; -Action Uninstall -Owner msi -ExtensionId &quot;typeagent.vscode-shell&quot; -OwnershipKey &quot;HKCU:\Software\Microsoft\TypeAgent\VSCodeShell&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\vscode-shell-install.log&quot;" />
 
     <CustomAction Id="UninstallVsCodeShell"
                   BinaryKey="WixCA"
