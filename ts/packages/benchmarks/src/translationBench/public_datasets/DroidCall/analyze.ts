@@ -65,6 +65,7 @@ const percent = (part: number, total: number): number =>
     total === 0 ? 0 : Number(((part * 100) / total).toFixed(2));
 
 const RESULT_REFERENCE = /^#(\d+)$/;
+const DOWNLOAD_OPTION = "--download";
 
 function hasPriorResultReference(
     value: unknown,
@@ -288,11 +289,16 @@ export async function analyzeDroidCall(
 async function main(): Promise<void> {
     const args = process.argv.slice(2);
     const outputArgs = args.filter((arg) => !arg.startsWith("--"));
-    if (outputArgs.length !== 1) {
-        throw new Error("Usage: analyzeDroidCall [--download] <output-dir>");
+    const unknownOptions = args.filter(
+        (arg) => arg.startsWith("--") && arg !== DOWNLOAD_OPTION,
+    );
+    if (outputArgs.length !== 1 || unknownOptions.length > 0) {
+        throw new Error(
+            `Usage: analyzeDroidCall [${DOWNLOAD_OPTION}] <output-dir>`,
+        );
     }
     const outputDir = outputArgs[0]!;
-    if (args.includes("--download")) await downloadDroidCall(outputDir);
+    if (args.includes(DOWNLOAD_OPTION)) await downloadDroidCall(outputDir);
     const report = await analyzeDroidCall(outputDir);
     console.log(JSON.stringify(report.splits, null, 2));
 }
