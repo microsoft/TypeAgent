@@ -28,6 +28,7 @@ import {
 const debug = registerDebug("typeagent:markdown:service");
 
 const app: Express = express();
+const LOOPBACK_HOST = "127.0.0.1";
 const port = parseInt(process.argv[2]);
 if (isNaN(port)) {
     throw new Error("Port must be a number");
@@ -833,7 +834,7 @@ app.get("/collaboration/info", (req: Request, res: Response) => {
 
     res.json({
         ...stats,
-        websocketServerUrl: `ws://localhost:${port}`,
+        websocketServerUrl: `ws://${LOOPBACK_HOST}:${port}`,
         currentDocument: currentDocument,
     });
 });
@@ -2310,14 +2311,15 @@ const server = http.createServer(app);
 createYjsWSServer(server);
 debug(`[SIGNAL] Y.js WebSocket server integrated`);
 
-// Start the HTTP server (which includes WebSocket support)
-server.listen(port, () => {
+// Bind only to loopback. Origin checks are not authentication and requests
+// from non-browser clients may legitimately omit the Origin header.
+server.listen(port, LOOPBACK_HOST, () => {
     const boundPort = (server.address() as { port: number }).port;
     debug(
-        `Express server with WebSocket support listening on port ${boundPort}`,
+        `Express server with WebSocket support listening at http://${LOOPBACK_HOST}:${boundPort}`,
     );
     debug(
-        `Y.js collaboration available at ws://localhost:${boundPort}/<room-name>`,
+        `Y.js collaboration available at ws://${LOOPBACK_HOST}:${boundPort}/<room-name>`,
     );
 
     // Send success signal to parent process AFTER server is ready to accept WebSocket connections
