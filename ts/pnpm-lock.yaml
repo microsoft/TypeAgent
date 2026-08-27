@@ -1796,6 +1796,9 @@ importers:
       '@typeagent/websocket-channel-server':
         specifier: workspace:*
         version: link:../../utils/webSocketChannelServer
+      '@typeagent/websocket-utils':
+        specifier: workspace:*
+        version: link:../../utils/webSocketUtils
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
@@ -3970,6 +3973,9 @@ importers:
       '@typeagent/typechat-utils':
         specifier: workspace:*
         version: link:../utils/typechatUtils
+      '@typeagent/websocket-utils':
+        specifier: workspace:*
+        version: link:../utils/webSocketUtils
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher

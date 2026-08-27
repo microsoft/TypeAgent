@@ -85,6 +85,12 @@ In local mode (no agent server), only a single default conversation is available
 
 In local mode, the shell also hosts an in-process port-discovery WebSocket on `ws://localhost:8999/` (the same default the standalone `agentServer` uses) so external clients like the Chrome extension can find in-process agents — e.g. the browser agent's dynamically assigned WebSocket port — through the same discovery channel they would use against a real `agentServer`. If port 8999 is already in use (a real `agentServer` running, another local-mode shell, etc.) the bind fails loudly and the shell continues without discovery; external clients won't be able to find in-process agents until you restart the shell with no conflict.
 
+### Read-only chat view server
+
+Setting `localHostPort` starts a small HTTP/WebSocket server that serves a read-only view of the current conversation. It pushes the full chat log to every client that connects and has no authentication, so it listens on `127.0.0.1` only. Upgrades are additionally restricted to TypeAgent origins, which keeps unrelated pages in your browser from opening a socket to the port.
+
+To read the chat view from another device, such as a phone on a trusted home network, set `TYPEAGENT_SHELL_CHAT_SERVER_HOST` to the interface to bind (`0.0.0.0` for all of them), and set `TYPEAGENT_SHELL_CHAT_SERVER_ALLOWED_ORIGINS` to the address the device loads the page from (for example `http://192.168.1.5:8080`). Both are needed: the page connects back to whatever host it was loaded from, so widening the bind without naming the origin leaves the page loading but its socket refused. Anyone who can reach that port can then read your conversation, so only do this on a network you control.
+
 ### Azure Speech to Text service (Optional)
 
 Currently, TypeAgent Shell optionally supports voice input via Azure Speech Services or [Local Whisper Service](../../../python/stt/whisperService/) in addition to keyboard input.

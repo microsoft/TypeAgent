@@ -6,6 +6,7 @@ import { AddressInfo } from "net";
 import registerDebug from "debug";
 import { isAllowedAgentOrigin } from "./originAllowlist.js";
 import { attachHeartbeat } from "@typeagent/websocket-channel-server";
+import { LOOPBACK_HOST } from "@typeagent/websocket-utils/loopback";
 
 const debug = registerDebug("typeagent:code:websocket");
 
@@ -57,6 +58,11 @@ export class CodeAgentWebSocketServer {
         return new Promise((resolve, reject) => {
             const server = new WebSocketServer({
                 port,
+                // Bind loopback: the origin gate below accepts clients that
+                // send no Origin header at all (native `ws` callers), so an
+                // all-interfaces bind would let any LAN peer connect as one
+                // and drive privileged code-agent RPC.
+                host: LOOPBACK_HOST,
                 // Gate every upgrade on Origin so a random web page on
                 // the same host can't dial the ephemeral port assigned
                 // by the OS. `verifyClient` is invoked synchronously

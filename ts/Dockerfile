@@ -84,6 +84,17 @@ WORKDIR /prod/api
 
 EXPOSE 80:3000
 
+# The API server binds loopback by default so a local run isn't reachable from
+# the network. In the container the published port is the whole point and the
+# container boundary is the isolation, so bind all interfaces here.
+ENV TYPEAGENT_API_HOST=0.0.0.0
+
+# Browser clients are still gated on Origin, and a hosted deployment serves the
+# chat view from its own hostname rather than localhost. Set
+# TYPEAGENT_API_ALLOWED_ORIGINS to that public origin when running this image,
+# e.g. TYPEAGENT_API_ALLOWED_ORIGINS=https://typeagent.example.com, or the
+# browser's dispatcher WebSocket will be refused with 403.
+
 # start actions
 # az login
 RUN echo az login --identity >> start.sh
