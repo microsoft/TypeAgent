@@ -775,12 +775,14 @@ function buildCopilotPolicyRequest(
     const mandatory =
         request.managedApprovalRequired === true ||
         requestsSandboxBypass(request);
+    const sessionEligible =
+        !mandatory && canOfferCopilotSessionApproval(request);
     return {
         requestId,
         permissionIdentity: getCopilotPermissionIdentity(request),
         cacheEligible: !mandatory,
-        sessionEligible: !mandatory && canOfferCopilotSessionApproval(request),
-        blanketSessionEligible: !mandatory,
+        sessionEligible,
+        blanketSessionEligible: sessionEligible,
     };
 }
 

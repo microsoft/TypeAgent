@@ -114,7 +114,6 @@ describe("Copilot permission adapter: choice eligibility", () => {
             "Allow once",
             "Allow this tool for request",
             "Allow all for request",
-            "Allow all for session",
             "Deny",
         ]);
         expect(

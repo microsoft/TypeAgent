@@ -6,29 +6,8 @@ import {
     CommandHandlerNoParams,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
-import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { setReasoningPermissionSessionApproval } from "../../../reasoning/reasoningPermissionPolicy.js";
-
-// Enable or disable the blanket "Allow all for session" flag. Called by
-// both the `@allow` commands and the natural-language permissions action.
-// Disabling also clears every per-tool session grant (see the policy
-// module) so `@allow off` leaves no session-scoped approvals behind.
-export function setPermissionSessionApproval(
-    context: ActionContext<CommandHandlerContext>,
-    enabled: boolean,
-): void {
-    setReasoningPermissionSessionApproval(
-        context.sessionContext.agentContext,
-        enabled,
-    );
-    displaySuccess(
-        enabled
-            ? "Eligible future agent permission prompts are allowed for this session. Existing prompts, managed-policy requests, and sandbox-bypass requests still require a response."
-            : "Agent permissions require confirmation again.",
-        context,
-    );
-}
+import type { CommandHandlerContext } from "../../commandHandlerContext.js";
+import { setPermissionSessionApproval } from "../permissionSessionApproval.js";
 
 class AllowAllCommandHandler implements CommandHandlerNoParams {
     public readonly description =
