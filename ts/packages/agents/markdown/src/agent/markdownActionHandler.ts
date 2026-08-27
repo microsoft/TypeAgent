@@ -379,7 +379,7 @@ async function handleStreamingMarkdownAction(
         `[AGENT] Starting streaming action: ${action.actionName} (stream: ${streamId})`,
     );
 
-    const agent = await createMarkdownAgent("GPT_4o");
+    const agent = await createMarkdownAgent("GPT_4_O");
     const storage = actionContext.sessionContext.sessionStorage;
 
     // Get current document content
@@ -539,7 +539,6 @@ async function handleMarkdownAction(
     actionContext: ActionContext<MarkdownActionContext>,
 ) {
     let result: ActionResult | undefined = undefined;
-    const agent = await createMarkdownAgent("GPT_4o");
 
     // Accumulates the LLM token usage consumed while handling this action so
     // it can be reported back to the dispatcher as "Action Tokens". The agent
@@ -549,7 +548,11 @@ async function handleMarkdownAction(
         completion_tokens: 0,
         total_tokens: 0,
     };
-    agent.tokenUsage = tokenUsage;
+    const createAgent = async () => {
+        const agent = await createMarkdownAgent("GPT_4_O");
+        agent.tokenUsage = tokenUsage;
+        return agent;
+    };
 
     const storage = actionContext.sessionContext.sessionStorage;
 
@@ -600,6 +603,7 @@ async function handleMarkdownAction(
             break;
         }
         case "updateDocument": {
+            const agent = await createAgent();
             debug("Starting updateDocument action in agent process");
             result = createActionResult("Updating document ...");
 
@@ -740,6 +744,7 @@ async function handleMarkdownAction(
             break;
         }
         case "streamingUpdateDocument": {
+            const agent = await createAgent();
             // Handle streaming AI commands - now unified with regular updateDocument flow
             debug(
                 "Starting streamingUpdateDocument action - using standard translator flow",

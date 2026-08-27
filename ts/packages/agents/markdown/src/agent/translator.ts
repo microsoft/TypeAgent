@@ -21,7 +21,7 @@ import { MarkdownUpdateResult } from "./markdownOperationSchema.js";
 const debug = registerDebug("typeagent:markdown:translator");
 
 export async function createMarkdownAgent(
-    model: "GPT_35_TURBO" | "GPT_4" | "GPT-v" | "GPT_4o",
+    model: "GPT_35_TURBO" | "GPT_4" | "GPT_V" | "GPT_4_O",
 ) {
     const packageRoot = path.join("../../");
     const schemaText = await fs.promises.readFile(
