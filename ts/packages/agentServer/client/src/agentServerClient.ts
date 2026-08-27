@@ -128,6 +128,10 @@ export type ConversationDispatcher = {
     /** Server-side queue snapshot at join time, so clients can render correct
      *  queue state when joining mid-queue. Omitted by older servers. */
     queueSnapshot?: JoinConversationResult["queueSnapshot"];
+    /** Interactions awaiting a client response when this client joined. */
+    pendingInteractions?: NonNullable<
+        JoinConversationResult["pendingInteractions"]
+    >;
 };
 
 export type AgentServerConnection = {
@@ -478,6 +482,7 @@ export function createAgentServerConnection(
                 name: result.name,
                 connectionId: result.connectionId,
                 queueSnapshot: result.queueSnapshot,
+                pendingInteractions: result.pendingInteractions ?? [],
             };
         },
 

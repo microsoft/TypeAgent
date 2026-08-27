@@ -20,11 +20,19 @@
 
 .PARAMETER Uninstall
   Remove the extracted directories instead of creating them.
+
+.PARAMETER ShowStackTrace
+  Set to "1" to display full error details before Windows Installer rolls back.
+
+.PARAMETER InstallerUiLevel
+  Windows Installer UI level. Error details are displayed only for full UI.
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Root,
     [ValidateSet("agent-server", "copilot-plugin")][string]$Payload,
     [string]$LogPath,
+    [string]$ShowStackTrace = "0",
+    [int]$InstallerUiLevel = 0,
     [switch]$Uninstall
 )
 
@@ -42,6 +50,40 @@ function Write-Log([string]$message) {
             Add-Content -Path $LogPath -Value $line
         } catch {
             # Logging must never fail the install.
+        }
+    }
+}
+
+function Format-ErrorDetails([System.Management.Automation.ErrorRecord]$errorRecord) {
+    $details = @($errorRecord.Exception.ToString())
+    if ($errorRecord.ScriptStackTrace) {
+        $details += "PowerShell stack trace:"
+        $details += $errorRecord.ScriptStackTrace
+    }
+    return $details -join [Environment]::NewLine
+}
+
+function Show-ErrorDetails([string]$details) {
+    $owner = $null
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        $owner = New-Object System.Windows.Forms.Form
+        $owner.Opacity = 0
+        $owner.ShowInTaskbar = $false
+        $owner.TopMost = $true
+        $owner.Show()
+        [System.Windows.Forms.MessageBox]::Show(
+            $owner,
+            $details,
+            "TypeAgent setup error details",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        ) | Out-Null
+    } catch {
+        Write-Log "ERROR: Unable to display setup error details: $($_.Exception)"
+    } finally {
+        if ($owner) {
+            $owner.Dispose()
         }
     }
 }
@@ -143,6 +185,14 @@ try {
     Write-Log "Payload extraction complete: $($payloads.Name -join ', ')."
     exit 0
 } catch {
-    Write-Log "ERROR: $($_.Exception.Message)"
+    $errorDetails = Format-ErrorDetails $_
+    Write-Log "ERROR: $errorDetails"
+    if (
+        $ShowStackTrace -eq "1" -and
+        $InstallerUiLevel -eq 5 -and
+        [Environment]::UserInteractive
+    ) {
+        Show-ErrorDetails $errorDetails
+    }
     exit 1
 }
