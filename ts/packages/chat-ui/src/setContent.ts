@@ -990,12 +990,7 @@ export function setContent(
 
         contentElm.appendChild(iframe);
     } else {
-        // vanilla, sanitized HTML only — re-run DOMPurify at the sink so
-        // CodeQL js/xss can recognize sanitization (the upstream
-        // `processContent` already sanitizes html/markdown, but the data
-        // flow through messageContentToHTML breaks the static analysis
-        // chain).
-        // vanilla, sanitized HTML only — re-run DOMPurify at the sink so
+        // vanilla, sanitized HTML only: re-run DOMPurify at the sink so
         // CodeQL js/xss can recognize sanitization (the upstream
         // `processContent` already sanitizes html/markdown, but the data
         // flow through messageContentToHTML breaks the static analysis
