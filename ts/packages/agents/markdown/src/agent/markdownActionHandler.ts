@@ -18,6 +18,7 @@ import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { UICommandResult } from "./ipcTypes.js";
+import { applyDocumentOperations } from "./documentOperations.js";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:markdown:agent");
@@ -381,6 +382,9 @@ async function handleStreamingMarkdownAction(
 
     const agent = await createMarkdownAgent("GPT_4_O");
     const storage = actionContext.sessionContext.sessionStorage;
+    if (!storage) {
+        throw new Error("Markdown actions require session storage");
+    }
 
     // Get current document content
     const filePath = `${actionContext.sessionContext.agentContext.currentFileName}`;
@@ -555,6 +559,9 @@ async function handleMarkdownAction(
     };
 
     const storage = actionContext.sessionContext.sessionStorage;
+    if (!storage) {
+        throw new Error("Markdown actions require session storage");
+    }
 
     switch (action.actionName) {
         case "openDocument":
@@ -574,14 +581,14 @@ async function handleMarkdownAction(
                 actionContext.sessionContext.agentContext.currentFileName =
                     newFileName;
 
-                if (!(await storage?.exists(newFileName))) {
-                    await storage?.write(newFileName, "");
+                if (!(await storage.exists(newFileName))) {
+                    await storage.write(newFileName, "");
                 }
 
                 if (actionContext.sessionContext.agentContext.viewProcess) {
                     const fullPath = await getFullMarkdownFilePath(
                         newFileName,
-                        storage!,
+                        storage,
                     );
 
                     actionContext.sessionContext.agentContext.viewProcess.send({
@@ -591,6 +598,10 @@ async function handleMarkdownAction(
                     });
                 }
                 result = createActionResult("Document opened");
+                result.resultEntity = {
+                    name: newFileName,
+                    type: ["file", "markdown"],
+                };
                 result.activityContext = {
                     activityName: "editingMarkdown",
                     description: "Editing a Markdown document",
@@ -633,9 +644,9 @@ async function handleMarkdownAction(
                 }
             } else {
                 // Fallback if no view process
-                if (await storage?.exists(filePath)) {
+                if (await storage.exists(filePath)) {
                     markdownContent =
-                        (await storage?.read(filePath, "utf8")) || "";
+                        (await storage.read(filePath, "utf8")) || "";
                     debug(
                         "No view process, read content from storage:",
                         markdownContent?.length,
@@ -718,9 +729,12 @@ async function handleMarkdownAction(
                             "Operations applied successfully via view process",
                         );
                     } else {
-                        console.warn(
-                            "No view process available, operations not applied",
+                        const updatedContent = applyDocumentOperations(
+                            markdownContent,
+                            updateResult.operations,
                         );
+                        await storage.write(filePath, updatedContent);
+                        debug("Applied operations directly to session storage");
                     }
                 } else {
                     debug("[AGENT] No operations returned from LLM");
@@ -777,9 +791,9 @@ async function handleMarkdownAction(
                 }
             } else {
                 // Fallback if no view process
-                if (await storage?.exists(filePath)) {
+                if (await storage.exists(filePath)) {
                     markdownContent =
-                        (await storage?.read(filePath, "utf8")) || "";
+                        (await storage.read(filePath, "utf8")) || "";
                     debug(
                         "No view process, read content from storage:",
                         markdownContent?.length,
@@ -824,8 +838,13 @@ async function handleMarkdownAction(
                             "Operations applied successfully via view process",
                         );
                     } else {
-                        console.warn(
-                            "No view process available, operations not applied",
+                        const updatedContent = applyDocumentOperations(
+                            markdownContent,
+                            updateResult.operations,
+                        );
+                        await storage.write(filePath, updatedContent);
+                        debug(
+                            "Applied streaming operations directly to session storage",
                         );
                     }
                 }

@@ -3,6 +3,8 @@
 
 import * as Y from "yjs";
 import registerDebug from "debug";
+import { applyDocumentOperations } from "../../agent/documentOperations.js";
+import type { DocumentOperation } from "../../agent/markdownOperationSchema.js";
 
 const debug = registerDebug("typeagent:markdown:collaboration");
 
@@ -52,82 +54,30 @@ export class CollaborationManager {
         };
     }
 
-    /**
-     * Apply operation to Yjs document
-     */
-    applyOperation(documentId: string, operation: any): void {
+    applyOperations(
+        documentId: string,
+        operations: DocumentOperation[],
+    ): string {
         const ydoc = this.documents.get(documentId);
         if (!ydoc) {
-            console.warn(
-                `No document found for ID: ${documentId}, cannot apply operation`,
-            );
-            return;
+            throw new Error(`No document found for ID: ${documentId}`);
         }
 
         const ytext = ydoc.getText("content");
-        debug(
-            `Applying operation: ${operation.type} to document: ${documentId}`,
+        const updatedContent = applyDocumentOperations(
+            ytext.toString(),
+            operations,
         );
 
-        try {
-            switch (operation.type) {
-                case "insert": {
-                    const insertText = operation.content
-                        .map((item: any) => this.contentItemToText(item))
-                        .join("");
-                    const position = Math.min(
-                        operation.position || 0,
-                        ytext.length,
-                    );
-                    ytext.insert(position, insertText);
-                    debug(
-                        `Inserted ${insertText.length} chars at position ${position} in document ${documentId}`,
-                    );
-                    break;
-                }
-                case "replace": {
-                    const replaceText = operation.content
-                        .map((item: any) => this.contentItemToText(item))
-                        .join("");
-                    const fromPos = Math.min(operation.from || 0, ytext.length);
-                    const toPos = Math.min(
-                        operation.to || fromPos + 1,
-                        ytext.length,
-                    );
-                    const deleteLength = toPos - fromPos;
+        ydoc.transact(() => {
+            ytext.delete(0, ytext.length);
+            ytext.insert(0, updatedContent);
+        });
 
-                    ytext.delete(fromPos, deleteLength);
-                    ytext.insert(fromPos, replaceText);
-                    debug(
-                        `Replaced ${deleteLength} chars with ${replaceText.length} chars at position ${fromPos} in document ${documentId}`,
-                    );
-                    break;
-                }
-                case "delete": {
-                    const fromPos = Math.min(operation.from || 0, ytext.length);
-                    const toPos = Math.min(
-                        operation.to || fromPos + 1,
-                        ytext.length,
-                    );
-                    const deleteLength = toPos - fromPos;
-
-                    ytext.delete(fromPos, deleteLength);
-                    debug(
-                        `Deleted ${deleteLength} chars at position ${fromPos} in document ${documentId}`,
-                    );
-                    break;
-                }
-                default:
-                    console.warn(
-                        `[COLLAB] Unknown operation type: ${operation.type}`,
-                    );
-            }
-        } catch (error) {
-            console.error(
-                `[COLLAB] Failed to apply operation ${operation.type}:`,
-                error,
-            );
-        }
+        debug(
+            `Applied ${operations.length} operations to document ${documentId}`,
+        );
+        return updatedContent;
     }
 
     /**
@@ -159,75 +109,5 @@ export class CollaborationManager {
         const ytext = ydoc.getText("content");
         ytext.delete(0, ytext.length);
         ytext.insert(0, content);
-    }
-
-    /**
-     * Convert content item to text (helper for operation application)
-     */
-    private contentItemToText(item: any): string {
-        if (item.text) {
-            return item.text;
-        }
-
-        if (item.content) {
-            return item.content
-                .map((child: any) => this.contentItemToText(child))
-                .join("");
-        }
-
-        // Handle special node types
-        switch (item.type) {
-            case "paragraph":
-                return (
-                    "\n" +
-                    (item.content
-                        ? item.content
-                              .map((child: any) =>
-                                  this.contentItemToText(child),
-                              )
-                              .join("")
-                        : "") +
-                    "\n"
-                );
-            case "heading":
-                const level = item.attrs?.level || 1;
-                const prefix = "#".repeat(level) + " ";
-                return (
-                    "\n" +
-                    prefix +
-                    (item.content
-                        ? item.content
-                              .map((child: any) =>
-                                  this.contentItemToText(child),
-                              )
-                              .join("")
-                        : "") +
-                    "\n"
-                );
-            case "code_block":
-                return (
-                    "\n```\n" +
-                    (item.content
-                        ? item.content
-                              .map((child: any) =>
-                                  this.contentItemToText(child),
-                              )
-                              .join("")
-                        : "") +
-                    "\n```\n"
-                );
-            case "mermaid":
-                return (
-                    "\n```mermaid\n" + (item.attrs?.content || "") + "\n```\n"
-                );
-            case "math_display":
-                return "\n$$\n" + (item.attrs?.content || "") + "\n$$\n";
-            default:
-                return item.content
-                    ? item.content
-                          .map((child: any) => this.contentItemToText(child))
-                          .join("")
-                    : "";
-        }
     }
 }

@@ -69,6 +69,10 @@ describe("markdown document actions", () => {
                     completion_tokens: 0,
                     total_tokens: 0,
                 });
+                expect(result.resultEntity).toEqual({
+                    name: "notes.md",
+                    type: ["file", "markdown"],
+                });
             } finally {
                 for (const [key, value] of savedModelSettings) {
                     process.env[key] = value;

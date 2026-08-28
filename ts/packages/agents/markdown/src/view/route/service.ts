@@ -690,7 +690,7 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
             sanitizedFilePath += ".md";
         }
 
-        const resolvedFilePath = resolvePathWithinRoot(
+        const resolvedFilePath = resolveWritableFileWithinRoot(
             ROOT_DIR,
             sanitizedFilePath,
         );
@@ -758,7 +758,7 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
         ytext.insert(0, content);
 
         // Then save to file
-        // fs.writeFileSync(targetFilePath, content, "utf-8");
+        fs.writeFileSync(targetFilePath, content, "utf-8");
 
         debug(
             `Auto-save completed to both Y.js document and file: ${targetFilePath}, ${content.length} chars`,
@@ -1635,98 +1635,88 @@ Start typing to see the editor in action!
             );
         });
     } else if (message.type === "applyLLMOperations") {
-        // PRODUCTION: Send operations to PRIMARY client only via SSE to prevent duplicates
         try {
-            debug(
-                `[VIEW] Forwarding ${message.operations?.length || 0} operations to primary client via SSE`,
-            );
+            if (!Array.isArray(message.operations)) {
+                throw new Error("Document operations must be an array");
+            }
 
-            if (clients.length === 0) {
-                console.warn(
-                    `[SSE] No clients connected to receive operations`,
+            if (clients.length > 0) {
+                const operationsEvent = {
+                    type: "llmOperations",
+                    operations: message.operations,
+                    timestamp: message.timestamp || Date.now(),
+                    source: "agent",
+                    clientRole: "primary",
+                };
+                clients[0].write(
+                    `data: ${JSON.stringify(operationsEvent)}\n\n`,
                 );
+
+                const notificationEvent = {
+                    type: "operationsBeingApplied",
+                    timestamp: Date.now(),
+                    operationCount: message.operations.length,
+                    source: "agent",
+                };
+                clients.slice(1).forEach((client) => {
+                    client.write(
+                        `data: ${JSON.stringify(notificationEvent)}\n\n`,
+                    );
+                });
+
                 process.send?.({
                     type: "operationsApplied",
-                    success: false,
-                    error: "No clients connected",
+                    success: true,
+                    operationCount: message.operations.length,
                     method: "sse-forwarded",
+                    clientsNotified: clients.length,
                 });
                 return;
             }
 
-            // Send operations to ONLY the first client to prevent duplicates
-            const primaryClient = clients[0];
-            const operationsEvent = {
-                type: "llmOperations",
-                operations: message.operations,
-                timestamp: message.timestamp || Date.now(),
-                source: "agent",
-                clientRole: "primary", // Mark this client as the primary applier
-            };
+            const documentId = filePath
+                ? path.basename(filePath, ".md")
+                : "default";
+            getAuthoritativeDocument(documentId);
 
-            try {
-                primaryClient.write(
-                    `data: ${JSON.stringify(operationsEvent)}\n\n`,
+            let writableFilePath: string | undefined;
+            if (filePath) {
+                writableFilePath = resolveWritableFileWithinRoot(
+                    ROOT_DIR,
+                    filePath,
                 );
-                debug(
-                    `[SSE] Sent ${message.operations?.length || 0} operations to PRIMARY client (${clients.indexOf(primaryClient)} of ${clients.length} clients)`,
-                );
-
-                debug(`data: ${JSON.stringify(operationsEvent)}\n\n`);
-
-                // Notify other clients that operations are being applied (optional)
-                if (clients.length > 1) {
-                    const notificationEvent = {
-                        type: "operationsBeingApplied",
-                        timestamp: Date.now(),
-                        operationCount: message.operations?.length || 0,
-                        source: "agent",
-                    };
-
-                    clients.slice(1).forEach((client, index) => {
-                        try {
-                            client.write(
-                                `data: ${JSON.stringify(notificationEvent)}\n\n`,
-                            );
-                            debug(
-                                `[SSE] Notified secondary client ${index + 1} of pending operations`,
-                            );
-                        } catch (error) {
-                            console.error(
-                                `[SSE] Failed to notify secondary client ${index + 1}:`,
-                                error,
-                            );
-                        }
-                    });
+                if (writableFilePath === undefined) {
+                    throw new Error("Access to the file is forbidden");
                 }
-            } catch (error) {
-                console.error(
-                    "[SSE] Failed to send operations to primary client:",
-                    error,
-                );
-                throw error;
             }
 
-            // Send success confirmation back to agent
+            const content = collaborationManager.applyOperations(
+                documentId,
+                message.operations,
+            );
+            if (writableFilePath) {
+                fs.writeFileSync(writableFilePath, content, "utf-8");
+                filePath = writableFilePath;
+            }
+
+            debug(
+                `[VIEW] Applied ${message.operations.length} operations to ${documentId}`,
+            );
+
             process.send?.({
                 type: "operationsApplied",
                 success: true,
-                operationCount: message.operations?.length || 0,
-                method: "sse-forwarded",
+                operationCount: message.operations.length,
+                method: "server-applied",
                 clientsNotified: clients.length,
             });
-
-            debug(`[VIEW] Operations forwarded to primary client successfully`);
         } catch (error) {
-            console.error(
-                "[VIEW] Failed to forward operations via SSE:",
-                error,
-            );
+            console.error("[VIEW] Failed to apply operations:", error);
             process.send?.({
                 type: "operationsApplied",
                 success: false,
                 error: error instanceof Error ? error.message : "Unknown error",
-                method: "sse-forwarded",
+                method: "server-applied",
             });
         }
     } else if (message.type === "getDocumentContent") {
