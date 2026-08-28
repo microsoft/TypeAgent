@@ -1,10 +1,26 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Editor } from "@milkdown/core";
-import { editorViewCtx, parserCtx } from "@milkdown/core";
+import { editorViewCtx, type Editor } from "@milkdown/core";
 import { AI_CONFIG, DEFAULT_MARKDOWN_CONTENT, EDITOR_CONFIG } from "../config";
 import { getMarkdownFromEditor, getEditorPositionInfo } from "../utils";
+import {
+    encodeDocumentPathForUrl,
+    ensureMarkdownExtension,
+} from "../../route/urlPath.js";
+
+class DocumentWriteConflictError extends Error {
+    public constructor(message: string) {
+        super(message);
+        this.name = "DocumentWriteConflictError";
+    }
+}
+
+interface DocumentWriteResponse {
+    content?: unknown;
+    error?: unknown;
+    revision?: unknown;
+}
 
 export class DocumentManager {
     private notificationManager: any = null;
@@ -13,7 +29,33 @@ export class DocumentManager {
     private autoSaveTimer: NodeJS.Timeout | null = null;
     private isPrimaryClient = false;
     private lastAutoSaveContent = "";
+    // A 409 with different on-disk content blocks repeated autosaves of
+    // exactly the same editor state. A subsequent edit may try again, but
+    // the conflicted payload is never retried indefinitely.
+    private lastConflictedAutoSaveContent: string | null = null;
     private currentDocumentId = "default";
+    private currentRevision: string | null = null;
+    // Token rotated by the view service on every trusted rebinding
+    // (setFile from the agent or /api/switch-document from another
+    // browser). Snapshots we accept must carry this exact value or
+    // we discard them - a stale snapshot for a previous binding must
+    // never overwrite the current editor content.
+    private currentBindingToken: string | null = null;
+    // Full user-relative path (POSIX form) of the currently-bound
+    // document. Nested paths (docs/team/roadmap.md) are preserved end
+    // to end; the browser never derives this from an absolute path
+    // because the service does not expose absolute paths to callers.
+    private currentBoundRelativePath: string | null = null;
+
+    /**
+     * Expose the current bound relative path (POSIX form, includes .md)
+     * for callers that need to render or route with it. Read-only from
+     * outside; the value is only mutated from bindingBootstrap /
+     * documentChanged / switchToDocument.
+     */
+    public getCurrentBoundRelativePath(): string | null {
+        return this.currentBoundRelativePath;
+    }
 
     public setNotificationManager(notificationManager: any): void {
         this.notificationManager = notificationManager;
@@ -34,10 +76,31 @@ export class DocumentManager {
     public async initialize(): Promise<void> {
         // Set up SSE connection for document change notifications
         this.setupSSEConnection();
+        await this.loadCurrentBindingPath();
 
         // Initialize auto-save if enabled
         if (EDITOR_CONFIG.FEATURES.AUTO_SAVE) {
             this.startAutoSave();
+        }
+    }
+
+    private async loadCurrentBindingPath(): Promise<void> {
+        try {
+            const response = await fetch("/api/current-document");
+            if (!response.ok) {
+                return;
+            }
+            const current = (await response.json()) as {
+                boundRelativePath?: unknown;
+            };
+            if (typeof current.boundRelativePath === "string") {
+                this.currentBoundRelativePath = current.boundRelativePath;
+            }
+        } catch (error) {
+            console.warn(
+                "[DOCUMENT] Failed to load current binding path:",
+                error,
+            );
         }
     }
 
@@ -59,7 +122,11 @@ export class DocumentManager {
     }
 
     /**
-     * Perform auto-save if content has changed
+     * Perform auto-save if content has changed. Autosave requires a
+     * live binding token learned from bindingBootstrap /
+     * documentChanged; without one the server would (and does) reject
+     * the request, so we skip locally rather than firing a doomed
+     * write.
      */
     private async performAutoSave(): Promise<void> {
         try {
@@ -74,66 +141,68 @@ export class DocumentManager {
                 return;
             }
 
-            // Get current content using editor API
-            const currentContent = await this.getMarkdownContent(editor);
+            if (this.currentBindingToken === null) {
+                console.log(
+                    "[AUTO-SAVE] Skipping - no bindingToken yet (unbootstrapped)",
+                );
+                return;
+            }
 
-            // Only save if content has changed
+            const currentContent = await this.getMarkdownContent(editor);
             if (currentContent === this.lastAutoSaveContent) {
                 console.log("[AUTO-SAVE] Skipping - content unchanged");
+                return;
+            }
+            if (currentContent === this.lastConflictedAutoSaveContent) {
+                console.warn(
+                    "[AUTO-SAVE] Skipping unchanged content after a write conflict",
+                );
                 return;
             }
 
             console.log(`[AUTO-SAVE] Content changed, auto-saving...`);
 
-            // Get current document path from server
-            const docInfo = await this.getCurrentDocumentInfo();
-
-            // Send auto-save request
+            // Send the binding identity and base revision with the save.
+            // They prevent a stale tab from confusing one binding or
+            // revision for another; they are not authorization credentials.
+            // We do NOT
+            // send any absolute path - the server writes only to its
+            // snapshotted trusted file/root.
             const response = await fetch(AI_CONFIG.ENDPOINTS.AUTOSAVE, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     content: currentContent,
-                    filePath: docInfo.fullPath,
                     documentId: this.currentDocumentId,
+                    bindingToken: this.currentBindingToken,
+                    expectedRevision: this.currentRevision,
                 }),
             });
 
+            await this.reconcileDocumentWriteResponse(
+                response,
+                currentContent,
+                "Auto-save",
+            );
             if (response.ok) {
-                this.lastAutoSaveContent = currentContent;
                 console.log("[AUTO-SAVE] Successfully saved document");
             } else {
-                console.error(
-                    "[AUTO-SAVE] Failed to save:",
-                    response.statusText,
+                console.log(
+                    "[AUTO-SAVE] Reconciled with content already persisted by another client",
                 );
             }
         } catch (error) {
             console.error("[AUTO-SAVE] Error during auto-save:", error);
-        }
-    }
-
-    /**
-     * Get current document info from server
-     */
-    private async getCurrentDocumentInfo(): Promise<{
-        currentDocument: string;
-        fullPath: string | null;
-    }> {
-        try {
-            const response = await fetch("/api/current-document");
-            if (response.ok) {
-                return await response.json();
+            if (
+                error instanceof DocumentWriteConflictError &&
+                this.notificationManager
+            ) {
+                this.notificationManager.showNotification(
+                    error.message,
+                    "error",
+                );
             }
-        } catch (error) {
-            console.warn("Failed to get current document info:", error);
         }
-
-        // Fallback
-        return {
-            currentDocument: this.currentDocumentId,
-            fullPath: null,
-        };
     }
 
     private setupSSEConnection(): void {
@@ -180,7 +249,20 @@ export class DocumentManager {
         switch (data.type) {
             case "documentChanged":
                 console.log(`[SSE] Document changed to: ${data.newDocumentId}`);
-                this.currentDocumentId = data.newDocumentId;
+                // Adopt the new identity atomically before we touch the
+                // editor or fire autosave: pairing the new token with the
+                // new documentId prevents a same-tick autosave from
+                // carrying a stale token that would then be rejected.
+                if (typeof data.newDocumentId === "string") {
+                    this.currentDocumentId = data.newDocumentId;
+                }
+                if (typeof data.bindingToken === "string") {
+                    this.currentBindingToken = data.bindingToken;
+                }
+                if (typeof data.boundRelativePath === "string") {
+                    this.currentBoundRelativePath = data.boundRelativePath;
+                }
+                this.adoptRevision(data.revision);
 
                 // Reset sync notification state for new document
                 if (this.notificationManager) {
@@ -202,6 +284,16 @@ export class DocumentManager {
 
             case "autoSave":
                 console.log(`[SSE] Auto-save completed for: ${data.filePath}`);
+                if (
+                    typeof data.bindingToken === "string" &&
+                    data.bindingToken === this.currentBindingToken
+                ) {
+                    this.adoptRevision(data.revision);
+                } else {
+                    console.warn(
+                        "[SSE] Ignoring autoSave revision for a stale binding",
+                    );
+                }
                 // Auto-save notification removed per user request
                 break;
 
@@ -210,60 +302,118 @@ export class DocumentManager {
                 // Auto-save error notification removed per user request
                 break;
 
-            case "llmOperations":
-                // PRODUCTION: Handle LLM operations sent to PRIMARY client only via SSE
-                // Apply operations through editor API for proper markdown parsing
-                if (
-                    data.clientRole === "primary" &&
-                    data.operations &&
-                    Array.isArray(data.operations) &&
-                    this.editorManager
-                ) {
-                    try {
-                        // Mark this client as primary for auto-save
-                        this.isPrimaryClient = true;
-                        console.log(
-                            "[SSE] Marked as PRIMARY CLIENT for auto-save",
-                        );
-
-                        // Apply operations through editor API for proper markdown parsing
-                        const editor = this.editorManager.getEditor();
-                        if (editor) {
-                            await this.applyOperationsThroughEditor(
-                                editor,
-                                data.operations,
-                            );
-                            console.log(
-                                ` [SSE] Applied ${data.operations.length} operations via editor API`,
-                            );
-                        } else {
-                            console.warn(
-                                ` [SSE] No editor available to apply operations`,
-                            );
-                        }
-                    } catch (error) {
-                        console.error(
-                            `[ERROR] [SSE] Failed to apply LLM operations:`,
-                            error,
-                        );
-                        if (this.notificationManager) {
-                            this.notificationManager.showNotification(
-                                `❌ Failed to apply AI changes`,
-                                "error",
-                            );
-                        }
+            case "bindingBootstrap": {
+                // Trusted bootstrap from the same-origin service. Its
+                // view of the current binding is authoritative on every
+                // reconnect: a stale in-memory token here would just
+                // paper over a real rebinding (e.g. another tab or the
+                // agent switched files while this tab was offline).
+                // Adopt the identity atomically so a subsequent
+                // autosave and any pending snapshots compare against
+                // a consistent token/documentId pair.
+                if (typeof data.bindingToken === "string") {
+                    this.currentBindingToken = data.bindingToken;
+                    if (typeof data.documentId === "string") {
+                        this.currentDocumentId = data.documentId;
                     }
-                } else if (data.clientRole !== "primary") {
-                    // Mark as secondary client
+                    if (typeof data.boundRelativePath === "string") {
+                        this.currentBoundRelativePath = data.boundRelativePath;
+                    }
+                    this.adoptRevision(data.revision);
+                    console.log(
+                        `[SSE] Adopted bindingBootstrap token for ${data.documentId ?? "<memory>"}`,
+                    );
+                } else if (data.bindingToken === null) {
+                    // View is in memory-only mode. Clear our token so a
+                    // stale value cannot survive across an unbind /
+                    // rebind cycle and get re-associated with a
+                    // different file.
+                    this.currentBindingToken = null;
+                    this.currentBoundRelativePath = null;
+                    this.currentRevision = null;
+                }
+                // clientRole is assigned by SSE connection ordering (see
+                // service /events). The first-connected browser is the
+                // primary autosave writer; secondary tabs skip autosave.
+                if (data.clientRole === "primary") {
+                    this.isPrimaryClient = true;
+                    console.log("[SSE] bindingBootstrap assigned PRIMARY role");
+                } else if (data.clientRole === "secondary") {
                     this.isPrimaryClient = false;
-                    console.log(`[SSE] Marked as SECONDARY CLIENT`);
-                } else {
-                    console.warn(
-                        `[SSE] Invalid LLM operations received:`,
-                        data,
+                    console.log(
+                        "[SSE] bindingBootstrap assigned SECONDARY role",
                     );
                 }
                 break;
+            }
+
+            case "primaryElected": {
+                // Sent to the next-connected browser when the previous
+                // primary tab closed. Flip the autosave flag on so this
+                // tab starts writing on the next timer tick. Promotion must
+                // not seat a new binding token by itself: without the matching
+                // documentChanged/bootstrap content that could pair stale
+                // editor content with a new file identity.
+                if (data.bindingToken !== this.currentBindingToken) {
+                    console.warn(
+                        "[SSE] Ignoring primaryElected for a stale binding",
+                    );
+                    break;
+                }
+                this.isPrimaryClient = true;
+                this.adoptRevision(data.revision);
+                console.log("[SSE] Promoted to PRIMARY for autosave");
+                break;
+            }
+
+            case "documentSnapshot": {
+                // Post-commit snapshot from the server after it applied
+                // LLM operations to raw Markdown. Only adopt it when the
+                // binding token matches the one we last recorded from
+                // documentChanged / bindingBootstrap. Fail closed when
+                // we have no token yet: an untrusted snapshot on an
+                // unbootstrapped browser must never seat a token from
+                // arbitrary content.
+                const snapshotToken = data.bindingToken;
+                if (typeof snapshotToken !== "string") {
+                    console.warn(
+                        "[SSE] Ignoring documentSnapshot with no bindingToken",
+                    );
+                    break;
+                }
+                if (this.currentBindingToken === null) {
+                    console.warn(
+                        `[SSE] Ignoring documentSnapshot: no established binding token to compare against (snapshot ${snapshotToken})`,
+                    );
+                    break;
+                }
+                if (snapshotToken !== this.currentBindingToken) {
+                    console.warn(
+                        `[SSE] Ignoring documentSnapshot for stale binding (snapshot ${snapshotToken}, current ${this.currentBindingToken})`,
+                    );
+                    break;
+                }
+                if (
+                    this.editorManager &&
+                    typeof data.markdown === "string" &&
+                    typeof this.editorManager.setContent === "function"
+                ) {
+                    try {
+                        await this.editorManager.setContent(data.markdown);
+                        this.lastAutoSaveContent = data.markdown;
+                        this.adoptRevision(data.revision);
+                        console.log(
+                            `[SSE] Adopted documentSnapshot (${data.markdown.length} chars, revision ${data.revision ?? "-"})`,
+                        );
+                    } catch (error) {
+                        console.error(
+                            "[ERROR] [SSE] Failed to apply documentSnapshot:",
+                            error,
+                        );
+                    }
+                }
+                break;
+            }
 
             case "operationsBeingApplied":
                 // Handle notification that operations are being applied by primary client
@@ -307,6 +457,7 @@ export class DocumentManager {
             const response = await fetch(documentUrl);
 
             const content = response.ok ? await response.text() : "";
+            this.adoptRevisionFromResponse(response);
             console.log(
                 ` [DOCUMENT] Frontend switched to document: "${documentId}"`,
             );
@@ -317,9 +468,16 @@ export class DocumentManager {
             }
 
             // Update page title and URL
-            document.title = `${documentName} - AI-Enhanced Markdown Editor`;
-            const newUrl = `/document/${encodeURIComponent(documentName)}`;
-            window.history.pushState({ documentName }, document.title, newUrl);
+            const relativePath =
+                this.currentBoundRelativePath ?? `${documentName}.md`;
+            const displayPath = relativePath.replace(/\.md$/i, "");
+            document.title = `${displayPath} - AI-Enhanced Markdown Editor`;
+            const newUrl = `/document/${encodeDocumentPathForUrl(relativePath)}`;
+            window.history.pushState(
+                { documentPath: displayPath },
+                document.title,
+                newUrl,
+            );
         } catch (error) {
             console.error(
                 "[DOCUMENT] Failed to handle backend document change:",
@@ -381,7 +539,13 @@ export class DocumentManager {
             }
 
             console.log(`[CLIENT] Sending markdown response to server...`);
-            // Send markdown content back to view process
+            // Send markdown content back to view process. Echo our
+            // currentBindingToken so the service can reject the
+            // response when we rebound mid-flight (the pending server
+            // request is pinned to the token that was live when the
+            // SSE was sent). A null echo is fine and expected during
+            // the pre-bootstrap window; the service simply skips the
+            // check when both sides carry null.
             const response = await fetch("/api/markdown-response", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -389,6 +553,7 @@ export class DocumentManager {
                     requestId: requestId,
                     markdown: markdown,
                     positionInfo: positionInfo,
+                    bindingToken: this.currentBindingToken,
                     timestamp: Date.now(),
                 }),
             });
@@ -417,6 +582,7 @@ export class DocumentManager {
                             error instanceof Error
                                 ? error.message
                                 : "Unknown error",
+                        bindingToken: this.currentBindingToken,
                         timestamp: Date.now(),
                     }),
                 });
@@ -429,9 +595,20 @@ export class DocumentManager {
         }
     }
 
+    /**
+     * Persist the current editor state to the bound file. Payload is
+     * the serialized Markdown from getMarkdownContent - never plain
+     * text - so headings/bold/code/links survive a manual save. When
+     * an editor is provided, we carry the current bindingToken as an
+     * identity proof: the service applies the same trust check the
+     * autosave endpoint does and rejects a missing/stale token
+     * without touching disk.
+     */
     public async saveDocument(editor?: Editor): Promise<void> {
         try {
-            // Get markdown content from editor or server
+            // Get markdown content from editor (via serializer) or,
+            // when there is no editor to serialize from, from the
+            // service's current view of the bound file.
             const content = editor
                 ? await this.getMarkdownContent(editor)
                 : await this.loadContentFromServer();
@@ -441,12 +618,19 @@ export class DocumentManager {
             const response = await fetch(saveUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content }),
+                body: JSON.stringify({
+                    content,
+                    documentId: this.currentDocumentId,
+                    bindingToken: this.currentBindingToken,
+                    expectedRevision: this.currentRevision,
+                }),
             });
 
-            if (!response.ok) {
-                throw new Error(`Save failed: ${response.status}`);
-            }
+            await this.reconcileDocumentWriteResponse(
+                response,
+                content,
+                "Save",
+            );
 
             console.log(` [DOCUMENT] Document saved successfully`);
         } catch (error) {
@@ -458,37 +642,17 @@ export class DocumentManager {
         }
     }
 
+    /**
+     * Get the full serialized Markdown for the editor. This is the
+     * ONLY content that autosave / saveDocument may persist: it runs
+     * the ProseMirror doc through Milkdown's serializerCtx so
+     * headings, bold, code fences, links, etc. round-trip. The
+     * ProseMirror `textContent` shortcut is intentionally not used
+     * here - it strips formatting and would silently overwrite the
+     * bound file with plain text.
+     */
     public async getMarkdownContent(editor: Editor): Promise<string> {
-        if (!editor) return "";
-
-        try {
-            // Get content directly from editor first (most current state)
-            const editorContent = await new Promise<string>((resolve) => {
-                editor.action((ctx) => {
-                    const view = ctx.get(editorViewCtx);
-                    resolve(view.state.doc.textContent || "");
-                });
-            });
-
-            if (editorContent) {
-                return editorContent;
-            }
-        } catch (error) {
-            console.warn("Failed to get content from editor:", error);
-        }
-
-        try {
-            // Fallback to server content if editor content is empty
-            const response = await fetch(AI_CONFIG.ENDPOINTS.DOCUMENT);
-            if (response.ok) {
-                const serverContent = await response.text();
-                return serverContent;
-            }
-        } catch (error) {
-            console.warn("Failed to fetch document from server:", error);
-        }
-
-        return "";
+        return getMarkdownFromEditor(editor);
     }
 
     public async loadInitialContent(): Promise<string> {
@@ -499,6 +663,8 @@ export class DocumentManager {
 
             if (response.ok) {
                 const content = await response.text();
+                this.adoptRevisionFromResponse(response);
+                this.lastAutoSaveContent = content;
                 return content;
             } else {
                 return this.getDefaultContent();
@@ -516,6 +682,7 @@ export class DocumentManager {
 
         if (response.ok) {
             const content = await response.text();
+            this.adoptRevisionFromResponse(response);
             return content;
         }
         throw new Error(
@@ -536,6 +703,7 @@ export class DocumentManager {
 
             if (response.ok) {
                 const content = await response.text();
+                this.adoptRevisionFromResponse(response);
                 return content;
             }
             throw new Error(
@@ -554,14 +722,19 @@ export class DocumentManager {
             const response = await fetch(saveUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content }),
+                body: JSON.stringify({
+                    content,
+                    documentId: this.currentDocumentId,
+                    bindingToken: this.currentBindingToken,
+                    expectedRevision: this.currentRevision,
+                }),
             });
 
-            if (!response.ok) {
-                throw new Error(
-                    `Failed to set document content: ${response.status} ${response.statusText}`,
-                );
-            }
+            await this.reconcileDocumentWriteResponse(
+                response,
+                content,
+                "Set document content",
+            );
 
             console.log(` [DOCUMENT] Document content updated successfully`);
             // Don't reload the whole page, just notify the editor will update via collaboration
@@ -618,15 +791,43 @@ export class DocumentManager {
         }
     }
 
-    public async switchToDocument(documentName: string): Promise<void> {
+    public async switchToDocument(documentPath: string): Promise<void> {
         try {
+            // Short-circuit when the SSE bootstrap already bound this
+            // browser to the requested document. Without this guard
+            // the initial `/document/team/2025/plan.md` load would
+            // trigger a redundant /api/switch-document call, which
+            // rotates the binding token, might race the
+            // bootstrap adoption path, and - if the raw path is not
+            // normalized identically - could persuade the service to
+            // create a new empty file.
+            if (this.currentBoundRelativePath !== null) {
+                const targetRelative = ensureMarkdownExtension(documentPath);
+                if (this.currentBoundRelativePath === targetRelative) {
+                    console.log(
+                        `[DOCUMENT] Already bound to ${this.currentBoundRelativePath}; skipping /api/switch-document`,
+                    );
+                    return;
+                }
+            }
+
             const switchUrl = "/api/switch-document";
 
-            // Call server to switch document
+            // Send the raw user-relative path (possibly nested, e.g.
+            // "docs/team/roadmap"). The service re-validates via
+            // pathPolicy, appends .md if needed, and returns the full
+            // normalized relative path plus the freshly-rotated
+            // bindingToken and documentId (Yjs room) it assigned.
             const response = await fetch(switchUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ documentName }),
+                body: JSON.stringify({
+                    documentPath,
+                    // Back-compat for older callers/tests that read
+                    // this on the server side; the server prefers
+                    // documentPath.
+                    documentName: documentPath,
+                }),
             });
 
             if (!response.ok) {
@@ -636,11 +837,33 @@ export class DocumentManager {
             }
 
             const result = await response.json();
-            console.log(`[DOCUMENT] Server switched to: ${documentName}`);
+            console.log(`[DOCUMENT] Server switched to: ${documentPath}`);
 
-            // Switch editor collaboration to new document room
+            // Adopt the new identity atomically BEFORE the editor
+            // room switch and any autosave. Otherwise the next
+            // autosave tick would carry the previous token/documentId
+            // and be rejected by the service - and worse, if the
+            // service had already rotated to a different binding
+            // (concurrent switch), we would pair new content with
+            // the old identity.
+            const documentId =
+                typeof result.documentId === "string"
+                    ? result.documentId
+                    : documentPath;
+            const relative =
+                typeof result.boundRelativePath === "string"
+                    ? result.boundRelativePath
+                    : typeof result.relativePath === "string"
+                      ? result.relativePath
+                      : null;
+            this.currentDocumentId = documentId;
+            this.currentBoundRelativePath = relative;
+            if (typeof result.bindingToken === "string") {
+                this.currentBindingToken = result.bindingToken;
+            }
+            this.adoptRevision(result.revision);
+
             if (this.editorManager) {
-                const documentId = documentName; // Document ID is same as document name (without .md)
                 await this.editorManager.switchToDocument(
                     documentId,
                     result.content,
@@ -650,14 +873,103 @@ export class DocumentManager {
                 );
             }
 
-            // Update page title and URL
-            document.title = `${documentName} - AI-Enhanced Markdown Editor`;
-            const newUrl = `/document/${encodeURIComponent(documentName)}`;
-            window.history.pushState({ documentName }, document.title, newUrl);
+            // Update page title and URL. For nested paths, encode each
+            // segment so slashes are preserved.
+            const displayPath = relative
+                ? relative.replace(/\.md$/i, "")
+                : documentPath;
+            document.title = `${displayPath} - AI-Enhanced Markdown Editor`;
+            const encodedPath = encodeDocumentPathForUrl(
+                relative ?? ensureMarkdownExtension(documentPath),
+            );
+            const newUrl = `/document/${encodedPath}`;
+            window.history.pushState(
+                { documentPath: displayPath },
+                document.title,
+                newUrl,
+            );
         } catch (error) {
             console.error("[DOCUMENT] Failed to switch document:", error);
             throw error;
         }
+    }
+
+    private adoptRevision(revision: unknown): void {
+        if (typeof revision === "string" && revision.length > 0) {
+            this.currentRevision = revision;
+        }
+    }
+
+    private adoptRevisionFromResponse(response: Response): void {
+        this.adoptRevision(response.headers.get("X-Content-Revision"));
+    }
+
+    private async parseDocumentWriteResponse(
+        response: Response,
+    ): Promise<DocumentWriteResponse | undefined> {
+        try {
+            const result: unknown = await response.json();
+            if (
+                typeof result === "object" &&
+                result !== null &&
+                !Array.isArray(result)
+            ) {
+                return result as DocumentWriteResponse;
+            }
+        } catch (error) {
+            console.warn(
+                `[DOCUMENT] Could not parse ${response.status} response body:`,
+                error,
+            );
+        }
+        return undefined;
+    }
+
+    /**
+     * Reconcile an optimistic document write. A 409 is considered resolved
+     * only when the server proves that the exact attempted content is already
+     * on disk. Otherwise we retain the old base revision and surface a
+     * conflict, preventing a follow-up save from overwriting newer disk data.
+     */
+    private async reconcileDocumentWriteResponse(
+        response: Response,
+        attemptedContent: string,
+        operation: string,
+    ): Promise<void> {
+        const result = await this.parseDocumentWriteResponse(response);
+
+        if (response.ok) {
+            this.adoptRevision(result?.revision);
+            this.lastAutoSaveContent = attemptedContent;
+            this.lastConflictedAutoSaveContent = null;
+            return;
+        }
+
+        if (
+            response.status === 409 &&
+            typeof result?.revision === "string" &&
+            result.content === attemptedContent
+        ) {
+            this.adoptRevision(result.revision);
+            this.lastAutoSaveContent = attemptedContent;
+            this.lastConflictedAutoSaveContent = null;
+            return;
+        }
+
+        if (response.status === 409) {
+            this.lastConflictedAutoSaveContent = attemptedContent;
+            const detail =
+                typeof result?.error === "string" ? ` ${result.error}` : "";
+            throw new DocumentWriteConflictError(
+                `${operation} conflict: the document changed on disk and was not overwritten.${detail}`,
+            );
+        }
+
+        const detail =
+            typeof result?.error === "string" ? ` ${result.error}` : "";
+        throw new Error(
+            `${operation} failed: ${response.status} ${response.statusText}.${detail}`,
+        );
     }
 
     private async hasUnsavedChanges(): Promise<boolean> {
@@ -684,205 +996,6 @@ export class DocumentManager {
             console.warn("Could not check for unsaved changes:", error);
             return false; // Assume no changes if we can't check
         }
-    }
-
-    /**
-     * Apply operations through the editor API for proper markdown parsing and DOM updates
-     */
-    private async applyOperationsThroughEditor(
-        editor: any,
-        operations: any[],
-    ): Promise<void> {
-        console.log(
-            `[WRITE] [EDITOR-API] Applying ${operations.length} operations through editor`,
-        );
-
-        await editor.action((ctx: any) => {
-            const view = ctx.get(editorViewCtx);
-            const parser = ctx.get(parserCtx);
-            let tr = view.state.tr;
-
-            for (const operation of operations) {
-                console.log(
-                    `[EDITOR-API] Applying operation: ${operation.type} at position ${operation.position || 0}`,
-                );
-
-                try {
-                    switch (operation.type) {
-                        case "insert": {
-                            // Convert operation content to markdown text
-                            const markdownText =
-                                this.operationContentToMarkdown(
-                                    operation.content,
-                                );
-
-                            const position = Math.min(
-                                operation.position || 0,
-                                view.state.doc.content.size,
-                            );
-
-                            // Parse markdown to ProseMirror nodes
-                            const doc = parser(markdownText);
-                            if (doc && doc.content) {
-                                tr = tr.insert(position, doc.content);
-                                console.log(
-                                    ` [EDITOR-API] Inserted "${markdownText}" at position ${position}`,
-                                );
-                            } else {
-                                console.warn(
-                                    ` [EDITOR-API] Failed to parse markdown: "${markdownText}"`,
-                                );
-                            }
-                            break;
-                        }
-                        case "replace": {
-                            const markdownText =
-                                this.operationContentToMarkdown(
-                                    operation.content,
-                                );
-
-                            const fromPos = Math.min(
-                                operation.from || 0,
-                                view.state.doc.content.size,
-                            );
-                            const toPos = Math.min(
-                                operation.to || fromPos + 1,
-                                view.state.doc.content.size,
-                            );
-
-                            // Parse markdown to ProseMirror nodes
-                            const doc = parser(markdownText);
-                            if (doc && doc.content) {
-                                tr = tr.replaceWith(
-                                    fromPos,
-                                    toPos,
-                                    doc.content,
-                                );
-                                console.log(
-                                    ` [EDITOR-API] Replaced content from ${fromPos} to ${toPos} with "${markdownText}"`,
-                                );
-                            }
-                            break;
-                        }
-                        case "delete": {
-                            const fromPos = Math.min(
-                                operation.from || 0,
-                                view.state.doc.content.size,
-                            );
-                            const toPos = Math.min(
-                                operation.to || fromPos + 1,
-                                view.state.doc.content.size,
-                            );
-
-                            tr = tr.delete(fromPos, toPos);
-                            console.log(
-                                ` [EDITOR-API] Deleted content from ${fromPos} to ${toPos}`,
-                            );
-                            break;
-                        }
-                        default:
-                            console.warn(
-                                `[ERROR] [EDITOR-API] Unknown operation type: ${operation.type}`,
-                            );
-                            break;
-                    }
-                } catch (operationError) {
-                    console.error(
-                        `[ERROR] [EDITOR-API] Failed to apply operation ${operation.type}:`,
-                        operationError,
-                    );
-                }
-            }
-
-            // Dispatch all changes in a single transaction
-            if (tr.docChanged) {
-                view.dispatch(tr);
-                console.log(
-                    ` [EDITOR-API] Applied ${operations.length} operations successfully`,
-                );
-            } else {
-                console.log(` [EDITOR-API] No document changes to apply`);
-            }
-        });
-    }
-
-    /**
-     * Convert operation content array to markdown text
-     */
-    private operationContentToMarkdown(content: any[]): string {
-        if (!Array.isArray(content)) {
-            const result = String(content || "");
-            return result;
-        }
-
-        const result = content
-            .map((item: any) => {
-                if (typeof item === "string") {
-                    return item;
-                }
-
-                if (item && typeof item === "object") {
-                    // Handle different content types
-                    switch (item.type) {
-                        case "heading":
-                            const headingText = this.extractTextFromContent(
-                                item.content || item.text,
-                            );
-                            return headingText;
-
-                        case "paragraph":
-                            const paragraphText = this.extractTextFromContent(
-                                item.content || item.text,
-                            );
-                            return paragraphText;
-
-                        case "text":
-                            const textResult = item.text || "";
-                            return textResult;
-
-                        default:
-                            // Fallback: extract any text content
-                            const fallbackResult =
-                                this.extractTextFromContent(item.content) ||
-                                item.text ||
-                                "";
-                            return fallbackResult;
-                    }
-                }
-
-                const stringResult = String(item || "");
-                return stringResult;
-            })
-            .join("\n");
-
-        return result;
-    }
-
-    /**
-     * Extract plain text from nested content structures
-     */
-    private extractTextFromContent(content: any): string {
-        if (!content) return "";
-
-        if (typeof content === "string") {
-            return content;
-        }
-
-        if (Array.isArray(content)) {
-            return content
-                .map((item) => this.extractTextFromContent(item))
-                .join("");
-        }
-
-        if (content.text) {
-            return content.text;
-        }
-
-        if (content.content) {
-            return this.extractTextFromContent(content.content);
-        }
-
-        return "";
     }
 
     /**

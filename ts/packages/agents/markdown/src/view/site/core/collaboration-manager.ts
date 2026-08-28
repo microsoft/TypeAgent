@@ -180,13 +180,18 @@ export class CollaborationManager {
                     `[COLLAB] Retrieved collaboration info for document: ${collabInfo.currentDocument}`,
                 );
 
+                // Never derive a room key from the display basename:
+                // same-basename files in different folders would collide.
+                const authoritativeDocumentId =
+                    typeof collabInfo.documentId === "string" &&
+                    collabInfo.documentId.length > 0
+                        ? collabInfo.documentId
+                        : COLLABORATION_CONFIG.DEFAULT_DOCUMENT_ID;
                 const config = {
                     websocketServerUrl:
                         collabInfo.websocketServerUrl ||
                         COLLABORATION_CONFIG.DEFAULT_WEBSOCKET_URL,
-                    documentId: collabInfo.currentDocument
-                        ? collabInfo.currentDocument.replace(".md", "")
-                        : COLLABORATION_CONFIG.DEFAULT_DOCUMENT_ID,
+                    documentId: authoritativeDocumentId,
                     fallbackToLocal: true,
                 };
 

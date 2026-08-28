@@ -466,6 +466,13 @@ export interface ActionContext<T = void> {
     // to execute immediately or redirect back to the reasoning loop.
     readonly isFromReasoningLoop: boolean;
 
+    // Host-authorized filesystem root for this action, propagated from
+    // ProcessCommandOptions.workingDirectory. Agents that persist to disk
+    // (e.g. the markdown editor) should resolve document paths under this
+    // root instead of session storage. Undefined when the host did not
+    // supply a working directory (the request is not filesystem-scoped).
+    readonly workingDirectory?: string | undefined;
+
     // queue up toggle transient agent to be executed at the end of the commands
     queueToggleTransientAgent(
         agentName: string,

@@ -5,10 +5,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+    ensureDirectoryWithinRoot,
+    isCanonicalDirectory,
+    normalizeRelativeDocumentPath,
     resolveExistingFileWithinRoot,
     resolvePathWithinRoot,
+    resolveRealDirectory,
     resolveWritableFileWithinRoot,
-} from "../src/view/route/pathPolicy.js";
+} from "../src/agent/pathPolicy.js";
 
 describe("markdown path policy", () => {
     let temporaryDirectory: string;
@@ -127,5 +131,72 @@ describe("markdown path policy", () => {
         fs.symlinkSync(path.join(sibling, "missing"), link, "junction");
 
         expect(resolveWritableFileWithinRoot(root, "dangling")).toBeUndefined();
+    });
+
+    test("creates nested subdirectories when createSubdirs is set", () => {
+        const target = resolveWritableFileWithinRoot(
+            root,
+            path.join("sub", "deeper", "note.md"),
+            { createSubdirs: true },
+        );
+        expect(target).toBe(
+            path.join(fs.realpathSync(root), "sub", "deeper", "note.md"),
+        );
+        expect(fs.existsSync(path.join(root, "sub", "deeper"))).toBe(true);
+    });
+
+    test("ensureDirectoryWithinRoot refuses a symlink mid-walk", () => {
+        const linked = path.join(root, "linked");
+        fs.symlinkSync(sibling, linked, "junction");
+        expect(
+            ensureDirectoryWithinRoot(root, path.join("linked", "child")),
+        ).toBeUndefined();
+    });
+
+    test("normalizeRelativeDocumentPath accepts a plain relative name", () => {
+        expect(normalizeRelativeDocumentPath("notes/first.md")).toBe(
+            "notes/first.md",
+        );
+        expect(normalizeRelativeDocumentPath("notes\\second.md")).toBe(
+            "notes/second.md",
+        );
+    });
+
+    test("normalizeRelativeDocumentPath rejects unsafe inputs", () => {
+        expect(normalizeRelativeDocumentPath("")).toBeUndefined();
+        expect(normalizeRelativeDocumentPath("   ")).toBeUndefined();
+        expect(normalizeRelativeDocumentPath(undefined)).toBeUndefined();
+        expect(normalizeRelativeDocumentPath(123)).toBeUndefined();
+        expect(normalizeRelativeDocumentPath("../escape.md")).toBeUndefined();
+        expect(
+            normalizeRelativeDocumentPath("sub/../escape.md"),
+        ).toBeUndefined();
+        expect(normalizeRelativeDocumentPath("./x.md")).toBeUndefined();
+        expect(normalizeRelativeDocumentPath("C:foo.md")).toBeUndefined();
+        // Absolute paths are rejected on POSIX and Windows alike.
+        expect(normalizeRelativeDocumentPath("/etc/passwd.md")).toBeUndefined();
+    });
+
+    test("resolveRealDirectory accepts existing absolute directories", () => {
+        expect(resolveRealDirectory(root)).toBe(fs.realpathSync(root));
+        expect(isCanonicalDirectory(root)).toBe(true);
+        expect(resolveRealDirectory("relative/path")).toBeUndefined();
+        expect(
+            resolveRealDirectory(path.join(root, "missing")),
+        ).toBeUndefined();
+        const filePath = path.join(root, "note.md");
+        fs.writeFileSync(filePath, "hello");
+        expect(resolveRealDirectory(filePath)).toBeUndefined();
+    });
+
+    test("detects when a canonical root path is replaced by a junction", () => {
+        const originalRoot = path.join(temporaryDirectory, "Original");
+        fs.renameSync(root, originalRoot);
+        fs.symlinkSync(sibling, root, "junction");
+        try {
+            expect(isCanonicalDirectory(root)).toBe(false);
+        } finally {
+            fs.unlinkSync(root);
+        }
     });
 });

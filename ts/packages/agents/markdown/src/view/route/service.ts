@@ -18,14 +18,34 @@ import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
 import registerDebug from "debug";
 import sanitizeFilename from "sanitize-filename";
+import { randomUUID } from "node:crypto";
 import { isAllowedViewOrigin } from "./originAllowlist.js";
 import {
+    isCanonicalDirectory,
+    normalizeRelativeDocumentPath,
     resolveExistingFileWithinRoot,
-    resolvePathWithinRoot,
+    resolveRealDirectory,
     resolveWritableFileWithinRoot,
-} from "./pathPolicy.js";
+} from "../../agent/pathPolicy.js";
+import { computeContentRevision } from "../../agent/contentRevision.js";
+import { applyDocumentOperations } from "../../agent/documentOperations.js";
+import type { DocumentOperation } from "../../agent/markdownOperationSchema.js";
 
 const debug = registerDebug("typeagent:markdown:service");
+// Sentinel error thrown when /api/markdown-response echoes a bindingToken
+// that does not match the token pinned to the pending request. Callers
+// MUST rethrow this (not fall back to Yjs / on-disk file), because a
+// mirror-based fallback paired with a rejected browser echo would let
+// stale-mirror content resolve a request that the browser explicitly
+// answered under a different binding. Ordinary unavailability (no
+// clients connected, timeout, transport error) still falls back through
+// the normal path.
+class ClientBindingMismatchError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "ClientBindingMismatchError";
+    }
+}
 
 const app: Express = express();
 const LOOPBACK_HOST = "127.0.0.1";
@@ -67,62 +87,82 @@ app.get("/", (req: Request, res: Response) => {
     res.sendFile(path.join(staticPath, "index.html"));
 });
 
-// Document-specific route
-app.get("/document/:documentName", (req: Request, res: Response) => {
+// Document-specific route. Uses a wildcard so nested user-relative paths
+// like /document/docs/team/roadmap round-trip; the browser's SPA reads
+// the path itself and does not depend on Express extracting a name.
+app.get(/^\/document\/.+/, (req: Request, res: Response) => {
     res.sendFile(path.join(staticPath, "index.html"));
 });
 
-// API endpoint to get current document name from URL
+// API endpoint to get current document name from URL. Reports the same
+// relative path (POSIX form) the browser needs to route into nested
+// directories; the absolute path is intentionally omitted from the
+// public surface - the browser must never trust or emit it, and
+// pathPolicy re-validates the relative path server-side on every write.
+//
+// The bindingToken is intentionally NOT returned here. The browser's
+// authoritative source for the current bindingToken is the SSE
+// `bindingBootstrap` / `documentChanged` events (and the response to
+// `/api/switch-document`); returning it from a broadly-cacheable GET
+// invites callers to treat it as an authorization credential, which it
+// is not. It is an anti-confusion identity marker whose lifecycle is
+// bound to setFile/switch-document rotation events.
 app.get("/api/current-document", (req: Request, res: Response) => {
     res.json({
         currentDocument: filePath ? path.basename(filePath, ".md") : null,
-        fullPath: filePath || null,
+        relativePath: boundRelativePath,
+        boundRelativePath,
     });
 });
 
-// API endpoint to switch to a specific document
+// API endpoint to switch to a specific document. Accepts a normalized
+// safe relative path under the currently-authorized root. Nested paths
+// (`docs/team/roadmap`) are preserved through the switch. Input is
+// re-validated against pathPolicy so an attacker-controlled tab cannot
+// smuggle traversal. Absolute browser paths are rejected. The response
+// carries the freshly-rotated bindingToken, the new documentId (Yjs
+// room), and the full relativePath so the browser can adopt them
+// atomically before switching editor rooms or issuing an autosave.
 app.post(
     "/api/switch-document",
     express.json(),
     (req: Request, res: Response) => {
         try {
-            const { documentName } = req.body;
-
-            if (!documentName || !/^[a-zA-Z0-9_\- ]+$/.test(documentName)) {
+            // Accept `documentPath` (preferred) or `documentName` (back-compat).
+            // Both go through normalizeRelativeDocumentPath so a nested
+            // safe relative path is honored while absolute paths, traversal,
+            // and Windows-drive segments are rejected.
+            const rawPath =
+                typeof req.body?.documentPath === "string"
+                    ? req.body.documentPath
+                    : typeof req.body?.documentName === "string"
+                      ? req.body.documentName
+                      : undefined;
+            if (typeof rawPath !== "string" || rawPath.length === 0) {
                 res.status(400).json({
-                    error: "Invalid document name. Only alphanumeric characters and underscores are allowed.",
+                    error: "documentPath (or documentName) is required",
                 });
                 return;
             }
 
-            debug("Switch document called with parameter ", documentName);
-
-            // Construct file path
-            const sanitizedDocumentName = sanitizeFilename(documentName);
-
-            if (!sanitizedDocumentName) {
-                res.status(400).json({ error: "Invalid document name" });
-                return;
-            }
-
-            // Construct and normalize file path
-            const documentPath = resolvePathWithinRoot(
-                ROOT_DIR,
-                `${sanitizedDocumentName}.md`,
-            );
-
-            debug("Sanitized document path ", documentPath);
-            // Verify that the file path is within the safe root directory
-            if (documentPath === undefined) {
-                res.status(403).json({
-                    error: "Access to the specified path is forbidden.",
+            const normalized = normalizeRelativeDocumentPath(rawPath);
+            if (normalized === undefined) {
+                res.status(400).json({
+                    error: "Invalid document path",
                 });
                 return;
             }
+            const relativeWithExt = normalized.toLowerCase().endsWith(".md")
+                ? normalized
+                : `${normalized}.md`;
 
+            debug("Switch document called with parameter ", relativeWithExt);
+
+            const root = getValidatedCurrentRoot();
             let safeDocumentPath = resolveWritableFileWithinRoot(
-                ROOT_DIR,
-                documentPath,
+                root,
+                relativeWithExt,
+                { createSubdirs: true },
             );
             if (safeDocumentPath === undefined) {
                 res.status(403).json({
@@ -131,41 +171,100 @@ app.post(
                 return;
             }
 
+            // Derive a display name for new-file seeding from the last
+            // path segment (without .md). We never trust the raw input as
+            // a filename target - only for the visible heading.
+            const lastSegment = relativeWithExt
+                .slice(0, -".md".length)
+                .split("/")
+                .pop() as string;
+            const displayName = sanitizeFilename(lastSegment) || lastSegment;
+
             if (!fs.existsSync(safeDocumentPath)) {
-                // Create new document if it doesn't exist
                 fs.writeFileSync(
                     safeDocumentPath,
-                    `# ${documentName}\n\nThis is a new document.\n`,
+                    `# ${displayName}\n\nThis is a new document.\n`,
                     { flag: "wx" },
                 );
                 safeDocumentPath = fs.realpathSync(safeDocumentPath);
             }
 
+            const oldFilePath = filePath;
+            // Capture the previous documentId BEFORE we rotate, so
+            // that we can evict its Yjs mirror / awareness once we
+            // know no clients still need it. This must happen with
+            // the old bindingToken still in place - after rotation,
+            // getCurrentDocumentId() will return the new token.
+            const previousDocumentId = getCurrentDocumentId();
             filePath = safeDocumentPath;
+            boundRelativePath = relativeWithExt;
+            bindingToken = randomUUID();
+            notifyBindingToParent();
 
-            // Initialize collaboration for new document
-            const documentId = sanitizedDocumentName;
+            // Room ID for the Yjs mirror / autosave / snapshot broadcasts
+            // is scoped to this binding (opaque token), so `a/note.md`
+            // and `b/note.md` cannot share a room via matching
+            // basenames. The user-visible name stays as the basename.
+            const documentId = getCurrentDocumentId();
+            // Drop the previous room's state if nothing is holding on
+            // to it. The check inside evictRoomIfIdle keeps connected
+            // clients from having their Y.Doc yanked mid-session.
+            if (previousDocumentId !== documentId) {
+                evictRoomIfIdle(previousDocumentId);
+            }
+            const documentName = path.basename(relativeWithExt, ".md");
             collaborationManager.initializeDocument(
-                sanitizedDocumentName,
+                documentId,
                 safeDocumentPath,
             );
 
-            // Load content into collaboration manager
             const content = fs.readFileSync(safeDocumentPath, "utf-8");
             debug("Raw content: ", content);
-            // collaborationManager.setDocumentContent(documentId, content);
 
             const ydoc = getAuthoritativeDocument(documentId);
             const ytext = ydoc.getText("content");
-
-            // Update document content
             ytext.delete(0, ytext.length);
             ytext.insert(0, content);
+            const revision = computeContentRevision(content);
+
+            // Broadcast documentChanged so other browsers connected to
+            // this view update their editor room and adopt the new
+            // binding token. Skip the broadcast when the underlying file
+            // did not change (a re-select of the same path).
+            if (oldFilePath !== filePath) {
+                const activeToken = bindingToken;
+                const activeRelative = boundRelativePath;
+                clients.forEach((client) => {
+                    try {
+                        client.write(
+                            `data: ${JSON.stringify({
+                                type: "documentChanged",
+                                newDocumentId: documentId,
+                                newDocumentName: documentName,
+                                bindingToken: activeToken,
+                                boundRelativePath: activeRelative,
+                                revision,
+                                timestamp: Date.now(),
+                            })}\n\n`,
+                        );
+                    } catch (sseError) {
+                        console.error(
+                            "[SSE] Failed to send documentChanged:",
+                            sseError,
+                        );
+                    }
+                });
+            }
 
             res.json({
                 success: true,
-                documentName: documentName,
-                content: content,
+                documentName,
+                documentId,
+                relativePath: relativeWithExt,
+                boundRelativePath: relativeWithExt,
+                bindingToken,
+                content,
+                revision,
                 documentPath: safeDocumentPath,
             });
         } catch (error) {
@@ -177,13 +276,23 @@ app.post(
     },
 );
 
-// API endpoint to handle markdown response from clients
+// API endpoint to handle markdown response from clients. Each pending
+// request records the binding token that was live when the requestMarkdown
+// SSE was sent; the browser echoes its `currentBindingToken` in the
+// response. When the two disagree (browser rebound mid-flight, or a
+// stale/attacker-supplied token) the pending promise is rejected so the
+// caller reads/applies against consistent identity rather than pairing new
+// content with the old binding.
 app.post(
     "/api/markdown-response",
     express.json(),
     (req: Request, res: Response) => {
         try {
             const { requestId, markdown, positionInfo, error } = req.body;
+            const responseToken =
+                typeof req.body?.bindingToken === "string"
+                    ? req.body.bindingToken
+                    : null;
 
             if (!requestId) {
                 res.status(400).json({ error: "Request ID is required" });
@@ -202,6 +311,18 @@ app.post(
 
                 if (error) {
                     pendingRequest.reject(new Error(error));
+                } else if (
+                    pendingRequest.expectedBindingToken !== null &&
+                    responseToken !== pendingRequest.expectedBindingToken
+                ) {
+                    debug(
+                        `[MARKDOWN-RESPONSE] Rejecting ${requestId}: bindingToken mismatch (expected ${pendingRequest.expectedBindingToken}, got ${responseToken ?? "<none>"})`,
+                    );
+                    pendingRequest.reject(
+                        new ClientBindingMismatchError(
+                            `Client markdown response bindingToken mismatch: expected ${pendingRequest.expectedBindingToken}, got ${responseToken ?? "<none>"}`,
+                        ),
+                    );
                 } else {
                     pendingRequest.resolve({
                         markdown: markdown || "",
@@ -231,7 +352,19 @@ app.post(
 );
 
 let clients: any[] = [];
-let filePath: string | null;
+let filePath: string | null = null;
+// The currently-bound relative path under `currentRoot`, normalized to
+// POSIX separators. Kept alongside `filePath` so the trusted parent IPC
+// can rebind by full user-relative path and recovery on the agent side
+// can reproduce the exact original binding rather than reconstructing it
+// from `basename(filePath)` (which loses nested directories).
+let boundRelativePath: string | null = null;
+// Opaque token rotated on every trusted rebinding (setFile from parent IPC
+// or /api/switch-document from the browser). The agent tags every read
+// and apply IPC with the token it observed, so a switch (even to the same
+// basename or same relative path) forces a fresh binding roundtrip and
+// prevents stale requests from clobbering the new file.
+let bindingToken: string | null = null;
 let collaborationManager: CollaborationManager;
 
 // UI Command routing state
@@ -240,10 +373,317 @@ const pendingCommands = new Map<string, any>();
 
 // Markdown request state
 let markdownRequestCounter = 0;
-const pendingMarkdownRequests = new Map<string, any>();
+type PendingMarkdownRequest = {
+    resolve: (value: {
+        markdown: string;
+        positionInfo: {
+            position: number;
+            selection?: { from: number; to: number };
+        };
+    }) => void;
+    reject: (error: Error) => void;
+    timeout: NodeJS.Timeout;
+    // The binding token live when the SSE was sent; the browser must echo
+    // it in /api/markdown-response or the pending request is rejected.
+    // `null` means "no active binding at request time"; the browser will
+    // send `null` too because its currentBindingToken is unset.
+    expectedBindingToken: string | null;
+};
+const pendingMarkdownRequests = new Map<string, PendingMarkdownRequest>();
 const userHomeDir = os.homedir();
-const ROOT_DIR =
+const INITIAL_ROOT_DIR =
     process.env.TYPEAGENT_MARKDOWN_ROOT || path.join(userHomeDir, "Documents");
+// The active document root. Mutated only through the trusted parent IPC
+// `setFile` message (see the process message handler below). HTTP routes read
+// this variable but never write it, so a compromised browser page cannot
+// pivot the server onto another directory.
+let currentRoot: string =
+    resolveRealDirectory(INITIAL_ROOT_DIR) ?? INITIAL_ROOT_DIR;
+
+function getValidatedCurrentRoot(): string {
+    if (!isCanonicalDirectory(currentRoot)) {
+        throw new Error("The document root is no longer accessible");
+    }
+    return currentRoot;
+}
+
+// Emit a bindingUpdated IPC message to the parent agent so it can attach the
+// rotated token to subsequent read/apply requests. Silently no-ops when
+// the process is not IPC-connected (unit-test / standalone runs).
+function notifyBindingToParent(): void {
+    process.send?.({
+        type: "bindingUpdated",
+        bindingToken,
+        boundFilePath: filePath,
+        boundRoot: filePath ? currentRoot : null,
+        boundRelativePath,
+    });
+}
+
+// Validate an inbound IPC message that may carry any of the identity
+// expectations (`expectedBindingToken`, `expectedRoot`,
+// `expectedRelativePath`). Returns undefined when every expectation
+// present in the message matches the current binding; returns a human
+// -readable rejection reason otherwise. Callers may also pass a
+// pre-captured `snapshot` to check against (used to re-validate a
+// snapshot after an in-flight async read that could have raced with a
+// rebinding). Unlike an identity match on a basename (which happily
+// accepts two files that share `notes` in a nested tree), the token
+// is opaque and rotates on every trusted rebinding, so a stale value
+// forces the agent through a fresh getDocumentContent before it can
+// apply.
+type BindingSnapshot = {
+    bindingToken: string | null;
+    currentRoot: string;
+    filePath: string | null;
+    boundRelativePath: string | null;
+};
+
+function captureBindingSnapshot(): BindingSnapshot {
+    return {
+        bindingToken,
+        currentRoot,
+        filePath,
+        boundRelativePath,
+    };
+}
+
+function bindingsDiffer(a: BindingSnapshot, b: BindingSnapshot): boolean {
+    return (
+        a.bindingToken !== b.bindingToken ||
+        a.currentRoot !== b.currentRoot ||
+        a.filePath !== b.filePath ||
+        a.boundRelativePath !== b.boundRelativePath
+    );
+}
+
+type BoundWriteValidation =
+    | {
+          ok: true;
+          snapshot: BindingSnapshot;
+          targetFilePath: string;
+          targetDocumentId: string;
+          roomMismatch: boolean;
+      }
+    | {
+          ok: false;
+          status: number;
+          error: string;
+          revision?: string;
+          content?: string;
+      };
+
+// Shared trust check used by every browser-initiated full-document
+// write (POST /document and POST /autosave). It:
+//   1. Snapshots the module-level binding at entry so a concurrent
+//      setFile / /api/switch-document during the handler cannot swap
+//      the target file underneath us.
+//   2. Requires the request to carry a bindingToken that matches the
+//      snapshot. This is an anti-confusion identity check, not
+//      authorization: a stale browser tab that never processed the
+//      latest bindingBootstrap MUST NOT be allowed to silently
+//      overwrite the new binding with content it authored under the
+//      old one.
+//   3. Re-validates the root is still a canonical directory and the
+//      relative path is still resolvable inside it, so a swapped
+//      symlink or a moved workspace root cannot widen the write.
+//   4. Chooses the Yjs room by the bound identity, ignoring any
+//      documentId the browser sent - the browser value is only
+//      inspected for a diagnostic roomMismatch flag.
+// Callers still have to re-check `bindingsDiffer` right before the
+// actual write in case any awaited work slipped in between.
+function validateBoundWriteRequest(body: {
+    bindingToken?: unknown;
+    documentId?: unknown;
+    expectedRevision?: unknown;
+}): BoundWriteValidation {
+    const requestBindingToken =
+        typeof body?.bindingToken === "string" ? body.bindingToken : null;
+
+    const snapshot = captureBindingSnapshot();
+
+    if (!snapshot.filePath) {
+        return {
+            ok: false,
+            status: 409,
+            error: "No file is bound. This endpoint requires a parent-established file binding.",
+        };
+    }
+
+    if (
+        snapshot.bindingToken === null ||
+        requestBindingToken === null ||
+        requestBindingToken !== snapshot.bindingToken
+    ) {
+        return {
+            ok: false,
+            status: 409,
+            error: "bindingToken is missing or stale. Reload to adopt the current binding.",
+        };
+    }
+
+    if (!isCanonicalDirectory(snapshot.currentRoot)) {
+        return {
+            ok: false,
+            status: 403,
+            error: "The document root is no longer accessible",
+        };
+    }
+    const targetFilePath = resolveWritableFileWithinRoot(
+        snapshot.currentRoot,
+        snapshot.filePath,
+    );
+    if (targetFilePath === undefined) {
+        return { ok: false, status: 403, error: "Invalid file path" };
+    }
+
+    const targetDocumentId = getCurrentDocumentId(snapshot);
+    const currentContent = fs.existsSync(targetFilePath)
+        ? fs.readFileSync(targetFilePath, "utf-8")
+        : "";
+    const currentRevision = computeContentRevision(currentContent);
+    const expectedRevision =
+        typeof body.expectedRevision === "string"
+            ? body.expectedRevision
+            : undefined;
+    if (
+        expectedRevision === undefined ||
+        expectedRevision !== currentRevision
+    ) {
+        return {
+            ok: false,
+            status: 409,
+            error:
+                expectedRevision === undefined
+                    ? "expectedRevision is required for a bound document write."
+                    : "Document content changed since it was loaded.",
+            revision: currentRevision,
+            content: currentContent,
+        };
+    }
+
+    const rawDocumentId =
+        typeof body.documentId === "string" ? body.documentId : undefined;
+    const requestedDocumentId = rawDocumentId
+        ? sanitizeFilename(rawDocumentId)
+        : undefined;
+    const roomMismatch =
+        requestedDocumentId !== undefined &&
+        requestedDocumentId !== targetDocumentId;
+
+    return {
+        ok: true,
+        snapshot,
+        targetFilePath,
+        targetDocumentId,
+        roomMismatch,
+    };
+}
+
+// Room ID for the currently-bound document. The Yjs WebSocket room / Yjs
+// mirror / autosave target / documentSnapshot broadcasts are keyed by
+// this ID. We use the opaque bindingToken (rotated on every trusted
+// rebinding) whenever a file is bound, so `a/note.md` and `b/note.md`
+// - which share basename `note` - are never coalesced into the same
+// Yjs room and cannot cross-write into each other via a browser that
+// sent a stale, browser-selected documentId. Memory-only mode has no
+// binding and shares the literal "default" room, which is intentional:
+// there is no file target, so there is no cross-file risk.
+function getCurrentDocumentId(
+    snapshot: BindingSnapshot = captureBindingSnapshot(),
+): string {
+    if (snapshot.filePath && snapshot.bindingToken) {
+        return snapshot.bindingToken;
+    }
+    return "default";
+}
+
+function checkExpectedIdentity(
+    message: {
+        expectedBindingToken?: unknown;
+        expectedRoot?: unknown;
+        expectedRelativePath?: unknown;
+    },
+    against: BindingSnapshot = captureBindingSnapshot(),
+): string | undefined {
+    if (typeof message.expectedBindingToken === "string") {
+        if (message.expectedBindingToken !== against.bindingToken) {
+            return `Binding token mismatch: expected ${message.expectedBindingToken}, current ${against.bindingToken ?? "<none>"}`;
+        }
+    }
+    if (typeof message.expectedRoot === "string") {
+        if (message.expectedRoot !== against.currentRoot) {
+            return `Binding root mismatch: expected ${message.expectedRoot}, current ${against.currentRoot}`;
+        }
+    }
+    if (typeof message.expectedRelativePath === "string") {
+        if (message.expectedRelativePath !== against.boundRelativePath) {
+            return `Binding relative path mismatch: expected ${message.expectedRelativePath}, current ${against.boundRelativePath ?? "<none>"}`;
+        }
+    }
+    return undefined;
+}
+
+// Read the current authoritative Markdown for `documentId`. Prefer the
+// connected browser (which owns the live editor state and may have edits
+// the Yjs mirror has not received yet); fall back to the Yjs mirror and
+// then to the raw file, in that order. Both paths return raw Markdown -
+// the server never applies operations against ProseMirror offsets.
+//
+// `snapshot` pins the read to the binding captured at request entry. The
+// browser request carries the snapshotted bindingToken and boundRelative
+// Path in the SSE payload and echoes the token back in
+// /api/markdown-response; a mismatch surfaces as a rejected client
+// request, and the file fallback below uses the snapshotted root/file
+// so a concurrent rebinding cannot widen the read.
+async function readCurrentMarkdownServerSide(
+    documentId: string,
+    snapshot: BindingSnapshot = captureBindingSnapshot(),
+): Promise<string> {
+    if (clients.length > 0) {
+        try {
+            const response = await requestMarkdownFromClient(0, snapshot);
+            return response.markdown;
+        } catch (error) {
+            // A binding-token mismatch means the browser explicitly
+            // answered for a different identity than the one the read
+            // was pinned to. Rethrow so the caller reports
+            // identityMismatch instead of silently reading the Yjs
+            // mirror (which would return content for the current
+            // binding, then be paired with the caller's stale expected
+            // identity - the exact confusion we are guarding).
+            if (error instanceof ClientBindingMismatchError) {
+                throw error;
+            }
+            debug(
+                `[VIEW] Falling back to Yjs mirror after client-serializer failure: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
+    }
+    const ydoc = getAuthoritativeDocument(documentId);
+    const ytext = ydoc.getText("content");
+    const yjsContent = ytext.toString();
+    if (yjsContent.length > 0 || !snapshot.filePath) {
+        return yjsContent;
+    }
+    // Last-resort file read for a bound document whose Yjs mirror is
+    // still empty (e.g. first read after setFile discovered a missing
+    // file). Path validity is re-checked against the SNAPSHOTTED root
+    // so a concurrent rebinding cannot widen what we read here.
+    if (!isCanonicalDirectory(snapshot.currentRoot)) {
+        return "";
+    }
+    const readableFilePath = resolveExistingFileWithinRoot(
+        snapshot.currentRoot,
+        snapshot.filePath,
+    );
+    if (readableFilePath === undefined) {
+        return "";
+    }
+    return fs.readFileSync(readableFilePath, "utf-8");
+}
 
 // Streaming state for LLM responses
 const activeStreamingSessions = new Map<
@@ -366,9 +806,19 @@ async function sendUICommandToAgentWithStreaming(
 }
 
 /**
- * Request markdown content from connected client with retry logic
+ * Request markdown content from connected client with retry logic. The
+ * snapshotted binding is threaded into the SSE payload as
+ * `expectedBindingToken` (plus `expectedRelativePath` for logs/debug on
+ * the browser side) and stashed on the pending entry so
+ * /api/markdown-response can reject a response that echoes back a
+ * different token. Retries reuse the SAME snapshot: retrying with the
+ * current live binding would defeat the identity check that the caller
+ * relied on.
  */
-async function requestMarkdownFromClient(retryCount: number = 0): Promise<{
+async function requestMarkdownFromClient(
+    retryCount: number = 0,
+    snapshot: BindingSnapshot = captureBindingSnapshot(),
+): Promise<{
     markdown: string;
     positionInfo: {
         position: number;
@@ -376,6 +826,7 @@ async function requestMarkdownFromClient(retryCount: number = 0): Promise<{
     };
 }> {
     const maxRetries = 3; // Increased from 2 to 3
+    const expectedBindingToken = snapshot.bindingToken;
 
     return new Promise((resolve, reject) => {
         const requestId = `markdown_req_${++markdownRequestCounter}`;
@@ -389,7 +840,7 @@ async function requestMarkdownFromClient(retryCount: number = 0): Promise<{
                 // Retry after a longer delay for better reliability
                 setTimeout(
                     () => {
-                        requestMarkdownFromClient(retryCount + 1)
+                        requestMarkdownFromClient(retryCount + 1, snapshot)
                             .then(resolve)
                             .catch(reject);
                     },
@@ -400,8 +851,16 @@ async function requestMarkdownFromClient(retryCount: number = 0): Promise<{
             }
         }, 8000); // 8 second timeout (increased from 5s)
 
-        // Store resolver for this request
-        pendingMarkdownRequests.set(requestId, { resolve, reject, timeout });
+        // Store resolver for this request. Include the expected binding
+        // token so /api/markdown-response can reject responses whose echo
+        // does not match, which would indicate the browser rebound
+        // between the SSE and the response.
+        pendingMarkdownRequests.set(requestId, {
+            resolve,
+            reject,
+            timeout,
+            expectedBindingToken,
+        });
 
         // Send request to clients via SSE
         debug(
@@ -422,6 +881,8 @@ async function requestMarkdownFromClient(retryCount: number = 0): Promise<{
                 `data: ${JSON.stringify({
                     type: "requestMarkdown",
                     requestId: requestId,
+                    expectedBindingToken,
+                    expectedRelativePath: snapshot.boundRelativePath,
                     timestamp: Date.now(),
                 })}\n\n`,
             );
@@ -518,6 +979,7 @@ app.get("/document", (req: Request, res: Response) => {
         const ydoc = getAuthoritativeDocument(documentId);
         const ytext = ydoc.getText("content");
         const content = ytext.toString();
+        res.setHeader("X-Content-Revision", computeContentRevision(content));
 
         debug(
             `Retrieved content from authoritative Y.js doc: ${documentId}, ${content.length} chars`,
@@ -532,11 +994,20 @@ app.get("/document", (req: Request, res: Response) => {
                 filePath,
         );
 
-        // File mode: get content from authoritative document (which should be synced with file)
-        const documentId = path.basename(filePath, ".md");
+        // File mode: get content from the authoritative Y.js doc
+        // scoped to the current binding (opaque token). Uses the same
+        // room key that setFile / autosave / applyLLMOperations use.
+        const documentId = getCurrentDocumentId();
         const ydoc = getAuthoritativeDocument(documentId);
         const ytext = ydoc.getText("content");
         const content = ytext.toString();
+        const persistedContent = fs.existsSync(filePath)
+            ? fs.readFileSync(filePath, "utf-8")
+            : "";
+        res.setHeader(
+            "X-Content-Revision",
+            computeContentRevision(persistedContent),
+        );
 
         debug(
             `Retrieved content from authoritative Y.js doc: ${documentId}, ${content.length} chars`,
@@ -551,63 +1022,94 @@ app.get("/document", (req: Request, res: Response) => {
     }
 });
 
-// Save document from markdown text
+// Save document from markdown text. Memory-only mode (no file bound)
+// still just writes to the shared "default" Yjs room. File mode goes
+// through validateBoundWriteRequest so it applies the same
+// bindingToken / snapshot / re-resolve trust checks the /autosave path
+// does; a browser that missed a rebinding cannot silently overwrite a
+// new binding with content authored against the old one.
 app.post("/document", express.json(), (req: Request, res: Response) => {
-    const markdownContent = req.body.content || "";
+    const markdownContent =
+        typeof req.body?.content === "string" ? req.body.content : "";
 
     if (!filePath) {
-        // Memory-only mode: save to authoritative Y.js document
-        const documentId = "default"; // Use consistent document ID
-
+        // Memory-only mode: save to authoritative Y.js document.
+        const documentId = "default";
         const ydoc = getAuthoritativeDocument(documentId);
         const ytext = ydoc.getText("content");
 
-        // Replace entire content atomically
         ytext.delete(0, ytext.length);
         ytext.insert(0, markdownContent);
 
         debug(
-            `Saved content to authoritative Y.js doc: ${markdownContent.length} chars`,
+            `Saved content to authoritative Y.js doc (memory-only): ${markdownContent.length} chars`,
         );
         res.json({
             success: true,
             message: "Content saved to memory (no file mode)",
         });
-
         return;
     }
 
     try {
-        const writableFilePath = resolveWritableFileWithinRoot(
-            ROOT_DIR,
-            filePath,
-        );
-        if (writableFilePath === undefined) {
-            res.status(403).json({ error: "Access to the file is forbidden" });
+        const validation = validateBoundWriteRequest(req.body ?? {});
+        if (!validation.ok) {
+            debug(`POST /document rejected: ${validation.error}`);
+            res.status(validation.status).json({
+                error: validation.error,
+                revision: validation.revision,
+                content: validation.content,
+            });
+            return;
+        }
+        const { snapshot, targetFilePath, targetDocumentId, roomMismatch } =
+            validation;
+        if (roomMismatch) {
+            debug(
+                `POST /document documentId mismatch (browser=${
+                    typeof req.body?.documentId === "string"
+                        ? req.body.documentId
+                        : "<none>"
+                }, bound=${targetDocumentId}); persisting to bound file`,
+            );
+        }
+
+        // Guard against a same-tick rebinding between validation and
+        // write. This is cheap (no awaits precede it) and fails closed.
+        if (bindingsDiffer(captureBindingSnapshot(), snapshot)) {
+            debug(
+                "POST /document rejected: binding rotated between validation and write",
+            );
+            res.status(409).json({
+                error: "Binding rotated during request",
+            });
             return;
         }
 
-        // File mode: save to both authoritative document and file
-        const documentId = path.basename(writableFilePath, ".md");
-        const ydoc = getAuthoritativeDocument(documentId);
+        const ydoc = getAuthoritativeDocument(targetDocumentId);
         const ytext = ydoc.getText("content");
-
-        // Update authoritative document first
         ytext.delete(0, ytext.length);
         ytext.insert(0, markdownContent);
 
-        // Then save to file
-        fs.writeFileSync(writableFilePath, markdownContent, "utf-8");
-        filePath = writableFilePath;
+        fs.writeFileSync(targetFilePath, markdownContent, "utf-8");
+        filePath = targetFilePath;
+        const revision = computeContentRevision(markdownContent);
 
         debug(
-            `Saved content to both Y.js doc and file: ${writableFilePath}, ${markdownContent.length} chars`,
+            `Saved content to both Y.js doc and file: ${targetFilePath}, ${markdownContent.length} chars`,
         );
-        res.json({ success: true });
+        res.json({
+            success: true,
+            filePath: targetFilePath,
+            documentId: targetDocumentId,
+            roomMismatch,
+            revision,
+        });
     } catch (error) {
+        console.error("[DOCUMENT] Save failed:", error);
         res.status(500).json({
             error: "Failed to save document",
-            details: error,
+            details: error instanceof Error ? error.message : error,
         });
     }
 });
@@ -670,81 +1172,58 @@ app.post("/api/ai-awareness", express.json(), (req: Request, res: Response) => {
     }
 });
 
-// Add auto-save endpoint
+// Add auto-save endpoint. Like POST /document, it requires the browser
+// to identify the binding and revision it edited: the request must carry a
+// `bindingToken` that matches the module-level token. Missing or stale
+// tokens (browser did not process bindingBootstrap, or another party
+// rotated the binding) are rejected without touching disk. The
+// browser-supplied `documentId` still may only select the Yjs room -
+// never the file target, which is always the SNAPSHOTTED filePath and
+// currentRoot captured at request entry.
 app.post("/autosave", express.json(), (req: Request, res: Response) => {
     try {
-        const { content, filePath: requestFilePath, documentId } = req.body;
-
-        if (!content && content !== "") {
+        const content =
+            typeof req.body?.content === "string" ? req.body.content : null;
+        if (content === null) {
             res.status(400).json({ error: "Content is required" });
             return;
         }
 
-        debug(
-            `Auto-save request received for document: ${documentId}, path: ${requestFilePath}, content: ${content.length} chars`,
-        );
-
-        // Use the provided file path or fall back to current filePath
-        let sanitizedFilePath = sanitizeFilename(documentId || filePath);
-        if (!sanitizedFilePath.endsWith(".md")) {
-            sanitizedFilePath += ".md";
-        }
-
-        const resolvedFilePath = resolveWritableFileWithinRoot(
-            ROOT_DIR,
-            sanitizedFilePath,
-        );
-        if (resolvedFilePath === undefined) {
-            res.status(403).json({ error: "Invalid file path" });
+        const validation = validateBoundWriteRequest(req.body ?? {});
+        if (!validation.ok) {
+            debug(`Auto-save rejected: ${validation.error}`);
+            res.status(validation.status).json({
+                error: validation.error,
+                revision: validation.revision,
+                content: validation.content,
+            });
             return;
         }
-        const targetFilePath = resolvedFilePath;
-        const targetDocumentId =
-            documentId ||
-            (sanitizedFilePath
-                ? path.basename(sanitizedFilePath, ".md")
-                : "default");
-
-        if (!targetFilePath) {
-            // Memory-only mode: save to authoritative Y.js document
+        const { snapshot, targetFilePath, targetDocumentId, roomMismatch } =
+            validation;
+        if (roomMismatch) {
             debug(
-                `Memory-only mode auto-save to Y.js document: ${targetDocumentId}`,
+                `Auto-save documentId mismatch (browser=${
+                    typeof req.body?.documentId === "string"
+                        ? req.body.documentId
+                        : "<none>"
+                }, bound=${targetDocumentId}); persisting to bound file`,
             );
+        }
+        debug(
+            `Auto-save request received for bound document: ${targetDocumentId}, path: ${targetFilePath}, content: ${content.length} chars`,
+        );
 
-            const ydoc = getAuthoritativeDocument(targetDocumentId);
-            const ytext = ydoc.getText("content");
-
-            // Replace entire content atomically
-            ytext.delete(0, ytext.length);
-            ytext.insert(0, content);
-
+        // Guard once more against a rebinding that raced our snapshot
+        // capture. Between validateBoundWriteRequest and the write below
+        // we did no `await`, but the token could still have rotated on
+        // a same-tick IPC. This is cheap and fails closed.
+        if (bindingsDiffer(captureBindingSnapshot(), snapshot)) {
             debug(
-                `Auto-save completed to Y.js document: ${targetDocumentId}, ${content.length} chars`,
+                "Auto-save rejected: binding rotated between validation and write",
             );
-
-            // Notify clients via SSE
-            clients.forEach((client) => {
-                try {
-                    client.write(
-                        `data: ${JSON.stringify({
-                            type: "autoSave",
-                            documentId: targetDocumentId,
-                            contentLength: content.length,
-                            timestamp: Date.now(),
-                        })}\n\n`,
-                    );
-                } catch (error) {
-                    console.error(
-                        "[SSE] Failed to send auto-save event to client:",
-                        error,
-                    );
-                }
-            });
-
-            res.json({
-                success: true,
-                message: "Auto-saved to memory",
-                documentId: targetDocumentId,
+            res.status(409).json({
+                error: "Autosave binding rotated during request",
             });
             return;
         }
@@ -759,6 +1238,7 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
 
         // Then save to file
         fs.writeFileSync(targetFilePath, content, "utf-8");
+        const revision = computeContentRevision(content);
 
         debug(
             `Auto-save completed to both Y.js document and file: ${targetFilePath}, ${content.length} chars`,
@@ -772,6 +1252,8 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
                         type: "autoSave",
                         filePath: targetFilePath,
                         documentId: targetDocumentId,
+                        bindingToken: snapshot.bindingToken,
+                        revision,
                         contentLength: content.length,
                         timestamp: Date.now(),
                     })}\n\n`,
@@ -789,6 +1271,8 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
             message: "Auto-saved successfully",
             filePath: targetFilePath,
             documentId: targetDocumentId,
+            roomMismatch,
+            revision,
         });
     } catch (error) {
         console.error("[AUTO-SAVE] Auto-save failed:", error);
@@ -824,64 +1308,30 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
 // Add collaboration info endpoint
 app.get("/collaboration/info", (req: Request, res: Response) => {
     const stats = collaborationManager.getStats();
-    const currentDocument = filePath
-        ? path.basename(filePath, ".md")
+
+    // The browser MUST use `documentId` (the opaque bindingToken when
+    // bound, `"default"` otherwise) as the Yjs room key. Two files that
+    // happen to share a basename (e.g. `a/note.md` and `b/note.md`) get
+    // distinct documentIds and therefore distinct rooms; deriving the
+    // room from the basename on the browser side would cross-collab
+    // them. `currentDocument` is retained only as a human-readable
+    // display name for logs and page titles.
+    const snapshot = captureBindingSnapshot();
+    const documentId = getCurrentDocumentId(snapshot);
+    const currentDocument = snapshot.filePath
+        ? path.basename(snapshot.filePath, ".md")
         : "default";
 
     debug(
-        `[COLLAB-INFO] Returning collaboration info - currentDocument: "${currentDocument}", filePath: ${filePath}`,
+        `[COLLAB-INFO] Returning collaboration info - documentId: "${documentId}", currentDocument: "${currentDocument}", filePath: ${snapshot.filePath}`,
     );
 
     res.json({
         ...stats,
         websocketServerUrl: `ws://${LOOPBACK_HOST}:${port}`,
-        currentDocument: currentDocument,
+        documentId,
+        currentDocument,
     });
-});
-
-// Add file operations endpoints
-app.post("/file/load", express.json(), (req: Request, res: Response) => {
-    try {
-        const { filePath: newFilePath } = req.body;
-
-        if (typeof newFilePath !== "string" || !newFilePath) {
-            res.status(400).json({ error: "File path is required" });
-            return;
-        }
-
-        const resolvedPath = resolveExistingFileWithinRoot(
-            ROOT_DIR,
-            newFilePath,
-        );
-        if (resolvedPath === undefined) {
-            res.status(403).json({
-                error: "Access to the file is forbidden or file not found",
-            });
-            return;
-        }
-
-        // Set new file path
-        filePath = resolvedPath;
-
-        // Initialize collaboration for new document
-        const documentId = path.basename(resolvedPath, ".md");
-        collaborationManager.initializeDocument(documentId, resolvedPath);
-
-        // Load content into collaboration manager
-        const content = fs.readFileSync(resolvedPath, "utf-8");
-        collaborationManager.setDocumentContent(documentId, content);
-
-        res.json({
-            success: true,
-            fileName: path.basename(newFilePath),
-            content: content,
-        });
-    } catch (error) {
-        res.status(500).json({
-            error: "Failed to load file",
-            details: error,
-        });
-    }
 });
 
 app.get("/file/info", (req: Request, res: Response) => {
@@ -891,10 +1341,18 @@ app.get("/file/info", (req: Request, res: Response) => {
     }
 
     try {
-        const stats = fs.statSync(filePath);
+        const readableFilePath = resolveExistingFileWithinRoot(
+            getValidatedCurrentRoot(),
+            filePath,
+        );
+        if (readableFilePath === undefined) {
+            res.status(403).json({ error: "Access to the file is forbidden" });
+            return;
+        }
+        const stats = fs.statSync(readableFilePath);
         res.json({
-            fileName: path.basename(filePath),
-            fullPath: filePath,
+            fileName: path.basename(readableFilePath),
+            fullPath: readableFilePath,
             size: stats.size,
             modified: stats.mtime,
         });
@@ -1486,9 +1944,88 @@ app.get("/events", (req: Request, res: Response) => {
     res.flushHeaders();
 
     clients.push(res);
+    // Assign primary/secondary role from SSE ordering. The first
+    // connected client is the primary autosave writer; subsequent
+    // browsers do not autosave. When the primary disconnects (close
+    // handler below) we promote the next client and send it a
+    // `primaryElected` SSE so it flips its autosave flag on. This
+    // replaces the earlier scheme where the role was implicit in
+    // now-removed `llmOperations` events, so a browser could sit
+    // forever as a non-writer.
+    const clientRole = clients[0] === res ? "primary" : "secondary";
+
+    // Bootstrap the newly-connected browser with the currently-active
+    // binding. Without this a browser that connected AFTER the last
+    // setFile / /api/switch-document (i.e. it missed the documentChanged
+    // SSE) would have no token to compare a documentSnapshot against.
+    // The bootstrap from the trusted same-origin service is authoritative
+    // on every connection, so the browser adopts it atomically rather
+    // than ignoring a differing token from a stale in-memory value.
+    try {
+        // Room ID uses the current binding token (opaque, unique per
+        // binding), so a browser connecting after setFile joins the
+        // same room the Yjs mirror is keyed under. The user-facing
+        // name stays as the basename for URL / title purposes.
+        const currentDocumentId = filePath ? getCurrentDocumentId() : null;
+        const currentDocumentName = filePath
+            ? path.basename(filePath, ".md")
+            : null;
+        const revision = filePath
+            ? computeContentRevision(
+                  fs.existsSync(filePath)
+                      ? fs.readFileSync(filePath, "utf-8")
+                      : "",
+              )
+            : null;
+        res.write(
+            `data: ${JSON.stringify({
+                type: "bindingBootstrap",
+                bindingToken,
+                documentId: currentDocumentId,
+                documentName: currentDocumentName,
+                boundRelativePath,
+                revision,
+                clientRole,
+                timestamp: Date.now(),
+            })}\n\n`,
+        );
+    } catch (bootstrapError) {
+        console.error("[SSE] Failed to send bindingBootstrap:", bootstrapError);
+    }
 
     req.on("close", () => {
+        const wasPrimary = clients[0] === res;
         clients = clients.filter((client) => client !== res);
+        if (wasPrimary && clients.length > 0) {
+            // Promote the next-connected browser so autosave keeps
+            // working when the previous primary tab closes. Include the
+            // persisted revision so a secondary that did not perform the
+            // previous save can use the current optimistic-concurrency base.
+            const promoted = clients[0];
+            try {
+                const snapshot = captureBindingSnapshot();
+                const persistedContent = snapshot.filePath
+                    ? fs.existsSync(snapshot.filePath)
+                        ? fs.readFileSync(snapshot.filePath, "utf-8")
+                        : ""
+                    : getAuthoritativeDocument("default")
+                          .getText("content")
+                          .toString();
+                promoted.write(
+                    `data: ${JSON.stringify({
+                        type: "primaryElected",
+                        bindingToken: snapshot.bindingToken,
+                        revision: computeContentRevision(persistedContent),
+                        timestamp: Date.now(),
+                    })}\n\n`,
+                );
+            } catch (promoteError) {
+                console.error(
+                    "[SSE] Failed to send primaryElected:",
+                    promoteError,
+                );
+            }
+        }
     });
 });
 
@@ -1501,22 +2038,73 @@ process.on("message", async (message: any) => {
     );
 
     if (message.type == "setFile") {
-        if (message.filePath) {
-            // Resolve and validate the file path
+        // Only trusted parent IPC can reroot the service. HTTP routes can
+        // select files within currentRoot but cannot change that root.
+        // The message shape is `{ workspaceRoot, relativePath }`: the agent
+        // passes the canonical workspace root it authorized (from the host
+        // ActionContext.workingDirectory) and the full normalized user
+        // -relative path. Preserving the nested relative path (rather than
+        // reducing to basename+dirname) keeps subdirectory layouts intact
+        // through recovery.
+        const nextRoot =
+            typeof message.workspaceRoot === "string" && message.workspaceRoot
+                ? resolveRealDirectory(message.workspaceRoot)
+                : currentRoot;
+        if (nextRoot === undefined) {
+            debug(
+                `Ignoring setFile: workspaceRoot ${message.workspaceRoot} is not a real directory`,
+            );
+            return;
+        }
+        const rawRelative =
+            typeof message.relativePath === "string"
+                ? message.relativePath
+                : "";
+        if (rawRelative) {
+            const relative = normalizeRelativeDocumentPath(rawRelative);
+            if (relative === undefined) {
+                debug(
+                    `Ignoring setFile: relativePath ${rawRelative} is not a safe relative path`,
+                );
+                return;
+            }
             const resolvedFilePath = resolveWritableFileWithinRoot(
-                ROOT_DIR,
-                path.basename(message.filePath),
+                nextRoot,
+                relative,
             );
             if (resolvedFilePath === undefined) {
-                debug("Invalid file path provided in message");
+                debug(
+                    `Ignoring setFile: relativePath ${rawRelative} escapes workspaceRoot`,
+                );
                 return;
             }
 
-            const oldFilePath = filePath;
-            filePath = resolvedFilePath;
+            if (currentRoot !== nextRoot) {
+                currentRoot = nextRoot;
+                debug(`Document root switched to ${currentRoot}`);
+            }
 
-            // Initialize collaboration for this document using authoritative document
-            const documentId = path.basename(message.filePath, ".md");
+            const oldFilePath = filePath;
+            // Capture previous documentId before rotation so we can
+            // evict its Yjs mirror when nothing is holding it.
+            const previousDocumentId = getCurrentDocumentId();
+            filePath = resolvedFilePath;
+            boundRelativePath = relative;
+            // Rotate the binding token on every accepted rebinding, including
+            // rebinding to the same basename or same relative path. Callers
+            // that observed the previous token are then forced through a
+            // fresh read before they can apply.
+            bindingToken = randomUUID();
+            notifyBindingToParent();
+
+            // Room ID is scoped to this binding (opaque token) - see
+            // getCurrentDocumentId(). Display name stays as the file
+            // basename for the URL / title.
+            const documentId = getCurrentDocumentId();
+            if (previousDocumentId !== documentId) {
+                evictRoomIfIdle(previousDocumentId);
+            }
+            const documentName = path.basename(relative, ".md");
 
             // Get or create the authoritative Y.js document
             const ydoc = getAuthoritativeDocument(documentId);
@@ -1531,37 +2119,52 @@ process.on("message", async (message: any) => {
                 ytext.insert(0, content); // Insert file content
 
                 debug(
-                    `File loaded into authoritative document: ${documentId}, ${content.length} chars from ${message.filePath}`,
+                    `File loaded into authoritative document: ${documentId}, ${content.length} chars from ${relative}`,
                 );
             } else {
                 debug(
                     `File doesn't exist, authoritative document ${documentId} remains empty`,
                 );
             }
+            const revision = computeContentRevision(
+                ydoc.getText("content").toString(),
+            );
 
             // Notify frontend clients if the document has changed
             if (oldFilePath !== filePath) {
-                // Send SSE notification to all clients to switch rooms
+                const activeToken = bindingToken;
+                const activeRelative = boundRelativePath;
                 clients.forEach((client) => {
                     client.write(
                         `data: ${JSON.stringify({
                             type: "documentChanged",
                             newDocumentId: documentId,
-                            newDocumentName: path.basename(
-                                message.filePath,
-                                ".md",
-                            ),
+                            newDocumentName: documentName,
+                            bindingToken: activeToken,
+                            boundRelativePath: activeRelative,
+                            revision,
                             timestamp: Date.now(),
                         })}\n\n`,
                     );
                 });
             }
         } else {
+            currentRoot = nextRoot;
+            // Capture the previous documentId before dropping to
+            // memory-only mode, so we can evict the room state that
+            // no longer has a bound file.
+            const previousDocumentId = getCurrentDocumentId();
             // No file mode - initialize with default content using authoritative document
             filePath = null;
+            boundRelativePath = null;
+            bindingToken = null;
+            notifyBindingToParent();
             debug("Running in memory-only mode (no file)");
 
             const documentId = "default";
+            if (previousDocumentId !== documentId) {
+                evictRoomIfIdle(previousDocumentId);
+            }
 
             // Get or create authoritative Y.js document for memory-only mode
             const ydoc = getAuthoritativeDocument(documentId);
@@ -1620,102 +2223,216 @@ Start typing to see the editor in action!
                 );
             }
         }
-    } else if (message.type == "applyOperations") {
-        // Send operations to frontend
-        debug(
-            "View received IPC operations from agent:",
-            message.operations?.length,
-        );
-        clients.forEach((client) => {
-            client.write(
-                `data: ${JSON.stringify({
-                    type: "operations",
-                    operations: message.operations,
-                })}\n\n`,
-            );
-        });
     } else if (message.type === "applyLLMOperations") {
+        const requestId =
+            typeof message.requestId === "string" ? message.requestId : "";
+        // Snapshot the binding at request start. `readCurrentMarkdown
+        // ServerSide` awaits, and a setFile / /api/switch-document
+        // during that await would otherwise let us persist operations
+        // against a file the agent never authorized. After the await
+        // we re-check the snapshot and reject if the binding rotated.
+        // The snapshot is hoisted out of the try so the outer catch
+        // (which reports back to the agent) can still surface the
+        // binding identity we were operating under.
+        const snapshot = captureBindingSnapshot();
+        const snapshotDocumentId = getCurrentDocumentId(snapshot);
         try {
             if (!Array.isArray(message.operations)) {
                 throw new Error("Document operations must be an array");
             }
 
-            if (clients.length > 0) {
-                const operationsEvent = {
-                    type: "llmOperations",
-                    operations: message.operations,
-                    timestamp: message.timestamp || Date.now(),
-                    source: "agent",
-                    clientRole: "primary",
-                };
-                clients[0].write(
-                    `data: ${JSON.stringify(operationsEvent)}\n\n`,
-                );
-
-                const notificationEvent = {
-                    type: "operationsBeingApplied",
-                    timestamp: Date.now(),
-                    operationCount: message.operations.length,
-                    source: "agent",
-                };
-                clients.slice(1).forEach((client) => {
-                    client.write(
-                        `data: ${JSON.stringify(notificationEvent)}\n\n`,
-                    );
-                });
-
+            const bindingCheck = checkExpectedIdentity(message, snapshot);
+            if (bindingCheck !== undefined) {
                 process.send?.({
                     type: "operationsApplied",
-                    success: true,
-                    operationCount: message.operations.length,
-                    method: "sse-forwarded",
-                    clientsNotified: clients.length,
+                    requestId,
+                    success: false,
+                    identityMismatch: true,
+                    error: bindingCheck,
+                    bindingToken: snapshot.bindingToken,
+                    documentId: snapshotDocumentId,
+                    method: "binding-check",
                 });
                 return;
             }
 
-            const documentId = filePath
-                ? path.basename(filePath, ".md")
-                : "default";
-            getAuthoritativeDocument(documentId);
+            // Server-authoritative apply. Regardless of whether a browser is
+            // connected, the view resolves the operations against raw
+            // Markdown and persists the result. When the browser is present
+            // we pull its current serialized Markdown (via the existing
+            // requestMarkdown SSE), verify it matches the base revision the
+            // agent read, then apply and push a post-commit snapshot back
+            // so the editor adopts the new text. Browser presence never
+            // changes the persistence semantics.
+            const operations = message.operations as DocumentOperation[];
+            const currentMarkdown = await readCurrentMarkdownServerSide(
+                snapshotDocumentId,
+                snapshot,
+            );
 
+            // Re-check the snapshot after the potentially-awaiting read.
+            // A concurrent setFile/switch-document during the await would
+            // have rotated bindingToken/filePath; persisting against the
+            // new binding with content read for the old one is exactly
+            // the race we are guarding.
+            if (bindingsDiffer(captureBindingSnapshot(), snapshot)) {
+                debug(
+                    `[VIEW] Rejecting applyLLMOperations: binding rotated during in-flight read (requestId ${requestId})`,
+                );
+                process.send?.({
+                    type: "operationsApplied",
+                    requestId,
+                    success: false,
+                    identityMismatch: true,
+                    error: "Binding rotated during in-flight read",
+                    bindingToken,
+                    documentId: snapshotDocumentId,
+                    method: "binding-recheck",
+                });
+                return;
+            }
+
+            const expectedRevision =
+                typeof message.expectedRevision === "string"
+                    ? message.expectedRevision
+                    : undefined;
+            const baseRevision = computeContentRevision(currentMarkdown);
+            if (
+                expectedRevision !== undefined &&
+                expectedRevision !== baseRevision
+            ) {
+                debug(
+                    `[VIEW] Rejecting applyLLMOperations: revision mismatch (expected ${expectedRevision}, current ${baseRevision})`,
+                );
+                process.send?.({
+                    type: "operationsApplied",
+                    requestId,
+                    success: false,
+                    revisionMismatch: true,
+                    error: "Document content changed since the agent read it",
+                    bindingToken: snapshot.bindingToken,
+                    revision: baseRevision,
+                    documentId: snapshotDocumentId,
+                    method: "revision-check",
+                });
+                return;
+            }
+
+            // Resolve the write target against the snapshotted filePath +
+            // currentRoot. Using globals here would race a concurrent
+            // rebinding; the snapshot recheck above only guarantees state
+            // was consistent at entry and after the await, so we still
+            // pin the write to the snapshot.
             let writableFilePath: string | undefined;
-            if (filePath) {
+            if (snapshot.filePath) {
+                if (!isCanonicalDirectory(snapshot.currentRoot)) {
+                    throw new Error(
+                        "The document root is no longer accessible",
+                    );
+                }
                 writableFilePath = resolveWritableFileWithinRoot(
-                    ROOT_DIR,
-                    filePath,
+                    snapshot.currentRoot,
+                    snapshot.filePath,
                 );
                 if (writableFilePath === undefined) {
                     throw new Error("Access to the file is forbidden");
                 }
             }
 
-            const content = collaborationManager.applyOperations(
-                documentId,
-                message.operations,
+            const updatedContent = applyDocumentOperations(
+                currentMarkdown,
+                operations,
             );
+
+            // Update the authoritative Yjs mirror so any concurrent
+            // WebSocket peer receives the raw-Markdown update.
+            const ydoc = getAuthoritativeDocument(snapshotDocumentId);
+            const ytext = ydoc.getText("content");
+            ydoc.transact(() => {
+                ytext.delete(0, ytext.length);
+                ytext.insert(0, updatedContent);
+            });
+
             if (writableFilePath) {
-                fs.writeFileSync(writableFilePath, content, "utf-8");
+                fs.writeFileSync(writableFilePath, updatedContent, "utf-8");
                 filePath = writableFilePath;
             }
 
+            const revision = computeContentRevision(updatedContent);
+
+            // Post-commit snapshot: tell browsers to reload from the raw
+            // Markdown the server just persisted. The snapshot carries the
+            // active binding token so a browser that has since rebound
+            // discards it instead of clobbering its editor. We use the
+            // snapshotted token here because `bindingToken` above was
+            // proven equal to the snapshot at this point.
+            if (snapshot.bindingToken) {
+                const publishedSnapshot = {
+                    type: "documentSnapshot",
+                    bindingToken: snapshot.bindingToken,
+                    markdown: updatedContent,
+                    revision,
+                    timestamp: Date.now(),
+                };
+                clients.forEach((client) => {
+                    try {
+                        client.write(
+                            `data: ${JSON.stringify(publishedSnapshot)}\n\n`,
+                        );
+                    } catch (sseError) {
+                        console.error(
+                            "[SSE] Failed to send documentSnapshot:",
+                            sseError,
+                        );
+                    }
+                });
+            }
+
             debug(
-                `[VIEW] Applied ${message.operations.length} operations to ${documentId}`,
+                `[VIEW] Applied ${operations.length} operations to ${snapshotDocumentId} (revision ${revision})`,
             );
 
             process.send?.({
                 type: "operationsApplied",
+                requestId,
                 success: true,
-                operationCount: message.operations.length,
+                operationCount: operations.length,
                 method: "server-applied",
                 clientsNotified: clients.length,
+                bindingToken: snapshot.bindingToken,
+                revision,
+                documentId: snapshotDocumentId,
             });
         } catch (error) {
+            if (error instanceof ClientBindingMismatchError) {
+                // Same fail-closed rule as getDocumentContent: the
+                // server-authoritative read that fed this apply came
+                // from a browser that answered under a mismatched
+                // binding. Report identityMismatch so the agent forces
+                // a fresh read under the current binding, rather than
+                // treating the failure as a generic apply error.
+                debug(
+                    `[VIEW] Rejecting applyLLMOperations: browser echoed mismatched bindingToken (requestId ${requestId})`,
+                );
+                process.send?.({
+                    type: "operationsApplied",
+                    requestId,
+                    success: false,
+                    identityMismatch: true,
+                    error: error.message,
+                    bindingToken: snapshot.bindingToken,
+                    documentId: snapshotDocumentId,
+                    method: "client-binding-mismatch",
+                });
+                return;
+            }
             console.error("[VIEW] Failed to apply operations:", error);
             process.send?.({
                 type: "operationsApplied",
+                requestId,
                 success: false,
                 error: error instanceof Error ? error.message : "Unknown error",
+                bindingToken,
                 method: "server-applied",
             });
         }
@@ -1726,17 +2443,45 @@ Start typing to see the editor in action!
         // Handle content requests from agent - try client markdown first, fallback to Y.js
         // Process this asynchronously to avoid blocking other messages
         (async () => {
+            const requestId =
+                typeof message.requestId === "string" ? message.requestId : "";
+
+            // Snapshot binding state at request entry. `requestMarkdown
+            // FromClient` awaits a network round-trip to the browser,
+            // and a setFile / /api/switch-document during that await
+            // could otherwise let us return content paired with a
+            // newly-rotated binding token. We re-check after the await
+            // and fail closed as identityMismatch when the snapshot no
+            // longer holds.
+            const snapshot = captureBindingSnapshot();
+            const snapshotDocumentId = getCurrentDocumentId(snapshot);
+            const snapshotBoundFilePath = snapshot.filePath ?? null;
+            const snapshotBoundRoot = snapshotBoundFilePath
+                ? snapshot.currentRoot
+                : null;
+            const snapshotBoundRelativePath = snapshot.boundRelativePath;
+
+            const bindingCheck = checkExpectedIdentity(message, snapshot);
+            if (bindingCheck !== undefined) {
+                process.send?.({
+                    type: "documentContent",
+                    requestId,
+                    content: "",
+                    source: "error",
+                    identityMismatch: true,
+                    error: bindingCheck,
+                    bindingToken: snapshot.bindingToken,
+                    boundDocumentId: snapshotDocumentId,
+                    boundFilePath: snapshotBoundFilePath,
+                    boundRoot: snapshotBoundRoot,
+                    boundRelativePath: snapshotBoundRelativePath,
+                    revision: null,
+                    timestamp: Date.now(),
+                });
+                return;
+            }
             try {
-                let documentId = "";
-
-                if (!filePath) {
-                    // Use default document ID for memory-only mode
-                    documentId = "default";
-                } else {
-                    documentId = path.basename(filePath, ".md");
-                }
-
-                debug("Using documentID " + documentId);
+                debug("Using documentID " + snapshotDocumentId);
 
                 let content = "";
                 let source = "unknown";
@@ -1748,7 +2493,7 @@ Start typing to see the editor in action!
                             `[VIEW] Attempting to get markdown from connected client...`,
                         );
                         const markdownResponse =
-                            await requestMarkdownFromClient();
+                            await requestMarkdownFromClient(0, snapshot);
                         content = markdownResponse.markdown;
                         source = "client-serializer";
                         debug(
@@ -1758,6 +2503,33 @@ Start typing to see the editor in action!
                         throw new Error("No clients connected");
                     }
                 } catch (clientError) {
+                    // Browser explicitly answered under a mismatched
+                    // binding token. Do NOT fall back to the Yjs mirror
+                    // / file: those would return content for the
+                    // current binding while the agent has pinned an
+                    // expected identity, and the mismatch would be
+                    // silently laundered as apparently-fresh content.
+                    if (clientError instanceof ClientBindingMismatchError) {
+                        debug(
+                            `[VIEW] Rejecting getDocumentContent: browser echoed mismatched bindingToken (requestId ${requestId})`,
+                        );
+                        process.send?.({
+                            type: "documentContent",
+                            requestId,
+                            content: "",
+                            source: "error",
+                            identityMismatch: true,
+                            error: clientError.message,
+                            bindingToken: snapshot.bindingToken,
+                            boundDocumentId: snapshotDocumentId,
+                            boundFilePath: snapshotBoundFilePath,
+                            boundRoot: snapshotBoundRoot,
+                            boundRelativePath: snapshotBoundRelativePath,
+                            revision: null,
+                            timestamp: Date.now(),
+                        });
+                        return;
+                    }
                     const errorMessage =
                         clientError instanceof Error
                             ? clientError.message
@@ -1767,7 +2539,7 @@ Start typing to see the editor in action!
                     );
 
                     // FALLBACK: Get content from authoritative Y.js document
-                    const ydoc = getAuthoritativeDocument(documentId);
+                    const ydoc = getAuthoritativeDocument(snapshotDocumentId);
                     const yText = ydoc.getText("content");
                     content = yText.toString();
                     source = "yjs-fallback";
@@ -1775,10 +2547,31 @@ Start typing to see the editor in action!
                         `[VIEW] Retrieved content from Y.js fallback: ${content.length} chars`,
                     );
 
-                    // If Y.js is also empty, try reading from file as last resort
-                    if (!content && filePath && fs.existsSync(filePath)) {
+                    // If Y.js is also empty, try reading from file as last
+                    // resort. Validate the snapshotted path against the
+                    // snapshotted root so a concurrent rebinding cannot
+                    // widen what we read here.
+                    if (!content && snapshot.filePath) {
                         try {
-                            content = fs.readFileSync(filePath, "utf-8");
+                            if (!isCanonicalDirectory(snapshot.currentRoot)) {
+                                throw new Error(
+                                    "The document root is no longer accessible",
+                                );
+                            }
+                            const readableFilePath =
+                                resolveExistingFileWithinRoot(
+                                    snapshot.currentRoot,
+                                    snapshot.filePath,
+                                );
+                            if (readableFilePath === undefined) {
+                                throw new Error(
+                                    "Access to the file is forbidden",
+                                );
+                            }
+                            content = fs.readFileSync(
+                                readableFilePath,
+                                "utf-8",
+                            );
                             source = "file-fallback";
                             debug(
                                 `[VIEW] Retrieved content from file fallback: ${content.length} chars`,
@@ -1791,15 +2584,48 @@ Start typing to see the editor in action!
                     }
                 }
 
+                // Re-check the snapshot after the possibly-awaiting read.
+                // If binding rotated during the round-trip, fail closed
+                // with identityMismatch so the agent does not pair the
+                // browser-selected content with its old identity.
+                if (bindingsDiffer(captureBindingSnapshot(), snapshot)) {
+                    debug(
+                        `[VIEW] Rejecting getDocumentContent: binding rotated during in-flight read (requestId ${requestId})`,
+                    );
+                    process.send?.({
+                        type: "documentContent",
+                        requestId,
+                        content: "",
+                        source: "error",
+                        identityMismatch: true,
+                        error: "Binding rotated during in-flight read",
+                        bindingToken,
+                        boundDocumentId: snapshotDocumentId,
+                        boundFilePath: snapshotBoundFilePath,
+                        boundRoot: snapshotBoundRoot,
+                        boundRelativePath: snapshotBoundRelativePath,
+                        revision: null,
+                        timestamp: Date.now(),
+                    });
+                    return;
+                }
+
                 debug(
                     `[VIEW] Sending document content to agent (source: ${source}, ${content.length} chars)`,
                 );
 
                 process.send?.({
                     type: "documentContent",
+                    requestId,
                     content: content,
                     source: source,
                     timestamp: Date.now(),
+                    bindingToken: snapshot.bindingToken,
+                    boundDocumentId: snapshotDocumentId,
+                    boundFilePath: snapshotBoundFilePath,
+                    boundRoot: snapshotBoundRoot,
+                    boundRelativePath: snapshotBoundRelativePath,
+                    revision: computeContentRevision(content),
                 });
 
                 debug("[SENT] [VIEW] Sent document content to agent process");
@@ -1807,6 +2633,7 @@ Start typing to see the editor in action!
                 console.error("[VIEW] Failed to get document content:", error);
                 process.send?.({
                     type: "documentContent",
+                    requestId,
                     content: "",
                     source: "error",
                     error:
@@ -1814,6 +2641,12 @@ Start typing to see the editor in action!
                             ? error.message
                             : "Unknown error",
                     timestamp: Date.now(),
+                    bindingToken: snapshot.bindingToken,
+                    boundDocumentId: snapshotDocumentId,
+                    boundFilePath: snapshotBoundFilePath,
+                    boundRoot: snapshotBoundRoot,
+                    boundRelativePath: snapshotBoundRelativePath,
+                    revision: null,
                 });
             }
         })();
@@ -1930,6 +2763,50 @@ function getAuthoritativeDocument(documentId: string): Y.Doc {
     return ydoc;
 }
 
+/**
+ * Free the Y.Doc / Awareness / connection-tracking state for a room
+ * whose binding just rotated away. Callers pass the OLD documentId
+ * captured before the rotation. We refuse to evict when any WebSocket
+ * client is still attached to the old room; a connected client is
+ * likely still syncing or authoring against that mirror and pulling it
+ * out from under them would corrupt their editor. When the room is
+ * idle (no attached sockets) we destroy the Y.Doc, drop the Awareness
+ * instance, and let CollaborationManager forget it too.
+ */
+function evictRoomIfIdle(oldDocumentId: string | null): void {
+    if (oldDocumentId === null || oldDocumentId === "default") {
+        // "default" is a shared memory-only fallback; keep it around.
+        return;
+    }
+    if (!docs.has(oldDocumentId)) {
+        return;
+    }
+    const attached = roomConnections.get(oldDocumentId);
+    if (attached && attached.size > 0) {
+        debug(
+            `Skipping eviction of ${oldDocumentId}: ${attached.size} client(s) still attached`,
+        );
+        return;
+    }
+    try {
+        const ydoc = docs.get(oldDocumentId);
+        if (ydoc) {
+            ydoc.destroy();
+        }
+    } catch (error) {
+        console.error(
+            `[EVICT] Failed to destroy Y.Doc for ${oldDocumentId}:`,
+            error,
+        );
+    }
+    docs.delete(oldDocumentId);
+    awarenessStates.delete(oldDocumentId);
+    roomConnections.delete(oldDocumentId);
+    roomAwarenessConnections.delete(oldDocumentId);
+    collaborationManager.forgetDocument(oldDocumentId);
+    debug(`Evicted idle Y.Doc / awareness room: ${oldDocumentId}`);
+}
+
 // Helper function to setup a Yjs connection (compatible with y-websocket)
 function setupWSConnection(conn: any, req: any, roomName: string): void {
     debug(`Setting up WebSocket connection for room: ${roomName}`);
@@ -1997,6 +2874,9 @@ function setupWSConnection(conn: any, req: any, roomName: string): void {
             debug(
                 `Client disconnected from room: ${roomName}, ${connections.size} clients remaining`,
             );
+            if (connections.size === 0 && roomName !== getCurrentDocumentId()) {
+                evictRoomIfIdle(roomName);
+            }
         }
     };
 

@@ -300,6 +300,10 @@ export type ActionContextParams = ContextParams & {
     actionContextId: number;
     activityContext: ActivityContext | undefined;
     isFromReasoningLoop: boolean;
+    // Absolute filesystem root the host authorized for this action. Serialized
+    // across the RPC boundary so out-of-process agents see the same value as
+    // ActionContext.workingDirectory on the dispatcher side.
+    workingDirectory: string | undefined;
 };
 
 export type OptionsFunctionCallBack = {
