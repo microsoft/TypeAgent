@@ -4,6 +4,7 @@
 //import Server from "webpack-dev-server";
 import express, { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
+import { LOOPBACK_HOST } from "@typeagent/websocket-utils/loopback";
 import bodyParser from "body-parser";
 import { fileURLToPath } from "url";
 import path from "path";
@@ -288,8 +289,9 @@ process.on("disconnect", () => {
     process.exit(1);
 });
 
-// Start the server
-const server = app.listen(port, () => {
+// Start the server. Bind loopback: this server serves indexed local files and
+// forwards updates to the agent process without authenticating callers.
+const server = app.listen(port, LOOPBACK_HOST, () => {
     const boundPort = (server.address() as { port: number }).port;
     debug(`Montage server started on port ${boundPort}`);
     process.send?.({ success: true, port: boundPort });

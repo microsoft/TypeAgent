@@ -118,7 +118,9 @@ function startViewServer(
         };
         server.once("error", onError);
         server.once("listening", onListening);
-        server.listen(port);
+        // Loopback only: the view is unauthenticated, so binding every
+        // interface would let any peer on the network reach it.
+        server.listen(port, "__LOOPBACK_HOST__");
     });
 }
 
