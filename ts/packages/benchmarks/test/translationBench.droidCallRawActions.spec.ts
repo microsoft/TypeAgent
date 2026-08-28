@@ -35,6 +35,14 @@ it("restores the accepted DroidCall response", () => {
     );
     expect(restored).toEqual(accepted);
 
+    const chosen = { chosenActions: accepted };
+    expect(
+        restoreDroidCallRawActions(chosen, [
+            JSON.stringify(accepted[0]),
+            '{"actionName":"findContact","parameters":{"name":"Grace"}}',
+        ]),
+    ).toEqual(accepted);
+
     const deep = `[${"[".repeat(101)}null${"]".repeat(101)}]`;
     expect(() => parseDroidCallRawResponse(deep)).toThrow("maxDepth");
 });

@@ -295,8 +295,15 @@ function restoreActions(
         }
         if (
             hasSameActionNames(accepted, raw.finalizedActionNames) &&
-            (translation.rawChosenActions === undefined ||
-                hasSameRawActions(translation.rawChosenActions, raw.actions))
+            hasSameRawActions(
+                translation.rawChosenActions ??
+                    translation.chosenActions.filter(
+                        (action) =>
+                            action.actionName !== PENDING_ACTION_NAME &&
+                            action.parameters !== undefined,
+                    ),
+                raw.actions,
+            )
         ) {
             return raw.actions;
         }
