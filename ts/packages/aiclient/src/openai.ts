@@ -162,9 +162,9 @@ export function apiSettingsFromEnv(
         return azureApiSettingsFromEnv(modelType, env, target);
     }
 
-    env ??= process.env;
-    if (EnvVars.OPENAI_API_KEY in env) {
-        return openAIApiSettingsFromEnv(modelType, env, endpointName);
+    const resolvedEnv = env ?? process.env;
+    if (EnvVars.OPENAI_API_KEY in resolvedEnv) {
+        return openAIApiSettingsFromEnv(modelType, resolvedEnv, endpointName);
     }
 
     return azureApiSettingsFromEnv(modelType, env, endpointName);

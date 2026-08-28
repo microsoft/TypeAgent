@@ -33,9 +33,7 @@ let cached: Config | undefined;
  */
 export function setRuntimeConfig(config: Config): void {
     cached = config;
-    if (config.modelProvider !== undefined) {
-        setActiveModelProvider(config.modelProvider);
-    }
+    setActiveModelProvider(config.modelProvider);
 }
 
 /**
@@ -47,11 +45,9 @@ export function initRuntimeConfigFromProcessEnv(): Config {
     for (const [k, v] of Object.entries(process.env)) {
         if (typeof v === "string") flat[k] = v;
     }
-    cached = buildConfig(flat);
-    if (cached.modelProvider !== undefined) {
-        setActiveModelProvider(cached.modelProvider);
-    }
-    return cached;
+    const config = buildConfig(flat);
+    setRuntimeConfig(config);
+    return config;
 }
 
 /**
@@ -71,4 +67,5 @@ export function getRuntimeConfig(): Config {
  */
 export function _resetRuntimeConfigForTests(): void {
     cached = undefined;
+    setActiveModelProvider(undefined);
 }
