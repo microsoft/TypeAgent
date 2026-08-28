@@ -7,9 +7,11 @@ Automated build and signing for the TypeAgent headless agent-server MSI installe
 This implementation builds a lightweight Windows Installer (MSI) that:
 
 - Downloads the `agent-server.<rid>` artifact from the ADO feed
-- Bundles it with the Copilot plugin and TypeAgent VS Code Chat VSIX
+- Bundles it with the Copilot plugin, the TypeAgent VS Code Chat VSIX, and the
+  TypeAgent VS Code Shell VSIX
 - Installs TypeAgent Chat and creates a desktop shortcut when VS Code 1.133+
   is present
+- Installs the TypeAgent VS Code Shell extension when VS Code 1.90+ is present
 - Signs with the TypeAgent development certificate (from Key Vault)
 - Produces a signed `.msi` ready for distribution
 
@@ -28,7 +30,7 @@ ts/tools/installers/wix/
   └── register-plugin.ps1         # Deferred CA: register/unregister the Copilot CLI plugin
 
 ts/tools/installers/common/
-  └── install-vscode-chat.ps1     # Shared VSIX install + desktop shortcut lifecycle
+  └── install-vscode-typeagent.ps1 # Shared VSIX install + desktop shortcut lifecycle
 
 pipelines/
   └── azure-build-publish-all.yml   # ADO pipeline (build_sign_publish_msi job)
@@ -127,6 +129,7 @@ agent-server:
 
 ```powershell
 pnpm --filter vscode-chat run package
+pnpm --filter vscode-shell run package
 
 node tools/scripts/stageCopilotPlugin.mjs `
   --out "$env:TEMP\typeagent-msi-stage\copilot-plugin"
@@ -174,9 +177,11 @@ node tools/scripts/build-msi.mjs `
   --agent-dir  "$env:TEMP\typeagent-msi-stage\agent-server" `
   --plugin-dir "$env:TEMP\typeagent-msi-stage\copilot-plugin" `
   --vscode-chat-vsix "packages\vscode-chat\dist-pub\vscode-chat.vsix" `
+  --vscode-shell-vsix "packages\vscode-shell\dist-pub\vscode-shell.vsix" `
   --version 0.0.1-local `
   --plugin-version 0.0.1-local `
   --vscode-chat-version 0.0.1-local `
+  --vscode-shell-version 0.0.1-local `
   --skip-shell-feed-resolution `
   --output "$env:TEMP\typeagent-msi-stage\out"
 ```
@@ -226,7 +231,8 @@ node build-msi.mjs --rid win32-x64 --version 0.0.1-<buildId> --output ./msi-out
 **What it does:**
 
 1. Downloads `agent-server.win32-x64` from the `typeagent` feed
-2. Downloads `typeagent-copilot-plugin` and `typeagent-vscode-chat`
+2. Downloads `typeagent-copilot-plugin`, `typeagent-vscode-chat`, and
+   `typeagent-vscode-shell`
 3. Extracts/stages the artifacts under `./msi-out/artifact`
 4. Compiles WiX definition (`.wxs` → `.wixobj`)
 5. Links to create `TypeAgent-<version>-win32-x64.msi`
@@ -274,7 +280,7 @@ exception remains available in the log.
 ## Native VS Code Chat integration
 
 `VSCODECHAT=1` is enabled by default. During install, the MSI runs the shared
-`install-vscode-chat.ps1` helper as the current user. The helper:
+`install-vscode-typeagent.ps1` helper as the current user. The helper:
 
 1. Finds user- or system-installed VS Code.
 2. Requires VS Code 1.133.0 or newer.
@@ -296,6 +302,31 @@ msiexec /i TypeAgent-<version>-win32-x64.msi VSCODECHAT=0
 The MSI removes the shortcut on uninstall. It removes the extension only when
 the installed version still matches the version originally installed by
 TypeAgent, so it does not delete an independently upgraded extension.
+
+## TypeAgent VS Code Shell extension
+
+`VSCODESHELL=1` is enabled by default and is exposed as a checkbox in the
+interactive installer. During install, the MSI runs the shared
+`install-vscode-typeagent.ps1` helper with `-ExtensionId typeagent.vscode-shell`, a
+distinct ownership subkey (`HKCU\Software\Microsoft\TypeAgent\VSCodeShell`), and
+`-NoShortcut`. The helper:
+
+1. Finds user- or system-installed VS Code.
+2. Requires VS Code 1.90.0 or newer (the extension's `engines.vscode`).
+3. Installs the bundled `typeagent.vscode-shell` VSIX.
+
+No desktop shortcut is created for this extension. If compatible VS Code is
+absent, the step logs a warning to `%LOCALAPPDATA%\TypeAgent\logs\vscode-shell-install.log`
+and the rest of the TypeAgent installation continues. Disable the component for
+a silent install with:
+
+```powershell
+msiexec /i TypeAgent-<version>-win32-x64.msi VSCODESHELL=0
+```
+
+On uninstall the MSI removes the extension only when the installed version
+still matches the version originally installed by TypeAgent, so it does not
+delete an independently upgraded extension.
 
 ## Endpoint provider selection (self-host)
 
