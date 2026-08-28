@@ -11,4 +11,4 @@ const files = new Command().argument("<checkpoints...>").parse().args;
 const merged = mergeTranslationBenchCheckpoints(
     files.map((filePath) => readTranslationBenchCheckpoint(filePath)),
 );
-console.log(JSON.stringify(merged.rows, null, 2));
+process.stdout.write(`${JSON.stringify(merged.rows, null, 2)}\n`);
