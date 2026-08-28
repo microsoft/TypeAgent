@@ -31,6 +31,40 @@ const ansiUpMarkdownToHtml = new AnsiUp();
 ansiUpMarkdownToHtml.use_classes = true;
 ansiUpMarkdownToHtml.escape_html = false;
 
+// Schemes a link or image in message content may use. `typeagent-browser` and
+// `typeagent-file` are the app's own link schemes (see fileLink.ts); `cid`
+// covers inline mail attachments. Note `file:` is deliberately absent - local
+// files are linked with `typeagent-file:` precisely because `file:` hrefs are
+// sanitized away here and are inert in Electron and webview hosts.
+const ALLOWED_URI_REGEXP =
+    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser|typeagent-file):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i;
+
+// The single DOMPurify configuration for every message-content sink.
+//
+// Message content is NOT trusted: an agent can relay text it got from the
+// outside world (an email body, a web page, a file), so anything rendered
+// here may be attacker-controlled. Two rules follow from that, and both were
+// previously violated:
+//
+//   1. Never add event-handler attributes (`onclick`, `onerror`, ...) to
+//      ADD_ATTR. Doing so re-permits exactly what DOMPurify strips by default
+//      and lets `<img src=x onerror=...>` execute.
+//   2. Never list `href`/`src` in ADD_URI_SAFE_ATTR. That marks them as not
+//      needing URI checks, which skips ALLOWED_URI_REGEXP entirely and lets
+//      `javascript:` URLs through.
+//
+// `target` is the only addition needed: the markdown `link_open` rule sets
+// `target="_blank"`. `href`, `src` and `style` are already allowed by
+// DOMPurify's defaults, so they do not need to be listed.
+//
+// Agent content that genuinely needs to run script uses `type: "iframe"`
+// instead, which renders in a sandboxed iframe and never reaches this config.
+const sanitizeConfig = {
+    ADD_ATTR: ["target"],
+    ADD_DATA_URI_TAGS: ["img"],
+    ALLOWED_URI_REGEXP,
+};
+
 // ---------------------------------------------------------------------------
 // Structured-content HTML renderer (Phase 3a)
 // Converts a StructuredContent block document to an HTML string. DOMPurify
@@ -560,13 +594,7 @@ function processContent(
         case "iframe":
             return content;
         case "html":
-            return DOMPurify.sanitize(content, {
-                ADD_ATTR: ["target", "onclick", "onerror", "href"],
-                ADD_DATA_URI_TAGS: ["img"],
-                ADD_URI_SAFE_ATTR: ["src", "href"],
-                ALLOWED_URI_REGEXP:
-                    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser|typeagent-file):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
-            });
+            return DOMPurify.sanitize(content, sanitizeConfig);
         case "markdown": {
             const md = createMarkdownRenderer();
             const renderedMarkdown = inline
@@ -575,13 +603,7 @@ function processContent(
             const withAnsi =
                 ansiUpMarkdownToHtml.ansi_to_html(renderedMarkdown);
 
-            return DOMPurify.sanitize(withAnsi, {
-                ADD_ATTR: ["target", "onclick", "onerror", "href"],
-                ADD_DATA_URI_TAGS: ["img"],
-                ADD_URI_SAFE_ATTR: ["src", "href", "style"],
-                ALLOWED_URI_REGEXP:
-                    /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser|typeagent-file):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
-            });
+            return DOMPurify.sanitize(withAnsi, sanitizeConfig);
         }
         case "text":
             return enableText2Html
@@ -973,13 +995,12 @@ export function setContent(
         // `processContent` already sanitizes html/markdown, but the data
         // flow through messageContentToHTML breaks the static analysis
         // chain).
-        contentElm.innerHTML += DOMPurify.sanitize(contentHtml, {
-            ADD_ATTR: ["target", "onclick", "onerror", "href"],
-            ADD_DATA_URI_TAGS: ["img"],
-            ADD_URI_SAFE_ATTR: ["src", "href", "style"],
-            ALLOWED_URI_REGEXP:
-                /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser|typeagent-file):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
-        });
+        // vanilla, sanitized HTML only — re-run DOMPurify at the sink so
+        // CodeQL js/xss can recognize sanitization (the upstream
+        // `processContent` already sanitizes html/markdown, but the data
+        // flow through messageContentToHTML breaks the static analysis
+        // chain).
+        contentElm.innerHTML += DOMPurify.sanitize(contentHtml, sanitizeConfig);
 
         // Plain-text content authors no links of its own, so bare URLs would
         // otherwise render as dead text. Wrap them in anchors here (markdown
@@ -1087,6 +1108,14 @@ export function swapContent(
         targetElement.classList.add("chat-message-action-data");
     }
 
-    sourceElement.setAttribute("action-data", originalMessage);
-    targetElement.innerHTML = data;
+    // Both halves of the swap are sanitized. `action-data` is an attribute on
+    // a DOM node, so it is reachable by anything that can already write to the
+    // document, and `originalMessage` is re-serialized message content that is
+    // swapped back in on the next toggle. Sanitizing both keeps this toggle
+    // from becoming a way to reintroduce markup that the render sink rejected.
+    sourceElement.setAttribute(
+        "action-data",
+        DOMPurify.sanitize(originalMessage, sanitizeConfig),
+    );
+    targetElement.innerHTML = DOMPurify.sanitize(data, sanitizeConfig);
 }
