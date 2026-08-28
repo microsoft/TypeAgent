@@ -532,10 +532,8 @@ function sendStreamingCompleteToView(
 }
 
 async function getFullMarkdownFilePath(fileName: string, storage: Storage) {
-    const paths = await storage?.list("", { fullPath: true });
-    const candidates = paths?.filter((item) => item.endsWith(fileName!));
-
-    return candidates ? candidates[0] : undefined;
+    const paths = await storage.list("", { fullPath: true });
+    return paths.find((item) => path.basename(item) === fileName);
 }
 
 async function handleMarkdownAction(
@@ -581,23 +579,45 @@ async function handleMarkdownAction(
                 actionContext.sessionContext.agentContext.currentFileName =
                     newFileName;
 
-                if (!(await storage.exists(newFileName))) {
-                    await storage.write(newFileName, "");
+                const documentExisted = await storage.exists(newFileName);
+                const initialContent =
+                    action.actionName === "createDocument"
+                        ? (action.parameters.content ?? "")
+                        : "";
+                if (!documentExisted) {
+                    await storage.write(newFileName, initialContent);
+                } else if (initialContent) {
+                    const existingContent =
+                        (await storage.read(newFileName, "utf8")) ?? "";
+                    if (existingContent) {
+                        throw new Error(
+                            `Document ${newFileName} already contains content`,
+                        );
+                    }
+                    await storage.write(newFileName, initialContent);
                 }
 
+                const fullPath = await getFullMarkdownFilePath(
+                    newFileName,
+                    storage,
+                );
                 if (actionContext.sessionContext.agentContext.viewProcess) {
-                    const fullPath = await getFullMarkdownFilePath(
-                        newFileName,
-                        storage,
-                    );
+                    if (!fullPath) {
+                        throw new Error(
+                            `Unable to resolve the path for ${newFileName}`,
+                        );
+                    }
 
                     actionContext.sessionContext.agentContext.viewProcess.send({
                         type: "setFile",
-                        filePath: path.basename(fullPath!),
-                        folderPath: path.dirname(fullPath!),
+                        filePath: path.basename(fullPath),
+                        folderPath: path.dirname(fullPath),
                     });
                 }
-                result = createActionResult("Document opened");
+                const actionLabel = documentExisted ? "opened" : "created";
+                result = createActionResult(
+                    `Document ${actionLabel} at ${fullPath ?? newFileName}`,
+                );
                 result.resultEntity = {
                     name: newFileName,
                     type: ["file", "markdown"],

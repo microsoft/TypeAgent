@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import type { ActionContext, Storage } from "@typeagent/agent-sdk";
+import path from "node:path";
 import {
     configFromEnvRecord,
     getRuntimeConfig,
@@ -27,6 +28,7 @@ describe("markdown document actions", () => {
 
             const checkedPaths: string[] = [];
             const writes: [string, string][] = [];
+            const fullPath = path.resolve("storage", "notes.md");
             const storage = {
                 exists: async (storagePath: string) => {
                     checkedPaths.push(storagePath);
@@ -35,6 +37,7 @@ describe("markdown document actions", () => {
                 write: async (storagePath: string, data: string) => {
                     writes.push([storagePath, data]);
                 },
+                list: async () => [fullPath],
             } as unknown as Storage;
             const context = {
                 sessionContext: {
@@ -73,6 +76,9 @@ describe("markdown document actions", () => {
                     name: "notes.md",
                     type: ["file", "markdown"],
                 });
+                expect(result.historyText).toBe(
+                    `Document created at ${fullPath}`,
+                );
             } finally {
                 for (const [key, value] of savedModelSettings) {
                     process.env[key] = value;
@@ -104,5 +110,40 @@ describe("markdown document actions", () => {
                 process.env.OPENAI_API_KEY = openAIKey;
             }
         }
+    });
+
+    test("creates a document with initial markdown content", async () => {
+        const fullPath = path.resolve("storage", "filled.md");
+        const writes: [string, string][] = [];
+        const storage = {
+            exists: async () => false,
+            write: async (storagePath: string, data: string) => {
+                writes.push([storagePath, data]);
+            },
+            list: async () => [fullPath],
+        } as unknown as Storage;
+        const context = {
+            sessionContext: {
+                agentContext: { localHostPort: 0 },
+                sessionStorage: storage,
+            },
+        } as unknown as ActionContext<{
+            currentFileName?: string;
+            localHostPort: number;
+        }>;
+
+        await instantiate().executeAction!(
+            {
+                schemaName: "markdown",
+                actionName: "createDocument",
+                parameters: {
+                    name: "filled.md",
+                    content: "# Filled\n\nLorem ipsum.",
+                },
+            },
+            context,
+        );
+
+        expect(writes).toEqual([["filled.md", "# Filled\n\nLorem ipsum."]]);
     });
 });
