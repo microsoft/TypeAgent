@@ -27,6 +27,7 @@
     "gen-action-parameters-grader": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genActionParametersGrader.js",
     "gen-catalog": "pnpm run build && node --max-old-space-size=4096 dist/translationBench/scripts/genCatalog.js && node --max-old-space-size=4096 dist/translationBench/scripts/genActionParametersGrader.js",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "merge-checkpoints": "pnpm run build && node dist/translationBench/scripts/mergeCheckpoints.js",
     "prettier": "prettier --check package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write package.json tsconfig.json src scripts test --ignore-path ../../.prettierignore",
     "test": "npm run test:local",
