@@ -8,7 +8,9 @@ import {
 } from "./conversationManager.js";
 import { createAgentServerConnectionHandler } from "./connectionHandler.js";
 import { startStaleBuildWatcher, isStaleBuild } from "./staleBuild.js";
-import { printConfigDriftBanner } from "./banner.js";
+import { printConfigDriftBanner, printWarningBanner } from "./banner.js";
+import { isLoopbackHost } from "@typeagent/websocket-utils/loopback";
+import { resolveAgentServerHost } from "./listenHost.js";
 import {
     getInstanceDirAsync,
     getTraceIdAsync,
@@ -397,6 +399,27 @@ async function main() {
               ? parseInt(process.env.AGENT_SERVER_PORT, 10)
               : AGENT_SERVER_DEFAULT_PORT;
 
+    // The listener is unauthenticated: anyone who can reach the port can join
+    // a conversation and drive the dispatcher with the local user's
+    // permissions. Bind loopback so only this machine can reach it. Remote
+    // access goes through the dev tunnel, whose host process also connects
+    // over loopback, so tunneling still works. `--host` / AGENT_SERVER_HOST
+    // exists for deployments that must publish the port (a container that
+    // isolates the workspace, for example) and warns when it widens the bind.
+    const host = resolveAgentServerHost(process.argv, process.env);
+    if (!isLoopbackHost(host)) {
+        printWarningBanner(
+            [
+                `Agent server is binding ${host}:${port}, not loopback.`,
+                "The server has no authentication: any host that can reach",
+                "this port can join conversations, read your identity, and",
+                "run agent commands as you. Only do this behind a network",
+                "boundary you control.",
+            ],
+            "agent-server",
+        );
+    }
+
     const idleShutdownIdx = process.argv.indexOf("--idle-timeout");
     const idleShutdownMs =
         idleShutdownIdx !== -1
@@ -519,7 +542,7 @@ async function main() {
             },
         });
 
-    wss = await createWebSocketChannelServer({ port }, connectionHandler);
+    wss = await createWebSocketChannelServer({ port, host }, connectionHandler);
 
     // Register the agent-server's own listen port as a regular
     // allocation under the well-known AGENT_SERVER_DISCOVERY_NAME with
@@ -537,7 +560,11 @@ async function main() {
         SYSTEM_SESSION_CONTEXT_ID,
     );
 
-    console.log(`Agent server started at ws://localhost:${port}`);
+    console.log(
+        isLoopbackHost(host)
+            ? `Agent server started at ws://localhost:${port}`
+            : `Agent server started at ws://${host}:${port}`,
+    );
     writeServerPid(port, process.pid);
     // Publish our own listen URL into the process environment so in-process
     // consumers (e.g. the reasoning loop's subagent manager, which spawns

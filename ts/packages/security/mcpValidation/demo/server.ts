@@ -174,7 +174,9 @@ async function main() {
         res.end("Not found");
     });
 
-    httpServer.listen(PORT, () => {
+    // Loopback only: the dashboard is unauthenticated and exposes live server
+    // state, so it must not be reachable from other machines.
+    httpServer.listen(PORT, "127.0.0.1", () => {
         console.error(`\n  Dashboard: http://localhost:${PORT}\n`);
         console.error(
             "  The dashboard polls the MCP server state every second.",
