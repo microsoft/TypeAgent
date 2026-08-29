@@ -13,8 +13,7 @@ function parseArgs(argv) {
         pluginSourceDir: "",
         marketplaceName: "typeagent-local",
         marketplaceRoot: path.join(
-            os.homedir(),
-            ".copilot",
+            getCopilotHome(),
             "marketplaces",
             "typeagent-local",
         ),
@@ -103,11 +102,15 @@ function getCopilotHome() {
     );
 }
 
-function hasListedEntry(output, identifier) {
-    return output.split(/\r?\n/).some((line) => {
+function findListedEntry(output, identifier) {
+    return output.split(/\r?\n/).find((line) => {
         const entry = line.trim().replace(/^[^A-Za-z0-9_.@-]+/, "");
         return entry.split(/\s+/, 1)[0] === identifier;
     });
+}
+
+function hasListedEntry(output, identifier) {
+    return findListedEntry(output, identifier) !== undefined;
 }
 
 function quoteCmdArgument(value) {
@@ -144,7 +147,7 @@ function runCopilot(copilotPath, args, logger, allowFailure = false) {
     if (res.error) {
         if (allowFailure) {
             logger.write(`Copilot invocation failed: ${res.error.message}`);
-            return { output: "", status: 1 };
+            return { output: "", status: 1, failed: true };
         }
         throw new Error(`Copilot invocation failed: ${res.error.message}`);
     }
@@ -168,7 +171,11 @@ function runCopilot(copilotPath, args, logger, allowFailure = false) {
         );
     }
 
-    return { output: `${stdout}\n${stderr}`, status: res.status ?? 1 };
+    return {
+        output: `${stdout}\n${stderr}`,
+        status: res.status ?? 1,
+        failed: res.status !== 0 || reportedFailure,
+    };
 }
 
 function ensureLocalPluginMarketplace({
@@ -293,6 +300,84 @@ function resolvePluginMetadata(opts) {
     return { pluginVersion, pluginDescription };
 }
 
+function getInstalledMarketplaceRoot(opts) {
+    return path.join(
+        getCopilotHome(),
+        "installed-plugins",
+        opts.marketplaceName,
+    );
+}
+
+function removeInstalledSnapshot(opts, logger) {
+    const installedSnapshot = path.join(
+        getInstalledMarketplaceRoot(opts),
+        opts.pluginName,
+    );
+    if (!fs.existsSync(installedSnapshot)) return;
+    logger.write(`Removing previous plugin snapshot: ${installedSnapshot}`);
+    fs.rmSync(installedSnapshot, { recursive: true, force: true });
+}
+
+function cleanFailedInstallArtifacts(opts, logger) {
+    const installedRoot = getInstalledMarketplaceRoot(opts);
+    if (!fs.existsSync(installedRoot)) return;
+    for (const entry of fs.readdirSync(installedRoot)) {
+        if (!entry.startsWith(`.${opts.pluginName}.tmp-`)) continue;
+        logger.write(`Removing failed-install artifact: ${entry}`);
+        fs.rmSync(path.join(installedRoot, entry), {
+            recursive: true,
+            force: true,
+        });
+    }
+}
+
+function migrateMarketplaceRegistration(opts, logger) {
+    const marketplaces = runCopilot(
+        opts.copilotPath,
+        ["plugin", "marketplace", "list"],
+        logger,
+    );
+    const registeredMarketplace = findListedEntry(
+        marketplaces.output,
+        opts.marketplaceName,
+    );
+    if (!registeredMarketplace) return false;
+    if (
+        registeredMarketplace
+            .toLowerCase()
+            .includes(opts.marketplaceRoot.toLowerCase())
+    ) {
+        return true;
+    }
+
+    logger.write(
+        `Replacing marketplace '${opts.marketplaceName}' with ${opts.marketplaceRoot}.`,
+    );
+    const plugins = runCopilot(opts.copilotPath, ["plugin", "list"], logger);
+    if (
+        hasListedEntry(
+            plugins.output,
+            `${opts.pluginName}@${opts.marketplaceName}`,
+        )
+    ) {
+        if (process.platform === "win32") {
+            removeInstalledSnapshot(opts, logger);
+        }
+        runCopilot(
+            opts.copilotPath,
+            ["plugin", "uninstall", opts.pluginName],
+            logger,
+            true,
+        );
+    }
+    runCopilot(
+        opts.copilotPath,
+        ["plugin", "marketplace", "remove", opts.marketplaceName],
+        logger,
+    );
+    return false;
+}
+
 function ensureCopilotAvailable(copilotPath, logger) {
     runCopilot(copilotPath, ["--version"], logger);
 }
@@ -300,6 +385,8 @@ function ensureCopilotAvailable(copilotPath, logger) {
 function installPlugin(opts, logger) {
     const { pluginVersion, pluginDescription } = resolvePluginMetadata(opts);
     logger.write(`Plugin source ready: ${opts.pluginSourceDir}`);
+    cleanFailedInstallArtifacts(opts, logger);
+    const marketplaceRegistered = migrateMarketplaceRegistration(opts, logger);
 
     const manifestPath = ensureLocalPluginMarketplace({
         marketplaceRoot: opts.marketplaceRoot,
@@ -312,13 +399,7 @@ function installPlugin(opts, logger) {
     });
     logger.write(`Marketplace manifest updated: ${manifestPath}`);
 
-    const marketplaceList = runCopilot(
-        opts.copilotPath,
-        ["plugin", "marketplace", "list"],
-        logger,
-        true,
-    );
-    if (!hasListedEntry(marketplaceList.output, opts.marketplaceName)) {
+    if (!marketplaceRegistered) {
         runCopilot(
             opts.copilotPath,
             ["plugin", "marketplace", "add", opts.marketplaceRoot],
@@ -336,63 +417,49 @@ function installPlugin(opts, logger) {
         opts.copilotPath,
         ["plugin", "list"],
         logger,
-        true,
     );
-    if (
-        hasListedEntry(
-            pluginListResult.output,
-            `${opts.pluginName}@${opts.marketplaceName}`,
-        )
-    ) {
-        if (process.platform === "win32") {
-            // Copilot CLI 1.0.81 can fail with os error 5 while replacing its
-            // own snapshot. Removing this one snapshot first avoids traversing
-            // or replacing files from inside the Copilot process.
-            const installedSnapshot = path.join(
-                getCopilotHome(),
-                "installed-plugins",
-                opts.marketplaceName,
-                opts.pluginName,
-            );
-            if (fs.existsSync(installedSnapshot)) {
-                logger.write(
-                    `Removing previous plugin snapshot: ${installedSnapshot}`,
-                );
-                fs.rmSync(installedSnapshot, {
-                    recursive: true,
-                    force: true,
-                });
+    const pluginIdentifier = `${opts.pluginName}@${opts.marketplaceName}`;
+    if (hasListedEntry(pluginListResult.output, pluginIdentifier)) {
+        const update = runCopilot(
+            opts.copilotPath,
+            ["plugin", "update", opts.pluginName],
+            logger,
+            true,
+        );
+        if (update.failed) {
+            const windowsAccessDenied =
+                process.platform === "win32" &&
+                /(?:Access is denied|os error 5)/i.test(update.output);
+            if (!windowsAccessDenied) {
+                throw new Error(`Plugin update failed: '${pluginIdentifier}'.`);
             }
-        } else {
+            logger.write(
+                "Copilot could not replace its Windows snapshot; retrying from a clean snapshot.",
+            );
+            removeInstalledSnapshot(opts, logger);
+            cleanFailedInstallArtifacts(opts, logger);
             runCopilot(
                 opts.copilotPath,
-                ["plugin", "uninstall", opts.pluginName],
+                ["plugin", "install", pluginIdentifier],
                 logger,
-                true,
             );
         }
+    } else {
+        runCopilot(
+            opts.copilotPath,
+            ["plugin", "install", pluginIdentifier],
+            logger,
+        );
     }
-
-    runCopilot(
-        opts.copilotPath,
-        ["plugin", "install", `${opts.pluginName}@${opts.marketplaceName}`],
-        logger,
-    );
 
     const verifyListResult = runCopilot(
         opts.copilotPath,
         ["plugin", "list"],
         logger,
-        true,
     );
-    if (
-        !hasListedEntry(
-            verifyListResult.output,
-            `${opts.pluginName}@${opts.marketplaceName}`,
-        )
-    ) {
+    if (!hasListedEntry(verifyListResult.output, pluginIdentifier)) {
         throw new Error(
-            `Plugin verification failed: '${opts.pluginName}@${opts.marketplaceName}' not found in copilot plugin list.`,
+            `Plugin verification failed: '${pluginIdentifier}' not found in copilot plugin list.`,
         );
     }
 
