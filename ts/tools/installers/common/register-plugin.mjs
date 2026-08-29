@@ -97,12 +97,49 @@ function createLogger(logPath) {
     return { write, logPath: resolvedLog };
 }
 
-function runCopilot(copilotPath, args, logger, allowFailure = false) {
-    logger.write(`Running: ${copilotPath} ${args.join(" ")}`);
-    const res = spawnSync(copilotPath, args, {
+function getCopilotHome() {
+    return path.resolve(
+        process.env.COPILOT_HOME ?? path.join(os.homedir(), ".copilot"),
+    );
+}
+
+function hasListedEntry(output, identifier) {
+    return output.split(/\r?\n/).some((line) => {
+        const entry = line.trim().replace(/^[^A-Za-z0-9_.@-]+/, "");
+        return entry.split(/\s+/, 1)[0] === identifier;
+    });
+}
+
+function quoteCmdArgument(value) {
+    return `"${value.replace(/%/g, "%%").replace(/"/g, '""')}"`;
+}
+
+function spawnCopilot(copilotPath, args) {
+    if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(copilotPath)) {
+        const commandLine = [
+            "call",
+            quoteCmdArgument(copilotPath),
+            ...args.map(quoteCmdArgument),
+        ].join(" ");
+        return spawnSync(
+            process.env.ComSpec ?? "cmd.exe",
+            ["/d", "/s", "/c", commandLine],
+            {
+                encoding: "utf8",
+                shell: false,
+                windowsVerbatimArguments: true,
+            },
+        );
+    }
+    return spawnSync(copilotPath, args, {
         encoding: "utf8",
         shell: false,
     });
+}
+
+function runCopilot(copilotPath, args, logger, allowFailure = false) {
+    logger.write(`Running: ${copilotPath} ${args.join(" ")}`);
+    const res = spawnCopilot(copilotPath, args);
 
     if (res.error) {
         if (allowFailure) {
@@ -121,7 +158,11 @@ function runCopilot(copilotPath, args, logger, allowFailure = false) {
         if (line.trim()) logger.write(`copilot! ${line}`);
     }
 
-    if (!allowFailure && res.status !== 0) {
+    const reportedFailure =
+        /(?:^|\n)(?:Failed to|Error: Request .* failed)/im.test(
+            `${stdout}\n${stderr}`,
+        );
+    if (!allowFailure && (res.status !== 0 || reportedFailure)) {
         throw new Error(
             `Copilot command exited with code ${res.status}: ${copilotPath} ${args.join(" ")}`,
         );
@@ -277,7 +318,7 @@ function installPlugin(opts, logger) {
         logger,
         true,
     );
-    if (!marketplaceList.output.includes(opts.marketplaceName)) {
+    if (!hasListedEntry(marketplaceList.output, opts.marketplaceName)) {
         runCopilot(
             opts.copilotPath,
             ["plugin", "marketplace", "add", opts.marketplaceRoot],
@@ -298,7 +339,8 @@ function installPlugin(opts, logger) {
         true,
     );
     if (
-        pluginListResult.output.includes(
+        hasListedEntry(
+            pluginListResult.output,
             `${opts.pluginName}@${opts.marketplaceName}`,
         )
     ) {
@@ -307,8 +349,7 @@ function installPlugin(opts, logger) {
             // own snapshot. Removing this one snapshot first avoids traversing
             // or replacing files from inside the Copilot process.
             const installedSnapshot = path.join(
-                os.homedir(),
-                ".copilot",
+                getCopilotHome(),
                 "installed-plugins",
                 opts.marketplaceName,
                 opts.pluginName,
@@ -345,7 +386,8 @@ function installPlugin(opts, logger) {
         true,
     );
     if (
-        !verifyListResult.output.includes(
+        !hasListedEntry(
+            verifyListResult.output,
             `${opts.pluginName}@${opts.marketplaceName}`,
         )
     ) {

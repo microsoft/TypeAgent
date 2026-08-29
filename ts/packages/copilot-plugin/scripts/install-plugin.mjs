@@ -23,20 +23,17 @@ const pluginRoot = path.resolve(scriptDir, "..");
 const workspaceRoot = path.resolve(pluginRoot, "..", "..");
 const marketplaceName = "typeagent-local";
 const pluginName = "typeagent";
+const copilotHome = path.resolve(
+    process.env.COPILOT_HOME ?? path.join(os.homedir(), ".copilot"),
+);
 const stagingRoot = path.join(
     os.homedir(),
     ".typeagent-copilot",
     "plugin-stage",
 );
-const marketplaceRoot = path.join(
-    os.homedir(),
-    ".copilot",
-    "marketplaces",
-    marketplaceName,
-);
+const marketplaceRoot = path.join(copilotHome, "marketplaces", marketplaceName);
 const installedMarketplaceRoot = path.join(
-    os.homedir(),
-    ".copilot",
+    copilotHome,
     "installed-plugins",
     marketplaceName,
 );
@@ -56,7 +53,27 @@ function warn(message) {
     process.stderr.write(`[copilot-plugin] ${message}\n`);
 }
 
+function quoteCmdArgument(value) {
+    return `"${value.replace(/%/g, "%%").replace(/"/g, '""')}"`;
+}
+
 function run(command, args) {
+    if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(command)) {
+        const commandLine = [
+            "call",
+            quoteCmdArgument(command),
+            ...args.map(quoteCmdArgument),
+        ].join(" ");
+        return spawnSync(
+            process.env.ComSpec ?? "cmd.exe",
+            ["/d", "/s", "/c", commandLine],
+            {
+                encoding: "utf8",
+                shell: false,
+                windowsVerbatimArguments: true,
+            },
+        );
+    }
     return spawnSync(command, args, {
         encoding: "utf8",
         shell: false,
@@ -73,6 +90,13 @@ function findCopilotCli() {
     const result = spawnSync(command, ["copilot"], { encoding: "utf8" });
     if (result.status !== 0 || !result.stdout.trim()) return undefined;
     return result.stdout.split(/\r?\n/)[0].trim();
+}
+
+function hasListedEntry(output, identifier) {
+    return output.split(/\r?\n/).some((line) => {
+        const entry = line.trim().replace(/^[^A-Za-z0-9_.@-]+/, "");
+        return entry.split(/\s+/, 1)[0] === identifier;
+    });
 }
 
 if (
@@ -111,13 +135,14 @@ const marketplaceOutput = `${marketplaces.stdout || ""}\n${
     marketplaces.stderr || ""
 }`;
 if (
-    marketplaceOutput.includes(marketplaceName) &&
+    hasListedEntry(marketplaceOutput, marketplaceName) &&
     !marketplaceOutput.toLowerCase().includes(marketplaceRoot.toLowerCase())
 ) {
     log("Replacing the legacy workspace-backed marketplace registration.");
     const plugins = run(copilotPath, ["plugin", "list"]);
     if (
-        `${plugins.stdout || ""}\n${plugins.stderr || ""}`.includes(
+        hasListedEntry(
+            `${plugins.stdout || ""}\n${plugins.stderr || ""}`,
             `${pluginName}@${marketplaceName}`,
         )
     ) {
@@ -175,7 +200,7 @@ const verification = run(copilotPath, ["plugin", "list"]);
 const verificationOutput = `${verification.stdout || ""}\n${
     verification.stderr || ""
 }`;
-if (!verificationOutput.includes(`${pluginName}@${marketplaceName}`)) {
+if (!hasListedEntry(verificationOutput, `${pluginName}@${marketplaceName}`)) {
     printResult(verification);
     warn(
         "Plugin registration returned success, but the plugin is not installed.",
