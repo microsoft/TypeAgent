@@ -118,10 +118,17 @@ function quoteCmdArgument(value) {
 }
 
 function spawnCopilot(copilotPath, args) {
-    if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(copilotPath)) {
+    let launcherPath = copilotPath;
+    if (process.platform === "win32" && path.extname(launcherPath) === "") {
+        launcherPath =
+            [".exe", ".cmd", ".bat"]
+                .map((extension) => `${launcherPath}${extension}`)
+                .find((candidate) => fs.existsSync(candidate)) ?? launcherPath;
+    }
+    if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(launcherPath)) {
         const commandLine = [
             "call",
-            quoteCmdArgument(copilotPath),
+            quoteCmdArgument(launcherPath),
             ...args.map(quoteCmdArgument),
         ].join(" ");
         return spawnSync(
@@ -134,7 +141,7 @@ function spawnCopilot(copilotPath, args) {
             },
         );
     }
-    return spawnSync(copilotPath, args, {
+    return spawnSync(launcherPath, args, {
         encoding: "utf8",
         shell: false,
     });
