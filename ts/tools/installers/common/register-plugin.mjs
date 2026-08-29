@@ -101,7 +101,7 @@ function runCopilot(copilotPath, args, logger, allowFailure = false) {
     logger.write(`Running: ${copilotPath} ${args.join(" ")}`);
     const res = spawnSync(copilotPath, args, {
         encoding: "utf8",
-        shell: process.platform === "win32",
+        shell: false,
     });
 
     if (res.error) {
@@ -271,20 +271,17 @@ function installPlugin(opts, logger) {
     });
     logger.write(`Marketplace manifest updated: ${manifestPath}`);
 
-    const addResult = runCopilot(
+    const marketplaceList = runCopilot(
         opts.copilotPath,
-        ["plugin", "marketplace", "add", opts.marketplaceRoot],
+        ["plugin", "marketplace", "list"],
         logger,
         true,
     );
-
-    if (
-        addResult.status !== 0 &&
-        !/already/i.test(addResult.output) &&
-        !/exists/i.test(addResult.output)
-    ) {
-        throw new Error(
-            `Failed to register marketplace '${opts.marketplaceName}' from '${opts.marketplaceRoot}'.`,
+    if (!marketplaceList.output.includes(opts.marketplaceName)) {
+        runCopilot(
+            opts.copilotPath,
+            ["plugin", "marketplace", "add", opts.marketplaceRoot],
+            logger,
         );
     }
 
@@ -305,12 +302,34 @@ function installPlugin(opts, logger) {
             `${opts.pluginName}@${opts.marketplaceName}`,
         )
     ) {
-        runCopilot(
-            opts.copilotPath,
-            ["plugin", "uninstall", opts.pluginName],
-            logger,
-            true,
-        );
+        if (process.platform === "win32") {
+            // Copilot CLI 1.0.81 can fail with os error 5 while replacing its
+            // own snapshot. Removing this one snapshot first avoids traversing
+            // or replacing files from inside the Copilot process.
+            const installedSnapshot = path.join(
+                os.homedir(),
+                ".copilot",
+                "installed-plugins",
+                opts.marketplaceName,
+                opts.pluginName,
+            );
+            if (fs.existsSync(installedSnapshot)) {
+                logger.write(
+                    `Removing previous plugin snapshot: ${installedSnapshot}`,
+                );
+                fs.rmSync(installedSnapshot, {
+                    recursive: true,
+                    force: true,
+                });
+            }
+        } else {
+            runCopilot(
+                opts.copilotPath,
+                ["plugin", "uninstall", opts.pluginName],
+                logger,
+                true,
+            );
+        }
     }
 
     runCopilot(

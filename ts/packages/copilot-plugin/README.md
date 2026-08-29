@@ -244,28 +244,25 @@ The current Copilot CLI (>= 1.0) does **not** accept a local path for
 subdirs, or git URLs. However, `copilot plugin marketplace add <path>` **does**
 accept a local path. So `pnpm run register` (`scripts/install-plugin.mjs`):
 
-1. Registers the `ts` workspace root as a local marketplace named
-   `typeagent-local`. The CLI discovers the marketplace manifest at
-   `ts/.github/plugin/marketplace.json`, whose plugin `source` points at
-   `./packages/copilot-plugin` (resolved relative to the marketplace root).
-2. Installs `typeagent@typeagent-local`, which **copies** the plugin dir into
-   `~/.copilot/installed-plugins/`.
-
-> The CLI searches several locations for the marketplace manifest, in order:
-> `marketplace.json` (root), `.plugin/marketplace.json`,
-> `.github/plugin/marketplace.json`, then `.claude-plugin/marketplace.json`.
-> We use `.github/plugin/` since the workspace already has a `.github` folder.
+1. Stages only the bundled runtime files under
+   `~/.typeagent-copilot/plugin-stage`. This deliberately excludes the
+   workspace's pnpm `node_modules` junctions, which Copilot cannot copy on
+   Windows.
+2. Creates and registers a local marketplace at
+   `~/.copilot/marketplaces/typeagent-local`.
+3. Installs `typeagent@typeagent-local`, which copies the staged snapshot into
+   `~/.copilot/installed-plugins/`, and verifies that it appears in
+   `copilot plugin list`.
 
 ### Why the build must bundle
 
-Installing copies the plugin directory into `~/.copilot/installed-plugins/`.
-Because this is a pnpm workspace, the plugin's runtime deps (the MCP SDK and the
-`workspace:*` packages) are symlinks/junctions into the central `.pnpm` store —
-the copy breaks them, and the MCP server crashes on launch with
-`ERR_MODULE_NOT_FOUND`. To fix this, `pnpm run build` runs an esbuild bundle
-step (`scripts/bundle.mjs`) that inlines every dependency into the hook and MCP
-entry points, so the copied `dist/` is self-contained and needs no
-`node_modules` at runtime.
+Installing copies a plugin snapshot into `~/.copilot/installed-plugins/`.
+Because this is a pnpm workspace, the package's runtime dependencies are
+symlinks/junctions into the central `.pnpm` store. Copying those links can fail
+with `Access is denied` on Windows, and copied links would not be portable.
+`pnpm run build` therefore runs `scripts/bundle.mjs` to inline every dependency,
+and registration stages only that self-contained runtime without
+`node_modules`.
 
 ### Updating after a code change
 
@@ -274,7 +271,7 @@ the plugin, rebuild and refresh the global copy:
 
 ```powershell
 pnpm run build       # re-bundle
-pnpm run register    # re-copies the fresh build (runs `copilot plugin update`)
+pnpm run register    # stages and installs a fresh snapshot
 ```
 
 > For rapid local development with live edits, prefer `pnpm copilot`
