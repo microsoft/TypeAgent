@@ -250,9 +250,14 @@ accept a local path. So `pnpm run register` (`scripts/install-plugin.mjs`):
    Windows.
 2. Creates and registers a local marketplace at
    `~/.copilot/marketplaces/typeagent-local`.
-3. Installs `typeagent@typeagent-local`, which copies the staged snapshot into
-   `~/.copilot/installed-plugins/`, and verifies that it appears in
-   `copilot plugin list`.
+3. Installs or updates `typeagent@typeagent-local`, which copies the staged
+   snapshot into `~/.copilot/installed-plugins/`, and verifies that it appears
+   in `copilot plugin list`.
+
+On Windows, VS Code may hold a directory watcher on the installed snapshot that
+blocks Copilot CLI's normal directory replacement with `Access is denied`. The
+registrar preserves the previous snapshot, removes the locked directory, and
+retries `plugin update`. If the retry fails, it restores the previous snapshot.
 
 ### Why the build must bundle
 

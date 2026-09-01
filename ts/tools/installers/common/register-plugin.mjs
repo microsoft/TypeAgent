@@ -117,14 +117,36 @@ function quoteCmdArgument(value) {
     return `"${value.replace(/%/g, "%%").replace(/"/g, '""')}"`;
 }
 
-function spawnCopilot(copilotPath, args) {
-    let launcherPath = copilotPath;
-    if (process.platform === "win32" && path.extname(launcherPath) === "") {
-        launcherPath =
-            [".exe", ".cmd", ".bat"]
-                .map((extension) => `${launcherPath}${extension}`)
-                .find((candidate) => fs.existsSync(candidate)) ?? launcherPath;
+function resolveWindowsLauncher(copilotPath) {
+    const resolveCandidate = (candidate) => {
+        if (path.extname(candidate) !== "") return candidate;
+        return (
+            [".exe", ".cmd", ".bat", ".ps1"]
+                .map((extension) => `${candidate}${extension}`)
+                .find((withExtension) => fs.existsSync(withExtension)) ??
+            candidate
+        );
+    };
+
+    const directCandidate = resolveCandidate(copilotPath);
+    if (directCandidate !== copilotPath || path.isAbsolute(copilotPath)) {
+        return directCandidate;
     }
+
+    const where = spawnSync("where.exe", [copilotPath], { encoding: "utf8" });
+    if (where.status !== 0) return copilotPath;
+    for (const line of where.stdout.split(/\r?\n/)) {
+        const candidate = line.trim();
+        if (candidate) return resolveCandidate(candidate);
+    }
+    return copilotPath;
+}
+
+function spawnCopilot(copilotPath, args) {
+    const launcherPath =
+        process.platform === "win32"
+            ? resolveWindowsLauncher(copilotPath)
+            : copilotPath;
     if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(launcherPath)) {
         const commandLine = [
             "call",
@@ -138,6 +160,23 @@ function spawnCopilot(copilotPath, args) {
                 encoding: "utf8",
                 shell: false,
                 windowsVerbatimArguments: true,
+            },
+        );
+    }
+    if (process.platform === "win32" && /\.ps1$/i.test(launcherPath)) {
+        return spawnSync(
+            "powershell.exe",
+            [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                launcherPath,
+                ...args,
+            ],
+            {
+                encoding: "utf8",
+                shell: false,
             },
         );
     }
@@ -315,14 +354,50 @@ function getInstalledMarketplaceRoot(opts) {
     );
 }
 
+function getInstalledSnapshot(opts) {
+    return path.join(getInstalledMarketplaceRoot(opts), opts.pluginName);
+}
+
 function removeInstalledSnapshot(opts, logger) {
-    const installedSnapshot = path.join(
-        getInstalledMarketplaceRoot(opts),
-        opts.pluginName,
-    );
+    const installedSnapshot = getInstalledSnapshot(opts);
     if (!fs.existsSync(installedSnapshot)) return;
     logger.write(`Removing previous plugin snapshot: ${installedSnapshot}`);
     fs.rmSync(installedSnapshot, { recursive: true, force: true });
+}
+
+function retryUpdateFromCleanSnapshot(opts, logger, pluginIdentifier) {
+    const installedSnapshot = getInstalledSnapshot(opts);
+    const backupRoot = fs.mkdtempSync(
+        path.join(os.tmpdir(), `${opts.pluginName}-plugin-backup-`),
+    );
+    const backupSnapshot = path.join(backupRoot, opts.pluginName);
+    fs.cpSync(installedSnapshot, backupSnapshot, { recursive: true });
+
+    try {
+        removeInstalledSnapshot(opts, logger);
+        cleanFailedInstallArtifacts(opts, logger);
+        try {
+            runCopilot(
+                opts.copilotPath,
+                ["plugin", "update", pluginIdentifier],
+                logger,
+            );
+        } catch (error) {
+            logger.write(
+                "The clean-snapshot update failed; restoring the previous plugin snapshot.",
+            );
+            if (fs.existsSync(installedSnapshot)) {
+                fs.rmSync(installedSnapshot, {
+                    recursive: true,
+                    force: true,
+                });
+            }
+            fs.cpSync(backupSnapshot, installedSnapshot, { recursive: true });
+            throw error;
+        }
+    } finally {
+        fs.rmSync(backupRoot, { recursive: true, force: true });
+    }
 }
 
 function cleanFailedInstallArtifacts(opts, logger) {
@@ -429,7 +504,7 @@ function installPlugin(opts, logger) {
     if (hasListedEntry(pluginListResult.output, pluginIdentifier)) {
         const update = runCopilot(
             opts.copilotPath,
-            ["plugin", "update", opts.pluginName],
+            ["plugin", "update", pluginIdentifier],
             logger,
             true,
         );
@@ -441,15 +516,9 @@ function installPlugin(opts, logger) {
                 throw new Error(`Plugin update failed: '${pluginIdentifier}'.`);
             }
             logger.write(
-                "Copilot could not replace its Windows snapshot; retrying from a clean snapshot.",
+                "Copilot could not replace its Windows snapshot; removing the locked snapshot and retrying the update.",
             );
-            removeInstalledSnapshot(opts, logger);
-            cleanFailedInstallArtifacts(opts, logger);
-            runCopilot(
-                opts.copilotPath,
-                ["plugin", "install", pluginIdentifier],
-                logger,
-            );
+            retryUpdateFromCleanSnapshot(opts, logger, pluginIdentifier);
         }
     } else {
         runCopilot(
