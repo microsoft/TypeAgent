@@ -505,6 +505,7 @@ export async function processCommand(
     options?: ProcessCommandOptions,
     parentContext?: Context,
 ): Promise<CommandResult | undefined> {
+    const isCommand = originalInput.trimStart().startsWith("@");
     // Create the AbortController *before* acquiring the lock so that a
     // cancelCommandByClientId() call that arrives while we are queued can
     // already abort the controller that will drive this command.
@@ -550,9 +551,7 @@ export async function processCommand(
                 ...(requestId.connectionId === undefined
                     ? {}
                     : { connectionId: requestId.connectionId }),
-                kind: originalInput.trimStart().startsWith("@")
-                    ? "command"
-                    : "request",
+                kind: isCommand ? "command" : "request",
                 attachmentCount: attachments?.length ?? 0,
             });
             try {
@@ -561,6 +560,7 @@ export async function processCommand(
                     const requestIdStr = requestId.requestId;
                     context.activeRequests.set(requestIdStr, abortController);
                     context.currentOptions = options;
+                    context.rememberCurrentRequestTrace = !isCommand;
                     beginProcessCommand(
                         requestId,
                         context,
@@ -602,6 +602,13 @@ export async function processCommand(
                         if (result !== undefined && rootTraceId !== undefined) {
                             result.traceId = rootTraceId;
                         }
+                        if (
+                            context.rememberCurrentRequestTrace &&
+                            rootTraceId !== undefined
+                        ) {
+                            context.lastCommandResultTraceId = rootTraceId;
+                        }
+                        context.rememberCurrentRequestTrace = false;
                         logRequestCompleted(
                             context.logger,
                             requestId.requestId,

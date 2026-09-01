@@ -406,6 +406,16 @@ export type CommandHandlerContext = {
      * `typeagent.trace.id` so existing logs can still be joined.
      */
     readonly traceId: string | undefined;
+    /**
+     * Canonical OpenTelemetry root trace id of the previous completed user
+     * request, used to resolve `@log open last`.
+     */
+    lastCommandResultTraceId?: string | undefined;
+    /**
+     * Set while processing a user request. Diagnostic trace-open actions clear
+     * it so they do not replace the trace they are inspecting.
+     */
+    rememberCurrentRequestTrace: boolean;
     readonly telemetryOptions: {
         readonly joinActiveTrace: boolean;
     };
@@ -1330,6 +1340,8 @@ export async function initializeCommandHandlerContext(
             logger,
             activationId,
             traceId,
+            lastCommandResultTraceId: undefined,
+            rememberCurrentRequestTrace: false,
             telemetryOptions: {
                 joinActiveTrace: options?.telemetry?.joinActiveTrace ?? false,
             },
