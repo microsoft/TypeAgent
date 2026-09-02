@@ -120,6 +120,7 @@ const evalConfigSchema = z
         modelConcurrency: positiveIntegerSchema.optional(),
         maxCases: nonNegativeIntegerSchema.nullable().optional(),
         headroom: z.number().finite().min(0).max(1).optional(),
+        caseOrder: z.enum(["any", "strict"]).optional(),
     })
     .strict()
     .superRefine((config, context) => {
