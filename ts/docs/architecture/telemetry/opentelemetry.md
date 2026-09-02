@@ -133,6 +133,10 @@ TypeAgent-owned Node hosts call `initTelemetry()` once and
 per enabled signal and exports directly. Libraries, agents, requests, and
 sessions do not create providers.
 
+Agent subprocesses are trace-only. They install a trace provider for RPC span
+continuity, but do not duplicate the agent-server's metrics, structured logs,
+debug bridge, local JSONL writer, or retention scan.
+
 The bridge includes `typeagent:*` namespaces by default. TypeAgent-owned hosts
 may explicitly include a stable legacy prefix that they own. Agent server hosts
 include `agent-server:*` this way rather than renaming existing namespaces and
@@ -372,7 +376,7 @@ omit unavailable values.
 
 ## Configuration and Local Files
 
-TypeAgent-owned processes support:
+TypeAgent-owned host processes support:
 
 ```yaml
 telemetry:
@@ -476,11 +480,11 @@ Expand `~` before `path.resolve()`. Sanitize `{service}`, `{process}`,
 `{timestamp}`, and `{pid}`. The timestamp is the UTC process-start time and
 changes once per telemetry initialization, not per record. TypeAgent-owned
 hosts identify their process role as `agent-server`, `api-server`, `shell`,
-`cli`, or `agent-<name>`. Insert missing process, timestamp, and PID components
-before the extension so filenames remain identifiable and concurrent processes
-never share a writer. Create parent directories and report the
-resolved path once through a status or diagnostic path that cannot recurse into
-the exporter.
+or `cli`. Agent subprocesses do not create local log files. Insert missing
+process, timestamp, and PID components before the extension so filenames remain
+identifiable and concurrent host processes never share a writer. Create parent
+directories and report the resolved path once through a status or diagnostic
+path that cannot recurse into the exporter.
 
 Rotation is left to the OS or external tools. Retention is managed by
 TypeAgent for its own JSONL directory: on telemetry startup, an asynchronous
@@ -601,7 +605,7 @@ pnpm run start:agent-server
 The environment settings enable:
 
 - OTLP export for configured signals.
-- One local JSONL file per process.
+- One local JSONL file for the agent-server host.
 - Copies of enabled `debug` namespaces in the OTel logs pipeline.
 - Privacy-filtered dispatcher Structured Logger events.
 - Full local trace sampling so every generated trace can be inspected.
