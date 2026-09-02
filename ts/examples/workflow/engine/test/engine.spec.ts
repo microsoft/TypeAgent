@@ -51,6 +51,7 @@ import {
     errorFail,
     httpGet,
 } from "../src/index.js";
+import { readHttpResponseBody } from "../src/builtinTasks.js";
 import {
     readFileSync,
     writeFileSync,
@@ -4868,54 +4869,50 @@ describe("WorkflowEngine (IR v1)", () => {
                 policy: allowAllPolicy,
             });
             expect(result.success).toBe(false);
-            expect(result.error?.message).toContain("private or reserved");
+            expect(result.error?.message).toContain(
+                "credential-free HTTP or HTTPS",
+            );
+        });
+
+        it.each([
+            ["decimal IPv4", "http://2852039166/metadata"],
+            ["hexadecimal IPv4", "http://0xa9fea9fe/metadata"],
+            ["octal IPv4", "http://0251.0376.0251.0376/metadata"],
+            ["loopback subnet", "http://127.0.0.2/metadata"],
+            ["carrier-grade NAT", "http://100.64.0.1/metadata"],
+            ["IPv4-mapped IPv6", "http://[::ffff:169.254.169.254]/metadata"],
+            ["Teredo", "http://[2001:0000::1]/metadata"],
+            ["6to4", "http://[2002:a9fe:a9fe::]/metadata"],
+            ["NAT64", "http://[64:ff9b::a9fe:a9fe]/metadata"],
+            ["unique-local IPv6", "http://[fc00::1]/metadata"],
+        ])("rejects %s targets", async (_name, url) => {
+            const result = await httpGet.execute(
+                { url },
+                {
+                    runId: "test",
+                    nodeId: "test",
+                    scopePath: [],
+                    signal: new AbortController().signal,
+                    outputSchema: { type: "object" },
+                },
+            );
+
+            expect(result.kind).toBe("fail");
+            if (result.kind === "fail") {
+                expect(result.error.message).toContain("private or reserved");
+            }
         });
     });
 
     describe("http.get response size enforcement", () => {
-        it("returns fail when response exceeds maxResponseBytes", async () => {
-            // Use a mock that simulates a streaming response.
-            // The real http.get code streams and checks byte count.
-            // We test via the builtinTasks import directly.
-            // Mock a global fetch that returns a large streaming body
-            const originalFetch = globalThis.fetch;
-            const largeBody = "X".repeat(200);
-            const encoder = new TextEncoder();
-            const encoded = encoder.encode(largeBody);
-
-            globalThis.fetch = (async () => ({
-                status: 200,
-                body: new ReadableStream({
-                    start(controller) {
-                        controller.enqueue(encoded);
-                        controller.close();
-                    },
-                }),
-            })) as any;
-
-            try {
-                const result = await httpGet.execute(
-                    {
-                        url: "https://example.com/large",
-                        maxResponseBytes: 50,
-                    },
-                    {
-                        runId: "test",
-                        nodeId: "test",
-                        scopePath: [],
-                        signal: new AbortController().signal,
-                        outputSchema: { type: "object" },
-                    } as any,
-                );
-                expect(result.kind).toBe("fail");
-                if (result.kind === "fail") {
-                    expect(result.error.message).toContain(
-                        "exceeded maximum size",
-                    );
-                }
-            } finally {
-                globalThis.fetch = originalFetch;
+        it("rejects a response that exceeds maxResponseBytes", async () => {
+            async function* responseBody() {
+                yield new TextEncoder().encode("X".repeat(200));
             }
+
+            await expect(
+                readHttpResponseBody(responseBody(), 50),
+            ).rejects.toThrow("exceeded maximum size");
         });
     });
 

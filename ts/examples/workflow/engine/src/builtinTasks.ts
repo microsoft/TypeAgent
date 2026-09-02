@@ -13,6 +13,8 @@
 
 import { execFile } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { request as httpRequest, type IncomingHttpHeaders } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import {
@@ -20,10 +22,16 @@ import {
     TaskDefinition,
     ConcreteTaskDefinition,
     GenericTaskDefinition,
+    TaskConstraints,
     TaskTypeParameter,
 } from "workflow-model";
 import { isGenericBuiltinSchema } from "./builtinTaskSchemas.js";
 import { openai } from "@typeagent/aiclient";
+import {
+    createPinnedLookup,
+    PrivateNetworkTargetError,
+    resolvePublicIpAddress,
+} from "@typeagent/common-utils/network";
 import type { CustomAgentConfig } from "@github/copilot-sdk";
 import { BUILTIN_TASK_SCHEMAS } from "./builtinTaskSchemas.js";
 import { invokeCopilotAgent } from "./copilotClientHost.js";
@@ -498,6 +506,184 @@ export const stringSplit: TaskDefinition<
     },
 };
 
+const MAX_HTTP_REDIRECTS = 20;
+const SENSITIVE_REDIRECT_HEADERS = new Set([
+    "authorization",
+    "cookie",
+    "cookie2",
+    "proxy-authorization",
+]);
+
+type HttpGetResponse = {
+    status: number;
+    headers: IncomingHttpHeaders;
+    body: Buffer;
+};
+
+function getUrlHostname(url: URL): string {
+    const hostname = url.hostname.toLowerCase();
+    const unbracketed =
+        hostname.startsWith("[") && hostname.endsWith("]")
+            ? hostname.slice(1, -1)
+            : hostname;
+    return unbracketed.endsWith(".") ? unbracketed.slice(0, -1) : unbracketed;
+}
+
+function hostMatches(hostname: string, constraint: string): boolean {
+    const normalized = constraint.toLowerCase().replace(/\.$/, "");
+    return hostname === normalized || hostname.endsWith(`.${normalized}`);
+}
+
+function validateHttpTarget(url: URL, constraints?: TaskConstraints): void {
+    if (
+        (url.protocol !== "http:" && url.protocol !== "https:") ||
+        url.username ||
+        url.password
+    ) {
+        throw new Error(
+            `URL "${url.toString()}" must use credential-free HTTP or HTTPS`,
+        );
+    }
+
+    const hostname = getUrlHostname(url);
+    const blocked = constraints?.blockedHosts;
+    if (blocked?.some((host) => hostMatches(hostname, host))) {
+        throw new Error(`Host "${hostname}" is blocked by caller constraints`);
+    }
+
+    const allowed = constraints?.allowedHosts;
+    if (allowed && !allowed.some((host) => hostMatches(hostname, host))) {
+        throw new Error(`Host "${hostname}" is not in the allowed hosts list`);
+    }
+}
+
+export async function readHttpResponseBody(
+    body: AsyncIterable<Uint8Array | string>,
+    maxBytes: number,
+): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    for await (const chunk of body) {
+        const buffer = Buffer.from(chunk);
+        totalBytes += buffer.byteLength;
+        if (totalBytes > maxBytes) {
+            throw new Error(
+                `Response exceeded maximum size of ${maxBytes} bytes`,
+            );
+        }
+        chunks.push(buffer);
+    }
+    return Buffer.concat(chunks);
+}
+
+async function requestHttpGetOnce(
+    url: URL,
+    headers: Record<string, string>,
+    maxBytes: number,
+    signal: AbortSignal,
+    constraints?: TaskConstraints,
+): Promise<HttpGetResponse> {
+    validateHttpTarget(url, constraints);
+
+    let resolved: Awaited<ReturnType<typeof resolvePublicIpAddress>>;
+    try {
+        resolved = await resolvePublicIpAddress(url.hostname);
+    } catch (error) {
+        if (error instanceof PrivateNetworkTargetError) {
+            throw new Error(
+                `URL "${url.toString()}" references a private or reserved address`,
+            );
+        }
+        throw error;
+    }
+
+    const request = url.protocol === "https:" ? httpsRequest : httpRequest;
+    return new Promise((resolveRequest, rejectRequest) => {
+        const req = request(
+            url,
+            {
+                headers,
+                ...createPinnedLookup(resolved),
+                signal,
+            },
+            (response) => {
+                void (async () => {
+                    try {
+                        const body = await readHttpResponseBody(
+                            response,
+                            maxBytes,
+                        );
+                        resolveRequest({
+                            status: response.statusCode ?? 0,
+                            headers: response.headers,
+                            body,
+                        });
+                    } catch (error) {
+                        req.destroy();
+                        rejectRequest(error);
+                    }
+                })();
+            },
+        );
+        req.on("error", rejectRequest);
+        req.end();
+    });
+}
+
+function removeSensitiveRedirectHeaders(
+    headers: Record<string, string>,
+): Record<string, string> {
+    return Object.fromEntries(
+        Object.entries(headers).filter(
+            ([name]) => !SENSITIVE_REDIRECT_HEADERS.has(name.toLowerCase()),
+        ),
+    );
+}
+
+async function fetchHttpGet(
+    inputUrl: string,
+    headers: Record<string, string> | undefined,
+    maxBytes: number,
+    signal: AbortSignal,
+    constraints?: TaskConstraints,
+): Promise<{ body: string; status: number }> {
+    let currentUrl = new URL(inputUrl);
+    let currentHeaders = headers ? { ...headers } : {};
+
+    for (let redirect = 0; redirect <= MAX_HTTP_REDIRECTS; redirect++) {
+        const response = await requestHttpGetOnce(
+            currentUrl,
+            currentHeaders,
+            maxBytes,
+            signal,
+            constraints,
+        );
+        const location = response.headers.location;
+        if (
+            response.status >= 300 &&
+            response.status < 400 &&
+            location !== undefined
+        ) {
+            if (redirect === MAX_HTTP_REDIRECTS) {
+                throw new Error("HTTP request exceeded the redirect limit");
+            }
+            const nextUrl = new URL(location, currentUrl);
+            if (nextUrl.origin !== currentUrl.origin) {
+                currentHeaders = removeSensitiveRedirectHeaders(currentHeaders);
+            }
+            currentUrl = nextUrl;
+            continue;
+        }
+
+        return {
+            body: response.body.toString("utf8"),
+            status: response.status,
+        };
+    }
+
+    throw new Error("HTTP request failed");
+}
+
 export const httpGet: TaskDefinition<
     {
         url: string;
@@ -511,102 +697,15 @@ export const httpGet: TaskDefinition<
     async execute(input, ctx) {
         const maxBytes = input.maxResponseBytes ?? 10 * 1024 * 1024; // 10MB
         try {
-            // Validate URL to prevent SSRF against internal services.
-            const parsed = new URL(input.url);
-            const hostname = parsed.hostname?.toLowerCase();
-            if (
-                hostname === "localhost" ||
-                hostname === "127.0.0.1" ||
-                hostname === "::1" ||
-                hostname === "0.0.0.0" ||
-                hostname === "169.254.169.254" ||
-                hostname === "[::1]" ||
-                hostname?.startsWith("10.") ||
-                hostname?.startsWith("192.168.") ||
-                /^172\.(1[6-9]|2\d|3[01])\./.test(hostname ?? "") ||
-                hostname?.endsWith(".internal") ||
-                parsed.protocol === "file:"
-            ) {
-                return {
-                    kind: "fail",
-                    error: {
-                        message: `URL "${input.url}" references a private or reserved address`,
-                    },
-                };
-            }
-
-            // Enforce caller-supplied blockedHosts
-            const blocked = ctx.constraints?.blockedHosts;
-            if (
-                blocked &&
-                hostname &&
-                blocked.some(
-                    (h) =>
-                        hostname === h.toLowerCase() ||
-                        hostname.endsWith("." + h.toLowerCase()),
-                )
-            ) {
-                return {
-                    kind: "fail",
-                    error: {
-                        message: `Host "${hostname}" is blocked by caller constraints`,
-                    },
-                };
-            }
-
-            // Enforce caller-supplied allowedHosts (allowlist overrides)
-            const allowedHosts = ctx.constraints?.allowedHosts;
-            if (allowedHosts && hostname) {
-                const isAllowed = allowedHosts.some(
-                    (h) =>
-                        hostname === h.toLowerCase() ||
-                        hostname.endsWith("." + h.toLowerCase()),
-                );
-                if (!isAllowed) {
-                    return {
-                        kind: "fail",
-                        error: {
-                            message: `Host "${hostname}" is not in the allowed hosts list`,
-                        },
-                    };
-                }
-            }
-
-            const resp = await fetch(input.url, {
-                ...(input.headers ? { headers: input.headers } : {}),
-                signal: ctx.signal,
-            });
-            // Stream the body to enforce the size limit.
-            const reader = resp.body?.getReader();
-            if (!reader) {
-                const body = await resp.text();
-                return { kind: "ok", output: { body, status: resp.status } };
-            }
-            const chunks: Uint8Array[] = [];
-            let totalBytes = 0;
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                totalBytes += value.byteLength;
-                if (totalBytes > maxBytes) {
-                    reader.cancel();
-                    return {
-                        kind: "fail",
-                        error: {
-                            message: `Response exceeded maximum size of ${maxBytes} bytes`,
-                        },
-                    };
-                }
-                chunks.push(value);
-            }
-            const decoder = new TextDecoder();
-            const body =
-                chunks
-                    .map((c) => decoder.decode(c, { stream: true }))
-                    .join("") + decoder.decode();
             return {
                 kind: "ok",
-                output: { body, status: resp.status },
+                output: await fetchHttpGet(
+                    input.url,
+                    input.headers,
+                    maxBytes,
+                    ctx.signal,
+                    ctx.constraints,
+                ),
             };
         } catch (err) {
             return {
