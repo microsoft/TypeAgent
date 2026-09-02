@@ -100,7 +100,8 @@ internal sealed interface ClientAction {
  */
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val webSocketManager = WebSocketManager()
+    private val deviceIdentity = StoredDeviceIdentity(application)
+    private val webSocketManager = WebSocketManager(deviceIdentity)
     private val conversationStore = ConversationStore(application)
 
     val messages: StateFlow<List<Message>> = webSocketManager.messages
