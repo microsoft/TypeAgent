@@ -206,7 +206,8 @@ export const LOCAL_GRAFANA_BASE_URL = "http://127.0.0.1:24319";
 
 const LOCAL_GRAFANA_HEALTH_URL = `${LOCAL_GRAFANA_BASE_URL}/api/health`;
 const LOCAL_GRAFANA_HEALTH_TIMEOUT_MS = 1500;
-const LOCAL_TEMPO_TRACE_WAIT_ATTEMPTS = 20;
+const LOCAL_TEMPO_TRACE_WAIT_TIMEOUT_MS = 5000;
+const LOCAL_TEMPO_TRACE_WAIT_ATTEMPTS = 10;
 const LOCAL_TEMPO_TRACE_WAIT_INTERVAL_MS = 500;
 const TRACE_ID_HEX_RE = /^[0-9a-f]{32}$/;
 
@@ -303,7 +304,10 @@ async function isLocalGrafanaReady(
     try {
         abortSignal?.throwIfAborted();
         const response = await dependencies.fetch(LOCAL_GRAFANA_HEALTH_URL, {
-            signal: combineAbortSignals(abortSignal),
+            signal: combineAbortSignals(
+                abortSignal,
+                LOCAL_GRAFANA_HEALTH_TIMEOUT_MS,
+            ),
         });
         return response.ok;
     } catch {
@@ -321,6 +325,13 @@ async function waitForLocalTempoTrace(
 ): Promise<TraceAvailability> {
     const traceUrl = `${LOCAL_GRAFANA_BASE_URL}/api/datasources/proxy/uid/tempo/api/traces/${traceId}`;
     let backendUnavailable = false;
+    const timeoutSignal = AbortSignal.timeout(
+        LOCAL_TEMPO_TRACE_WAIT_TIMEOUT_MS,
+    );
+    const pollingSignal =
+        abortSignal === undefined
+            ? timeoutSignal
+            : AbortSignal.any([abortSignal, timeoutSignal]);
     for (
         let attempt = 0;
         attempt < LOCAL_TEMPO_TRACE_WAIT_ATTEMPTS;
@@ -329,7 +340,7 @@ async function waitForLocalTempoTrace(
         abortSignal?.throwIfAborted();
         try {
             const response = await dependencies.fetch(traceUrl, {
-                signal: combineAbortSignals(abortSignal),
+                signal: pollingSignal,
             });
             if (response.ok) {
                 if (await containsTypeAgentRootSpan(response)) {
@@ -346,10 +357,18 @@ async function waitForLocalTempoTrace(
             }
         } catch {
             abortSignal?.throwIfAborted();
+            if (timeoutSignal.aborted) {
+                break;
+            }
             backendUnavailable = true;
         }
         if (attempt + 1 < LOCAL_TEMPO_TRACE_WAIT_ATTEMPTS) {
-            await waitForRetry(dependencies, abortSignal);
+            try {
+                await waitForRetry(dependencies, pollingSignal);
+            } catch {
+                abortSignal?.throwIfAborted();
+                break;
+            }
         }
     }
     return backendUnavailable ? "unavailable" : "not-found";
@@ -357,8 +376,9 @@ async function waitForLocalTempoTrace(
 
 function combineAbortSignals(
     abortSignal: AbortSignal | undefined,
+    timeoutMs: number,
 ): AbortSignal {
-    const timeoutSignal = AbortSignal.timeout(LOCAL_GRAFANA_HEALTH_TIMEOUT_MS);
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
     return abortSignal === undefined
         ? timeoutSignal
         : AbortSignal.any([abortSignal, timeoutSignal]);

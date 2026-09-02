@@ -410,7 +410,7 @@ describe("@log open", () => {
             wait: waitMock,
         });
 
-        expect(waitMock).toHaveBeenCalledTimes(19);
+        expect(waitMock).toHaveBeenCalledTimes(9);
         expect(openMock).not.toHaveBeenCalled();
         const error = captured.find((c) => c.kind === "error");
         expect(String(error!.content)).toContain(
@@ -432,7 +432,7 @@ describe("@log open", () => {
             wait: waitMock,
         });
 
-        expect(waitMock).toHaveBeenCalledTimes(19);
+        expect(waitMock).toHaveBeenCalledTimes(9);
         expect(openMock).not.toHaveBeenCalled();
         const error = captured.find((c) => c.kind === "error");
         expect(String(error!.content)).toContain(
