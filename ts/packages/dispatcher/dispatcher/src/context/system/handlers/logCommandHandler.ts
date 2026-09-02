@@ -261,8 +261,21 @@ function resolveTraceId(
     }
     const lower = trimmed.toLowerCase();
     if (lower === "last") {
-        const stored = systemContext.lastCommandResultTraceId;
-        if (stored === undefined) {
+        let trace:
+            | (typeof systemContext.sessionTraceHistory)[number]
+            | undefined;
+        for (
+            let i = systemContext.sessionTraceHistory.length - 1;
+            i >= 0;
+            i--
+        ) {
+            const candidate = systemContext.sessionTraceHistory[i];
+            if (candidate.kind === "request" && !candidate.isTraceOpen) {
+                trace = candidate;
+                break;
+            }
+        }
+        if (trace === undefined) {
             const tracing = describeProvider(otelTrace.getTracerProvider());
             if (tracing.startsWith("no-op")) {
                 return {
@@ -273,7 +286,7 @@ function resolveTraceId(
                 error: "No previous completed request's trace id is available yet. Run a request first, then use '@log open last'.",
             };
         }
-        return { traceId: stored };
+        return { traceId: trace.traceId };
     }
     if (!TRACE_ID_HEX_RE.test(lower)) {
         return {
@@ -405,7 +418,6 @@ export async function openLogTrace(
     dependencies: OpenLogTraceDependencies = defaultDependencies,
 ): Promise<void> {
     const systemContext = context.sessionContext.agentContext;
-    systemContext.rememberCurrentRequestTrace = false;
     const resolved = resolveTraceId(rawTraceId, systemContext);
     if ("error" in resolved) {
         displayError(resolved.error, context);

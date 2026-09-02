@@ -21,7 +21,7 @@ function makeContext(agentContextOverrides?: Record<string, unknown>): {
 } {
     const captured: Captured[] = [];
     const agentContext: Record<string, unknown> = {
-        lastCommandResultTraceId: undefined,
+        sessionTraceHistory: [],
         ...agentContextOverrides,
     };
     const context = {
@@ -232,7 +232,15 @@ describe("@log open", () => {
 
     it("resolves 'last' to the stored previous trace id", async () => {
         const { context, captured } = makeContext({
-            lastCommandResultTraceId: VALID_ID,
+            sessionTraceHistory: [
+                {
+                    traceId: VALID_ID,
+                    requestId: "request-1",
+                    kind: "request",
+                    isTraceOpen: false,
+                    completedAt: 1,
+                },
+            ],
         });
         const { deps, openMock } = makeReadyDeps();
         await openLogTrace("last", context, deps);
@@ -245,16 +253,40 @@ describe("@log open", () => {
         expect(success).toBeDefined();
     });
 
-    it("does not let the natural-language open action replace the trace being inspected", async () => {
-        const { context, agentContext } = makeContext({
-            lastCommandResultTraceId: VALID_ID,
-            rememberCurrentRequestTrace: true,
+    it("ignores newer command and trace-open entries when resolving the last request", async () => {
+        const commandTraceId = "fedcba9876543210fedcba9876543210";
+        const traceOpenId = "11111111111111111111111111111111";
+        const { context } = makeContext({
+            sessionTraceHistory: [
+                {
+                    traceId: VALID_ID,
+                    requestId: "request-1",
+                    kind: "request",
+                    isTraceOpen: false,
+                    completedAt: 1,
+                },
+                {
+                    traceId: commandTraceId,
+                    requestId: "command-1",
+                    kind: "command",
+                    isTraceOpen: false,
+                    completedAt: 2,
+                },
+                {
+                    traceId: traceOpenId,
+                    requestId: "request-2",
+                    kind: "request",
+                    isTraceOpen: true,
+                    completedAt: 3,
+                },
+            ],
         });
-        const { deps } = makeReadyDeps();
+        const { deps, openMock } = makeReadyDeps();
         await openLogTrace("last", context, deps);
 
-        expect(agentContext.rememberCurrentRequestTrace).toBe(false);
-        expect(agentContext.lastCommandResultTraceId).toBe(VALID_ID);
+        expect(openMock).toHaveBeenCalledWith(
+            buildLocalGrafanaTraceUrl(VALID_ID),
+        );
     });
 
     it("shows a clear error when 'last' has no stored trace id", async () => {

@@ -522,8 +522,9 @@ export async function processCommand(
     // steps in later phases; the root span carries only the values known
     // at the outermost async boundary. Everything the wrapper receives is
     // an identifier, not user text - see setTypeAgentSpanAttributes.
-    const sessionId = context.session.sessionDirPath
-        ? getSessionName(context.session.sessionDirPath)
+    const sessionAtStart = context.session;
+    const sessionId = sessionAtStart.sessionDirPath
+        ? getSessionName(sessionAtStart.sessionDirPath)
         : undefined;
     const rootAttributes: {
         -readonly [K in keyof otel.TypeAgentSpanAttributes]: otel.TypeAgentSpanAttributes[K];
@@ -560,7 +561,6 @@ export async function processCommand(
                     const requestIdStr = requestId.requestId;
                     context.activeRequests.set(requestIdStr, abortController);
                     context.currentOptions = options;
-                    context.rememberCurrentRequestTrace = !isCommand;
                     beginProcessCommand(
                         requestId,
                         context,
@@ -603,12 +603,24 @@ export async function processCommand(
                             result.traceId = rootTraceId;
                         }
                         if (
-                            context.rememberCurrentRequestTrace &&
-                            rootTraceId !== undefined
+                            rootTraceId !== undefined &&
+                            context.session === sessionAtStart
                         ) {
-                            context.lastCommandResultTraceId = rootTraceId;
+                            context.sessionTraceHistory.push({
+                                traceId: rootTraceId,
+                                requestId: requestId.requestId,
+                                kind: isCommand ? "command" : "request",
+                                isTraceOpen:
+                                    result?.actions?.some(
+                                        (action) =>
+                                            action.schemaName ===
+                                                "system.log" &&
+                                            action.actionName ===
+                                                "openLogTrace",
+                                    ) === true,
+                                completedAt: Date.now(),
+                            });
                         }
-                        context.rememberCurrentRequestTrace = false;
                         logRequestCompleted(
                             context.logger,
                             requestId.requestId,
