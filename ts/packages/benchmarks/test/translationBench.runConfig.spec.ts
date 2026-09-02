@@ -33,7 +33,7 @@ const SAMPLE: RunConfigFile = {
     batches: {
         eval_fast: {
             synthesizer: { caseCount: 100 },
-            eval: { maxCases: 100, headroom: 0.9, caseOrder: "any" },
+            eval: { maxCases: 100, headroom: 0.9 },
         },
         eval: {
             synthesizer: { caseCount: 1000 },
@@ -109,7 +109,6 @@ describe("translationBench runConfig", () => {
         expect(resolved.caseCount).toBe(100);
         expect(resolved.maxCases).toBe(100);
         expect(resolved.headroom).toBe(0.9);
-        expect(resolved.caseOrder).toBe("any");
         expect(resolved.generatorModel).toBe("azure/gpt-5.4");
         expect(resolved.evalModels).toEqual([
             "azure/gpt-4.1",
