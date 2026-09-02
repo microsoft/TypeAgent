@@ -23,7 +23,11 @@ function ensureDir(dir) {
 
 /** Skip when dest exists with same size and mtime >= source (idempotent builds). */
 function copyFileFast(from, to) {
-    if (!existsSync(from)) return false;
+    if (!existsSync(from)) {
+        throw new Error(
+            `copyAssets: missing required asset ${path.relative(root, from)}`,
+        );
+    }
     ensureDir(path.dirname(to));
     if (existsSync(to)) {
         const src = statSync(from);
