@@ -294,6 +294,10 @@ export type ContextParams = {
     hasSessionStorage: boolean;
     agentContextId: number | undefined;
     sessionContextId: string;
+    // Snapshot of SessionContext.currentConnectionId taken when the call is
+    // made. Optional: older agent processes and server-initiated calls have
+    // none.
+    currentConnectionId?: string | undefined;
 };
 
 export type ActionContextParams = ContextParams & {

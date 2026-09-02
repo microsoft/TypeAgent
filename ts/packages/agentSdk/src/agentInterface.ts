@@ -290,6 +290,13 @@ export interface SessionContext<T = unknown> {
      */
     readonly sessionContextId: string;
 
+    /**
+     * Connection that made the request being processed, or `undefined` between
+     * requests and for server-initiated work. An agent hosted by several
+     * clients uses this to send an action back to the one that asked.
+     */
+    readonly currentConnectionId: string | undefined;
+
     notify(
         event: AppAgentEvent,
         message: string | DisplayContent,

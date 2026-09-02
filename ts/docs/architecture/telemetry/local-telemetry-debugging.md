@@ -36,7 +36,6 @@ In TypeAgent, run:
 
 The @trace typeagent\* command enables all debug logs in the typeagent namespace.
 The @log profile diagnostic command enables all structured + debug logs to be captured locally.
-
 After sending a request, jump straight to its trace in Grafana Explore:
 
 ```
