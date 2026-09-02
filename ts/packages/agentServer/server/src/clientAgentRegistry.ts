@@ -7,6 +7,7 @@ import {
     AppAgentManifest,
     SessionContext,
 } from "@typeagent/agent-sdk";
+import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 import { createHash } from "node:crypto";
 import { createLimiter } from "@typeagent/common-utils";
 import registerDebug from "debug";
@@ -37,10 +38,10 @@ export type ClientAgentGroup = {
     /** Hash of the schema source; instances must agree on it. See {@link getManifestKey}. */
     manifestKey: string;
     /**
-     * Normalized `agentInterface` the group was created with, or undefined when
-     * the creator did not declare one. See {@link getAgentInterfaceKey}.
+     * Normalized `agentInterface` of the instances currently in the group. See
+     * {@link getAgentInterfaceKey}.
      */
-    agentInterfaceKey: string | undefined;
+    agentInterfaceKey: string;
     /**
      * Whether the client that created this group opted in to sharing the name.
      * Off means a second, different client is rejected exactly as it was before
@@ -59,10 +60,12 @@ export type ClientAgentRegistration = {
     appAgent: AppAgent;
     manifest: AppAgentManifest;
     /**
-     * Methods the client implements. Optional so a client that does not send
-     * one keeps working; when present it must match the group's.
+     * Methods the client implements, which the caller already used to build
+     * {@link ClientAgentRegistration.appAgent}. Required: `registerClientAgent`
+     * takes it as a required field and `createAgentRpcClient` cannot build a
+     * proxy without it, so a registration that reaches here always has one.
      */
-    agentInterface?: readonly string[] | undefined;
+    agentInterface: readonly AgentInterfaceFunctionName[];
     /** See {@link ClientAgentGroup.multiInstance}. Only read on the first registration. */
     multiInstance?: boolean;
 };
@@ -146,8 +149,9 @@ export function schemaMismatchMessage(name: string): string {
 }
 
 /**
- * Normalized `agentInterface`, or undefined when the client did not declare
- * one.
+ * Normalized `agentInterface`, order-insensitive and de-duplicated so key order
+ * cannot cause a false mismatch (the same trap {@link getManifestKey} avoids
+ * for Android's `org.json.JSONObject`).
  *
  * The mux is built once, from the first instance's proxy, and
  * {@link getManifestKey} only covers schema text -- two app versions can share
@@ -156,11 +160,9 @@ export function schemaMismatchMessage(name: string): string {
  * to support methods it does not; the call only fails once someone makes it.
  */
 export function getAgentInterfaceKey(
-    agentInterface: readonly string[] | undefined,
-): string | undefined {
-    return agentInterface === undefined
-        ? undefined
-        : [...new Set(agentInterface)].sort().join("\u0000");
+    agentInterface: readonly AgentInterfaceFunctionName[],
+): string {
+    return [...new Set(agentInterface)].sort().join("\u0000");
 }
 
 export function interfaceMismatchMessage(name: string): string {
@@ -514,6 +516,27 @@ function createMux(group: ClientAgentGroup, template: AppAgent): AppAgent {
 }
 
 /**
+ * Point the group's existing mux at a new method set, in place.
+ *
+ * The dispatcher was handed this exact object by `addDynamicAgent` and keeps
+ * that reference, checking each optional method on it at call time. Assigning a
+ * fresh object to `group.mux` would therefore leave the dispatcher on the old
+ * one, so the methods have to be swapped onto the object it already holds.
+ */
+function rebuildMux(group: ClientAgentGroup, template: AppAgent): void {
+    const next = methodsOf(createMux(group, template));
+    const current = methodsOf(group.mux);
+    for (const method of Object.keys(current)) {
+        if (next[method] === undefined) {
+            delete current[method];
+        }
+    }
+    for (const method of Object.keys(next)) {
+        current[method] = next[method];
+    }
+}
+
+/**
  * Bring a device that joined late up to the state the others are in. Failures
  * are traced, not thrown: one device must not fail another's registration.
  */
@@ -580,6 +603,25 @@ export function createClientAgentGroup(
 }
 
 /**
+ * True when this registration takes over the group's only instance: either the
+ * same `instanceId` coming back, or the same connection re-registering under a
+ * new one (its old proxy died when the new one claimed the `agent:<name>`
+ * channel). Either way no other device is in the group, so the method set is
+ * this device's alone to change.
+ */
+function replacesSoleInstance(
+    group: ClientAgentGroup,
+    registration: ClientAgentRegistration,
+): boolean {
+    return (
+        group.instances.size === 1 &&
+        (group.instances.has(registration.instanceId) ||
+            findInstanceIdForConnection(group, registration.connectionId) !==
+                undefined)
+    );
+}
+
+/**
  * Add a device, or replace its proxy if the same `instanceId` is already
  * there. Replacing in place is what makes a reconnect work: the device keeps
  * its slot and the dispatcher never sees a change. Returns true if the group
@@ -597,15 +639,22 @@ export async function joinClientAgentGroup(
     // Checked alongside the schema, and for a replacement too: the mux was
     // built from the method set of whichever proxy created the group, so an
     // instance that arrives with a different one would be routed calls it
-    // cannot answer. Only compared when both sides declared an interface, so a
-    // client that sends none keeps working.
+    // cannot answer.
     const agentInterfaceKey = getAgentInterfaceKey(registration.agentInterface);
-    if (
-        agentInterfaceKey !== undefined &&
-        group.agentInterfaceKey !== undefined &&
-        agentInterfaceKey !== group.agentInterfaceKey
-    ) {
-        throw new Error(interfaceMismatchMessage(group.name));
+    if (agentInterfaceKey !== group.agentInterfaceKey) {
+        // Unless this device is the whole group. A lone device that upgrades
+        // its app keeps its schema but can gain or lose methods, and rejecting
+        // that would break a reconnect that used to work - with a message
+        // telling the user to disconnect devices that do not exist. Nobody else
+        // is sharing the name, so adopt the new set and bring the mux with it.
+        if (!replacesSoleInstance(group, registration)) {
+            throw new Error(interfaceMismatchMessage(group.name));
+        }
+        group.agentInterfaceKey = agentInterfaceKey;
+        rebuildMux(group, registration.appAgent);
+        debugGroup(
+            `${group.name}: sole instance ${registration.instanceId} changed the method set; mux rebuilt`,
+        );
     }
 
     const existing = group.instances.get(registration.instanceId);

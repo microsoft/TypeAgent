@@ -24,6 +24,7 @@ import {
     ConversationSummaryResult,
 } from "agent-dispatcher";
 import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
+import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 import type {
     DisplayLogEntry,
     PendingInteractionRequest,
@@ -253,8 +254,9 @@ export type ConversationManager = {
      * same schema: the dynamic agent is added once and each client becomes an
      * instance behind it. Re-registering the same `instanceId` replaces its
      * proxy in place, which is how a reconnect recovers. Rejects when the
-     * schema or the `agentInterface` differs, or when the instance is new and
-     * multi-instance support is switched off.
+     * schema differs, when the `agentInterface` differs from what the other
+     * devices implement, or when the instance is new and multi-instance
+     * support is switched off.
      */
     addClientAgent(
         conversationId: string,
@@ -265,7 +267,7 @@ export type ConversationManager = {
         displayName: string,
         connectionId: string,
         multiInstance: boolean,
-        agentInterface?: readonly string[],
+        agentInterface: readonly AgentInterfaceFunctionName[],
     ): Promise<void>;
     /**
      * Remove one instance added via {@link addClientAgent}. The dynamic agent
@@ -1221,7 +1223,7 @@ export async function createConversationManager(
             displayName: string,
             connectionId: string,
             multiInstance: boolean,
-            agentInterface?: readonly string[],
+            agentInterface: readonly AgentInterfaceFunctionName[],
         ): Promise<void> {
             const record = conversations.get(conversationId);
             if (record === undefined) {
