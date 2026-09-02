@@ -17,7 +17,6 @@ import {
     openai as ai,
     CompleteUsageStatsCallback,
     CompletionJsonSchema,
-    getModelCallSink,
 } from "@typeagent/aiclient";
 import {
     createIncrementalJsonParser,
@@ -337,45 +336,13 @@ export function createJsonTranslatorWithValidator<T extends object>(
         if (jsonSchema !== undefined) {
             debugJsonSchema(jsonSchema);
         }
-        const sink = getModelCallSink();
-        if (sink === undefined) {
-            return originalComplete(
-                actualPrompt,
-                actualUsageCallback,
-                jsonSchema,
-                logFnOverride ?? options?.promptLogger?.logModelRequest,
-                actualSignal,
-            );
-        }
-        // Capture the full call (prompt in, provider response out, usage) for
-        // trajectory logging. Only runs when a benchmark activates the sink.
-        let usage: unknown;
-        const captureUsage: CompleteUsageStatsCallback = (stats) => {
-            usage = stats;
-            actualUsageCallback?.(stats);
-        };
-        const atMs = Date.now();
-        const startedPerf = performance.now();
-        const response = await originalComplete(
+        return originalComplete(
             actualPrompt,
-            captureUsage,
+            actualUsageCallback,
             jsonSchema,
             logFnOverride ?? options?.promptLogger?.logModelRequest,
             actualSignal,
         );
-        try {
-            sink({
-                name,
-                request: actualPrompt,
-                response,
-                usage,
-                atMs,
-                durationMs: performance.now() - startedPerf,
-            });
-        } catch {
-            // Trajectory capture must never break translation.
-        }
-        return response;
     };
 
     if (ai.supportsStreaming(model)) {
