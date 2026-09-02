@@ -63,7 +63,7 @@ export type {
 
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
-    clientType?: "shell" | "extension"; // identifies the connecting client type
+    clientType?: "shell" | "extension" | "android"; // identifies the connecting client type
     conversationId?: string; // join a specific conversation by UUID. If omitted, connects to the default conversation.
 };
 
@@ -282,9 +282,10 @@ export type AgentServerInvokeFunctions = {
      *
      * The client must create its agent-rpc server on the `agent:<name>`
      * channel (via createAgentRpcServer over the connection channel provider)
-     * before calling this. Rejects if an agent with `name` is already
-     * registered on the target conversation (e.g. a second client trying to
-     * register the same singleton agent).
+     * before calling this. A client that opts in with `multiInstance` may share
+     * the agent name with other clients carrying the same schema: the server
+     * keeps one registration with an instance per client, and routes each
+     * action to one of them. Without it, a second client is rejected as before.
      */
     registerClientAgent: (param: RegisterClientAgentParams) => Promise<void>;
     /** Unregister a previously registered client-hosted agent. */
@@ -303,11 +304,34 @@ export type RegisterClientAgentParams = {
      * more than one).
      */
     conversationId?: string;
+    /**
+     * Stable, client-generated id for the device hosting this agent.
+     * Re-registering the same `instanceId` replaces its proxy in place, which
+     * is what makes a reconnect work. Omit it and the server derives one from
+     * the connection, so the client is a single instance that does not survive
+     * a reconnect.
+     */
+    instanceId?: string;
+    /** Human readable name, used when the server has to name the devices. */
+    displayName?: string;
+    /**
+     * Opt in to sharing this agent name with other clients. Off by default, so
+     * a client that expects to be the only host of `name` (the shell) keeps
+     * getting an error when a second one registers. When the client that
+     * creates the registration opts in, later clients carrying the same schema
+     * join it as extra instances instead of being rejected.
+     */
+    multiInstance?: boolean;
 };
 
 export type UnregisterClientAgentParams = {
     name: string;
     conversationId?: string;
+    /**
+     * Which instance to remove. The server only ever removes one the calling
+     * connection owns, so a client cannot unregister another client's.
+     */
+    instanceId?: string;
 };
 
 /**

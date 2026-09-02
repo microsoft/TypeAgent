@@ -78,6 +78,18 @@ describe("createWebSocketChannelServer binding", () => {
         }
     });
 
+    test("an empty host binds loopback, not every interface", async () => {
+        const port = takePort();
+        await start({ port, host: "" });
+
+        await expect(connect("127.0.0.1", port)).resolves.toBe("open");
+
+        const lan = lanAddress();
+        if (lan !== undefined) {
+            await expect(connect(lan, port)).resolves.toBe("refused");
+        }
+    });
+
     test("an explicit host is passed through", async () => {
         const port = takePort();
         await start({ port, host: "localhost" });

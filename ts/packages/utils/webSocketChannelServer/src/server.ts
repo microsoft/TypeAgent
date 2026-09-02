@@ -98,7 +98,8 @@ export async function createWebSocketChannelServer(
     // serve same-machine clients, so bind loopback unless one names a host
     // explicitly (a container publishing the port, for example).
     const listenOptions: WebSocket.ServerOptions =
-        wsOptions.port !== undefined && wsOptions.host === undefined
+        wsOptions.port !== undefined &&
+        (wsOptions.host === undefined || wsOptions.host.trim() === "")
             ? { ...wsOptions, host: LOOPBACK_HOST }
             : wsOptions;
     // verifyClient runs synchronously during the HTTP upgrade; using it
