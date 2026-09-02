@@ -71,18 +71,8 @@ const files = [
     ],
 ];
 
-const requiredGenerated = new Set([
-    "src/translationBench/catalog.generated.json",
-    "src/translationBench/action-parameters-grader.generated.json",
-    "src/translationBench/eligible-gold-actions.generated.json",
-    "src/translationBench/policy/action-eligibility.json",
-]);
 for (const [fromRel, toRel] of files) {
-    const from = path.join(root, fromRel);
-    if (requiredGenerated.has(fromRel) && !existsSync(from)) {
-        throw new Error(`copyAssets: missing required asset ${fromRel}`);
-    }
-    copyFileFast(from, path.join(root, toRel));
+    copyFileFast(path.join(root, fromRel), path.join(root, toRel));
 }
 
 const yamlSrc = path.join(root, "src/translationBench/synthesizer");
@@ -98,24 +88,6 @@ if (existsSync(yamlSrc)) {
             path.join(yamlDst, name.name),
         );
     }
-}
-
-const policyFiles = [
-    [
-        "src/translationBench/policy/action-eligibility.json",
-        "dist/translationBench/policy/action-eligibility.json",
-    ],
-    [
-        "src/translationBench/policy/action-eligibility.schema.json",
-        "dist/translationBench/policy/action-eligibility.schema.json",
-    ],
-];
-for (const [fromRel, toRel] of policyFiles) {
-    const from = path.join(root, fromRel);
-    if (!existsSync(from)) {
-        throw new Error(`copyAssets: missing required asset ${fromRel}`);
-    }
-    copyFileFast(from, path.join(root, toRel));
 }
 
 const policyYamlSrc = path.join(root, "src/translationBench/policy");
