@@ -507,6 +507,7 @@ export const stringSplit: TaskDefinition<
 };
 
 const MAX_HTTP_REDIRECTS = 20;
+const DEFAULT_HTTP_TIMEOUT_MS = 30_000;
 const SENSITIVE_REDIRECT_HEADERS = new Set([
     "authorization",
     "cookie",
@@ -582,6 +583,7 @@ async function requestHttpGetOnce(
     maxBytes: number,
     signal: AbortSignal,
     constraints?: TaskConstraints,
+    timeoutMs: number = DEFAULT_HTTP_TIMEOUT_MS,
 ): Promise<HttpGetResponse> {
     validateHttpTarget(url, constraints);
 
@@ -605,6 +607,7 @@ async function requestHttpGetOnce(
                 headers,
                 ...createPinnedLookup(resolved),
                 signal,
+                timeout: timeoutMs,
             },
             (response) => {
                 void (async () => {
@@ -625,6 +628,13 @@ async function requestHttpGetOnce(
                 })();
             },
         );
+        req.on("timeout", () => {
+            req.destroy(
+                new Error(
+                    `HTTP request to "${url.toString()}" timed out after ${timeoutMs}ms`,
+                ),
+            );
+        });
         req.on("error", rejectRequest);
         req.end();
     });
@@ -646,6 +656,7 @@ async function fetchHttpGet(
     maxBytes: number,
     signal: AbortSignal,
     constraints?: TaskConstraints,
+    timeoutMs?: number,
 ): Promise<{ body: string; status: number }> {
     let currentUrl = new URL(inputUrl);
     let currentHeaders = headers ? { ...headers } : {};
@@ -657,6 +668,7 @@ async function fetchHttpGet(
             maxBytes,
             signal,
             constraints,
+            timeoutMs,
         );
         const location = response.headers.location;
         if (
@@ -689,6 +701,7 @@ export const httpGet: TaskDefinition<
         url: string;
         headers?: Record<string, string>;
         maxResponseBytes?: number;
+        timeoutMs?: number;
     },
     { body: string; status: number }
 > = {
@@ -705,6 +718,7 @@ export const httpGet: TaskDefinition<
                     maxBytes,
                     ctx.signal,
                     ctx.constraints,
+                    input.timeoutMs,
                 ),
             };
         } catch (err) {

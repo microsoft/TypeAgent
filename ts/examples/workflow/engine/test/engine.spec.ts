@@ -2162,6 +2162,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         url: { type: "string" },
                         headers: { type: "object" },
                         maxResponseBytes: { type: "integer" },
+                        timeoutMs: { type: "integer" },
                     },
                 },
                 outputSchema: {
@@ -2266,6 +2267,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         url: { type: "string" },
                         headers: { type: "object" },
                         maxResponseBytes: { type: "integer" },
+                        timeoutMs: { type: "integer" },
                     },
                 },
                 outputSchema: {
