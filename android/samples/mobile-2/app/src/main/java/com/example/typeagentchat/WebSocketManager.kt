@@ -16,9 +16,15 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class WebSocketManager internal constructor(
     /**
+     * Who this device is on the server. Required rather than defaulted so the
+     * production path cannot fall back to a throwaway identity, which would
+     * make every reconnect look like a new device. Tests pass a fake, because
+     * the real one needs a `Context`.
+     */
+    private val deviceIdentity: DeviceIdentity,
+    /**
      * Overridden by unit tests with a fake so the connect and registration
-     * handshake can be driven without a server. Production callers use the
-     * no-argument constructor and get [client].
+     * handshake can be driven without a server. Production callers get [client].
      */
     webSocketFactory: WebSocket.Factory? = null
 ) {
@@ -389,7 +395,7 @@ class WebSocketManager internal constructor(
      */
     private fun joinConversation(resumeConversationId: String?) {
         val options = JSONObject()
-            .put("clientType", "extension")
+            .put("clientType", "android")
             .put("filter", false)
             .putOpt("conversationId", resumeConversationId)
 
@@ -487,7 +493,9 @@ class WebSocketManager internal constructor(
             args = listOf(
                 AndroidDeviceAgent.createRegistrationParams(
                     conversationId = joinedConversationId,
-                    schemaContent = schemaContent
+                    schemaContent = schemaContent,
+                    instanceId = deviceIdentity.instanceId,
+                    displayName = deviceIdentity.displayName
                 )
             ),
             onResult = {
@@ -522,16 +530,24 @@ class WebSocketManager internal constructor(
     }
 
     /**
-     * Recovers from the server reporting `androidDevice` as already registered
-     * for this conversation.
+     * Compatibility shim for a server that still rejects a second registration
+     * of `androidDevice` on one conversation.
      *
-     * The stale entry is bound to a socket that is gone, so keeping it leaves
-     * actions routed into a dead channel. `unregisterClientAgent` removes the
-     * entry whichever connection made it, so evicting it and registering again
-     * rebinds the route to this connection.
+     * A server that tracks devices by `instanceId` replaces this device in
+     * place on reconnect, so this cannot fire. It only runs against an older
+     * server.
+     *
+     * On an older server the stale entry is bound to a dead socket, so
+     * evicting it and registering again rebinds the route here. Against a
+     * fixed server the eviction is inert, which is deliberate: it must never
+     * be able to drop another device's live registration.
      *
      * Tried once per connection: a second collision means the eviction did not
      * clear the entry, and retrying would loop.
+     *
+     * TODO: delete this method, [reuseExistingRegistration],
+     * [isAgentAlreadyRegisteredError] and their tests once every supported
+     * server tracks client agents by `instanceId`.
      */
     private fun handleRegistrationCollision(joinedConversationId: String) {
         val alreadyAttempted = synchronized(lock) {
@@ -577,16 +593,18 @@ class WebSocketManager internal constructor(
     }
 
     /**
-     * Last resort when the stale registration cannot be evicted. Actions stay
-     * routed at the connection it was made on, so they will not reach this
-     * device until that entry is gone, which only happens once the server drops
-     * the dispatcher for the conversation.
+     * Last resort when the stale registration cannot be evicted. It belongs to
+     * another connection, so actions stay routed there until the server drops
+     * the dispatcher for the conversation. The status stays distinct from
+     * [STATUS_AGENT_REGISTERED] and the log stays at warning level so a masked
+     * rejection is still traceable.
      */
     private fun reuseExistingRegistration(joinedConversationId: String) {
         markClientAgentRegistered(
             logMessage = "Client agent ${AndroidDeviceAgent.NAME} is still registered for " +
-                "conversation $joinedConversationId and could not be reclaimed. Actions will " +
-                "not reach this device until that registration is removed.",
+                "conversation $joinedConversationId by another connection and could not be " +
+                "reclaimed. Actions will not reach this device until that registration is " +
+                "removed.",
             statusText = STATUS_AGENT_REGISTRATION_REUSED,
             isRecovery = true
         )
@@ -1700,9 +1718,15 @@ internal fun isConversationNotFoundError(error: String?): Boolean =
  * leave, so restarting the app does not clear it while another client is
  * joined. Left unhandled, the app then refuses every executeAction.
  *
+ * A server that tracks devices by `instanceId` replaces this device in place,
+ * so this only matches against an older server or one with multi-instance
+ * support switched off.
+ *
  * Matches the whole `App agent '<name>' already exists` phrase, not the agent
  * name alone, because the caller reacts by claiming the agent is registered: a
- * missed match degrades to the pre-existing failure, a false match hides it.
+ * missed match degrades to the pre-existing failure, a false match hides it. Do
+ * not widen it to any other error text - the schema-version-mismatch message in
+ * particular must reach the user.
  */
 internal fun isAgentAlreadyRegisteredError(error: String?, agentName: String): Boolean {
     val text = error?.trim().orEmpty()

@@ -24,7 +24,18 @@ stack, and enables local telemetry in `config.local.yaml`.
 
 If the command changes `telemetry.local`, restart TypeAgent once so it picks
 up the configuration. Send a request, then open
-[Grafana](http://127.0.0.1:24319) to inspect traces and logs.
+[Grafana](http://127.0.0.1:24319) to inspect traces and logs via Explore > Tempo.
+Traces are available in the response metadata of every request (printed by default in the CLI and on-hover for other experiences).
+
+In TypeAgent, run:
+
+```
+@trace typeagent*
+@log profile diagnostic
+```
+
+The @trace typeagent\* command enables all debug logs in the typeagent namespace.
+The @log profile diagnostic command enables all structured + debug logs to be captured locally.
 
 For setup details, queries, cleanup, and troubleshooting, continue below.
 

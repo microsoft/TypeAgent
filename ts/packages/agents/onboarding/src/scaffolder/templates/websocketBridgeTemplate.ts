@@ -95,7 +95,14 @@ export class __AgentName__Bridge {
      */
     public static start(port: number = 0): Promise<__AgentName__Bridge> {
         return new Promise((resolve, reject) => {
-            const server = new WebSocketServer({ port });
+            const server = new WebSocketServer({
+                port,
+                // Bind loopback. The bridge carries agent RPC with the local
+                // user's permissions and authenticates nothing, so an
+                // all-interfaces bind would let any LAN peer impersonate the
+                // plugin, intercept requests, and forge responses.
+                host: "__LOOPBACK_HOST__",
+            });
             let settled = false;
             const onError = (e: Error) => {
                 if (settled) return;

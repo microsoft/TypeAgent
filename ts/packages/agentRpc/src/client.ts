@@ -229,6 +229,7 @@ export async function createAgentRpcClient(
             hasSessionStorage: context.sessionStorage !== undefined,
             agentContextId: context.agentContext?.contextId,
             sessionContextId: context.sessionContextId,
+            currentConnectionId: context.currentConnectionId,
         };
     }
 
