@@ -37,6 +37,11 @@ export type ClientAgentGroup = {
     /** Hash of the schema source; instances must agree on it. See {@link getManifestKey}. */
     manifestKey: string;
     /**
+     * Normalized `agentInterface` the group was created with, or undefined when
+     * the creator did not declare one. See {@link getAgentInterfaceKey}.
+     */
+    agentInterfaceKey: string | undefined;
+    /**
      * Whether the client that created this group opted in to sharing the name.
      * Off means a second, different client is rejected exactly as it was before
      * groups existed, so a client that assumes it is the only host of the name
@@ -53,6 +58,11 @@ export type ClientAgentRegistration = {
     connectionId: string;
     appAgent: AppAgent;
     manifest: AppAgentManifest;
+    /**
+     * Methods the client implements. Optional so a client that does not send
+     * one keeps working; when present it must match the group's.
+     */
+    agentInterface?: readonly string[] | undefined;
     /** See {@link ClientAgentGroup.multiInstance}. Only read on the first registration. */
     multiInstance?: boolean;
 };
@@ -133,6 +143,28 @@ export function getManifestKey(manifest: AppAgentManifest): string {
 
 export function schemaMismatchMessage(name: string): string {
     return `Client agent '${name}' is already registered on this conversation with a different schema version. Update the app to the same version as the other device(s), or disconnect them first.`;
+}
+
+/**
+ * Normalized `agentInterface`, or undefined when the client did not declare
+ * one.
+ *
+ * The mux is built once, from the first instance's proxy, and
+ * {@link getManifestKey} only covers schema text -- two app versions can share
+ * a schema and still implement different methods. Without this, a device with a
+ * narrower interface joins a group created by a richer one and silently appears
+ * to support methods it does not; the call only fails once someone makes it.
+ */
+export function getAgentInterfaceKey(
+    agentInterface: readonly string[] | undefined,
+): string | undefined {
+    return agentInterface === undefined
+        ? undefined
+        : [...new Set(agentInterface)].sort().join("\u0000");
+}
+
+export function interfaceMismatchMessage(name: string): string {
+    return `Client agent '${name}' is already registered on this conversation by a device that implements a different set of methods. Update the app to the same version as the other device(s), or disconnect them first.`;
 }
 
 /**
@@ -530,6 +562,7 @@ export function createClientAgentGroup(
         name,
         manifest: registration.manifest,
         manifestKey: getManifestKey(registration.manifest),
+        agentInterfaceKey: getAgentInterfaceKey(registration.agentInterface),
         multiInstance: registration.multiInstance === true,
         instances: new Map([[instance.instanceId, instance]]),
         mux: undefined as unknown as AppAgent,
@@ -559,6 +592,20 @@ export async function joinClientAgentGroup(
     const manifestKey = getManifestKey(registration.manifest);
     if (manifestKey !== group.manifestKey) {
         throw new Error(schemaMismatchMessage(group.name));
+    }
+
+    // Checked alongside the schema, and for a replacement too: the mux was
+    // built from the method set of whichever proxy created the group, so an
+    // instance that arrives with a different one would be routed calls it
+    // cannot answer. Only compared when both sides declared an interface, so a
+    // client that sends none keeps working.
+    const agentInterfaceKey = getAgentInterfaceKey(registration.agentInterface);
+    if (
+        agentInterfaceKey !== undefined &&
+        group.agentInterfaceKey !== undefined &&
+        agentInterfaceKey !== group.agentInterfaceKey
+    ) {
+        throw new Error(interfaceMismatchMessage(group.name));
     }
 
     const existing = group.instances.get(registration.instanceId);

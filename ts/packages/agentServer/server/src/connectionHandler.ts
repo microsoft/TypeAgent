@@ -24,6 +24,13 @@ import type { PortRegistrar } from "agent-dispatcher";
 import type { ConversationManager } from "./conversationManager.js";
 import { resolveTunnelUrlForDiscovery } from "./tunnelResolver.js";
 import { getSpeechToken } from "./speechToken.js";
+import registerDebug from "debug";
+
+// Disconnect cleanup is best effort, so a failure cannot be surfaced to anyone:
+// the socket it would be reported on is already gone. Without a trace, a client
+// agent left behind on the shared dispatcher only shows up much later as a
+// routing failure with nothing pointing back at the cause.
+const debugError = registerDebug("agent-server:connection:error");
 
 /**
  * Per-connection handler signature expected by transports (the WebSocket
@@ -609,6 +616,7 @@ export function createAgentServerConnectionHandler(
                         displayName,
                         connectionId,
                         param.multiInstance === true,
+                        agentInterface,
                     );
                 } catch (e) {
                     channelProvider.deleteChannel(`agent:${name}`);
@@ -683,8 +691,18 @@ export function createAgentServerConnectionHandler(
                         .removeClientAgent(conversationId, name, instanceId, {
                             ownerConnectionId: connectionId,
                         })
-                        .catch(() => {
-                            // Best effort on disconnect
+                        .catch((e) => {
+                            // Best effort on disconnect, but not silent: this
+                            // failing is how a client agent leaks onto the
+                            // shared dispatcher. Not retried on purpose --
+                            // removal is idempotent and ownership-checked, so a
+                            // second attempt could only race a reconnect that
+                            // has legitimately reclaimed the instance.
+                            debugError(
+                                `Failed to remove client agent "${name}" instance ${instanceId} (connection ${connectionId}) from conversation ${conversationId} on disconnect: ${
+                                    e instanceof Error ? e.message : String(e)
+                                }`,
+                            );
                         });
                 }
             }
@@ -695,8 +713,15 @@ export function createAgentServerConnectionHandler(
             ] of joinedConversations.entries()) {
                 conversationManager
                     .leaveConversation(conversationId, connectionId)
-                    .catch(() => {
-                        // Best effort on disconnect
+                    .catch((e) => {
+                        // Best effort on disconnect, but traced: a conversation
+                        // this connection never leaves keeps its dispatcher
+                        // alive and its idle timer from ever starting.
+                        debugError(
+                            `Failed to leave conversation ${conversationId} for connection ${connectionId} on disconnect: ${
+                                e instanceof Error ? e.message : String(e)
+                            }`,
+                        );
                     });
             }
             joinedConversations.clear();

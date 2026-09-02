@@ -122,6 +122,7 @@ async function register(
         connectionId: string;
         appAgent: AppAgent;
         manifest?: AppAgentManifest;
+        agentInterface?: readonly string[];
         multiInstance?: boolean;
     },
 ): Promise<void> {
@@ -131,6 +132,7 @@ async function register(
         connectionId: options.connectionId,
         appAgent: options.appAgent,
         manifest: options.manifest ?? makeManifest(),
+        agentInterface: options.agentInterface,
         // Devices opt in; the tests that pin single-host behaviour pass
         // false explicitly.
         multiInstance: options.multiInstance ?? true,
@@ -255,6 +257,93 @@ describe("clientAgentRegistry registration", () => {
         });
 
         expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(2);
+    });
+
+    test("a device implementing a different method set is rejected", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeDevice().appAgent,
+            agentInterface: ["executeAction"],
+        });
+
+        // Same schema, older build: it cannot answer getDynamicDisplay. The mux
+        // was built from A's proxy, so without the check B would be routed
+        // calls it has no method for.
+        await expect(
+            register(registry, host, {
+                instanceId: "b",
+                connectionId: "conn-b",
+                appAgent: makeDevice().appAgent,
+                agentInterface: ["executeAction", "getDynamicDisplay"],
+            }),
+        ).rejects.toThrow(/different set of methods/i);
+        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(1);
+    });
+
+    test("the same method set in another order is accepted", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeDevice().appAgent,
+            agentInterface: ["executeAction", "getDynamicDisplay"],
+        });
+        await register(registry, host, {
+            instanceId: "b",
+            connectionId: "conn-b",
+            appAgent: makeDevice().appAgent,
+            agentInterface: ["getDynamicDisplay", "executeAction"],
+        });
+
+        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(2);
+    });
+
+    test("a client that declares no method set is unaffected by the check", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeDevice().appAgent,
+            agentInterface: ["executeAction"],
+        });
+        await register(registry, host, {
+            instanceId: "b",
+            connectionId: "conn-b",
+            appAgent: makeDevice().appAgent,
+        });
+
+        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(2);
+    });
+
+    test("a reconnecting instance cannot change the group's method set", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeDevice().appAgent,
+            agentInterface: ["executeAction"],
+        });
+
+        // Replacing in place keeps the mux built from the original proxy, so
+        // the check has to cover a replacement too, not just a new instance.
+        await expect(
+            register(registry, host, {
+                instanceId: "a",
+                connectionId: "conn-a2",
+                appAgent: makeDevice().appAgent,
+                agentInterface: ["executeAction", "getDynamicDisplay"],
+            }),
+        ).rejects.toThrow(/different set of methods/i);
     });
 
     // Case 12

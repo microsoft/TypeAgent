@@ -102,6 +102,7 @@ function createTestServer(): TestServer {
             displayName: string,
             connectionId: string,
             multiInstance: boolean,
+            agentInterface?: readonly string[],
         ) {
             await registry.add(host, name, {
                 instanceId,
@@ -109,6 +110,7 @@ function createTestServer(): TestServer {
                 connectionId,
                 appAgent,
                 manifest: agentManifest,
+                agentInterface,
                 multiInstance,
             });
         },
