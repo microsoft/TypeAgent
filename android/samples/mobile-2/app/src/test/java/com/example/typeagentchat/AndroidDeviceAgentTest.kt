@@ -273,6 +273,94 @@ class AndroidDeviceAgentTest {
     }
 
     @Test
+    fun parsesComposeEmailExecuteAction() {
+        val parsed = parseSuccess<AndroidDeviceAction.ComposeEmail>(
+            "composeEmail",
+            JSONObject()
+                .put("originalRequest", "Email Ada the notes")
+                .put("to", JSONArray(listOf("ada@example.com")))
+                .put("subject", "Notes")
+        )
+
+        assertEquals(listOf("ada@example.com"), parsed.action.to)
+        assertTrue(
+            parse("composeEmail", JSONObject().put("to", JSONArray(listOf("not an address"))))
+                is AndroidDeviceActionParseResult.ActionError
+        )
+    }
+
+    @Test
+    fun parsesShareTextExecuteAction() {
+        val parsed = parseSuccess<AndroidDeviceAction.ShareText>(
+            "shareText",
+            JSONObject()
+                .put("originalRequest", "Share the address")
+                .put("text", "1 Microsoft Way, Redmond WA")
+        )
+
+        assertEquals("1 Microsoft Way, Redmond WA", parsed.action.text)
+        assertTrue(
+            parse("shareText", JSONObject().put("text", "   "))
+                is AndroidDeviceActionParseResult.ActionError
+        )
+    }
+
+    @Test
+    fun parsesOpenSettingsExecuteAction() {
+        val parsed = parseSuccess<AndroidDeviceAction.OpenSettings>(
+            "openSettings",
+            JSONObject()
+                .put("originalRequest", "Turn on wifi")
+                .put("screen", "wifi")
+        )
+
+        assertEquals(AndroidSettingsScreen.Wifi, parsed.action.screen)
+        // A raw intent action must never be accepted here.
+        assertTrue(
+            parse("openSettings", JSONObject().put("screen", "android.settings.SETTINGS"))
+                is AndroidDeviceActionParseResult.ActionError
+        )
+    }
+
+    @Test
+    fun parsesCreateCalendarEventExecuteAction() {
+        val parsed = parseSuccess<AndroidDeviceAction.CreateCalendarEvent>(
+            "createCalendarEvent",
+            JSONObject()
+                .put("originalRequest", "Add lunch on the 24th")
+                .put("title", "Lunch")
+                .put("start", "2026-08-24T12:00")
+        )
+
+        assertEquals("Lunch", parsed.action.title)
+        assertTrue(parsed.action.endMillis > parsed.action.startMillis)
+        assertTrue(
+            parse(
+                "createCalendarEvent",
+                JSONObject().put("title", "Lunch").put("start", "next Tuesday at 3")
+            ) is AndroidDeviceActionParseResult.ActionError
+        )
+    }
+
+    @Test
+    fun parsesPlayMusicFromSearchExecuteAction() {
+        val parsed = parseSuccess<AndroidDeviceAction.PlayMusicFromSearch>(
+            "playMusicFromSearch",
+            JSONObject()
+                .put("originalRequest", "Play Miles Davis")
+                .put("query", "Miles Davis")
+                .put("focus", "artist")
+        )
+
+        assertEquals("Miles Davis", parsed.action.query)
+        assertEquals(MusicSearchFocus.Artist, parsed.action.focus)
+        assertTrue(
+            parse("playMusicFromSearch", JSONObject().put("query", "   "))
+                is AndroidDeviceActionParseResult.ActionError
+        )
+    }
+
+    @Test
     fun serializesActionResults() {        val success = AndroidDeviceAgent.createSuccessResult("Timer request sent for 30 seconds")
         val failure = AndroidDeviceAgent.createErrorResult("No timer app")
 

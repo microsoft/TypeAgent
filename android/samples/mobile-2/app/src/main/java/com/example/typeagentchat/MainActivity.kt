@@ -10,6 +10,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.AlarmClock
+import android.provider.CalendarContract
+import android.provider.MediaStore
+import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
@@ -79,6 +82,9 @@ import com.example.typeagentchat.ui.theme.TypeAgentChatTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.text.DateFormat
+import java.util.Date
+import java.util.TimeZone
 
 class MainActivity : ComponentActivity() {
 
@@ -132,6 +138,16 @@ class MainActivity : ComponentActivity() {
                             launchWebSearchIntent(action.action, action.completion)
                         is ClientAction.OpenWebPage ->
                             launchOpenWebPageIntent(action.action, action.completion)
+                        is ClientAction.ComposeEmail ->
+                            launchComposeEmailIntent(action.action, action.completion)
+                        is ClientAction.ShareText ->
+                            launchShareTextIntent(action.action, action.completion)
+                        is ClientAction.OpenSettings ->
+                            launchOpenSettingsIntent(action.action, action.completion)
+                        is ClientAction.CreateCalendarEvent ->
+                            launchCreateCalendarEventIntent(action.action, action.completion)
+                        is ClientAction.PlayMusicFromSearch ->
+                            launchPlayMusicFromSearchIntent(action.action, action.completion)
                     }
                 } catch (cancellation: CancellationException) {
                     // The action was already taken off the channel, so no other
@@ -197,6 +213,11 @@ class MainActivity : ComponentActivity() {
             is ClientAction.ComposeSms -> completion(result)
             is ClientAction.WebSearch -> completion(result)
             is ClientAction.OpenWebPage -> completion(result)
+            is ClientAction.ComposeEmail -> completion(result)
+            is ClientAction.ShareText -> completion(result)
+            is ClientAction.OpenSettings -> completion(result)
+            is ClientAction.CreateCalendarEvent -> completion(result)
+            is ClientAction.PlayMusicFromSearch -> completion(result)
         }
     }
 
@@ -476,6 +497,267 @@ class MainActivity : ComponentActivity() {
             missingAppMessage = "No browser is available on this device.",
             deniedMessage = "This app is not allowed to open web pages.",
             backgroundMessage = "Could not open the page while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `composeEmail` action by opening a pre-filled draft.
+     *
+     * `ACTION_SENDTO` with a bare `mailto:` URI rather than `ACTION_SEND`: only
+     * email apps claim `mailto:`, so a message meant for an inbox cannot be
+     * routed into a social or messaging app by mistake. Recipients ride as
+     * extras, which is what mail apps read when the URI carries no address.
+     */
+    private fun launchComposeEmailIntent(
+        action: ComposeEmailAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")).apply {
+            if (action.to.isNotEmpty()) {
+                putExtra(Intent.EXTRA_EMAIL, action.to.toTypedArray())
+            }
+            if (action.cc.isNotEmpty()) {
+                putExtra(Intent.EXTRA_CC, action.cc.toTypedArray())
+            }
+            if (action.bcc.isNotEmpty()) {
+                putExtra(Intent.EXTRA_BCC, action.bcc.toTypedArray())
+            }
+            if (action.subject.isNotEmpty()) {
+                putExtra(Intent.EXTRA_SUBJECT, action.subject)
+            }
+            if (action.body.isNotEmpty()) {
+                putExtra(Intent.EXTRA_TEXT, action.body)
+            }
+        }
+        val recipient = action.to.firstOrNull() ?: "a new message"
+        launchExternalIntent(
+            intent = intent,
+            actionName = "compose-email",
+            detail = "to=${action.to.size} cc=${action.cc.size} bcc=${action.bcc.size} " +
+                "bodyChars=${action.body.length}",
+            successMessage = "Email draft opened for $recipient",
+            missingAppMessage = "No email app is available on this device.",
+            deniedMessage = "This app is not allowed to open the email app.",
+            backgroundMessage = "Could not open the email app while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `shareText` action by opening the system share sheet.
+     *
+     * The chooser is what makes this safe: the destination is every app on the
+     * device, so the user - not the model - picks where the text goes.
+     *
+     * The inner `ACTION_SEND` intent is resolved before the chooser is built.
+     * `createChooser` always resolves, since the chooser itself is a system
+     * activity, so without this check a device with no text-sharing app would
+     * get an empty share sheet while the agent was told the action succeeded.
+     */
+    private fun launchShareTextIntent(
+        action: ShareTextAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, action.text)
+            if (action.subject.isNotEmpty()) {
+                // Read by email and note apps; ignored by everything else.
+                putExtra(Intent.EXTRA_SUBJECT, action.subject)
+            }
+        }
+        val missingAppMessage = "No app on this device can accept shared text."
+        if (shareIntent.resolveActivity(packageManager) == null) {
+            Log.e(TAG, "No app available to handle share-text intent")
+            Toast.makeText(this, missingAppMessage, Toast.LENGTH_SHORT).show()
+            completion(AndroidDeviceExecutionResult.Failure(missingAppMessage))
+            return
+        }
+
+        launchExternalIntent(
+            intent = Intent.createChooser(shareIntent, getString(R.string.share_chooser_title)),
+            actionName = "share-text",
+            detail = "textChars=${action.text.length}",
+            successMessage = "Share sheet opened",
+            missingAppMessage = missingAppMessage,
+            deniedMessage = "This app is not allowed to open the share sheet.",
+            backgroundMessage =
+                "Could not open the share sheet while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Handles the `openSettings` action by opening one settings screen.
+     *
+     * An ordinary app cannot toggle wifi, Bluetooth or Do Not Disturb - the
+     * platform removed those APIs - so taking the user to the right screen is
+     * the honest version of "turn on wifi for me".
+     */
+    private fun launchOpenSettingsIntent(
+        action: OpenSettingsAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val screen = action.screen
+        launchExternalIntent(
+            intent = buildSettingsIntent(screen),
+            actionName = "open-settings",
+            detail = "screen=${screen.schemaName}",
+            successMessage = "Opening ${screen.displayName}",
+            missingAppMessage = "This device has no ${screen.displayName} screen.",
+            deniedMessage = "This app is not allowed to open ${screen.displayName}.",
+            backgroundMessage =
+                "Could not open ${screen.displayName} while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Maps the closed [AndroidSettingsScreen] set onto platform intents.
+     *
+     * Exhaustive on purpose: the model never supplies an action string, so
+     * adding a screen means adding a branch here rather than widening what an
+     * `openSettings` request can start.
+     */
+    private fun buildSettingsIntent(screen: AndroidSettingsScreen): Intent = when (screen) {
+        AndroidSettingsScreen.Settings -> Intent(Settings.ACTION_SETTINGS)
+        AndroidSettingsScreen.Wifi -> Intent(Settings.ACTION_WIFI_SETTINGS)
+        AndroidSettingsScreen.Bluetooth -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+        AndroidSettingsScreen.Display -> Intent(Settings.ACTION_DISPLAY_SETTINGS)
+        AndroidSettingsScreen.Sound -> Intent(Settings.ACTION_SOUND_SETTINGS)
+        AndroidSettingsScreen.Location -> Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+        AndroidSettingsScreen.Battery -> Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
+        AndroidSettingsScreen.AirplaneMode -> Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS)
+        AndroidSettingsScreen.DateAndTime -> Intent(Settings.ACTION_DATE_SETTINGS)
+        AndroidSettingsScreen.Storage -> Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
+        AndroidSettingsScreen.Accessibility -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        AndroidSettingsScreen.Security -> Intent(Settings.ACTION_SECURITY_SETTINGS)
+        // Pinned to this app's own package. Taking a package name from the
+        // model would turn this into "open any installed app's settings".
+        AndroidSettingsScreen.AppInfo -> Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", packageName, null)
+        )
+    }
+
+    /**
+     * Handles the `createCalendarEvent` action by opening the calendar app's
+     * new-event editor pre-filled.
+     *
+     * `ACTION_INSERT` on the provider's events URI, never a direct write: the
+     * calendar app owns the insert, so no calendar permission is needed and the
+     * user sees the event before it is saved.
+     */
+    private fun launchCreateCalendarEventIntent(
+        action: CreateCalendarEventAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val intent = Intent(Intent.ACTION_INSERT)
+            .setData(CalendarContract.Events.CONTENT_URI)
+            .putExtra(CalendarContract.Events.TITLE, action.title)
+            .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, action.startMillis)
+            .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, action.endMillis)
+            .putExtra(CalendarContract.EXTRA_EVENT_ALL_DAY, action.allDay)
+        if (action.location.isNotEmpty()) {
+            intent.putExtra(CalendarContract.Events.EVENT_LOCATION, action.location)
+        }
+        if (action.description.isNotEmpty()) {
+            intent.putExtra(CalendarContract.Events.DESCRIPTION, action.description)
+        }
+
+        val whenLabel = formatEventStart(action)
+        launchExternalIntent(
+            intent = intent,
+            actionName = "create-calendar-event",
+            detail = "allDay=${action.allDay} start=${action.startMillis} end=${action.endMillis}",
+            successMessage = "Calendar draft opened for \"${action.title}\" on $whenLabel",
+            missingAppMessage = "No calendar app is available on this device.",
+            deniedMessage = "This app is not allowed to open the calendar app.",
+            backgroundMessage =
+                "Could not open the calendar app while the app was in the background.",
+            completion = completion
+        )
+    }
+
+    /**
+     * Formats the start of an event for the confirmation toast.
+     *
+     * All-day events are stored at UTC midnight, so they are formatted in UTC
+     * too - reading them in the device's zone would show the previous day for
+     * anyone west of Greenwich.
+     */
+    private fun formatEventStart(action: CreateCalendarEventAction): String {
+        val format = if (action.allDay) {
+            DateFormat.getDateInstance(DateFormat.MEDIUM).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+        } else {
+            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+        }
+        return format.format(Date(action.startMillis))
+    }
+
+    /**
+     * Handles the `playMusicFromSearch` action by asking the device's music app
+     * to play the best match for a query.
+     *
+     * What actually plays is entirely the music app's decision, so the toast
+     * and the agent result both say what was asked for, not what is playing.
+     */
+    @Suppress("DEPRECATION")
+    private fun launchPlayMusicFromSearchIntent(
+        action: PlayMusicFromSearchAction,
+        completion: (AndroidDeviceExecutionResult) -> Unit
+    ) {
+        val intent = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
+            putExtra(SearchManager.QUERY, action.query)
+            // EXTRA_MEDIA_FOCUS tells the music app how to read the query. It is
+            // left off for "any", which is the documented way to say
+            // "unstructured search - you decide".
+            when (action.focus) {
+                MusicSearchFocus.Any -> Unit
+                MusicSearchFocus.Artist -> {
+                    putExtra(
+                        MediaStore.EXTRA_MEDIA_FOCUS,
+                        MediaStore.Audio.Artists.ENTRY_CONTENT_TYPE
+                    )
+                    putExtra(MediaStore.EXTRA_MEDIA_ARTIST, action.query)
+                }
+
+                MusicSearchFocus.Album -> {
+                    putExtra(
+                        MediaStore.EXTRA_MEDIA_FOCUS,
+                        MediaStore.Audio.Albums.ENTRY_CONTENT_TYPE
+                    )
+                    putExtra(MediaStore.EXTRA_MEDIA_ALBUM, action.query)
+                }
+
+                MusicSearchFocus.Song -> {
+                    putExtra(
+                        MediaStore.EXTRA_MEDIA_FOCUS,
+                        MediaStore.Audio.Media.ENTRY_CONTENT_TYPE
+                    )
+                    putExtra(MediaStore.EXTRA_MEDIA_TITLE, action.query)
+                }
+
+                MusicSearchFocus.Playlist -> {
+                    putExtra(
+                        MediaStore.EXTRA_MEDIA_FOCUS,
+                        MediaStore.Audio.Playlists.ENTRY_CONTENT_TYPE
+                    )
+                    putExtra(MediaStore.EXTRA_MEDIA_PLAYLIST, action.query)
+                }
+            }
+        }
+        launchExternalIntent(
+            intent = intent,
+            actionName = "play-music-from-search",
+            detail = "focus=${action.focus.schemaName} query=${action.query}",
+            successMessage = "Asked your music app to play ${action.query}",
+            missingAppMessage = "No music app on this device can play from a search.",
+            deniedMessage = "This app is not allowed to start playback.",
+            backgroundMessage = "Could not start playback while the app was in the background.",
             completion = completion
         )
     }
