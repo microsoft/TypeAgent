@@ -13534,8 +13534,8 @@ packages:
   electron-publish@26.8.1:
     resolution: {integrity: sha512-q+jrSTIh/Cv4eGZa7oVR+grEJo/FoLMYBAnSL5GCtqwUpr1T+VgKB/dn1pnzxIxqD8S/jP1yilT9VrwCqINR4w==}
 
-  electron-to-chromium@1.5.414:
-    resolution: {integrity: sha512-aYlviXiaXBbzvKgyALpcMmqa3Np3sDr0XnZbEG62n2UpZFbEcjQ4EEMOLGzVPhwVnwTz0lvKY+GcARbunuHekw==}
+  electron-to-chromium@1.5.415:
+    resolution: {integrity: sha512-958V+Kbhtgz+SxXeEVKBjrlKRBIDAYvUJfwhjxMZ5S6ut9jAl7l9ZKBkBrvjyjZE36PabLUo2L8kEeV5O4vgJg==}
 
   electron-updater@6.6.2:
     resolution: {integrity: sha512-Cr4GDOkbAUqRHP5/oeOmH/L2Bn6+FQPxVLZtPbcmKZC63a1F3uu5EefYOssgZXG3u/zBlubbJ5PJdITdMVggbw==}
@@ -26576,7 +26576,7 @@ snapshots:
     dependencies:
       baseline-browser-mapping: 2.11.19
       caniuse-lite: 1.0.30001810
-      electron-to-chromium: 1.5.414
+      electron-to-chromium: 1.5.415
       node-releases: 2.0.53
       update-browserslist-db: 1.3.1(browserslist@4.28.8)
 
@@ -28001,7 +28001,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-to-chromium@1.5.414: {}
+  electron-to-chromium@1.5.415: {}
 
   electron-updater@6.6.2(supports-color@8.1.1):
     dependencies:
