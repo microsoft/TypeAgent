@@ -68,9 +68,27 @@
     actionName: "clearLogSettings"
   };
 
+// Open one request's captured OpenTelemetry trace in local Grafana. Every
+// rule anchors on "local Grafana" or an explicit "last trace" so these do not
+// swallow generic "open ..." or "view ..." phrases.
+<OpenLogTrace> =
+  <Polite> open (the)? trace $(traceId:wildcard) in (the)? local grafana -> {
+    actionName: "openLogTrace",
+    parameters: { traceId }
+  }
+  | <Polite> open (the)? last trace -> {
+    actionName: "openLogTrace",
+    parameters: { traceId: "last" }
+  }
+  | <Polite> view (the)? last action result in (local)? grafana -> {
+    actionName: "openLogTrace",
+    parameters: { traceId: "last" }
+  };
+
 <Start> = <ShowLogStatus>
   | <SetFocusedProfile>
   | <SetDiagnosticProfile>
   | <SetVerboseProfile>
   | <SetOffProfile>
-  | <ClearLogSettings>;
+  | <ClearLogSettings>
+  | <OpenLogTrace>;
