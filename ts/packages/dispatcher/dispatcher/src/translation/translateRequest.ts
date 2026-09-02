@@ -907,6 +907,7 @@ async function findAssistantForRequest(
         schemaNames,
         provider,
         systemContext.promptLogger,
+        systemContext.session.getConfig().translation.model,
     );
 
     const result = await withChatModelTelemetryPurpose("schema-selection", () =>
