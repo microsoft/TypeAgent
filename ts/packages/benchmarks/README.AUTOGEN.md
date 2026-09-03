@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=26ad6323c100ffdf5ebc9fc114195b28de87858755404fe3cdf5046199f899b6 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=e1f7d3bf6c811d8ec2f4b5a91920017e587823fbe06393546dc91cd20fbf0eaf -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/benchmarks — AI-generated documentation
@@ -47,25 +47,37 @@ _None._
 - [./src/index.ts](./src/index.ts)
 - [./src/translationBench/index.ts](./src/translationBench/index.ts)
 - [./src/translationBench/policy/index.ts](./src/translationBench/policy/index.ts)
+- [./src/translationBench/public_datasets/DroidCall/index.ts](./src/translationBench/public_datasets/DroidCall/index.ts)
+- [./src/translationBench/public_datasets/DroidCall/toTypeAgentSchema.ts](./src/translationBench/public_datasets/DroidCall/toTypeAgentSchema.ts)
+- [./src/translationBench/public_datasets/Seal-Tools/index.ts](./src/translationBench/public_datasets/Seal-Tools/index.ts)
+- [./src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.ts](./src/translationBench/public_datasets/Seal-Tools/toTypeAgentSchema.ts)
 - [./src/translationBench/runner/index.ts](./src/translationBench/runner/index.ts)
 - [./src/translationBench/synthesizer/goldSchema.ts](./src/translationBench/synthesizer/goldSchema.ts)
 - [./src/translationBench/synthesizer/index.ts](./src/translationBench/synthesizer/index.ts)
-- [./src/core/model-prices.generated.json](./src/core/model-prices.generated.json)
-- [./src/core/paths.ts](./src/core/paths.ts)
-- [./src/core/prices.ts](./src/core/prices.ts)
-- [./src/core/rateLimiter.ts](./src/core/rateLimiter.ts)
-- _…and 56 more under `./src/`._
+- _…and 126 more under `./src/`._
 
 ### Environment variables
 
-_3 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_15 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
+- `DROIDCALL_CASE_IDS`
+- `DROIDCALL_MAX_CASES`
+- `DROIDCALL_MODELS`
+- `LITELLM_API_KEY`
+- `LITELLM_BASE_URL`
+- `LOCAL_LITELLM_API_KEY`
+- `LOCAL_LITELLM_OPENAI_BASE_URL`
 - `OPENAI_API_KEY`
 - `OPENAI_ENDPOINT`
 - `OPENAI_MODEL`
+- `OPENAI_MODEL_WIRE_API`
+- `SEAL_CASE_IDS`
+- `SEAL_MAX_CASES`
+- `SEAL_MODELS`
+- `TYPEAGENT_MODEL_PROVIDER`
 
 ---
 
-_Auto-generated against commit `273bb231e117e3ee83dc130e9981ab6c62dee464` on `2026-08-18T21:00:19.015Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
+_Auto-generated against commit `673a5348ac4d210dabe5bafe24ce10e24b290f2e` on `2026-09-03T06:14:18.659Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/benchmarks docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
