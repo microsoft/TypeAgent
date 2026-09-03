@@ -65,6 +65,7 @@ type CurrentMarkdownDocument =
     | {
           source: "session";
           storageKey: string;
+          binding?: DocumentBinding;
       }
     | {
           source: "workspace";
@@ -351,6 +352,7 @@ async function updateMarkdownContext(
                 storage,
             );
             if (fullPath) {
+                currentDocument.binding = createSessionFileBinding(fullPath);
                 process.env.MARKDOWN_FILE = fullPath;
                 // Fork the express view service in the background instead of
                 // blocking agent enable (and therefore agent-server startup)
@@ -363,7 +365,7 @@ async function updateMarkdownContext(
                     fullPath,
                     context.agentContext.localHostPort,
                 )
-                    .then(async (result) => {
+                    .then((result) => {
                         if (!result) {
                             return;
                         }
@@ -398,11 +400,9 @@ async function updateMarkdownContext(
                             context.agentContext.currentDocument?.source ===
                             "session"
                         ) {
-                            const binding = await getCurrentDocumentBinding(
-                                context.agentContext,
-                                storage,
-                            );
-                            if (!("storageKey" in binding)) {
+                            const binding =
+                                context.agentContext.currentDocument.binding;
+                            if (binding) {
                                 viewProcess.send({
                                     type: "setFile",
                                     workspaceRoot: binding.root,
@@ -695,6 +695,8 @@ async function handleCreateDocument(
                 storage,
             );
             if (fullPath) {
+                agentContext.currentDocument.binding =
+                    createSessionFileBinding(fullPath);
                 agentContext.viewProcess.send({
                     type: "setFile",
                     workspaceRoot: fs.realpathSync(path.dirname(fullPath)),
@@ -789,6 +791,8 @@ async function handleOpenDocument(
                 storage,
             );
             if (fullPath) {
+                agentContext.currentDocument.binding =
+                    createSessionFileBinding(fullPath);
                 agentContext.viewProcess.send({
                     type: "setFile",
                     workspaceRoot: fs.realpathSync(path.dirname(fullPath)),
@@ -844,6 +848,15 @@ type DocumentUpdateAction = Extract<
 
 type CurrentDocumentBinding = DocumentBinding | { storageKey: string };
 
+function createSessionFileBinding(fullPath: string): DocumentBinding {
+    return {
+        token: undefined,
+        root: fs.realpathSync(path.dirname(fullPath)),
+        relativePath: path.basename(fullPath),
+        filePath: fs.realpathSync(fullPath),
+    };
+}
+
 async function getCurrentDocumentBinding(
     agentContext: MarkdownActionContext,
     storage: Storage | undefined,
@@ -855,6 +868,15 @@ async function getCurrentDocumentBinding(
         );
     }
     if (currentDocument.source === "session") {
+        if (
+            getCurrentDocumentViewProcess(agentContext) &&
+            currentDocument.binding
+        ) {
+            return {
+                ...currentDocument.binding,
+                token: agentContext.currentBindingToken,
+            };
+        }
         if (storage === undefined) {
             throw new Error("Session storage is unavailable");
         }
@@ -869,10 +891,8 @@ async function getCurrentDocumentBinding(
             throw new Error("Current session document has no local file");
         }
         return {
+            ...createSessionFileBinding(fullPath),
             token: agentContext.currentBindingToken,
-            root: fs.realpathSync(path.dirname(fullPath)),
-            relativePath: path.basename(fullPath),
-            filePath: fs.realpathSync(fullPath),
         };
     }
     return {
@@ -910,14 +930,11 @@ async function readCurrentDocumentContent(
         };
     }
 
-    const response = await getDocumentContentFromView(
-        viewProcess,
-        {
-            expectedBindingToken: binding.token,
-            expectedRoot: binding.root,
-            expectedRelativePath: binding.relativePath,
-        },
-    );
+    const response = await getDocumentContentFromView(viewProcess, {
+        expectedBindingToken: binding.token,
+        expectedRoot: binding.root,
+        expectedRelativePath: binding.relativePath,
+    });
     if (response.identityMismatch) {
         throw new Error(
             "Document identity changed while reading; refusing to update the wrong file",
@@ -977,7 +994,9 @@ async function applyOperationsForCurrentDocument(
             expectedUpdatedRevision !== undefined &&
             computeContentRevision(updatedContent) !== expectedUpdatedRevision
         ) {
-            throw new Error("Updated document revision does not match operations");
+            throw new Error(
+                "Updated document revision does not match operations",
+            );
         }
         await storage.write(binding.storageKey, updatedContent);
         return;
@@ -1346,14 +1365,16 @@ export function setCurrentAgentContext(context: MarkdownActionContext) {
     ) {
         wiredViewProcesses.add(viewProcess);
         viewProcess.on("message", async (message: any) => {
-            if (message.type === "bindingUpdated" && currentAgentContext) {
+            if (
+                message.type === "bindingUpdated" &&
+                currentAgentContext?.currentDocument?.source === "session"
+            ) {
+                const binding = currentAgentContext.currentDocument.binding;
                 if (
-                    message.boundRoot ===
-                        currentAgentContext.currentWorkspaceRoot &&
-                    message.boundRelativePath ===
-                        currentAgentContext.currentFileName &&
-                    message.boundFilePath ===
-                        currentAgentContext.currentFilePath
+                    binding &&
+                    message.boundRoot === binding.root &&
+                    message.boundRelativePath === binding.relativePath &&
+                    message.boundFilePath === binding.filePath
                 ) {
                     currentAgentContext.currentBindingToken =
                         typeof message.bindingToken === "string"

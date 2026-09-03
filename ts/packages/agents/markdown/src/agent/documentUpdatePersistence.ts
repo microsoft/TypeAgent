@@ -7,8 +7,7 @@ import { createHash } from "node:crypto";
 import { applyDocumentOperations } from "./documentOperations.js";
 import type { DocumentOperation } from "./markdownOperationSchema.js";
 import {
-    isCanonicalDirectory,
-    resolveExistingFileWithinRoot,
+    resolveRealDirectory,
     resolveWritableFileWithinRoot,
 } from "./pathPolicy.js";
 
@@ -52,13 +51,14 @@ function validateIdentity(
     }
 }
 
-function resolveBoundFile(binding: DocumentBinding, write: boolean): string {
-    if (!isCanonicalDirectory(binding.root)) {
+function resolveBoundFile(binding: DocumentBinding): string {
+    if (resolveRealDirectory(binding.root) !== binding.root) {
         throw new Error("The authorized markdown workspace root changed");
     }
-    const resolved = write
-        ? resolveWritableFileWithinRoot(binding.root, binding.relativePath)
-        : resolveExistingFileWithinRoot(binding.root, binding.relativePath);
+    const resolved = resolveWritableFileWithinRoot(
+        binding.root,
+        binding.relativePath,
+    );
     if (
         resolved === undefined ||
         path.relative(resolved, binding.filePath) !== ""
@@ -71,7 +71,7 @@ function resolveBoundFile(binding: DocumentBinding, write: boolean): string {
 }
 
 export function readBoundDocument(binding: DocumentBinding) {
-    const filePath = resolveBoundFile(binding, false);
+    const filePath = resolveBoundFile(binding);
     const content = fs.readFileSync(filePath, "utf-8");
     return { content, revision: computeContentRevision(content), filePath };
 }
@@ -82,7 +82,7 @@ export function persistDocumentOperations(
     expected: UpdateExpectations,
 ) {
     validateIdentity(binding, expected);
-    let filePath = resolveBoundFile(binding, true);
+    let filePath = resolveBoundFile(binding);
     const currentContent = fs.readFileSync(filePath, "utf-8");
     const currentRevision = computeContentRevision(currentContent);
     if (expected.updatedRevision === currentRevision) {
@@ -109,7 +109,7 @@ export function persistDocumentOperations(
     }
 
     validateIdentity(binding, expected);
-    filePath = resolveBoundFile(binding, true);
+    filePath = resolveBoundFile(binding);
     if (
         computeContentRevision(fs.readFileSync(filePath, "utf-8")) !==
         currentRevision
