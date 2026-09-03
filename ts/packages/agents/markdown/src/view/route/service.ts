@@ -22,9 +22,7 @@ import { randomUUID } from "node:crypto";
 import { isAllowedViewOrigin } from "./originAllowlist.js";
 import { resolvePathWithinRoot } from "./pathPolicy.js";
 import {
-    isCanonicalDirectory,
     normalizeRelativeDocumentPath,
-    resolveExistingFileWithinRoot,
     resolveRealDirectory,
     resolveWritableFileWithinRoot,
 } from "../../agent/pathPolicy.js";
@@ -262,8 +260,16 @@ const INITIAL_ROOT_DIR =
 let currentRoot =
     resolveRealDirectory(INITIAL_ROOT_DIR) ?? path.resolve(INITIAL_ROOT_DIR);
 
+function resolveCanonicalRoot(root: string): string | undefined {
+    const canonicalRoot = resolveRealDirectory(root);
+    return canonicalRoot !== undefined &&
+        path.relative(path.resolve(root), canonicalRoot) === ""
+        ? canonicalRoot
+        : undefined;
+}
+
 function getValidatedCurrentRoot(): string {
-    if (!isCanonicalDirectory(currentRoot)) {
+    if (resolveCanonicalRoot(currentRoot) === undefined) {
         throw new Error("The document root is no longer accessible");
     }
     return currentRoot;
@@ -921,11 +927,11 @@ app.post("/file/load", express.json(), (req: Request, res: Response) => {
             return;
         }
 
-        const resolvedPath = resolveExistingFileWithinRoot(
+        const resolvedPath = resolveWritableFileWithinRoot(
             getValidatedCurrentRoot(),
             newFilePath,
         );
-        if (resolvedPath === undefined) {
+        if (resolvedPath === undefined || !fs.existsSync(resolvedPath)) {
             res.status(403).json({
                 error: "Access to the file is forbidden or file not found",
             });
@@ -1582,8 +1588,8 @@ process.on("message", async (message: any) => {
         if (message.relativePath) {
             const nextRoot =
                 typeof message.workspaceRoot === "string" &&
-                isCanonicalDirectory(message.workspaceRoot)
-                    ? resolveRealDirectory(message.workspaceRoot)
+                resolveCanonicalRoot(message.workspaceRoot) !== undefined
+                    ? resolveCanonicalRoot(message.workspaceRoot)
                     : undefined;
             const relativePath = normalizeRelativeDocumentPath(
                 message.relativePath,
