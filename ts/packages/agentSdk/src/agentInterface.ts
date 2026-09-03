@@ -473,6 +473,9 @@ export interface ActionContext<T = void> {
     // to execute immediately or redirect back to the reasoning loop.
     readonly isFromReasoningLoop: boolean;
 
+    // Absolute filesystem root authorized by the host for this action.
+    readonly workingDirectory?: string | undefined;
+
     // queue up toggle transient agent to be executed at the end of the commands
     queueToggleTransientAgent(
         agentName: string,

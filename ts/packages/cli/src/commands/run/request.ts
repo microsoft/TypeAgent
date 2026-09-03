@@ -95,6 +95,7 @@ export default class RequestCommand extends Command {
                     conversation.dispatcher,
                     `@dispatcher request ${args.request}`,
                     this.loadAttachment(args.attachment),
+                    { workingDirectory: process.cwd() },
                 );
             });
         } finally {

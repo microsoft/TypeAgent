@@ -11,14 +11,23 @@ import {
     AppAgentInitSettings,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import { MarkdownAction } from "./markdownActionSchema.js";
+import {
+    CreateDocumentAction,
+    MarkdownAction,
+} from "./markdownActionSchema.js";
 import { DocumentOperation } from "./markdownOperationSchema.js";
 import { createMarkdownAgent } from "./translator.js";
 import { ChildProcess, fork } from "child_process";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { UICommandResult } from "./ipcTypes.js";
 import registerDebug from "debug";
+import {
+    normalizeRelativeDocumentPath,
+    resolveRealDirectory,
+    resolveWritableFileWithinRoot,
+} from "./pathPolicy.js";
 
 const debug = registerDebug("typeagent:markdown:agent");
 
@@ -45,6 +54,8 @@ async function executeMarkdownAction(
 
 type MarkdownActionContext = {
     currentFileName?: string | undefined;
+    currentFilePath?: string | undefined;
+    currentWorkspaceRoot?: string | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
     // Handle returned by sessionContext.registerPort for the markdown
@@ -534,12 +545,97 @@ async function getFullMarkdownFilePath(fileName: string, storage: Storage) {
     return candidates ? candidates[0] : undefined;
 }
 
+async function handleCreateDocument(
+    action: CreateDocumentAction,
+    actionContext: ActionContext<MarkdownActionContext>,
+): Promise<ActionResult> {
+    const rawName = action.parameters.name;
+    const relativeCandidate = normalizeRelativeDocumentPath(rawName);
+    if (relativeCandidate === undefined) {
+        throw new Error(
+            `Document name is not a safe relative path: ${JSON.stringify(rawName)}`,
+        );
+    }
+    const relativeName = relativeCandidate.toLowerCase().endsWith(".md")
+        ? relativeCandidate
+        : `${relativeCandidate}.md`;
+
+    const workingDirectory = actionContext.workingDirectory;
+    if (workingDirectory === undefined) {
+        throw new Error(
+            "Markdown document creation requires a host-authorized working directory",
+        );
+    }
+    const canonicalRoot = resolveRealDirectory(workingDirectory);
+    if (canonicalRoot === undefined) {
+        throw new Error(
+            `Configured workingDirectory is not a real directory: ${workingDirectory}`,
+        );
+    }
+    const absoluteFilePath = resolveWritableFileWithinRoot(
+        canonicalRoot,
+        relativeName,
+    );
+    if (absoluteFilePath === undefined) {
+        throw new Error(
+            `Document name escapes workingDirectory: ${JSON.stringify(rawName)}`,
+        );
+    }
+
+    const initialContent = action.parameters.content ?? "";
+    const documentExisted = fs.existsSync(absoluteFilePath);
+    if (!documentExisted) {
+        fs.writeFileSync(absoluteFilePath, initialContent, {
+            encoding: "utf-8",
+            flag: "wx",
+        });
+    } else if (initialContent) {
+        const existingContent = fs.readFileSync(absoluteFilePath, "utf-8");
+        if (existingContent) {
+            throw new Error(
+                `Document ${relativeName} already contains content`,
+            );
+        }
+        fs.writeFileSync(absoluteFilePath, initialContent, "utf-8");
+    }
+
+    const agentContext = actionContext.sessionContext.agentContext;
+    agentContext.currentFileName = relativeName;
+    agentContext.currentFilePath = absoluteFilePath;
+    agentContext.currentWorkspaceRoot = canonicalRoot;
+
+    if (agentContext.viewProcess) {
+        agentContext.viewProcess.send({
+            type: "setFile",
+            filePath: path.basename(absoluteFilePath),
+            folderPath: path.dirname(absoluteFilePath),
+        });
+    }
+
+    const actionLabel = documentExisted ? "opened" : "created";
+    const result = createActionResult(
+        `Document ${actionLabel} at ${absoluteFilePath}`,
+    );
+    result.resultEntity = {
+        name: relativeName,
+        type: ["file", "markdown"],
+    };
+    result.activityContext = {
+        activityName: "editingMarkdown",
+        description: "Editing a Markdown document",
+        state: {
+            fileName: relativeName,
+        },
+        openLocalView: true,
+    };
+    return result;
+}
+
 async function handleMarkdownAction(
     action: MarkdownAction,
     actionContext: ActionContext<MarkdownActionContext>,
 ) {
     let result: ActionResult | undefined = undefined;
-    const agent = await createMarkdownAgent("GPT_4o");
 
     // Accumulates the LLM token usage consumed while handling this action so
     // it can be reported back to the dispatcher as "Action Tokens". The agent
@@ -549,13 +645,20 @@ async function handleMarkdownAction(
         completion_tokens: 0,
         total_tokens: 0,
     };
-    agent.tokenUsage = tokenUsage;
+    const createAgent = async () => {
+        const agent = await createMarkdownAgent("GPT_4o");
+        agent.tokenUsage = tokenUsage;
+        return agent;
+    };
 
     const storage = actionContext.sessionContext.sessionStorage;
 
     switch (action.actionName) {
-        case "openDocument":
         case "createDocument": {
+            result = await handleCreateDocument(action, actionContext);
+            break;
+        }
+        case "openDocument": {
             if (!action.parameters.name) {
                 result = createActionResult(
                     "Document could not be created: no name was provided",
@@ -600,6 +703,7 @@ async function handleMarkdownAction(
             break;
         }
         case "updateDocument": {
+            const agent = await createAgent();
             debug("Starting updateDocument action in agent process");
             result = createActionResult("Updating document ...");
 
@@ -740,6 +844,7 @@ async function handleMarkdownAction(
             break;
         }
         case "streamingUpdateDocument": {
+            const agent = await createAgent();
             // Handle streaming AI commands - now unified with regular updateDocument flow
             debug(
                 "Starting streamingUpdateDocument action - using standard translator flow",
