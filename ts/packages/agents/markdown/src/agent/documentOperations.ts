@@ -19,11 +19,76 @@ export function applyDocumentOperations(
     content: string,
     operations: DocumentOperation[],
 ): string {
-    return operations.reduce(
+    const orderedOperations = orderBaseRelativeOperations(
+        operations,
+        content.length,
+    );
+    return orderedOperations.reduce(
         (updatedContent, operation) =>
             applyDocumentOperation(updatedContent, operation),
         content,
     );
+}
+
+type OperationSpan = {
+    operation: DocumentOperation;
+    index: number;
+    from: number;
+    to: number;
+};
+
+function orderBaseRelativeOperations(
+    operations: DocumentOperation[],
+    contentLength: number,
+): DocumentOperation[] {
+    const spans = operations.map((operation, index) => {
+        const [from, to] =
+            operation.type === "insert"
+                ? [
+                      validatePosition(operation.position, contentLength),
+                      operation.position,
+                  ]
+                : validateRange(operation.from, operation.to, contentLength);
+        return { operation, index, from, to };
+    });
+
+    for (let leftIndex = 0; leftIndex < spans.length; leftIndex += 1) {
+        for (
+            let rightIndex = leftIndex + 1;
+            rightIndex < spans.length;
+            rightIndex += 1
+        ) {
+            if (operationsOverlap(spans[leftIndex], spans[rightIndex])) {
+                throw new Error("Document operations must not overlap");
+            }
+        }
+    }
+
+    return spans
+        .sort((left, right) => {
+            const positionOrder = right.from - left.from;
+            if (positionOrder !== 0) {
+                return positionOrder;
+            }
+            if (left.from === left.to && right.from !== right.to) {
+                return 1;
+            }
+            if (right.from === right.to && left.from !== left.to) {
+                return -1;
+            }
+            return right.index - left.index;
+        })
+        .map(({ operation }) => operation);
+}
+
+function operationsOverlap(left: OperationSpan, right: OperationSpan): boolean {
+    if (left.from === left.to) {
+        return right.from < left.from && left.from < right.to;
+    }
+    if (right.from === right.to) {
+        return left.from < right.from && right.from < left.to;
+    }
+    return left.from < right.to && right.from < left.to;
 }
 
 function applyDocumentOperation(
@@ -32,7 +97,10 @@ function applyDocumentOperation(
 ): string {
     switch (operation.type) {
         case "insert": {
-            const position = clampPosition(operation.position, content.length);
+            const position = validatePosition(
+                operation.position,
+                content.length,
+            );
             return (
                 content.slice(0, position) +
                 contentItemsToText(operation.content) +
@@ -40,7 +108,7 @@ function applyDocumentOperation(
             );
         }
         case "replace": {
-            const [from, to] = clampRange(
+            const [from, to] = validateRange(
                 operation.from,
                 operation.to,
                 content.length,
@@ -52,7 +120,7 @@ function applyDocumentOperation(
             );
         }
         case "delete": {
-            const [from, to] = clampRange(
+            const [from, to] = validateRange(
                 operation.from,
                 operation.to,
                 content.length,
@@ -60,7 +128,7 @@ function applyDocumentOperation(
             return content.slice(0, from) + content.slice(to);
         }
         case "format": {
-            const [from, to] = clampRange(
+            const [from, to] = validateRange(
                 operation.from,
                 operation.to,
                 content.length,
@@ -451,14 +519,18 @@ function peelLink(
     return { leftPos: leftPos - 1, rightPos: closeParen + 1 };
 }
 
-function clampPosition(position: number, contentLength: number): number {
-    if (!Number.isInteger(position) || position < 0) {
+function validatePosition(position: number, contentLength: number): number {
+    if (
+        !Number.isInteger(position) ||
+        position < 0 ||
+        position > contentLength
+    ) {
         throw new Error(`Invalid document position: ${position}`);
     }
-    return Math.min(position, contentLength);
+    return position;
 }
 
-function clampRange(
+function validateRange(
     from: number,
     to: number,
     contentLength: number,
@@ -467,9 +539,10 @@ function clampRange(
         !Number.isInteger(from) ||
         !Number.isInteger(to) ||
         from < 0 ||
-        to < from
+        to < from ||
+        to > contentLength
     ) {
         throw new Error(`Invalid document range: ${from}-${to}`);
     }
-    return [Math.min(from, contentLength), Math.min(to, contentLength)];
+    return [from, to];
 }

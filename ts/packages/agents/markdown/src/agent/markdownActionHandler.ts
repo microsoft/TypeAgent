@@ -565,8 +565,11 @@ async function handleStreamingMarkdownAction(
     // Read the current document. Prefer the view process (which has the
     // authoritative Yjs state) when it exists; otherwise pull directly from
     // the on-disk workspace document. Session storage is not a fallback.
-    const { content: markdownContent } =
-        await readCurrentDocumentContent(actionContext);
+    const {
+        content: markdownContent,
+        bindingToken,
+        revision,
+    } = await readCurrentDocumentContent(actionContext);
 
     try {
         // Call agent with streaming callback
@@ -616,18 +619,20 @@ async function handleStreamingMarkdownAction(
                     actionContext,
                 );
 
-                // Persist directly to the filesystem when the view process is
-                // not running. Otherwise the view process is responsible for
-                // applying and autosaving the operations.
-                if (
-                    !actionContext.sessionContext.agentContext.viewProcess &&
-                    updateResult.operations &&
-                    updateResult.operations.length > 0
-                ) {
-                    await persistOperationsToFile(
+                if (updateResult.operations?.length) {
+                    const operations =
+                        updateResult.operations as DocumentOperation[];
+                    const updatedContent = applyDocumentOperations(
+                        markdownContent,
+                        operations,
+                    );
+                    await applyOperationsForCurrentDocument(
                         actionContext,
                         markdownContent,
-                        updateResult.operations as DocumentOperation[],
+                        operations,
+                        bindingToken,
+                        revision,
+                        computeContentRevision(updatedContent),
                     );
                 }
 
@@ -1085,58 +1090,64 @@ async function updateCurrentDocument(
 
     const updateResult = response.data;
     if (updateResult.operations?.length) {
-        const viewProcess =
-            actionContext.sessionContext.agentContext.viewProcess;
-        if (viewProcess) {
-            // When a live view is authoritative, applyLLMOperations is the
-            // single source of truth: the service reads the current
-            // Markdown, revalidates the revision, applies the operations
-            // over raw Markdown, persists the bound file, updates its Yjs
-            // mirror, and broadcasts a post-commit snapshot. We never
-            // silently fall back to a headless filesystem write while the
-            // view is connected because that path bypasses that pipeline.
-            const agentContext = actionContext.sessionContext.agentContext;
-            const applied = await sendOperationsToView(
-                viewProcess,
-                updateResult.operations,
-                {
-                    expectedBindingToken: bindingToken,
-                    expectedRoot: agentContext.currentWorkspaceRoot,
-                    expectedRelativePath: agentContext.currentFileName,
-                    expectedRevision: revision,
-                },
-            );
-            if (!applied.success) {
-                if (applied.identityMismatch) {
-                    throw new Error(
-                        "Document identity changed while applying operations; refusing to write to the wrong file",
-                    );
-                }
-                if (applied.revisionMismatch) {
-                    throw new Error(
-                        "Document changed between read and apply; refusing to overwrite (revision mismatch)",
-                    );
-                }
-                throw new Error(
-                    applied.error ??
-                        "Failed to apply operations in view process",
-                );
-            }
-            debug("Operations applied successfully via view process");
-        } else {
-            await persistOperationsToFile(
-                actionContext,
-                markdownContent,
-                updateResult.operations,
-            );
-            debug("Applied operations directly to filesystem document");
-        }
+        await applyOperationsForCurrentDocument(
+            actionContext,
+            markdownContent,
+            updateResult.operations,
+            bindingToken,
+            revision,
+        );
     } else {
         debug("[AGENT] No operations returned from LLM");
     }
 
     return createActionResult(
         updateResult.operationSummary ?? "Updated document",
+    );
+}
+
+async function applyOperationsForCurrentDocument(
+    actionContext: ActionContext<MarkdownActionContext>,
+    baseContent: string,
+    operations: DocumentOperation[],
+    bindingToken: string | undefined,
+    revision: string,
+    expectedUpdatedRevision?: string,
+): Promise<void> {
+    const agentContext = actionContext.sessionContext.agentContext;
+    if (!agentContext.viewProcess) {
+        await persistOperationsToFile(actionContext, baseContent, operations);
+        debug("Applied operations directly to filesystem document");
+        return;
+    }
+
+    const applied = await sendOperationsToView(
+        agentContext.viewProcess,
+        operations,
+        {
+            expectedBindingToken: bindingToken,
+            expectedRoot: agentContext.currentWorkspaceRoot,
+            expectedRelativePath: agentContext.currentFileName,
+            expectedRevision: revision,
+            expectedUpdatedRevision,
+        },
+    );
+    if (applied.success) {
+        debug("Operations applied successfully via view process");
+        return;
+    }
+    if (applied.identityMismatch) {
+        throw new Error(
+            "Document identity changed while applying operations; refusing to write to the wrong file",
+        );
+    }
+    if (applied.revisionMismatch) {
+        throw new Error(
+            "Document changed between read and apply; refusing to overwrite (revision mismatch)",
+        );
+    }
+    throw new Error(
+        applied.error ?? "Failed to apply operations in view process",
     );
 }
 
@@ -1200,6 +1211,7 @@ type ApplyExpectations = {
     expectedRoot?: string | undefined;
     expectedRelativePath?: string | undefined;
     expectedRevision?: string | undefined;
+    expectedUpdatedRevision?: string | undefined;
 };
 
 async function sendOperationsToView(
@@ -1212,6 +1224,7 @@ async function sendOperationsToView(
         expectedRoot,
         expectedRelativePath,
         expectedRevision,
+        expectedUpdatedRevision,
     } = expectations;
     if (!viewProcess) {
         return {
@@ -1231,7 +1244,7 @@ async function sendOperationsToView(
                 identityMismatch: false,
                 revisionMismatch: false,
             });
-        }, 5000);
+        }, 15000);
 
         // Only accept the response tagged with our requestId. This keeps
         // out-of-order or concurrent operationsApplied messages from
@@ -1279,6 +1292,7 @@ async function sendOperationsToView(
             expectedRoot,
             expectedRelativePath,
             expectedRevision,
+            expectedUpdatedRevision,
         });
 
         debug(

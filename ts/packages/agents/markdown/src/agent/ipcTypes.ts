@@ -114,6 +114,7 @@ export interface LLMOperationsMessage {
     expectedRoot?: string;
     expectedRelativePath?: string;
     expectedRevision?: string;
+    expectedUpdatedRevision?: string;
 }
 
 export interface OperationsAppliedMessage {

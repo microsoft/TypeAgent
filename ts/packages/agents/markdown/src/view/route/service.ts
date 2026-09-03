@@ -639,10 +639,15 @@ function checkExpectedIdentity(
 async function readCurrentMarkdownServerSide(
     documentId: string,
     snapshot: BindingSnapshot = captureBindingSnapshot(),
+    clientReadRetries: number = 3,
 ): Promise<string> {
     if (clients.length > 0) {
         try {
-            const response = await requestMarkdownFromClient(0, snapshot);
+            const response = await requestMarkdownFromClient(
+                0,
+                snapshot,
+                clientReadRetries,
+            );
             return response.markdown;
         } catch (error) {
             // A binding-token mismatch means the browser explicitly
@@ -818,6 +823,7 @@ async function sendUICommandToAgentWithStreaming(
 async function requestMarkdownFromClient(
     retryCount: number = 0,
     snapshot: BindingSnapshot = captureBindingSnapshot(),
+    maxRetries: number = 3,
 ): Promise<{
     markdown: string;
     positionInfo: {
@@ -825,7 +831,6 @@ async function requestMarkdownFromClient(
         selection?: { from: number; to: number };
     };
 }> {
-    const maxRetries = 3; // Increased from 2 to 3
     const expectedBindingToken = snapshot.bindingToken;
 
     return new Promise((resolve, reject) => {
@@ -840,7 +845,11 @@ async function requestMarkdownFromClient(
                 // Retry after a longer delay for better reliability
                 setTimeout(
                     () => {
-                        requestMarkdownFromClient(retryCount + 1, snapshot)
+                        requestMarkdownFromClient(
+                            retryCount + 1,
+                            snapshot,
+                            maxRetries,
+                        )
                             .then(resolve)
                             .catch(reject);
                     },
@@ -2079,6 +2088,16 @@ process.on("message", async (message: any) => {
                 return;
             }
 
+            if (
+                currentRoot === nextRoot &&
+                filePath === resolvedFilePath &&
+                boundRelativePath === relative &&
+                bindingToken !== null
+            ) {
+                notifyBindingToParent();
+                return;
+            }
+
             if (currentRoot !== nextRoot) {
                 currentRoot = nextRoot;
                 debug(`Document root switched to ${currentRoot}`);
@@ -2268,6 +2287,7 @@ Start typing to see the editor in action!
             const currentMarkdown = await readCurrentMarkdownServerSide(
                 snapshotDocumentId,
                 snapshot,
+                0,
             );
 
             // Re-check the snapshot after the potentially-awaiting read.
@@ -2296,8 +2316,18 @@ Start typing to see the editor in action!
                 typeof message.expectedRevision === "string"
                     ? message.expectedRevision
                     : undefined;
+            const expectedUpdatedRevision =
+                typeof message.expectedUpdatedRevision === "string"
+                    ? message.expectedUpdatedRevision
+                    : undefined;
             const baseRevision = computeContentRevision(currentMarkdown);
+            // Streaming clients may have already rendered the final operations.
+            // Persist that exact result instead of applying the offsets twice.
+            const operationsAlreadyApplied =
+                expectedUpdatedRevision !== undefined &&
+                expectedUpdatedRevision === baseRevision;
             if (
+                !operationsAlreadyApplied &&
                 expectedRevision !== undefined &&
                 expectedRevision !== baseRevision
             ) {
@@ -2339,10 +2369,9 @@ Start typing to see the editor in action!
                 }
             }
 
-            const updatedContent = applyDocumentOperations(
-                currentMarkdown,
-                operations,
-            );
+            const updatedContent = operationsAlreadyApplied
+                ? currentMarkdown
+                : applyDocumentOperations(currentMarkdown, operations);
 
             // Update the authoritative Yjs mirror so any concurrent
             // WebSocket peer receives the raw-Markdown update.

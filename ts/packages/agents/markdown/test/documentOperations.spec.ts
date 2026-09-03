@@ -4,6 +4,65 @@
 import { applyDocumentOperations } from "../src/agent/documentOperations.js";
 import type { DocumentOperation } from "../src/agent/markdownOperationSchema.js";
 
+describe("base-relative DocumentOperation batches", () => {
+    test("applies length-changing operations without shifting later offsets", () => {
+        const before =
+            "# Title\n\nAlpha paragraph.\n\nBravo paragraph.\n\nCharlie paragraph.\n";
+        const charlieStart = before.indexOf("Charlie");
+        const operations: DocumentOperation[] = [
+            {
+                type: "insert",
+                position: before.indexOf("Alpha"),
+                content: [{ type: "text", text: "NEW INTRO\n\n" }],
+            },
+            {
+                type: "delete",
+                from: charlieStart,
+                to: before.length,
+            },
+        ];
+
+        expect(applyDocumentOperations(before, operations)).toBe(
+            "# Title\n\nNEW INTRO\n\nAlpha paragraph.\n\nBravo paragraph.\n\n",
+        );
+    });
+
+    test("preserves operation order for inserts at the same position", () => {
+        const operations: DocumentOperation[] = [
+            {
+                type: "insert",
+                position: 0,
+                content: [{ type: "text", text: "first " }],
+            },
+            {
+                type: "insert",
+                position: 0,
+                content: [{ type: "text", text: "second " }],
+            },
+        ];
+
+        expect(applyDocumentOperations("body", operations)).toBe(
+            "first second body",
+        );
+    });
+
+    test("rejects overlapping operations", () => {
+        const operations: DocumentOperation[] = [
+            { type: "delete", from: 0, to: 4 },
+            {
+                type: "replace",
+                from: 2,
+                to: 6,
+                content: [{ type: "text", text: "updated" }],
+            },
+        ];
+
+        expect(() => applyDocumentOperations("content", operations)).toThrow(
+            "Document operations must not overlap",
+        );
+    });
+});
+
 describe("format DocumentOperation", () => {
     test("adds strong marks around a character range", () => {
         const before = "hello world";

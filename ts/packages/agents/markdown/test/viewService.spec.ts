@@ -81,6 +81,62 @@ describe("markdown view service", () => {
         );
     });
 
+    test("does not apply streaming operations twice", async () => {
+        root = fs.mkdtempSync(path.join(os.tmpdir(), "markdown-view-test-"));
+        const filePath = path.join(root, "streamed.md");
+        fs.writeFileSync(filePath, "already streamed", "utf-8");
+
+        viewProcess = fork(servicePath, ["0"], {
+            env: {
+                ...process.env,
+                TYPEAGENT_MARKDOWN_ROOT: root,
+            },
+            stdio: ["ignore", "ignore", "ignore", "ipc"],
+        });
+        await waitForMessage(
+            viewProcess,
+            (message) => message.type === "Success",
+        );
+        viewProcess.send({
+            type: "setFile",
+            workspaceRoot: root,
+            relativePath: "streamed.md",
+        });
+        viewProcess.send({
+            type: "getDocumentContent",
+            requestId: "capture-streamed",
+        });
+        const bound = await waitForMessage(
+            viewProcess,
+            (message) =>
+                message.type === "documentContent" &&
+                message.requestId === "capture-streamed",
+        );
+
+        viewProcess.send({
+            type: "applyLLMOperations",
+            requestId: "apply-streamed",
+            operations: [
+                {
+                    type: "insert",
+                    position: 0,
+                    content: [{ type: "text", text: "duplicate " }],
+                },
+            ],
+            expectedRevision: "base-before-streaming",
+            expectedUpdatedRevision: bound.revision,
+        });
+        const applied = await waitForMessage(
+            viewProcess,
+            (message) =>
+                message.type === "operationsApplied" &&
+                message.requestId === "apply-streamed",
+        );
+
+        expect(applied.success).toBe(true);
+        expect(fs.readFileSync(filePath, "utf-8")).toBe("already streamed");
+    });
+
     test("reroots via setFile workspaceRoot and persists under the new root", async () => {
         root = fs.mkdtempSync(path.join(os.tmpdir(), "markdown-view-test-"));
         const workspace = fs.mkdtempSync(
@@ -396,6 +452,8 @@ describe("markdown view service", () => {
         root = fs.mkdtempSync(path.join(os.tmpdir(), "markdown-view-test-"));
         const filePath = path.join(root, "browser.md");
         fs.writeFileSync(filePath, "seed", "utf-8");
+        const nextFilePath = path.join(root, "next.md");
+        fs.writeFileSync(nextFilePath, "next", "utf-8");
 
         viewProcess = fork(servicePath, ["0"], {
             env: {
@@ -427,11 +485,11 @@ describe("markdown view service", () => {
         const staleToken = first.bindingToken;
         expect(typeof staleToken).toBe("string");
 
-        // Rebind to rotate the token.
+        // Rebind to another file to rotate the token.
         viewProcess.send({
             type: "setFile",
             workspaceRoot: root,
-            relativePath: "browser.md",
+            relativePath: "next.md",
         });
         viewProcess.send({
             type: "getDocumentContent",
@@ -460,6 +518,7 @@ describe("markdown view service", () => {
 
         expect(response.status).toBe(409);
         expect(fs.readFileSync(filePath, "utf-8")).toBe("seed");
+        expect(fs.readFileSync(nextFilePath, "utf-8")).toBe("next");
     });
 
     test("rejects browser autosave when no file is bound", async () => {
@@ -607,7 +666,7 @@ describe("markdown view service", () => {
         expect(fs.readFileSync(filePath, "utf-8")).toBe("existing");
     });
 
-    test("rebinding to the same relative path rotates the binding token", async () => {
+    test("rebinding to the same relative path preserves the binding token", async () => {
         // A rebound view must reject callers pinned to the pre-rebind
         // token even when the new binding uses the same basename or the
         // same relative path.
@@ -656,7 +715,7 @@ describe("markdown view service", () => {
         const firstToken = first.bindingToken;
         expect(typeof firstToken).toBe("string");
 
-        // Rebind to the same relative path - the token must rotate.
+        // Rebinding the current file is an acknowledgement, not a new identity.
         viewProcess.send({
             type: "setFile",
             workspaceRoot: root,
@@ -672,29 +731,10 @@ describe("markdown view service", () => {
                 message.type === "documentContent" &&
                 message.requestId === "capture-token-2",
         );
-        expect(second.bindingToken).not.toBe(firstToken);
-
-        // A caller still pinned to the stale token must be rejected.
-        viewProcess.send({
-            type: "applyLLMOperations",
-            requestId: "apply-stale-rebind",
-            operations: [
-                {
-                    type: "insert",
-                    position: 0,
-                    content: [{ type: "text", text: "clobber" }],
-                },
-            ],
-            expectedBindingToken: firstToken,
-        });
-        const rejected = await waitForMessage(
-            viewProcess,
-            (message) =>
-                message.type === "operationsApplied" &&
-                message.requestId === "apply-stale-rebind",
-        );
-        expect(rejected.success).toBe(false);
-        expect(rejected.identityMismatch).toBe(true);
+        expect(second.bindingToken).toBe(firstToken);
+        expect(
+            bindingUpdates.filter((token) => token === firstToken),
+        ).toHaveLength(2);
         expect(fs.readFileSync(filePath, "utf-8")).toBe("seed");
     });
 
