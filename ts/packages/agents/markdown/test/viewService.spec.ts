@@ -240,6 +240,7 @@ describe("markdown view service binding isolation", () => {
                 bindingToken: first.bindingToken,
                 documentId: first.bindingToken,
                 boundRelativePath: "first.md",
+                clientRole: "primary",
             });
 
             const switchedResponse = await fetch(
@@ -304,6 +305,39 @@ describe("markdown view service binding isolation", () => {
             });
         } finally {
             controller.abort();
+        }
+    });
+
+    test("elects the next SSE client when the primary disconnects", async () => {
+        const port = await start({ "shared.md": "shared" });
+        const bound = await bind("shared.md", "bind-shared");
+        const primaryController = new AbortController();
+        const secondaryController = new AbortController();
+        const primaryEvents = await openSseEvents(
+            `http://127.0.0.1:${port}/events`,
+            primaryController.signal,
+        );
+        const secondaryEvents = await openSseEvents(
+            `http://127.0.0.1:${port}/events`,
+            secondaryController.signal,
+        );
+        try {
+            expect(
+                await waitForEvent(primaryEvents, "bindingBootstrap"),
+            ).toMatchObject({ clientRole: "primary" });
+            expect(
+                await waitForEvent(secondaryEvents, "bindingBootstrap"),
+            ).toMatchObject({ clientRole: "secondary" });
+
+            primaryController.abort();
+            expect(
+                await waitForEvent(secondaryEvents, "primaryElected"),
+            ).toMatchObject({
+                bindingToken: bound.bindingToken,
+            });
+        } finally {
+            primaryController.abort();
+            secondaryController.abort();
         }
     });
 
