@@ -3,6 +3,20 @@
 
 // IPC Message Types for TypeAgent Communication
 
+export interface SetFileMessage {
+    type: "setFile";
+    workspaceRoot?: string;
+    relativePath?: string;
+}
+
+export interface BindingUpdatedMessage {
+    type: "bindingUpdated";
+    bindingToken: string | null;
+    boundFilePath: string | null;
+    boundRoot: string | null;
+    boundRelativePath: string | null;
+}
+
 // Agent ← View: UI command requests
 export interface UICommandMessage {
     type: "uiCommand";
@@ -46,7 +60,7 @@ export interface DocumentContentMessage {
     type: "documentContent";
     requestId: string;
     content: string;
-    source?: "file" | "error";
+    source?: "client-serializer" | "yjs-fallback" | "file-fallback" | "error";
     error?: string;
     timestamp: number;
     bindingToken: string | null;
@@ -98,6 +112,24 @@ export interface NotificationEvent {
 export interface OperationsAppliedEvent {
     type: "operationsApplied";
     operationCount: number;
+}
+
+export interface DocumentSnapshotEvent {
+    type: "documentSnapshot";
+    bindingToken: string;
+    markdown: string;
+    revision: string;
+    timestamp: number;
+}
+
+export interface BindingBootstrapEvent {
+    type: "bindingBootstrap";
+    bindingToken: string | null;
+    documentId: string | null;
+    documentName: string | null;
+    boundRelativePath: string | null;
+    revision: string | null;
+    timestamp: number;
 }
 
 // Client ← View: Markdown content requests
