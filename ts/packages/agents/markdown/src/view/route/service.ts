@@ -1717,6 +1717,38 @@ erDiagram
     };
 }
 
+async function captureStableBindingRevision(): Promise<
+    | {
+          snapshot: BindingSnapshot;
+          revision: string | null;
+      }
+    | undefined
+> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const snapshot = captureBindingSnapshot();
+        let revision: string | null = null;
+        if (snapshot.filePath && snapshot.boundRelativePath) {
+            try {
+                revision = (
+                    await readBoundDocument({
+                        token: snapshot.bindingToken ?? undefined,
+                        root: snapshot.currentRoot,
+                        relativePath: snapshot.boundRelativePath,
+                        filePath: snapshot.filePath,
+                    })
+                ).revision;
+            } catch (error) {
+                debug(`Unable to read binding revision: ${error}`);
+                return undefined;
+            }
+        }
+        if (!bindingsDiffer(captureBindingSnapshot(), snapshot)) {
+            return { snapshot, revision };
+        }
+    }
+    return undefined;
+}
+
 app.get("/events", async (req: Request, res: Response) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -1726,57 +1758,52 @@ app.get("/events", async (req: Request, res: Response) => {
     let closed = false;
     req.on("close", () => {
         closed = true;
+        const wasPrimary = clients[0] === res;
         clients = clients.filter((client) => client !== res);
+        if (wasPrimary && clients[0]) {
+            const nextPrimary = clients[0];
+            void captureStableBindingRevision().then((binding) => {
+                if (binding && clients[0] === nextPrimary) {
+                    safeWriteToResponse(
+                        nextPrimary,
+                        `data: ${JSON.stringify({
+                            type: "primaryElected",
+                            bindingToken: binding.snapshot.bindingToken,
+                            revision: binding.revision,
+                            timestamp: Date.now(),
+                        })}\n\n`,
+                    );
+                }
+            });
+        }
     });
 
-    let bootstrap = captureBindingSnapshot();
-    let revision: string | null = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-        bootstrap = captureBindingSnapshot();
-        revision = null;
-        if (bootstrap.filePath && bootstrap.boundRelativePath) {
-            try {
-                revision = (
-                    await readBoundDocument({
-                        token: bootstrap.bindingToken ?? undefined,
-                        root: bootstrap.currentRoot,
-                        relativePath: bootstrap.boundRelativePath,
-                        filePath: bootstrap.filePath,
-                    })
-                ).revision;
-            } catch (error) {
-                debug(`Unable to read binding bootstrap revision: ${error}`);
-                res.end();
-                return;
-            }
-        }
-        if (closed) {
-            return;
-        }
-        if (!bindingsDiffer(captureBindingSnapshot(), bootstrap)) {
-            break;
-        }
-        if (attempt === 2) {
-            res.end();
-            return;
-        }
+    const binding = await captureStableBindingRevision();
+    if (!binding || closed) {
+        res.end();
+        return;
     }
-    res.write(
+    const clientRole = clients.length === 0 ? "primary" : "secondary";
+    const wroteBootstrap = safeWriteToResponse(
+        res,
         `data: ${JSON.stringify({
             type: "bindingBootstrap",
-            bindingToken: bootstrap.bindingToken,
-            documentId: bootstrap.filePath
-                ? getCurrentDocumentId(bootstrap)
+            bindingToken: binding.snapshot.bindingToken,
+            documentId: binding.snapshot.filePath
+                ? getCurrentDocumentId(binding.snapshot)
                 : null,
-            documentName: bootstrap.filePath
-                ? path.basename(bootstrap.filePath, ".md")
+            documentName: binding.snapshot.filePath
+                ? path.basename(binding.snapshot.filePath, ".md")
                 : null,
-            boundRelativePath: bootstrap.boundRelativePath,
-            revision,
+            boundRelativePath: binding.snapshot.boundRelativePath,
+            revision: binding.revision,
+            clientRole,
             timestamp: Date.now(),
         })}\n\n`,
     );
-    clients.push(res);
+    if (wroteBootstrap && !closed) {
+        clients.push(res);
+    }
 });
 
 // Serve static files AFTER API routes to avoid conflicts

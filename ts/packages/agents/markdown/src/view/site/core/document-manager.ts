@@ -5,7 +5,24 @@ import type { Editor } from "@milkdown/core";
 import { editorViewCtx, parserCtx } from "@milkdown/core";
 import { AI_CONFIG, DEFAULT_MARKDOWN_CONTENT, EDITOR_CONFIG } from "../config";
 import { getMarkdownFromEditor, getEditorPositionInfo } from "../utils";
-import { encodeDocumentPathForUrl } from "../../route/urlPath";
+import {
+    encodeDocumentPathForUrl,
+    ensureMarkdownExtension,
+} from "../../route/urlPath";
+
+class DocumentWriteConflictError extends Error {
+    public constructor(message: string) {
+        super(message);
+        this.name = "DocumentWriteConflictError";
+    }
+}
+
+interface DocumentWriteResponse {
+    bindingToken?: unknown;
+    content?: unknown;
+    error?: unknown;
+    revision?: unknown;
+}
 
 interface SSEEventData {
     type: string;
@@ -29,6 +46,7 @@ interface SSEEventData {
 interface BindingStateData {
     documentId?: unknown;
     bindingToken?: unknown;
+    boundRelativePath?: unknown;
     revision?: unknown;
 }
 
@@ -42,10 +60,34 @@ export class DocumentManager {
     private isPrimaryClient = false;
     private isBindingTransitionInProgress = false;
     private lastAutoSaveContent = "";
+    private lastConflictedAutoSaveContent: string | null = null;
     private currentDocumentId = "default";
     private bindingToken: string | null = null;
     private revision: string | null = null;
     private bindingVersion = 0;
+    private currentBoundRelativePath: string | null = null;
+
+    // Keep the names introduced by the persistence change as aliases while
+    // retaining the parent's binding state machine and transition guards.
+    private get currentBindingToken(): string | null {
+        return this.bindingToken;
+    }
+
+    private set currentBindingToken(value: string | null) {
+        this.bindingToken = value;
+    }
+
+    private get currentRevision(): string | null {
+        return this.revision;
+    }
+
+    private set currentRevision(value: string | null) {
+        this.revision = value;
+    }
+
+    public getCurrentBoundRelativePath(): string | null {
+        return this.currentBoundRelativePath;
+    }
 
     public setNotificationManager(notificationManager: any): void {
         this.notificationManager = notificationManager;
@@ -66,10 +108,31 @@ export class DocumentManager {
     public async initialize(): Promise<void> {
         // Set up SSE connection for document change notifications
         this.setupSSEConnection();
+        await this.loadCurrentBindingPath();
 
         // Initialize auto-save if enabled
         if (EDITOR_CONFIG.FEATURES.AUTO_SAVE) {
             this.startAutoSave();
+        }
+    }
+
+    private async loadCurrentBindingPath(): Promise<void> {
+        try {
+            const response = await fetch("/api/current-document");
+            if (!response.ok) {
+                return;
+            }
+            const current = (await response.json()) as {
+                boundRelativePath?: unknown;
+            };
+            if (typeof current.boundRelativePath === "string") {
+                this.currentBoundRelativePath = current.boundRelativePath;
+            }
+        } catch (error) {
+            console.warn(
+                "[DOCUMENT] Failed to load current binding path:",
+                error,
+            );
         }
     }
 
@@ -91,7 +154,7 @@ export class DocumentManager {
     }
 
     /**
-     * Perform auto-save if content has changed
+     * Persist changed editor Markdown from the primary browser only.
      */
     private async performAutoSave(): Promise<void> {
         try {
@@ -113,12 +176,15 @@ export class DocumentManager {
                 return;
             }
 
-            // Get current content using editor API
             const currentContent = await this.getMarkdownContent(editor);
-
-            // Only save if content has changed
             if (currentContent === this.lastAutoSaveContent) {
                 console.log("[AUTO-SAVE] Skipping - content unchanged");
+                return;
+            }
+            if (currentContent === this.lastConflictedAutoSaveContent) {
+                console.warn(
+                    "[AUTO-SAVE] Skipping unchanged content after a write conflict",
+                );
                 return;
             }
 
@@ -138,25 +204,31 @@ export class DocumentManager {
                 }),
             });
 
+            await this.reconcileDocumentWriteResponse(
+                response,
+                currentContent,
+                "Auto-save",
+                bindingToken,
+                bindingVersion,
+            );
             if (response.ok) {
-                const result = await response.json();
-                if (
-                    bindingVersion === this.bindingVersion &&
-                    bindingToken === this.bindingToken &&
-                    result.bindingToken === bindingToken
-                ) {
-                    this.adoptRevision(result);
-                    this.lastAutoSaveContent = currentContent;
-                }
                 console.log("[AUTO-SAVE] Successfully saved document");
             } else {
-                console.error(
-                    "[AUTO-SAVE] Failed to save:",
-                    response.statusText,
+                console.log(
+                    "[AUTO-SAVE] Reconciled with content already persisted by another client",
                 );
             }
         } catch (error) {
             console.error("[AUTO-SAVE] Error during auto-save:", error);
+            if (
+                error instanceof DocumentWriteConflictError &&
+                this.notificationManager
+            ) {
+                this.notificationManager.showNotification(
+                    error.message,
+                    "error",
+                );
+            }
         }
     }
 
@@ -223,8 +295,17 @@ export class DocumentManager {
                 break;
 
             case "autoSave":
-                this.adoptRevision(data);
                 console.log(`[SSE] Auto-save completed for: ${data.filePath}`);
+                if (
+                    typeof data.bindingToken === "string" &&
+                    data.bindingToken === this.bindingToken
+                ) {
+                    this.adoptRevision(data);
+                } else {
+                    console.warn(
+                        "[SSE] Ignoring autoSave revision for a stale binding",
+                    );
+                }
                 // Auto-save notification removed per user request
                 break;
 
@@ -239,6 +320,22 @@ export class DocumentManager {
 
             case "llmOperations":
                 await this.handleLLMOperations(data);
+                break;
+
+            case "primaryElected":
+                if (
+                    typeof data.bindingToken !== "string" ||
+                    data.bindingToken !== this.bindingToken ||
+                    typeof data.revision !== "string"
+                ) {
+                    console.warn(
+                        "[SSE] Ignoring incomplete or stale primaryElected event",
+                    );
+                    break;
+                }
+                this.isPrimaryClient = true;
+                this.adoptRevision(data);
+                console.log("[SSE] Promoted to PRIMARY for auto-save");
                 break;
 
             case "operationsBeingApplied":
@@ -272,25 +369,51 @@ export class DocumentManager {
         if (
             typeof data.bindingToken === "string" &&
             typeof data.documentId === "string" &&
-            typeof data.revision === "string"
+            typeof data.revision === "string" &&
+            typeof data.boundRelativePath === "string"
         ) {
+            const documentName =
+                typeof data.documentName === "string"
+                    ? data.documentName
+                    : data.boundRelativePath.replace(/\.md$/i, "");
             await this.transitionToBinding(
                 {
                     documentId: data.documentId,
                     bindingToken: data.bindingToken,
+                    boundRelativePath: data.boundRelativePath,
                     revision: data.revision,
                 },
-                data.documentName,
+                documentName,
                 data.boundRelativePath,
             );
-        } else if (data.bindingToken === null && data.documentId === null) {
+        } else if (
+            data.bindingToken === null &&
+            data.documentId === null &&
+            data.boundRelativePath === null
+        ) {
             this.adoptBinding(data);
+        } else {
+            console.warn("[SSE] Ignoring incomplete bindingBootstrap event");
+            return;
+        }
+
+        if (data.clientRole === "primary") {
+            this.isPrimaryClient = true;
+        } else if (data.clientRole === "secondary") {
+            this.isPrimaryClient = false;
         }
     }
 
     private async handleDocumentChanged(data: SSEEventData): Promise<void> {
         console.log(`[SSE] Document changed to: ${data.newDocumentId}`);
-        if (typeof data.bindingToken !== "string") {
+        if (
+            typeof data.newDocumentId !== "string" ||
+            typeof data.newDocumentName !== "string" ||
+            typeof data.bindingToken !== "string" ||
+            typeof data.boundRelativePath !== "string" ||
+            typeof data.revision !== "string"
+        ) {
+            console.warn("[SSE] Ignoring incomplete documentChanged event");
             return;
         }
         if (this.notificationManager) {
@@ -300,6 +423,7 @@ export class DocumentManager {
             {
                 documentId: data.newDocumentId,
                 bindingToken: data.bindingToken,
+                boundRelativePath: data.boundRelativePath,
                 revision: data.revision,
             },
             data.newDocumentName,
@@ -312,6 +436,7 @@ export class DocumentManager {
             data.bindingToken !== this.bindingToken ||
             typeof data.markdown !== "string" ||
             typeof data.baseMarkdown !== "string" ||
+            typeof data.revision !== "string" ||
             !this.editorManager
         ) {
             return;
@@ -416,11 +541,12 @@ export class DocumentManager {
         }
         await this.editorManager.switchToDocument(documentId, content);
 
-        document.title = `${documentName} - AI-Enhanced Markdown Editor`;
         const documentPath = relativePath || documentName;
+        const displayPath = documentPath.replace(/\.md$/i, "");
+        document.title = `${displayPath} - AI-Enhanced Markdown Editor`;
         const newUrl = `/document/${encodeDocumentPathForUrl(documentPath)}`;
         window.history.pushState(
-            { documentName: documentPath },
+            { documentPath: displayPath },
             document.title,
             newUrl,
         );
@@ -430,6 +556,7 @@ export class DocumentManager {
         binding: {
             documentId: string;
             bindingToken: string;
+            boundRelativePath: string;
             revision: unknown;
         },
         documentName: string,
@@ -440,18 +567,23 @@ export class DocumentManager {
                 binding.bindingToken === this.bindingToken &&
                 binding.documentId === this.currentDocumentId
             ) {
+                this.currentBoundRelativePath = binding.boundRelativePath;
                 this.adoptRevision(binding);
                 return;
             }
 
             this.isBindingTransitionInProgress = true;
             try {
-                await this.handleDocumentChangeFromBackend(
-                    binding.documentId,
-                    documentName,
-                    relativePath,
-                    binding.bindingToken,
-                );
+                // Unit tests and headless clients have no editor to switch.
+                // They still need to track the server-authoritative binding.
+                if (this.editorManager) {
+                    await this.handleDocumentChangeFromBackend(
+                        binding.documentId,
+                        documentName,
+                        relativePath,
+                        binding.bindingToken,
+                    );
+                }
                 this.adoptBinding(binding);
             } finally {
                 this.isBindingTransitionInProgress = false;
@@ -571,6 +703,9 @@ export class DocumentManager {
         }
     }
 
+    /**
+     * Persist serialized Markdown with the active binding and base revision.
+     */
     public async saveDocument(editor?: Editor): Promise<void> {
         try {
             if (
@@ -598,19 +733,13 @@ export class DocumentManager {
                 }),
             });
 
-            if (!response.ok) {
-                throw new Error(`Save failed: ${response.status}`);
-            }
-
-            const result = await response.json();
-            if (
-                bindingVersion !== this.bindingVersion ||
-                bindingToken !== this.bindingToken ||
-                result.bindingToken !== bindingToken
-            ) {
-                throw new Error("Binding changed while saving");
-            }
-            this.adoptRevision(result);
+            await this.reconcileDocumentWriteResponse(
+                response,
+                content,
+                "Save",
+                bindingToken,
+                bindingVersion,
+            );
             console.log(` [DOCUMENT] Document saved successfully`);
         } catch (error) {
             console.error("[DOCUMENT] Failed to save document:", error);
@@ -622,7 +751,6 @@ export class DocumentManager {
     }
 
     public async getMarkdownContent(editor: Editor): Promise<string> {
-        if (!editor) return "";
         return getMarkdownFromEditor(editor);
     }
 
@@ -635,6 +763,7 @@ export class DocumentManager {
             if (response.ok) {
                 const content = await response.text();
                 this.adoptRevisionHeader(response);
+                this.lastAutoSaveContent = content;
                 return content;
             } else {
                 return this.getDefaultContent();
@@ -708,21 +837,13 @@ export class DocumentManager {
                 }),
             });
 
-            if (!response.ok) {
-                throw new Error(
-                    `Failed to set document content: ${response.status} ${response.statusText}`,
-                );
-            }
-
-            const result = await response.json();
-            if (
-                bindingVersion !== this.bindingVersion ||
-                bindingToken !== this.bindingToken ||
-                result.bindingToken !== bindingToken
-            ) {
-                throw new Error("Binding changed while updating content");
-            }
-            this.adoptRevision(result);
+            await this.reconcileDocumentWriteResponse(
+                response,
+                content,
+                "Set document content",
+                bindingToken,
+                bindingVersion,
+            );
             console.log(` [DOCUMENT] Document content updated successfully`);
             // Don't reload the whole page, just notify the editor will update via collaboration
             console.log(
@@ -778,16 +899,26 @@ export class DocumentManager {
         }
     }
 
-    public async switchToDocument(documentName: string): Promise<void> {
+    public async switchToDocument(documentPath: string): Promise<void> {
         try {
+            if (this.currentBoundRelativePath !== null) {
+                const targetRelativePath =
+                    ensureMarkdownExtension(documentPath);
+                if (this.currentBoundRelativePath === targetRelativePath) {
+                    console.log(
+                        `[DOCUMENT] Already bound to ${this.currentBoundRelativePath}; skipping /api/switch-document`,
+                    );
+                    return;
+                }
+            }
+
             const switchUrl = "/api/switch-document";
             const startingBindingVersion = this.bindingVersion;
 
-            // Call server to switch document
             const response = await fetch(switchUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ documentPath: documentName }),
+                body: JSON.stringify({ documentPath }),
             });
 
             if (!response.ok) {
@@ -796,19 +927,37 @@ export class DocumentManager {
                 );
             }
 
-            const result = await response.json();
+            const result = (await response.json()) as BindingStateData & {
+                documentName?: unknown;
+            };
             if (
                 this.bindingVersion !== startingBindingVersion &&
                 this.bindingToken !== result.bindingToken
             ) {
+                console.warn(
+                    `[DOCUMENT] Ignoring stale switch response for ${documentPath}`,
+                );
                 return;
             }
-            console.log(`[DOCUMENT] Server switched to: ${documentName}`);
+            if (
+                typeof result.documentId !== "string" ||
+                typeof result.bindingToken !== "string" ||
+                typeof result.boundRelativePath !== "string" ||
+                typeof result.revision !== "string"
+            ) {
+                throw new Error("Switch response is missing binding data");
+            }
+            const documentName =
+                typeof result.documentName === "string"
+                    ? result.documentName
+                    : documentPath;
+            console.log(`[DOCUMENT] Server switched to: ${documentPath}`);
 
             await this.transitionToBinding(
                 {
                     documentId: result.documentId,
                     bindingToken: result.bindingToken,
+                    boundRelativePath: result.boundRelativePath,
                     revision: result.revision,
                 },
                 documentName,
@@ -825,29 +974,114 @@ export class DocumentManager {
         if (typeof data.documentId === "string") {
             this.currentDocumentId = data.documentId;
         }
-        this.bindingToken =
+        this.currentBindingToken =
             typeof data.bindingToken === "string" ? data.bindingToken : null;
-        this.revision =
+        this.currentRevision =
             typeof data.revision === "string" ? data.revision : null;
+        this.currentBoundRelativePath =
+            typeof data.boundRelativePath === "string"
+                ? data.boundRelativePath
+                : null;
     }
 
     private adoptRevision(data: BindingStateData): void {
         if (
             typeof data.bindingToken === "string" &&
-            data.bindingToken !== this.bindingToken
+            data.bindingToken !== this.currentBindingToken
         ) {
             return;
         }
         if (typeof data.revision === "string") {
-            this.revision = data.revision;
+            this.currentRevision = data.revision;
         }
     }
 
     private adoptRevisionHeader(response: Response): void {
         const revision = response.headers.get("X-Content-Revision");
         if (revision) {
-            this.revision = revision;
+            this.currentRevision = revision;
         }
+    }
+
+    private async parseDocumentWriteResponse(
+        response: Response,
+    ): Promise<DocumentWriteResponse | undefined> {
+        try {
+            const result: unknown = await response.json();
+            if (
+                typeof result === "object" &&
+                result !== null &&
+                !Array.isArray(result)
+            ) {
+                return result as DocumentWriteResponse;
+            }
+        } catch (error) {
+            console.warn(
+                `[DOCUMENT] Could not parse ${response.status} response body:`,
+                error,
+            );
+        }
+        return undefined;
+    }
+
+    private async reconcileDocumentWriteResponse(
+        response: Response,
+        attemptedContent: string,
+        operation: string,
+        expectedBindingToken: string,
+        expectedBindingVersion: number,
+    ): Promise<void> {
+        const result = await this.parseDocumentWriteResponse(response);
+        if (
+            expectedBindingVersion !== this.bindingVersion ||
+            expectedBindingToken !== this.bindingToken
+        ) {
+            throw new Error(`Binding changed while ${operation.toLowerCase()}`);
+        }
+
+        if (response.ok) {
+            if (typeof result?.revision !== "string") {
+                throw new Error(`${operation} response is missing a revision`);
+            }
+            if (
+                result?.bindingToken !== undefined &&
+                result.bindingToken !== expectedBindingToken
+            ) {
+                throw new Error(
+                    `${operation} response did not match the active binding`,
+                );
+            }
+            this.adoptRevision(result ?? {});
+            this.lastAutoSaveContent = attemptedContent;
+            this.lastConflictedAutoSaveContent = null;
+            return;
+        }
+
+        if (
+            response.status === 409 &&
+            typeof result?.revision === "string" &&
+            result.content === attemptedContent
+        ) {
+            this.adoptRevision({ revision: result.revision });
+            this.lastAutoSaveContent = attemptedContent;
+            this.lastConflictedAutoSaveContent = null;
+            return;
+        }
+
+        if (response.status === 409) {
+            this.lastConflictedAutoSaveContent = attemptedContent;
+            const detail =
+                typeof result?.error === "string" ? ` ${result.error}` : "";
+            throw new DocumentWriteConflictError(
+                `${operation} conflict: the document changed on disk and was not overwritten.${detail}`,
+            );
+        }
+
+        const detail =
+            typeof result?.error === "string" ? ` ${result.error}` : "";
+        throw new Error(
+            `${operation} failed: ${response.status} ${response.statusText}.${detail}`,
+        );
     }
 
     private async hasUnsavedChanges(): Promise<boolean> {

@@ -180,13 +180,18 @@ export class CollaborationManager {
                     `[COLLAB] Retrieved collaboration info for document: ${collabInfo.currentDocument}`,
                 );
 
+                // The server-provided ID is the Yjs room key. A display
+                // basename is not unique for documents in different folders.
+                const authoritativeDocumentId =
+                    typeof collabInfo.currentDocumentId === "string" &&
+                    collabInfo.currentDocumentId.length > 0
+                        ? collabInfo.currentDocumentId
+                        : COLLABORATION_CONFIG.DEFAULT_DOCUMENT_ID;
                 const config = {
                     websocketServerUrl:
                         collabInfo.websocketServerUrl ||
                         COLLABORATION_CONFIG.DEFAULT_WEBSOCKET_URL,
-                    documentId:
-                        collabInfo.currentDocumentId ||
-                        COLLABORATION_CONFIG.DEFAULT_DOCUMENT_ID,
+                    documentId: authoritativeDocumentId,
                     fallbackToLocal: true,
                 };
 
