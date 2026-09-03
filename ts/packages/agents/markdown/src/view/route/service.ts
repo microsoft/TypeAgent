@@ -271,7 +271,7 @@ let clients: any[] = [];
 let filePath: string | null = null;
 let boundRelativePath: string | null = null;
 let bindingToken: string | null = null;
-let collaborationManager: CollaborationManager;
+const collaborationManager = new CollaborationManager();
 
 // UI Command routing state
 let commandCounter = 0;
@@ -731,9 +731,6 @@ function handleStreamingChunkFromAgent(
         );
     }
 }
-
-// Initialize collaboration manager
-collaborationManager = new CollaborationManager();
 
 // Get document as markdown text
 app.get("/document", (req: Request, res: Response) => {
