@@ -79,6 +79,14 @@ export function resolveRealDirectory(absolutePath: string): string | undefined {
     }
 }
 
+export function isCanonicalDirectory(absolutePath: string): boolean {
+    const canonicalPath = resolveRealDirectory(absolutePath);
+    return (
+        canonicalPath !== undefined &&
+        path.relative(path.resolve(absolutePath), canonicalPath) === ""
+    );
+}
+
 export function resolveExistingFileWithinRoot(
     root: string,
     requestedPath: string,
