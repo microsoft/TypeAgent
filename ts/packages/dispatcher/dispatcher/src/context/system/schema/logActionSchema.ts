@@ -4,7 +4,8 @@
 export type LogAction =
     | ShowLogStatusAction
     | SetLogProfileAction
-    | ClearLogSettingsAction;
+    | ClearLogSettingsAction
+    | OpenLogTraceAction;
 
 // Show the current local OpenTelemetry logging configuration.
 // Examples: "show local log status", "check local telemetry settings".
@@ -25,4 +26,16 @@ export type SetLogProfileAction = {
 // Examples: "reset local logging", "clear local telemetry settings".
 export type ClearLogSettingsAction = {
     actionName: "clearLogSettings";
+};
+
+// Open a captured request's OpenTelemetry trace in the local Grafana Explore
+// view. `traceId` is either a 32-character hex trace id or the literal "last",
+// which resolves to the trace id of the previously completed request.
+// Examples: "open trace <id> in local Grafana", "open last trace",
+// "view the last action result in Grafana".
+export type OpenLogTraceAction = {
+    actionName: "openLogTrace";
+    parameters: {
+        traceId: string;
+    };
 };

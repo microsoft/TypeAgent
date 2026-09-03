@@ -465,8 +465,12 @@ const probePayloadShape = {
     history: z.unknown().optional(),
     parameterScore: z.array(parameterScoreSpecSchema.optional()).optional(),
 } as const;
-function validateHistory(
-    probe: { history?: unknown },
+function validateProbePayload(
+    probe: {
+        history?: unknown;
+        expectedActions?: unknown;
+        parameterScore?: unknown;
+    },
     context: z.RefinementCtx,
 ) {
     if (probe.history !== undefined && !isChatHistoryInput(probe.history)) {
@@ -476,11 +480,22 @@ function validateHistory(
             message: "invalid ChatHistoryInput",
         });
     }
+    if (
+        Array.isArray(probe.parameterScore) &&
+        Array.isArray(probe.expectedActions) &&
+        probe.parameterScore.length !== probe.expectedActions.length
+    ) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["parameterScore"],
+            message: "parameterScore must align 1:1 with expectedActions",
+        });
+    }
 }
 const probePayloadSchema = z
     .object(probePayloadShape)
     .strict()
-    .superRefine(validateHistory);
+    .superRefine(validateProbePayload);
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 const lineageSchema = z
     .object({
@@ -514,7 +529,7 @@ const publicProbeSchema = z
         selection: selectionAnnotationSchema,
     })
     .strict()
-    .superRefine(validateHistory);
+    .superRefine(validateProbePayload);
 const shapeOnlySchema = z
     .object({
         ...probePayloadShape,
@@ -530,7 +545,7 @@ const shapeOnlySchema = z
             .strict(),
     })
     .strict()
-    .superRefine(validateHistory);
+    .superRefine(validateProbePayload);
 const toolSchema = z
     .object({
         type: z.literal("function"),

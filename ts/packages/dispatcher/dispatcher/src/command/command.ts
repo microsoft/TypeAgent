@@ -505,6 +505,7 @@ export async function processCommand(
     options?: ProcessCommandOptions,
     parentContext?: Context,
 ): Promise<CommandResult | undefined> {
+    const isCommand = originalInput.trimStart().startsWith("@");
     // Create the AbortController *before* acquiring the lock so that a
     // cancelCommandByClientId() call that arrives while we are queued can
     // already abort the controller that will drive this command.
@@ -521,8 +522,9 @@ export async function processCommand(
     // steps in later phases; the root span carries only the values known
     // at the outermost async boundary. Everything the wrapper receives is
     // an identifier, not user text - see setTypeAgentSpanAttributes.
-    const sessionId = context.session.sessionDirPath
-        ? getSessionName(context.session.sessionDirPath)
+    const sessionAtStart = context.session;
+    const sessionId = sessionAtStart.sessionDirPath
+        ? getSessionName(sessionAtStart.sessionDirPath)
         : undefined;
     const rootAttributes: {
         -readonly [K in keyof otel.TypeAgentSpanAttributes]: otel.TypeAgentSpanAttributes[K];
@@ -550,9 +552,7 @@ export async function processCommand(
                 ...(requestId.connectionId === undefined
                     ? {}
                     : { connectionId: requestId.connectionId }),
-                kind: originalInput.trimStart().startsWith("@")
-                    ? "command"
-                    : "request",
+                kind: isCommand ? "command" : "request",
                 attachmentCount: attachments?.length ?? 0,
             });
             try {
@@ -601,6 +601,25 @@ export async function processCommand(
                         const result = endProcessCommand(requestId, context);
                         if (result !== undefined && rootTraceId !== undefined) {
                             result.traceId = rootTraceId;
+                        }
+                        if (
+                            rootTraceId !== undefined &&
+                            context.session === sessionAtStart
+                        ) {
+                            context.sessionTraceHistory.push({
+                                traceId: rootTraceId,
+                                requestId: requestId.requestId,
+                                kind: isCommand ? "command" : "request",
+                                isTraceOpen:
+                                    result?.actions?.some(
+                                        (action) =>
+                                            action.schemaName ===
+                                                "system.log" &&
+                                            action.actionName ===
+                                                "openLogTrace",
+                                    ) === true,
+                                completedAt: Date.now(),
+                            });
                         }
                         logRequestCompleted(
                             context.logger,
