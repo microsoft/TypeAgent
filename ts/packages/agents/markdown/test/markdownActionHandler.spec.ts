@@ -67,6 +67,9 @@ describe("markdown document creation", () => {
                 },
                 context,
             );
+            if (result === undefined || "error" in result) {
+                throw new Error("Expected successful document creation");
+            }
 
             const expectedPath = path.join(
                 fs.realpathSync(workspace),
@@ -82,7 +85,7 @@ describe("markdown document creation", () => {
                 currentFilePath: expectedPath,
                 currentWorkspaceRoot: fs.realpathSync(workspace),
             });
-            expect(result?.tokenUsage).toEqual({
+            expect(result.tokenUsage).toEqual({
                 prompt_tokens: 0,
                 completion_tokens: 0,
                 total_tokens: 0,
@@ -97,7 +100,7 @@ describe("markdown document creation", () => {
     test.each([
         ["traversal", "../escape"],
         ["nested traversal", "notes/../../escape"],
-        ["absolute", path.resolve(workspace, "..", "escape")],
+        ["absolute", path.resolve("escape")],
         ["drive-qualified", "C:escape"],
     ])("rejects %s paths", async (_label, name) => {
         const { context } = createContext();
