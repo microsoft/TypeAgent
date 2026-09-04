@@ -711,18 +711,20 @@ export type DependabotAlertsAction = {
     };
 };
 
-// Fetch a target branch, merge it into the current branch, and create the merge
-// commit. If Git reports conflicts, hand the conflicted files to Reasoning for
-// semantic resolution before the deterministic completion action commits.
+// Fetch a source branch, merge it into the currently checked-out local branch,
+// and create the merge commit. This action never checks out a different
+// destination branch. If Git reports conflicts, hand the conflicted files to
+// Reasoning for semantic resolution before the deterministic completion action
+// commits.
 // Use this for requests such as "resolve merge conflicts from main" or "bring
 // the default branch into this branch and resolve conflicts". This never pushes.
 export type ResolveMergeConflictsAction = {
     actionName: "resolveMergeConflicts";
     parameters: {
-        // Branch to merge into the current local branch. A REMOTE/BRANCH value
-        // disambiguates repositories with multiple remotes. When omitted, use
-        // the selected remote's configured default branch, then an existing
-        // main or master branch.
+        // Source branch to merge into the currently checked-out local branch. A
+        // REMOTE/BRANCH value disambiguates repositories with multiple remotes.
+        // When omitted, use the selected remote's configured default branch,
+        // then an existing main or master branch.
         targetBranch?: string;
     };
 };
