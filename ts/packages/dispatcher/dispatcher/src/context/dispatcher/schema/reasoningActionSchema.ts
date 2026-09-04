@@ -17,5 +17,8 @@ export interface ReasoningAction {
         attemptedAction?: string;
         // JSON-serialized entities on the stack at the time of redirect.
         contextEntities?: string;
+        // Override the tool working directory for a task tied to a specific
+        // local repository. Omit for the TypeAgent repository default.
+        workingDirectory?: string;
     };
 }

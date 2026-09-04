@@ -38,12 +38,9 @@ import {
     whichExists,
 } from "./setup.js";
 import {
-    MergePreparationFailure,
-    MergePreparationSuccess,
-    MergeVerificationFailure,
-    MergeVerificationSuccess,
-    prepareMerge,
-    verifyMergeConflictsResolved,
+    MergeConflictResult,
+    completeMergeConflictResolution,
+    mergeAndCommit,
 } from "./mergeConflict.js";
 
 const execFileAsync = promisify(execFile);
@@ -67,8 +64,6 @@ export function instantiate(): AppAgent {
         initializeAgentContext,
         executeAction,
         checkReadiness,
-        getActionReadiness: async (action) =>
-            getGithubActionReadiness(action.actionName),
         setup: async (actionContext) =>
             offerInstall(
                 actionContext as ActionContext<GithubCliActionContext>,
@@ -81,15 +76,6 @@ export function instantiate(): AppAgent {
             return ctx.choiceManager.handleChoice(choiceId, response, context);
         },
     };
-}
-
-export function getGithubActionReadiness(
-    actionName: string,
-): ReadinessReport | undefined {
-    return actionName === "resolveMergeConflicts" ||
-        actionName === "verifyMergeConflictsResolved"
-        ? { state: "ready" }
-        : undefined;
 }
 
 async function initializeAgentContext(): Promise<GithubCliActionContext> {
@@ -445,7 +431,7 @@ export function buildArgs(
 
     switch (action.actionName) {
         case "resolveMergeConflicts":
-        case "verifyMergeConflictsResolved":
+        case "completeMergeConflictResolution":
             // This action uses the narrowly scoped local git workflow below,
             // never the general-purpose gh argument marshaller.
             return undefined;
@@ -1932,101 +1918,6 @@ export async function validateAndResolveRepo(
     };
 }
 
-function formatMergeFailure(failure: MergePreparationFailure): string {
-    const details: string[] = [`**${failure.message}**`];
-    if (failure.changedPaths !== undefined) {
-        details.push(
-            `Existing paths:\n${failure.changedPaths.map((file) => `- \`${file}\``).join("\n")}`,
-        );
-    }
-    if (failure.remotes !== undefined) {
-        details.push(
-            `Remotes: ${failure.remotes.map((remote) => `\`${remote}\``).join(", ")}`,
-        );
-    }
-    if (failure.recovery.length > 0) {
-        details.push(
-            `Recovery:\n${failure.recovery.map((step) => `- ${step}`).join("\n")}`,
-        );
-    }
-    return details.join("\n\n");
-}
-
-export function buildMergeResult(
-    result: MergePreparationSuccess,
-): ActionResultSuccess {
-    const target = result.target.displayName;
-    const summary =
-        result.status === "conflicts"
-            ? `Merge from ${target} has ${result.conflicts.length} conflict(s).`
-            : result.status === "ready"
-              ? `Merge from ${target} is ready for review.`
-              : `${target} is already incorporated.`;
-    const conflictLines = result.conflicts.map((conflict) => {
-        const flags = [
-            conflict.kind,
-            conflict.binary ? "binary" : undefined,
-            conflict.submodule ? "submodule" : undefined,
-        ].filter((value): value is string => value !== undefined);
-        return `- \`${conflict.path}\` (${flags.join(", ")})`;
-    });
-    const blocks: StructuredBlock[] = [
-        { kind: "heading", level: 3, text: summary },
-        {
-            kind: "keyValue",
-            pairs: [
-                { label: "Current branch", value: result.currentBranch },
-                { label: "Target", value: target },
-                { label: "Fetched commit", value: result.target.fetchedCommit },
-                {
-                    label: "Merge state",
-                    value: result.mergeInProgress
-                        ? "In progress, not committed"
-                        : "No merge in progress",
-                },
-            ],
-        },
-    ];
-    if (conflictLines.length > 0) {
-        blocks.push({
-            kind: "text",
-            format: "markdown",
-            text: `**Conflicted files**\n${conflictLines.join("\n")}`,
-        });
-    }
-    blocks.push({
-        kind: "text",
-        format: "markdown",
-        text: `**Next steps**\n${result.recovery.map((step) => `- ${step}`).join("\n")}`,
-    });
-
-    return {
-        historyText: JSON.stringify(result),
-        entities: [],
-        resultValue: result,
-        displayContent: createStructuredContent(blocks, { rawData: result }),
-    };
-}
-
-async function executeResolveMergeConflicts(
-    targetBranch: string | undefined,
-): Promise<ActionResult> {
-    const result = await prepareMerge(targetBranch);
-    if (result.status === "blocked") {
-        return {
-            error: JSON.stringify(result),
-            errorCode: result.errorCode,
-            retryable: result.errorCode !== "mergeFailed",
-            mayHaveSideEffects: result.mayHaveSideEffects,
-            errorDisplayContent: {
-                type: "markdown",
-                content: formatMergeFailure(result),
-            },
-        };
-    }
-    return buildMergeResult(result);
-}
-
 export function getRequestedMergeTarget(action: {
     actionName?: string;
     parameters?: { targetBranch?: string };
@@ -2034,86 +1925,90 @@ export function getRequestedMergeTarget(action: {
     return action.parameters?.targetBranch;
 }
 
-function formatVerificationFailure(failure: MergeVerificationFailure): string {
-    return [
-        `**${failure.message}**`,
-        failure.recovery.length > 0
-            ? `Recovery:\n${failure.recovery.map((step) => `- ${step}`).join("\n")}`
-            : undefined,
-    ]
-        .filter((part): part is string => part !== undefined)
-        .join("\n\n");
+function buildMergeFailure(
+    result: Extract<MergeConflictResult, { status: "blocked" }>,
+): ActionResult {
+    const recovery =
+        result.recovery === undefined ? "" : `\n\n${result.recovery}`;
+    return {
+        error: JSON.stringify(result),
+        errorCode: result.errorCode,
+        retryable: !result.mayHaveSideEffects,
+        mayHaveSideEffects: result.mayHaveSideEffects,
+        errorDisplayContent: {
+            type: "markdown",
+            content: `**${result.message}**${recovery}`,
+        },
+    };
 }
 
-export function buildVerificationResult(
-    result: MergeVerificationSuccess,
-): ActionResultSuccess {
+export function buildMergeResult(result: MergeConflictResult): ActionResult {
+    if (result.status === "blocked") {
+        return buildMergeFailure(result);
+    }
+
+    const target = result.target?.displayName;
     const summary =
-        result.status === "resolved"
-            ? "All merge conflicts are resolved and all merge changes are staged."
-            : result.status === "unresolved"
-              ? `${result.remainingConflicts.length} merge conflict(s) remain.`
-              : result.status === "markersRemain"
-                ? `Conflict markers remain in ${result.markerPaths.length} file(s).`
-                : `${result.unstagedPaths.length} merge path(s) still have unstaged changes.`;
-    const details =
-        result.status === "unresolved"
-            ? result.remainingConflicts.map(
-                  (conflict) =>
-                      `- \`${conflict.path}\` (${conflict.kind}${conflict.binary ? ", binary" : ""}${conflict.submodule ? ", submodule" : ""})`,
-              )
-            : result.status === "markersRemain"
-              ? result.markerPaths.map((file) => `- \`${file}\``)
-              : result.unstagedPaths.map((file) => `- \`${file}\``);
+        result.status === "committed"
+            ? `Created merge commit ${result.commit.slice(0, 12)}${target ? ` from ${target}` : ""}.`
+            : result.status === "upToDate"
+              ? `${target} is already incorporated.`
+              : `Merge from ${target} has ${result.conflicts.length} conflict(s). Reasoning will resolve them.`;
     const blocks: StructuredBlock[] = [
         { kind: "heading", level: 3, text: summary },
-        {
-            kind: "keyValue",
-            pairs: [
-                { label: "Current branch", value: result.currentBranch },
-                { label: "Merge state", value: "In progress, not committed" },
-                {
-                    label: "Inspected paths",
-                    value: result.inspectedPaths.length,
-                },
-            ],
-        },
     ];
-    if (details.length > 0) {
+    if (result.status === "conflicts") {
         blocks.push({
             kind: "text",
             format: "markdown",
-            text: details.join("\n"),
+            text: result.conflicts.map((file) => `- \`${file}\``).join("\n"),
+        });
+        blocks.push({
+            kind: "text",
+            format: "markdown",
+            text: `The merge is in progress in \`${result.repositoryRoot}\`. If Reasoning cannot finish it, run \`git -C "${result.repositoryRoot}" merge --abort\`.`,
         });
     }
-    blocks.push({
-        kind: "text",
-        format: "markdown",
-        text: `**Next steps**\n${result.recovery.map((step) => `- ${step}`).join("\n")}`,
-    });
-    return {
+    const actionResult: ActionResultSuccess = {
         historyText: JSON.stringify(result),
         entities: [],
         resultValue: result,
         displayContent: createStructuredContent(blocks, { rawData: result }),
     };
+    if (result.status === "conflicts") {
+        const files = result.conflicts.map((file) => `- ${file}`).join("\n");
+        actionResult.additionalActions = [
+            {
+                schemaName: "dispatcher.reasoning",
+                actionName: "reasoningAction",
+                parameters: {
+                    originalRequest:
+                        `Resolve the current Git merge conflicts in the repository at ${result.repositoryRoot}. ` +
+                        `Treat every path below as relative to that root, and run every Git command with that exact repository as its working directory:\n${files}\n\n` +
+                        "Inspect both sides and preserve the intent of each change. Edit and stage only these conflicted paths. Do not edit unrelated files, abort the merge, commit, or push. " +
+                        "Stage each resolved path with git add or git rm. When all conflicts are resolved and staged, execute the " +
+                        `\`github-cli.completeMergeConflictResolution\` action with \`{\"repositoryRoot\":${JSON.stringify(result.repositoryRoot)}}\`; it will verify and create the merge commit.`,
+                    reason: "The merge produced file conflicts that require semantic resolution.",
+                    workingDirectory: result.repositoryRoot,
+                },
+            },
+        ];
+    }
+    return actionResult;
 }
 
-async function executeVerifyMergeConflictsResolved(): Promise<ActionResult> {
-    const result = await verifyMergeConflictsResolved();
-    if (result.status === "blocked") {
-        return {
-            error: JSON.stringify(result),
-            errorCode: result.errorCode,
-            retryable: true,
-            mayHaveSideEffects: false,
-            errorDisplayContent: {
-                type: "markdown",
-                content: formatVerificationFailure(result),
-            },
-        };
-    }
-    return buildVerificationResult(result);
+async function executeResolveMergeConflicts(
+    targetBranch: string | undefined,
+): Promise<ActionResult> {
+    return buildMergeResult(await mergeAndCommit(targetBranch));
+}
+
+async function executeCompleteMergeConflictResolution(
+    repositoryRoot: string,
+): Promise<ActionResult> {
+    return buildMergeResult(
+        await completeMergeConflictResolution({ cwd: repositoryRoot }),
+    );
 }
 
 // code-complexity-allow: top-level action dispatch over all github-cli actions
@@ -2124,8 +2019,10 @@ async function executeAction(
     if (action.actionName === "resolveMergeConflicts") {
         return executeResolveMergeConflicts(getRequestedMergeTarget(action));
     }
-    if (action.actionName === "verifyMergeConflictsResolved") {
-        return executeVerifyMergeConflictsResolved();
+    if (action.actionName === "completeMergeConflictResolution") {
+        return executeCompleteMergeConflictResolution(
+            action.parameters.repositoryRoot,
+        );
     }
 
     // Bare-name repo guard — see validateAndResolveRepo. Runs before

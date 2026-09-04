@@ -829,15 +829,6 @@ export async function createAgentRpcClient(
         checkReadiness(context: SessionContext<ShimContext>) {
             return rpc.invoke("checkReadiness", getContextParam(context));
         },
-        getActionReadiness(
-            action: TypeAgentAction,
-            context: SessionContext<ShimContext>,
-        ) {
-            return rpc.invoke("getActionReadiness", {
-                ...getContextParam(context),
-                action,
-            });
-        },
         setup(context: ActionContext<ShimContext>) {
             return withActionContextAsync(context, (contextParams) =>
                 rpc.invoke("setup", { ...contextParams }),

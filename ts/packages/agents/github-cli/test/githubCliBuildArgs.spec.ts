@@ -220,7 +220,7 @@ describe("buildArgs — myPullRequests (cross-repo gh search prs)", () => {
     });
 
     describe("buildArgs — deterministic local merge actions", () => {
-        test.each(["resolveMergeConflicts", "verifyMergeConflictsResolved"])(
+        test.each(["resolveMergeConflicts", "completeMergeConflictResolution"])(
             "keeps %s outside the generic gh execution path",
             (actionName) => {
                 expect(buildArgs(action(actionName, {}))).toBeUndefined();

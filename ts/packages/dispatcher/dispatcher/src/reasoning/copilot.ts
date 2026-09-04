@@ -1312,6 +1312,7 @@ export async function executeCodingRequest(
  */
 function getCopilotSessionConfig(
     context: ActionContext<CommandHandlerContext>,
+    workingDirectory?: string,
 ): SessionConfig {
     const systemContext = context.sessionContext.agentContext;
     // Capture the request's clientIO now, before execute_action transiently
@@ -2142,7 +2143,7 @@ function getCopilotSessionConfig(
             "github/search/*",
             "shell",
         ],
-        workingDirectory: getRepoRoot(),
+        workingDirectory: workingDirectory ?? getRepoRoot(),
         onPermissionRequest: createCopilotPermissionHandler(context),
         systemMessage: {
             mode: "append" as const,
@@ -2273,6 +2274,7 @@ async function createCopilotSession(
 async function executeReasoningWithoutPlanning(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
+    workingDirectory?: string,
 ): Promise<any> {
     debug(`Executing reasoning request: ${originalRequest}`);
     context.actionIO.appendDisplay("Thinking...", "temporary");
@@ -2299,7 +2301,7 @@ async function executeReasoningWithoutPlanning(
     let copilotToolLoopIteration = 0;
 
     const client = await getCopilotClient(context.sessionContext.agentContext);
-    const config = getCopilotSessionConfig(context);
+    const config = getCopilotSessionConfig(context, workingDirectory);
 
     // Check for existing session ID to enable multi-turn conversations
     let sessionId = getSessionId(context);
@@ -2605,13 +2607,18 @@ async function executeReasoningWithoutPlanning(
 async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
+    workingDirectory?: string,
 ): Promise<any> {
     const systemContext = context.sessionContext.agentContext;
     const storage = context.sessionContext.sessionStorage;
 
     if (!storage) {
         debug("No sessionStorage available, using standard reasoning");
-        return executeReasoningWithoutPlanning(originalRequest, context);
+        return executeReasoningWithoutPlanning(
+            originalRequest,
+            context,
+            workingDirectory,
+        );
     }
 
     const requestId = generateRequestId();
@@ -2654,7 +2661,7 @@ async function executeReasoningWithTracing(
         const client = await getCopilotClient(
             context.sessionContext.agentContext,
         );
-        const config = getCopilotSessionConfig(context);
+        const config = getCopilotSessionConfig(context, workingDirectory);
 
         // Check for existing session ID to enable multi-turn conversations
         let sessionId = getSessionId(context);
@@ -3150,6 +3157,9 @@ export async function executeReasoningAction(
     return executeReasoning(request, context, {
         planReuseEnabled,
         engine: "copilot",
+        ...(action.parameters.workingDirectory === undefined
+            ? {}
+            : { workingDirectory: action.parameters.workingDirectory }),
     });
 }
 
@@ -3163,6 +3173,7 @@ export async function executeReasoning(
     options?: {
         planReuseEnabled?: boolean;
         engine?: "copilot";
+        workingDirectory?: string;
     },
 ): Promise<any> {
     const engine = options?.engine ?? "copilot";
@@ -3177,10 +3188,18 @@ export async function executeReasoning(
         () => {
             if (!planReuseEnabled) {
                 // Standard reasoning without planning
-                return executeReasoningWithoutPlanning(request, context);
+                return executeReasoningWithoutPlanning(
+                    request,
+                    context,
+                    options?.workingDirectory,
+                );
             }
             // Trace capture + auto recipe generation
-            return executeReasoningWithTracing(request, context);
+            return executeReasoningWithTracing(
+                request,
+                context,
+                options?.workingDirectory,
+            );
         },
         {
             genAiSystem: "github_copilot",

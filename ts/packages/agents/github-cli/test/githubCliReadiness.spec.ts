@@ -17,7 +17,6 @@
 
 import {
     evaluateGhReadiness,
-    getGithubActionReadiness,
     runInstall,
     validateAndResolveRepo,
 } from "../src/github-cliActionHandler.js";
@@ -84,21 +83,6 @@ describe("evaluateGhReadiness", () => {
         // issue would just loop.
         expect(r.details).toMatch(/gh auth status/);
         expect(r.details).toMatch(/@config agent refresh github-cli/);
-    });
-});
-
-describe("getGithubActionReadiness", () => {
-    test.each(["resolveMergeConflicts", "verifyMergeConflictsResolved"])(
-        "allows the Git-only %s action without gh authentication",
-        (actionName) => {
-            expect(getGithubActionReadiness(actionName)).toEqual({
-                state: "ready",
-            });
-        },
-    );
-
-    test("uses agent-wide readiness for gh-backed actions", () => {
-        expect(getGithubActionReadiness("issueList")).toBeUndefined();
     });
 });
 

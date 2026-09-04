@@ -13,159 +13,90 @@ export type GitCommandResult = {
     exitCode: number;
     stdout: string;
     stderr: string;
-    failureCode?: string | undefined;
-    timedOut?: boolean | undefined;
 };
 
 export type GitCommandRunner = (
     args: readonly string[],
     cwd?: string,
-    timeoutMs?: number,
 ) => Promise<GitCommandResult>;
-
-export type MergeConflictKind =
-    | "bothModified"
-    | "bothAdded"
-    | "bothDeleted"
-    | "addedByUs"
-    | "addedByThem"
-    | "deletedByUs"
-    | "deletedByThem"
-    | "unmerged";
-
-export type MergeConflictDetail = {
-    path: string;
-    status: string;
-    kind: MergeConflictKind;
-    binary: boolean;
-    submodule: boolean;
-};
 
 export type MergeTarget = {
     remote: string;
     branch: string;
     displayName: string;
-    fetchedCommit: string;
 };
 
-export type MergePreparationSuccess = {
-    status: "conflicts" | "ready" | "upToDate";
-    repositoryRoot: string;
-    currentBranch: string;
-    target: MergeTarget;
-    mergeInProgress: boolean;
-    conflicts: MergeConflictDetail[];
-    recovery: string[];
-};
+export type MergeConflictResult =
+    | {
+          status: "committed";
+          repositoryRoot: string;
+          currentBranch: string;
+          target?: MergeTarget;
+          commit: string;
+      }
+    | {
+          status: "conflicts";
+          repositoryRoot: string;
+          currentBranch: string;
+          target: MergeTarget;
+          conflicts: string[];
+      }
+    | {
+          status: "upToDate";
+          repositoryRoot: string;
+          currentBranch: string;
+          target: MergeTarget;
+      }
+    | {
+          status: "blocked";
+          errorCode:
+              | "notRepository"
+              | "detachedHead"
+              | "dirtyWorktree"
+              | "operationInProgress"
+              | "noMergeInProgress"
+              | "missingRemote"
+              | "ambiguousRemote"
+              | "missingTargetBranch"
+              | "fetchFailed"
+              | "mergeFailed"
+              | "unresolvedConflicts"
+              | "missingResolutionState"
+              | "unstagedChanges"
+              | "unrelatedChanges"
+              | "conflictMarkers"
+              | "commitFailed";
+          message: string;
+          recovery?: string;
+          conflicts?: string[];
+          mayHaveSideEffects: boolean;
+      };
 
-export type MergePreparationFailure = {
-    status: "blocked";
-    errorCode:
-        | "notRepository"
-        | "gitUnavailable"
-        | "detachedHead"
-        | "branchChanged"
-        | "operationInProgress"
-        | "dirtyWorktree"
-        | "missingRemote"
-        | "ambiguousRemote"
-        | "remoteUnavailable"
-        | "invalidTargetBranch"
-        | "missingTargetBranch"
-        | "fetchFailed"
-        | "mergeFailed";
-    message: string;
-    repositoryRoot?: string;
-    currentBranch?: string;
-    changedPaths?: string[];
-    operation?: string;
-    remotes?: string[];
-    recovery: string[];
-    mayHaveSideEffects: boolean;
-};
-
-export type MergePreparationResult =
-    | MergePreparationSuccess
-    | MergePreparationFailure;
-
-export type MergeVerificationSuccess = {
-    status: "resolved" | "unresolved" | "markersRemain" | "unstagedChanges";
-    repositoryRoot: string;
-    currentBranch: string;
-    mergeInProgress: true;
-    inspectedPaths: string[];
-    remainingConflicts: MergeConflictDetail[];
-    markerPaths: string[];
-    unstagedPaths: string[];
-    recovery: string[];
-};
-
-export type MergeVerificationFailure = {
-    status: "blocked";
-    errorCode:
-        | "notRepository"
-        | "gitUnavailable"
-        | "detachedHead"
-        | "noMergeInProgress"
-        | "verificationFailed";
-    message: string;
-    repositoryRoot?: string;
-    currentBranch?: string;
-    recovery: string[];
-    mayHaveSideEffects: false;
-};
-
-export type MergeVerificationResult =
-    | MergeVerificationSuccess
-    | MergeVerificationFailure;
-
-export type PrepareMergeOptions = {
+export type MergeOptions = {
     cwd?: string;
     runGit?: GitCommandRunner;
     pathExists?: (filePath: string) => boolean;
-    isBinaryFile?: (filePath: string) => boolean;
-};
-
-type ResolvedTarget = {
-    remote: string;
-    branch: string;
-    displayName: string;
-};
-
-const UNMERGED_STATUSES = new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
-const MUTATING_GIT_TIMEOUT_MS = 10 * 60_000;
-
-const CONFLICT_KIND_BY_STATUS: Record<string, MergeConflictKind> = {
-    DD: "bothDeleted",
-    AU: "addedByUs",
-    UD: "deletedByThem",
-    UA: "addedByThem",
-    DU: "deletedByUs",
-    AA: "bothAdded",
-    UU: "bothModified",
+    readFile?: (filePath: string) => string;
+    writeFile?: (filePath: string, content: string) => void;
+    removeFile?: (filePath: string) => void;
 };
 
 export async function runGitCommand(
     args: readonly string[],
     cwd = process.cwd(),
-    timeoutMs = 60_000,
 ): Promise<GitCommandResult> {
     try {
         const { stdout, stderr } = await execFileAsync("git", [...args], {
             cwd,
             encoding: "utf8",
             maxBuffer: 4 * 1024 * 1024,
-            timeout: timeoutMs,
+            timeout: 10 * 60_000,
             windowsHide: true,
         });
-        return {
-            exitCode: 0,
-            stdout,
-            stderr,
-        };
+        return { exitCode: 0, stdout, stderr };
     } catch (error) {
         const failure = error as Error & {
-            code?: number | string;
+            code?: number;
             stdout?: string;
             stderr?: string;
         };
@@ -174,1141 +105,519 @@ export async function runGitCommand(
                 typeof failure.code === "number" ? failure.code : Number.NaN,
             stdout: String(failure.stdout ?? ""),
             stderr: String(failure.stderr ?? failure.message),
-            failureCode:
-                typeof failure.code === "string" ? failure.code : undefined,
-            timedOut: Boolean((failure as Error & { killed?: boolean }).killed),
         };
     }
 }
 
 function blocked(
-    errorCode: MergePreparationFailure["errorCode"],
+    errorCode: Extract<MergeConflictResult, { status: "blocked" }>["errorCode"],
     message: string,
-    details: Partial<MergePreparationFailure> = {},
-): MergePreparationFailure {
+    mayHaveSideEffects = false,
+    details: Partial<Extract<MergeConflictResult, { status: "blocked" }>> = {},
+): MergeConflictResult {
     return {
         status: "blocked",
         errorCode,
         message,
-        recovery: [],
-        mayHaveSideEffects: false,
+        mayHaveSideEffects,
         ...details,
     };
 }
 
-function verificationBlocked(
-    errorCode: MergeVerificationFailure["errorCode"],
-    message: string,
-    details: Partial<MergeVerificationFailure> = {},
-): MergeVerificationFailure {
-    return {
-        status: "blocked",
-        errorCode,
-        message,
-        recovery: [],
-        mayHaveSideEffects: false,
-        ...details,
-    };
+function lines(output: string): string[] {
+    return output
+        .split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter(Boolean);
 }
 
-function splitNullTerminated(output: string): string[] {
-    return output.split("\0").filter((entry) => entry.length > 0);
+function nullSeparated(output: string): string[] {
+    return output.split("\0").filter(Boolean);
 }
 
-function scalarOutput(output: string): string {
-    return output.trim();
-}
-
-export function parsePorcelainPaths(output: string): string[] {
-    const records = splitNullTerminated(output);
-    const paths: string[] = [];
-    for (let index = 0; index < records.length; index++) {
-        const record = records[index];
-        if (record.length < 4) {
-            continue;
-        }
-        paths.push(record.slice(3));
-        const status = record.slice(0, 2);
-        if (status.includes("R") || status.includes("C")) {
-            const originalPath = records[index + 1];
-            if (originalPath !== undefined) {
-                paths.push(originalPath);
-                index++;
-            }
-        }
-    }
-    return paths;
-}
-
-export function parseConflictStatuses(
-    output: string,
-): Array<{ path: string; status: string; kind: MergeConflictKind }> {
-    const records = splitNullTerminated(output);
-    const conflicts: Array<{
-        path: string;
-        status: string;
-        kind: MergeConflictKind;
-    }> = [];
-    for (let index = 0; index < records.length; index++) {
-        const record = records[index];
-        const status = record.slice(0, 2);
-        if (UNMERGED_STATUSES.has(status)) {
-            conflicts.push({
-                path: record.slice(3),
-                status,
-                kind: CONFLICT_KIND_BY_STATUS[status] ?? "unmerged",
-            });
-        }
-        if (status.includes("R") || status.includes("C")) {
-            index++;
-        }
-    }
-    return conflicts;
-}
-
-export function parseSubmodulePaths(output: string): Set<string> {
-    const submodulePaths = new Set<string>();
-    for (const entry of parseConflictIndex(output)) {
-        if (entry.mode === "160000") {
-            submodulePaths.add(entry.path);
-        }
-    }
-    return submodulePaths;
-}
-
-type ConflictIndexEntry = {
-    mode: string;
-    objectId: string;
-    path: string;
-};
-
-function parseConflictIndex(output: string): ConflictIndexEntry[] {
-    const entries: ConflictIndexEntry[] = [];
-    for (const record of splitNullTerminated(output)) {
-        const match = /^(\d{6}) ([0-9a-f]+) [123]\t(.*)$/s.exec(record);
-        if (match !== null) {
-            entries.push({
-                mode: match[1],
-                objectId: match[2],
-                path: match[3],
-            });
-        }
-    }
-    return entries;
-}
-
-function parseRemoteDefaultBranch(output: string): string | undefined {
-    const match = /^ref:\s+refs\/heads\/([^\t\r\n]+)\s+HEAD$/m.exec(output);
-    return match?.[1];
-}
-
-type RemoteBranchLookup =
-    | { status: "found" }
-    | { status: "missing" }
-    | { status: "error"; message: string };
-
-async function lookupRemoteBranch(
+async function getRepository(
+    cwd: string,
     runGit: GitCommandRunner,
-    root: string,
-    remote: string,
-    branch: string,
-): Promise<RemoteBranchLookup> {
-    const result = await runGit(
-        ["ls-remote", "--exit-code", "--heads", remote, `refs/heads/${branch}`],
-        root,
-    );
-    if (result.exitCode === 0 && scalarOutput(result.stdout).length > 0) {
-        return { status: "found" };
-    }
-    if (result.exitCode === 2) {
-        return { status: "missing" };
-    }
-    return {
-        status: "error",
-        message:
-            result.stderr ||
-            `Unable to inspect branch '${branch}' on remote '${remote}'.`,
-    };
-}
-
-async function validateBranchName(
-    runGit: GitCommandRunner,
-    root: string,
-    branch: string,
-): Promise<boolean> {
-    const result = await runGit(["check-ref-format", "--branch", branch], root);
-    return result.exitCode === 0;
-}
-
-async function getConfiguredDefaultBranch(
-    runGit: GitCommandRunner,
-    root: string,
-    remote: string,
 ): Promise<
-    | { status: "found"; branch: string }
-    | { status: "missing" }
-    | { status: "error"; message: string }
+    { repositoryRoot: string; currentBranch: string } | MergeConflictResult
 > {
-    const remoteHead = await runGit(
-        ["ls-remote", "--symref", remote, "HEAD"],
-        root,
+    const root = await runGit(["rev-parse", "--show-toplevel"], cwd);
+    if (root.exitCode !== 0) {
+        return blocked(
+            "notRepository",
+            "Run this action from a Git repository.",
+        );
+    }
+    const repositoryRoot = root.stdout.trim();
+    const branch = await runGit(
+        ["symbolic-ref", "--quiet", "--short", "HEAD"],
+        repositoryRoot,
     );
-    if (remoteHead.exitCode === 0) {
-        const branch = parseRemoteDefaultBranch(remoteHead.stdout);
-        if (branch !== undefined) {
-            return { status: "found", branch };
-        }
-        return { status: "missing" };
+    if (branch.exitCode !== 0) {
+        return blocked(
+            "detachedHead",
+            "Check out a local branch before merging.",
+        );
     }
-    return {
-        status: "error",
-        message:
-            remoteHead.stderr ||
-            `Unable to inspect the default branch on remote '${remote}'.`,
-    };
+    return { repositoryRoot, currentBranch: branch.stdout.trim() };
 }
 
-async function resolveTarget(
+async function findOperation(
+    repositoryRoot: string,
     runGit: GitCommandRunner,
-    root: string,
-    remotes: string[],
-    requestedTarget?: string,
-): Promise<ResolvedTarget | MergePreparationFailure> {
-    const target = requestedTarget?.trim();
-    if (target === undefined || target.length === 0) {
-        if (remotes.length > 1) {
-            return blocked(
-                "ambiguousRemote",
-                "This repository has multiple remotes, so the default target repository is ambiguous.",
-                {
-                    repositoryRoot: root,
-                    remotes,
-                    recovery: [
-                        "Retry with an explicit REMOTE/BRANCH target, such as upstream/main.",
-                        "No fetch or merge was attempted.",
-                    ],
-                },
-            );
-        }
-
-        const remote = remotes[0];
-        const configuredDefault = await getConfiguredDefaultBranch(
-            runGit,
-            root,
-            remote,
-        );
-        if (configuredDefault.status === "error") {
-            return blocked(
-                "remoteUnavailable",
-                `Unable to inspect remote '${remote}' for its default branch.`,
-                {
-                    repositoryRoot: root,
-                    remotes,
-                    recovery: [
-                        configuredDefault.message,
-                        "Check network access and remote credentials, then retry.",
-                        "No fetch or merge was attempted.",
-                    ],
-                },
-            );
-        }
-        if (configuredDefault.status === "found") {
-            return {
-                remote,
-                branch: configuredDefault.branch,
-                displayName: `${remote}/${configuredDefault.branch}`,
-            };
-        }
-
-        for (const fallback of ["main", "master"]) {
-            const lookup = await lookupRemoteBranch(
-                runGit,
-                root,
-                remote,
-                fallback,
-            );
-            if (lookup.status === "error") {
-                return blocked(
-                    "remoteUnavailable",
-                    `Unable to inspect branch '${fallback}' on remote '${remote}'.`,
-                    {
-                        repositoryRoot: root,
-                        remotes,
-                        recovery: [
-                            lookup.message,
-                            "Check network access and remote credentials, then retry.",
-                            "No fetch or merge was attempted.",
-                        ],
-                    },
-                );
-            }
-            if (lookup.status === "found") {
-                return {
-                    remote,
-                    branch: fallback,
-                    displayName: `${remote}/${fallback}`,
-                };
-            }
-        }
-        return blocked(
-            "missingTargetBranch",
-            `Remote '${remote}' has no configured default branch and neither main nor master exists.`,
-            {
-                repositoryRoot: root,
-                remotes,
-                recovery: [
-                    "Retry with an explicit branch that exists on the remote.",
-                    "No fetch or merge was attempted.",
-                ],
-            },
-        );
-    }
-
-    const explicitRemote = [...remotes]
-        .sort((left, right) => right.length - left.length)
-        .find((remote) => target.startsWith(`${remote}/`));
-    const branch =
-        explicitRemote === undefined
-            ? target
-            : target.slice(explicitRemote.length + 1);
-    if (!(await validateBranchName(runGit, root, branch))) {
-        return blocked(
-            "invalidTargetBranch",
-            `'${target}' is not a valid branch name.`,
-            {
-                repositoryRoot: root,
-                recovery: ["Use a valid BRANCH or REMOTE/BRANCH target."],
-            },
-        );
-    }
-
-    if (explicitRemote !== undefined) {
-        const lookup = await lookupRemoteBranch(
-            runGit,
-            root,
-            explicitRemote,
-            branch,
-        );
-        if (lookup.status === "error") {
-            return blocked(
-                "remoteUnavailable",
-                `Unable to inspect branch '${branch}' on remote '${explicitRemote}'.`,
-                {
-                    repositoryRoot: root,
-                    remotes,
-                    recovery: [
-                        lookup.message,
-                        "Check network access and remote credentials, then retry.",
-                        "No fetch or merge was attempted.",
-                    ],
-                },
-            );
-        }
-        if (lookup.status === "missing") {
-            return blocked(
-                "missingTargetBranch",
-                `Branch '${branch}' does not exist on remote '${explicitRemote}'.`,
-                {
-                    repositoryRoot: root,
-                    remotes,
-                    recovery: [
-                        "Check the remote and branch names, then retry.",
-                        "No fetch or merge was attempted.",
-                    ],
-                },
-            );
-        }
-        return {
-            remote: explicitRemote,
-            branch,
-            displayName: `${explicitRemote}/${branch}`,
-        };
-    }
-
-    const matchingRemotes: string[] = [];
-    for (const remote of remotes) {
-        const lookup = await lookupRemoteBranch(runGit, root, remote, branch);
-        if (lookup.status === "error") {
-            return blocked(
-                "remoteUnavailable",
-                `Unable to inspect branch '${branch}' on remote '${remote}'.`,
-                {
-                    repositoryRoot: root,
-                    remotes,
-                    recovery: [
-                        lookup.message,
-                        "Check network access and remote credentials, then retry.",
-                        "No fetch or merge was attempted.",
-                    ],
-                },
-            );
-        }
-        if (lookup.status === "found") {
-            matchingRemotes.push(remote);
-        }
-    }
-    if (matchingRemotes.length === 0) {
-        return blocked(
-            "missingTargetBranch",
-            `Branch '${branch}' does not exist on any configured remote.`,
-            {
-                repositoryRoot: root,
-                remotes,
-                recovery: [
-                    "Check the branch name or use REMOTE/BRANCH to select a remote.",
-                    "No fetch or merge was attempted.",
-                ],
-            },
-        );
-    }
-    if (matchingRemotes.length > 1) {
-        return blocked(
-            "ambiguousRemote",
-            `Branch '${branch}' exists on multiple remotes: ${matchingRemotes.join(", ")}.`,
-            {
-                repositoryRoot: root,
-                remotes: matchingRemotes,
-                recovery: [
-                    `Retry with one of: ${matchingRemotes.map((remote) => `${remote}/${branch}`).join(", ")}.`,
-                    "No fetch or merge was attempted.",
-                ],
-            },
-        );
-    }
-    return {
-        remote: matchingRemotes[0],
-        branch,
-        displayName: `${matchingRemotes[0]}/${branch}`,
-    };
-}
-
-async function findInProgressOperation(
-    runGit: GitCommandRunner,
-    root: string,
     pathExists: (filePath: string) => boolean,
 ): Promise<string | undefined> {
-    const operationPaths: Array<[string, string]> = [
+    for (const [gitPath, operation] of [
         ["MERGE_HEAD", "merge"],
         ["rebase-merge", "rebase"],
         ["rebase-apply", "rebase"],
         ["CHERRY_PICK_HEAD", "cherry-pick"],
-    ];
-    for (const [gitPath, operation] of operationPaths) {
-        const result = await runGit(["rev-parse", "--git-path", gitPath], root);
-        if (
-            result.exitCode === 0 &&
-            pathExists(path.resolve(root, scalarOutput(result.stdout)))
-        ) {
-            return operation;
+        ["REVERT_HEAD", "revert"],
+    ]) {
+        const result = await runGit(
+            ["rev-parse", "--git-path", gitPath],
+            repositoryRoot,
+        );
+        if (result.exitCode === 0) {
+            const resolved = path.resolve(repositoryRoot, result.stdout.trim());
+            if (pathExists(resolved)) {
+                return operation;
+            }
         }
     }
     return undefined;
 }
 
-type ConflictReadResult =
-    | { ok: true; conflicts: MergeConflictDetail[] }
-    | { ok: false; message: string };
-
-function isBinaryFile(filePath: string): boolean {
-    const stats = fs.lstatSync(filePath);
-    if (!stats.isFile()) {
-        return false;
+function selectRemote(
+    remotes: string[],
+    explicitRemote: string | undefined,
+): string | MergeConflictResult {
+    if (explicitRemote !== undefined) {
+        return remotes.includes(explicitRemote)
+            ? explicitRemote
+            : blocked(
+                  "missingRemote",
+                  `Remote '${explicitRemote}' does not exist.`,
+              );
     }
-    const handle = fs.openSync(filePath, "r");
-    try {
-        const prefix = Buffer.alloc(8_000);
-        const bytesRead = fs.readSync(handle, prefix, 0, prefix.length, 0);
-        return prefix.subarray(0, bytesRead).includes(0);
-    } finally {
-        fs.closeSync(handle);
+    if (remotes.includes("origin")) {
+        return "origin";
     }
+    if (remotes.length === 1) {
+        return remotes[0];
+    }
+    if (remotes.length === 0) {
+        return blocked("missingRemote", "This repository has no Git remote.");
+    }
+    return blocked(
+        "ambiguousRemote",
+        `Choose a remote explicitly. Available remotes: ${remotes.join(", ")}.`,
+    );
 }
 
-async function readConflicts(
+function parseTarget(
+    targetBranch: string | undefined,
+    remotes: string[],
+): {
+    remote?: string;
+    branch?: string;
+} {
+    if (targetBranch === undefined) {
+        return {};
+    }
+    const slash = targetBranch.indexOf("/");
+    return slash > 0 && remotes.includes(targetBranch.slice(0, slash))
+        ? {
+              remote: targetBranch.slice(0, slash),
+              branch: targetBranch.slice(slash + 1),
+          }
+        : { branch: targetBranch };
+}
+
+async function getDefaultBranch(
+    repositoryRoot: string,
+    remote: string,
     runGit: GitCommandRunner,
-    root: string,
-    pathExists: (filePath: string) => boolean,
-    inspectBinaryFile: (filePath: string) => boolean,
-): Promise<ConflictReadResult> {
-    const [status, index] = await Promise.all([
-        runGit(
-            ["status", "--porcelain=v1", "-z", "--untracked-files=no"],
-            root,
-        ),
-        runGit(["ls-files", "-u", "-z"], root),
-    ]);
-    if (status.exitCode !== 0 || index.exitCode !== 0) {
-        return {
-            ok: false,
-            message:
-                status.stderr ||
-                index.stderr ||
-                "Git could not inspect the unmerged index.",
-        };
+): Promise<string | undefined> {
+    const head = await runGit(
+        ["ls-remote", "--symref", remote, "HEAD"],
+        repositoryRoot,
+    );
+    const match = /^ref:\s+refs\/heads\/(.+)\s+HEAD$/m.exec(head.stdout);
+    if (head.exitCode === 0 && match?.[1]) {
+        return match[1];
     }
-
-    const conflicts = parseConflictStatuses(status.stdout);
-    const submodulePaths = parseSubmodulePaths(index.stdout);
-    const binaryPaths = new Set<string>();
-    for (const conflict of conflicts) {
-        if (submodulePaths.has(conflict.path)) {
-            continue;
-        }
-        const absolutePath = path.resolve(root, conflict.path);
-        if (!pathExists(absolutePath)) {
-            continue;
-        }
-        try {
-            if (inspectBinaryFile(absolutePath)) {
-                binaryPaths.add(conflict.path);
-            }
-        } catch (error) {
-            return {
-                ok: false,
-                message:
-                    error instanceof Error
-                        ? error.message
-                        : `Unable to inspect conflicted file '${conflict.path}'.`,
-            };
+    for (const fallback of ["main", "master"]) {
+        const result = await runGit(
+            ["ls-remote", "--exit-code", "--heads", remote, fallback],
+            repositoryRoot,
+        );
+        if (result.exitCode === 0 && result.stdout.trim() !== "") {
+            return fallback;
         }
     }
-    return {
-        ok: true,
-        conflicts: conflicts.map((conflict) => ({
-            ...conflict,
-            binary: binaryPaths.has(conflict.path),
-            submodule: submodulePaths.has(conflict.path),
-        })),
-    };
+    return undefined;
 }
 
-function reviewRecovery(): string[] {
-    return [
-        "Review the unstaged and staged diffs before finishing the merge.",
-        "To abandon this merge and restore the pre-merge tree, run: git merge --abort",
-        "Do not commit or push until the working tree has been reviewed.",
-    ];
+async function resolveTarget(
+    targetBranch: string | undefined,
+    repositoryRoot: string,
+    runGit: GitCommandRunner,
+): Promise<MergeTarget | MergeConflictResult> {
+    const remoteResult = await runGit(["remote"], repositoryRoot);
+    const remotes = lines(remoteResult.stdout);
+    const requested = parseTarget(targetBranch?.trim() || undefined, remotes);
+    const remote = selectRemote(remotes, requested.remote);
+    if (typeof remote !== "string") {
+        return remote;
+    }
+    const branch =
+        requested.branch ??
+        (await getDefaultBranch(repositoryRoot, remote, runGit));
+    if (branch === undefined || branch === "") {
+        return blocked(
+            "missingTargetBranch",
+            `Could not determine the default branch for '${remote}'. Specify a target branch.`,
+        );
+    }
+    const validBranch = await runGit(
+        ["check-ref-format", "--branch", branch],
+        repositoryRoot,
+    );
+    if (validBranch.exitCode !== 0) {
+        return blocked(
+            "missingTargetBranch",
+            `'${branch}' is not a valid Git branch name.`,
+        );
+    }
+    return { remote, branch, displayName: `${remote}/${branch}` };
 }
 
-// code-complexity-allow: fail-closed Git state machine keeps every mutation guard explicit
-export async function prepareMerge(
-    requestedTarget?: string,
-    options: PrepareMergeOptions = {},
-): Promise<MergePreparationResult> {
-    const runGit = options.runGit ?? runGitCommand;
+async function listConflicts(
+    repositoryRoot: string,
+    runGit: GitCommandRunner,
+): Promise<string[]> {
+    const result = await runGit(
+        ["diff", "--name-only", "--diff-filter=U", "-z"],
+        repositoryRoot,
+    );
+    return result.exitCode === 0 ? nullSeparated(result.stdout) : [];
+}
+
+async function hasMergeHead(
+    repositoryRoot: string,
+    runGit: GitCommandRunner,
+): Promise<boolean> {
+    const result = await runGit(
+        ["rev-parse", "--verify", "MERGE_HEAD"],
+        repositoryRoot,
+    );
+    return result.exitCode === 0;
+}
+
+async function getResolutionStatePath(
+    repositoryRoot: string,
+    runGit: GitCommandRunner,
+): Promise<string | undefined> {
+    const result = await runGit(
+        ["rev-parse", "--git-path", "TYPEAGENT_MERGE_CONFLICTS"],
+        repositoryRoot,
+    );
+    return result.exitCode === 0
+        ? path.resolve(repositoryRoot, result.stdout.trim())
+        : undefined;
+}
+
+async function commitMerge(
+    repositoryRoot: string,
+    runGit: GitCommandRunner,
+): Promise<string | MergeConflictResult> {
+    const commit = await runGit(["commit", "--no-edit"], repositoryRoot);
+    if (commit.exitCode !== 0) {
+        return blocked(
+            "commitFailed",
+            commit.stderr.trim() || "Git could not create the merge commit.",
+            true,
+            {
+                recovery:
+                    "Resolve the error, then run `git commit` or `git merge --abort`.",
+            },
+        );
+    }
+    const head = await runGit(["rev-parse", "HEAD"], repositoryRoot);
+    return head.exitCode === 0 ? head.stdout.trim() : "";
+}
+
+async function listChangedPaths(
+    repositoryRoot: string,
+    runGit: GitCommandRunner,
+    args: readonly string[],
+): Promise<string[] | undefined> {
+    const result = await runGit([...args, "-z"], repositoryRoot);
+    return result.exitCode === 0 ? nullSeparated(result.stdout) : undefined;
+}
+
+export async function mergeAndCommit(
+    targetBranch?: string,
+    options: MergeOptions = {},
+): Promise<MergeConflictResult> {
     const cwd = options.cwd ?? process.cwd();
+    const runGit = options.runGit ?? runGitCommand;
     const pathExists = options.pathExists ?? fs.existsSync;
-    const inspectBinaryFile = options.isBinaryFile ?? isBinaryFile;
-
-    const rootResult = await runGit(["rev-parse", "--show-toplevel"], cwd);
-    if (rootResult.failureCode === "ENOENT") {
-        return blocked(
-            "gitUnavailable",
-            "Git is not installed or is not available on PATH.",
-            { recovery: ["Install Git, then retry."] },
-        );
+    const writeFile =
+        options.writeFile ??
+        ((filePath, content) => fs.writeFileSync(filePath, content, "utf8"));
+    const removeFile =
+        options.removeFile ??
+        ((filePath) => fs.rmSync(filePath, { force: true }));
+    const repository = await getRepository(cwd, runGit);
+    if ("status" in repository) {
+        return repository;
     }
-    if (
-        rootResult.exitCode !== 0 ||
-        scalarOutput(rootResult.stdout).length === 0
-    ) {
-        return blocked(
-            "notRepository",
-            "The current working directory is not inside a Git repository.",
-            { recovery: ["Open a repository working directory and retry."] },
-        );
-    }
-    const repositoryRoot = path.resolve(scalarOutput(rootResult.stdout));
-
-    const branchResult = await runGit(
-        ["symbolic-ref", "--quiet", "--short", "HEAD"],
+    const { repositoryRoot, currentBranch } = repository;
+    const resolutionStatePath = await getResolutionStatePath(
         repositoryRoot,
-    );
-    if (
-        branchResult.exitCode !== 0 ||
-        scalarOutput(branchResult.stdout).length === 0
-    ) {
-        return blocked(
-            "detachedHead",
-            "HEAD is detached. A local branch must be checked out before preparing a merge.",
-            {
-                repositoryRoot,
-                recovery: [
-                    "Check out or create the intended local branch, then retry.",
-                    "No fetch or merge was attempted.",
-                ],
-            },
-        );
-    }
-    const currentBranch = scalarOutput(branchResult.stdout);
-    const headResult = await runGit(
-        ["rev-parse", "--verify", "HEAD^{commit}"],
-        repositoryRoot,
-    );
-    if (
-        headResult.exitCode !== 0 ||
-        scalarOutput(headResult.stdout).length === 0
-    ) {
-        return blocked(
-            "mergeFailed",
-            "The current branch does not resolve to a commit.",
-            {
-                repositoryRoot,
-                currentBranch,
-                recovery: [
-                    "Create or check out a branch with at least one commit, then retry.",
-                    "No fetch or merge was attempted.",
-                ],
-            },
-        );
-    }
-    const initialHead = scalarOutput(headResult.stdout);
-
-    const operation = await findInProgressOperation(
         runGit,
-        repositoryRoot,
-        pathExists,
     );
+    const operation = await findOperation(repositoryRoot, runGit, pathExists);
     if (operation !== undefined) {
         return blocked(
             "operationInProgress",
-            `A ${operation} operation is already in progress.`,
-            {
-                repositoryRoot,
-                currentBranch,
-                operation,
-                recovery: [
-                    `Continue or abort the existing ${operation} before retrying.`,
-                    "No fetch or new merge was attempted.",
-                ],
-            },
+            `Finish or abort the current ${operation} before starting another merge.`,
         );
     }
-
-    const statusResult = await runGit(
+    const status = await runGit(
         ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
         repositoryRoot,
     );
-    if (statusResult.exitCode !== 0) {
-        return blocked("mergeFailed", "Unable to inspect the working tree.", {
-            repositoryRoot,
-            currentBranch,
-            recovery: [statusResult.stderr],
-        });
-    }
-    const changedPaths = parsePorcelainPaths(statusResult.stdout);
-    if (changedPaths.length > 0) {
+    if (status.exitCode !== 0 || status.stdout !== "") {
         return blocked(
             "dirtyWorktree",
-            "The working tree has existing changes. The merge was not started so unrelated edits remain untouched.",
-            {
-                repositoryRoot,
-                currentBranch,
-                changedPaths,
-                recovery: [
-                    "Commit, stash, or otherwise preserve the listed changes, then retry with a clean working tree.",
-                    "No fetch or merge was attempted.",
-                ],
-            },
+            "Commit or stash local changes before merging.",
         );
     }
-
-    const remoteResult = await runGit(["remote"], repositoryRoot);
-    const remotes = scalarOutput(remoteResult.stdout)
-        .split(/\r?\n/)
-        .map((remote) => remote.trim())
-        .filter((remote) => remote.length > 0);
-    if (remoteResult.exitCode !== 0 || remotes.length === 0) {
-        return blocked(
-            "missingRemote",
-            "This repository has no configured Git remote.",
-            {
-                repositoryRoot,
-                currentBranch,
-                recovery: [
-                    "Configure the intended remote, then retry.",
-                    "No fetch or merge was attempted.",
-                ],
-            },
-        );
+    if (resolutionStatePath !== undefined && pathExists(resolutionStatePath)) {
+        removeFile(resolutionStatePath);
     }
-
-    const resolvedTarget = await resolveTarget(
-        runGit,
-        repositoryRoot,
-        remotes,
-        requestedTarget,
-    );
-    if ("status" in resolvedTarget) {
-        return { ...resolvedTarget, currentBranch };
+    const target = await resolveTarget(targetBranch, repositoryRoot, runGit);
+    if ("status" in target) {
+        return target;
     }
-
-    const temporaryRef = `refs/typeagent/merge-conflict/${randomUUID()}`;
-    const fetchResult = await runGit(
+    const temporaryRef = `refs/typeagent/merge/${randomUUID()}`;
+    const fetch = await runGit(
         [
             "fetch",
             "--no-tags",
             "--no-write-fetch-head",
-            resolvedTarget.remote,
-            "--",
-            `refs/heads/${resolvedTarget.branch}:${temporaryRef}`,
+            target.remote,
+            `refs/heads/${target.branch}:${temporaryRef}`,
         ],
         repositoryRoot,
-        MUTATING_GIT_TIMEOUT_MS,
     );
-    const cleanupTemporaryRef = async (): Promise<GitCommandResult> =>
-        runGit(["update-ref", "-d", temporaryRef], repositoryRoot);
-    if (fetchResult.exitCode !== 0) {
-        const cleanup = await cleanupTemporaryRef();
+    if (fetch.exitCode !== 0) {
         return blocked(
             "fetchFailed",
-            `Unable to fetch '${resolvedTarget.displayName}'.`,
-            {
-                repositoryRoot,
-                currentBranch,
-                recovery: [
-                    fetchResult.stderr || "Inspect the remote and retry.",
-                    ...(cleanup.exitCode === 0
-                        ? []
-                        : [
-                              `Remove the temporary ref before retrying: git update-ref -d ${temporaryRef}`,
-                          ]),
-                    "No merge was attempted.",
-                ],
-                mayHaveSideEffects: true,
-            },
+            fetch.stderr.trim() || `Could not fetch ${target.displayName}.`,
         );
     }
-
-    const fetchedCommitResult = await runGit(
+    const fetchedCommit = await runGit(
         ["rev-parse", "--verify", `${temporaryRef}^{commit}`],
         repositoryRoot,
     );
-    const cleanup = await cleanupTemporaryRef();
-    if (
-        fetchedCommitResult.exitCode !== 0 ||
-        scalarOutput(fetchedCommitResult.stdout).length === 0 ||
-        cleanup.exitCode !== 0
-    ) {
+    if (fetchedCommit.exitCode !== 0) {
+        await runGit(["update-ref", "-d", temporaryRef], repositoryRoot);
         return blocked(
             "fetchFailed",
-            `Fetch completed but '${resolvedTarget.displayName}' did not resolve to a commit.`,
-            {
+            `Could not resolve the fetched commit for ${target.displayName}.`,
+        );
+    }
+    const merge = await runGit(
+        ["merge", "--no-commit", "--no-ff", fetchedCommit.stdout.trim()],
+        repositoryRoot,
+    );
+    await runGit(["update-ref", "-d", temporaryRef], repositoryRoot);
+    if (merge.exitCode !== 0) {
+        const conflicts = await listConflicts(repositoryRoot, runGit);
+        if (conflicts.length > 0) {
+            if (resolutionStatePath === undefined) {
+                return blocked(
+                    "mergeFailed",
+                    "Git could not create conflict-resolution state.",
+                    true,
+                    { recovery: "Run `git merge --abort`." },
+                );
+            }
+            try {
+                writeFile(resolutionStatePath, JSON.stringify(conflicts));
+            } catch (error) {
+                return blocked(
+                    "mergeFailed",
+                    `Could not save conflict-resolution state: ${String(error)}`,
+                    true,
+                    { recovery: "Run `git merge --abort`." },
+                );
+            }
+            return {
+                status: "conflicts",
                 repositoryRoot,
                 currentBranch,
-                recovery: [
-                    fetchedCommitResult.stderr ||
-                        "The fetched branch did not resolve to a commit.",
-                    ...(cleanup.exitCode === 0
-                        ? []
-                        : [
-                              `Remove the temporary ref before retrying: git update-ref -d ${temporaryRef}`,
-                          ]),
-                ],
-                mayHaveSideEffects: true,
-            },
-        );
-    }
-    const target: MergeTarget = {
-        ...resolvedTarget,
-        fetchedCommit: scalarOutput(fetchedCommitResult.stdout),
-    };
-
-    const branchBeforeMerge = await runGit(
-        ["symbolic-ref", "--quiet", "--short", "HEAD"],
-        repositoryRoot,
-    );
-    const activeBranch = scalarOutput(branchBeforeMerge.stdout);
-    if (branchBeforeMerge.exitCode !== 0 || activeBranch !== currentBranch) {
-        return blocked(
-            "branchChanged",
-            "The checked-out branch changed while the target was being fetched.",
-            {
-                repositoryRoot,
-                ...(activeBranch.length > 0
-                    ? { currentBranch: activeBranch }
-                    : {}),
-                recovery: [
-                    `Check out '${currentBranch}' with a clean working tree, then retry.`,
-                    "No merge was attempted.",
-                ],
-                mayHaveSideEffects: true,
-            },
-        );
-    }
-    const headBeforeMerge = await runGit(
-        ["rev-parse", "--verify", "HEAD^{commit}"],
-        repositoryRoot,
-    );
-    if (
-        headBeforeMerge.exitCode !== 0 ||
-        scalarOutput(headBeforeMerge.stdout) !== initialHead
-    ) {
-        return blocked(
-            "branchChanged",
-            "The current branch tip changed while the target was being fetched.",
-            {
-                repositoryRoot,
-                currentBranch,
-                recovery: [
-                    "Review the new branch state and retry from a clean working tree.",
-                    "No merge was attempted.",
-                ],
-                mayHaveSideEffects: true,
-            },
-        );
-    }
-    const operationBeforeMerge = await findInProgressOperation(
-        runGit,
-        repositoryRoot,
-        pathExists,
-    );
-    if (operationBeforeMerge !== undefined) {
-        return blocked(
-            "operationInProgress",
-            `A ${operationBeforeMerge} operation started while the target was being fetched.`,
-            {
-                repositoryRoot,
-                currentBranch,
-                operation: operationBeforeMerge,
-                recovery: [
-                    `Continue or abort the existing ${operationBeforeMerge} before retrying.`,
-                    "No new merge was attempted.",
-                ],
-                mayHaveSideEffects: true,
-            },
-        );
-    }
-    const statusBeforeMerge = await runGit(
-        ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
-        repositoryRoot,
-    );
-    if (statusBeforeMerge.exitCode !== 0) {
-        return blocked("mergeFailed", "Unable to recheck the working tree.", {
-            repositoryRoot,
-            currentBranch,
-            recovery: [statusBeforeMerge.stderr, "No merge was attempted."],
-            mayHaveSideEffects: true,
-        });
-    }
-    const newChangedPaths = parsePorcelainPaths(statusBeforeMerge.stdout);
-    if (newChangedPaths.length > 0) {
-        return blocked(
-            "dirtyWorktree",
-            "The working tree changed while the target was being fetched. The merge was not started.",
-            {
-                repositoryRoot,
-                currentBranch,
-                changedPaths: newChangedPaths,
-                recovery: [
-                    "Preserve the listed changes and retry with a clean working tree.",
-                    "No merge was attempted.",
-                ],
-                mayHaveSideEffects: true,
-            },
-        );
-    }
-
-    const mergeResult = await runGit(
-        ["merge", "--no-commit", "--no-ff", "--", target.fetchedCommit],
-        repositoryRoot,
-        MUTATING_GIT_TIMEOUT_MS,
-    );
-    const conflictRead = await readConflicts(
-        runGit,
-        repositoryRoot,
-        pathExists,
-        inspectBinaryFile,
-    );
-    if (!conflictRead.ok) {
-        const mergeInProgress = await hasMergeHead(
-            runGit,
-            repositoryRoot,
-            pathExists,
-        );
+                target,
+                conflicts,
+            };
+        }
         return blocked(
             "mergeFailed",
-            "The merge ran, but Git could not inspect its conflict state.",
+            merge.stderr.trim() || "Git could not merge the target branch.",
+            true,
             {
-                repositoryRoot,
-                currentBranch,
-                recovery: [
-                    conflictRead.message,
-                    ...(mergeInProgress
-                        ? reviewRecovery()
-                        : ["Inspect the repository state before retrying."]),
-                ],
-                mayHaveSideEffects: true,
+                recovery:
+                    "Inspect `git status`, then run `git merge --abort` if needed.",
             },
         );
     }
-    if (conflictRead.conflicts.length > 0) {
-        return {
-            status: "conflicts",
-            repositoryRoot,
-            currentBranch,
-            target,
-            mergeInProgress: true,
-            conflicts: conflictRead.conflicts,
-            recovery: reviewRecovery(),
-        };
+    if (!(await hasMergeHead(repositoryRoot, runGit))) {
+        return { status: "upToDate", repositoryRoot, currentBranch, target };
     }
-
-    const mergeInProgress = await hasMergeHead(
-        runGit,
-        repositoryRoot,
-        pathExists,
-    );
-    if (mergeResult.exitCode !== 0) {
-        return blocked("mergeFailed", "Git could not prepare the merge.", {
-            repositoryRoot,
-            currentBranch,
-            recovery: [
-                mergeResult.stderr || mergeResult.stdout,
-                ...(mergeResult.timedOut
-                    ? [
-                          "The merge command timed out. Confirm no Git process is still running; if Git reports an index lock, remove only the repository's stale .git/index.lock before recovery.",
-                      ]
-                    : []),
-                ...(mergeInProgress
-                    ? reviewRecovery()
-                    : ["Inspect the repository state before retrying."]),
-            ],
-            mayHaveSideEffects: true,
-        });
-    }
-
-    return {
-        status: mergeInProgress ? "ready" : "upToDate",
-        repositoryRoot,
-        currentBranch,
-        target,
-        mergeInProgress,
-        conflicts: [],
-        recovery: mergeInProgress
-            ? reviewRecovery()
-            : [
-                  "The target is already incorporated. No merge commit or push was performed.",
-              ],
-    };
+    const commit = await commitMerge(repositoryRoot, runGit);
+    return typeof commit === "string"
+        ? {
+              status: "committed",
+              repositoryRoot,
+              currentBranch,
+              target,
+              commit,
+          }
+        : commit;
 }
 
-async function hasMergeHead(
-    runGit: GitCommandRunner,
-    repositoryRoot: string,
-    pathExists: (filePath: string) => boolean,
-): Promise<boolean> {
-    const mergeHeadPath = await runGit(
-        ["rev-parse", "--git-path", "MERGE_HEAD"],
-        repositoryRoot,
-    );
-    return (
-        mergeHeadPath.exitCode === 0 &&
-        pathExists(
-            path.resolve(repositoryRoot, scalarOutput(mergeHeadPath.stdout)),
-        )
-    );
-}
-
-function parseMarkerPaths(output: string): string[] {
-    const markerPaths = new Set<string>();
-    for (const line of output.split(/\r?\n/)) {
-        const match = /^(.*):\d+: leftover conflict marker$/.exec(line);
-        if (match !== null) {
-            markerPaths.add(match[1]);
-        }
-    }
-    return [...markerPaths];
-}
-
-// code-complexity-allow: verification reports each distinct unresolved merge state explicitly
-export async function verifyMergeConflictsResolved(
-    options: PrepareMergeOptions = {},
-): Promise<MergeVerificationResult> {
-    const runGit = options.runGit ?? runGitCommand;
+export async function completeMergeConflictResolution(
+    options: MergeOptions = {},
+): Promise<MergeConflictResult> {
     const cwd = options.cwd ?? process.cwd();
+    const runGit = options.runGit ?? runGitCommand;
     const pathExists = options.pathExists ?? fs.existsSync;
-    const inspectBinaryFile = options.isBinaryFile ?? isBinaryFile;
-
-    const rootResult = await runGit(["rev-parse", "--show-toplevel"], cwd);
-    if (rootResult.failureCode === "ENOENT") {
-        return verificationBlocked(
-            "gitUnavailable",
-            "Git is not installed or is not available on PATH.",
-            { recovery: ["Install Git, then retry."] },
-        );
+    const readFile =
+        options.readFile ?? ((filePath) => fs.readFileSync(filePath, "utf8"));
+    const removeFile =
+        options.removeFile ??
+        ((filePath) => fs.rmSync(filePath, { force: true }));
+    const repository = await getRepository(cwd, runGit);
+    if ("status" in repository) {
+        return repository;
     }
-    if (
-        rootResult.exitCode !== 0 ||
-        scalarOutput(rootResult.stdout).length === 0
-    ) {
-        return verificationBlocked(
-            "notRepository",
-            "The current working directory is not inside a Git repository.",
-            { recovery: ["Open the repository working directory and retry."] },
-        );
-    }
-    const repositoryRoot = path.resolve(scalarOutput(rootResult.stdout));
-    const branchResult = await runGit(
-        ["symbolic-ref", "--quiet", "--short", "HEAD"],
+    const { repositoryRoot, currentBranch } = repository;
+    const resolutionStatePath = await getResolutionStatePath(
         repositoryRoot,
-    );
-    if (
-        branchResult.exitCode !== 0 ||
-        scalarOutput(branchResult.stdout).length === 0
-    ) {
-        return verificationBlocked(
-            "detachedHead",
-            "HEAD is detached, so the prepared merge cannot be verified safely.",
-            {
-                repositoryRoot,
-                recovery: ["Inspect the repository state manually."],
-            },
-        );
-    }
-    const currentBranch = scalarOutput(branchResult.stdout);
-
-    if (!(await hasMergeHead(runGit, repositoryRoot, pathExists))) {
-        return verificationBlocked(
-            "noMergeInProgress",
-            "No merge is in progress. Verification will not guess at a completed or aborted merge.",
-            {
-                repositoryRoot,
-                currentBranch,
-                recovery: [
-                    "Run resolveMergeConflicts to prepare a merge, or inspect the repository state manually.",
-                ],
-            },
-        );
-    }
-
-    const conflictRead = await readConflicts(
         runGit,
-        repositoryRoot,
-        pathExists,
-        inspectBinaryFile,
     );
-    if (!conflictRead.ok) {
-        return verificationBlocked(
-            "verificationFailed",
-            "Git could not inspect the merge conflict state.",
-            {
-                repositoryRoot,
-                currentBranch,
-                recovery: [conflictRead.message, ...reviewRecovery()],
-            },
+    if (!(await hasMergeHead(repositoryRoot, runGit))) {
+        return blocked(
+            "noMergeInProgress",
+            "There is no merge in progress to complete.",
         );
     }
-
-    const [changed, unstaged, stagedCheck, unstagedCheck] = await Promise.all([
-        runGit(["diff", "--name-only", "-z", "HEAD", "--"], repositoryRoot),
-        runGit(["diff", "--name-only", "-z", "--"], repositoryRoot),
-        runGit(["diff", "--cached", "--check", "--"], repositoryRoot),
-        runGit(["diff", "--check", "--"], repositoryRoot),
-    ]);
-    if (changed.exitCode !== 0 || unstaged.exitCode !== 0) {
-        return verificationBlocked(
-            "verificationFailed",
-            "Git could not inspect the prepared merge changes.",
-            {
-                repositoryRoot,
-                currentBranch,
-                recovery: [
-                    changed.stderr ||
-                        unstaged.stderr ||
-                        "Inspect the repository state manually.",
-                    ...reviewRecovery(),
-                ],
-            },
+    const conflicts = await listConflicts(repositoryRoot, runGit);
+    if (conflicts.length > 0) {
+        return blocked(
+            "unresolvedConflicts",
+            "Resolve and stage every conflicted file before completing the merge.",
+            true,
+            { conflicts },
         );
     }
-    if (
-        (stagedCheck.exitCode !== 0 && stagedCheck.stderr.length > 0) ||
-        (unstagedCheck.exitCode !== 0 && unstagedCheck.stderr.length > 0)
-    ) {
-        return verificationBlocked(
-            "verificationFailed",
-            "Git could not check the prepared merge for conflict markers.",
-            {
-                repositoryRoot,
-                currentBranch,
-                recovery: [
-                    stagedCheck.stderr ||
-                        unstagedCheck.stderr ||
-                        "Inspect the repository state manually.",
-                    ...reviewRecovery(),
-                ],
-            },
+    if (resolutionStatePath === undefined || !pathExists(resolutionStatePath)) {
+        return blocked(
+            "missingResolutionState",
+            "Conflict-resolution state is missing. Inspect the merge and commit or abort it manually.",
+            true,
         );
     }
-
-    const inspectedPaths = splitNullTerminated(changed.stdout);
-    const unstagedPaths = splitNullTerminated(unstaged.stdout);
-    if (conflictRead.conflicts.length > 0) {
-        return {
-            status: "unresolved",
-            repositoryRoot,
-            currentBranch,
-            mergeInProgress: true,
-            inspectedPaths,
-            remainingConflicts: conflictRead.conflicts,
-            markerPaths: [],
-            unstagedPaths,
-            recovery: [
-                "Resolve and stage every remaining unmerged path, then verify again.",
-                ...reviewRecovery(),
-            ],
-        };
+    let originalConflicts: string[];
+    try {
+        const parsed: unknown = JSON.parse(readFile(resolutionStatePath));
+        if (
+            !Array.isArray(parsed) ||
+            !parsed.every((value) => typeof value === "string")
+        ) {
+            throw new Error("Invalid conflict path list");
+        }
+        originalConflicts = parsed;
+    } catch {
+        return blocked(
+            "missingResolutionState",
+            "Conflict-resolution state is invalid. Inspect the merge and commit or abort it manually.",
+            true,
+        );
     }
-
-    const markerPaths = [
-        ...new Set([
-            ...parseMarkerPaths(stagedCheck.stdout),
-            ...parseMarkerPaths(unstagedCheck.stdout),
-        ]),
-    ];
-    if (markerPaths.length > 0) {
-        return {
-            status: "markersRemain",
-            repositoryRoot,
-            currentBranch,
-            mergeInProgress: true,
-            inspectedPaths,
-            remainingConflicts: [],
-            markerPaths,
-            unstagedPaths,
-            recovery: [
-                "Remove or intentionally resolve the reported marker lines, stage the affected paths, and verify again.",
-                ...reviewRecovery(),
-            ],
-        };
+    const unstaged = await runGit(["diff", "--quiet"], repositoryRoot);
+    if (unstaged.exitCode !== 0) {
+        return blocked(
+            "unstagedChanges",
+            "Stage the resolved merge changes before completing the merge.",
+            true,
+        );
     }
-    if (unstagedPaths.length > 0) {
-        return {
-            status: "unstagedChanges",
-            repositoryRoot,
-            currentBranch,
-            mergeInProgress: true,
-            inspectedPaths,
-            remainingConflicts: [],
-            markerPaths: [],
-            unstagedPaths,
-            recovery: [
-                "Review and stage the reported paths before considering the merge resolved.",
-                ...reviewRecovery(),
-            ],
-        };
-    }
-
-    return {
-        status: "resolved",
+    const mergeBase = await runGit(
+        ["merge-base", "HEAD", "MERGE_HEAD"],
         repositoryRoot,
-        currentBranch,
-        mergeInProgress: true,
-        inspectedPaths,
-        remainingConflicts: [],
-        markerPaths: [],
-        unstagedPaths: [],
-        recovery: reviewRecovery(),
-    };
+    );
+    const allowedPaths =
+        mergeBase.exitCode === 0
+            ? await listChangedPaths(repositoryRoot, runGit, [
+                  "diff",
+                  "--name-only",
+                  mergeBase.stdout.trim(),
+                  "MERGE_HEAD",
+              ])
+            : undefined;
+    const stagedPaths = await listChangedPaths(repositoryRoot, runGit, [
+        "diff",
+        "--cached",
+        "--name-only",
+        "HEAD",
+    ]);
+    if (allowedPaths === undefined || stagedPaths === undefined) {
+        return blocked(
+            "unrelatedChanges",
+            "Git could not verify the staged merge paths.",
+            true,
+        );
+    }
+    const allowed = new Set([...allowedPaths, ...originalConflicts]);
+    const unrelated = stagedPaths.filter((file) => !allowed.has(file));
+    if (unrelated.length > 0) {
+        return blocked(
+            "unrelatedChanges",
+            `Unstage changes unrelated to the merge: ${unrelated.join(", ")}.`,
+            true,
+        );
+    }
+    const markerCheck = await runGit(
+        ["diff", "--cached", "--check"],
+        repositoryRoot,
+    );
+    if (
+        markerCheck.exitCode !== 0 &&
+        `${markerCheck.stdout}\n${markerCheck.stderr}`.includes(
+            "leftover conflict marker",
+        )
+    ) {
+        return blocked(
+            "conflictMarkers",
+            "Remove remaining conflict markers before completing the merge.",
+            true,
+        );
+    }
+    const commit = await commitMerge(repositoryRoot, runGit);
+    if (typeof commit === "string") {
+        removeFile(resolutionStatePath);
+    }
+    return typeof commit === "string"
+        ? {
+              status: "committed",
+              repositoryRoot,
+              currentBranch,
+              commit,
+          }
+        : commit;
 }

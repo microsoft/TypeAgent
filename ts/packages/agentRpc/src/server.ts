@@ -328,15 +328,6 @@ export function createAgentRpcServer(
             }
             return agent.checkReadiness(getSessionContextShim(param));
         },
-        async getActionReadiness(param) {
-            if (agent.getActionReadiness === undefined) {
-                throw new Error("Invalid invocation of getActionReadiness");
-            }
-            return agent.getActionReadiness(
-                param.action,
-                getSessionContextShim(param),
-            );
-        },
         async setup(param) {
             if (agent.setup === undefined) {
                 throw new Error("Invalid invocation of setup");

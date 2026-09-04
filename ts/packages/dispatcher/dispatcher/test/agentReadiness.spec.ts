@@ -378,21 +378,6 @@ describe("checkAgentReady (pre-flight gate)", () => {
         expect(out).toBeUndefined();
     });
 
-    test("honors a ready per-action override", async () => {
-        const sys = fakeSystemContext({
-            readiness: new Map([
-                [
-                    "agentA",
-                    { state: "setup-required", message: "missing tool" },
-                ],
-            ]),
-        });
-        const out = await checkAgentReady("agentA", sys, fakeActionContext(), {
-            state: "ready",
-        });
-        expect(out).toBeUndefined();
-    });
-
     describe("@config agent setup manual instructions", () => {
         test("renders setup details as markdown", () => {
             const display = getManualAgentSetupDisplay("player", {

@@ -229,7 +229,6 @@ const sessionContextArg: Record<string, number> = {
     updateAgentContext: 1,
     closeAgentContext: 0,
     checkReadiness: 0,
-    getActionReadiness: 1,
     startBackgroundTasks: 0,
     stopBackgroundTasks: 0,
     validateWildcardMatch: 1,

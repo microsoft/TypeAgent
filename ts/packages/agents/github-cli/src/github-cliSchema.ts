@@ -69,7 +69,7 @@ export type GithubCliActions =
     | VariableCreateAction
     | DependabotAlertsAction
     | ResolveMergeConflictsAction
-    | VerifyMergeConflictsResolvedAction;
+    | CompleteMergeConflictResolutionAction;
 
 export type AuthLoginAction = {
     actionName: "authLogin";
@@ -711,11 +711,11 @@ export type DependabotAlertsAction = {
     };
 };
 
-// Fetch a target branch and prepare a local merge without committing or pushing.
+// Fetch a target branch, merge it into the current branch, and create the merge
+// commit. If Git reports conflicts, hand the conflicted files to Reasoning for
+// semantic resolution before the deterministic completion action commits.
 // Use this for requests such as "resolve merge conflicts from main" or "bring
-// the default branch into this branch and resolve conflicts". If conflicts
-// occur, the result provides the exact unmerged paths for the calling MCP
-// client to resolve with its own file tools.
+// the default branch into this branch and resolve conflicts". This never pushes.
 export type ResolveMergeConflictsAction = {
     actionName: "resolveMergeConflicts";
     parameters: {
@@ -727,12 +727,14 @@ export type ResolveMergeConflictsAction = {
     };
 };
 
-// Verify that a merge prepared by resolveMergeConflicts has no unmerged entries
-// or conflict markers and that all merge changes are staged. This only inspects
-// repository state; it never stages, commits, finalizes, aborts, or pushes.
-//
-// Example: { actionName: "verifyMergeConflictsResolved", parameters: {} }
-export type VerifyMergeConflictsResolvedAction = {
-    actionName: "verifyMergeConflictsResolved";
-    parameters: {};
+// Complete a conflicted merge after Reasoning has resolved and staged every
+// conflicted path. This verifies that no unmerged or unstaged paths remain,
+// creates the merge commit, and never pushes. Usually invoked by Reasoning
+// rather than selected directly from a user request.
+export type CompleteMergeConflictResolutionAction = {
+    actionName: "completeMergeConflictResolution";
+    parameters: {
+        // Absolute root of the repository whose merge should be completed.
+        repositoryRoot: string;
+    };
 };
