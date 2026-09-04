@@ -7,12 +7,14 @@ import {
     ActionContext,
     AppAction,
     AppAgent,
+    DisplayContent,
     ReadinessReport,
     SessionContext,
 } from "@typeagent/agent-sdk";
 import Database from "better-sqlite3";
 import path from "path";
 import { exec } from "child_process";
+import { randomUUID } from "crypto";
 import { fileURLToPath } from "url";
 import os from "os";
 import registerDebug from "debug";
@@ -21,6 +23,7 @@ import {
     ChoiceManager,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
+import { createStructuredContent } from "@typeagent/agent-sdk/helpers/display";
 import {
     evaluateCodeReadiness,
     resolveCodePortOverride,
@@ -61,13 +64,93 @@ const sharedPendingCalls: Map<
     {
         resolve: (value?: undefined) => void;
         context?: ActionContext<CodeActionContext> | undefined;
+        clientId?: string | undefined;
     }
 > = new Map();
+const cancellationControlCalls = new Map<
+    number,
+    { clientId: string; responseId: unknown }
+>();
 // Global call-id counter. The pending-calls map is module-scoped (one
 // websocket server is shared across all sessions), so the id space must
 // also be global — per-session counters would collide on 0,1,2,... and
 // route a response to the wrong session's pending call.
 let nextSharedCallId = 0;
+
+export function displayCodaResult(result: unknown): DisplayContent {
+    const message =
+        typeof result === "string"
+            ? result
+            : typeof result === "object" &&
+                result !== null &&
+                "message" in result &&
+                typeof result.message === "string"
+              ? result.message
+              : undefined;
+    if (message === undefined) {
+        return JSON.stringify(result);
+    }
+    if (!message.startsWith("{") || !message.endsWith("}")) {
+        return message;
+    }
+    try {
+        const commandResult: unknown = JSON.parse(message);
+        if (
+            typeof commandResult === "object" &&
+            commandResult !== null &&
+            "exitCode" in commandResult &&
+            "success" in commandResult
+        ) {
+            return createStructuredContent(
+                [
+                    {
+                        kind: "text",
+                        text: JSON.stringify(commandResult, null, 2),
+                    },
+                ],
+                { rawData: commandResult },
+            );
+        }
+    } catch {
+        // Existing Coda actions return plain-text messages.
+    }
+    return message;
+}
+
+export function getActionResponseTimeoutMs(action: AppAction): number {
+    if (action.actionName !== "runWorkspaceCommand") {
+        return 5_000;
+    }
+
+    const requestedTimeout = action.parameters?.["timeoutMs"];
+    const commandTimeout =
+        typeof requestedTimeout === "number" &&
+        Number.isInteger(requestedTimeout) &&
+        requestedTimeout > 0 &&
+        requestedTimeout <= 5 * 60 * 1000
+            ? requestedTimeout
+            : 2 * 60 * 1000;
+    // Leave enough time for Coda to terminate the shell process and send its
+    // final structured result after the command timeout expires.
+    return commandTimeout + 10_000;
+}
+
+function getActionParameters(
+    action: AppAction,
+): Record<string, unknown> | undefined {
+    if (action.actionName !== "runWorkspaceCommand") {
+        return action.parameters;
+    }
+    const parameters = action.parameters ?? {};
+    return {
+        ...parameters,
+        executionId:
+            typeof parameters.executionId === "string" &&
+            parameters.executionId.length > 0
+                ? parameters.executionId
+                : randomUUID(),
+    };
+}
 
 export function instantiate(): AppAgent {
     return {
@@ -101,6 +184,7 @@ type CodeActionContext = {
         {
             resolve: (value?: undefined) => void;
             context?: ActionContext<CodeActionContext> | undefined;
+            clientId?: string | undefined;
         }
     >;
     // Manages yes/no choice callbacks (currently only the setup-flow card).
@@ -191,18 +275,85 @@ function getCodeBindPort(): number {
 // server itself is module-scoped — all sessions route their pending-call
 // completions through the same handler.
 function attachSharedOnMessage(server: CodeAgentWebSocketServer): void {
-    server.onMessage = (message: string) => {
+    server.onMessage = (message: string, clientId: string) => {
         try {
             const data = JSON.parse(message) as WebSocketMessageV2;
 
+            if (
+                data.method === "code/cancelWorkspaceCommand" &&
+                typeof data.params?.executionId === "string"
+            ) {
+                const targetClientId =
+                    server.getOnlyConnectedClientId(clientId);
+                if (targetClientId === undefined) {
+                    server.sendToClient(
+                        clientId,
+                        JSON.stringify({
+                            id: data.id,
+                            result: JSON.stringify({
+                                success: false,
+                                error: "Exactly one Coda workspace must be connected.",
+                                cancelled: false,
+                                pendingCancellation: false,
+                                executionId: data.params.executionId,
+                            }),
+                        }),
+                    );
+                    return;
+                }
+                const callId = nextSharedCallId++;
+                cancellationControlCalls.set(callId, {
+                    clientId,
+                    responseId: data.id,
+                });
+                if (
+                    !server.sendToClient(
+                        targetClientId,
+                        JSON.stringify({
+                            id: callId,
+                            method: data.method,
+                            params: {
+                                ...data.params,
+                                allowPendingCancellation: true,
+                            },
+                        }),
+                    )
+                ) {
+                    cancellationControlCalls.delete(callId);
+                }
+                return;
+            }
+
             if (data.id !== undefined && data.result !== undefined) {
+                const controlCall = cancellationControlCalls.get(
+                    Number(data.id),
+                );
+                if (controlCall !== undefined) {
+                    cancellationControlCalls.delete(Number(data.id));
+                    server.sendToClient(
+                        controlCall.clientId,
+                        JSON.stringify({
+                            ...data,
+                            id: controlCall.responseId,
+                        }),
+                    );
+                    return;
+                }
                 const pendingCall = sharedPendingCalls.get(Number(data.id));
 
                 if (pendingCall) {
+                    if (
+                        pendingCall.clientId !== undefined &&
+                        pendingCall.clientId !== clientId
+                    ) {
+                        return;
+                    }
                     sharedPendingCalls.delete(Number(data.id));
                     const { resolve, context } = pendingCall;
                     if (context?.actionIO) {
-                        context.actionIO.setDisplay(data.result);
+                        context.actionIO.setDisplay(
+                            displayCodaResult(data.result),
+                        );
                     }
                     resolve();
                 }
@@ -440,6 +591,7 @@ async function ensureVSCodeProcess(): Promise<void> {
 
 async function sendPingToCodaExtension(
     agentContext: CodeActionContext,
+    clientId?: string,
 ): Promise<boolean> {
     const server = agentContext.webSocketServer;
     if (!server || !server.isConnected()) return false;
@@ -457,15 +609,23 @@ async function sendPingToCodaExtension(
                 resolve(true);
             },
             context: undefined as any,
+            clientId,
         });
 
-        server.broadcast(
-            JSON.stringify({
-                id: callId,
-                method: "code/ping",
-                params: {},
-            }),
-        );
+        const message = JSON.stringify({
+            id: callId,
+            method: "code/ping",
+            params: {},
+        });
+        const sent =
+            clientId === undefined
+                ? server.broadcast(message) > 0
+                : server.sendToClient(clientId, message);
+        if (!sent) {
+            clearTimeout(timeout);
+            agentContext.pendingCall.delete(callId);
+            resolve(false);
+        }
     });
 }
 
@@ -531,11 +691,25 @@ async function executeCodeAction(
 
     const agentContext = context.sessionContext.agentContext;
     const webSocketServer = agentContext.webSocketServer;
+    const actionParameters = getActionParameters(action);
+    const isStructuredWorkspaceCommand =
+        action.actionName === "runWorkspaceCommand" ||
+        action.actionName === "cancelWorkspaceCommand";
 
     if (webSocketServer && webSocketServer.isConnected()) {
+        const targetClientId = isStructuredWorkspaceCommand
+            ? webSocketServer.getOnlyConnectedClientId()
+            : undefined;
+        if (isStructuredWorkspaceCommand && targetClientId === undefined) {
+            return createActionResultFromError(
+                "Structured workspace commands require exactly one connected Coda workspace to avoid running in an unintended window.",
+            );
+        }
         try {
-            const isExtensionAlive =
-                await sendPingToCodaExtension(agentContext);
+            const isExtensionAlive = await sendPingToCodaExtension(
+                agentContext,
+                targetClientId,
+            );
             if (!isExtensionAlive) {
                 return createActionResultFromError(
                     "❌ Coda VSCode extension is not connected.",
@@ -544,10 +718,26 @@ async function executeCodeAction(
 
             const callId = nextSharedCallId++;
             return new Promise<undefined>((resolve) => {
-                const timeoutMs = 5000;
+                const timeoutMs = getActionResponseTimeoutMs(action);
                 const timeoutHandle = setTimeout(() => {
                     if (agentContext.pendingCall.has(callId)) {
                         agentContext.pendingCall.delete(callId);
+                        if (
+                            action.actionName === "runWorkspaceCommand" &&
+                            typeof actionParameters?.executionId === "string"
+                        ) {
+                            webSocketServer.sendToClient(
+                                targetClientId!,
+                                JSON.stringify({
+                                    id: nextSharedCallId++,
+                                    method: "code/cancelWorkspaceCommand",
+                                    params: {
+                                        executionId:
+                                            actionParameters.executionId,
+                                    },
+                                }),
+                            );
+                        }
                         if (context.actionIO) {
                             context.actionIO.setDisplay(
                                 `No connected coda extension handled action "${action.actionName}". If multiple VS Code windows are open, reload the others (Ctrl+Shift+P → Developer: Reload Window) so they pick up the latest coda bundle.`,
@@ -562,14 +752,25 @@ async function executeCodeAction(
                         resolve(value);
                     },
                     context,
+                    clientId: targetClientId,
                 });
-                webSocketServer.broadcast(
-                    JSON.stringify({
-                        id: callId,
-                        method: `code/${action.actionName}`,
-                        params: action.parameters,
-                    }),
-                );
+                const message = JSON.stringify({
+                    id: callId,
+                    method: `code/${action.actionName}`,
+                    params: actionParameters,
+                });
+                const sent =
+                    targetClientId === undefined
+                        ? webSocketServer.broadcast(message) > 0
+                        : webSocketServer.sendToClient(targetClientId, message);
+                if (!sent) {
+                    clearTimeout(timeoutHandle);
+                    agentContext.pendingCall.delete(callId);
+                    context.actionIO?.setDisplay(
+                        "The Coda workspace disconnected before the command could be delivered.",
+                    );
+                    resolve(undefined);
+                }
             });
         } catch {
             throw new Error("Unable to contact code backend.");

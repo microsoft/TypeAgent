@@ -20,7 +20,7 @@
   "scripts": {
     "build": "pnpm run esbuild-base --sourcemap",
     "build:ext:vscode": "pnpm run package",
-    "clean": "rimraf --glob out dist-pub *.tsbuildinfo *.done.build.log",
+    "clean": "rimraf --glob out dist-pub dist-test *.tsbuildinfo *.done.build.log",
     "deploy:local": "pnpm run package && code --install-extension dist-pub/aisystems-coda.vsix --force",
     "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --log-level=warning",
     "esbuild-watch": "pnpm run esbuild-base --sourcemap --watch",
@@ -29,7 +29,8 @@
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "pretest": "pnpm run build",
-    "test-compile": "tsc -p ./src",
+    "test-compile": "pnpm --dir ../agents/code exec tsc -p ../../coda/src",
+    "test:local": "pnpm --dir ../agents/code exec tsc --target ES2022 --module Node16 --moduleResolution Node16 --esModuleInterop --strict --types node --outDir ../../coda/dist-test --rootDir ../../coda/src ../../coda/src/workspaceCommandRunner.ts ../../coda/src/workspaceCommandPolicy.ts ../../coda/src/test/workspaceCommandRunner.spec.ts ../../coda/src/test/workspaceCommandPolicy.spec.ts && node --test dist-test/test/workspaceCommandRunner.spec.js dist-test/test/workspaceCommandPolicy.spec.js",
     "test:full": "vscode-test",
     "vscode:prepublish": "pnpm run esbuild-base --minify",
     "watch": "tsc -w"

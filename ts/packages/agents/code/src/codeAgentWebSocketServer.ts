@@ -12,9 +12,10 @@ const debug = registerDebug("typeagent:code:websocket");
 
 export class CodeAgentWebSocketServer {
     private clients: Map<string, WebSocket> = new Map();
+    private controlClientIds = new Set<string>();
     private clientIdCounter = 0;
     private readonly stopHeartbeat: () => void;
-    public onMessage?: (message: string) => void;
+    public onMessage?: (message: string, clientId: string) => void;
     /**
      * Fired after the {@link clients} map mutation completes for any
      * connect / disconnect, with the post-mutation total. Used by the
@@ -118,11 +119,19 @@ export class CodeAgentWebSocketServer {
     }
 
     private setupHandlers(): void {
-        this.server.on("connection", (ws: WebSocket) => {
+        this.server.on("connection", (ws: WebSocket, request) => {
             const clientId = `client-${++this.clientIdCounter}-${Date.now()}`;
+            const role = new URL(
+                request.url ?? "",
+                "ws://localhost",
+            ).searchParams.get("role");
+            const isControlClient = role === "command-executor-control";
             debug("New client connected");
             this.clients.set(clientId, ws);
-            this.onClientCountChanged?.(this.clients.size);
+            if (isControlClient) {
+                this.controlClientIds.add(clientId);
+            }
+            this.onClientCountChanged?.(this.getConnectedCount());
 
             // Store client ID on the WebSocket for reference
             (ws as any).clientId = clientId;
@@ -130,20 +139,22 @@ export class CodeAgentWebSocketServer {
             ws.on("message", (message: Buffer) => {
                 const messageStr = message.toString();
                 if (this.onMessage) {
-                    this.onMessage(messageStr);
+                    this.onMessage(messageStr, clientId);
                 }
             });
 
             ws.on("close", () => {
                 debug("Client disconnected");
                 this.clients.delete(clientId);
-                this.onClientCountChanged?.(this.clients.size);
+                this.controlClientIds.delete(clientId);
+                this.onClientCountChanged?.(this.getConnectedCount());
             });
 
             ws.on("error", (error) => {
                 debug("Client error:", error);
                 if (this.clients.delete(clientId)) {
-                    this.onClientCountChanged?.(this.clients.size);
+                    this.controlClientIds.delete(clientId);
+                    this.onClientCountChanged?.(this.getConnectedCount());
                 }
             });
         });
@@ -154,6 +165,9 @@ export class CodeAgentWebSocketServer {
         const clientsToRemove: string[] = [];
 
         for (const [clientId, client] of this.clients.entries()) {
+            if (this.controlClientIds.has(clientId)) {
+                continue;
+            }
             if (client.readyState === WebSocket.OPEN) {
                 try {
                     client.send(message);
@@ -168,14 +182,57 @@ export class CodeAgentWebSocketServer {
         }
 
         // Remove failed clients
-        clientsToRemove.forEach((clientId) => this.clients.delete(clientId));
+        clientsToRemove.forEach((clientId) => {
+            this.clients.delete(clientId);
+            this.controlClientIds.delete(clientId);
+        });
 
         return successCount;
     }
 
+    public getOnlyConnectedClientId(
+        excludeClientId?: string,
+    ): string | undefined {
+        let connectedClientId: string | undefined;
+        for (const [clientId, client] of this.clients.entries()) {
+            if (
+                clientId === excludeClientId ||
+                this.controlClientIds.has(clientId) ||
+                client.readyState !== WebSocket.OPEN
+            ) {
+                continue;
+            }
+            if (connectedClientId !== undefined) {
+                return undefined;
+            }
+            connectedClientId = clientId;
+        }
+        return connectedClientId;
+    }
+
+    public sendToClient(clientId: string, message: string): boolean {
+        const client = this.clients.get(clientId);
+        if (client?.readyState !== WebSocket.OPEN) {
+            return false;
+        }
+        try {
+            client.send(message);
+            return true;
+        } catch (error) {
+            debug("Failed to send to client:", error);
+            this.clients.delete(clientId);
+            this.controlClientIds.delete(clientId);
+            this.onClientCountChanged?.(this.getConnectedCount());
+            return false;
+        }
+    }
+
     public isConnected(): boolean {
-        for (const [, client] of this.clients.entries()) {
-            if (client.readyState === WebSocket.OPEN) {
+        for (const [clientId, client] of this.clients.entries()) {
+            if (
+                !this.controlClientIds.has(clientId) &&
+                client.readyState === WebSocket.OPEN
+            ) {
                 return true;
             }
         }
@@ -184,8 +241,11 @@ export class CodeAgentWebSocketServer {
 
     public getConnectedCount(): number {
         let count = 0;
-        for (const [, client] of this.clients.entries()) {
-            if (client.readyState === WebSocket.OPEN) {
+        for (const [clientId, client] of this.clients.entries()) {
+            if (
+                !this.controlClientIds.has(clientId) &&
+                client.readyState === WebSocket.OPEN
+            ) {
                 count++;
             }
         }
@@ -228,6 +288,7 @@ export class CodeAgentWebSocketServer {
             }
         }
         this.clients.clear();
+        this.controlClientIds.clear();
         return new Promise((resolve) => {
             this.server.close(() => resolve());
         });

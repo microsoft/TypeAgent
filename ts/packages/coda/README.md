@@ -22,6 +22,26 @@ To deploy the extension locally in your vscode environment, run `pnpm run deploy
    - Create a new python code file that merges two sorted arrays of numbers
    - etc
 
+### Structured workspace commands
+
+The `code-workbench.runWorkspaceCommand` action executes an explicitly supplied
+shell command and returns JSON with stdout, stderr, exit code, duration, status,
+timeout, cancellation, and output-truncation metadata. Commands run in the active
+editor's workspace root, the only workspace root, or a requested root in
+multi-root workspaces. A relative `workingDirectory` may select a subdirectory.
+
+The action uses `cmd.exe /d /s /c` on Windows and `/bin/sh -c` on Unix, passing
+the command as one shell argument. Commands are limited to 16 KiB; each output
+stream is limited to 64 KiB and reports its original byte count. The timeout
+defaults to two minutes and is capped at five. High-risk commands remain blocked
+by the existing Coda command-risk policy. To avoid treating this as an arbitrary
+terminal shortcut, structured execution accepts only focused build, test, lint,
+and diagnostic tools and rejects shell composition. Commands receive an `executionId`;
+independent IDs run concurrently inside one Coda window and
+`cancelWorkspaceCommand` cancels one. The Code Agent sends structured commands
+only when exactly one Coda workspace is connected, preventing a command from
+running in an unintended VS Code window.
+
 > Tip: If you have any problems, please check to see if the `coda` extension was installed correctly using the command `code --list-extensions`. You should see `aisystems.copilot-coda` in the list of vscode extensions.
 
 ## Requirements

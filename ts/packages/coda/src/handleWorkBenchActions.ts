@@ -10,6 +10,272 @@ import * as path from "path";
 import * as vscode from "vscode";
 import * as fs from "fs/promises";
 import { aliasManager } from "./commandAliasMgr";
+import {
+    WorkspaceCommandRunner,
+    WorkspaceCommandResult,
+} from "./workspaceCommandRunner";
+import { validateFocusedWorkspaceCommand } from "./workspaceCommandPolicy";
+
+const workspaceCommandRunner = new WorkspaceCommandRunner();
+
+type WorkspaceCommandParameters = {
+    command?: unknown;
+    workspaceFolder?: unknown;
+    workingDirectory?: unknown;
+    commandRiskLevel?: unknown;
+    timeoutMs?: unknown;
+    executionId?: unknown;
+    allowPendingCancellation?: unknown;
+};
+
+function workspaceCommandResponse(
+    result:
+        | WorkspaceCommandResult
+        | {
+              success: boolean;
+              error?: string;
+              executionId?: string;
+              cancelled?: boolean;
+              pendingCancellation?: boolean;
+          },
+): ActionResult {
+    if ("exitCode" in result) {
+        return { handled: true, message: JSON.stringify(result) };
+    }
+    return {
+        handled: true,
+        message: JSON.stringify({
+            success: result.success,
+            error: result.error,
+            exitCode: null,
+            durationMs: 0,
+            stdout: { text: "", truncated: false, totalBytes: 0 },
+            stderr: { text: "", truncated: false, totalBytes: 0 },
+            timedOut: false,
+            cancelled: result.cancelled ?? false,
+            pendingCancellation: result.pendingCancellation ?? false,
+            executionId: result.executionId,
+        }),
+    };
+}
+
+function workspaceCommandError(
+    error: string,
+    executionId?: string,
+): ActionResult {
+    return workspaceCommandResponse({ success: false, error, executionId });
+}
+
+async function resolveWorkspaceCommandDirectory(
+    parameters: WorkspaceCommandParameters,
+): Promise<string | { error: string }> {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) {
+        return { error: "No workspace or repository is currently open." };
+    }
+    if (
+        parameters.workspaceFolder !== undefined &&
+        (typeof parameters.workspaceFolder !== "string" ||
+            parameters.workspaceFolder.trim().length === 0)
+    ) {
+        return { error: "workspaceFolder must be a non-empty string." };
+    }
+    if (
+        parameters.workingDirectory !== undefined &&
+        (typeof parameters.workingDirectory !== "string" ||
+            parameters.workingDirectory.trim().length === 0)
+    ) {
+        return { error: "workingDirectory must be a non-empty string." };
+    }
+
+    let workspaceFolder: vscode.WorkspaceFolder | undefined;
+    if (typeof parameters.workspaceFolder === "string") {
+        const requested = parameters.workspaceFolder;
+        const requestedPath = path.resolve(requested);
+        workspaceFolder = workspaceFolders.find(
+            (folder) =>
+                folder.name === requested ||
+                path.resolve(folder.uri.fsPath) === requestedPath,
+        );
+        if (workspaceFolder === undefined) {
+            return {
+                error: `No open workspace root matches '${requested}'.`,
+            };
+        }
+    } else {
+        const activeUri = vscode.window.activeTextEditor?.document.uri;
+        workspaceFolder = activeUri
+            ? vscode.workspace.getWorkspaceFolder(activeUri)
+            : undefined;
+        if (workspaceFolder === undefined && workspaceFolders.length === 1) {
+            workspaceFolder = workspaceFolders[0];
+        }
+        if (workspaceFolder === undefined) {
+            return {
+                error: "Multiple workspace roots are open. Specify workspaceFolder by name or absolute path.",
+            };
+        }
+    }
+    if (workspaceFolder.uri.scheme !== "file") {
+        return {
+            error: `Workspace root '${workspaceFolder.name}' is not a local filesystem folder.`,
+        };
+    }
+
+    const workingDirectory =
+        typeof parameters.workingDirectory === "string"
+            ? parameters.workingDirectory
+            : undefined;
+    const root = workspaceFolder.uri.fsPath;
+    const cwd =
+        workingDirectory !== undefined
+            ? path.resolve(root, workingDirectory)
+            : root;
+    const relativePath = path.relative(root, cwd);
+    if (
+        (workingDirectory !== undefined && path.isAbsolute(workingDirectory)) ||
+        relativePath === ".." ||
+        relativePath.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relativePath)
+    ) {
+        return {
+            error: "workingDirectory must stay within the selected workspace root.",
+        };
+    }
+    try {
+        const stat = await fs.stat(cwd);
+        if (!stat.isDirectory()) {
+            return { error: `workingDirectory is not a directory: ${cwd}` };
+        }
+    } catch (error) {
+        return {
+            error: `workingDirectory does not exist: ${
+                error instanceof Error ? error.message : String(error)
+            }`,
+        };
+    }
+    return cwd;
+}
+
+export async function handleRunWorkspaceCommand(action: {
+    parameters?: WorkspaceCommandParameters;
+}): Promise<ActionResult> {
+    const parameters = action.parameters ?? {};
+    const executionId =
+        typeof parameters.executionId === "string"
+            ? parameters.executionId
+            : undefined;
+    if (typeof parameters.command !== "string") {
+        return workspaceCommandError("command must be a string.", executionId);
+    }
+    if (
+        parameters.timeoutMs !== undefined &&
+        typeof parameters.timeoutMs !== "number"
+    ) {
+        return workspaceCommandError(
+            "timeoutMs must be a number.",
+            executionId,
+        );
+    }
+    if (
+        parameters.executionId !== undefined &&
+        (typeof parameters.executionId !== "string" ||
+            parameters.executionId.trim().length === 0 ||
+            parameters.executionId.length > 128)
+    ) {
+        return workspaceCommandError(
+            "executionId must be a non-empty string no longer than 128 characters.",
+        );
+    }
+    if (
+        executionId !== undefined &&
+        workspaceCommandRunner.consumePendingCancellation(executionId)
+    ) {
+        return workspaceCommandResponse({
+            success: false,
+            exitCode: null,
+            durationMs: 0,
+            command: parameters.command,
+            cwd: "",
+            stdout: { text: "", truncated: false, totalBytes: 0 },
+            stderr: { text: "", truncated: false, totalBytes: 0 },
+            timedOut: false,
+            cancelled: true,
+            executionId,
+        });
+    }
+    const declaredRiskLevel =
+        parameters.commandRiskLevel === undefined
+            ? "low"
+            : parameters.commandRiskLevel;
+    if (
+        declaredRiskLevel !== "low" &&
+        declaredRiskLevel !== "medium" &&
+        declaredRiskLevel !== "high"
+    ) {
+        return workspaceCommandError(
+            "commandRiskLevel must be low, medium, or high.",
+            executionId,
+        );
+    }
+    const cwd = await resolveWorkspaceCommandDirectory(parameters);
+    if (typeof cwd !== "string") {
+        return workspaceCommandError(cwd.error, executionId);
+    }
+
+    if (declaredRiskLevel === "high") {
+        return workspaceCommandError(
+            "Command execution blocked due to high risk.",
+            executionId,
+        );
+    }
+    const commandPolicyError = validateFocusedWorkspaceCommand(
+        parameters.command,
+    );
+    if (commandPolicyError !== undefined) {
+        return workspaceCommandError(commandPolicyError, executionId);
+    }
+    const result = await workspaceCommandRunner.run({
+        command: parameters.command,
+        cwd,
+        ...(parameters.timeoutMs === undefined
+            ? {}
+            : { timeoutMs: parameters.timeoutMs }),
+        ...(parameters.executionId === undefined
+            ? {}
+            : { executionId: parameters.executionId }),
+    });
+    return "error" in result
+        ? workspaceCommandError(result.error, executionId)
+        : workspaceCommandResponse(result);
+}
+
+export function handleCancelWorkspaceCommand(action: {
+    parameters?: WorkspaceCommandParameters;
+}): ActionResult {
+    const executionId = action.parameters?.executionId;
+    if (typeof executionId !== "string" || executionId.trim().length === 0) {
+        return workspaceCommandError("executionId must be a non-empty string.");
+    }
+    const cancellation = workspaceCommandRunner.cancel(
+        executionId,
+        action.parameters?.allowPendingCancellation === true,
+    );
+    const cancelled = cancellation === "cancelled";
+    return workspaceCommandResponse({
+        success: cancellation !== "notFound",
+        cancelled,
+        pendingCancellation: cancellation === "pending",
+        executionId,
+        ...(cancellation !== "notFound"
+            ? {}
+            : { error: "No active command has that executionId." }),
+    });
+}
+
+export function cancelWorkspaceCommands(): void {
+    workspaceCommandRunner.cancelAll();
+}
 
 async function handleOpenFileAction(action: any): Promise<ActionResult> {
     const actionResult: ActionResult = {
@@ -538,6 +804,12 @@ export async function handleWorkbenchActions(
             break;
         case "openInIntegratedTerminal":
             actionResult = await handleOpenInIntegratedTerminal(action);
+            break;
+        case "runWorkspaceCommand":
+            actionResult = await handleRunWorkspaceCommand(action);
+            break;
+        case "cancelWorkspaceCommand":
+            actionResult = handleCancelWorkspaceCommand(action);
             break;
         default: {
             actionResult.message = `Did not understand the request for action: "${actionName}"`;

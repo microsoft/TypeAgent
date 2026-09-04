@@ -11,6 +11,7 @@ import {
     AgentServerConnection,
     AGENT_SERVER_DEFAULT_URL,
 } from "@typeagent/agent-server-client";
+import { discoverPort } from "@typeagent/agent-server-client/discovery";
 import type {
     AgentSchemaInfo,
     ClientIO,
@@ -30,6 +31,14 @@ import * as path from "path";
 import * as os from "os";
 import { convert } from "html-to-text";
 import { loadConfig, type ResolvedAgentServerConfig } from "./config/index.js";
+import {
+    CancelWorkspaceCommandInput,
+    CancelWorkspaceCommandInputSchema,
+    CancelWorkspaceCommandResultSchema,
+    WorkspaceCommandInput,
+    WorkspaceCommandInputSchema,
+    WorkspaceCommandResultSchema,
+} from "./workspaceCommandMcpSchema.js";
 
 // ── Agent filter ──────────────────────────────────────────────────────────────
 
@@ -107,6 +116,60 @@ function toolResult(result: string, rawData?: unknown): CallToolResult {
             : (rawData as Record<string, unknown>);
     }
     return out;
+}
+
+function resultText(result: CallToolResult): string {
+    return result.content
+        .map((content) => (content.type === "text" ? content.text : ""))
+        .filter((text) => text.length > 0)
+        .join("\n");
+}
+
+function workspaceCommandFailure(
+    error: string,
+    executionId: string,
+): CallToolResult {
+    const failure = {
+        success: false,
+        error,
+        exitCode: null,
+        durationMs: 0,
+        stdout: { text: "", truncated: false, totalBytes: 0 },
+        stderr: { text: "", truncated: false, totalBytes: 0 },
+        timedOut: false,
+        cancelled: false,
+        executionId,
+    };
+    return toolResult(JSON.stringify(failure, null, 2), failure);
+}
+
+function cancelledWorkspaceCommandResult(executionId: string): CallToolResult {
+    const result = {
+        success: false,
+        error: "The command request was cancelled before it was dispatched.",
+        exitCode: null,
+        durationMs: 0,
+        stdout: { text: "", truncated: false, totalBytes: 0 },
+        stderr: { text: "", truncated: false, totalBytes: 0 },
+        timedOut: false,
+        cancelled: true,
+        executionId,
+    };
+    return toolResult(JSON.stringify(result, null, 2), result);
+}
+
+function cancellationFailure(
+    error: string,
+    executionId: string,
+): CallToolResult {
+    const failure = {
+        success: false,
+        error,
+        cancelled: false,
+        pendingCancellation: false,
+        executionId,
+    };
+    return toolResult(JSON.stringify(failure, null, 2), failure);
 }
 
 function stripAnsi(text: string): string {
@@ -352,6 +415,8 @@ export class CommandServer {
         messages: [],
     };
     private currentRequestConfirmed: boolean = false;
+    private dispatcherRequestInFlight = false;
+    private workspaceCommandInFlight = false;
     private config: ResolvedAgentServerConfig;
 
     constructor(agentServerUrl?: string) {
@@ -632,8 +697,32 @@ export class CommandServer {
                     "- naturalLanguage: The original natural language request from the user (e.g. 'play shake it off'). ALWAYS provide this when you have the user's original request — the dispatcher uses it to populate its NL cache so future identical or similar requests can be handled without LLM translation.\n\n" +
                     "The action is dispatched directly to the agent, bypassing the LLM translation step for maximum speed.",
             },
-            async (request: ExecuteActionRequest) =>
-                this.executeAction(request),
+            async (request: ExecuteActionRequest, extra) =>
+                this.executeAction(request, false, extra.signal),
+        );
+
+        this.server.registerTool(
+            "run_workspace_command",
+            {
+                inputSchema: WorkspaceCommandInputSchema.shape,
+                outputSchema: WorkspaceCommandResultSchema.shape,
+                description:
+                    "Run one explicitly requested build, test, lint, or diagnostic command in the open VS Code workspace through Coda. This is a direct TypeAgent action: it does not use natural-language translation or a terminal UI. Returns structured stdout, stderr, exitCode, durationMs, success, timedOut, cancelled, and truncation metadata. Example: { command: 'pnpm test -- --runInBand', workingDirectory: 'ts/packages/coda', executionId: 'coda-tests-1' }. Coda blocks high-risk commands and rejects shell composition.",
+            },
+            async (request: WorkspaceCommandInput, extra) =>
+                this.runWorkspaceCommand(request, extra.signal),
+        );
+
+        this.server.registerTool(
+            "cancel_workspace_command",
+            {
+                inputSchema: CancelWorkspaceCommandInputSchema.shape,
+                outputSchema: CancelWorkspaceCommandResultSchema.shape,
+                description:
+                    "Cancel one active run_workspace_command request by executionId. The result reports whether a running command was cancelled or whether cancellation is pending before its command reaches Coda.",
+            },
+            async (request: CancelWorkspaceCommandInput) =>
+                this.cancelWorkspaceCommand(request),
         );
 
         // 4. User/editor context - delegates to the code agent (VS Code CODA
@@ -738,6 +827,22 @@ export class CommandServer {
     // ── Tool implementations ─────────────────────────────────────────────────
 
     public async executeCommand(
+        request: ExecuteCommandRequest,
+    ): Promise<CallToolResult> {
+        if (this.dispatcherRequestInFlight) {
+            return toolResult(
+                "Another request is already using this Command Executor. Wait for it to complete before sending another command.",
+            );
+        }
+        this.dispatcherRequestInFlight = true;
+        try {
+            return await this.executeCommandUnlocked(request);
+        } finally {
+            this.dispatcherRequestInFlight = false;
+        }
+    }
+
+    private async executeCommandUnlocked(
         request: ExecuteCommandRequest,
     ): Promise<CallToolResult> {
         this.logger.log(`execute_command: ${request.request}`);
@@ -971,8 +1076,211 @@ export class CommandServer {
         });
     }
 
+    private async runWorkspaceCommand(
+        request: WorkspaceCommandInput,
+        signal?: AbortSignal,
+    ): Promise<CallToolResult> {
+        if (this.workspaceCommandInFlight) {
+            return workspaceCommandFailure(
+                "This Command Executor already has a workspace command in progress. Use a separate MCP connection for a concurrent command.",
+                request.executionId,
+            );
+        }
+        this.workspaceCommandInFlight = true;
+        if (signal?.aborted) {
+            this.workspaceCommandInFlight = false;
+            return cancelledWorkspaceCommandResult(request.executionId);
+        }
+        let acquiredDispatcherLock = false;
+        const cancelOnAbort = () => {
+            void this.cancelWorkspaceCommand({
+                executionId: request.executionId,
+            });
+        };
+        signal?.addEventListener("abort", cancelOnAbort, { once: true });
+        try {
+            if (this.dispatcherRequestInFlight) {
+                return workspaceCommandFailure(
+                    "Another request is already using this Command Executor. Wait for it to complete before sending another command.",
+                    request.executionId,
+                );
+            }
+            this.dispatcherRequestInFlight = true;
+            acquiredDispatcherLock = true;
+            const result = await this.executeActionUnlocked(
+                {
+                    schemaName: "code.code-workbench",
+                    actionName: "runWorkspaceCommand",
+                    parameters: request,
+                },
+                true,
+            );
+            if (
+                result.structuredContent !== undefined &&
+                WorkspaceCommandResultSchema.safeParse(result.structuredContent)
+                    .success
+            ) {
+                return result;
+            }
+            return workspaceCommandFailure(
+                resultText(result),
+                request.executionId,
+            );
+        } finally {
+            if (acquiredDispatcherLock) {
+                this.dispatcherRequestInFlight = false;
+            }
+            signal?.removeEventListener("abort", cancelOnAbort);
+            this.workspaceCommandInFlight = false;
+        }
+    }
+
+    private async cancelWorkspaceCommand(
+        request: CancelWorkspaceCommandInput,
+    ): Promise<CallToolResult> {
+        let endpoint: string | undefined;
+        try {
+            const discovered = await discoverPort("code", undefined, {
+                url: this.agentServerUrl,
+            });
+            if (discovered.kind === "found") {
+                endpoint =
+                    discovered.url ?? `ws://localhost:${discovered.port}`;
+            }
+        } catch (error) {
+            return cancellationFailure(
+                error instanceof Error ? error.message : String(error),
+                request.executionId,
+            );
+        }
+        if (endpoint === undefined) {
+            return cancellationFailure(
+                "The Code Agent websocket is not available.",
+                request.executionId,
+            );
+        }
+
+        const url = new URL(endpoint);
+        url.searchParams.set("channel", "code");
+        url.searchParams.set("role", "command-executor-control");
+        return new Promise<CallToolResult>((resolve) => {
+            const socket = new WebSocket(url);
+            const timeout = setTimeout(() => {
+                socket.close();
+                resolve(
+                    cancellationFailure(
+                        "Timed out waiting for Coda to cancel the command.",
+                        request.executionId,
+                    ),
+                );
+            }, 10_000);
+            const finish = (result: CallToolResult) => {
+                clearTimeout(timeout);
+                socket.close();
+                resolve(result);
+            };
+            socket.addEventListener("open", () => {
+                socket.send(
+                    JSON.stringify({
+                        id: request.executionId,
+                        method: "code/cancelWorkspaceCommand",
+                        params: request,
+                    }),
+                );
+            });
+            socket.addEventListener("message", (event) => {
+                try {
+                    const response = JSON.parse(String(event.data)) as {
+                        id?: unknown;
+                        result?: unknown;
+                    };
+                    if (response.id !== request.executionId) {
+                        return;
+                    }
+                    const result =
+                        typeof response.result === "string"
+                            ? JSON.parse(response.result)
+                            : response.result;
+                    if (
+                        CancelWorkspaceCommandResultSchema.safeParse(result)
+                            .success
+                    ) {
+                        finish(
+                            toolResult(JSON.stringify(result, null, 2), result),
+                        );
+                        return;
+                    }
+                } catch {
+                    // The schema-normalized failure below gives callers a stable result.
+                }
+                finish(
+                    cancellationFailure(
+                        "Coda returned an invalid cancellation response.",
+                        request.executionId,
+                    ),
+                );
+            });
+            socket.addEventListener("error", () => {
+                finish(
+                    cancellationFailure(
+                        "Unable to contact the Code Agent websocket.",
+                        request.executionId,
+                    ),
+                );
+            });
+        });
+    }
+
     private async executeAction(
         request: ExecuteActionRequest,
+        preserveDisplayText = false,
+        signal?: AbortSignal,
+    ): Promise<CallToolResult> {
+        if (
+            request.schemaName === "code.code-workbench" &&
+            request.actionName === "runWorkspaceCommand"
+        ) {
+            const parsed = WorkspaceCommandInputSchema.safeParse(
+                request.parameters,
+            );
+            return parsed.success
+                ? this.runWorkspaceCommand(parsed.data, signal)
+                : toolResult(
+                      `Action parameters are invalid: ${parsed.error.message}`,
+                  );
+        }
+        if (
+            request.schemaName === "code.code-workbench" &&
+            request.actionName === "cancelWorkspaceCommand"
+        ) {
+            const parsed = CancelWorkspaceCommandInputSchema.safeParse(
+                request.parameters,
+            );
+            return parsed.success
+                ? this.cancelWorkspaceCommand(parsed.data)
+                : toolResult(
+                      `Action parameters are invalid: ${parsed.error.message}`,
+                  );
+        }
+        if (this.dispatcherRequestInFlight) {
+            return toolResult(
+                "Another request is already using this Command Executor. Wait for it to complete before sending another command.",
+            );
+        }
+        this.dispatcherRequestInFlight = true;
+        try {
+            return await this.executeActionUnlocked(
+                request,
+                preserveDisplayText,
+            );
+        } finally {
+            this.dispatcherRequestInFlight = false;
+        }
+    }
+
+    private async executeActionUnlocked(
+        request: ExecuteActionRequest,
+        preserveDisplayText = false,
     ): Promise<CallToolResult> {
         this.logger.log(
             `execute_action: ${request.schemaName}.${request.actionName} params=${JSON.stringify(request.parameters ?? {})}`,
@@ -1065,7 +1373,9 @@ export class CommandServer {
             if (this.responseCollector.messages.length > 0) {
                 const response = this.responseCollector.messages.join("\n\n");
                 return toolResult(
-                    await processHtmlContent(response),
+                    preserveDisplayText
+                        ? response
+                        : await processHtmlContent(response),
                     this.responseCollector.rawData,
                 );
             }
