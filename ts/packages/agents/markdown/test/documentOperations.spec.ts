@@ -63,6 +63,47 @@ describe("base-relative DocumentOperation batches", () => {
     });
 });
 
+describe("insert and replace content serialization", () => {
+    test.each(["insert", "replace"] as const)(
+        "preserves marks on nested content for %s operations",
+        (type) => {
+            const content = [
+                {
+                    type: "paragraph",
+                    content: [
+                        { type: "text", text: "Hello " },
+                        {
+                            type: "text",
+                            text: "world",
+                            marks: [{ type: "strong" }, { type: "em" }],
+                        },
+                    ],
+                },
+            ];
+            const operation: DocumentOperation =
+                type === "insert"
+                    ? { type, position: 0, content }
+                    : { type, from: 0, to: 3, content };
+
+            expect(applyDocumentOperations("old", [operation])).toBe(
+                "Hello ***world***\n\n" + (type === "insert" ? "old" : ""),
+            );
+        },
+    );
+
+    test("separates a horizontal rule from preceding text", () => {
+        const operation: DocumentOperation = {
+            type: "insert",
+            position: 6,
+            content: [{ type: "horizontal_rule" }],
+        };
+
+        expect(applyDocumentOperations("Hello\n", [operation])).toBe(
+            "Hello\n\n---\n\n",
+        );
+    });
+});
+
 describe("format DocumentOperation", () => {
     test("adds strong marks around a character range", () => {
         const before = "hello world";
@@ -182,6 +223,19 @@ describe("format DocumentOperation", () => {
         };
         // Peel ** first (matches inner **), then * around it: "abc"
         expect(applyDocumentOperations(before, [op])).toBe("abc");
+    });
+
+    test("does not remove em from strong text", () => {
+        const before = "hello **world**";
+        const op: DocumentOperation = {
+            type: "format",
+            from: 8,
+            to: 13,
+            add: false,
+            marks: [{ type: "em" }],
+        };
+
+        expect(applyDocumentOperations(before, [op])).toBe(before);
     });
 
     test("removes a link", () => {

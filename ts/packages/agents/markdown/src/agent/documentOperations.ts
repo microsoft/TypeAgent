@@ -101,9 +101,10 @@ function applyDocumentOperation(
                 operation.position,
                 content.length,
             );
+            const before = content.slice(0, position);
             return (
-                content.slice(0, position) +
-                contentItemsToText(operation.content) +
+                before +
+                contentItemsToText(operation.content, before) +
                 content.slice(position)
             );
         }
@@ -113,9 +114,10 @@ function applyDocumentOperation(
                 operation.to,
                 content.length,
             );
+            const before = content.slice(0, from);
             return (
-                content.slice(0, from) +
-                contentItemsToText(operation.content) +
+                before +
+                contentItemsToText(operation.content, before) +
                 content.slice(to)
             );
         }
@@ -140,12 +142,18 @@ function applyDocumentOperation(
     }
 }
 
-function contentItemsToText(items: ContentItem[]): string {
-    return items.map((item) => contentItemToText(item)).join("");
+function contentItemsToText(
+    items: ContentItem[],
+    precedingText: string,
+): string {
+    return items.reduce(
+        (text, item) => text + contentItemToText(item, precedingText + text),
+        "",
+    );
 }
 
-function contentItemToText(item: ContentItem): string {
-    const text = getPlainText(item);
+function contentItemToText(item: ContentItem, precedingText: string): string {
+    const text = getMarkedText(item);
     switch (item.type) {
         case "heading": {
             if (/^#{1,6}\s/.test(text)) {
@@ -169,21 +177,29 @@ function contentItemToText(item: ContentItem): string {
         case "ordered_list":
             return serializeList(item, "1.");
         case "code_block":
-            return `\`\`\`\n${text}\n\`\`\`\n\n`;
+            return `\`\`\`\n${getPlainText(item)}\n\`\`\`\n\n`;
         case "blockquote":
             return `${text
                 .split("\n")
                 .map((line) => `> ${line}`)
                 .join("\n")}\n\n`;
         case "horizontal_rule":
-            return "---\n\n";
+            return `${blockSeparatorBefore(precedingText)}---\n\n`;
         case "hard_break":
             return "  \n";
         case "text":
-            return applyMarks(text, item);
+            return text;
         default:
             return text;
     }
+}
+
+function getMarkedText(item: ContentItem): string {
+    const text =
+        item.text !== undefined
+            ? item.text
+            : (item.content?.map(getMarkedText).join("") ?? "");
+    return applyMarks(text, item);
 }
 
 function getPlainText(item: ContentItem): string {
@@ -197,10 +213,17 @@ function ensureBlockSeparator(text: string): string {
     return text.endsWith("\n\n") ? text : `${text}\n\n`;
 }
 
+function blockSeparatorBefore(text: string): string {
+    if (text.length === 0 || text.endsWith("\n\n")) {
+        return "";
+    }
+    return text.endsWith("\n") ? "\n" : "\n\n";
+}
+
 function serializeList(item: ContentItem, marker: string): string {
     const lines =
         item.content?.map(
-            (child) => `${marker} ${getPlainText(child).trim()}`,
+            (child) => `${marker} ${getMarkedText(child).trim()}`,
         ) ?? [];
     return `${lines.join("\n")}\n\n`;
 }
@@ -400,7 +423,10 @@ function peelSymmetricDelimiter(
 ): Boundaries | undefined {
     const candidates = [wrapper.delimiter, ...(wrapper.alternates ?? [])];
     for (const delimiter of candidates) {
-        if (isSurroundedBy(content, leftPos, rightPos, delimiter)) {
+        if (
+            isSurroundedBy(content, leftPos, rightPos, delimiter) &&
+            isDistinctEmphasisDelimiter(content, leftPos, rightPos, delimiter)
+        ) {
             return {
                 leftPos: leftPos - delimiter.length,
                 rightPos: rightPos + delimiter.length,
@@ -408,6 +434,21 @@ function peelSymmetricDelimiter(
         }
     }
     return undefined;
+}
+
+function isDistinctEmphasisDelimiter(
+    content: string,
+    leftPos: number,
+    rightPos: number,
+    delimiter: string,
+): boolean {
+    if (delimiter.length !== 1 || (delimiter !== "*" && delimiter !== "_")) {
+        return true;
+    }
+    return (
+        countRun(content, leftPos, delimiter, -1) % 2 === 1 &&
+        countRun(content, rightPos, delimiter, 1) % 2 === 1
+    );
 }
 
 function isSurroundedBy(
