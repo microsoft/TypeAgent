@@ -690,6 +690,7 @@ function reviewRecovery(): string[] {
     ];
 }
 
+// code-complexity-allow: fail-closed Git state machine keeps every mutation guard explicit
 export async function prepareMerge(
     requestedTarget?: string,
     options: PrepareMergeOptions = {},
@@ -1120,6 +1121,7 @@ function parseMarkerPaths(output: string): string[] {
     return [...markerPaths];
 }
 
+// code-complexity-allow: verification reports each distinct unresolved merge state explicitly
 export async function verifyMergeConflictsResolved(
     options: PrepareMergeOptions = {},
 ): Promise<MergeVerificationResult> {
