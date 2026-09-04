@@ -1127,6 +1127,9 @@ importers:
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../../packages/aiclient
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../../../packages/utils/commonUtils
       ajv:
         specifier: ^8.17.1
         version: 8.18.0
@@ -4669,6 +4672,9 @@ importers:
       '@typeagent/agent-server-client':
         specifier: workspace:*
         version: link:../agentServer/client
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       '@typeagent/copilot-macros':
         specifier: workspace:*
         version: link:../copilot-macros
