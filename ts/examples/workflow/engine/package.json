@@ -30,6 +30,7 @@
   "dependencies": {
     "@github/copilot-sdk": "1.0.9",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
     "ajv": "^8.17.1",
     "debug": "^4.3.4",
     "workflow-model": "workspace:*"
