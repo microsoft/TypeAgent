@@ -371,8 +371,9 @@ async function runGh(args: string[], timeoutMs = 30_000): Promise<string> {
 // result rather than fail the whole action. `exitCode` is -1 when gh never ran
 // at all — a missing binary or a timeout.
 //
-// The buffer is larger than `runGh`'s because these commands can return whole
-// pull request diffs.
+// The buffer is larger than `runGh`'s because GitHub returns patches before we
+// can truncate them. Eight MiB accommodates large PR responses while still
+// bounding memory if a generated file contains an unusually large patch.
 async function runGhCapture(
     args: string[],
     timeoutMs = 60_000,

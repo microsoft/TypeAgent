@@ -422,7 +422,8 @@ export type PrFilesAction = {
         // patches are large; turn it on to see the actual code changes.
         includePatch?: boolean;
 
-        // How many files to return, newest API order. 1-300, default 50.
+        // How many files to return, newest API order. Defaults to 50 to keep
+        // the structured display manageable; callers can request up to 300.
         maxFiles?: number;
 
         // How many lines of each file's patch to keep. 1-200, default 40.

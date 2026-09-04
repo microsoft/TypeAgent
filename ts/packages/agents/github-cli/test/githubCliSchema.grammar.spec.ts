@@ -55,6 +55,10 @@ describe("github-cliSchema.agr — prFiles", () => {
     it.each([
         "show files changed in PR 2196",
         "what files does PR 2196 change",
+        "what files does PR 2196 touch",
+        "what files does PR 2196 edit",
+        "what files does PR 2196 modify",
+        "show what's changed in PR 2196",
     ])("%s", (request) => {
         expect(actions(request)[0]).toMatchObject({
             actionName: "prFiles",
@@ -83,6 +87,7 @@ describe("github-cliSchema.agr — prFailedChecks", () => {
     it.each([
         "show failing checks for PR 2196",
         "why is CI failing on PR 2196",
+        "why is the CI failing on PR 2196",
     ])("%s", (request) => {
         expect(actions(request)[0]).toMatchObject({
             actionName: "prFailedChecks",

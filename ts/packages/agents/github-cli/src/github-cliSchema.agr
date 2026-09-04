@@ -276,7 +276,13 @@
         number
     }
 }
-  | what files does PR $(number:number) change -> {
+  | what files does PR $(number:number) (change | touch | edit | modify) -> {
+    actionName: "prFiles",
+    parameters: {
+        number
+    }
+}
+  | show what's changed in PR $(number:number) -> {
     actionName: "prFiles",
     parameters: {
         number
@@ -303,7 +309,7 @@
         number
     }
 }
-  | why is CI failing on PR $(number:number) -> {
+  | why is (the)? CI failing on PR $(number:number) -> {
     actionName: "prFailedChecks",
     parameters: {
         number
