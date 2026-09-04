@@ -30,8 +30,8 @@
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "pretest": "pnpm run build",
     "test-compile": "pnpm --dir ../agents/code exec tsc -p ../../coda/src",
-    "test:local": "pnpm --dir ../agents/code exec tsc --target ES2022 --module Node16 --moduleResolution Node16 --esModuleInterop --strict --types node --outDir ../../coda/dist-test --rootDir ../../coda/src ../../coda/src/workspaceCommandRunner.ts ../../coda/src/workspaceCommandPolicy.ts ../../coda/src/test/workspaceCommandRunner.spec.ts ../../coda/src/test/workspaceCommandPolicy.spec.ts && node --test dist-test/test/workspaceCommandRunner.spec.js dist-test/test/workspaceCommandPolicy.spec.js",
     "test:full": "vscode-test",
+    "test:local": "pnpm --dir ../agents/code exec tsc --target ES2022 --module Node16 --moduleResolution Node16 --esModuleInterop --strict --types node --outDir ../../coda/dist-test --rootDir ../../coda/src ../../coda/src/workspaceCommandRunner.ts ../../coda/src/workspaceCommandPolicy.ts ../../coda/src/test/workspaceCommandRunner.spec.ts ../../coda/src/test/workspaceCommandPolicy.spec.ts && node --test dist-test/test/workspaceCommandRunner.spec.js dist-test/test/workspaceCommandPolicy.spec.js",
     "vscode:prepublish": "pnpm run esbuild-base --minify",
     "watch": "tsc -w"
   },
