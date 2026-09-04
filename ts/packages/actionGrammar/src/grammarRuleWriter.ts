@@ -923,9 +923,26 @@ function writeSingleExpr(
             }
             break;
         }
-        case "ruleReference":
-            writeBracketedName(result, expr.refName);
+        case "ruleReference": {
+            // CurtisM: prettier always prefers the grouped form so authors see
+            // the quantifier attachment explicitly. <Name>? and (<Name>)? are
+            // equivalent at parse time.
+            const quant = expr.repeat
+                ? expr.optional
+                    ? "*"
+                    : "+"
+                : expr.optional
+                  ? "?"
+                  : undefined;
+            if (quant) {
+                result.write("(");
+                writeBracketedName(result, expr.refName);
+                result.write(`)${quant}`);
+            } else {
+                writeBracketedName(result, expr.refName);
+            }
             break;
+        }
         case "rules": {
             result.write("(");
             // brokenCol = -1: in broken mode, | aligns with ( which is one column

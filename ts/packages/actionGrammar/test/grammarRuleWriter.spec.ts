@@ -287,6 +287,31 @@ describe("Grammar Rule Writer", () => {
     it("kleene star with alternates", () => {
         validateRoundTrip(`<test> = hello (world | earth)* end;`);
     });
+    // CurtisM: prettier always prefers the grouped form. Bare <Name>?/*/+ and
+    // (<Name>)?/*/+ are equivalent at parse time; writer emits the grouped form.
+    it("rewrites bare quantified rule refs to grouped form", () => {
+        const written = fmt(`
+            <other> = one | two;
+            <opt> = hello <other>? world;
+            <star> = hello <other>* world;
+            <plus> = hello <other>+ world;
+        `);
+        expect(written).toContain("(<other>)?");
+        expect(written).toContain("(<other>)*");
+        expect(written).toContain("(<other>)+");
+        expect(written).not.toMatch(/<other>\?/);
+        expect(written).not.toMatch(/<other>\*/);
+        expect(written).not.toMatch(/<other>\+/);
+        // Grouped output still round-trips
+        validateRoundTrip(written);
+    });
+    it("escapes literal quantifier chars on write-back", () => {
+        const written = fmt(`<test> = what is the time\\? star\\* plus\\+;`);
+        expect(written).toMatch(/time\\\?/);
+        expect(written).toMatch(/star\\\*/);
+        expect(written).toMatch(/plus\\\+/);
+        validateRoundTrip(written);
+    });
     it("spaces in expressions", () => {
         validateRoundTrip(
             `<test> = ${spaces}${escapedSpaces}${spaces}${escapedSpaces}${spaces};`,
