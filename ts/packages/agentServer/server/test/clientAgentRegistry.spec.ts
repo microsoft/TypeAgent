@@ -17,6 +17,7 @@ import {
     type ClientAgentHost,
     type ClientAgentRegistry,
 } from "../src/clientAgentRegistry.js";
+import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 
 const AGENT_NAME = "androidDevice";
 const SCHEMA =
@@ -44,18 +45,44 @@ function makeManifest(
 type FakeDevice = {
     appAgent: AppAgent;
     executed: TypeAgentAction[];
+    dynamicDisplays: string[];
 };
 
-function makeDevice(): FakeDevice {
+/** What a device implements unless a test asks for something else. */
+const DEFAULT_INTERFACE: AgentInterfaceFunctionName[] = ["executeAction"];
+
+/**
+ * A device whose proxy carries exactly the methods it declares. The interface
+ * checks are about a device advertising methods it cannot answer, so a fake
+ * that always implements the same one would not show the difference.
+ * `getDynamicDisplay` is the optional method those tests move in and out.
+ */
+function makeDevice(
+    agentInterface: readonly AgentInterfaceFunctionName[] = DEFAULT_INTERFACE,
+): FakeDevice {
     const executed: TypeAgentAction[] = [];
+    const dynamicDisplays: string[] = [];
+    const available: Record<string, unknown> = {
+        async executeAction(action: TypeAgentAction) {
+            executed.push(action);
+            return undefined;
+        },
+        async getDynamicDisplay(_type: string, displayId: string) {
+            dynamicDisplays.push(displayId);
+            return { type: "text", content: displayId };
+        },
+    };
+    const appAgent: Record<string, unknown> = {};
+    for (const method of agentInterface) {
+        if (available[method] === undefined) {
+            throw new Error(`makeDevice has no fake for '${method}'`);
+        }
+        appAgent[method] = available[method];
+    }
     return {
         executed,
-        appAgent: {
-            async executeAction(action: TypeAgentAction) {
-                executed.push(action);
-                return undefined;
-            },
-        },
+        dynamicDisplays,
+        appAgent: appAgent as unknown as AppAgent,
     };
 }
 
@@ -122,6 +149,7 @@ async function register(
         connectionId: string;
         appAgent: AppAgent;
         manifest?: AppAgentManifest;
+        agentInterface?: readonly AgentInterfaceFunctionName[];
         multiInstance?: boolean;
     },
 ): Promise<void> {
@@ -131,6 +159,13 @@ async function register(
         connectionId: options.connectionId,
         appAgent: options.appAgent,
         manifest: options.manifest ?? makeManifest(),
+        // Default to what the proxy actually implements, which is what the
+        // real client sends: createAgentRpcServer derives agentInterface from
+        // the agent object. A test that passes one explicitly is deliberately
+        // making the two disagree.
+        agentInterface:
+            options.agentInterface ??
+            (Object.keys(options.appAgent) as AgentInterfaceFunctionName[]),
         // Devices opt in; the tests that pin single-host behaviour pass
         // false explicitly.
         multiInstance: options.multiInstance ?? true,
@@ -255,6 +290,205 @@ describe("clientAgentRegistry registration", () => {
         });
 
         expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(2);
+    });
+
+    test("a second device implementing fewer methods is rejected", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        const a = makeDevice(["executeAction", "getDynamicDisplay"]);
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: a.appAgent,
+        });
+        // The mux is built from A's proxy, so the dynamic agent the dispatcher
+        // holds offers getDynamicDisplay.
+        expect(getMux(registry).getDynamicDisplay).toBeDefined();
+
+        // B is an older build: same schema, but no getDynamicDisplay. Without
+        // the check it would join, and the first getDynamicDisplay that routed
+        // to B would fail at call time.
+        await expect(
+            register(registry, host, {
+                instanceId: "b",
+                connectionId: "conn-b",
+                appAgent: makeDevice(["executeAction"]).appAgent,
+            }),
+        ).rejects.toThrow(/different set of methods/i);
+        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(1);
+        expect(getMux(registry).getDynamicDisplay).toBeDefined();
+    });
+
+    test("a second device implementing extra methods is rejected", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeDevice(["executeAction"]).appAgent,
+        });
+
+        // The other direction: B's extra method would be silently unreachable,
+        // since the mux only carries what A's proxy had.
+        await expect(
+            register(registry, host, {
+                instanceId: "b",
+                connectionId: "conn-b",
+                appAgent: makeDevice(["executeAction", "getDynamicDisplay"])
+                    .appAgent,
+            }),
+        ).rejects.toThrow(/different set of methods/i);
+        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(1);
+    });
+
+    test("the same method set in another order is accepted", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeDevice(["executeAction", "getDynamicDisplay"])
+                .appAgent,
+            agentInterface: ["executeAction", "getDynamicDisplay"],
+        });
+        await register(registry, host, {
+            instanceId: "b",
+            connectionId: "conn-b",
+            appAgent: makeDevice(["executeAction", "getDynamicDisplay"])
+                .appAgent,
+            agentInterface: ["getDynamicDisplay", "executeAction"],
+        });
+
+        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(2);
+    });
+
+    test("an empty method set is compared like any other", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeDevice(["executeAction"]).appAgent,
+        });
+
+        // Nothing in common with the group, so it is a mismatch rather than an
+        // opt-out: the key for [] is the empty string, not undefined.
+        await expect(
+            register(registry, host, {
+                instanceId: "b",
+                connectionId: "conn-b",
+                appAgent: makeDevice([]).appAgent,
+            }),
+        ).rejects.toThrow(/different set of methods/i);
+        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(1);
+    });
+
+    test("a device reconnecting with the same method set keeps its slot", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeDevice(["executeAction", "getDynamicDisplay"])
+                .appAgent,
+        });
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a2",
+            appAgent: makeDevice(["executeAction", "getDynamicDisplay"])
+                .appAgent,
+        });
+
+        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(1);
+        expect(host.added).toEqual([AGENT_NAME]);
+    });
+
+    test("a lone device that upgrades its app changes the group's method set", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeDevice(["executeAction"]).appAgent,
+        });
+        expect(getMux(registry).getDynamicDisplay).toBeUndefined();
+
+        // Same device, same schema, new build that implements one more method.
+        // Nobody else is in the group, so there is no other device to conflict
+        // with and nothing for the user to disconnect.
+        const upgraded = makeDevice(["executeAction", "getDynamicDisplay"]);
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a2",
+            appAgent: upgraded.appAgent,
+        });
+
+        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(1);
+        // The dispatcher still holds the object it was handed, so the new
+        // method has to show up on that same mux and route to the device.
+        const { context } = makeSessionContext("conn-a2");
+        expect(getMux(registry).getDynamicDisplay).toBeDefined();
+        await getMux(registry).getDynamicDisplay!("html", "display-1", context);
+        expect(upgraded.dynamicDisplays).toEqual(["display-1"]);
+    });
+
+    test("a lone device that downgrades loses the method from the mux", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeDevice(["executeAction", "getDynamicDisplay"])
+                .appAgent,
+        });
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a2",
+            appAgent: makeDevice(["executeAction"]).appAgent,
+        });
+
+        // Leaving it on the mux would advertise a method no device can answer.
+        expect(getMux(registry).getDynamicDisplay).toBeUndefined();
+        expect(getMux(registry).executeAction).toBeDefined();
+    });
+
+    test("a reconnecting device cannot change a shared group's method set", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        const shared: AgentInterfaceFunctionName[] = [
+            "executeAction",
+            "getDynamicDisplay",
+        ];
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeDevice(shared).appAgent,
+        });
+        await register(registry, host, {
+            instanceId: "b",
+            connectionId: "conn-b",
+            appAgent: makeDevice(shared).appAgent,
+        });
+
+        // Replacing in place keeps the mux built from the original proxy, so
+        // the check has to cover a replacement too, not just a new instance.
+        // B is still there and still expects getDynamicDisplay to work.
+        await expect(
+            register(registry, host, {
+                instanceId: "a",
+                connectionId: "conn-a2",
+                appAgent: makeDevice(["executeAction"]).appAgent,
+            }),
+        ).rejects.toThrow(/different set of methods/i);
+        expect(getMux(registry).getDynamicDisplay).toBeDefined();
     });
 
     // Case 12

@@ -7,6 +7,24 @@ internal object AndroidDeviceAgent {
     const val NAME = "androidDevice"
     const val CHANNEL_NAME = "agent:$NAME"
     const val SCHEMA_ASSET = "typeagent/androidDeviceSchema.ts"
+
+    /**
+     * Methods this agent answers on its RPC channel, sent as `agentInterface`
+     * at registration.
+     *
+     * The server builds its proxy from this list and, when several devices host
+     * `androidDevice`, rejects one whose list differs from the others. So it has
+     * to describe what `handleAndroidDeviceInvoke` really dispatches: declaring
+     * a method the device cannot answer fails only later, at the call. Keeping
+     * one list for both the declaration and the dispatch guard is what stops the
+     * two from drifting - nothing else checks them against each other, and no CI
+     * job builds this module.
+     */
+    val SUPPORTED_METHODS = listOf("executeAction")
+
+    /** Whether [SUPPORTED_METHODS] covers an incoming RPC method. */
+    fun supports(methodName: String): Boolean = SUPPORTED_METHODS.contains(methodName)
+
     private const val AGENT_DESCRIPTION =
         "Acts on this Android device: sets alarms and countdown timers, shows the " +
             "alarm and timer lists, searches for nearby places, shows a place on the " +
@@ -34,11 +52,14 @@ internal object AndroidDeviceAgent {
             .put("actionDefaultEnabled", true)
             .put("schema", schema)
 
+        val agentInterface = JSONArray()
+        SUPPORTED_METHODS.forEach { agentInterface.put(it) }
+
         return JSONObject()
             .put("name", NAME)
             .put("conversationId", conversationId)
             .put("manifest", manifest)
-            .put("agentInterface", JSONArray().put("executeAction"))
+            .put("agentInterface", agentInterface)
             // Identifies this device so several devices can share one
             // `androidDevice` agent, and so a reconnect replaces this device
             // instead of adding another. `multiInstance` is the opt-in: without

@@ -748,7 +748,10 @@ class WebSocketManager internal constructor(
             Log.e(TAG, "Android agent invocation is missing callId.")
             return
         }
-        if (methodName != "executeAction") {
+        // The same list registration declares as agentInterface, so the guard
+        // and the declaration cannot drift apart. It has one entry today; a
+        // second would need its own dispatch below, not just a line in the list.
+        if (!AndroidDeviceAgent.supports(methodName)) {
             sendRpcError(
                 channelName,
                 callId,
