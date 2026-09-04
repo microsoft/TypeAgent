@@ -30,6 +30,8 @@ export type GithubCliActions =
     | PrViewAction
     | PrCheckoutAction
     | PrChecksAction
+    | PrFilesAction
+    | PrFailedChecksAction
     | ProjectCreateAction
     | ProjectDeleteAction
     | ProjectListAction
@@ -388,6 +390,77 @@ export type PrChecksAction = {
     parameters: {
         number: number;
         repo?: string;
+    };
+};
+
+// List the files a pull request changes, with per-file status and line counts,
+// and optionally an excerpt of each file's diff. Use this to find out what a
+// pull request actually touches. Read-only.
+//
+// Example:
+// User: what files does PR 2196 change?
+// Agent: { actionName: "prFiles", parameters: { number: 2196 } }
+//
+// Example:
+// User: show me the diff for pull request 42 in microsoft/TypeAgent
+// Agent: { actionName: "prFiles", parameters: { number: 42, repo: "microsoft/TypeAgent", includePatch: true } }
+//
+// Example:
+// User: what does https://github.com/microsoft/TypeAgent/pull/42 change?
+// Agent: { actionName: "prFiles", parameters: { number: 42, repo: "microsoft/TypeAgent" } }
+export type PrFilesAction = {
+    actionName: "prFiles";
+    parameters: {
+        // The pull request number.
+        number: number;
+
+        // OWNER/REPO slug (e.g. "microsoft/TypeAgent"), or the pull request's
+        // web link. Omit to use the repository in the current directory.
+        repo?: string;
+
+        // Include an excerpt of each file's diff. Off by default because
+        // patches are large; turn it on to see the actual code changes.
+        includePatch?: boolean;
+
+        // How many files to return, newest API order. 1-300, default 50.
+        maxFiles?: number;
+
+        // How many lines of each file's patch to keep. 1-200, default 40.
+        // Only meaningful with includePatch.
+        maxPatchLines?: number;
+    };
+};
+
+// Explain why a pull request's checks are red: which checks failed, when, and
+// the specific error annotations GitHub recorded for each one. Use this to
+// diagnose CI failures. Read-only.
+//
+// Example:
+// User: why is CI failing on PR 2196?
+// Agent: { actionName: "prFailedChecks", parameters: { number: 2196 } }
+//
+// Example:
+// User: show the failing checks for pull request 42 in microsoft/TypeAgent
+// Agent: { actionName: "prFailedChecks", parameters: { number: 42, repo: "microsoft/TypeAgent" } }
+//
+// Example:
+// User: why is https://github.com/microsoft/TypeAgent/pull/42 red?
+// Agent: { actionName: "prFailedChecks", parameters: { number: 42, repo: "microsoft/TypeAgent" } }
+export type PrFailedChecksAction = {
+    actionName: "prFailedChecks";
+    parameters: {
+        // The pull request number.
+        number: number;
+
+        // OWNER/REPO slug (e.g. "microsoft/TypeAgent"), or the pull request's
+        // web link. Omit to use the repository in the current directory.
+        repo?: string;
+
+        // How many failing checks to describe in detail. 1-20, default 5.
+        maxChecks?: number;
+
+        // How many annotations to return per failing check. 1-50, default 10.
+        maxAnnotations?: number;
     };
 };
 
