@@ -203,6 +203,14 @@ export type AppAgentStatus = {
     priority: boolean;
     request: boolean;
     active: boolean;
+
+    /**
+     * Whether this schema's actions can actually be executed. `active` is
+     * true when either the actions or the agent's commands are enabled, so
+     * it cannot be used to decide whether `@action` will run. Optional
+     * because older agent servers do not report it.
+     */
+    actionActive?: boolean;
 };
 
 export type DispatcherStatus = {

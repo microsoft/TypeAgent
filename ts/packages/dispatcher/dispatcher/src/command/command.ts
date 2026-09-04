@@ -709,6 +709,7 @@ export function getDispatcherStatus(
             active:
                 context.agents.isActionActive(config.schemaName) ||
                 context.agents.isCommandEnabled(appAgentName),
+            actionActive: context.agents.isActionActive(config.schemaName),
         };
     });
 
@@ -722,6 +723,7 @@ export function getDispatcherStatus(
                 priority: false,
                 request: false,
                 active: context.agents.isCommandEnabled(agentName),
+                actionActive: false,
             });
         }
     }

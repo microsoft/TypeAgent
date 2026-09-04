@@ -20,6 +20,12 @@ import type {
 } from "@typeagent/dispatcher-types";
 import type { Dispatcher } from "@typeagent/dispatcher-types";
 import { awaitCommand } from "@typeagent/dispatcher-types";
+import {
+    buildActionCommand,
+    filterActiveAgentSchemas,
+    findActionSubSchema,
+    getAgentActionNames,
+} from "@typeagent/dispatcher-types/helpers/actionDispatch";
 import { DisplayAppendMode } from "@typeagent/agent-sdk";
 import {
     getStructuredFallback,
@@ -874,20 +880,12 @@ export class CommandServer {
                 );
             }
 
-            // Filter to active agents when connected
+            // Filter to the sub-schemas this session actually has enabled.
             let visible = agents;
             if (this.dispatcher) {
                 try {
                     const status = await this.dispatcher.getStatus();
-                    const activeNames = new Set(
-                        status.agents
-                            .filter((a) => a.active)
-                            .map((a) => a.name.toLowerCase()),
-                    );
-                    const filtered = agents.filter((a) =>
-                        activeNames.has(a.name.toLowerCase()),
-                    );
-                    if (filtered.length > 0) visible = filtered;
+                    visible = filterActiveAgentSchemas(agents, status);
                 } catch {
                     // Use unfiltered list
                 }
@@ -913,18 +911,13 @@ export class CommandServer {
 
         if (request.actionName) {
             // Level 3 — full TypeScript source for one specific action
-            const needle = request.actionName.toLowerCase();
-            const subSchema = agent.subSchemas.find((s) =>
-                s.actions.some((a) => a.name.toLowerCase() === needle),
-            );
-            if (!subSchema) {
-                const allActions = agent.subSchemas
-                    .flatMap((s) => s.actions.map((a) => a.name))
-                    .join(", ");
+            const found = findActionSubSchema(agent, request.actionName);
+            if (!found) {
                 return toolResult(
-                    `Action '${request.actionName}' not found in agent '${agent.name}'.\n\nAvailable actions: ${allActions}`,
+                    `Action '${request.actionName}' not found in agent '${agent.name}'.\n\nAvailable actions: ${getAgentActionNames(agent).join(", ")}`,
                 );
             }
+            const { subSchema } = found;
             if (!subSchema.schemaText) {
                 return toolResult(
                     `TypeScript schema not available for action '${request.actionName}'.`,
@@ -1041,18 +1034,19 @@ export class CommandServer {
             parameters = flowParams || {};
         }
 
-        const paramStr =
-            parameters && Object.keys(parameters).length > 0
-                ? `--parameters '${JSON.stringify(parameters).replaceAll("'", "\\u0027")}'`
-                : "";
-
-        const nlStr = request.naturalLanguage
-            ? `--naturalLanguage '${request.naturalLanguage.replaceAll("'", "\\u0027")}'`
-            : "";
-
-        const actionCommand =
-            `@action ${schemaName} ${actionName} ${paramStr} ${nlStr}`.trim();
-
+        let actionCommand: string;
+        try {
+            actionCommand = buildActionCommand({
+                schemaName,
+                actionName,
+                parameters,
+                naturalLanguage: request.naturalLanguage,
+            });
+        } catch (error) {
+            return toolResult(
+                error instanceof Error ? error.message : String(error),
+            );
+        }
         this.logger.log(`Dispatching: ${actionCommand}`);
         this.responseCollector.messages = [];
         this.responseCollector.rawData = undefined;

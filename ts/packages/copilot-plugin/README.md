@@ -294,16 +294,180 @@ different MCP tool catalog.
 
 ### Direct Mode (default)
 
-The hook connects directly to TypeAgent over WebSocket. When TypeAgent recognizes and handles the request, the hook returns `{ handled: true, responseContent: "..." }` — Copilot skips the LLM entirely.
+The hook connects directly to TypeAgent over WebSocket. When TypeAgent recognizes and handles the request, the hook returns `{ handled: true, responseContent: "..." }` — Copilot skips the LLM entirely. TypeAgent still translates the prompt; what is skipped is Copilot's model.
 
 - **Pros:** Fast (~1-3s), no LLM tokens consumed
 - **Cons:** No streaming output, response is returned all at once
 
 ### MCP Mode
 
-The hook injects a directive into the prompt context, instructing the LLM to call the `typeagent-processCommand` MCP tool. TypeAgent's MCP server streams progress notifications to the CLI timeline.
+The hook injects a directive into the prompt context, instructing the LLM to
+call TypeAgent's MCP tools. TypeAgent's MCP server streams progress
+notifications to the CLI timeline.
 
-- **Pros:** Streaming output visible during processing, LLM-formatted responses
+There are two ways in.
+
+**`typeagent-processCommand` is the default.** It sends the user's own words and
+lets TypeAgent translate them. This is the right choice for anything a person
+phrased, not just conversational or multi-step requests: TypeAgent caches
+translations, so a phrase it has seen before resolves with no model call at all.
+It is also the only path that honors `learn:` / `dev:` / `record:` directives.
+
+**The typed-action shortcut exists for actions Copilot already holds.** In one
+line: _a caller that already knows the action it wants can run it directly,
+instead of writing a sentence for TypeAgent to translate back into the action it
+started with._
+
+The case that motivates it is agentic. The MCP servers are registered
+independently of the prompt hook, so their tools stay in Copilot's catalog on
+every turn of a multi-step loop — including steps Copilot planned itself, where
+no user ever said anything. Previously the only way to run such a step was to
+describe it in prose. That round trip costs a model call, and it can lose or
+distort a parameter that was never ambiguous to begin with. Two tools cover it:
+
+- `typeagent-executeAction` runs a single typed action by `schemaName`,
+  `actionName` and `parameters`, skipping translation and TypeAgent reasoning.
+- `typeagent-discoverActions` supplies the contract when it is not already
+  known. It only reports agents and schemas whose actions the session has
+  enabled, so anything it lists is runnable.
+
+So what it buys is **determinism and fidelity for machine-composed steps** — a
+structure the caller already holds reaches the dispatcher intact, schema
+validated, with no interpretation step in between. What it does **not** buy is
+speed on ordinary user requests, and it should not be sold as though it does; a
+warm translation cache already answers those with no model call.
+
+#### Which path a request takes
+
+The deciding question is not what the request does, it is **where the request
+came from**. Words the user typed go to translation. Structure Copilot is
+already holding goes to the shortcut.
+
+| The situation                                                     | Path                                | Why                                                       |
+| ----------------------------------------------------------------- | ----------------------------------- | --------------------------------------------------------- |
+| User types `play some jazz music`                                 | `processCommand`                    | The user supplied the phrasing; the cache likely knows it |
+| User types something with a `learn:`, `dev:` or `record:` prefix  | `processCommand`, always            | Directives only work through translation                  |
+| User asks something conversational, ambiguous, or multi-step      | `processCommand`                    | The dispatcher is better at this than Copilot guessing    |
+| User phrased it and Copilot cannot name the action                | `processCommand`, **not** discovery | Translating is cheaper than a discovery round-trip        |
+| Copilot composed the action itself as a step of a task it planned | `executeAction`                     | There is no user sentence to translate                    |
+| Copilot already holds the schema, action and parameters           | `executeAction`                     | The lookup is already paid for                            |
+
+A worked example. The user says "tidy up my desktop and put on some focus
+music." That sentence goes to `processCommand` — the user wrote it, it is
+multi-step, and TypeAgent decomposes it. Now contrast: Copilot is midway through
+a longer task it planned itself, has already fetched the `player` contract for
+an earlier step, and now needs to start a specific playlist as step four of six.
+Nobody said that step out loud. Copilot calls `executeAction` with the schema
+and parameters it is already holding, rather than composing an English sentence
+for TypeAgent to parse back into the structure it just had.
+
+The failure mode worth naming: seeing a user request, calling
+`discoverActions` to find the matching action, then calling `executeAction`.
+That is the most expensive route available and the guidance tells the model not
+to do it. Discovery is for contracts that get reused, not for answering a
+sentence the user already phrased.
+
+#### When the shortcut is actually cheaper
+
+Copilot's model runs either way — the hook has already given it the turn — so
+choosing the shortcut costs no extra inference. A discovery round-trip does.
+
+| Situation                              | Copilot turns | TypeAgent model calls |
+| -------------------------------------- | ------------- | --------------------- |
+| `processCommand`, phrase in cache      | 1             | 0                     |
+| `processCommand`, phrase not in cache  | 1             | 1                     |
+| `executeAction`, contract known        | 1             | 0                     |
+| `discoverActions` then `executeAction` | 2-3           | 0                     |
+
+A warm cache is unbeatable, so the rule is: when the user supplied the phrasing
+and the contract is unknown, translating is cheaper than discovering — and the
+injected guidance says exactly that. The shortcut earns its keep when the
+contract is already in hand, or when there was no user phrasing to begin with.
+
+Passing `naturalLanguage` populates the translation cache through the same
+explanation pipeline a normal request uses, so a request served by the shortcut
+still teaches TypeAgent the phrasing for next time.
+
+#### How discovery scales
+
+MCP's usual scaling failure is catalog bloat: expose N capabilities as N tools
+and every tool definition sits in the model's context on every turn, whether or
+not it is relevant. TypeAgent's action space is far too large for that. So the
+action space lives _behind_ a tool rather than _as_ tools — this integration
+adds exactly two, and that stays true whether TypeAgent exposes hundreds of
+actions or many thousands. Discovery output is a tool result, so it enters
+context only when something asks for it.
+
+Discovery is tiered for the same reason, and there is deliberately no "list
+every action" call — `agentName` is required before any actions come back:
+
+| Call                       | Returns                                                 |
+| -------------------------- | ------------------------------------------------------- |
+| no arguments               | one line per enabled agent                              |
+| `agentName`                | that agent's sub-schemas and actions, with descriptions |
+| `agentName` + `actionName` | one action's TypeScript parameters                      |
+
+Results are filtered to enabled schemas, so a session sees its active subset
+rather than everything installed.
+
+Neither tier is paginated, which is fine at present scale — the largest agent in
+this repo exposes on the order of 80 actions — but it is worth knowing which
+tier gives first. The per-agent listing grows with one agent's action count,
+while the agent list grows with the number of enabled agents; the latter is the
+one to watch, since a deployment is more likely to accumulate many agents than
+to put many hundreds of actions on a single one. Either would need paging before
+it reached that point.
+
+#### Why discovery is live rather than prefetched
+
+Discovery deliberately re-reads dispatcher status on every call instead of being
+snapshotted once at startup. Which agents are enabled changes during a session,
+so a cached catalog would eventually offer actions that `@action` then refuses —
+the same class of mismatch the `actionActive` flag exists to prevent.
+
+Prefetching would also have to live somewhere. Anything handed over at handshake
+for the model to keep in mind ends up in the tool catalog or system context,
+which is per-turn cost — the bloat this shape is built to avoid, just relocated.
+
+That cost is better avoided than amortized, and for chained work it already is:
+discovery is paid per chain, not per call. One lookup for an agent, then any
+number of `executeAction` calls reusing that contract from context, which is
+what the guidance means by reusing a contract and never re-requesting one
+already held.
+
+If discovery ever does become a bottleneck, the useful lever is latency rather
+than context: every tool call currently opens and closes its own dispatcher
+connection, which costs more across a chain than re-reading the catalog does.
+
+#### Not the same as Direct Mode
+
+The two are independent and pull in opposite directions. Direct Mode skips
+**Copilot's** LLM and lets TypeAgent translate; the typed-action shortcut skips
+**TypeAgent's** translation and lets Copilot's LLM choose the action. The
+shortcut lives entirely inside MCP mode.
+
+#### What the shortcut does and does not skip
+
+It skips translation, not execution. It runs the dispatcher's `@action`
+command, which uses the same `executeActions` engine as an ordinary request, so
+enabled-action gating, chained multi-step actions, result-entity resolution,
+action results recorded to memory, cancellation, and per-agent confirmation all
+behave identically. Two differences are worth knowing:
+
+- No prior-turn entity context is supplied, so references like "play it again"
+  cannot be resolved — pass concrete parameters instead.
+- Schemas that opt into `errorReasoning` are not retried through TypeAgent
+  reasoning on failure; the error is returned to the caller, which is the
+  reasoner in this arrangement.
+
+Neither tool can answer an agent's follow-up question: this MCP client has no
+return path for a choice or form. When an agent asks one, the tool reports the
+pending question instead of reporting success, so the user can answer it in the
+TypeAgent shell.
+
+- **Pros:** Streaming output visible during processing, LLM-formatted responses;
+  the typed-action shortcut avoids a translation round-trip for actions Copilot
+  already holds or composed itself
 - **Cons:** Slower (~3-5s), consumes LLM tokens
 
 ### Dev Mode
@@ -387,18 +551,20 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 The plugin starts three logical MCP servers from the same bundled entry point and
 single-file release executable:
 
-| Server                | Tool                       | Description                                                                             |
-| --------------------- | -------------------------- | --------------------------------------------------------------------------------------- |
-| `typeagent`           | `typeagent-processCommand` | Send a command to the TypeAgent agent-server                                            |
-| `typeagent`           | `typeagent-listAgents`     | List available TypeAgent agents                                                         |
-| `typeagent`           | `typeagent-getStatus`      | Get TypeAgent server status                                                             |
-| `typeagent-workspace` | `read`                     | Read bounded text under approved workspace roots                                        |
-| `typeagent-workspace` | `glob`                     | Find bounded, deterministically ordered workspace files                                 |
-| `typeagent-workspace` | `grep`                     | Search bounded workspace text                                                           |
-| `typeagent-workspace` | `fetch`                    | Fetch bounded public HTTP(S) text without ambient credentials or private-network access |
-| `typeagent-macros`    | `list_macros`              | List and search reusable captured procedures                                            |
-| `typeagent-macros`    | `run_macro`                | Replay an approved macro or return an agent-runner handoff                              |
-| `typeagent-macros`    | lifecycle tools            | Capture-derived draft validation, approval, disablement, and candidate submission       |
+| Server                | Tool                        | Description                                                                             |
+| --------------------- | --------------------------- | --------------------------------------------------------------------------------------- |
+| `typeagent`           | `typeagent-processCommand`  | Default path: send the user's words for TypeAgent to translate                          |
+| `typeagent`           | `typeagent-discoverActions` | List the enabled agents, their actions, and one action's TypeScript contract            |
+| `typeagent`           | `typeagent-executeAction`   | Run a typed action Copilot already holds, skipping translation                          |
+| `typeagent`           | `typeagent-listAgents`      | List available TypeAgent agents                                                         |
+| `typeagent`           | `typeagent-getStatus`       | Get TypeAgent server status                                                             |
+| `typeagent-workspace` | `read`                      | Read bounded text under approved workspace roots                                        |
+| `typeagent-workspace` | `glob`                      | Find bounded, deterministically ordered workspace files                                 |
+| `typeagent-workspace` | `grep`                      | Search bounded workspace text                                                           |
+| `typeagent-workspace` | `fetch`                     | Fetch bounded public HTTP(S) text without ambient credentials or private-network access |
+| `typeagent-macros`    | `list_macros`               | List and search reusable captured procedures                                            |
+| `typeagent-macros`    | `run_macro`                 | Replay an approved macro or return an agent-runner handoff                              |
+| `typeagent-macros`    | lifecycle tools             | Capture-derived draft validation, approval, disablement, and candidate submission       |
 
 Workspace tools are available in direct, MCP, and dev modes. In bypass mode
 they remain discoverable because Copilot fixes the MCP catalog when the session
