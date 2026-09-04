@@ -10,8 +10,9 @@ internal object AndroidDeviceAgent {
     private const val AGENT_DESCRIPTION =
         "Acts on this Android device: sets alarms and countdown timers, shows the " +
             "alarm and timer lists, searches for nearby places, shows a place on the " +
-            "map, opens the dialer or a text message draft, runs a web search and " +
-            "opens web pages."
+            "map, opens the dialer or a text message draft, runs a web search, " +
+            "opens web pages, drafts email, shares text with another app, opens " +
+            "device settings screens, drafts calendar events and plays music."
 
     fun createRegistrationParams(
         conversationId: String,
@@ -155,6 +156,56 @@ internal object AndroidDeviceAgent {
                 AndroidDeviceActionParseResult.Success(AndroidDeviceAction.OpenWebPage(parsed))
             }
 
+            "composeEmail" -> {
+                val parsed = parseComposeEmailActionPayload(parameters)
+                    ?: return AndroidDeviceActionParseResult.ActionError(
+                        "Invalid composeEmail parameters: every recipient must be a " +
+                            "valid email address and the draft cannot be empty."
+                    )
+                AndroidDeviceActionParseResult.Success(AndroidDeviceAction.ComposeEmail(parsed))
+            }
+
+            "shareText" -> {
+                val parsed = parseShareTextActionPayload(parameters)
+                    ?: return AndroidDeviceActionParseResult.ActionError(
+                        "Invalid shareText parameters: text is required."
+                    )
+                AndroidDeviceActionParseResult.Success(AndroidDeviceAction.ShareText(parsed))
+            }
+
+            "openSettings" -> {
+                val parsed = parseOpenSettingsActionPayload(parameters)
+                    ?: return AndroidDeviceActionParseResult.ActionError(
+                        "Invalid openSettings parameters: screen must be one of " +
+                            AndroidSettingsScreen.entries.joinToString { it.schemaName } + "."
+                    )
+                AndroidDeviceActionParseResult.Success(AndroidDeviceAction.OpenSettings(parsed))
+            }
+
+            "createCalendarEvent" -> {
+                val parsed = parseCreateCalendarEventActionPayload(parameters)
+                    ?: return AndroidDeviceActionParseResult.ActionError(
+                        "Invalid createCalendarEvent parameters: title is required and " +
+                            "start/end must be local ISO-8601 values such as " +
+                            "2026-08-24T15:00, with end after start."
+                    )
+                AndroidDeviceActionParseResult.Success(
+                    AndroidDeviceAction.CreateCalendarEvent(parsed)
+                )
+            }
+
+            "playMusicFromSearch" -> {
+                val parsed = parsePlayMusicFromSearchActionPayload(parameters)
+                    ?: return AndroidDeviceActionParseResult.ActionError(
+                        "Invalid playMusicFromSearch parameters: query is required and " +
+                            "focus must be one of " +
+                            MusicSearchFocus.entries.joinToString { it.schemaName } + "."
+                    )
+                AndroidDeviceActionParseResult.Success(
+                    AndroidDeviceAction.PlayMusicFromSearch(parsed)
+                )
+            }
+
             else -> AndroidDeviceActionParseResult.ActionError(
                 "Unsupported Android agent action: $actionName"
             )
@@ -187,6 +238,13 @@ internal sealed interface AndroidDeviceAction {
     data class ComposeSms(val action: ComposeSmsAction) : AndroidDeviceAction
     data class WebSearch(val action: WebSearchAction) : AndroidDeviceAction
     data class OpenWebPage(val action: OpenWebPageAction) : AndroidDeviceAction
+    data class ComposeEmail(val action: ComposeEmailAction) : AndroidDeviceAction
+    data class ShareText(val action: ShareTextAction) : AndroidDeviceAction
+    data class OpenSettings(val action: OpenSettingsAction) : AndroidDeviceAction
+    data class CreateCalendarEvent(val action: CreateCalendarEventAction) : AndroidDeviceAction
+    data class PlayMusicFromSearch(
+        val action: PlayMusicFromSearchAction
+    ) : AndroidDeviceAction
 }
 
 internal sealed interface AndroidDeviceActionParseResult {

@@ -836,6 +836,16 @@ class WebSocketManager internal constructor(
                 handler.onWebSearch(action.action, completion)
             is AndroidDeviceAction.OpenWebPage ->
                 handler.onOpenWebPage(action.action, completion)
+            is AndroidDeviceAction.ComposeEmail ->
+                handler.onComposeEmail(action.action, completion)
+            is AndroidDeviceAction.ShareText ->
+                handler.onShareText(action.action, completion)
+            is AndroidDeviceAction.OpenSettings ->
+                handler.onOpenSettings(action.action, completion)
+            is AndroidDeviceAction.CreateCalendarEvent ->
+                handler.onCreateCalendarEvent(action.action, completion)
+            is AndroidDeviceAction.PlayMusicFromSearch ->
+                handler.onPlayMusicFromSearch(action.action, completion)
         }
     }
 
@@ -1691,6 +1701,31 @@ class WebSocketManager internal constructor(
 
         fun onOpenWebPage(
             action: OpenWebPageAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onComposeEmail(
+            action: ComposeEmailAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onShareText(
+            action: ShareTextAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onOpenSettings(
+            action: OpenSettingsAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onCreateCalendarEvent(
+            action: CreateCalendarEventAction,
+            completion: (AndroidDeviceExecutionResult) -> Unit
+        )
+
+        fun onPlayMusicFromSearch(
+            action: PlayMusicFromSearchAction,
             completion: (AndroidDeviceExecutionResult) -> Unit
         )
     }

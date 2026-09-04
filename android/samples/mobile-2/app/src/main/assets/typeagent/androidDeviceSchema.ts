@@ -11,7 +11,12 @@ export type AndroidDeviceAction =
     | DialPhoneNumberAction
     | ComposeSmsAction
     | WebSearchAction
-    | OpenWebPageAction;
+    | OpenWebPageAction
+    | ComposeEmailAction
+    | ShareTextAction
+    | OpenSettingsAction
+    | CreateCalendarEventAction
+    | PlayMusicFromSearchAction;
 
 // A day of the week an alarm can repeat on.
 export type AlarmRepeatDay =
@@ -138,5 +143,123 @@ export type OpenWebPageAction = {
         originalRequest: string;
         // An absolute http:// or https:// URL. Other schemes are rejected.
         url: string;
+    };
+};
+
+// Opens the Android device's email app on a pre-filled draft message.
+// The user still has to press send, so this never sends mail by itself.
+// Use when the user asks to email someone.
+export type ComposeEmailAction = {
+    actionName: "composeEmail";
+    parameters: {
+        // The original user request.
+        originalRequest: string;
+        // Recipient email addresses. Omit when the user did not name anyone;
+        // the email app then opens with an empty To field.
+        to?: string[];
+        // Carbon-copy recipients.
+        cc?: string[];
+        // Blind carbon-copy recipients.
+        bcc?: string[];
+        // The subject line.
+        subject?: string;
+        // The message body.
+        body?: string;
+    };
+};
+
+// Offers a piece of text to the Android share sheet so the user can pass it to
+// another app. Use only when the user explicitly asks to share, send or post
+// some text they have named; the user picks the destination app and confirms.
+export type ShareTextAction = {
+    actionName: "shareText";
+    parameters: {
+        // The original user request.
+        originalRequest: string;
+        // The exact text to share.
+        text: string;
+        // An optional title or subject offered to apps that can use one.
+        subject?: string;
+    };
+};
+
+// A settings screen this device agent is allowed to open.
+export type AndroidSettingsScreen =
+    | "settings"
+    | "wifi"
+    | "bluetooth"
+    | "display"
+    | "sound"
+    | "location"
+    | "battery"
+    | "airplaneMode"
+    | "dateAndTime"
+    | "storage"
+    | "accessibility"
+    | "security"
+    | "appInfo";
+
+// Opens one of the Android device's settings screens.
+// Use when the user asks to change a device setting - the app cannot toggle
+// settings directly, so it takes the user to the right screen instead.
+export type OpenSettingsAction = {
+    actionName: "openSettings";
+    parameters: {
+        // The original user request.
+        originalRequest: string;
+        // Which settings screen to open. Only these screens are supported;
+        // "settings" is the top-level settings app and "appInfo" is this chat
+        // app's own details page.
+        screen: AndroidSettingsScreen;
+    };
+};
+
+// Opens the Android device's calendar app on a pre-filled new event.
+// The user still has to save it, so this never writes to a calendar by itself.
+// Use when the user asks to create, schedule or add a calendar event.
+export type CreateCalendarEventAction = {
+    actionName: "createCalendarEvent";
+    parameters: {
+        // The original user request.
+        originalRequest: string;
+        // The event title.
+        title: string;
+        // Local start time as ISO-8601 without a time zone, for example
+        // "2026-08-24T15:00". For an all-day event use a date only,
+        // "2026-08-24". Times are interpreted in the device's own time zone,
+        // so never convert to UTC and never append "Z" or an offset.
+        start: string;
+        // Local end time in the same format as start. Omit for a one hour
+        // event, or a single day when allDay is true.
+        end?: string;
+        // True when the event covers whole days rather than a time of day.
+        allDay?: boolean;
+        // Where the event takes place.
+        location?: string;
+        // Longer notes about the event.
+        description?: string;
+    };
+};
+
+// What a music search query names.
+export type MusicSearchFocus =
+    | "any"
+    | "artist"
+    | "album"
+    | "song"
+    | "playlist";
+
+// Asks the Android device's music app to play something matching a search.
+// Use when the user asks to play music, an artist, an album or a song.
+export type PlayMusicFromSearchAction = {
+    actionName: "playMusicFromSearch";
+    parameters: {
+        // The original user request.
+        originalRequest: string;
+        // What to search for, for example "Kind of Blue" or "Miles Davis".
+        query: string;
+        // What the query names. Omit or use "any" when it is unclear, which
+        // lets the music app decide.
+        focus?: MusicSearchFocus;
     };
 };
