@@ -126,7 +126,9 @@ function resultText(result: CallToolResult): string {
         .join("\n");
 }
 
-function workspaceCommandNonRunResult(
+// One shape for every result where the command never actually ran, so the
+// failure and pre-dispatch-cancellation paths cannot drift apart.
+function unexecutedWorkspaceCommandResult(
     fields: { error: string; cancelled: boolean },
     executionId: string,
 ): CallToolResult {
@@ -148,14 +150,14 @@ function workspaceCommandFailure(
     error: string,
     executionId: string,
 ): CallToolResult {
-    return workspaceCommandNonRunResult(
+    return unexecutedWorkspaceCommandResult(
         { error, cancelled: false },
         executionId,
     );
 }
 
 function cancelledWorkspaceCommandResult(executionId: string): CallToolResult {
-    return workspaceCommandNonRunResult(
+    return unexecutedWorkspaceCommandResult(
         {
             error: "The command request was cancelled before it was dispatched.",
             cancelled: true,
@@ -800,7 +802,7 @@ export class CommandServer {
                 inputSchema: WorkspaceCommandInputSchema.shape,
                 outputSchema: WorkspaceCommandResultSchema.shape,
                 description:
-                    "Run one explicitly requested build, test, lint, or diagnostic command in the open VS Code workspace through Coda. This is a direct TypeAgent action: it does not use natural-language translation or a terminal UI. Returns structured stdout, stderr, exitCode, durationMs, success, timedOut, cancelled, and truncation metadata. Example: { command: 'pnpm test -- --runInBand', workingDirectory: 'ts/packages/coda', executionId: 'coda-tests-1' }. Coda blocks high-risk commands and rejects shell composition.",
+                    "Run one explicitly requested build, test, lint, or diagnostic command in the open VS Code workspace through Coda. This is a direct TypeAgent action: it does not use natural-language translation or a terminal UI. Returns structured stdout, stderr, exitCode, durationMs, success, timedOut, cancelled, and truncation metadata. Example: { command: 'pnpm test -- --runInBand', workingDirectory: 'ts/packages/coda', executionId: 'coda-tests-1' }. Coda rejects shell composition and restricts commands to an allowlist of focused tools, with path arguments confined to the workspace root. This tool holds the Command Executor for the whole run, so execute_command and execute_action are unavailable until it finishes; use a separate MCP connection for concurrent work. cancel_workspace_command still works while it runs.",
             },
             async (request: WorkspaceCommandInput, extra) =>
                 this.runWorkspaceCommand(request, extra.signal),
@@ -1226,6 +1228,18 @@ export class CommandServer {
         }
     }
 
+    // Cancellation deliberately bypasses the dispatcher and talks to the Code
+    // Agent websocket directly. It has to: a running run_workspace_command
+    // holds dispatcherRequestInFlight for its whole duration, so a cancel
+    // routed through executeAction would queue behind the very command it is
+    // meant to stop. The lock itself is load-bearing, since responseCollector
+    // is a single buffer shared by every dispatcher request, so the second
+    // transport is the consequence of that and not an alternative to it.
+    //
+    // Known limitation: the target is resolved by discovering the "code" agent
+    // independently of where the run was dispatched. With more than one
+    // reachable agent server this can address a different Code Agent than the
+    // one running the command.
     private async cancelWorkspaceCommand(
         request: CancelWorkspaceCommandInput,
     ): Promise<CallToolResult> {
