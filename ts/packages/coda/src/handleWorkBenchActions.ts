@@ -59,11 +59,22 @@ function workspaceCommandResponse(
     };
 }
 
-function workspaceCommandError(
+export function workspaceCommandError(
     error: string,
     executionId?: string,
 ): ActionResult {
     return workspaceCommandResponse({ success: false, error, executionId });
+}
+
+const workspaceCommandActionNames = new Set([
+    "runWorkspaceCommand",
+    "cancelWorkspaceCommand",
+]);
+
+// Only these actions answer with the structured command-result shape. Every
+// other action keeps the plain ActionResult contract.
+export function isWorkspaceCommandAction(actionName: string): boolean {
+    return workspaceCommandActionNames.has(actionName);
 }
 
 function validateWorkspaceCommandPaths(

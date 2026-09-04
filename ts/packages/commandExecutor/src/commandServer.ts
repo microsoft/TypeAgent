@@ -29,6 +29,7 @@ import {
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { randomUUID } from "crypto";
 import { convert } from "html-to-text";
 import { loadConfig, type ResolvedAgentServerConfig } from "./config/index.js";
 import {
@@ -1167,29 +1168,30 @@ export class CommandServer {
         request: WorkspaceCommandInput,
         signal?: AbortSignal,
     ): Promise<CallToolResult> {
+        // The Code Agent assigns an ID when the caller omits one. Resolve it
+        // here so the result and any cancellation refer to the same command.
+        const executionId = request.executionId ?? randomUUID();
         if (this.workspaceCommandInFlight) {
             return workspaceCommandFailure(
                 "This Command Executor already has a workspace command in progress. Use a separate MCP connection for a concurrent command.",
-                request.executionId,
+                executionId,
             );
         }
         this.workspaceCommandInFlight = true;
         if (signal?.aborted) {
             this.workspaceCommandInFlight = false;
-            return cancelledWorkspaceCommandResult(request.executionId);
+            return cancelledWorkspaceCommandResult(executionId);
         }
         let acquiredDispatcherLock = false;
         const cancelOnAbort = () => {
-            void this.cancelWorkspaceCommand({
-                executionId: request.executionId,
-            });
+            void this.cancelWorkspaceCommand({ executionId });
         };
         signal?.addEventListener("abort", cancelOnAbort, { once: true });
         try {
             if (this.dispatcherRequestInFlight) {
                 return workspaceCommandFailure(
                     "Another request is already using this Command Executor. Wait for it to complete before sending another command.",
-                    request.executionId,
+                    executionId,
                 );
             }
             this.dispatcherRequestInFlight = true;
@@ -1198,7 +1200,7 @@ export class CommandServer {
                 {
                     schemaName: "code.code-workbench",
                     actionName: "runWorkspaceCommand",
-                    parameters: request,
+                    parameters: { ...request, executionId },
                 },
                 true,
             );
@@ -1209,10 +1211,7 @@ export class CommandServer {
             ) {
                 return result;
             }
-            return workspaceCommandFailure(
-                resultText(result),
-                request.executionId,
-            );
+            return workspaceCommandFailure(resultText(result), executionId);
         } finally {
             if (acquiredDispatcherLock) {
                 this.dispatcherRequestInFlight = false;

@@ -45,6 +45,21 @@ describe("workspace command MCP schemas", () => {
         ).toThrow();
     });
 
+    test("treats executionId as optional so grammar-sourced actions stay valid", () => {
+        // The .agr grammar and the code-workbench action schema both omit
+        // executionId; the Code Agent assigns one. Requiring it here would
+        // reject actions the action schema declares valid.
+        expect(
+            WorkspaceCommandInputSchema.parse({ command: "pnpm test" }),
+        ).toEqual({ command: "pnpm test" });
+        expect(() =>
+            WorkspaceCommandInputSchema.parse({
+                command: "pnpm test",
+                executionId: "",
+            }),
+        ).toThrow();
+    });
+
     test("keeps success, failure, and cancellation result contracts distinct", () => {
         expect(
             WorkspaceCommandResultSchema.parse({

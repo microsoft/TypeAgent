@@ -4,7 +4,11 @@
 import WebSocket from "ws";
 import { createWebSocket, keepWebSocketAlive } from "./webSocket";
 import { handleVSCodeActions } from "./handleVSCodeActions";
-import { cancelWorkspaceCommands } from "./handleWorkBenchActions";
+import {
+    cancelWorkspaceCommands,
+    isWorkspaceCommandAction,
+    workspaceCommandError,
+} from "./handleWorkBenchActions";
 
 type WebSocketMessageV2 = {
     id?: string;
@@ -37,21 +41,20 @@ async function handleActionMessage(data: WebSocketMessageV2): Promise<void> {
         );
     } catch (error) {
         console.error("Error handling websocket action:", error);
+        const message = error instanceof Error ? error.message : String(error);
+        const executionId = data.params?.executionId;
         webSocket?.send(
             JSON.stringify({
                 id: data.id,
-                result: JSON.stringify({
-                    success: false,
-                    error:
-                        error instanceof Error ? error.message : String(error),
-                    exitCode: null,
-                    durationMs: 0,
-                    stdout: { text: "", truncated: false, totalBytes: 0 },
-                    stderr: { text: "", truncated: false, totalBytes: 0 },
-                    timedOut: false,
-                    cancelled: false,
-                    executionId: data.params?.executionId,
-                }),
+                result: isWorkspaceCommandAction(actionName)
+                    ? workspaceCommandError(
+                          message,
+                          typeof executionId === "string" &&
+                              executionId.length > 0
+                              ? executionId
+                              : undefined,
+                      )
+                    : { handled: false, message },
             }),
         );
     }
@@ -108,9 +111,15 @@ async function ensureWebsocketConnected() {
         }
 
         if (data.method !== undefined && data.method.indexOf("/") > 0) {
-            // Do not await a long-running command here: cancellation and other
-            // requests must continue to reach the extension while it runs.
-            void handleActionMessage(data);
+            // Only a workspace command runs long enough to block the message
+            // loop, and it must not: cancellation has to reach the extension
+            // while it runs. Every other action stays awaited so action
+            // ordering is preserved.
+            if (data.method === "code/runWorkspaceCommand") {
+                void handleActionMessage(data);
+            } else {
+                await handleActionMessage(data);
+            }
         }
         console.log(
             `vscode extension websocket client received message: ${JSON.stringify(data, null, 2)}`,

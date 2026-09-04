@@ -47,8 +47,9 @@ export const WorkspaceCommandInputSchema = z.object({
         .string()
         .min(1)
         .max(128)
+        .optional()
         .describe(
-            "Unique caller-generated ID used to correlate this command and cancel it later.",
+            "Optional unique caller-generated ID used to correlate this command and cancel it later. One is assigned when omitted, and returned in the result.",
         ),
 });
 
