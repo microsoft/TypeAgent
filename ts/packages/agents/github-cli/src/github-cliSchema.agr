@@ -315,6 +315,12 @@
         number
     }
 }
+  | why is (the)? pipeline failing on PR $(number:number) -> {
+    actionName: "prFailedChecks",
+    parameters: {
+        number
+    }
+}
   | show failing checks for PR $(number:number) in $(repo:wildcard) -> {
     actionName: "prFailedChecks",
     parameters: {

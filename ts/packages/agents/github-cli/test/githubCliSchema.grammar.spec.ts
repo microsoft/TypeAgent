@@ -88,6 +88,8 @@ describe("github-cliSchema.agr — prFailedChecks", () => {
         "show failing checks for PR 2196",
         "why is CI failing on PR 2196",
         "why is the CI failing on PR 2196",
+        "why is pipeline failing on PR 2196",
+        "why is the pipeline failing on PR 2196",
     ])("%s", (request) => {
         expect(actions(request)[0]).toMatchObject({
             actionName: "prFailedChecks",
