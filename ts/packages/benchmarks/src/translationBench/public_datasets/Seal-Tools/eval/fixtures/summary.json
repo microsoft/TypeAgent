@@ -1,0 +1,254 @@
+{
+  "dataset": "seal-tools-validation",
+  "byModel": {
+    "azure/gpt-5.6-luna": {
+      "sealToolsOfficial": {
+        "formatAccuracy": 1,
+        "tool": {
+          "precision": 0.9230769230769231,
+          "recall": 1,
+          "f1": 0.9600000000000001
+        },
+        "parameter": {
+          "precision": 0.7777777777777778,
+          "recall": 0.84,
+          "f1": 0.8076923076923077
+        },
+        "counts": {
+          "formatted": 5,
+          "rows": 5,
+          "correctTools": 12,
+          "predictedTools": 13,
+          "goldTools": 12,
+          "correctParameters": 21,
+          "predictedParameters": 27,
+          "goldParameters": 25
+        }
+      },
+      "sealToolsCaseInsensitive": {
+        "formatAccuracy": 1,
+        "tool": {
+          "precision": 0.9230769230769231,
+          "recall": 1,
+          "f1": 0.9600000000000001
+        },
+        "parameter": {
+          "precision": 0.7777777777777778,
+          "recall": 0.84,
+          "f1": 0.8076923076923077
+        },
+        "counts": {
+          "formatted": 5,
+          "rows": 5,
+          "correctTools": 12,
+          "predictedTools": 13,
+          "goldTools": 12,
+          "correctParameters": 21,
+          "predictedParameters": 27,
+          "goldParameters": 25
+        }
+      },
+      "typeAgentSupplemental": {
+        "totalCases": 5,
+        "passedCases": 1,
+        "exactPassedCases": 0,
+        "schemaValidCases": 5,
+        "expectedCount": 12,
+        "routed": 12,
+        "paramMatches": 8,
+        "negativeRows": 0,
+        "negativeRowsFired": 0,
+        "negativeRowErrors": 0,
+        "errors": 0,
+        "passRate": 0.2,
+        "exactPassRate": 0,
+        "schemaValidRate": 1,
+        "toolScore": 1,
+        "paramScore": 0.6666666666666666,
+        "falseNegativeRate": 0,
+        "diagnostics": {
+          "wrongRouteOrAction": 1,
+          "missingRequiredParameter": 0,
+          "extraneousParameter": 0,
+          "wrongParameterType": 0,
+          "wrongValue": 4,
+          "invalidJsonOrTranslationFailure": 0
+        },
+        "avgLatencyMs": 4250.181549999999,
+        "p50LatencyMs": 4431.730415999999,
+        "p95LatencyMs": 5227.682542,
+        "usage": {
+          "promptTokens": 5312,
+          "completionTokens": 1209,
+          "cachedTokens": 0
+        }
+      }
+    },
+    "azure/gpt-4o": {
+      "sealToolsOfficial": {
+        "formatAccuracy": 1,
+        "tool": {
+          "precision": 0.9230769230769231,
+          "recall": 1,
+          "f1": 0.9600000000000001
+        },
+        "parameter": {
+          "precision": 0.8518518518518519,
+          "recall": 0.92,
+          "f1": 0.8846153846153846
+        },
+        "counts": {
+          "formatted": 5,
+          "rows": 5,
+          "correctTools": 12,
+          "predictedTools": 13,
+          "goldTools": 12,
+          "correctParameters": 23,
+          "predictedParameters": 27,
+          "goldParameters": 25
+        }
+      },
+      "sealToolsCaseInsensitive": {
+        "formatAccuracy": 1,
+        "tool": {
+          "precision": 0.9230769230769231,
+          "recall": 1,
+          "f1": 0.9600000000000001
+        },
+        "parameter": {
+          "precision": 0.8518518518518519,
+          "recall": 0.92,
+          "f1": 0.8846153846153846
+        },
+        "counts": {
+          "formatted": 5,
+          "rows": 5,
+          "correctTools": 12,
+          "predictedTools": 13,
+          "goldTools": 12,
+          "correctParameters": 23,
+          "predictedParameters": 27,
+          "goldParameters": 25
+        }
+      },
+      "typeAgentSupplemental": {
+        "totalCases": 5,
+        "passedCases": 3,
+        "exactPassedCases": 2,
+        "schemaValidCases": 5,
+        "expectedCount": 12,
+        "routed": 12,
+        "paramMatches": 10,
+        "negativeRows": 0,
+        "negativeRowsFired": 0,
+        "negativeRowErrors": 0,
+        "errors": 0,
+        "passRate": 0.6,
+        "exactPassRate": 0.4,
+        "schemaValidRate": 1,
+        "toolScore": 1,
+        "paramScore": 0.8333333333333334,
+        "falseNegativeRate": 0,
+        "diagnostics": {
+          "wrongRouteOrAction": 1,
+          "missingRequiredParameter": 0,
+          "extraneousParameter": 0,
+          "wrongParameterType": 0,
+          "wrongValue": 2,
+          "invalidJsonOrTranslationFailure": 0
+        },
+        "avgLatencyMs": 2794.115791800001,
+        "p50LatencyMs": 2872.605042000001,
+        "p95LatencyMs": 4451.906875000002,
+        "usage": {
+          "promptTokens": 5317,
+          "completionTokens": 993,
+          "cachedTokens": 0
+        }
+      }
+    },
+    "azure/gpt-4.1": {
+      "sealToolsOfficial": {
+        "formatAccuracy": 1,
+        "tool": {
+          "precision": 0.9230769230769231,
+          "recall": 1,
+          "f1": 0.9600000000000001
+        },
+        "parameter": {
+          "precision": 0.8518518518518519,
+          "recall": 0.92,
+          "f1": 0.8846153846153846
+        },
+        "counts": {
+          "formatted": 5,
+          "rows": 5,
+          "correctTools": 12,
+          "predictedTools": 13,
+          "goldTools": 12,
+          "correctParameters": 23,
+          "predictedParameters": 27,
+          "goldParameters": 25
+        }
+      },
+      "sealToolsCaseInsensitive": {
+        "formatAccuracy": 1,
+        "tool": {
+          "precision": 0.9230769230769231,
+          "recall": 1,
+          "f1": 0.9600000000000001
+        },
+        "parameter": {
+          "precision": 0.8518518518518519,
+          "recall": 0.92,
+          "f1": 0.8846153846153846
+        },
+        "counts": {
+          "formatted": 5,
+          "rows": 5,
+          "correctTools": 12,
+          "predictedTools": 13,
+          "goldTools": 12,
+          "correctParameters": 23,
+          "predictedParameters": 27,
+          "goldParameters": 25
+        }
+      },
+      "typeAgentSupplemental": {
+        "totalCases": 5,
+        "passedCases": 3,
+        "exactPassedCases": 2,
+        "schemaValidCases": 5,
+        "expectedCount": 12,
+        "routed": 12,
+        "paramMatches": 10,
+        "negativeRows": 0,
+        "negativeRowsFired": 0,
+        "negativeRowErrors": 0,
+        "errors": 0,
+        "passRate": 0.6,
+        "exactPassRate": 0.4,
+        "schemaValidRate": 1,
+        "toolScore": 1,
+        "paramScore": 0.8333333333333334,
+        "falseNegativeRate": 0,
+        "diagnostics": {
+          "wrongRouteOrAction": 1,
+          "missingRequiredParameter": 0,
+          "extraneousParameter": 0,
+          "wrongParameterType": 0,
+          "wrongValue": 2,
+          "invalidJsonOrTranslationFailure": 0
+        },
+        "avgLatencyMs": 4661.0872916,
+        "p50LatencyMs": 3573.819208000001,
+        "p95LatencyMs": 11446.758458,
+        "usage": {
+          "promptTokens": 5317,
+          "completionTokens": 1031,
+          "cachedTokens": 0
+        }
+      }
+    }
+  }
+}

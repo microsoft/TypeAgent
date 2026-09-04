@@ -54,6 +54,7 @@ import {
     runTranslationBenchDataQualityVerifier,
     runTranslationBenchFormatChecker,
 } from "./dataQualityVerifier.js";
+import type { TranslationBenchAmbiguityProbeTranslator } from "./ambiguityProbe.js";
 import {
     loadTranslationBenchQualityVerifierPromptPack,
     loadTranslationBenchSynthesizerPromptPack,
@@ -66,22 +67,22 @@ import {
     summarizeTranslationBenchConfusableSiblings,
 } from "./utteranceDisambiguation.js";
 import {
-    clearPackagedLlmJudgeExcludedActionsCacheForTests,
+    clearPackagedActionEligibilityPolicyCacheForTests,
     countEligibleTranslationBenchActions,
-    getPackagedLlmJudgeExcludedActions,
+    getPackagedScheduleExcludedActionIds,
+    getPackagedActionEligibilityPolicy,
+    getPackagedEligibleGoldActionIds,
 } from "./eligibleActions.js";
 import {
     getPackagedActionParametersGraderCatalog,
+    graderRulesFingerprint,
     hasUsableParameterScoreSpecs,
     parameterScoreSpecsForExpectedActions,
-} from "./catalogGenerator/actionParametersGrader.js";
+} from "../policy/policyGenerator.js";
+import { TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE } from "./negativeFairness.js";
 
-export function getTranslationBenchLlmJudgeExcludedActions(): ReadonlySet<string> {
-    return getPackagedLlmJudgeExcludedActions();
-}
-
-export function clearTranslationBenchLlmJudgeExcludedActionsCacheForTests(): void {
-    clearPackagedLlmJudgeExcludedActionsCacheForTests();
+export function clearTranslationBenchActionEligibilityPolicyCacheForTests(): void {
+    clearPackagedActionEligibilityPolicyCacheForTests();
 }
 
 export {
@@ -143,6 +144,13 @@ export interface TranslationBenchGenerationQualityLoopOptions {
     maxAttempts: number;
     generator: TranslationBenchGenerationLlm;
     reviewer: TranslationBenchGenerationLlm;
+    /**
+     * Optional multi-model translator. When set, stage 3 of the quality
+     * verifier probes each positive utterance and rejects ambiguous gold.
+     */
+    ambiguityProbe?: TranslationBenchAmbiguityProbeTranslator;
+    /** Judge LLM for stage 3 (defaults to reviewer). */
+    ambiguityJudgeLlm?: TranslationBenchGenerationLlm;
     forbiddenUtterances?: ReadonlySet<string>;
     promptsDir?: string;
 }
@@ -163,6 +171,9 @@ export interface TranslationBenchGenerationCheckpointSettings {
     schedule: TranslationBenchGenerationScheduleEntry[];
     synthesizerPromptHash: string;
     qualityVerifierPromptHash: string;
+    actionEligibilityPolicyHash: string;
+    eligibleGoldActionsHash: string;
+    applyEligibleGoldAllowlist: boolean;
 }
 
 export type TranslationBenchSynthesizerLlm = TranslationBenchGenerationLlm;
@@ -178,10 +189,14 @@ export interface TranslationBenchGeneratedBenchmarkOptions {
     genCaseCount: number;
     maxAttempts: number;
     requireCompleteCoverage: boolean;
-    /** Parallel schedule slots (default 1). Checkpoint commits stay serialized. */
+    allowMissingRemovedActions?: boolean;
+    applyEligibleGoldAllowlist?: boolean;
     concurrency?: number;
     generator: TranslationBenchGenerationLlm;
     reviewer: TranslationBenchGenerationLlm;
+    /** Multi-model ambiguity probe. Recommended in production. */
+    ambiguityProbe?: TranslationBenchAmbiguityProbeTranslator;
+    ambiguityJudgeLlm?: TranslationBenchGenerationLlm;
     checkpointPath?: string;
     resume?: boolean;
     promptsDir?: string;
@@ -248,12 +263,19 @@ export function createTranslationBenchGenerationSchedule(
         caseCount: number;
         requireCompleteCoverage: boolean;
         excludedActionIds?: ReadonlySet<string>;
+        allowMissingRemovedActions?: boolean;
+        applyEligibleGoldAllowlist?: boolean;
     },
 ): TranslationBenchGenerationSchedule {
     requirePositiveInteger(options.caseCount, "Translation bench case count");
     const census = getTranslationBenchCatalogCensus(catalog);
     const excludedActionIds =
-        options.excludedActionIds ?? getPackagedLlmJudgeExcludedActions();
+        options.excludedActionIds ??
+        getPackagedScheduleExcludedActionIds(catalog, {
+            allowMissingExactIds: options.allowMissingRemovedActions === true,
+            applyEligibleGoldAllowlist:
+                options.applyEligibleGoldAllowlist !== false,
+        });
     const qualified = census.qualifiedActionKeys
         .map((key) => {
             const [schemaName, actionName] = JSON.parse(key) as [
@@ -274,7 +296,7 @@ export function createTranslationBenchGenerationSchedule(
     );
     if (eligibleActionCount === 0 || qualified.length === 0) {
         throw new Error(
-            "Translation bench generation schedule has no eligible actions after llmAsAJudge exclusions",
+            "Translation bench generation schedule has no eligible actions after policy removedActions exclusions",
         );
     }
     if (
@@ -546,7 +568,10 @@ function formatSynthesizerPrompt(
                 confusableSiblings,
             ),
             disambiguationRule:
-                "Every seed and positive utterance must uniquely identify the target action. If confusableSiblings is non-empty, include target-only cues and never use phrasing that fits a sibling equally well.",
+                "Every seed and positive utterance must uniquely identify the target action. If confusableSiblings is non-empty, write phrasing that only fits the target and include target-only cues; a deterministic format gate rejects double-meaning phrasing.",
+            negativeFairnessRule:
+                TRANSLATION_BENCH_NEGATIVE_FAIRNESS_RULE +
+                " The semantic checker LLM judges this (no verb lexicon).",
         }),
         prior_feedback_json: JSON.stringify(feedback),
         previous_rejected_block: previousRejectedBlock,
@@ -644,13 +669,19 @@ export async function runTranslationBenchGenerationQualityLoop(
         const candidateHash =
             computeTranslationBenchCanonicalJsonHash(candidate);
 
-        // Stage 2 — full quality verifier ending in semantic checker (LLM).
+        // Stage 2–3 — semantic checker, then optional multi-model ambiguity probe.
         const verify = await runTranslationBenchDataQualityVerifier({
             synthesizerOutput: synthesizerJson,
             loop: options,
             candidateHash,
             candidate,
             semanticLlm: options.reviewer,
+            ...(options.ambiguityProbe !== undefined
+                ? { ambiguityProbe: options.ambiguityProbe }
+                : {}),
+            ...(options.ambiguityJudgeLlm !== undefined
+                ? { ambiguityJudgeLlm: options.ambiguityJudgeLlm }
+                : {}),
             ...(options.promptsDir !== undefined
                 ? { promptsDir: options.promptsDir }
                 : {}),
@@ -684,20 +715,37 @@ export async function runTranslationBenchGenerationQualityLoop(
         }
 
         const semantic = verify.semantic;
+        const ambiguity = verify.ambiguity;
         const reviewerRecord = completionRecord(
             {
-                text: semantic.completionText,
+                text:
+                    ambiguity?.judge?.completionText || semantic.completionText,
             },
             options.reviewer.model,
-            hashText(semantic.prompt),
+            hashText(ambiguity?.judge?.prompt ?? semantic.prompt),
         );
+        // Surface ambiguity-probe rejection on the attempt record when stage 3 fails
+        // after semantic approve (so checkpoints show AMBIGUOUS_INTENT, not a false approve).
+        const finalDecision =
+            verify.accepted && semantic.decision.decision === "approve"
+                ? ("approve" as const)
+                : ("reject" as const);
+        const finalIssues =
+            ambiguity !== undefined && !ambiguity.passed
+                ? ambiguity.issues
+                : semantic.decision.issues;
+        const finalSummary =
+            ambiguity !== undefined && !ambiguity.passed
+                ? (ambiguity.judge?.decision.summary ??
+                  ambiguity.issues.map((i) => i.message).join("; "))
+                : semantic.decision.summary;
         record.reviewer = {
             ...reviewerRecord,
             candidateHash,
-            decision: semantic.decision.decision,
+            decision: finalDecision,
             scores: semantic.decision.scores,
-            issues: semantic.decision.issues,
-            summary: semantic.decision.summary,
+            issues: finalIssues,
+            summary: finalSummary,
         };
 
         if (verify.accepted && semantic.decision.decision === "approve") {
@@ -964,6 +1012,14 @@ function checkpointHeader(
             semanticChecker: qualityPack.semanticChecker,
             acceptance: qualityPack.acceptance,
         }),
+        actionEligibilityPolicyHash:
+            getPackagedActionEligibilityPolicy().contentHash,
+        eligibleGoldActionsHash:
+            options.applyEligibleGoldAllowlist === false
+                ? "0".repeat(64)
+                : getPackagedEligibleGoldActionIds().contentHash,
+        applyEligibleGoldAllowlist:
+            options.applyEligibleGoldAllowlist !== false,
     };
     return {
         kind: "translation-bench-checkpoint",
@@ -1082,9 +1138,29 @@ export async function generateTranslationBenchBenchmark(
     const catalog = createTranslationBenchTypeAgentSchemaCatalog(
         options.provider,
     );
+    const liveRulesFp = graderRulesFingerprint();
+    const packagedGrader = getPackagedActionParametersGraderCatalog();
+    if (
+        packagedGrader.rulesFingerprint === undefined ||
+        packagedGrader.rulesFingerprint.length === 0
+    ) {
+        throw new Error(
+            "Packaged action-parameters grader missing rulesFingerprint; run pnpm gen-policy",
+        );
+    }
+    if (packagedGrader.rulesFingerprint !== liveRulesFp) {
+        throw new Error(
+            `Packaged action-parameters grader is stale vs action-eligibility policy ` +
+                `(grader rulesFingerprint=${packagedGrader.rulesFingerprint}, ` +
+                `live=${liveRulesFp}). Run pnpm gen-policy.`,
+        );
+    }
     const schedule = createTranslationBenchGenerationSchedule(catalog, {
         caseCount: options.caseCount,
         requireCompleteCoverage: options.requireCompleteCoverage,
+        allowMissingRemovedActions: options.allowMissingRemovedActions === true,
+        applyEligibleGoldAllowlist:
+            options.applyEligibleGoldAllowlist !== false,
     });
     const seenAnchors = new Set<string>();
     const anchors = importTranslationBenchSourceCandidates(options.sourceText, {
@@ -1184,8 +1260,9 @@ export async function generateTranslationBenchBenchmark(
                 options.generator.model,
                 options.reviewer.model,
             );
-            casesBySlot.set(entry.slot, evalCase);
-            for (const u of utterances) usedUtterances.add(u);
+            // Persist the checkpoint row BEFORE mutating in-memory state so an
+            // I/O failure cannot leave an uncheckpointed case in casesBySlot
+            // (which the partial-coverage path would otherwise return).
             if (options.checkpointPath !== undefined) {
                 const row: TranslationBenchCheckpointRow<TranslationBenchBenchmarkCaseRecord> =
                     {
@@ -1204,6 +1281,8 @@ export async function generateTranslationBenchBenchmark(
                     [row],
                 );
             }
+            casesBySlot.set(entry.slot, evalCase);
+            for (const u of utterances) usedUtterances.add(u);
             options.onProgress?.(casesBySlot.size, options.caseCount);
             return "ok";
         });
@@ -1229,6 +1308,12 @@ export async function generateTranslationBenchBenchmark(
                 maxAttempts: options.maxAttempts,
                 generator: options.generator,
                 reviewer: options.reviewer,
+                ...(options.ambiguityProbe !== undefined
+                    ? { ambiguityProbe: options.ambiguityProbe }
+                    : {}),
+                ...(options.ambiguityJudgeLlm !== undefined
+                    ? { ambiguityJudgeLlm: options.ambiguityJudgeLlm }
+                    : {}),
             };
 
             try {
@@ -1268,16 +1353,46 @@ export async function generateTranslationBenchBenchmark(
             .slice(0, 5)
             .map((e) => `slot ${e.slot}: ${e.message}`)
             .join(" | ");
-        throw new Error(
-            `Translation bench generation failed on ${slotErrors.length}/${pending.length} slots. ${sample}`,
+        if (options.requireCompleteCoverage || casesBySlot.size === 0) {
+            throw new Error(
+                `Translation bench generation failed on ${slotErrors.length}/${pending.length} slots. ${sample}`,
+            );
+        }
+        // Partial draft is OK when complete coverage is not required (smoke / resume).
+        console.warn(
+            `[gen] continuing with ${casesBySlot.size}/${options.caseCount} cases; failed ${slotErrors.length}: ${sample}`,
         );
     }
-    const cases = schedule.entries.map((entry) =>
-        finalizeTranslationBenchGeneratedCaseLineage(
-            casesBySlot.get(entry.slot)!,
-            catalog,
+    const cases = schedule.entries
+        .filter((entry) => casesBySlot.has(entry.slot))
+        .map((entry) =>
+            finalizeTranslationBenchGeneratedCaseLineage(
+                casesBySlot.get(entry.slot)!,
+                catalog,
+            ),
+        );
+    // Coverage/caseCount must describe the cases actually emitted, not the
+    // planned schedule; on the partial path fewer slots complete than planned.
+    const scheduledActionCount = new Set(
+        cases.map((evalCase) =>
+            JSON.stringify([
+                evalCase.targetAction.schemaName,
+                evalCase.targetAction.actionName,
+            ]),
         ),
-    );
+    ).size;
+    const coverageExcluded = getPackagedScheduleExcludedActionIds(catalog, {
+        allowMissingExactIds: options.allowMissingRemovedActions === true,
+        applyEligibleGoldAllowlist:
+            options.applyEligibleGoldAllowlist !== false,
+    });
+    const coverage: TranslationBenchGenerationCoverage = {
+        ...schedule.coverage,
+        scheduledActionCount,
+        complete:
+            scheduledActionCount ===
+            countEligibleTranslationBenchActions(catalog, coverageExcluded),
+    };
     const usage = aggregateUsage(cases);
     const estimatedCosts = cases.flatMap(
         (evalCase) =>
@@ -1331,11 +1446,19 @@ export async function generateTranslationBenchBenchmark(
                         TRANSLATION_BENCH_GENERATION_CONTRACT_VERSION,
                     generatorModel: options.generator.model,
                     reviewerModel: options.reviewer.model,
-                    caseCount: options.caseCount,
+                    caseCount: cases.length,
                     genCaseCount: options.genCaseCount,
                     maxAttempts: options.maxAttempts,
-                    coverage: schedule.coverage,
+                    coverage,
                     runFingerprint: header.runFingerprint,
+                    eligibleGoldActionsHash:
+                        options.applyEligibleGoldAllowlist === false
+                            ? "0".repeat(64)
+                            : getPackagedEligibleGoldActionIds().contentHash,
+                    applyEligibleGoldAllowlist:
+                        options.applyEligibleGoldAllowlist !== false,
+                    allowMissingRemovedActions:
+                        options.allowMissingRemovedActions === true,
                 },
             },
             approval: { status: "draft" },
@@ -1343,5 +1466,5 @@ export async function generateTranslationBenchBenchmark(
         cases,
     };
     validateTranslationBenchBenchmark(benchmark);
-    return { benchmark, coverage: schedule.coverage };
+    return { benchmark, coverage };
 }
