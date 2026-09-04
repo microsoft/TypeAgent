@@ -78,7 +78,7 @@ export type WorkbenchActionRunWorkspaceCommand = {
         workspaceFolder?: string;
         // Optional path relative to the selected workspace root.
         workingDirectory?: string;
-        // Declared command safety classification. Coda also classifies the exact command and blocks high-risk commands.
+        // Caller-declared risk level. "high" is rejected. Advisory only: the enforced limits are the focused-tool allowlist and workspace-root path confinement.
         commandRiskLevel?: "low" | "medium" | "high";
         // Bounded execution time in milliseconds.
         timeoutMs?: number;

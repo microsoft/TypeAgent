@@ -126,37 +126,42 @@ function resultText(result: CallToolResult): string {
         .join("\n");
 }
 
+function workspaceCommandNonRunResult(
+    fields: { error: string; cancelled: boolean },
+    executionId: string,
+): CallToolResult {
+    const result = {
+        success: false,
+        error: fields.error,
+        exitCode: null,
+        durationMs: 0,
+        stdout: { text: "", truncated: false, totalBytes: 0 },
+        stderr: { text: "", truncated: false, totalBytes: 0 },
+        timedOut: false,
+        cancelled: fields.cancelled,
+        executionId,
+    };
+    return toolResult(JSON.stringify(result, null, 2), result);
+}
+
 function workspaceCommandFailure(
     error: string,
     executionId: string,
 ): CallToolResult {
-    const failure = {
-        success: false,
-        error,
-        exitCode: null,
-        durationMs: 0,
-        stdout: { text: "", truncated: false, totalBytes: 0 },
-        stderr: { text: "", truncated: false, totalBytes: 0 },
-        timedOut: false,
-        cancelled: false,
+    return workspaceCommandNonRunResult(
+        { error, cancelled: false },
         executionId,
-    };
-    return toolResult(JSON.stringify(failure, null, 2), failure);
+    );
 }
 
 function cancelledWorkspaceCommandResult(executionId: string): CallToolResult {
-    const result = {
-        success: false,
-        error: "The command request was cancelled before it was dispatched.",
-        exitCode: null,
-        durationMs: 0,
-        stdout: { text: "", truncated: false, totalBytes: 0 },
-        stderr: { text: "", truncated: false, totalBytes: 0 },
-        timedOut: false,
-        cancelled: true,
+    return workspaceCommandNonRunResult(
+        {
+            error: "The command request was cancelled before it was dispatched.",
+            cancelled: true,
+        },
         executionId,
-    };
-    return toolResult(JSON.stringify(result, null, 2), result);
+    );
 }
 
 function cancellationFailure(

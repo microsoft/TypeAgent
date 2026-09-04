@@ -6,9 +6,14 @@ import { randomUUID } from "crypto";
 
 export const MAX_COMMAND_BYTES = 16 * 1024;
 export const MAX_OUTPUT_BYTES = 64 * 1024;
+// Source of truth for the command timeout bounds. The MCP input schema in
+// packages/commandExecutor and getActionResponseTimeoutMs in the code agent
+// encode the same numbers; keep them in step when changing these.
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000;
 export const MAX_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_PENDING_CANCELLATIONS = 64;
+// How long a SIGTERM'd child may keep the streams open before completion is
+// forced. Unrelated to the code agent's CANCELLATION_CONTROL_TIMEOUT_MS.
 const STOP_FALLBACK_MS = 5_000;
 
 export type WorkspaceCommandOutput = {

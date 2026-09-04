@@ -4,6 +4,12 @@
 import { WebSocketMessageV2 } from "@typeagent/websocket-utils";
 import { CodeAgentWebSocketServer } from "./codeAgentWebSocketServer.js";
 import {
+    clearCancellationControlCalls,
+    forwardCancellationControlRequest,
+    handleCancellationControlDisconnect,
+    resolveCancellationControlResponse,
+} from "./cancellationControl.js";
+import {
     ActionContext,
     AppAction,
     AppAgent,
@@ -67,67 +73,11 @@ const sharedPendingCalls: Map<
         clientId?: string | undefined;
     }
 > = new Map();
-const cancellationControlCalls = new Map<
-    number,
-    {
-        clientId: string;
-        targetClientId: string;
-        responseId: unknown;
-        executionId: string;
-        timeout: NodeJS.Timeout;
-    }
->();
-const CANCELLATION_CONTROL_TIMEOUT_MS = 5_000;
 // Global call-id counter. The pending-calls map is module-scoped (one
 // websocket server is shared across all sessions), so the id space must
 // also be global — per-session counters would collide on 0,1,2,... and
 // route a response to the wrong session's pending call.
 let nextSharedCallId = 0;
-
-function deleteCancellationControlCall(callId: number) {
-    const call = cancellationControlCalls.get(callId);
-    if (call !== undefined) {
-        clearTimeout(call.timeout);
-        cancellationControlCalls.delete(callId);
-    }
-    return call;
-}
-
-function clearCancellationControlCalls(clientId?: string): void {
-    for (const [callId, call] of cancellationControlCalls) {
-        if (
-            clientId === undefined ||
-            call.clientId === clientId ||
-            call.targetClientId === clientId
-        ) {
-            deleteCancellationControlCall(callId);
-        }
-    }
-}
-
-function sendCancellationControlFailure(
-    server: CodeAgentWebSocketServer,
-    call: {
-        clientId: string;
-        responseId: unknown;
-        executionId: string;
-    },
-    error: string,
-): void {
-    server.sendToClient(
-        call.clientId,
-        JSON.stringify({
-            id: call.responseId,
-            result: JSON.stringify({
-                success: false,
-                error,
-                cancelled: false,
-                pendingCancellation: false,
-                executionId: call.executionId,
-            }),
-        }),
-    );
-}
 
 export function displayCodaResult(result: unknown): DisplayContent {
     const message =
@@ -353,62 +303,20 @@ function attachSharedOnMessage(server: CodeAgentWebSocketServer): void {
                     );
                     return;
                 }
-                const callId = nextSharedCallId++;
-                const timeout = setTimeout(() => {
-                    const call = deleteCancellationControlCall(callId);
-                    if (call !== undefined) {
-                        sendCancellationControlFailure(
-                            server,
-                            call,
-                            "The Coda workspace did not respond to the cancellation request.",
-                        );
-                    }
-                }, CANCELLATION_CONTROL_TIMEOUT_MS);
-                timeout.unref();
-                cancellationControlCalls.set(callId, {
+                forwardCancellationControlRequest(server, {
+                    callId: nextSharedCallId++,
                     clientId,
                     targetClientId,
                     responseId: data.id,
                     executionId: data.params.executionId,
-                    timeout,
+                    method: data.method,
+                    params: data.params,
                 });
-                if (
-                    !server.sendToClient(
-                        targetClientId,
-                        JSON.stringify({
-                            id: callId,
-                            method: data.method,
-                            params: {
-                                ...data.params,
-                                allowPendingCancellation: true,
-                            },
-                        }),
-                    )
-                ) {
-                    const call = deleteCancellationControlCall(callId);
-                    if (call !== undefined) {
-                        sendCancellationControlFailure(
-                            server,
-                            call,
-                            "The Coda workspace disconnected before the cancellation request could be delivered.",
-                        );
-                    }
-                }
                 return;
             }
 
             if (data.id !== undefined && data.result !== undefined) {
-                const controlCall = deleteCancellationControlCall(
-                    Number(data.id),
-                );
-                if (controlCall !== undefined) {
-                    server.sendToClient(
-                        controlCall.clientId,
-                        JSON.stringify({
-                            ...data,
-                            id: controlCall.responseId,
-                        }),
-                    );
+                if (resolveCancellationControlResponse(server, data)) {
                     return;
                 }
                 const pendingCall = sharedPendingCalls.get(Number(data.id));
@@ -459,24 +367,7 @@ function attachSharedOnMessage(server: CodeAgentWebSocketServer): void {
         }
     };
     server.onClientDisconnected = (clientId: string) => {
-        for (const [callId, call] of cancellationControlCalls) {
-            if (
-                call.clientId === clientId ||
-                call.targetClientId === clientId
-            ) {
-                deleteCancellationControlCall(callId);
-                if (
-                    call.targetClientId === clientId &&
-                    call.clientId !== clientId
-                ) {
-                    sendCancellationControlFailure(
-                        server,
-                        call,
-                        "The Coda workspace disconnected before responding to the cancellation request.",
-                    );
-                }
-            }
-        }
+        handleCancellationControlDisconnect(server, clientId);
     };
 }
 

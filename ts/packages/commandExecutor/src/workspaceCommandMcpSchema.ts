@@ -32,7 +32,7 @@ export const WorkspaceCommandInputSchema = z.object({
         .enum(["low", "medium", "high"])
         .optional()
         .describe(
-            "Optional declared command-risk level. High-risk commands are blocked; structured execution also restricts commands to focused build, test, lint, and diagnostic tools.",
+            'Optional caller-declared command-risk level. "high" is rejected. Advisory only: the enforced limits are Coda\'s focused build/test/lint/diagnostic tool allowlist and workspace-root path confinement.',
         ),
     timeoutMs: z
         .number()

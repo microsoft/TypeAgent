@@ -33,14 +33,22 @@ multi-root workspaces. A relative `workingDirectory` may select a subdirectory.
 The action uses `cmd.exe /d /s /c` on Windows and `/bin/sh -c` on Unix, passing
 the command as one shell argument. Commands are limited to 16 KiB; each output
 stream is limited to 64 KiB and reports its original byte count. The timeout
-defaults to two minutes and is capped at five. High-risk commands remain blocked
-by the existing Coda command-risk policy. To avoid treating this as an arbitrary
-terminal shortcut, structured execution accepts only focused build, test, lint,
-and diagnostic tools and rejects shell composition. Commands receive an `executionId`;
-independent IDs run concurrently inside one Coda window and
-`cancelWorkspaceCommand` cancels one. The Code Agent sends structured commands
-only when exactly one Coda workspace is connected, preventing a command from
-running in an unintended VS Code window.
+defaults to two minutes and is capped at five.
+
+What is actually enforced, in order: a `commandRiskLevel` of `high` is rejected;
+the executable must be one of the focused build, test, lint, and diagnostic tools
+in the allowlist; shell composition and path-expansion syntax are rejected; and
+every path argument must resolve inside the selected workspace root, both
+lexically and after symlinks are followed. Note that `commandRiskLevel` is
+declared by the caller, so it is advisory. The allowlist and the path
+confinement are the enforced boundary, not the declared risk level. Coda does
+not classify the command itself.
+
+Commands receive an `executionId`; independent IDs run concurrently inside one
+Coda window and `cancelWorkspaceCommand` cancels one. The `executionId` is
+optional on the way in and the Code Agent assigns one when it is omitted. The
+Code Agent sends structured commands only when exactly one Coda workspace is
+connected, preventing a command from running in an unintended VS Code window.
 
 > Tip: If you have any problems, please check to see if the `coda` extension was installed correctly using the command `code --list-extensions`. You should see `aisystems.copilot-coda` in the list of vscode extensions.
 
