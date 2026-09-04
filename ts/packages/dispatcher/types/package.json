@@ -13,6 +13,7 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
+    "./helpers/actionDispatch": "./dist/helpers/actionDispatch.js",
     "./helpers/status": "./dist/helpers/status.js"
   },
   "files": [

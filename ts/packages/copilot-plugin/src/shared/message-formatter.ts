@@ -111,6 +111,22 @@ export function extractMessageText(message: IAgentMessage): string | undefined {
 }
 
 /**
+ * Extracts an agent's machine-readable payload from an IAgentMessage, when
+ * the agent produced StructuredContent. Returned to MCP clients as
+ * `structuredContent` so they can act on the data instead of re-parsing the
+ * display text.
+ */
+export function extractRawData(message: IAgentMessage): unknown {
+    if (typeof message !== "object" || !("message" in message)) {
+        return undefined;
+    }
+    const msg = message.message;
+    return isStructuredContent(msg as DisplayContent)
+        ? (msg as StructuredContent).rawData
+        : undefined;
+}
+
+/**
  * Convert HTML to plain text using html-to-text, matching the
  * pattern used by the TypeAgent commandExecutor MCP server.
  */
