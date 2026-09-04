@@ -816,6 +816,7 @@ export function createAgentRpcServer(
             streamingContext: undefined,
             activityContext: param.activityContext,
             isFromReasoningLoop: param.isFromReasoningLoop ?? false,
+            workingDirectory: param.workingDirectory,
             get abortSignal() {
                 return abortController.signal;
             },
