@@ -37,6 +37,14 @@ import {
     runSetupCommand,
     whichExists,
 } from "./setup.js";
+import {
+    MergePreparationFailure,
+    MergePreparationSuccess,
+    MergeVerificationFailure,
+    MergeVerificationSuccess,
+    prepareMerge,
+    verifyMergeConflictsResolved,
+} from "./mergeConflict.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -59,6 +67,8 @@ export function instantiate(): AppAgent {
         initializeAgentContext,
         executeAction,
         checkReadiness,
+        getActionReadiness: async (action) =>
+            getGithubActionReadiness(action.actionName),
         setup: async (actionContext) =>
             offerInstall(
                 actionContext as ActionContext<GithubCliActionContext>,
@@ -71,6 +81,15 @@ export function instantiate(): AppAgent {
             return ctx.choiceManager.handleChoice(choiceId, response, context);
         },
     };
+}
+
+export function getGithubActionReadiness(
+    actionName: string,
+): ReadinessReport | undefined {
+    return actionName === "resolveMergeConflicts" ||
+        actionName === "verifyMergeConflictsResolved"
+        ? { state: "ready" }
+        : undefined;
 }
 
 async function initializeAgentContext(): Promise<GithubCliActionContext> {
@@ -425,6 +444,12 @@ export function buildArgs(
     const p = action.parameters as Record<string, unknown>;
 
     switch (action.actionName) {
+        case "resolveMergeConflicts":
+        case "verifyMergeConflictsResolved":
+            // This action uses the narrowly scoped local git workflow below,
+            // never the general-purpose gh argument marshaller.
+            return undefined;
+
         // ── Auth ──
         case "authLogin": {
             const args = ["auth", "login"];
@@ -1907,11 +1932,202 @@ export async function validateAndResolveRepo(
     };
 }
 
+function formatMergeFailure(failure: MergePreparationFailure): string {
+    const details: string[] = [`**${failure.message}**`];
+    if (failure.changedPaths !== undefined) {
+        details.push(
+            `Existing paths:\n${failure.changedPaths.map((file) => `- \`${file}\``).join("\n")}`,
+        );
+    }
+    if (failure.remotes !== undefined) {
+        details.push(
+            `Remotes: ${failure.remotes.map((remote) => `\`${remote}\``).join(", ")}`,
+        );
+    }
+    if (failure.recovery.length > 0) {
+        details.push(
+            `Recovery:\n${failure.recovery.map((step) => `- ${step}`).join("\n")}`,
+        );
+    }
+    return details.join("\n\n");
+}
+
+export function buildMergeResult(
+    result: MergePreparationSuccess,
+): ActionResultSuccess {
+    const target = result.target.displayName;
+    const summary =
+        result.status === "conflicts"
+            ? `Merge from ${target} has ${result.conflicts.length} conflict(s).`
+            : result.status === "ready"
+              ? `Merge from ${target} is ready for review.`
+              : `${target} is already incorporated.`;
+    const conflictLines = result.conflicts.map((conflict) => {
+        const flags = [
+            conflict.kind,
+            conflict.binary ? "binary" : undefined,
+            conflict.submodule ? "submodule" : undefined,
+        ].filter((value): value is string => value !== undefined);
+        return `- \`${conflict.path}\` (${flags.join(", ")})`;
+    });
+    const blocks: StructuredBlock[] = [
+        { kind: "heading", level: 3, text: summary },
+        {
+            kind: "keyValue",
+            pairs: [
+                { label: "Current branch", value: result.currentBranch },
+                { label: "Target", value: target },
+                { label: "Fetched commit", value: result.target.fetchedCommit },
+                {
+                    label: "Merge state",
+                    value: result.mergeInProgress
+                        ? "In progress, not committed"
+                        : "No merge in progress",
+                },
+            ],
+        },
+    ];
+    if (conflictLines.length > 0) {
+        blocks.push({
+            kind: "text",
+            format: "markdown",
+            text: `**Conflicted files**\n${conflictLines.join("\n")}`,
+        });
+    }
+    blocks.push({
+        kind: "text",
+        format: "markdown",
+        text: `**Next steps**\n${result.recovery.map((step) => `- ${step}`).join("\n")}`,
+    });
+
+    return {
+        historyText: JSON.stringify(result),
+        entities: [],
+        resultValue: result,
+        displayContent: createStructuredContent(blocks, { rawData: result }),
+    };
+}
+
+async function executeResolveMergeConflicts(
+    targetBranch: string | undefined,
+): Promise<ActionResult> {
+    const result = await prepareMerge(targetBranch);
+    if (result.status === "blocked") {
+        return {
+            error: JSON.stringify(result),
+            errorCode: result.errorCode,
+            retryable: result.errorCode !== "mergeFailed",
+            mayHaveSideEffects: result.mayHaveSideEffects,
+            errorDisplayContent: {
+                type: "markdown",
+                content: formatMergeFailure(result),
+            },
+        };
+    }
+    return buildMergeResult(result);
+}
+
+export function getRequestedMergeTarget(action: {
+    actionName?: string;
+    parameters?: { targetBranch?: string };
+}): string | undefined {
+    return action.parameters?.targetBranch;
+}
+
+function formatVerificationFailure(failure: MergeVerificationFailure): string {
+    return [
+        `**${failure.message}**`,
+        failure.recovery.length > 0
+            ? `Recovery:\n${failure.recovery.map((step) => `- ${step}`).join("\n")}`
+            : undefined,
+    ]
+        .filter((part): part is string => part !== undefined)
+        .join("\n\n");
+}
+
+export function buildVerificationResult(
+    result: MergeVerificationSuccess,
+): ActionResultSuccess {
+    const summary =
+        result.status === "resolved"
+            ? "All merge conflicts are resolved and all merge changes are staged."
+            : result.status === "unresolved"
+              ? `${result.remainingConflicts.length} merge conflict(s) remain.`
+              : result.status === "markersRemain"
+                ? `Conflict markers remain in ${result.markerPaths.length} file(s).`
+                : `${result.unstagedPaths.length} merge path(s) still have unstaged changes.`;
+    const details =
+        result.status === "unresolved"
+            ? result.remainingConflicts.map(
+                  (conflict) =>
+                      `- \`${conflict.path}\` (${conflict.kind}${conflict.binary ? ", binary" : ""}${conflict.submodule ? ", submodule" : ""})`,
+              )
+            : result.status === "markersRemain"
+              ? result.markerPaths.map((file) => `- \`${file}\``)
+              : result.unstagedPaths.map((file) => `- \`${file}\``);
+    const blocks: StructuredBlock[] = [
+        { kind: "heading", level: 3, text: summary },
+        {
+            kind: "keyValue",
+            pairs: [
+                { label: "Current branch", value: result.currentBranch },
+                { label: "Merge state", value: "In progress, not committed" },
+                {
+                    label: "Inspected paths",
+                    value: result.inspectedPaths.length,
+                },
+            ],
+        },
+    ];
+    if (details.length > 0) {
+        blocks.push({
+            kind: "text",
+            format: "markdown",
+            text: details.join("\n"),
+        });
+    }
+    blocks.push({
+        kind: "text",
+        format: "markdown",
+        text: `**Next steps**\n${result.recovery.map((step) => `- ${step}`).join("\n")}`,
+    });
+    return {
+        historyText: JSON.stringify(result),
+        entities: [],
+        resultValue: result,
+        displayContent: createStructuredContent(blocks, { rawData: result }),
+    };
+}
+
+async function executeVerifyMergeConflictsResolved(): Promise<ActionResult> {
+    const result = await verifyMergeConflictsResolved();
+    if (result.status === "blocked") {
+        return {
+            error: JSON.stringify(result),
+            errorCode: result.errorCode,
+            retryable: true,
+            mayHaveSideEffects: false,
+            errorDisplayContent: {
+                type: "markdown",
+                content: formatVerificationFailure(result),
+            },
+        };
+    }
+    return buildVerificationResult(result);
+}
+
 // code-complexity-allow: top-level action dispatch over all github-cli actions
 async function executeAction(
     action: TypeAgentAction<GithubCliActions>,
     context: ActionContext<unknown>,
 ): Promise<ActionResult> {
+    if (action.actionName === "resolveMergeConflicts") {
+        return executeResolveMergeConflicts(getRequestedMergeTarget(action));
+    }
+    if (action.actionName === "verifyMergeConflictsResolved") {
+        return executeVerifyMergeConflictsResolved();
+    }
+
     // Bare-name repo guard — see validateAndResolveRepo. Runs before
     // buildArgs so we never hand `gh` a malformed --repo value.
     const validated = await validateAndResolveRepo(
@@ -1921,6 +2137,7 @@ async function executeAction(
     if (validated.kind === "clarify") {
         return validated.result;
     }
+
     action = validated.action;
 
     const args = buildArgs(action);

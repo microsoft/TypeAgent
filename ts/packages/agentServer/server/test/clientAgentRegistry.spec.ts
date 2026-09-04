@@ -648,6 +648,39 @@ describe("clientAgentRegistry routing", () => {
         expect(readinessCalls).toHaveLength(1);
     });
 
+    test("routes per-action readiness as a read-only session call", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        const calls: string[] = [];
+        const appAgent: AppAgent = {
+            async executeAction() {
+                return undefined;
+            },
+            async getActionReadiness(action) {
+                calls.push(action.actionName);
+                return { state: "ready" };
+            },
+        };
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent,
+        });
+
+        const { context } = makeSessionContext(undefined);
+        const report = await getMux(registry).getActionReadiness!(
+            {
+                schemaName: AGENT_NAME,
+                actionName: "verifyMergeConflictsResolved",
+                parameters: {},
+            },
+            context,
+        );
+
+        expect(report).toEqual({ state: "ready" });
+        expect(calls).toEqual(["verifyMergeConflictsResolved"]);
+    });
+
     // Case 10
     test("overlapping requests from different connections route to their own devices", async () => {
         const registry = createClientAgentRegistry();

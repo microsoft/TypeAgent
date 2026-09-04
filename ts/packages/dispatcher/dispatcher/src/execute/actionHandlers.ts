@@ -23,6 +23,7 @@ import {
     ParsedCommandParams,
     ParameterDefinitions,
     AppAction,
+    ReadinessReport,
 } from "@typeagent/agent-sdk";
 import type { Span } from "@opentelemetry/api";
 import {
@@ -116,8 +117,10 @@ export async function checkAgentReady(
     appAgentName: string,
     systemContext: CommandHandlerContext,
     actionContext: ActionContext<unknown>,
+    readinessOverride?: ReadinessReport,
 ): Promise<ActionResult | undefined> {
-    const report = systemContext.agents.getReadiness(appAgentName);
+    const report =
+        readinessOverride ?? systemContext.agents.getReadiness(appAgentName);
     if (report.state === "ready") {
         return undefined;
     }
@@ -291,10 +294,15 @@ async function executeHandlerForActionSpan(
 
     let setupResult: ActionResult | undefined;
     try {
+        const actionReadiness = await appAgent.getActionReadiness?.(
+            executableAction.action,
+            actionContext.sessionContext,
+        );
         setupResult = await checkAgentReady(
             appAgentName,
             systemContext,
             actionContext,
+            actionReadiness,
         );
     } catch (error) {
         rethrowIfActionCancelled(error, systemContext);

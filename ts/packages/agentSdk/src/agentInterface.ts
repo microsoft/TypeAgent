@@ -154,6 +154,12 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
     // checkReadiness should be CHEAP (file-existence / env-var read level).
     // Expensive probes (network, child processes) belong in `setup`.
     checkReadiness?(context: SessionContext<unknown>): Promise<ReadinessReport>;
+    // Optional per-action override for agents whose actions have different
+    // runtime dependencies. Return undefined to use the agent-wide readiness.
+    getActionReadiness?(
+        action: TypeAgentAction,
+        context: SessionContext<unknown>,
+    ): Promise<ReadinessReport | undefined>;
 
     // Idempotent setup that brings the agent from `setup-required` to `ready`.
     // Returns ActionResult so it can use the in-chat yes/no card pattern

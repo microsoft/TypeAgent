@@ -67,7 +67,9 @@ export type GithubCliActions =
     | MyPullRequestsAction
     | IssueAddLabelAction
     | VariableCreateAction
-    | DependabotAlertsAction;
+    | DependabotAlertsAction
+    | ResolveMergeConflictsAction
+    | VerifyMergeConflictsResolvedAction;
 
 export type AuthLoginAction = {
     actionName: "authLogin";
@@ -707,4 +709,30 @@ export type DependabotAlertsAction = {
         // Filter by state: open, dismissed, fixed
         state?: string;
     };
+};
+
+// Fetch a target branch and prepare a local merge without committing or pushing.
+// Use this for requests such as "resolve merge conflicts from main" or "bring
+// the default branch into this branch and resolve conflicts". If conflicts
+// occur, the result provides the exact unmerged paths for the calling MCP
+// client to resolve with its own file tools.
+export type ResolveMergeConflictsAction = {
+    actionName: "resolveMergeConflicts";
+    parameters: {
+        // Branch to merge into the current local branch. A REMOTE/BRANCH value
+        // disambiguates repositories with multiple remotes. When omitted, use
+        // the selected remote's configured default branch, then an existing
+        // main or master branch.
+        targetBranch?: string;
+    };
+};
+
+// Verify that a merge prepared by resolveMergeConflicts has no unmerged entries
+// or conflict markers and that all merge changes are staged. This only inspects
+// repository state; it never stages, commits, finalizes, aborts, or pushes.
+//
+// Example: { actionName: "verifyMergeConflictsResolved", parameters: {} }
+export type VerifyMergeConflictsResolvedAction = {
+    actionName: "verifyMergeConflictsResolved";
+    parameters: {};
 };

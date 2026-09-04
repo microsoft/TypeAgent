@@ -283,6 +283,9 @@ export type AgentInvokeFunctions = {
         param: Partial<ContextParams> & { schemaName: string },
     ): Promise<GrammarContent | undefined>;
     checkReadiness(param: Partial<ContextParams>): Promise<ReadinessReport>;
+    getActionReadiness(
+        param: Partial<ContextParams> & { action: TypeAgentAction },
+    ): Promise<ReadinessReport | undefined>;
     setup(
         param: Partial<ActionContextParams>,
     ): Promise<ActionResult | undefined>;
