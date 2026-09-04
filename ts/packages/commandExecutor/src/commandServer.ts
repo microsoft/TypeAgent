@@ -191,6 +191,93 @@ async function processHtmlContent(content: string): Promise<string> {
     return htmlToPlainText(content);
 }
 
+function remapWebflowAction(request: ExecuteActionRequest): {
+    schemaName: string;
+    actionName: string;
+    parameters: Record<string, unknown> | undefined;
+} {
+    if (
+        request.schemaName !== "webflow" ||
+        !["run_draft", "list", "execute"].includes(request.actionName)
+    ) {
+        return {
+            schemaName: request.schemaName,
+            actionName: request.actionName,
+            parameters: request.parameters,
+        };
+    }
+
+    const parameters = request.parameters;
+    if (request.actionName === "run_draft") {
+        const p = parameters as
+            | {
+                  script?: unknown;
+                  params?: unknown;
+                  parameters?: unknown;
+                  timeout?: unknown;
+              }
+            | undefined;
+        const mappedParameters: Record<string, unknown> = {
+            script: p?.script,
+        };
+        if (p?.params !== undefined) {
+            mappedParameters.params =
+                typeof p.params === "string"
+                    ? p.params
+                    : JSON.stringify(p.params);
+        }
+        if (p?.parameters !== undefined) {
+            mappedParameters.params =
+                typeof p.parameters === "string"
+                    ? p.parameters
+                    : JSON.stringify(p.parameters);
+        }
+        if (p?.timeout !== undefined) {
+            mappedParameters.timeout = p.timeout;
+        }
+        return {
+            schemaName: "browser",
+            actionName: "executeAdHocScript",
+            parameters: mappedParameters,
+        };
+    }
+    if (request.actionName === "list") {
+        const domain = (parameters as { domain?: unknown } | undefined)?.domain;
+        return domain
+            ? {
+                  schemaName: "browser",
+                  actionName: "getWebFlowsForDomain",
+                  parameters: { domain },
+              }
+            : {
+                  schemaName: "browser",
+                  actionName: "getAllWebFlows",
+                  parameters: {},
+              };
+    }
+
+    const p = parameters as
+        | { flowName?: unknown; parameters?: unknown }
+        | undefined;
+    let flowParams = p?.parameters;
+    if (typeof flowParams === "string") {
+        try {
+            flowParams = JSON.parse(flowParams);
+        } catch {
+            flowParams = {};
+        }
+    }
+    return {
+        schemaName: "browser.webFlows",
+        actionName:
+            typeof p?.flowName === "string" ? p.flowName : request.actionName,
+        parameters:
+            flowParams && typeof flowParams === "object"
+                ? (flowParams as Record<string, unknown>)
+                : {},
+    };
+}
+
 // ── Logger ────────────────────────────────────────────────────────────────────
 
 class Logger {
@@ -1296,58 +1383,8 @@ export class CommandServer {
             );
         }
 
-        // Remap webflow schema calls to browser agent actions
-        let schemaName = request.schemaName;
-        let actionName = request.actionName;
-        let parameters = request.parameters;
-
-        if (schemaName === "webflow" && actionName === "run_draft") {
-            schemaName = "browser";
-            actionName = "executeAdHocScript";
-            const p = parameters as any;
-            parameters = {
-                script: p?.script,
-                ...(p?.params && {
-                    params:
-                        typeof p.params === "string"
-                            ? p.params
-                            : JSON.stringify(p.params),
-                }),
-                ...(p?.parameters && {
-                    params:
-                        typeof p.parameters === "string"
-                            ? p.parameters
-                            : JSON.stringify(p.parameters),
-                }),
-                ...(p?.timeout && { timeout: p.timeout }),
-            };
-        } else if (schemaName === "webflow" && actionName === "list") {
-            // Route to discovery handler which returns webflows
-            const p = parameters as any;
-            if (p?.domain) {
-                schemaName = "browser";
-                actionName = "getWebFlowsForDomain";
-                parameters = { domain: p.domain };
-            } else {
-                schemaName = "browser";
-                actionName = "getAllWebFlows";
-                parameters = {};
-            }
-        } else if (schemaName === "webflow" && actionName === "execute") {
-            const p = parameters as any;
-            const flowName = p?.flowName;
-            let flowParams = p?.parameters;
-            if (typeof flowParams === "string") {
-                try {
-                    flowParams = JSON.parse(flowParams);
-                } catch {
-                    flowParams = {};
-                }
-            }
-            schemaName = "browser.webFlows";
-            actionName = flowName || actionName;
-            parameters = flowParams || {};
-        }
+        const { schemaName, actionName, parameters } =
+            remapWebflowAction(request);
 
         const paramStr =
             parameters && Object.keys(parameters).length > 0
