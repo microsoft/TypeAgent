@@ -5,6 +5,7 @@ import { WebSocketMessageV2 } from "@typeagent/websocket-utils";
 import { CodeAgentWebSocketServer } from "./codeAgentWebSocketServer.js";
 import {
     ActionContext,
+    ActionResult,
     AppAction,
     AppAgent,
     ReadinessReport,
@@ -59,7 +60,7 @@ const sharedActiveSessions = new Set<SessionContext<CodeActionContext>>();
 const sharedPendingCalls: Map<
     number,
     {
-        resolve: (value?: undefined) => void;
+        resolve: (errorMessage?: string) => void;
         context?: ActionContext<CodeActionContext> | undefined;
     }
 > = new Map();
@@ -99,7 +100,7 @@ type CodeActionContext = {
     pendingCall: Map<
         number,
         {
-            resolve: (value?: undefined) => void;
+            resolve: (errorMessage?: string) => void;
             context?: ActionContext<CodeActionContext> | undefined;
         }
     >;
@@ -187,6 +188,40 @@ function getCodeBindPort(): number {
     return n;
 }
 
+// Detect an operational-failure result from the coda extension: a WebSocket
+// `result` that is JSON encoding a plain object with exactly one key,
+// `error` (a string) — the shape produced by handleReadActions' catch-all
+// and explicit error returns. Any other shape (including the "OK"/"pong"
+// strings used by non-action messages) is treated as success and yields
+// undefined, so this only changes behavior for genuinely error-shaped results.
+export function extractOperationalError(result: unknown): string | undefined {
+    if (typeof result !== "string") {
+        return undefined;
+    }
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(result);
+    } catch {
+        return undefined;
+    }
+    if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        !Array.isArray(parsed)
+    ) {
+        const keys = Object.keys(parsed);
+        const errorValue = (parsed as Record<string, unknown>).error;
+        if (
+            keys.length === 1 &&
+            keys[0] === "error" &&
+            typeof errorValue === "string"
+        ) {
+            return errorValue;
+        }
+    }
+    return undefined;
+}
+
 // Wire the shared server's onMessage handler. Module-scoped because the
 // server itself is module-scoped — all sessions route their pending-call
 // completions through the same handler.
@@ -204,7 +239,7 @@ function attachSharedOnMessage(server: CodeAgentWebSocketServer): void {
                     if (context?.actionIO) {
                         context.actionIO.setDisplay(data.result);
                     }
-                    resolve();
+                    resolve(extractOperationalError(data.result));
                 }
             }
         } catch (error) {
@@ -497,9 +532,14 @@ export async function getActiveFileFromVSCode(
 
         // NOTE: pendingCall entry has no ActionContext because this isn’t a UI action
         agentContext.pendingCall.set(callId, {
-            resolve: (value?: any) => {
+            // This call site doesn't currently receive real ActiveFile
+            // payloads through the pending-call channel (the coda side has
+            // no "code/getActiveFile" handler, so it always falls through to
+            // the default "OK" response) — only the timeout/undefined path
+            // is exercised today. Any non-error result still resolves undefined.
+            resolve: () => {
                 clearTimeout(t);
-                resolve(value as ActiveFile | undefined);
+                resolve(undefined);
             },
             context: undefined as any,
         });
@@ -543,23 +583,26 @@ async function executeCodeAction(
             }
 
             const callId = nextSharedCallId++;
-            return new Promise<undefined>((resolve) => {
+            return new Promise<ActionResult | undefined>((resolve) => {
                 const timeoutMs = 5000;
                 const timeoutHandle = setTimeout(() => {
                     if (agentContext.pendingCall.has(callId)) {
                         agentContext.pendingCall.delete(callId);
+                        const timeoutMessage = `No connected coda extension handled action "${action.actionName}". If multiple VS Code windows are open, reload the others (Ctrl+Shift+P → Developer: Reload Window) so they pick up the latest coda bundle.`;
                         if (context.actionIO) {
-                            context.actionIO.setDisplay(
-                                `No connected coda extension handled action "${action.actionName}". If multiple VS Code windows are open, reload the others (Ctrl+Shift+P → Developer: Reload Window) so they pick up the latest coda bundle.`,
-                            );
+                            context.actionIO.setDisplay(timeoutMessage);
                         }
-                        resolve(undefined);
+                        resolve(createActionResultFromError(timeoutMessage));
                     }
                 }, timeoutMs);
                 agentContext.pendingCall.set(callId, {
-                    resolve: (value?: undefined) => {
+                    resolve: (errorMessage?: string) => {
                         clearTimeout(timeoutHandle);
-                        resolve(value);
+                        resolve(
+                            errorMessage !== undefined
+                                ? createActionResultFromError(errorMessage)
+                                : undefined,
+                        );
                     },
                     context,
                 });

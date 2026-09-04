@@ -14,6 +14,7 @@ export type CodeActions =
     | ListOpenEditorsAction
     | GetFileContentAction
     | GetWorkspaceChangesAction
+    | GetGitDiffAction
     | LaunchCopilotChatAction;
 
 export type CodeActivity = LaunchVSCodeAction;
@@ -228,4 +229,45 @@ export type GetFileContentAction = {
 export type GetWorkspaceChangesAction = {
     actionName: "getWorkspaceChanges";
     parameters: {};
+};
+
+// Get the actual Git diff for the workspace: changed files plus bounded unified-patch/hunk text, split into staged and unstaged sections by default.
+//
+// Complements getWorkspaceChanges (which only reports file paths and
+// statuses) by returning real patch content, truncated with explicit
+// metadata when a diff is large.
+//
+// Omit `base` (or pass "HEAD") to diff against HEAD: staged (index vs HEAD)
+// and unstaged (working tree vs index) changes are reported as two separate
+// sections. Pass `base` to instead diff the working tree against an
+// arbitrary ref (branch, tag, or commit-ish), reported as one combined
+// section since git does not distinguish staged/unstaged against a custom
+// base.
+//
+// Each section reports: files (path, oldPath for renames/copies, status,
+// binary, and bounded patch text -- omitted for binary files), plus
+// filesTruncated/patchTruncated booleans when the file-count or byte-budget
+// caps were hit, and filesOutsideWorkspace (only present when > 0) counting
+// files dropped because they fall outside every open workspace folder (the
+// git repository root can sit above the folder(s) actually opened).
+//
+// Example:
+// User: show me my uncommitted changes
+// Agent: { actionName: "getGitDiff", parameters: {} }
+//
+// Example:
+// User: diff my branch against main
+// Agent: { actionName: "getGitDiff", parameters: { base: "main" } }
+export type GetGitDiffAction = {
+    actionName: "getGitDiff";
+    parameters: {
+        // Git ref (branch, tag, or commit-ish, e.g. "main", "HEAD~3") to diff
+        // the working tree against. Omit (or pass "HEAD") to diff against
+        // HEAD and get separate staged/unstaged sections.
+        base?: string;
+        // Workspace-relative repository root or folder name to select which
+        // git repository to diff when more than one is open. Ignored (and
+        // unnecessary) when only one repository is open.
+        repository?: string;
+    };
 };

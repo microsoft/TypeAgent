@@ -589,7 +589,15 @@ export async function handleVSCodeActions(action: any) {
             actionResult = handledResult;
         } else {
             actionResult.handled = false;
-            actionResult.message = `Did not handle the action: "${actionName}"`;
+            // JSON-encode as {error: ...} (matching every operational-failure
+            // shape returned by handleReadActions) rather than a bare string,
+            // so extractOperationalError on the code-agent side correctly
+            // classifies this as a failed ActionResult instead of silently
+            // treating it as success (JSON.parse on a bare string throws and
+            // is caught/ignored there).
+            actionResult.message = JSON.stringify({
+                error: `Did not handle the action: "${actionName}"`,
+            });
         }
     }
 

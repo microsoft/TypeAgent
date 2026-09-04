@@ -60,6 +60,7 @@
   },
   "devDependencies": {
     "@typeagent/action-grammar-compiler": "workspace:*",
+    "@typeagent/action-schema": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/better-sqlite3": "7.6.13",
     "@types/debug": "^4.1.12",

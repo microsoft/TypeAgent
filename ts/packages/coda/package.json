@@ -28,9 +28,11 @@
     "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies -o dist-pub/aisystems-coda.vsix",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
-    "pretest": "pnpm run build",
+    "pretest:full": "pnpm run build",
+    "test": "npm run test:local",
     "test-compile": "tsc -p ./src",
     "test:full": "vscode-test",
+    "test:local": "tsx --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=../../tools/scripts/nodeTestFailureReporter.mjs --test-reporter-destination=stdout test/*.spec.ts",
     "vscode:prepublish": "pnpm run esbuild-base --minify",
     "watch": "tsc -w"
   },
@@ -75,7 +77,8 @@
     "esbuild": "^0.28.2",
     "mkdirp": "^3.0.1",
     "prettier": "^3.5.3",
-    "rimraf": "^6.0.1"
+    "rimraf": "^6.0.1",
+    "tsx": "^4.21.0"
   },
   "engines": {
     "vscode": "^1.88.0"

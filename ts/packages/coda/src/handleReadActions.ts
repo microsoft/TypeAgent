@@ -4,6 +4,12 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { ActionResult } from "./helpers";
+import {
+    type DiffSection,
+    parseDiffBlock,
+    parseUnifiedDiff,
+    splitDiffBlocks,
+} from "./gitDiffUtils";
 
 // Read/introspection action names served here. Kept in sync with the read
 // actions in packages/agents/code/src/codeActionsSchema.ts.
@@ -14,12 +20,15 @@ const READ_ACTIONS = new Set([
     "listOpenEditors",
     "getFileContent",
     "getWorkspaceChanges",
+    "getGitDiff",
 ]);
 
 type ReadActionParameters = {
     fileName?: string;
     startLine?: number;
     endLine?: number;
+    base?: string;
+    repository?: string;
 };
 
 type ReadAction = {
@@ -44,6 +53,15 @@ type GitRepository = {
         workingTreeChanges: GitChange[];
         indexChanges: GitChange[];
     };
+    // Raw unified diff text for the whole repo: `cached=true` is the staged
+    // diff (index vs HEAD, i.e. `git diff --cached`), `cached=false`/omitted
+    // is the unstaged diff (working tree vs index, i.e. `git diff`).
+    diff(cached?: boolean): Promise<string>;
+    // Raw unified diff text for a path (or "." for the whole repo, which the
+    // git extension passes straight through as `git diff <ref> -- .`, byte-
+    // identical to a path-less `git diff <ref>` run from the repo root)
+    // between the working tree and an arbitrary ref.
+    diffWith(ref: string, path: string): Promise<string>;
 };
 
 type GitApi = {
@@ -83,6 +101,8 @@ export async function handleReadActions(
                 return ok(await getFileContent(params));
             case "getWorkspaceChanges":
                 return ok(await getWorkspaceChanges());
+            case "getGitDiff":
+                return ok(await getGitDiff(params));
             default:
                 return { handled: false, message: "" };
         }
@@ -283,7 +303,10 @@ async function getFileContent(params: {
     };
 }
 
-async function getWorkspaceChanges() {
+// Acquire the built-in git extension's API, activating it if needed. Shared
+// by getWorkspaceChanges and getGitDiff so both report the same error for a
+// missing/inactive extension.
+async function getGitApi(): Promise<GitApi | { error: string }> {
     const gitExtension =
         vscode.extensions.getExtension<GitExtensionExports>("vscode.git");
     if (!gitExtension) {
@@ -292,7 +315,14 @@ async function getWorkspaceChanges() {
     const exports = gitExtension.isActive
         ? gitExtension.exports
         : await gitExtension.activate();
-    const api = exports.getAPI(1);
+    return exports.getAPI(1);
+}
+
+async function getWorkspaceChanges() {
+    const api = await getGitApi();
+    if ("error" in api) {
+        return api;
+    }
     const repositories = api.repositories.map((repo) => ({
         root: vscode.workspace.asRelativePath(repo.rootUri, false),
         branch: repo.state.HEAD?.name,
@@ -310,6 +340,104 @@ async function getWorkspaceChanges() {
     return { repositories };
 }
 
+async function getGitDiff(params: ReadActionParameters) {
+    const api = await getGitApi();
+    if ("error" in api) {
+        return api;
+    }
+    if (api.repositories.length === 0) {
+        return { error: "No git repositories are open in this workspace." };
+    }
+    const selected = selectRepository(api.repositories, params.repository);
+    if ("error" in selected) {
+        return selected;
+    }
+    const repo = selected.repository;
+    const root = vscode.workspace.asRelativePath(repo.rootUri, false);
+    const branch = repo.state.HEAD?.name;
+    const base = params.base?.trim();
+
+    if (!base || base === "HEAD") {
+        const [unstagedText, stagedText] = await Promise.all([
+            repo.diff(false),
+            repo.diff(true),
+        ]);
+        return {
+            root,
+            branch,
+            base: "HEAD",
+            unstaged: parseContainedDiff(unstagedText, repo),
+            staged: parseContainedDiff(stagedText, repo),
+        };
+    }
+
+    // A single repo-rooted diff (rather than one diffWith(base, path) call
+    // per changed file) avoids N serial git spawns -- which for a large
+    // changeset can exceed the action's timeout -- and reuses the same
+    // parseUnifiedDiff bounding/binary-detection logic as the default (no
+    // base) path above instead of duplicating it.
+    let diffText: string;
+    try {
+        diffText = await repo.diffWith(base, ".");
+    } catch (err) {
+        return {
+            error: `Failed to diff against "${base}": ${err instanceof Error ? err.message : String(err)}`,
+        };
+    }
+    return {
+        root,
+        branch,
+        base,
+        diff: parseContainedDiff(diffText, repo),
+    };
+}
+
+// Pick the repository to diff. With a single open repository, `repository`
+// is ignored (nothing to disambiguate). With multiple, match by workspace-
+// relative root, root folder name, or absolute fs path; report the available
+// roots on an ambiguous/unmatched selector instead of guessing.
+function selectRepository(
+    repositories: GitRepository[],
+    repository: string | undefined,
+): { repository: GitRepository } | { error: string } {
+    if (repositories.length === 1) {
+        return { repository: repositories[0] };
+    }
+    const roots = repositories.map((repo) => ({
+        repo,
+        relative: vscode.workspace.asRelativePath(repo.rootUri, false),
+    }));
+    if (!repository) {
+        return {
+            error: `Multiple git repositories are open; specify "repository" as one of: ${roots.map((r) => r.relative).join(", ")}.`,
+        };
+    }
+    const needle = repository.trim();
+    const match = roots.find(
+        (r) =>
+            r.relative === needle ||
+            path.basename(r.relative) === needle ||
+            r.repo.rootUri.fsPath === needle,
+    );
+    if (!match) {
+        return {
+            error: `No open git repository matches "${repository}". Available: ${roots.map((r) => r.relative).join(", ")}.`,
+        };
+    }
+    return { repository: match.repo };
+}
+
+// True if `candidateFsPath` is `rootFsPath` itself or nested under it.
+function isWithinRoot(candidateFsPath: string, rootFsPath: string): boolean {
+    const rootWithSep = rootFsPath.endsWith(path.sep)
+        ? rootFsPath
+        : rootFsPath + path.sep;
+    return (
+        candidateFsPath === rootFsPath ||
+        candidateFsPath.startsWith(rootWithSep)
+    );
+}
+
 // Resolve a workspace-relative path or bare file name to a Uri inside an open
 // workspace folder. Rejects paths that escape the workspace root via `..` or
 // absolute components (matching the containment check used when creating files).
@@ -321,14 +449,66 @@ function resolveWorkspaceFile(fileName: string): vscode.Uri | undefined {
     const trimmed = fileName.trim();
     for (const folder of folders) {
         const candidate = vscode.Uri.joinPath(folder.uri, trimmed);
-        const root = folder.uri.fsPath;
-        const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
-        const target = candidate.fsPath;
-        if (target === root || target.startsWith(rootWithSep)) {
+        if (isWithinRoot(candidate.fsPath, folder.uri.fsPath)) {
             return candidate;
         }
     }
     return undefined;
+}
+
+// The git extension's repository root can sit above the open workspace
+// folder(s) -- e.g. this very monorepo's "ts/" folder is opened as a
+// workspace folder while its git repository root is the parent directory --
+// so a diff can otherwise return patch content for files outside every
+// folder the user actually opened. getFileContent/getDiagnostics both
+// refuse such paths via resolveWorkspaceFile; do the same here for
+// consistency by dropping out-of-workspace files from the result (recording
+// how many were dropped) rather than silently including them. A rename/copy
+// also checks `oldPath`: its destination can sit inside the workspace while
+// its source (and the patch's old-side content) came from outside it, which
+// would otherwise leak repo-root-relative paths and content the workspace
+// boundary is meant to hide.
+//
+// Filtering happens on the raw diff blocks *before* parseUnifiedDiff applies
+// MAX_DIFF_FILES/MAX_SECTION_PATCH_BYTES, so an out-of-workspace file never
+// crowds an in-workspace one out of those caps. Skipped entirely when no
+// workspace folder is open (nothing to contain to, and nothing meaningfully
+// "outside" without one).
+function parseContainedDiff(
+    diffText: string,
+    repo: GitRepository,
+): DiffSection {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) {
+        return parseUnifiedDiff(diffText);
+    }
+    const isInsideWorkspace = (relativePath: string) => {
+        const absolute = vscode.Uri.joinPath(repo.rootUri, relativePath);
+        return folders.some((folder) =>
+            isWithinRoot(absolute.fsPath, folder.uri.fsPath),
+        );
+    };
+    let filesOutsideWorkspace = 0;
+    const containedBlocks = splitDiffBlocks(diffText).filter((block) => {
+        const entry = parseDiffBlock(block);
+        if (!entry) {
+            // Leave blocks that fail to parse for parseUnifiedDiff to count
+            // as filesUnparsed rather than silently dropping them here too.
+            return true;
+        }
+        const inside =
+            isInsideWorkspace(entry.path) &&
+            (entry.oldPath === undefined || isInsideWorkspace(entry.oldPath));
+        if (!inside) {
+            filesOutsideWorkspace++;
+        }
+        return inside;
+    });
+    const section = parseUnifiedDiff(containedBlocks.join(""));
+    if (filesOutsideWorkspace === 0) {
+        return section;
+    }
+    return { ...section, filesOutsideWorkspace };
 }
 
 // Map the VS Code git API Status enum (numeric) to a readable name.
