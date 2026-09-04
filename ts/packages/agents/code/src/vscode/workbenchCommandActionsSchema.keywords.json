@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "schema": "code.code-workbench",
   "generatedBy": "llm",
-  "generatedAt": "2026-07-08T09:37:29.694Z",
-  "sourceHash": "+dVRLLm3/u9G1X4GL1PBki8JTEOlFEBeNqpOTZQo3K8=",
+  "generatedAt": "2026-09-04T21:47:59.558Z",
+  "sourceHash": "gr8T/xLRyyJ5HzjdEpeh4Gh3zn8E6CGvT4N4aUjiQbc=",
   "actions": {
     "workbenchOpenFile": [
       "file",
@@ -113,6 +113,27 @@
       "programming",
       "software",
       "coding"
+    ],
+    "runWorkspaceCommand": [
+      "workspace",
+      "command",
+      "test",
+      "build",
+      "lint",
+      "diagnostic",
+      "execute",
+      "output",
+      "terminal",
+      "timeout",
+      "directory"
+    ],
+    "cancelWorkspaceCommand": [
+      "cancel",
+      "stop",
+      "terminate",
+      "workspace",
+      "command",
+      "execution"
     ]
   }
 }

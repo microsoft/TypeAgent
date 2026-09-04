@@ -29,9 +29,9 @@
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "pretest": "pnpm run build",
-    "test-compile": "pnpm --dir ../agents/code exec tsc -p ../../coda/src",
+    "test-compile": "tsc -p src",
     "test:full": "vscode-test",
-    "test:local": "pnpm --dir ../agents/code exec tsc --target ES2022 --module Node16 --moduleResolution Node16 --esModuleInterop --strict --types node --outDir ../../coda/dist-test --rootDir ../../coda/src ../../coda/src/workspaceCommandRunner.ts ../../coda/src/workspaceCommandPolicy.ts ../../coda/src/test/workspaceCommandRunner.spec.ts ../../coda/src/test/workspaceCommandPolicy.spec.ts && node --test dist-test/test/workspaceCommandRunner.spec.js dist-test/test/workspaceCommandPolicy.spec.js",
+    "test:local": "tsc --target ES2022 --module Node16 --moduleResolution Node16 --esModuleInterop --strict --types node --outDir dist-test --rootDir src src/workspaceCommandRunner.ts src/workspaceCommandPolicy.ts src/test/workspaceCommandRunner.spec.ts src/test/workspaceCommandPolicy.spec.ts && node --test dist-test/test/workspaceCommandRunner.spec.js dist-test/test/workspaceCommandPolicy.spec.js",
     "vscode:prepublish": "pnpm run esbuild-base --minify",
     "watch": "tsc -w"
   },
@@ -68,6 +68,7 @@
     "@types/debug": "^4.1.12",
     "@types/express": "^4.17.17",
     "@types/mocha": "^10.0.6",
+    "@types/node": "^22.0.0",
     "@types/vscode": "^1.88.0",
     "@types/ws": "^8.5.10",
     "@vscode/test-cli": "^0.0.12",
@@ -76,7 +77,8 @@
     "esbuild": "^0.28.2",
     "mkdirp": "^3.0.1",
     "prettier": "^3.5.3",
-    "rimraf": "^6.0.1"
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
   },
   "engines": {
     "vscode": "^1.88.0"

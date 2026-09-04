@@ -9,6 +9,7 @@ export const MAX_OUTPUT_BYTES = 64 * 1024;
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000;
 export const MAX_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_PENDING_CANCELLATIONS = 64;
+const STOP_FALLBACK_MS = 5_000;
 
 export type WorkspaceCommandOutput = {
     text: string;
@@ -191,6 +192,9 @@ export class WorkspaceCommandRunner {
             : ["-c", options.command];
 
         return new Promise((resolve) => {
+            let settled = false;
+            let stopFallbackHandle: NodeJS.Timeout | undefined;
+            let timeoutHandle: NodeJS.Timeout;
             let child: ChildProcess;
             try {
                 child = spawn(shell, shellArgs, {
@@ -212,7 +216,14 @@ export class WorkspaceCommandRunner {
             }
 
             const finish = (exitCode: number | null) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
                 clearTimeout(timeoutHandle);
+                if (stopFallbackHandle !== undefined) {
+                    clearTimeout(stopFallbackHandle);
+                }
                 this.activeCommands.delete(executionId);
                 resolve({
                     success: exitCode === 0 && !timedOut && !cancelled,
@@ -247,8 +258,14 @@ export class WorkspaceCommandRunner {
                         }`,
                     );
                 });
+                stopFallbackHandle = setTimeout(() => {
+                    child.stdout?.destroy();
+                    child.stderr?.destroy();
+                    finish(child.exitCode);
+                }, STOP_FALLBACK_MS);
+                stopFallbackHandle.unref();
             };
-            const timeoutHandle = setTimeout(() => stop("timeout"), timeout);
+            timeoutHandle = setTimeout(() => stop("timeout"), timeout);
 
             this.activeCommands.set(executionId, {
                 child,

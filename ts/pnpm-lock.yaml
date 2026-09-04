@@ -4440,6 +4440,9 @@ importers:
       '@types/mocha':
         specifier: ^10.0.6
         version: 10.0.10
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.18
       '@types/vscode':
         specifier: ^1.88.0
         version: 1.100.0
@@ -4467,6 +4470,9 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
 
   packages/codeProcessor:
     dependencies:

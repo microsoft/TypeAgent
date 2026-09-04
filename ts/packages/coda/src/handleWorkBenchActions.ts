@@ -137,11 +137,27 @@ function resolveWorkspaceChildDirectory(
 
 async function verifyWorkspaceDirectory(
     cwd: string,
-): Promise<string | { error: string }> {
+    workspaceRoot: string,
+): Promise<{ cwd: string; workspaceRoot: string } | { error: string }> {
     try {
         if (!(await fs.stat(cwd)).isDirectory()) {
             return { error: `workingDirectory is not a directory: ${cwd}` };
         }
+        const [realCwd, realWorkspaceRoot] = await Promise.all([
+            fs.realpath(cwd),
+            fs.realpath(workspaceRoot),
+        ]);
+        const relativePath = path.relative(realWorkspaceRoot, realCwd);
+        if (
+            relativePath === ".." ||
+            relativePath.startsWith(`..${path.sep}`) ||
+            path.isAbsolute(relativePath)
+        ) {
+            return {
+                error: "workingDirectory must stay within the selected workspace root.",
+            };
+        }
+        return { cwd: realCwd, workspaceRoot: realWorkspaceRoot };
     } catch (error) {
         return {
             error: `workingDirectory does not exist: ${
@@ -149,12 +165,11 @@ async function verifyWorkspaceDirectory(
             }`,
         };
     }
-    return cwd;
 }
 
 async function resolveWorkspaceCommandDirectory(
     parameters: WorkspaceCommandParameters,
-): Promise<string | { error: string }> {
+): Promise<{ cwd: string; workspaceRoot: string } | { error: string }> {
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
         return { error: "No workspace or repository is currently open." };
@@ -182,7 +197,10 @@ async function resolveWorkspaceCommandDirectory(
             : undefined;
     const root = workspaceFolder.uri.fsPath;
     const cwd = resolveWorkspaceChildDirectory(root, workingDirectory);
-    return typeof cwd === "string" ? verifyWorkspaceDirectory(cwd) : cwd;
+    if (typeof cwd !== "string") {
+        return cwd;
+    }
+    return verifyWorkspaceDirectory(cwd, root);
 }
 
 export async function handleRunWorkspaceCommand(action: {
@@ -246,9 +264,9 @@ export async function handleRunWorkspaceCommand(action: {
             executionId,
         );
     }
-    const cwd = await resolveWorkspaceCommandDirectory(parameters);
-    if (typeof cwd !== "string") {
-        return workspaceCommandError(cwd.error, executionId);
+    const directory = await resolveWorkspaceCommandDirectory(parameters);
+    if ("error" in directory) {
+        return workspaceCommandError(directory.error, executionId);
     }
 
     if (declaredRiskLevel === "high") {
@@ -259,13 +277,15 @@ export async function handleRunWorkspaceCommand(action: {
     }
     const commandPolicyError = validateFocusedWorkspaceCommand(
         parameters.command,
+        directory.cwd,
+        directory.workspaceRoot,
     );
     if (commandPolicyError !== undefined) {
         return workspaceCommandError(commandPolicyError, executionId);
     }
     const result = await workspaceCommandRunner.run({
         command: parameters.command,
-        cwd,
+        cwd: directory.cwd,
         ...(parameters.timeoutMs === undefined
             ? {}
             : { timeoutMs: parameters.timeoutMs }),

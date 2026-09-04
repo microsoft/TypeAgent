@@ -16,6 +16,7 @@ export class CodeAgentWebSocketServer {
     private clientIdCounter = 0;
     private readonly stopHeartbeat: () => void;
     public onMessage?: (message: string, clientId: string) => void;
+    public onClientDisconnected?: (clientId: string) => void;
     /**
      * Fired after the {@link clients} map mutation completes for any
      * connect / disconnect, with the post-mutation total. Used by the
@@ -145,19 +146,22 @@ export class CodeAgentWebSocketServer {
 
             ws.on("close", () => {
                 debug("Client disconnected");
-                this.clients.delete(clientId);
-                this.controlClientIds.delete(clientId);
-                this.onClientCountChanged?.(this.getConnectedCount());
+                this.removeClient(clientId);
             });
 
             ws.on("error", (error) => {
                 debug("Client error:", error);
-                if (this.clients.delete(clientId)) {
-                    this.controlClientIds.delete(clientId);
-                    this.onClientCountChanged?.(this.getConnectedCount());
-                }
+                this.removeClient(clientId);
             });
         });
+    }
+
+    private removeClient(clientId: string): void {
+        if (this.clients.delete(clientId)) {
+            this.controlClientIds.delete(clientId);
+            this.onClientDisconnected?.(clientId);
+            this.onClientCountChanged?.(this.getConnectedCount());
+        }
     }
 
     public broadcast(message: string): number {
@@ -183,8 +187,7 @@ export class CodeAgentWebSocketServer {
 
         // Remove failed clients
         clientsToRemove.forEach((clientId) => {
-            this.clients.delete(clientId);
-            this.controlClientIds.delete(clientId);
+            this.removeClient(clientId);
         });
 
         return successCount;
@@ -220,9 +223,7 @@ export class CodeAgentWebSocketServer {
             return true;
         } catch (error) {
             debug("Failed to send to client:", error);
-            this.clients.delete(clientId);
-            this.controlClientIds.delete(clientId);
-            this.onClientCountChanged?.(this.getConnectedCount());
+            this.removeClient(clientId);
             return false;
         }
     }
@@ -282,10 +283,11 @@ export class CodeAgentWebSocketServer {
     public close(): Promise<void> {
         debug("Closing CodeAgentWebSocketServer");
         this.stopHeartbeat();
-        for (const [, client] of this.clients.entries()) {
+        for (const [clientId, client] of this.clients.entries()) {
             if (client.readyState === WebSocket.OPEN) {
                 client.close();
             }
+            this.onClientDisconnected?.(clientId);
         }
         this.clients.clear();
         this.controlClientIds.clear();
