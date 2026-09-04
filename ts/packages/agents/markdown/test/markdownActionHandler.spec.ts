@@ -18,6 +18,7 @@ type TestAgentContext = {
               filePath: string;
               workspaceRoot: string;
           };
+    viewProcess?: { send: (message: unknown) => void } | undefined;
     localHostPort: number;
 };
 
@@ -37,11 +38,15 @@ describe("markdown document creation", () => {
     function createContext(options?: {
         workingDirectory?: string | undefined;
         storage?: Storage | undefined;
+        viewProcess?: { send: (message: unknown) => void } | undefined;
     }): {
         context: ActionContext<TestAgentContext>;
         agentContext: TestAgentContext;
     } {
-        const agentContext = { localHostPort: 0 };
+        const agentContext = {
+            localHostPort: 0,
+            viewProcess: options?.viewProcess,
+        };
         const workingDirectory =
             options !== undefined && "workingDirectory" in options
                 ? options.workingDirectory
@@ -67,7 +72,14 @@ describe("markdown document creation", () => {
         for (const [key] of savedModelSettings) {
             delete process.env[key];
         }
-        const { context, agentContext } = createContext();
+        const viewMessages: unknown[] = [];
+        const { context, agentContext } = createContext({
+            viewProcess: {
+                send: (message) => {
+                    viewMessages.push(message);
+                },
+            },
+        });
 
         try {
             const result = await instantiate().executeAction!(
@@ -106,6 +118,8 @@ describe("markdown document creation", () => {
                 completion_tokens: 0,
                 total_tokens: 0,
             });
+            expect(result.activityContext?.openLocalView).toBe(false);
+            expect(viewMessages).toHaveLength(0);
         } finally {
             for (const [key, value] of savedModelSettings) {
                 process.env[key] = value;
@@ -152,7 +166,7 @@ describe("markdown document creation", () => {
                     },
                     context,
                 ),
-            ).rejects.toThrow(/escapes the working directory/);
+            ).rejects.toThrow(/not writable within the working directory/);
             expect(fs.existsSync(path.join(outside, "escape.md"))).toBe(false);
         } finally {
             fs.rmSync(outside, { recursive: true, force: true });
@@ -184,6 +198,9 @@ describe("markdown document creation", () => {
             },
             context,
         );
+        if (result === undefined || "error" in result) {
+            throw new Error("Expected successful document creation");
+        }
 
         expect(files.get("notes.md")).toBe("# Stored note");
         expect(agentContext).toMatchObject({
@@ -192,7 +209,56 @@ describe("markdown document creation", () => {
                 storageKey: "notes.md",
             },
         });
-        expect(result).toBeDefined();
+        expect(result.activityContext?.openLocalView).toBe(true);
+    });
+
+    test("opens an existing workspace document without opening the session-rooted view", async () => {
+        const documentPath = path.join(workspace, "notes.md");
+        fs.writeFileSync(documentPath, "# Existing");
+        const viewMessages: unknown[] = [];
+        const { context, agentContext } = createContext({
+            viewProcess: {
+                send: (message) => {
+                    viewMessages.push(message);
+                },
+            },
+        });
+
+        const result = await instantiate().executeAction!(
+            {
+                schemaName: "markdown",
+                actionName: "openDocument",
+                parameters: { name: "notes" },
+            },
+            context,
+        );
+        if (result === undefined || "error" in result) {
+            throw new Error("Expected successful document open");
+        }
+
+        expect(agentContext.currentDocument).toEqual({
+            source: "workspace",
+            filePath: fs.realpathSync(documentPath),
+            workspaceRoot: fs.realpathSync(workspace),
+        });
+        expect(result.activityContext?.openLocalView).toBe(false);
+        expect(viewMessages).toHaveLength(0);
+    });
+
+    test("does not create a missing document when opening it", async () => {
+        const { context } = createContext();
+
+        await expect(
+            instantiate().executeAction!(
+                {
+                    schemaName: "markdown",
+                    actionName: "openDocument",
+                    parameters: { name: "missing" },
+                },
+                context,
+            ),
+        ).rejects.toThrow(/does not exist within the working directory/);
+        expect(fs.existsSync(path.join(workspace, "missing.md"))).toBe(false);
     });
 
     test("requires a working directory or session storage", async () => {

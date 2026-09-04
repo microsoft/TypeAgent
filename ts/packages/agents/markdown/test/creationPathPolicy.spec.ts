@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import {
     normalizeRelativeDocumentPath,
+    resolveExistingFileWithinRoot,
     resolveRealDirectory,
     resolveWritableFileWithinRoot,
 } from "../src/agent/pathPolicy.js";
@@ -64,6 +65,24 @@ describe("markdown creation path policy", () => {
         fs.symlinkSync(path.join(sibling, "missing"), link, "junction");
 
         expect(resolveWritableFileWithinRoot(root, "dangling")).toBeUndefined();
+    });
+
+    test("resolves only existing files inside the root", () => {
+        const document = path.join(root, "existing.md");
+        fs.writeFileSync(document, "content");
+
+        expect(resolveExistingFileWithinRoot(root, "existing.md")).toBe(
+            fs.realpathSync(document),
+        );
+        expect(
+            resolveExistingFileWithinRoot(root, "missing.md"),
+        ).toBeUndefined();
+        expect(
+            resolveExistingFileWithinRoot(
+                root,
+                path.join("..", "Documents-backup", "outside.md"),
+            ),
+        ).toBeUndefined();
     });
 
     test("normalizes relative document paths and rejects unsafe inputs", () => {

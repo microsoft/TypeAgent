@@ -79,6 +79,29 @@ export function resolveRealDirectory(absolutePath: string): string | undefined {
     }
 }
 
+export function resolveExistingFileWithinRoot(
+    root: string,
+    requestedPath: string,
+): string | undefined {
+    const rootPaths = resolveRootPaths(root);
+    const candidate = path.resolve(rootPaths.resolvedRoot, requestedPath);
+    if (!isPathWithinRoot(rootPaths.resolvedRoot, candidate)) {
+        return undefined;
+    }
+    try {
+        const canonicalFile = fs.realpathSync(candidate);
+        return isPathWithinRoot(rootPaths.canonicalRoot, canonicalFile) &&
+            fs.statSync(canonicalFile).isFile()
+            ? canonicalFile
+            : undefined;
+    } catch (error) {
+        if (isFileNotFoundError(error)) {
+            return undefined;
+        }
+        throw error;
+    }
+}
+
 function ensureDirectoryWithinRoot(
     root: RootPaths,
     relativeDirectory: string,
