@@ -1,16 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { ActionContext } from "@typeagent/agent-sdk";
+import type { ActionContext, Storage } from "@typeagent/agent-sdk";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { instantiate } from "../src/agent/markdownActionHandler.js";
 
 type TestAgentContext = {
-    currentFileName?: string;
-    currentFilePath?: string;
-    currentWorkspaceRoot?: string;
+    currentDocument?:
+        | {
+              source: "session";
+              storageKey: string;
+          }
+        | {
+              source: "workspace";
+              filePath: string;
+              workspaceRoot: string;
+          };
     localHostPort: number;
 };
 
@@ -27,16 +34,23 @@ describe("markdown document creation", () => {
         fs.rmSync(workspace, { recursive: true, force: true });
     });
 
-    function createContext(): {
+    function createContext(options?: {
+        workingDirectory?: string | undefined;
+        storage?: Storage | undefined;
+    }): {
         context: ActionContext<TestAgentContext>;
         agentContext: TestAgentContext;
     } {
         const agentContext = { localHostPort: 0 };
+        const workingDirectory =
+            options !== undefined && "workingDirectory" in options
+                ? options.workingDirectory
+                : workspace;
         const context = {
-            workingDirectory: workspace,
+            workingDirectory,
             sessionContext: {
                 agentContext,
-                sessionStorage: undefined,
+                sessionStorage: options?.storage,
             },
         } as unknown as ActionContext<TestAgentContext>;
         return { context, agentContext };
@@ -81,9 +95,11 @@ describe("markdown document creation", () => {
                 "# Plan\n\nInitial content.",
             );
             expect(agentContext).toMatchObject({
-                currentFileName: "notes/nested/plan.md",
-                currentFilePath: expectedPath,
-                currentWorkspaceRoot: fs.realpathSync(workspace),
+                currentDocument: {
+                    source: "workspace",
+                    filePath: expectedPath,
+                    workspaceRoot: fs.realpathSync(workspace),
+                },
             });
             expect(result.tokenUsage).toEqual({
                 prompt_tokens: 0,
@@ -136,18 +152,51 @@ describe("markdown document creation", () => {
                     },
                     context,
                 ),
-            ).rejects.toThrow(/escapes workingDirectory/);
+            ).rejects.toThrow(/escapes the working directory/);
             expect(fs.existsSync(path.join(outside, "escape.md"))).toBe(false);
         } finally {
             fs.rmSync(outside, { recursive: true, force: true });
         }
     });
 
-    test("requires a host-authorized working directory", async () => {
-        const { context } = createContext();
-        Object.defineProperty(context, "workingDirectory", {
-            value: undefined,
+    test("falls back to session storage without a working directory", async () => {
+        const files = new Map<string, string>();
+        const storage = {
+            exists: async (name: string) => files.has(name),
+            read: async (name: string) => files.get(name) ?? "",
+            write: async (name: string, content: string) => {
+                files.set(name, content);
+            },
+        } as unknown as Storage;
+        const { context, agentContext } = createContext({
+            workingDirectory: undefined,
+            storage,
         });
+
+        const result = await instantiate().executeAction!(
+            {
+                schemaName: "markdown",
+                actionName: "createDocument",
+                parameters: {
+                    name: "notes",
+                    content: "# Stored note",
+                },
+            },
+            context,
+        );
+
+        expect(files.get("notes.md")).toBe("# Stored note");
+        expect(agentContext).toMatchObject({
+            currentDocument: {
+                source: "session",
+                storageKey: "notes.md",
+            },
+        });
+        expect(result).toBeDefined();
+    });
+
+    test("requires a working directory or session storage", async () => {
+        const { context } = createContext({ workingDirectory: undefined });
 
         await expect(
             instantiate().executeAction!(
@@ -158,6 +207,6 @@ describe("markdown document creation", () => {
                 },
                 context,
             ),
-        ).rejects.toThrow(/host-authorized working directory/);
+        ).rejects.toThrow(/working directory or session storage/);
     });
 });
