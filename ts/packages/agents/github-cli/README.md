@@ -11,18 +11,19 @@ The agent runs a `gh auth status` readiness probe at startup and pre-flights it 
 
 ## Supported Actions
 
-| Category          | Actions                                                                                               |
-| ----------------- | ----------------------------------------------------------------------------------------------------- |
-| **Auth**          | Login, logout, check status                                                                           |
-| **Issues**        | Create, close, reopen, list, view, browse                                                             |
-| **Pull Requests** | Create (including draft), close, merge, list, view, checkout, browse                                  |
-| **Repos**         | Create, clone, delete, view (with field-specific queries like stars/forks), fork, star/unstar, browse |
-| **Search**        | Search repositories by keyword                                                                        |
-| **Status**        | Dashboard summary of notifications, PRs, and issues                                                   |
-| **Contributors**  | Top N contributors for a repo                                                                         |
-| **Dependabot**    | List alerts with severity/state filters                                                               |
-| **Workflows**     | View workflow runs and workflow details                                                               |
-| **Other**         | Codespaces, gists, releases, projects, labels, secrets, SSH keys, config, orgs                        |
+| Category           | Actions                                                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| **Auth**           | Login, logout, check status                                                                                       |
+| **Issues**         | Create, close, reopen, list, view, browse                                                                         |
+| **Pull Requests**  | Create (including draft), close, merge, list, view, checkout, browse                                              |
+| **PR diagnostics** | List a PR's changed files (optionally with diff excerpts); explain failing checks with GitHub's error annotations |
+| **Repos**          | Create, clone, delete, view (with field-specific queries like stars/forks), fork, star/unstar, browse             |
+| **Search**         | Search repositories by keyword                                                                                    |
+| **Status**         | Dashboard summary of notifications, PRs, and issues                                                               |
+| **Contributors**   | Top N contributors for a repo                                                                                     |
+| **Dependabot**     | List alerts with severity/state filters                                                                           |
+| **Workflows**      | View workflow runs and workflow details                                                                           |
+| **Other**          | Codespaces, gists, releases, projects, labels, secrets, SSH keys, config, orgs                                    |
 
 ## Example Phrases
 
@@ -33,6 +34,10 @@ how many stars does microsoft/TypeAgent have
 show top 10 contributors for microsoft/TypeAgent
 create issue "Fix login bug" in microsoft/TypeAgent
 close issue 42 in microsoft/TypeAgent
+show files changed in PR 2196
+show the diff for PR 2196
+why is CI failing on PR 2196
+why is https://github.com/cli/cli/pull/9000 failing
 open a draft PR for my-feature branch
 show newest 5 dependabot alerts in microsoft/TypeAgent
 fork microsoft/TypeAgent
@@ -46,6 +51,8 @@ star microsoft/TypeAgent
 - Status output uses **bold section headers** for readability
 - Dependabot alerts are color-coded by severity (🔴 critical, 🟠 high, 🟡 medium, 🟢 low)
 - Mutation actions (create, close, star, fork) return friendly emoji confirmation messages
+- `prFiles` and `prFailedChecks` return typed structured data (`rawData`) alongside their display, and state explicitly when output was truncated, so an external MCP client can act on the result directly
+- `prFiles` and `prFailedChecks` accept a pull request's web link in place of an `OWNER/REPO` slug, so a PR in another repository (or on a GitHub Enterprise host) can be diagnosed without leaving the current checkout
 
 ## Demo
 
