@@ -33,6 +33,7 @@ test("rejects path arguments outside the workspace root", () => {
         "pytest -c../../../outside.ini",
         "tsc -p../../..",
         "pytest ../../../outside=test.py",
+        "msbuild /p:OutputPath=../../../outside",
         `tsc --project "${path.resolve(
             workspaceRoot,
             "..",
@@ -68,6 +69,22 @@ test("allows path arguments that remain inside the workspace root", () => {
         ),
         undefined,
     );
+});
+
+test("allows Windows-style slash-prefixed switches", () => {
+    for (const command of [
+        "msbuild /t:Build",
+        "dotnet build /p:Configuration=Release",
+    ]) {
+        assert.equal(
+            validateFocusedWorkspaceCommand(
+                command,
+                workspaceCwd,
+                workspaceRoot,
+            ),
+            undefined,
+        );
+    }
 });
 
 test("rejects a bare symlink argument that resolves outside the workspace", () => {

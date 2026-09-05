@@ -99,10 +99,22 @@ function validatePathArguments(
     const realRoot = fs.realpathSync.native(resolvedRoot);
     for (const token of tokens.slice(1)) {
         const equalsIndex = token.indexOf("=");
-        let value =
-            token.startsWith("-") && equalsIndex > 1
-                ? token.slice(equalsIndex + 1)
-                : token;
+        const windowsOption = /^\/[A-Za-z][A-Za-z0-9_-]*(?::|=)(.*)$/.exec(
+            token,
+        );
+        const windowsOptionValue = windowsOption?.[1];
+        const windowsOptionEqualsIndex = windowsOptionValue?.indexOf("=") ?? -1;
+        let value = windowsOptionValue ?? token;
+        if (windowsOptionEqualsIndex >= 0) {
+            value = value.slice(windowsOptionEqualsIndex + 1);
+        }
+        if (
+            windowsOption === null &&
+            token.startsWith("-") &&
+            equalsIndex > 1
+        ) {
+            value = token.slice(equalsIndex + 1);
+        }
         if (equalsIndex < 0) {
             const attachedShortOption = /^-[A-Za-z](.+)$/.exec(token);
             if (attachedShortOption !== null) {
