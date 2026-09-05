@@ -93,9 +93,11 @@ export function hasClass(element: HTMLElement, className: string): boolean {
  * This ensures we get accurate markdown formatting and position information
  */
 export async function getMarkdownFromEditor(editor: Editor): Promise<string> {
-    if (!editor) return "";
+    if (!editor) {
+        throw new Error("Cannot serialize Markdown without an editor");
+    }
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         try {
             editor.action((ctx) => {
                 const view = ctx.get(editorViewCtx);
@@ -104,12 +106,11 @@ export async function getMarkdownFromEditor(editor: Editor): Promise<string> {
                 resolve(markdown);
             });
         } catch (error) {
-            console.warn("Failed to serialize markdown from editor:", error);
-            // Fallback to text content if serializer fails
-            editor.action((ctx) => {
-                const view = ctx.get(editorViewCtx);
-                resolve(view.state.doc.textContent || "");
-            });
+            reject(
+                error instanceof Error
+                    ? error
+                    : new Error("Failed to serialize Markdown"),
+            );
         }
     });
 }

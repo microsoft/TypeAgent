@@ -3,6 +3,7 @@
 
 import { DocumentManager } from "../core/document-manager";
 import { getElementById } from "../utils";
+import { encodeDocumentPathForUrl } from "../../route/urlPath.js";
 //import { editorViewCtx } from "@milkdown/core";
 
 export class ToolbarManager {
@@ -169,17 +170,19 @@ export class ToolbarManager {
             }
 
             const docInfo = await response.json();
-            const documentName = docInfo.currentDocument || "live";
+            const documentPath =
+                docInfo.boundRelativePath || docInfo.currentDocument || "live";
 
             // Create shareable URL
             const baseUrl = window.location.origin;
-            const shareUrl = `${baseUrl}/document/${documentName}`;
+            const encodedPath = encodeDocumentPathForUrl(documentPath);
+            const shareUrl = `${baseUrl}/document/${encodedPath}`;
 
             // Copy to clipboard
             await navigator.clipboard.writeText(shareUrl);
 
             this.showNotification(
-                `🔗 Link copied: /document/${documentName}`,
+                `🔗 Link copied: /document/${encodedPath}`,
                 "success",
             );
         } catch (error) {
@@ -189,8 +192,11 @@ export class ToolbarManager {
             try {
                 const response = await fetch("/api/current-document");
                 const docInfo = await response.json();
-                const documentName = docInfo.currentDocument || "live";
-                const shareUrl = `${window.location.origin}/document/${documentName}`;
+                const documentPath =
+                    docInfo.boundRelativePath ||
+                    docInfo.currentDocument ||
+                    "live";
+                const shareUrl = `${window.location.origin}/document/${encodeDocumentPathForUrl(documentPath)}`;
 
                 // Show URL in prompt as fallback
                 prompt("Copy this shareable URL:", shareUrl);

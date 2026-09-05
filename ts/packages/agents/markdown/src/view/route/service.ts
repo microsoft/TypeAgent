@@ -451,6 +451,23 @@ function broadcastEvent(event: Record<string, unknown>): void {
     }
 }
 
+function getBoundRevision(): string | null {
+    if (!filePath || !boundRelativePath) {
+        return null;
+    }
+    try {
+        return readBoundDocument({
+            token: bindingToken ?? undefined,
+            root: currentRoot,
+            relativePath: boundRelativePath,
+            filePath,
+        }).revision;
+    } catch (error) {
+        debug(`Unable to read current binding revision: ${error}`);
+        return null;
+    }
+}
+
 function notifyBindingToParent(): void {
     process.send?.({
         type: "bindingUpdated",
@@ -1598,19 +1615,8 @@ app.get("/events", (req: Request, res: Response) => {
     res.flushHeaders();
 
     clients.push(res);
-    let revision: string | null = null;
-    if (filePath && boundRelativePath) {
-        try {
-            revision = readBoundDocument({
-                token: bindingToken ?? undefined,
-                root: currentRoot,
-                relativePath: boundRelativePath,
-                filePath,
-            }).revision;
-        } catch (error) {
-            debug(`Unable to read binding bootstrap revision: ${error}`);
-        }
-    }
+    const clientRole = clients.length === 1 ? "primary" : "secondary";
+    const revision = getBoundRevision();
     res.write(
         `data: ${JSON.stringify({
             type: "bindingBootstrap",
@@ -1619,12 +1625,25 @@ app.get("/events", (req: Request, res: Response) => {
             documentName: filePath ? path.basename(filePath, ".md") : null,
             boundRelativePath,
             revision,
+            clientRole,
             timestamp: Date.now(),
         })}\n\n`,
     );
 
     req.on("close", () => {
+        const wasPrimary = clients[0] === res;
         clients = clients.filter((client) => client !== res);
+        if (wasPrimary && clients[0]) {
+            safeWriteToResponse(
+                clients[0],
+                `data: ${JSON.stringify({
+                    type: "primaryElected",
+                    bindingToken,
+                    revision: getBoundRevision(),
+                    timestamp: Date.now(),
+                })}\n\n`,
+            );
+        }
     });
 });
 

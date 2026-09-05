@@ -18,6 +18,7 @@ import { UIManager } from "./ui/ui-manager";
 
 // Import utilities
 import { getRequiredElement, eventHandlers } from "./utils";
+import { parseDocumentPathFromUrl } from "../route/urlPath.js";
 
 // Global state for the application
 let editorManager: EditorManager | null = null;
@@ -35,10 +36,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 async function initializeApplication(): Promise<void> {
-    // Check if we have a document name in the URL
-    const urlPath = window.location.pathname;
-    const documentNameMatch = urlPath.match(/\/document\/([^\/]+)/);
-    const documentName = documentNameMatch ? documentNameMatch[1] : null;
+    // Parse the target document path from the URL. Nested paths
+    // (`/document/team/2025/plan`) and per-segment percent-encoded
+    // spaces (`/document/my%20notes`) round-trip end-to-end; the
+    // service also matches on the full path so no dirname/basename
+    // reduction happens on either side.
+    const documentPath = parseDocumentPathFromUrl(window.location.pathname);
 
     // Initialize managers
     editorManager = new EditorManager();
@@ -54,9 +57,13 @@ async function initializeApplication(): Promise<void> {
     // Connect DocumentManager to UI components
     uiManager.setDocumentManager(documentManager);
 
-    // If we have a document name in URL, switch to that document
-    if (documentName) {
-        await switchToDocument(documentName);
+    // If the URL asked for a specific document, ask the DocumentManager
+    // to align to it. The DocumentManager compares against the binding
+    // the service just bootstrapped over SSE, so a redundant switch
+    // (URL already matches the bound file) becomes a no-op instead of
+    // creating a stray file or rotating the trusted binding token.
+    if (documentPath) {
+        await switchToDocument(documentPath);
     }
 
     // Get required DOM elements
@@ -81,31 +88,30 @@ async function initializeApplication(): Promise<void> {
     console.log("[APP] Application initialized successfully");
 }
 
-async function switchToDocument(documentName: string): Promise<void> {
+async function switchToDocument(documentPath: string): Promise<void> {
     try {
         if (documentManager) {
-            await documentManager.switchToDocument(documentName);
+            await documentManager.switchToDocument(documentPath);
             console.log(
-                `[APP] Successfully switched to document: ${documentName}`,
+                `[APP] Successfully switched to document: ${documentPath}`,
             );
         } else {
             throw new Error("DocumentManager not initialized");
         }
     } catch (error) {
         console.error("[APP] Failed to switch document:", error);
-        showError(`Failed to load document: ${documentName}`);
+        showError(`Failed to load document: ${documentPath}`);
     }
 }
 
 function setupBrowserHistoryHandling(): void {
-    // Handle browser back/forward navigation
-    window.addEventListener("popstate", async (event) => {
-        const urlPath = window.location.pathname;
-        const documentNameMatch = urlPath.match(/\/document\/([^\/]+)/);
-        const documentName = documentNameMatch ? documentNameMatch[1] : null;
-
-        if (documentName && event.state?.documentName !== documentName) {
-            await switchToDocument(documentName);
+    // Handle browser back/forward navigation. Reuse the same nested
+    // URL parser as initial load so `/document/team/2025/plan` and
+    // percent-encoded segments navigate correctly.
+    window.addEventListener("popstate", async () => {
+        const target = parseDocumentPathFromUrl(window.location.pathname);
+        if (target) {
+            await switchToDocument(target);
         }
     });
 }
