@@ -44,6 +44,13 @@ export class CollaborationManager {
             `Using existing Y.js document: ${documentId} ${filePath ? `(${filePath})` : "(memory-only)"}`,
         );
     }
+
+    forgetDocument(documentId: string): void {
+        this.documents.delete(documentId);
+        this.documentPaths.delete(documentId);
+        debug(`Forgot document: ${documentId}`);
+    }
+
     getStats(): any {
         return {
             documents: this.documents.size,
