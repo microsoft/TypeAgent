@@ -270,6 +270,65 @@
     }
 };
 
+<PrFiles> = show files changed in PR $(number:number) -> {
+    actionName: "prFiles",
+    parameters: {
+        number
+    }
+}
+  | what files does PR $(number:number) (change | touch | edit | modify) -> {
+    actionName: "prFiles",
+    parameters: {
+        number
+    }
+}
+  | show what's changed in PR $(number:number) -> {
+    actionName: "prFiles",
+    parameters: {
+        number
+    }
+}
+  | show files changed in PR $(number:number) in $(repo:wildcard) -> {
+    actionName: "prFiles",
+    parameters: {
+        number,
+        repo
+    }
+}
+  | show the diff for PR $(number:number) -> {
+    actionName: "prFiles",
+    parameters: {
+        number,
+        includePatch: true
+    }
+};
+
+<PrFailedChecks> = show failing checks for PR $(number:number) -> {
+    actionName: "prFailedChecks",
+    parameters: {
+        number
+    }
+}
+  | why is (the)? CI failing on PR $(number:number) -> {
+    actionName: "prFailedChecks",
+    parameters: {
+        number
+    }
+}
+  | why is (the)? pipeline failing on PR $(number:number) -> {
+    actionName: "prFailedChecks",
+    parameters: {
+        number
+    }
+}
+  | show failing checks for PR $(number:number) in $(repo:wildcard) -> {
+    actionName: "prFailedChecks",
+    parameters: {
+        number,
+        repo
+    }
+};
+
 <RepoCreate> = create a new repository named $(name:wildcard) -> {
     actionName: "repoCreate",
     parameters: {
@@ -519,6 +578,8 @@ import { GithubCliActions } from "./github-cliSchema.ts";
   | <PrView>
   | <PrCheckout>
   | <PrChecks>
+  | <PrFiles>
+  | <PrFailedChecks>
   | <RepoCreate>
   | <RepoClone>
   | <RepoView>

@@ -4,13 +4,15 @@
 import { createReadStream, promises as fs } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { isIP } from "node:net";
-import { lookup } from "node:dns/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+    createPinnedLookup,
+    resolvePublicIpAddress,
+} from "@typeagent/common-utils/network";
 import { convert } from "html-to-text";
 import { z } from "zod";
 import { getMode } from "../shared/plugin-config.js";
@@ -508,98 +510,6 @@ export async function grepWorkspace(args: {
     return { matches, truncated };
 }
 
-const nonPublicIpv4Ranges: readonly (readonly [number, number])[] = [
-    [0x00000000, 0x00ffffff],
-    [0x0a000000, 0x0affffff],
-    [0x64400000, 0x647fffff],
-    [0x7f000000, 0x7fffffff],
-    [0xa9fe0000, 0xa9feffff],
-    [0xac100000, 0xac1fffff],
-    [0xc0000000, 0xc00000ff],
-    [0xc0000200, 0xc00002ff],
-    [0xc0a80000, 0xc0a8ffff],
-    [0xc6120000, 0xc613ffff],
-    [0xc6336400, 0xc63364ff],
-    [0xcb007100, 0xcb0071ff],
-    [0xe0000000, 0xffffffff],
-];
-
-function parseIpv4(address: string): number | undefined {
-    const parts = address.split(".").map(Number);
-    if (
-        parts.length !== 4 ||
-        parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
-    ) {
-        return undefined;
-    }
-    return (
-        parts[0] * 0x1000000 + parts[1] * 0x10000 + parts[2] * 0x100 + parts[3]
-    );
-}
-
-function isPublicIpv4(address: string): boolean {
-    const value = parseIpv4(address);
-    return (
-        value !== undefined &&
-        !nonPublicIpv4Ranges.some(
-            ([start, end]) => value >= start && value <= end,
-        )
-    );
-}
-
-function isPublicIp(address: string): boolean {
-    const family = isIP(address);
-    if (family === 4) {
-        return isPublicIpv4(address);
-    }
-    if (family !== 6) {
-        return false;
-    }
-    const normalized = address.toLowerCase();
-    if (normalized.startsWith("::ffff:")) {
-        return isPublicIpv4(normalized.slice("::ffff:".length));
-    }
-    if (
-        normalized.startsWith("2001:db8:") ||
-        normalized.startsWith("2001:0db8:")
-    ) {
-        return false;
-    }
-    return normalized.startsWith("2") || normalized.startsWith("3");
-}
-
-async function resolvePublicAddress(
-    hostname: string,
-): Promise<{ address: string; family: 4 | 6 }> {
-    const normalized = hostname.toLowerCase();
-    if (normalized === "localhost" || normalized.endsWith(".local")) {
-        throw new Error(`Private network target is not allowed: ${hostname}`);
-    }
-
-    const family = isIP(hostname);
-    if (family !== 0) {
-        if (!isPublicIp(hostname)) {
-            throw new Error(
-                `Private network target is not allowed: ${hostname}`,
-            );
-        }
-        return { address: hostname, family: family as 4 | 6 };
-    }
-
-    const addresses = await lookup(hostname, { all: true, verbatim: true });
-    const publicAddress = addresses.find((entry) => isPublicIp(entry.address));
-    if (
-        !publicAddress ||
-        addresses.some((entry) => !isPublicIp(entry.address))
-    ) {
-        throw new Error(`Private network target is not allowed: ${hostname}`);
-    }
-    return {
-        address: publicAddress.address,
-        family: publicAddress.family as 4 | 6,
-    };
-}
-
 async function fetchOnce(
     url: URL,
     maxBytes: number,
@@ -608,7 +518,7 @@ async function fetchOnce(
     headers: Record<string, string | string[] | undefined>;
     body: Buffer;
 }> {
-    const resolved = await resolvePublicAddress(url.hostname);
+    const resolved = await resolvePublicIpAddress(url.hostname);
     const request = url.protocol === "https:" ? httpsRequest : httpRequest;
 
     return new Promise((resolve, reject) => {
@@ -620,9 +530,7 @@ async function fetchOnce(
                     "accept-encoding": "identity",
                     "user-agent": "TypeAgent-Workspace-Tools/1.0",
                 },
-                lookup: (_hostname, _options, callback) => {
-                    callback(null, resolved.address, resolved.family);
-                },
+                ...createPinnedLookup(resolved),
                 timeout: FETCH_TIMEOUT_MS,
             },
             (response) => {

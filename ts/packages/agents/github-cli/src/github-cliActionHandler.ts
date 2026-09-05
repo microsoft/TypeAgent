@@ -42,6 +42,8 @@ import {
     completeMergeConflictResolution,
     mergeAndCommit,
 } from "./mergeConflict.js";
+import { buildTableBlock } from "./structuredResults.js";
+import { GhResult, runPrFailedChecks, runPrFiles } from "./prDiagnostics.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -365,6 +367,42 @@ async function runGh(args: string[], timeoutMs = 30_000): Promise<string> {
         windowsHide: true,
     });
     return stdout.trim();
+}
+
+// Run a gh CLI command and return its full result, including a non-zero exit
+// code, instead of throwing. Some gh commands report status through the exit
+// code while still writing the JSON we asked for (`gh pr checks` exits
+// non-zero when checks fail), and some failures should degrade a section of a
+// result rather than fail the whole action. `exitCode` is -1 when gh never ran
+// at all — a missing binary or a timeout.
+//
+// The buffer is larger than `runGh`'s because GitHub returns patches before we
+// can truncate them. Eight MiB accommodates large PR responses while still
+// bounding memory if a generated file contains an unusually large patch.
+async function runGhCapture(
+    args: string[],
+    timeoutMs = 60_000,
+): Promise<GhResult> {
+    try {
+        const { stdout, stderr } = await execFileAsync("gh", args, {
+            timeout: timeoutMs,
+            maxBuffer: 8 * 1024 * 1024,
+            windowsHide: true,
+        });
+        return { stdout, stderr, exitCode: 0 };
+    } catch (e) {
+        const err = e as {
+            stdout?: string;
+            stderr?: string;
+            code?: unknown;
+            message?: string;
+        };
+        return {
+            stdout: err.stdout ?? "",
+            stderr: err.stderr || err.message || "gh failed to run",
+            exitCode: typeof err.code === "number" ? err.code : -1,
+        };
+    }
 }
 
 // Sentinel values that mean "no assignee". `gh issue list --assignee <x>`
@@ -1269,13 +1307,9 @@ function makeStructuredTable<T>(
         pageSize?: number;
     },
 ): ActionResultSuccess {
-    const columns = colSpecs.map(({ value: _v, ...col }) => col);
-    const rows: TableCell[][] = objects.map((obj) =>
-        colSpecs.map((col) => col.value(obj)),
-    );
     // Cap long lists to a first page (client reveals the rest via "Show
     // more") unless the caller overrode it. All rows still ship.
-    const table: TableBlock = createTable(columns, rows, {
+    const table: TableBlock = buildTableBlock(colSpecs, objects, {
         pageSize: 15,
         ...tableOptions,
     });
@@ -1986,11 +2020,18 @@ export function buildMergeResult(result: MergeConflictResult): ActionResult {
                         `Resolve the current Git merge conflicts in the repository at ${result.repositoryRoot}. ` +
                         `Treat every path below as relative to that root, and run every Git command with that exact repository as its working directory:\n${files}\n\n` +
                         "Inspect both sides and preserve the intent of each change. Edit and stage only these conflicted paths. Do not edit unrelated files, abort the merge, commit, or push. " +
-                        "Stage each resolved path with git add or git rm. When all conflicts are resolved and staged, execute the " +
-                        `\`github-cli.completeMergeConflictResolution\` action with \`{\"repositoryRoot\":${JSON.stringify(result.repositoryRoot)}}\`; it will verify and create the merge commit.`,
+                        "Use your native file and terminal tools directly; do not delegate this task to another agent or an editor extension. " +
+                        "Stage each resolved path with git add or git rm, then return. " +
+                        "The dispatcher will run the completion action next to verify the staged resolution and create the merge commit. " +
+                        "Do not invoke the completion action yourself or claim a merge commit was created.",
                     reason: "The merge produced file conflicts that require semantic resolution.",
                     workingDirectory: result.repositoryRoot,
                 },
+            },
+            {
+                schemaName: "github-cli",
+                actionName: "completeMergeConflictResolution",
+                parameters: { repositoryRoot: result.repositoryRoot },
             },
         ];
     }
@@ -2036,6 +2077,16 @@ async function executeAction(
     }
 
     action = validated.action;
+
+    // Multi-call read-only diagnostics. These compose several gh invocations
+    // into one structured result, so they run ahead of the single-command
+    // buildArgs/runGh path below.
+    if (action.actionName === "prFiles") {
+        return runPrFiles(action.parameters, runGhCapture);
+    }
+    if (action.actionName === "prFailedChecks") {
+        return runPrFailedChecks(action.parameters, runGhCapture);
+    }
 
     const args = buildArgs(action);
     if (!args) {
