@@ -7,6 +7,7 @@ import * as fs from "fs";
 import * as vscode from "vscode";
 import { initializeWS } from "./wsConnect";
 import { initializeAliasManager } from "./commandAliasMgr";
+import { cancelWorkspaceCommands } from "./handleWorkBenchActions";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -46,4 +47,6 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() {
+    cancelWorkspaceCommands();
+}
