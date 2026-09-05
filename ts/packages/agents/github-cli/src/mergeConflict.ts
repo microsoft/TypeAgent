@@ -18,6 +18,7 @@ export type GitCommandResult = {
 export type GitCommandRunner = (
     args: readonly string[],
     cwd?: string,
+    signal?: AbortSignal,
 ) => Promise<GitCommandResult>;
 
 export type MergeTarget = {
@@ -74,6 +75,7 @@ export type MergeConflictResult =
 
 export type MergeOptions = {
     cwd?: string;
+    signal?: AbortSignal | undefined;
     runGit?: GitCommandRunner;
     pathExists?: (filePath: string) => boolean;
     readFile?: (filePath: string) => string;
@@ -81,9 +83,46 @@ export type MergeOptions = {
     removeFile?: (filePath: string) => void;
 };
 
+// Bind the actual post-merge index paths to this merge, including edits
+// Git automatically applied through renames.
+type ResolutionState = {
+    version: 1;
+    head: string;
+    mergeHead: string;
+    conflicts: string[];
+    stagedPaths: string[];
+};
+
+function abortError(message = "The operation was aborted."): Error {
+    return new DOMException(message, "AbortError");
+}
+
+function isAbortError(error: unknown): boolean {
+    return (
+        error instanceof Error &&
+        (error.name === "AbortError" ||
+            ("code" in error && error.code === "ABORT_ERR"))
+    );
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+    if (signal?.aborted) {
+        throw abortError();
+    }
+}
+
+function cancellableGit(options: MergeOptions): GitCommandRunner {
+    const runGit = options.runGit ?? runGitCommand;
+    return (args, cwd) => {
+        throwIfAborted(options.signal);
+        return runGit(args, cwd, options.signal);
+    };
+}
+
 export async function runGitCommand(
     args: readonly string[],
     cwd = process.cwd(),
+    signal?: AbortSignal,
 ): Promise<GitCommandResult> {
     try {
         const { stdout, stderr } = await execFileAsync("git", [...args], {
@@ -92,9 +131,14 @@ export async function runGitCommand(
             maxBuffer: 4 * 1024 * 1024,
             timeout: 10 * 60_000,
             windowsHide: true,
+            signal,
         });
         return { exitCode: 0, stdout, stderr };
     } catch (error) {
+        // Let the dispatcher distinguish cancellation from a failed Git command.
+        if (isAbortError(error) || signal?.aborted) {
+            throw abortError();
+        }
         const failure = error as Error & {
             code?: number;
             stdout?: string;
@@ -304,15 +348,18 @@ async function listConflicts(
     return result.exitCode === 0 ? nullSeparated(result.stdout) : [];
 }
 
-async function hasMergeHead(
+async function getMergeParents(
     repositoryRoot: string,
     runGit: GitCommandRunner,
-): Promise<boolean> {
+): Promise<{ head: string; mergeHead: string } | undefined> {
     const result = await runGit(
-        ["rev-parse", "--verify", "MERGE_HEAD"],
+        ["rev-parse", "HEAD", "MERGE_HEAD"],
         repositoryRoot,
     );
-    return result.exitCode === 0;
+    const [head, mergeHead] = lines(result.stdout);
+    return result.exitCode === 0 && head && mergeHead
+        ? { head, mergeHead }
+        : undefined;
 }
 
 async function getResolutionStatePath(
@@ -357,12 +404,30 @@ async function listChangedPaths(
     return result.exitCode === 0 ? nullSeparated(result.stdout) : undefined;
 }
 
+async function deleteTemporaryRef(
+    repositoryRoot: string,
+    runGit: GitCommandRunner,
+    ref: string,
+): Promise<void> {
+    // Cleanup must run even after cancellation, without masking its AbortError.
+    try {
+        const result = await runGit(["update-ref", "-d", ref], repositoryRoot);
+        if (result.exitCode !== 0) {
+            throw new Error(result.stderr || "git update-ref failed");
+        }
+    } catch (error) {
+        console.warn(
+            `Could not remove temporary merge ref ${ref} in ${repositoryRoot}: ${String(error)}`,
+        );
+    }
+}
+
 export async function mergeAndCommit(
     targetBranch?: string,
     options: MergeOptions = {},
 ): Promise<MergeConflictResult> {
     const cwd = options.cwd ?? process.cwd();
-    const runGit = options.runGit ?? runGitCommand;
+    const runGit = cancellableGit(options);
     const pathExists = options.pathExists ?? fs.existsSync;
     const writeFile =
         options.writeFile ??
@@ -370,6 +435,7 @@ export async function mergeAndCommit(
     const removeFile =
         options.removeFile ??
         ((filePath) => fs.rmSync(filePath, { force: true }));
+
     const repository = await getRepository(cwd, runGit);
     if ("status" in repository) {
         return repository;
@@ -404,103 +470,161 @@ export async function mergeAndCommit(
         return target;
     }
     const temporaryRef = `refs/typeagent/merge/${randomUUID()}`;
-    const fetch = await runGit(
-        [
-            "fetch",
-            "--no-tags",
-            "--no-write-fetch-head",
-            target.remote,
-            `refs/heads/${target.branch}:${temporaryRef}`,
-        ],
-        repositoryRoot,
-    );
-    if (fetch.exitCode !== 0) {
-        return blocked(
-            "fetchFailed",
-            fetch.stderr.trim() || `Could not fetch ${target.displayName}.`,
+    try {
+        const fetch = await runGit(
+            [
+                "fetch",
+                "--no-tags",
+                "--no-write-fetch-head",
+                target.remote,
+                `refs/heads/${target.branch}:${temporaryRef}`,
+            ],
+            repositoryRoot,
         );
-    }
-    const fetchedCommit = await runGit(
-        ["rev-parse", "--verify", `${temporaryRef}^{commit}`],
-        repositoryRoot,
-    );
-    if (fetchedCommit.exitCode !== 0) {
-        await runGit(["update-ref", "-d", temporaryRef], repositoryRoot);
-        return blocked(
-            "fetchFailed",
-            `Could not resolve the fetched commit for ${target.displayName}.`,
+        if (fetch.exitCode !== 0) {
+            return blocked(
+                "fetchFailed",
+                fetch.stderr.trim() || `Could not fetch ${target.displayName}.`,
+            );
+        }
+        // This invocation's unique ref pins the fetched target until cleanup.
+        const merge = await runGit(
+            ["merge", "--no-commit", "--no-ff", temporaryRef],
+            repositoryRoot,
         );
-    }
-    const merge = await runGit(
-        ["merge", "--no-commit", "--no-ff", fetchedCommit.stdout.trim()],
-        repositoryRoot,
-    );
-    await runGit(["update-ref", "-d", temporaryRef], repositoryRoot);
-    if (merge.exitCode !== 0) {
-        const conflicts = await listConflicts(repositoryRoot, runGit);
-        if (conflicts.length > 0) {
-            if (resolutionStatePath === undefined) {
-                return blocked(
-                    "mergeFailed",
-                    "Git could not create conflict-resolution state.",
-                    true,
-                    { recovery: "Run `git merge --abort`." },
+        if (merge.exitCode !== 0) {
+            const conflicts = await listConflicts(repositoryRoot, runGit);
+            if (conflicts.length > 0) {
+                if (resolutionStatePath === undefined) {
+                    return blocked(
+                        "mergeFailed",
+                        "Git could not create conflict-resolution state.",
+                        true,
+                        { recovery: "Run `git merge --abort`." },
+                    );
+                }
+                const stagedSnapshot = await listChangedPaths(
+                    repositoryRoot,
+                    runGit,
+                    ["diff", "--cached", "--name-only", "HEAD"],
                 );
+                const parents = await getMergeParents(repositoryRoot, runGit);
+                if (stagedSnapshot === undefined || parents === undefined) {
+                    return blocked(
+                        "mergeFailed",
+                        "Git could not capture post-merge state.",
+                        true,
+                        { recovery: "Run `git merge --abort`." },
+                    );
+                }
+                const state: ResolutionState = {
+                    version: 1,
+                    ...parents,
+                    conflicts,
+                    stagedPaths: stagedSnapshot,
+                };
+                try {
+                    writeFile(resolutionStatePath, JSON.stringify(state));
+                } catch (error) {
+                    return blocked(
+                        "mergeFailed",
+                        `Could not save conflict-resolution state: ${String(error)}`,
+                        true,
+                        { recovery: "Run `git merge --abort`." },
+                    );
+                }
+                return {
+                    status: "conflicts",
+                    repositoryRoot,
+                    currentBranch,
+                    target,
+                    conflicts,
+                };
             }
-            try {
-                writeFile(resolutionStatePath, JSON.stringify(conflicts));
-            } catch (error) {
-                return blocked(
-                    "mergeFailed",
-                    `Could not save conflict-resolution state: ${String(error)}`,
-                    true,
-                    { recovery: "Run `git merge --abort`." },
-                );
-            }
+            return blocked(
+                "mergeFailed",
+                merge.stderr.trim() || "Git could not merge the target branch.",
+                true,
+                {
+                    recovery:
+                        "Inspect `git status`, then run `git merge --abort` if needed.",
+                },
+            );
+        }
+        if (!(await getMergeParents(repositoryRoot, runGit))) {
             return {
-                status: "conflicts",
+                status: "upToDate",
                 repositoryRoot,
                 currentBranch,
                 target,
-                conflicts,
             };
         }
-        return blocked(
-            "mergeFailed",
-            merge.stderr.trim() || "Git could not merge the target branch.",
-            true,
-            {
-                recovery:
-                    "Inspect `git status`, then run `git merge --abort` if needed.",
-            },
+        const commit = await commitMerge(repositoryRoot, runGit);
+        return typeof commit === "string"
+            ? {
+                  status: "committed",
+                  repositoryRoot,
+                  currentBranch,
+                  target,
+                  commit,
+              }
+            : commit;
+    } finally {
+        await deleteTemporaryRef(
+            repositoryRoot,
+            options.runGit ?? runGitCommand,
+            temporaryRef,
         );
     }
-    if (!(await hasMergeHead(repositoryRoot, runGit))) {
-        return { status: "upToDate", repositoryRoot, currentBranch, target };
+}
+
+function parseResolutionState(raw: string): ResolutionState | undefined {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        return undefined;
     }
-    const commit = await commitMerge(repositoryRoot, runGit);
-    return typeof commit === "string"
-        ? {
-              status: "committed",
-              repositoryRoot,
-              currentBranch,
-              target,
-              commit,
-          }
-        : commit;
+    if (
+        parsed === null ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed)
+    ) {
+        return undefined;
+    }
+    const candidate = parsed as Record<string, unknown>;
+    if (
+        candidate.version !== 1 ||
+        typeof candidate.head !== "string" ||
+        typeof candidate.mergeHead !== "string" ||
+        !Array.isArray(candidate.conflicts) ||
+        !candidate.conflicts.every((value) => typeof value === "string") ||
+        !Array.isArray(candidate.stagedPaths) ||
+        !candidate.stagedPaths.every((value) => typeof value === "string")
+    ) {
+        return undefined;
+    }
+    return {
+        version: 1,
+        head: candidate.head,
+        mergeHead: candidate.mergeHead,
+        conflicts: candidate.conflicts,
+        stagedPaths: candidate.stagedPaths,
+    };
 }
 
 export async function completeMergeConflictResolution(
     options: MergeOptions = {},
 ): Promise<MergeConflictResult> {
     const cwd = options.cwd ?? process.cwd();
-    const runGit = options.runGit ?? runGitCommand;
+    const runGit = cancellableGit(options);
     const pathExists = options.pathExists ?? fs.existsSync;
     const readFile =
         options.readFile ?? ((filePath) => fs.readFileSync(filePath, "utf8"));
     const removeFile =
         options.removeFile ??
         ((filePath) => fs.rmSync(filePath, { force: true }));
+
     const repository = await getRepository(cwd, runGit);
     if ("status" in repository) {
         return repository;
@@ -510,7 +634,8 @@ export async function completeMergeConflictResolution(
         repositoryRoot,
         runGit,
     );
-    if (!(await hasMergeHead(repositoryRoot, runGit))) {
+    const parents = await getMergeParents(repositoryRoot, runGit);
+    if (parents === undefined) {
         return blocked(
             "noMergeInProgress",
             "There is no merge in progress to complete.",
@@ -532,20 +657,28 @@ export async function completeMergeConflictResolution(
             true,
         );
     }
-    let originalConflicts: string[];
+    let raw: string;
     try {
-        const parsed: unknown = JSON.parse(readFile(resolutionStatePath));
-        if (
-            !Array.isArray(parsed) ||
-            !parsed.every((value) => typeof value === "string")
-        ) {
-            throw new Error("Invalid conflict path list");
-        }
-        originalConflicts = parsed;
-    } catch {
+        raw = readFile(resolutionStatePath);
+    } catch (error) {
         return blocked(
             "missingResolutionState",
-            "Conflict-resolution state is invalid. Inspect the merge and commit or abort it manually.",
+            `Could not read conflict-resolution state: ${String(error)}`,
+            true,
+        );
+    }
+    const state = parseResolutionState(raw);
+    if (state === undefined) {
+        return blocked(
+            "missingResolutionState",
+            "Conflict-resolution state is invalid or from an older format. Inspect the merge and commit or abort it manually.",
+            true,
+        );
+    }
+    if (parents.head !== state.head || parents.mergeHead !== state.mergeHead) {
+        return blocked(
+            "missingResolutionState",
+            "Conflict-resolution state does not match the current merge. Inspect the merge and commit or abort it manually.",
             true,
         );
     }
@@ -557,33 +690,20 @@ export async function completeMergeConflictResolution(
             true,
         );
     }
-    const mergeBase = await runGit(
-        ["merge-base", "HEAD", "MERGE_HEAD"],
-        repositoryRoot,
-    );
-    const allowedPaths =
-        mergeBase.exitCode === 0
-            ? await listChangedPaths(repositoryRoot, runGit, [
-                  "diff",
-                  "--name-only",
-                  mergeBase.stdout.trim(),
-                  "MERGE_HEAD",
-              ])
-            : undefined;
     const stagedPaths = await listChangedPaths(repositoryRoot, runGit, [
         "diff",
         "--cached",
         "--name-only",
         "HEAD",
     ]);
-    if (allowedPaths === undefined || stagedPaths === undefined) {
+    if (stagedPaths === undefined) {
         return blocked(
             "unrelatedChanges",
             "Git could not verify the staged merge paths.",
             true,
         );
     }
-    const allowed = new Set([...allowedPaths, ...originalConflicts]);
+    const allowed = new Set([...state.stagedPaths, ...state.conflicts]);
     const unrelated = stagedPaths.filter((file) => !allowed.has(file));
     if (unrelated.length > 0) {
         return blocked(

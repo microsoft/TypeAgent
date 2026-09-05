@@ -2038,31 +2038,33 @@ export function buildMergeResult(result: MergeConflictResult): ActionResult {
     return actionResult;
 }
 
-async function executeResolveMergeConflicts(
-    targetBranch: string | undefined,
-): Promise<ActionResult> {
-    return buildMergeResult(await mergeAndCommit(targetBranch));
-}
-
-async function executeCompleteMergeConflictResolution(
-    repositoryRoot: string,
-): Promise<ActionResult> {
-    return buildMergeResult(
-        await completeMergeConflictResolution({ cwd: repositoryRoot }),
-    );
-}
-
 // code-complexity-allow: top-level action dispatch over all github-cli actions
 async function executeAction(
     action: TypeAgentAction<GithubCliActions>,
     context: ActionContext<unknown>,
 ): Promise<ActionResult> {
-    if (action.actionName === "resolveMergeConflicts") {
-        return executeResolveMergeConflicts(getRequestedMergeTarget(action));
-    }
-    if (action.actionName === "completeMergeConflictResolution") {
-        return executeCompleteMergeConflictResolution(
-            action.parameters.repositoryRoot,
+    if (
+        action.actionName === "resolveMergeConflicts" ||
+        action.actionName === "completeMergeConflictResolution"
+    ) {
+        // The server's cwd may belong to an unrelated repository.
+        if (!context.workingDirectory) {
+            return buildMergeFailure({
+                status: "blocked",
+                errorCode: "notRepository",
+                message:
+                    "The host did not provide a working directory for this action. Open a session in a Git repository and retry.",
+                mayHaveSideEffects: false,
+            });
+        }
+        const options = {
+            cwd: context.workingDirectory,
+            signal: context.abortSignal,
+        };
+        return buildMergeResult(
+            action.actionName === "resolveMergeConflicts"
+                ? await mergeAndCommit(getRequestedMergeTarget(action), options)
+                : await completeMergeConflictResolution(options),
         );
     }
 

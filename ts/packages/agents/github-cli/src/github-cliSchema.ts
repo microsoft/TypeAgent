@@ -810,7 +810,7 @@ export type ResolveMergeConflictsAction = {
 export type CompleteMergeConflictResolutionAction = {
     actionName: "completeMergeConflictResolution";
     parameters: {
-        // Absolute root of the repository whose merge should be completed.
+        // Recorded merge root; execution always uses the host-authorized working directory.
         repositoryRoot: string;
     };
 };

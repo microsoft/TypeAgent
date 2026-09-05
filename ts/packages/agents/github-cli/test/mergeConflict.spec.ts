@@ -15,6 +15,8 @@ import {
 } from "../src/github-cliActionHandler.js";
 
 const ROOT = process.platform === "win32" ? "C:\\repo" : "/repo";
+const HEAD_SHA = "1111111111111111111111111111111111111111";
+const MERGE_HEAD_SHA = "2222222222222222222222222222222222222222";
 
 function ok(stdout = ""): GitCommandResult {
     return { exitCode: 0, stdout, stderr: "" };
@@ -38,16 +40,19 @@ type RunnerOptions = {
     mergeInProgress?: boolean;
     unstaged?: boolean;
     stagedPaths?: string[];
-    allowedPaths?: string[];
     markers?: boolean;
     whitespaceErrors?: boolean;
     commit?: GitCommandResult;
+    head?: string;
+    mergeHead?: string;
 };
 
 function createRunner(options: RunnerOptions = {}): {
     runGit: GitCommandRunner;
     calls: string[][];
 } {
+    const head = options.head ?? HEAD_SHA;
+    const mergeHead = options.mergeHead ?? MERGE_HEAD_SHA;
     const calls: string[][] = [];
     const runGit: GitCommandRunner = async (args) => {
         calls.push([...args]);
@@ -75,16 +80,16 @@ function createRunner(options: RunnerOptions = {}): {
                 return options.mainExists
                     ? ok("abc\trefs/heads/main\n")
                     : fail();
-            case key(["rev-parse", "--verify", "MERGE_HEAD"]):
-                return options.mergeInProgress === false ? fail() : ok("abc");
+            case key(["rev-parse", "HEAD", "MERGE_HEAD"]):
+                return options.mergeInProgress === false
+                    ? fail()
+                    : ok(`${head}\n${mergeHead}`);
+            case key(["rev-parse", "HEAD"]):
+                return ok(head);
             case key(["diff", "--name-only", "--diff-filter=U", "-z"]):
                 return ok((options.conflicts ?? []).join("\0"));
             case key(["diff", "--quiet"]):
                 return options.unstaged ? fail() : ok();
-            case key(["merge-base", "HEAD", "MERGE_HEAD"]):
-                return ok("base");
-            case key(["diff", "--name-only", "base", "MERGE_HEAD", "-z"]):
-                return ok((options.allowedPaths ?? ["src/a.ts"]).join("\0"));
             case key(["diff", "--cached", "--name-only", "HEAD", "-z"]):
                 return ok((options.stagedPaths ?? ["src/a.ts"]).join("\0"));
             case key(["diff", "--cached", "--check"]):
@@ -95,8 +100,6 @@ function createRunner(options: RunnerOptions = {}): {
                       : ok();
             case key(["commit", "--no-edit"]):
                 return options.commit ?? ok();
-            case key(["rev-parse", "HEAD"]):
-                return ok("0123456789abcdef");
             default:
                 if (args[0] === "rev-parse" && args[1] === "--git-path") {
                     return ok(`.git/${args[2]}`);
@@ -108,15 +111,10 @@ function createRunner(options: RunnerOptions = {}): {
                     return ok();
                 }
                 if (
-                    args[0] === "rev-parse" &&
-                    args[1] === "--verify" &&
-                    args[2]?.startsWith("refs/typeagent/merge/")
-                ) {
-                    return ok("fetched-commit");
-                }
-                if (
-                    key(args) ===
-                    key(["merge", "--no-commit", "--no-ff", "fetched-commit"])
+                    args[0] === "merge" &&
+                    args[1] === "--no-commit" &&
+                    args[2] === "--no-ff" &&
+                    args[3]?.startsWith("refs/typeagent/merge/")
                 ) {
                     return options.merge ?? ok();
                 }
@@ -136,10 +134,27 @@ function createRunner(options: RunnerOptions = {}): {
     return { runGit, calls };
 }
 
+function stateFixture(
+    overrides: {
+        head?: string;
+        mergeHead?: string;
+        conflicts?: string[];
+        stagedPaths?: string[];
+    } = {},
+): string {
+    return JSON.stringify({
+        version: 1,
+        head: overrides.head ?? HEAD_SHA,
+        mergeHead: overrides.mergeHead ?? MERGE_HEAD_SHA,
+        conflicts: overrides.conflicts ?? ["src/a.ts"],
+        stagedPaths: overrides.stagedPaths ?? ["src/a.ts"],
+    });
+}
+
 const resolutionState = {
     pathExists: (filePath: string) =>
         filePath.includes("TYPEAGENT_MERGE_CONFLICTS"),
-    readFile: () => JSON.stringify(["src/a.ts"]),
+    readFile: () => stateFixture(),
     removeFile: () => {},
 };
 
@@ -156,13 +171,13 @@ describe("mergeAndCommit", () => {
             status: "committed",
             currentBranch: "feature/work",
             target: { displayName: "origin/main" },
-            commit: "0123456789abcdef",
+            commit: HEAD_SHA,
         });
         expect(calls).toContainEqual([
             "merge",
             "--no-commit",
             "--no-ff",
-            "fetched-commit",
+            expect.stringMatching(/^refs\/typeagent\/merge\//),
         ]);
         expect(calls).toContainEqual(["commit", "--no-edit"]);
         expect(calls.some(([command]) => command === "push")).toBe(false);
@@ -246,16 +261,20 @@ describe("mergeAndCommit", () => {
         expect(calls.some(([command]) => command === "fetch")).toBe(false);
     });
 
-    test("returns conflicted paths for Reasoning instead of committing", async () => {
+    test("returns conflicted paths for Reasoning and persists v1 state", async () => {
+        let stored: { path: string; content: string } | undefined;
         const { runGit, calls } = createRunner({
             merge: fail("CONFLICT"),
             conflicts: ["src/a.ts", "src/b.ts"],
+            stagedPaths: ["src/a.ts", "src/b.ts", "src/autoMerged.ts"],
         });
         const result = await mergeAndCommit("main", {
             cwd: ROOT,
             runGit,
             pathExists: () => false,
-            writeFile: () => {},
+            writeFile: (path, content) => {
+                stored = { path, content };
+            },
         });
 
         expect(result).toMatchObject({
@@ -264,6 +283,136 @@ describe("mergeAndCommit", () => {
         });
         expect(calls.some(([command]) => command === "commit")).toBe(false);
         expect(calls.some(([command]) => command === "push")).toBe(false);
+
+        expect(stored).toBeDefined();
+        expect(stored!.path).toContain("TYPEAGENT_MERGE_CONFLICTS");
+        const parsed = JSON.parse(stored!.content);
+        expect(parsed).toEqual({
+            version: 1,
+            head: HEAD_SHA,
+            mergeHead: MERGE_HEAD_SHA,
+            conflicts: ["src/a.ts", "src/b.ts"],
+            // Snapshot includes the auto-merged rename target that the
+            // previous diff-based reconstruction would have missed.
+            stagedPaths: ["src/a.ts", "src/b.ts", "src/autoMerged.ts"],
+        });
+    });
+
+    test("cleans up the temporary fetch ref even when the merge fails", async () => {
+        const { runGit, calls } = createRunner({
+            merge: fail("CONFLICT"),
+            conflicts: ["src/a.ts"],
+        });
+        await mergeAndCommit("main", {
+            cwd: ROOT,
+            runGit,
+            pathExists: () => false,
+            writeFile: () => {},
+        });
+        expect(
+            calls.some(
+                ([command, flag, ref]) =>
+                    command === "update-ref" &&
+                    flag === "-d" &&
+                    ref?.startsWith("refs/typeagent/merge/"),
+            ),
+        ).toBe(true);
+    });
+
+    test("propagates AbortError when the signal is already aborted", async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const { runGit, calls } = createRunner();
+        await expect(
+            mergeAndCommit("main", {
+                cwd: ROOT,
+                runGit,
+                pathExists: () => false,
+                signal: controller.signal,
+            }),
+        ).rejects.toMatchObject({ name: "AbortError" });
+        // Never even reached repo detection.
+        expect(calls.length).toBe(0);
+    });
+
+    test.each(["interrupted", "just completed"])(
+        "cancelling a %s fetch prevents merge and commit and cleans up",
+        async (fetchState) => {
+            const controller = new AbortController();
+            const { runGit, calls } = createRunner();
+            const cancelledRunner: GitCommandRunner = async (
+                args,
+                cwd,
+                signal,
+            ) => {
+                if (args[0] === "fetch") {
+                    expect(signal).toBe(controller.signal);
+                    controller.abort();
+                    if (fetchState === "interrupted") {
+                        throw new DOMException(
+                            "The operation was aborted.",
+                            "AbortError",
+                        );
+                    }
+                    return ok();
+                }
+                if (args[0] === "update-ref" && args[1] === "-d") {
+                    expect(signal).toBeUndefined();
+                }
+                return runGit(args, cwd, signal);
+            };
+            await expect(
+                mergeAndCommit("main", {
+                    cwd: ROOT,
+                    runGit: cancelledRunner,
+                    pathExists: () => false,
+                    signal: controller.signal,
+                }),
+            ).rejects.toMatchObject({ name: "AbortError" });
+            expect(calls.some(([command]) => command === "merge")).toBe(false);
+            expect(calls.some(([command]) => command === "commit")).toBe(false);
+            expect(
+                calls.some(
+                    ([command, flag]) =>
+                        command === "update-ref" && flag === "-d",
+                ),
+            ).toBe(true);
+        },
+    );
+
+    test("reports failed ref cleanup without masking cancellation", async () => {
+        const controller = new AbortController();
+        const { runGit } = createRunner();
+        const originalWarn = console.warn;
+        const warnings: string[] = [];
+        console.warn = (message: string) => warnings.push(message);
+        try {
+            await expect(
+                mergeAndCommit("main", {
+                    cwd: ROOT,
+                    pathExists: () => false,
+                    signal: controller.signal,
+                    runGit: async (args, cwd, signal) => {
+                        if (args[0] === "fetch") {
+                            controller.abort();
+                            throw new DOMException("Cancelled", "AbortError");
+                        }
+                        if (args[0] === "update-ref") {
+                            expect(signal).toBeUndefined();
+                            return fail("cannot lock ref");
+                        }
+                        return runGit(args, cwd, signal);
+                    },
+                }),
+            ).rejects.toMatchObject({ name: "AbortError" });
+            expect(warnings).toEqual([
+                expect.stringMatching(
+                    /Could not remove temporary merge ref .*cannot lock ref/,
+                ),
+            ]);
+        } finally {
+            console.warn = originalWarn;
+        }
     });
 });
 
@@ -301,7 +450,6 @@ describe("completeMergeConflictResolution", () => {
 
     test("refuses to commit staged changes unrelated to the merge", async () => {
         const { runGit } = createRunner({
-            allowedPaths: ["src/a.ts"],
             stagedPaths: ["src/a.ts", "notes.txt"],
         });
         const result = await completeMergeConflictResolution({
@@ -328,20 +476,6 @@ describe("completeMergeConflictResolution", () => {
         });
     });
 
-    test("allows a resolved rename recorded in conflict state", async () => {
-        const { runGit } = createRunner({
-            allowedPaths: ["src/old.ts"],
-            stagedPaths: ["src/new.ts"],
-        });
-        const result = await completeMergeConflictResolution({
-            cwd: ROOT,
-            runGit,
-            ...resolutionState,
-            readFile: () => JSON.stringify(["src/new.ts"]),
-        });
-        expect(result).toMatchObject({ status: "committed" });
-    });
-
     test("does not mistake incoming whitespace errors for conflict markers", async () => {
         const { runGit } = createRunner({ whitespaceErrors: true });
         const result = await completeMergeConflictResolution({
@@ -362,10 +496,77 @@ describe("completeMergeConflictResolution", () => {
 
         expect(result).toMatchObject({
             status: "committed",
-            commit: "0123456789abcdef",
+            commit: HEAD_SHA,
         });
         expect(calls).toContainEqual(["commit", "--no-edit"]);
         expect(calls.some(([command]) => command === "push")).toBe(false);
+    });
+
+    test.each([
+        ["legacy format", JSON.stringify(["src/a.ts"])],
+        ["invalid JSON", "not json"],
+        ["changed HEAD", stateFixture({ head: "different-commit" })],
+        ["changed MERGE_HEAD", stateFixture({ mergeHead: "different-commit" })],
+    ])("rejects resolution state with %s", async (_description, raw) => {
+        const { runGit, calls } = createRunner();
+        const result = await completeMergeConflictResolution({
+            cwd: ROOT,
+            runGit,
+            ...resolutionState,
+            readFile: () => raw,
+        });
+        expect(result).toMatchObject({
+            status: "blocked",
+            errorCode: "missingResolutionState",
+            mayHaveSideEffects: true,
+        });
+        expect(calls.some(([command]) => command === "commit")).toBe(false);
+    });
+
+    test("surfaces a state-read failure instead of silently proceeding", async () => {
+        const { runGit, calls } = createRunner();
+        const result = await completeMergeConflictResolution({
+            cwd: ROOT,
+            runGit,
+            ...resolutionState,
+            readFile: () => {
+                throw new Error("EACCES");
+            },
+        });
+        expect(result).toMatchObject({
+            status: "blocked",
+            errorCode: "missingResolutionState",
+            mayHaveSideEffects: true,
+        });
+        expect(result).toMatchObject({
+            message: expect.stringContaining("EACCES"),
+        });
+        expect(calls.some(([command]) => command === "commit")).toBe(false);
+    });
+
+    test("cancellation after index checks prevents committing or removing state", async () => {
+        const controller = new AbortController();
+        const { runGit, calls } = createRunner();
+        let removed = false;
+        await expect(
+            completeMergeConflictResolution({
+                cwd: ROOT,
+                runGit: async (args, cwd, signal) => {
+                    const result = await runGit(args, cwd, signal);
+                    if (key(args) === key(["diff", "--cached", "--check"])) {
+                        controller.abort();
+                    }
+                    return result;
+                },
+                ...resolutionState,
+                removeFile: () => {
+                    removed = true;
+                },
+                signal: controller.signal,
+            }),
+        ).rejects.toMatchObject({ name: "AbortError" });
+        expect(calls.some(([command]) => command === "commit")).toBe(false);
+        expect(removed).toBe(false);
     });
 });
 
