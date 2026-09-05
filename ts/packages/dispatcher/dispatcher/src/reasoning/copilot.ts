@@ -672,8 +672,8 @@ function formatToolCallDisplay(toolName: string, input: unknown): string {
             return `**Tool:** \`remember\``;
     }
 
-    // Built-in tools (shell, github/fs/*, github/search/*, ...): show the
-    // primary argument so parallel or similar calls are distinguishable
+    // Built-in tools (view, edit, create, glob, grep, powershell, bash, ...):
+    // show the primary argument so parallel or similar calls are distinguishable
     // instead of rendering as identical "Tool: <name>" bubbles. The tool name
     // is rendered as inline code so it reads as a highlighted chip (matching a
     // single tool call and the folded-batch summary).
@@ -1306,9 +1306,63 @@ export async function executeCodingRequest(
     }
 }
 
+// These are runtime tool names, not the obsolete github/fs/* or shell aliases.
+// Restrict matches to built-ins; onPermissionRequest still authorizes each call.
+export const COPILOT_NATIVE_BUILTIN_TOOLS: readonly string[] = [
+    "builtin:view",
+    "builtin:edit",
+    "builtin:create",
+    "builtin:apply_patch",
+    "builtin:str_replace_editor",
+    "builtin:glob",
+    "builtin:grep",
+    "builtin:rg",
+    "builtin:powershell",
+    "builtin:read_powershell",
+    "builtin:stop_powershell",
+    "builtin:list_powershell",
+    "builtin:bash",
+    "builtin:read_bash",
+    "builtin:stop_bash",
+    "builtin:list_bash",
+    "builtin:web_fetch",
+];
+
+const COPILOT_ALWAYS_ON_CUSTOM_TOOLS: readonly string[] = [
+    "discover_actions",
+    "execute_action",
+    "search_memory",
+    "remember",
+    "get_conversation_info",
+    "read_conversation",
+    "list_conversations",
+    "search_conversations",
+    "get_user_context",
+    "find_installable_agent",
+    "ask_user",
+    "ask_user_form",
+];
+
+const COPILOT_SUBAGENT_CUSTOM_TOOLS: readonly string[] = [
+    "create_subagent",
+    "invoke_subagent",
+    "list_subagents",
+    "stop_subagent",
+];
+
+export function buildCopilotAvailableTools(opts: {
+    subagentsEnabled: boolean;
+}): string[] {
+    return [
+        ...COPILOT_ALWAYS_ON_CUSTOM_TOOLS,
+        ...(opts.subagentsEnabled ? COPILOT_SUBAGENT_CUSTOM_TOOLS : []),
+        ...COPILOT_NATIVE_BUILTIN_TOOLS,
+    ];
+}
+
 /**
- * Get Copilot SDK session configuration with TypeAgent tools
- * (Mirrors getClaudeOptions from claude.ts)
+ * Get Copilot SDK session configuration with TypeAgent tools.
+ * Mirrors getClaudeOptions from claude.ts.
  */
 function getCopilotSessionConfig(
     context: ActionContext<CommandHandlerContext>,
@@ -2118,31 +2172,7 @@ function getCopilotSessionConfig(
             askUserTool,
             askUserFormTool,
         ],
-        availableTools: [
-            "discover_actions",
-            "execute_action",
-            "search_memory",
-            "remember",
-            "get_conversation_info",
-            "read_conversation",
-            "list_conversations",
-            "search_conversations",
-            "get_user_context",
-            ...(subagentsEnabled
-                ? [
-                      "create_subagent",
-                      "invoke_subagent",
-                      "list_subagents",
-                      "stop_subagent",
-                  ]
-                : []),
-            "find_installable_agent",
-            "ask_user",
-            "ask_user_form",
-            "github/fs/*",
-            "github/search/*",
-            "shell",
-        ],
+        availableTools: buildCopilotAvailableTools({ subagentsEnabled }),
         workingDirectory: workingDirectory ?? getRepoRoot(),
         onPermissionRequest: createCopilotPermissionHandler(context),
         systemMessage: {
@@ -2155,9 +2185,11 @@ function getCopilotSessionConfig(
                 "## Built-in Tools (USE THESE FIRST)",
                 "You have access to powerful built-in capabilities:",
                 "- **Web search**: Use your native web search for looking up information online",
-                "- **File operations**: `github/fs/*` for reading, writing, editing files",
-                "- **Code search**: `github/search/*` for searching code patterns",
-                "- **Shell commands**: `shell` for executing terminal commands",
+                "- **File reading**: `view` for reading a file (whole file or a line range) or listing a directory",
+                "- **File search**: `glob` for finding files by name; `grep` or `rg` for searching contents, depending on the model's available tools",
+                "- **File editing**: Use the available native editor: `edit` / `create`, `apply_patch`, or `str_replace_editor`",
+                "- **Shell commands**: `powershell` on Windows or `bash` on macOS/Linux; use the matching `read_*`, `stop_*`, and `list_*` tools for commands that continue running",
+                "- **Web pages**: `web_fetch` for retrieving a URL",
                 "",
                 "## TypeAgent Action Tools (USE WHEN NEEDED)",
                 "For TypeAgent-specific actions like music playback, calendar management, email:",
@@ -2202,7 +2234,7 @@ function getCopilotSessionConfig(
                 "- **PREFER built-in tools** for web search, file operations, and code investigation",
                 "- **Use TypeAgent actions** only for domain-specific operations (music, calendar, email, etc.)",
                 "- For web search queries → use your native web search capability",
-                "- For code operations → use `github/fs/*` and `github/search/*` tools",
+                "- For code operations → use the available native file, search, and terminal tools directly",
                 "- For TypeAgent capabilities → use `discover_actions` then `execute_action`",
             ].join("\n"),
         },

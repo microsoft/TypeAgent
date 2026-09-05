@@ -370,7 +370,7 @@ describe("completeMergeConflictResolution", () => {
 });
 
 describe("merge action results", () => {
-    test("routes conflicted files to the existing Reasoning action", () => {
+    test("queues verification after Reasoning instead of relying on model completion", () => {
         const result = buildMergeResult({
             status: "conflicts",
             repositoryRoot: ROOT,
@@ -392,10 +392,15 @@ describe("merge action results", () => {
                 schemaName: "dispatcher.reasoning",
                 actionName: "reasoningAction",
             }),
+            {
+                schemaName: "github-cli",
+                actionName: "completeMergeConflictResolution",
+                parameters: { repositoryRoot: ROOT },
+            },
         ]);
         expect(
             result.additionalActions?.[0].parameters?.originalRequest,
-        ).toContain(JSON.stringify(ROOT));
+        ).toContain(ROOT);
         expect(result.additionalActions?.[0].parameters?.workingDirectory).toBe(
             ROOT,
         );
