@@ -18,12 +18,20 @@ import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
 import registerDebug from "debug";
 import sanitizeFilename from "sanitize-filename";
+import { randomUUID } from "node:crypto";
 import { isAllowedViewOrigin } from "./originAllowlist.js";
+import { resolvePathWithinRoot } from "./pathPolicy.js";
 import {
-    resolveExistingFileWithinRoot,
-    resolvePathWithinRoot,
+    normalizeRelativeDocumentPath,
+    resolveRealDirectory,
     resolveWritableFileWithinRoot,
-} from "./pathPolicy.js";
+} from "../../agent/pathPolicy.js";
+import {
+    persistDocumentOperations,
+    readBoundDocument,
+    type DocumentBinding,
+} from "../../agent/documentUpdatePersistence.js";
+import type { DocumentOperation } from "../../agent/markdownOperationSchema.js";
 
 const debug = registerDebug("typeagent:markdown:service");
 
@@ -107,7 +115,7 @@ app.post(
 
             // Construct and normalize file path
             const documentPath = resolvePathWithinRoot(
-                ROOT_DIR,
+                getValidatedCurrentRoot(),
                 `${sanitizedDocumentName}.md`,
             );
 
@@ -121,7 +129,7 @@ app.post(
             }
 
             let safeDocumentPath = resolveWritableFileWithinRoot(
-                ROOT_DIR,
+                getValidatedCurrentRoot(),
                 documentPath,
             );
             if (safeDocumentPath === undefined) {
@@ -142,6 +150,9 @@ app.post(
             }
 
             filePath = safeDocumentPath;
+            boundRelativePath = `${sanitizedDocumentName}.md`;
+            bindingToken = randomUUID();
+            notifyBindingToParent();
 
             // Initialize collaboration for new document
             const documentId = sanitizedDocumentName;
@@ -231,7 +242,9 @@ app.post(
 );
 
 let clients: any[] = [];
-let filePath: string | null;
+let filePath: string | null = null;
+let boundRelativePath: string | null = null;
+let bindingToken: string | null = null;
 let collaborationManager: CollaborationManager;
 
 // UI Command routing state
@@ -242,8 +255,71 @@ const pendingCommands = new Map<string, any>();
 let markdownRequestCounter = 0;
 const pendingMarkdownRequests = new Map<string, any>();
 const userHomeDir = os.homedir();
-const ROOT_DIR =
+const INITIAL_ROOT_DIR =
     process.env.TYPEAGENT_MARKDOWN_ROOT || path.join(userHomeDir, "Documents");
+let currentRoot =
+    resolveRealDirectory(INITIAL_ROOT_DIR) ?? path.resolve(INITIAL_ROOT_DIR);
+
+function resolveCanonicalRoot(root: string): string | undefined {
+    const canonicalRoot = resolveRealDirectory(root);
+    return canonicalRoot !== undefined &&
+        path.relative(path.resolve(root), canonicalRoot) === ""
+        ? canonicalRoot
+        : undefined;
+}
+
+function getValidatedCurrentRoot(): string {
+    if (resolveCanonicalRoot(currentRoot) === undefined) {
+        throw new Error("The document root is no longer accessible");
+    }
+    return currentRoot;
+}
+
+type BindingSnapshot = {
+    bindingToken: string | null;
+    currentRoot: string;
+    filePath: string | null;
+    boundRelativePath: string | null;
+};
+
+function captureBindingSnapshot(): BindingSnapshot {
+    return { bindingToken, currentRoot, filePath, boundRelativePath };
+}
+
+function bindingError(
+    message: Record<string, unknown>,
+    snapshot: BindingSnapshot,
+): string | undefined {
+    if (
+        typeof message.expectedBindingToken === "string" &&
+        message.expectedBindingToken !== snapshot.bindingToken
+    ) {
+        return "Document binding token changed";
+    }
+    if (
+        typeof message.expectedRoot === "string" &&
+        message.expectedRoot !== snapshot.currentRoot
+    ) {
+        return "Document binding root changed";
+    }
+    if (
+        typeof message.expectedRelativePath === "string" &&
+        message.expectedRelativePath !== snapshot.boundRelativePath
+    ) {
+        return "Document binding path changed";
+    }
+    return undefined;
+}
+
+function notifyBindingToParent(): void {
+    process.send?.({
+        type: "bindingUpdated",
+        bindingToken,
+        boundFilePath: filePath,
+        boundRoot: filePath ? currentRoot : null,
+        boundRelativePath,
+    });
+}
 
 // Streaming state for LLM responses
 const activeStreamingSessions = new Map<
@@ -440,6 +516,8 @@ async function requestMarkdownFromClient(retryCount: number = 0): Promise<{
     });
 }
 
+void requestMarkdownFromClient;
+
 /**
  * Determine if a command should use streaming
  */
@@ -579,7 +657,7 @@ app.post("/document", express.json(), (req: Request, res: Response) => {
 
     try {
         const writableFilePath = resolveWritableFileWithinRoot(
-            ROOT_DIR,
+            getValidatedCurrentRoot(),
             filePath,
         );
         if (writableFilePath === undefined) {
@@ -691,7 +769,7 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
         }
 
         const resolvedFilePath = resolvePathWithinRoot(
-            ROOT_DIR,
+            getValidatedCurrentRoot(),
             sanitizedFilePath,
         );
         if (resolvedFilePath === undefined) {
@@ -849,11 +927,11 @@ app.post("/file/load", express.json(), (req: Request, res: Response) => {
             return;
         }
 
-        const resolvedPath = resolveExistingFileWithinRoot(
-            ROOT_DIR,
+        const resolvedPath = resolveWritableFileWithinRoot(
+            getValidatedCurrentRoot(),
             newFilePath,
         );
-        if (resolvedPath === undefined) {
+        if (resolvedPath === undefined || !fs.existsSync(resolvedPath)) {
             res.status(403).json({
                 error: "Access to the file is forbidden or file not found",
             });
@@ -862,6 +940,12 @@ app.post("/file/load", express.json(), (req: Request, res: Response) => {
 
         // Set new file path
         filePath = resolvedPath;
+        boundRelativePath = path
+            .relative(currentRoot, resolvedPath)
+            .split(path.sep)
+            .join("/");
+        bindingToken = randomUUID();
+        notifyBindingToParent();
 
         // Initialize collaboration for new document
         const documentId = path.basename(resolvedPath, ".md");
@@ -1501,11 +1585,22 @@ process.on("message", async (message: any) => {
     );
 
     if (message.type == "setFile") {
-        if (message.filePath) {
-            // Resolve and validate the file path
+        if (message.relativePath) {
+            const nextRoot =
+                typeof message.workspaceRoot === "string" &&
+                resolveCanonicalRoot(message.workspaceRoot) !== undefined
+                    ? resolveCanonicalRoot(message.workspaceRoot)
+                    : undefined;
+            const relativePath = normalizeRelativeDocumentPath(
+                message.relativePath,
+            );
+            if (nextRoot === undefined || relativePath === undefined) {
+                debug("Invalid document binding provided in message");
+                return;
+            }
             const resolvedFilePath = resolveWritableFileWithinRoot(
-                ROOT_DIR,
-                path.basename(message.filePath),
+                nextRoot,
+                relativePath,
             );
             if (resolvedFilePath === undefined) {
                 debug("Invalid file path provided in message");
@@ -1513,10 +1608,14 @@ process.on("message", async (message: any) => {
             }
 
             const oldFilePath = filePath;
+            currentRoot = nextRoot;
             filePath = resolvedFilePath;
+            boundRelativePath = relativePath;
+            bindingToken = randomUUID();
+            notifyBindingToParent();
 
             // Initialize collaboration for this document using authoritative document
-            const documentId = path.basename(message.filePath, ".md");
+            const documentId = path.basename(relativePath, ".md");
 
             // Get or create the authoritative Y.js document
             const ydoc = getAuthoritativeDocument(documentId);
@@ -1531,7 +1630,7 @@ process.on("message", async (message: any) => {
                 ytext.insert(0, content); // Insert file content
 
                 debug(
-                    `File loaded into authoritative document: ${documentId}, ${content.length} chars from ${message.filePath}`,
+                    `File loaded into authoritative document: ${documentId}, ${content.length} chars from ${relativePath}`,
                 );
             } else {
                 debug(
@@ -1547,10 +1646,8 @@ process.on("message", async (message: any) => {
                         `data: ${JSON.stringify({
                             type: "documentChanged",
                             newDocumentId: documentId,
-                            newDocumentName: path.basename(
-                                message.filePath,
-                                ".md",
-                            ),
+                            newDocumentName: path.basename(relativePath, ".md"),
+                            bindingToken,
                             timestamp: Date.now(),
                         })}\n\n`,
                     );
@@ -1559,6 +1656,9 @@ process.on("message", async (message: any) => {
         } else {
             // No file mode - initialize with default content using authoritative document
             filePath = null;
+            boundRelativePath = null;
+            bindingToken = null;
+            notifyBindingToParent();
             debug("Running in memory-only mode (no file)");
 
             const documentId = "default";
@@ -1635,198 +1735,149 @@ Start typing to see the editor in action!
             );
         });
     } else if (message.type === "applyLLMOperations") {
-        // PRODUCTION: Send operations to PRIMARY client only via SSE to prevent duplicates
+        const requestId =
+            typeof message.requestId === "string" ? message.requestId : "";
+        const snapshot = captureBindingSnapshot();
         try {
-            debug(
-                `[VIEW] Forwarding ${message.operations?.length || 0} operations to primary client via SSE`,
-            );
-
-            if (clients.length === 0) {
-                console.warn(
-                    `[SSE] No clients connected to receive operations`,
-                );
+            if (
+                !Array.isArray(message.operations) ||
+                !snapshot.filePath ||
+                !snapshot.boundRelativePath ||
+                typeof message.expectedRevision !== "string"
+            ) {
+                throw new Error("Invalid document update request");
+            }
+            const identityError = bindingError(message, snapshot);
+            if (identityError) {
                 process.send?.({
                     type: "operationsApplied",
+                    requestId,
                     success: false,
-                    error: "No clients connected",
-                    method: "sse-forwarded",
+                    identityMismatch: true,
+                    error: identityError,
+                    bindingToken: snapshot.bindingToken,
                 });
                 return;
             }
 
-            // Send operations to ONLY the first client to prevent duplicates
-            const primaryClient = clients[0];
-            const operationsEvent = {
-                type: "llmOperations",
-                operations: message.operations,
-                timestamp: message.timestamp || Date.now(),
-                source: "agent",
-                clientRole: "primary", // Mark this client as the primary applier
+            const binding: DocumentBinding = {
+                token: snapshot.bindingToken ?? undefined,
+                root: snapshot.currentRoot,
+                relativePath: snapshot.boundRelativePath,
+                filePath: snapshot.filePath,
             };
+            const persisted = persistDocumentOperations(
+                binding,
+                message.operations as DocumentOperation[],
+                {
+                    bindingToken:
+                        typeof message.expectedBindingToken === "string"
+                            ? message.expectedBindingToken
+                            : undefined,
+                    root:
+                        typeof message.expectedRoot === "string"
+                            ? message.expectedRoot
+                            : undefined,
+                    relativePath:
+                        typeof message.expectedRelativePath === "string"
+                            ? message.expectedRelativePath
+                            : undefined,
+                    revision: message.expectedRevision,
+                    updatedRevision:
+                        typeof message.expectedUpdatedRevision === "string"
+                            ? message.expectedUpdatedRevision
+                            : undefined,
+                },
+            );
 
-            try {
-                primaryClient.write(
-                    `data: ${JSON.stringify(operationsEvent)}\n\n`,
-                );
-                debug(
-                    `[SSE] Sent ${message.operations?.length || 0} operations to PRIMARY client (${clients.indexOf(primaryClient)} of ${clients.length} clients)`,
-                );
-
-                debug(`data: ${JSON.stringify(operationsEvent)}\n\n`);
-
-                // Notify other clients that operations are being applied (optional)
-                if (clients.length > 1) {
-                    const notificationEvent = {
-                        type: "operationsBeingApplied",
-                        timestamp: Date.now(),
-                        operationCount: message.operations?.length || 0,
-                        source: "agent",
-                    };
-
-                    clients.slice(1).forEach((client, index) => {
-                        try {
-                            client.write(
-                                `data: ${JSON.stringify(notificationEvent)}\n\n`,
-                            );
-                            debug(
-                                `[SSE] Notified secondary client ${index + 1} of pending operations`,
-                            );
-                        } catch (error) {
-                            console.error(
-                                `[SSE] Failed to notify secondary client ${index + 1}:`,
-                                error,
-                            );
-                        }
-                    });
-                }
-            } catch (error) {
-                console.error(
-                    "[SSE] Failed to send operations to primary client:",
-                    error,
-                );
-                throw error;
-            }
-
-            // Send success confirmation back to agent
-            process.send?.({
-                type: "operationsApplied",
-                success: true,
-                operationCount: message.operations?.length || 0,
-                method: "sse-forwarded",
-                clientsNotified: clients.length,
-            });
-
-            debug(`[VIEW] Operations forwarded to primary client successfully`);
-        } catch (error) {
-            console.error(
-                "[VIEW] Failed to forward operations via SSE:",
-                error,
+            const documentId = path.basename(snapshot.boundRelativePath, ".md");
+            collaborationManager.setDocumentContent(
+                documentId,
+                persisted.content,
             );
             process.send?.({
                 type: "operationsApplied",
+                requestId,
+                success: true,
+                operationCount: message.operations.length,
+                bindingToken: snapshot.bindingToken,
+                revision: persisted.revision,
+            });
+        } catch (error) {
+            const errorMessage =
+                error instanceof Error ? error.message : "Unknown error";
+            process.send?.({
+                type: "operationsApplied",
+                requestId,
                 success: false,
-                error: error instanceof Error ? error.message : "Unknown error",
-                method: "sse-forwarded",
+                identityMismatch: /binding|workspace root/.test(errorMessage),
+                revisionMismatch: /revision mismatch/.test(errorMessage),
+                error: errorMessage,
+                bindingToken: snapshot.bindingToken,
             });
         }
     } else if (message.type === "getDocumentContent") {
-        debug(
-            `[VIEW] Processing getDocumentContent request at ${new Date().toISOString()}`,
-        );
-        // Handle content requests from agent - try client markdown first, fallback to Y.js
-        // Process this asynchronously to avoid blocking other messages
-        (async () => {
-            try {
-                let documentId = "";
-
-                if (!filePath) {
-                    // Use default document ID for memory-only mode
-                    documentId = "default";
-                } else {
-                    documentId = path.basename(filePath, ".md");
-                }
-
-                debug("Using documentID " + documentId);
-
-                let content = "";
-                let source = "unknown";
-
-                try {
-                    // PRIMARY: Try to get proper markdown from connected client
-                    if (clients.length > 0) {
-                        debug(
-                            `[VIEW] Attempting to get markdown from connected client...`,
-                        );
-                        const markdownResponse =
-                            await requestMarkdownFromClient();
-                        content = markdownResponse.markdown;
-                        source = "client-serializer";
-                        debug(
-                            `[VIEW] Retrieved markdown from client: ${content.length} chars`,
-                        );
-                    } else {
-                        throw new Error("No clients connected");
-                    }
-                } catch (clientError) {
-                    const errorMessage =
-                        clientError instanceof Error
-                            ? clientError.message
-                            : String(clientError);
-                    debug(
-                        `[VIEW] Failed to get markdown from client (${errorMessage}), falling back to Y.js`,
-                    );
-
-                    // FALLBACK: Get content from authoritative Y.js document
-                    const ydoc = getAuthoritativeDocument(documentId);
-                    const yText = ydoc.getText("content");
-                    content = yText.toString();
-                    source = "yjs-fallback";
-                    debug(
-                        `[VIEW] Retrieved content from Y.js fallback: ${content.length} chars`,
-                    );
-
-                    // If Y.js is also empty, try reading from file as last resort
-                    if (!content && filePath && fs.existsSync(filePath)) {
-                        try {
-                            content = fs.readFileSync(filePath, "utf-8");
-                            source = "file-fallback";
-                            debug(
-                                `[VIEW] Retrieved content from file fallback: ${content.length} chars`,
-                            );
-                        } catch (fileError) {
-                            debug(
-                                `[VIEW] File fallback also failed: ${fileError}`,
-                            );
-                        }
-                    }
-                }
-
-                debug(
-                    `[VIEW] Sending document content to agent (source: ${source}, ${content.length} chars)`,
-                );
-
+        const requestId =
+            typeof message.requestId === "string" ? message.requestId : "";
+        const snapshot = captureBindingSnapshot();
+        try {
+            const identityError = bindingError(message, snapshot);
+            if (identityError) {
                 process.send?.({
                     type: "documentContent",
-                    content: content,
-                    source: source,
-                    timestamp: Date.now(),
-                });
-
-                debug("[SENT] [VIEW] Sent document content to agent process");
-            } catch (error) {
-                console.error("[VIEW] Failed to get document content:", error);
-                process.send?.({
-                    type: "documentContent",
+                    requestId,
                     content: "",
                     source: "error",
-                    error:
-                        error instanceof Error
-                            ? error.message
-                            : "Unknown error",
+                    error: identityError,
+                    identityMismatch: true,
+                    bindingToken: snapshot.bindingToken,
+                    boundFilePath: snapshot.filePath,
+                    boundRoot: snapshot.filePath ? snapshot.currentRoot : null,
+                    boundRelativePath: snapshot.boundRelativePath,
+                    revision: null,
                     timestamp: Date.now(),
                 });
+                return;
             }
-        })();
+            if (!snapshot.filePath || !snapshot.boundRelativePath) {
+                throw new Error("No markdown document is bound");
+            }
+            const document = readBoundDocument({
+                token: snapshot.bindingToken ?? undefined,
+                root: snapshot.currentRoot,
+                relativePath: snapshot.boundRelativePath,
+                filePath: snapshot.filePath,
+            });
+            process.send?.({
+                type: "documentContent",
+                requestId,
+                content: document.content,
+                source: "file",
+                bindingToken: snapshot.bindingToken,
+                boundFilePath: snapshot.filePath,
+                boundRoot: snapshot.currentRoot,
+                boundRelativePath: snapshot.boundRelativePath,
+                revision: document.revision,
+                timestamp: Date.now(),
+            });
+        } catch (error) {
+            const errorMessage =
+                error instanceof Error ? error.message : "Unknown error";
+            process.send?.({
+                type: "documentContent",
+                requestId,
+                content: "",
+                source: "error",
+                error: errorMessage,
+                identityMismatch: /binding|workspace root/.test(errorMessage),
+                bindingToken: snapshot.bindingToken,
+                boundFilePath: snapshot.filePath,
+                boundRoot: snapshot.filePath ? snapshot.currentRoot : null,
+                boundRelativePath: snapshot.boundRelativePath,
+                revision: null,
+                timestamp: Date.now(),
+            });
+        }
     } else if (message.type === "uiCommandResult") {
         // Handle UI command results from agent
         debug(

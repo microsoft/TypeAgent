@@ -23,7 +23,7 @@ type TestAgentContext = {
 };
 
 describe("markdown document creation", () => {
-    let workspace: string;
+    let workspace = "";
 
     beforeEach(() => {
         workspace = fs.mkdtempSync(
