@@ -19,9 +19,9 @@ function makeSettings(): CopilotApiSettings {
         provider: "copilot",
         modelType: ModelType.Chat,
         endpoint: "copilot-cli",
-        modelName: "claude-haiku-4.5",
+        modelName: "gpt-5.6-luna",
         disableInfiniteSessions: true,
-        fallbackModels: ["gpt-5-mini", "gpt-5.4-mini"],
+        fallbackModels: ["gpt-5.4-mini", "gpt-5-mini", "gpt-5.4"],
         maxRetryAttempts: 0,
         retryPauseMs: 1,
         timeout: 5_000,
@@ -31,7 +31,7 @@ function makeSettings(): CopilotApiSettings {
 function makeEndpoint(overrides?: Partial<CopilotEndpoint>): CopilotEndpoint {
     return {
         url: "https://api.example/chat/completions",
-        model: "claude-haiku-4.5",
+        model: "gpt-5.6-luna",
         headers: {
             Authorization: "******",
             "Copilot-Integration-Id": "copilot-developer-cli",
@@ -199,6 +199,32 @@ describe("selectCopilotModel", () => {
         expect(selected?.id).toBe("claude-sonnet-6");
     });
 
+    test("uses the newest available model in the requested tier", () => {
+        const selected = selectCopilotModel(
+            "gpt-5.6-sol",
+            [],
+            [
+                makeModel("gpt-5.5-sol"),
+                makeModel("gpt-5.7-sol"),
+                makeModel("gpt-6-astra"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.7-sol");
+    });
+
+    test("uses the nearest general tier before a specialized model", () => {
+        const selected = selectCopilotModel(
+            "gpt-5.6-sol",
+            [],
+            [
+                makeModel("gpt-6-astra"),
+                makeModel("gpt-5.6-luna"),
+                makeModel("gpt-5.6-terra"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.6-terra");
+    });
+
     test("uses a deterministic concrete model as the final fallback", () => {
         const selected = selectCopilotModel(
             "missing-model",
@@ -255,7 +281,7 @@ describe("createCopilotTransportModel", () => {
         const headers = fetchArgs[0].init.headers as Record<string, string>;
         expect(headers.Authorization).toBe("******");
         const body = JSON.parse(fetchArgs[0].init.body as string);
-        expect(body.model).toBe("claude-haiku-4.5");
+        expect(body.model).toBe("gpt-5.6-luna");
         expect(body.temperature).toBe(0);
         expect(body.messages).toEqual([
             { role: "user", content: "what time is it" },

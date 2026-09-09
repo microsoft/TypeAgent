@@ -1186,7 +1186,7 @@ Usage: `@config execution reasoning [<engine>]`
 
 - &lt;engine&gt; - (optional) Reasoning engine to use (claude, copilot, or none). Omit to show the current engine. (type: string)
 
-## @config execution reasoningModel - Set the Copilot reasoning model (e.g. claude-opus-4.8). Omit to show the current value.
+## @config execution reasoningModel - Set the Copilot reasoning model (e.g. gpt-5.6-sol). Omit to show the current value.
 
 Usage: `@config execution reasoningModel [<model>]`
 

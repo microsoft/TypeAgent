@@ -178,7 +178,7 @@ async function sendMessageAndWaitWithCancellation(
     }
 }
 
-const FALLBACK_MODEL = "claude-opus-4.8";
+const FALLBACK_MODEL = "gpt-5.6-sol";
 
 // Default reasoning effort when COPILOT_REASONING_EFFORT is unset/invalid.
 // "high" makes the model more likely to actually run verification tool calls
@@ -214,16 +214,22 @@ export function resolveReasoningTimeoutMs(): number {
         : Math.min(parsed, MAX_SETTIMEOUT_MS);
 }
 
+export function resolveCopilotReasoningModel(
+    configured: string | undefined,
+    environment: string | undefined = process.env.COPILOT_REASONING_MODEL,
+): string {
+    return configured?.trim() || environment?.trim() || FALLBACK_MODEL;
+}
+
 function resolveModel(context: ActionContext<CommandHandlerContext>): string {
     // Live @config override wins, then the COPILOT_REASONING_MODEL env var
     // (from config.yaml), then the built-in fallback.
     const configured =
         context.sessionContext.agentContext.session.getConfig().execution
             .reasoningModel;
-    return (
-        configured?.trim() ||
-        process.env.COPILOT_REASONING_MODEL?.trim() ||
-        FALLBACK_MODEL
+    return resolveCopilotReasoningModel(
+        configured,
+        process.env.COPILOT_REASONING_MODEL,
     );
 }
 

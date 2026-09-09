@@ -372,14 +372,21 @@ function isConcreteAvailableModel(model: ModelInfo): boolean {
     return model.id !== "auto" && model.policy?.state !== "disabled";
 }
 
-function versionedFamily(
-    modelId: string,
-): { family: string; version: number[] } | undefined {
-    const match = /^(.*?)-(\d+(?:\.\d+)*)$/.exec(modelId);
+type VersionedModelId = {
+    family: string;
+    version: number[];
+    tier: string | undefined;
+};
+
+function versionedFamily(modelId: string): VersionedModelId | undefined {
+    const match = /^(.*?)-(\d+(?:\.\d+)*)(?:-([a-z][a-z0-9.-]*))?$/i.exec(
+        modelId,
+    );
     if (match === null) return undefined;
     return {
         family: match[1],
         version: match[2].split(".").map(Number),
+        tier: match[3]?.toLowerCase(),
     };
 }
 
@@ -390,6 +397,56 @@ function compareVersionsDescending(a: number[], b: number[]): number {
         if (difference !== 0) return difference;
     }
     return 0;
+}
+
+function modelTierClass(tier: string | undefined): number | undefined {
+    switch (tier) {
+        case undefined:
+        case "sol":
+            return 3;
+        case "terra":
+        case "mini":
+            return 2;
+        case "luna":
+        case "nano":
+            return 1;
+        default:
+            return undefined;
+    }
+}
+
+function compareFamilyCandidates(
+    a: { model: ModelInfo; parsed: VersionedModelId },
+    b: { model: ModelInfo; parsed: VersionedModelId },
+    requested: VersionedModelId,
+): number {
+    const aExactTier = a.parsed.tier === requested.tier;
+    const bExactTier = b.parsed.tier === requested.tier;
+    if (aExactTier !== bExactTier) return aExactTier ? -1 : 1;
+
+    const requestedClass = modelTierClass(requested.tier);
+    const aClass = modelTierClass(a.parsed.tier);
+    const bClass = modelTierClass(b.parsed.tier);
+    if (requestedClass !== undefined) {
+        const aDistance =
+            aClass === undefined
+                ? Number.POSITIVE_INFINITY
+                : Math.abs(requestedClass - aClass);
+        const bDistance =
+            bClass === undefined
+                ? Number.POSITIVE_INFINITY
+                : Math.abs(requestedClass - bClass);
+        if (aDistance !== bDistance) return aDistance - bDistance;
+        if (aClass !== bClass) return (aClass ?? 0) - (bClass ?? 0);
+    }
+
+    const versionOrder = compareVersionsDescending(
+        a.parsed.version,
+        b.parsed.version,
+    );
+    return versionOrder !== 0
+        ? versionOrder
+        : a.model.id.localeCompare(b.model.id);
 }
 
 export function selectCopilotModel(
@@ -413,19 +470,17 @@ export function selectCopilotModel(
         const familyModels = available
             .map((model) => ({
                 model,
-                version: versionedFamily(model.id),
+                parsed: versionedFamily(model.id),
             }))
             .filter(
                 (
                     candidate,
                 ): candidate is {
                     model: ModelInfo;
-                    version: { family: string; version: number[] };
-                } => candidate.version?.family === requestedFamily.family,
+                    parsed: VersionedModelId;
+                } => candidate.parsed?.family === requestedFamily.family,
             )
-            .sort((a, b) =>
-                compareVersionsDescending(a.version.version, b.version.version),
-            );
+            .sort((a, b) => compareFamilyCandidates(a, b, requestedFamily));
         if (familyModels.length > 0) return familyModels[0].model;
     }
 
