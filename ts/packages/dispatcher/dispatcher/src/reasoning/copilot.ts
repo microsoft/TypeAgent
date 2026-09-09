@@ -2174,7 +2174,10 @@ function getCopilotSessionConfig(
         ],
         availableTools: buildCopilotAvailableTools({ subagentsEnabled }),
         workingDirectory: workingDirectory ?? getRepoRoot(),
-        onPermissionRequest: createCopilotPermissionHandler(context),
+        onPermissionRequest: createCopilotPermissionHandler(
+            context,
+            workingDirectory,
+        ),
         systemMessage: {
             mode: "append" as const,
             content: [
