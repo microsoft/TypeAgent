@@ -234,6 +234,16 @@ describe("selectCopilotModel", () => {
         expect(selected?.id).toBe("a-model");
     });
 
+    test("handles long malformed model ids without family matching", () => {
+        const requested = "-0-a".repeat(10_000);
+        const selected = selectCopilotModel(
+            requested,
+            [],
+            [makeModel("z-model"), makeModel("a-model")],
+        );
+        expect(selected?.id).toBe("a-model");
+    });
+
     test("returns undefined when no concrete model is enabled", () => {
         const selected = selectCopilotModel(
             "claude-haiku-4.5",

@@ -378,16 +378,36 @@ type VersionedModelId = {
     tier: string | undefined;
 };
 
+function parseNumericVersion(segment: string): number[] | undefined {
+    const components = segment.split(".");
+    const version: number[] = [];
+    for (const component of components) {
+        if (component.length === 0) return undefined;
+        for (let i = 0; i < component.length; i++) {
+            const code = component.charCodeAt(i);
+            if (code < 48 || code > 57) return undefined;
+        }
+        const value = Number(component);
+        if (!Number.isSafeInteger(value)) return undefined;
+        version.push(value);
+    }
+    return version;
+}
+
 function versionedFamily(modelId: string): VersionedModelId | undefined {
-    const match = /^(.*?)-(\d+(?:\.\d+)*)(?:-([a-z][a-z0-9.-]*))?$/i.exec(
-        modelId,
-    );
-    if (match === null) return undefined;
-    return {
-        family: match[1],
-        version: match[2].split(".").map(Number),
-        tier: match[3]?.toLowerCase(),
-    };
+    const segments = modelId.split("-");
+    for (let i = 1; i < segments.length; i++) {
+        const version = parseNumericVersion(segments[i]);
+        if (version === undefined) continue;
+        const family = segments.slice(0, i).join("-");
+        if (family.length === 0) return undefined;
+        const tier = segments
+            .slice(i + 1)
+            .join("-")
+            .toLowerCase();
+        return { family, version, tier: tier.length === 0 ? undefined : tier };
+    }
+    return undefined;
 }
 
 function compareVersionsDescending(a: number[], b: number[]): number {
