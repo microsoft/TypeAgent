@@ -91,7 +91,7 @@ describe("markdown update persistence", () => {
         ).toThrow(/binding token changed/);
     });
 
-    test("rejects a workspace replaced by a junction", () => {
+    test("rejects a workspace replaced by a junction", async () => {
         const movedWorkspace = path.join(temporaryDirectory, "moved-workspace");
         const outside = path.join(temporaryDirectory, "outside");
         fs.mkdirSync(outside);
@@ -99,7 +99,7 @@ describe("markdown update persistence", () => {
         fs.renameSync(workspace, movedWorkspace);
         fs.symlinkSync(outside, workspace, "junction");
 
-        expect(() => readBoundDocument(binding)).toThrow(
+        await expect(readBoundDocument(binding)).rejects.toThrow(
             /workspace root changed/,
         );
         expect(fs.readFileSync(path.join(outside, "plan.md"), "utf-8")).toBe(

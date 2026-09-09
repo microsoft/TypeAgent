@@ -23,9 +23,10 @@ import { isAllowedViewOrigin } from "./originAllowlist.js";
 import { resolvePathWithinRoot } from "./pathPolicy.js";
 import {
     normalizeRelativeDocumentPath,
+    resolveExistingFileWithinRoot,
     resolveRealDirectory,
     resolveWritableFileWithinRoot,
-} from "../../agent/pathPolicy.js";
+} from "../../agent/documentPathPolicy.js";
 import {
     persistDocumentOperations,
     readBoundDocument,
@@ -927,11 +928,11 @@ app.post("/file/load", express.json(), (req: Request, res: Response) => {
             return;
         }
 
-        const resolvedPath = resolveWritableFileWithinRoot(
+        const resolvedPath = resolveExistingFileWithinRoot(
             getValidatedCurrentRoot(),
             newFilePath,
         );
-        if (resolvedPath === undefined || !fs.existsSync(resolvedPath)) {
+        if (resolvedPath === undefined) {
             res.status(403).json({
                 error: "Access to the file is forbidden or file not found",
             });
@@ -1842,12 +1843,20 @@ Start typing to see the editor in action!
             if (!snapshot.filePath || !snapshot.boundRelativePath) {
                 throw new Error("No markdown document is bound");
             }
-            const document = readBoundDocument({
+            const document = await readBoundDocument({
                 token: snapshot.bindingToken ?? undefined,
                 root: snapshot.currentRoot,
                 relativePath: snapshot.boundRelativePath,
                 filePath: snapshot.filePath,
             });
+            if (
+                bindingToken !== snapshot.bindingToken ||
+                currentRoot !== snapshot.currentRoot ||
+                filePath !== snapshot.filePath ||
+                boundRelativePath !== snapshot.boundRelativePath
+            ) {
+                throw new Error("Document binding changed while reading");
+            }
             process.send?.({
                 type: "documentContent",
                 requestId,

@@ -29,7 +29,7 @@ import {
     resolveExistingFileWithinRoot,
     resolveRealDirectory,
     resolveWritableFileWithinRoot,
-} from "./pathPolicy.js";
+} from "./documentPathPolicy.js";
 import {
     computeContentRevision,
     persistDocumentOperations,
@@ -922,7 +922,7 @@ async function readCurrentDocumentContent(
     }
     const viewProcess = getCurrentDocumentViewProcess(agentContext);
     if (!viewProcess) {
-        const document = readBoundDocument(binding);
+        const document = await readBoundDocument(binding);
         return {
             content: document.content,
             binding,

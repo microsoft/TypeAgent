@@ -8,8 +8,8 @@ import { applyDocumentOperations } from "./documentOperations.js";
 import type { DocumentOperation } from "./markdownOperationSchema.js";
 import {
     resolveRealDirectory,
-    resolveWritableFileWithinRoot,
-} from "./pathPolicy.js";
+    resolveExistingFileWithinRoot,
+} from "./documentPathPolicy.js";
 
 export interface DocumentBinding {
     token: string | undefined;
@@ -55,12 +55,16 @@ function resolveBoundFile(binding: DocumentBinding): string {
     if (resolveRealDirectory(binding.root) !== binding.root) {
         throw new Error("The authorized markdown workspace root changed");
     }
-    const resolved = resolveWritableFileWithinRoot(
+    const resolved = resolveExistingFileWithinRoot(
         binding.root,
         binding.relativePath,
     );
     if (
         resolved === undefined ||
+        path.relative(
+            resolved,
+            path.resolve(binding.root, binding.relativePath),
+        ) !== "" ||
         path.relative(resolved, binding.filePath) !== ""
     ) {
         throw new Error(
@@ -70,10 +74,54 @@ function resolveBoundFile(binding: DocumentBinding): string {
     return resolved;
 }
 
-export function readBoundDocument(binding: DocumentBinding) {
+export async function readBoundDocument(binding: DocumentBinding) {
+    binding = { ...binding };
     const filePath = resolveBoundFile(binding);
-    const content = fs.readFileSync(filePath, "utf-8");
+    const rootIdentity = fs.statSync(binding.root, { bigint: true });
+    const fileIdentity = fs.statSync(filePath, { bigint: true });
+    const file = await fs.promises.open(filePath, "r");
+    let content: string;
+    try {
+        const openedIdentity = await file.stat({ bigint: true });
+        if (!sameFileIdentity(fileIdentity, openedIdentity)) {
+            throw new Error("Document binding file changed while opening");
+        }
+        // Check the opened handle before reading, not just its pathname.
+        resolveBoundFile(binding);
+        content = await file.readFile("utf-8");
+    } finally {
+        await file.close();
+    }
+
+    // The root or file may have been replaced during any of the awaits above.
+    resolveBoundFile(binding);
+    if (
+        !sameFileIdentity(
+            rootIdentity,
+            fs.statSync(binding.root, { bigint: true }),
+        )
+    ) {
+        throw new Error("The authorized markdown workspace root changed");
+    }
+    const currentIdentity = fs.statSync(filePath, { bigint: true });
+    if (!sameFileIdentity(fileIdentity, currentIdentity)) {
+        throw new Error("Document binding file changed while reading");
+    }
+    // ctime can change on a read on Windows; it is not a content revision.
+    if (
+        fileIdentity.size !== currentIdentity.size ||
+        fileIdentity.mtimeNs !== currentIdentity.mtimeNs
+    ) {
+        throw new Error("Document changed while reading (revision mismatch)");
+    }
     return { content, revision: computeContentRevision(content), filePath };
+}
+
+function sameFileIdentity(
+    left: fs.BigIntStats,
+    right: fs.BigIntStats,
+): boolean {
+    return left.dev === right.dev && left.ino === right.ino;
 }
 
 export function persistDocumentOperations(
