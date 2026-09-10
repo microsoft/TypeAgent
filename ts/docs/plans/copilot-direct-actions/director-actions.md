@@ -5,7 +5,9 @@
 
 ## Revision Notes
 
-2026-09-10: Added input, discovery, and execution safeguards from the earlier shortcut design, while keeping this document's architecture and open interface questions.
+2026-09-10: Resolved the structured action interface questions, including MCP exposure, progressive discovery, contract versioning, authorization, multi-step behavior, and sharing across integration modes.
+
+2026-09-10: Added input, discovery, and execution safeguards from the earlier shortcut design.
 
 ## Summary
 
@@ -135,11 +137,49 @@ Discovery should provide enough information for Copilot to determine:
 
 For large action catalogs, discovery should preferably support search and progressive disclosure rather than requiring the entire TypeAgent action catalog to be loaded into Copilot's context.
 
-Start with compact summaries, then load the selected action's complete contract, including referenced types and required constraints. A caller that already knows the action should be able to fetch its contract directly; a caller with a current contract should not need to repeat discovery.
+Use two required levels of progressive disclosure:
 
-Contracts may be reused within the same server and session/permission scope. TypeAgent must detect an outdated contract before execution and ask the caller to refresh it. The compatibility mechanism remains an open question.
+1. **Action summary:** Search or list compact action identifiers, descriptions, and current availability.
+2. **Action contract:** Retrieve one closed, self-contained contract with its parameters, referenced types, constraints, outputs, and interaction requirements.
+
+Server status and capability or schema names may be returned as metadata and search filters, but they should not be mandatory retrieval stages. Treating them as required levels would add round trips without improving the contract boundary. The action is the unit of selection, caching, and compatibility.
+
+The normal flow is:
+
+```text
+search actions → get selected action contract → execute action
+```
+
+A caller that already knows the action should be able to fetch its contract directly; a caller with a current contract should not need to repeat discovery. A contract must include referenced enums and nested types without loading unrelated actions from the same schema.
+
+Contracts may be reused within the same server and session/permission scope. TypeAgent must detect an outdated contract before execution and ask the caller to refresh it using the exact-match mechanism below.
 
 Discovery must respect the caller's permissions. It neither enables actions nor grants permission to execute them. No match or an ambiguous match should lead to clarification or natural-language handling, not guessed action parameters.
+
+### Contract Versioning
+
+Discovery responses include a protocol version for the structured-action envelope and an opaque fingerprint for each action contract. Execution must supply the fingerprint returned with the selected contract.
+
+TypeAgent compares the supplied fingerprint with the current contract before any effect is possible. A mismatch returns `contract_stale` without executing the action. The caller must fetch the current contract and construct a new request; TypeAgent must not reinterpret parameters under the changed contract.
+
+The initial implementation may conservatively use the existing schema source hash. The target fingerprint should hash a canonical representation of the selected action's execution-relevant contract, including parameter types, required fields, constraints, referenced definitions, outputs, and interaction shape. Descriptions and transient availability, authentication, permission, and readiness state must not affect the fingerprint.
+
+Version 1 uses exact fingerprint matching rather than attempting semantic compatibility between arbitrary schema changes. This intentionally favors a safe refresh over complex compatibility rules for unions, nested types, constraints, and interaction results.
+
+## MCP Interface
+
+Expose a small, fixed set of operations through the existing TypeAgent MCP server:
+
+- Search or list action summaries.
+- Retrieve one complete action contract.
+- Execute one action against that contract.
+- Continue or cancel a pending interaction when the transport cannot represent that interaction directly.
+
+These operations are normal MCP tools. Individual TypeAgent actions remain data returned by discovery rather than being registered as separate MCP tools. This keeps a large, dynamic, permission-sensitive catalog out of Copilot's native tool list and allows enabled actions to change during a session. Native per-action tools may be reconsidered if Copilot supports reliable dynamic tool-list refresh and large catalogs without excessive context use.
+
+Use the existing `schemaName` and `actionName` as the action identity. Keep them as separate request fields even if discovery also provides a joined display identifier.
+
+The MCP package is a transport adapter over a shared structured-action service in the dispatcher or agent server. Discovery, contract generation, fingerprinting, validation, readiness checks, execution, and interaction state do not belong in the MCP adapter.
 
 ## Responsibility Boundaries
 
@@ -160,6 +200,34 @@ Both paths should use the existing dispatcher execution engine, rather than a se
 Structured calls also need clear results for the next step: machine-readable data and stable IDs where available, plus readable text. Distinguish completion, failure, cancellation, and required interaction. Never silently answer a required choice or report completion while confirmation is pending. Define how an interaction resumes, or say when continuation is unsupported.
 
 Bind calls to the intended conversation and make any use of prior-turn context explicit. After a timeout, disconnect, or cancellation, effects may already have occurred. Do not automatically replay the action unless it is known not to have executed or is safe to repeat.
+
+For structured invocation, Copilot selecting an action does not count as user confirmation. Before execution, TypeAgent must:
+
+1. Bind the request to the correct caller, TypeAgent session, and Copilot conversation.
+2. Reject a stale contract.
+3. Resolve the current action and validate its parameters.
+4. Check that the schema and action are enabled.
+5. Run agent readiness and setup checks.
+6. Preserve authentication and resource authorization enforced by the owning service.
+7. Request user confirmation for destructive, external, costly, or sensitive effects.
+
+A required choice or form returns `requires_interaction` with an opaque, session-bound, single-use interaction ID. A later call submits the user's response or cancels the interaction. The integration must not choose a default answer on the user's behalf. Completion, failure, cancellation, `contract_stale`, unavailability, and uncertain execution after a disconnect or timeout must remain distinct result states.
+
+## Multi-Step Behavior
+
+Version 1 exposes only single structured action calls:
+
+- Copilot invokes individual actions in sequence when it owns the orchestration.
+- A registered TypeAgent flow may be exposed as one action while its internal steps remain private.
+- A request that still requires interpretation or planning uses the natural-language path.
+
+Do not expose a general-purpose structured plan API in version 1. Such an API would require result bindings, partial-failure behavior, confirmation suspension, cancellation, retry, and rollback semantics that single action invocation does not need. If repeated calls later prove insufficient, a batch design can add those semantics explicitly without changing the initial action contract.
+
+## Shared Integration Service
+
+Direct and MCP integration modes share the same transport-neutral structured-action service. It owns discovery, action identity and contracts, fingerprints, validation, readiness and authorization checks, execution, structured results, and interaction and cancellation semantics.
+
+MCP maps the service to MCP tools and structured content. Direct mode calls it through the dispatcher interface. This does not change ordinary Direct-mode prompts: user-originated natural language continues through TypeAgent's intent resolution, and only callers that already know the action and concrete parameters use the shared structured interface.
 
 ## Architectural Model
 
@@ -218,13 +286,3 @@ This avoids redundant reasoning while preserving TypeAgent's action abstraction,
 - **Clear ownership:** Copilot handles orchestration; TypeAgent handles its action domain and execution.
 - **Scalability:** Action discovery can support large TypeAgent catalogs without injecting every action schema into the model context.
 - **Backward compatibility:** Clients that only understand natural language can continue using the existing TypeAgent path.
-
-## Open Questions
-
-1. How should TypeAgent actions be exposed through the existing MCP plugin model?
-2. Should action discovery be a callable MCP tool, or should action metadata participate directly in Copilot's native tool-discovery mechanism?
-3. What is the appropriate granularity of discovery: server, capability, action, or full schema?
-4. How should action versioning and schema compatibility be handled?
-5. Which authorization and confirmation checks must occur when Copilot directly invokes an action?
-6. How should multi-step TypeAgent actions or plans be represented?
-7. Can the structured action contract be shared across the Direct and MCP integration modes?
