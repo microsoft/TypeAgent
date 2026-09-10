@@ -134,4 +134,16 @@ class ComposeEmailActionParserTest {
 
         assertEquals(8_000, parsed?.body?.length)
     }
+
+    @Test
+    fun preservesBodyFormattingWhileRemovingUnsafeControls() {
+        val parsed = parseComposeEmailActionPayload(
+            payload("body" to "Hello team,\r\n\r\n- First\u0000 item\n- Second item\n\nThanks")
+        )
+
+        assertEquals(
+            "Hello team,\n\n- First  item\n- Second item\n\nThanks",
+            parsed?.body
+        )
+    }
 }

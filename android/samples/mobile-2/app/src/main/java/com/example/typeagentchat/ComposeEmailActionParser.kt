@@ -63,7 +63,7 @@ internal fun parseComposeEmailActionPayload(data: Any?): ComposeEmailAction? {
     val cc = payload.parseEmailAddressList("cc") ?: return null
     val bcc = payload.parseEmailAddressList("bcc") ?: return null
     val subject = payload.sanitizedActionText("subject")
-    val body = payload.sanitizedActionText("body", MAX_EMAIL_BODY_CHARS)
+    val body = payload.sanitizedMultilineActionText("body", MAX_EMAIL_BODY_CHARS)
 
     // An entirely empty draft is not something a user ever asks for, so it is
     // treated as a failed translation rather than silently opening a blank

@@ -712,11 +712,12 @@ class MainActivity : ComponentActivity() {
     ) {
         val intent = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).apply {
             putExtra(SearchManager.QUERY, action.query)
-            // EXTRA_MEDIA_FOCUS tells the music app how to read the query. It is
-            // left off for "any", which is the documented way to say
-            // "unstructured search - you decide".
+            // EXTRA_MEDIA_FOCUS is required. A generic focus plus a non-empty
+            // query is Android's documented unstructured-search mode.
             when (action.focus) {
-                MusicSearchFocus.Any -> Unit
+                MusicSearchFocus.Any -> {
+                    putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
+                }
                 MusicSearchFocus.Artist -> {
                     putExtra(
                         MediaStore.EXTRA_MEDIA_FOCUS,

@@ -112,26 +112,25 @@ internal fun parseCreateCalendarEventActionPayload(
         return null
     }
 
+    val start = parseIsoDateTime(payload.sanitizedActionText("start")) ?: return null
     val allDay = when (val raw = payload.opt("allDay")) {
-        null, JSONObject.NULL -> false
+        null, JSONObject.NULL -> !start.hasTimeOfDay
         is Boolean -> raw
         // "true"/"false" as a string is a common model slip and is unambiguous.
         is String -> raw.trim().lowercase().toBooleanStrictOrNull() ?: return null
         else -> return null
     }
 
-    val start = parseIsoDateTime(payload.sanitizedActionText("start")) ?: return null
-    // The schema asks for a date only when allDay is set. A time of day here
-    // means the model contradicted itself, and either reading of it - honour
-    // the time, or drop it - would put something in the calendar the user did
-    // not ask for, so the action fails and says so instead.
-    if (allDay && start.hasTimeOfDay) {
+    // Date-only values represent all-day events; date-time values represent
+    // timed events. A supplied allDay value must agree rather than silently
+    // changing the meaning of start.
+    if (allDay == start.hasTimeOfDay) {
         return null
     }
 
     val rawEnd = payload.sanitizedActionText("end")
     val end = if (rawEnd.isEmpty()) null else parseIsoDateTime(rawEnd) ?: return null
-    if (end != null && allDay && end.hasTimeOfDay) {
+    if (end != null && end.hasTimeOfDay != start.hasTimeOfDay) {
         return null
     }
 
@@ -159,7 +158,10 @@ internal fun parseCreateCalendarEventActionPayload(
         endMillis = endMillis,
         allDay = allDay,
         location = payload.sanitizedActionText("location", MAX_EVENT_LOCATION_CHARS),
-        description = payload.sanitizedActionText("description", MAX_EVENT_DESCRIPTION_CHARS)
+        description = payload.sanitizedMultilineActionText(
+            "description",
+            MAX_EVENT_DESCRIPTION_CHARS
+        )
     )
 }
 

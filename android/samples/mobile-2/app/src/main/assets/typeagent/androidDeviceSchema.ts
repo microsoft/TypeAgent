@@ -163,7 +163,7 @@ export type ComposeEmailAction = {
         bcc?: string[];
         // The subject line.
         subject?: string;
-        // The message body.
+        // The message body. Preserve paragraphs, lists and signatures.
         body?: string;
     };
 };
@@ -229,14 +229,17 @@ export type CreateCalendarEventAction = {
         // "2026-08-24". Times are interpreted in the device's own time zone,
         // so never convert to UTC and never append "Z" or an offset.
         start: string;
-        // Local end time in the same format as start. Omit for a one hour
-        // event, or a single day when allDay is true.
+        // Local end in the same format as start. For a timed event, omit for a
+        // one-hour event. For an all-day event, this is the last included date;
+        // omit it for a single-day event.
         end?: string;
-        // True when the event covers whole days rather than a time of day.
+        // True when the event covers whole days rather than a time of day. When
+        // omitted, a date-only start implies true and a date-time implies false.
+        // If supplied, this must agree with the format of start.
         allDay?: boolean;
         // Where the event takes place.
         location?: string;
-        // Longer notes about the event.
+        // Longer notes about the event. Preserve multiline formatting.
         description?: string;
     };
 };

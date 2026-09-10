@@ -223,22 +223,30 @@ class CreateCalendarEventActionParserTest {
     }
 
     @Test
-    fun readsADateOnlyValueAsLocalMidnightWhenItIsNotAllDay() {
+    fun infersAnAllDayEventFromADateOnlyStart() {
         val parsed = parseCreateCalendarEventActionPayload(
             payload("start" to "2026-08-24"),
             timeZone = brisbane
         )
 
-        assertEquals(august24MidnightUtc - 10 * hour, parsed?.startMillis)
+        assertTrue(parsed?.allDay ?: false)
+        assertEquals(august24MidnightUtc, parsed?.startMillis)
+        assertEquals(august24MidnightUtc + day, parsed?.endMillis)
     }
 
     @Test
-    fun rejectsAnAllDayEventThatAlsoCarriesATimeOfDay() {
+    fun rejectsAnAllDayValueThatContradictsTheStartFormat() {
         // The model contradicted itself; either reading would put something in
         // the calendar the user did not ask for.
         assertNull(
             parseCreateCalendarEventActionPayload(
                 payload("start" to "2026-08-24T09:00", "allDay" to true),
+                timeZone = utc
+            )
+        )
+        assertNull(
+            parseCreateCalendarEventActionPayload(
+                payload("start" to "2026-08-24", "allDay" to false),
                 timeZone = utc
             )
         )
@@ -389,13 +397,16 @@ class CreateCalendarEventActionParserTest {
             payload(
                 "start" to "2026-08-24T15:00",
                 "location" to "Cafe Rio",
-                "description" to "Bring the deck"
+                "description" to "Agenda:\r\n- Bring\u0000 the deck\n- Review notes"
             ),
             timeZone = utc
         )
 
         assertEquals("Cafe Rio", parsed?.location)
-        assertEquals("Bring the deck", parsed?.description)
+        assertEquals(
+            "Agenda:\n- Bring  the deck\n- Review notes",
+            parsed?.description
+        )
     }
 
     @Test

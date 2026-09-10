@@ -37,7 +37,7 @@ internal fun parseShareTextActionPayload(data: Any?): ShareTextAction? {
     val payload = data as? JSONObject ?: return null
     // Newlines survive here, unlike in the URI-bound actions: shared text is
     // carried as an extra, and a multi-line note is a normal thing to share.
-    val text = payload.optActionString("text").trim().take(MAX_SHARE_TEXT_CHARS).trim()
+    val text = payload.sanitizedMultilineActionText("text", MAX_SHARE_TEXT_CHARS)
     if (text.isEmpty()) {
         return null
     }

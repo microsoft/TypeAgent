@@ -24,9 +24,9 @@ class ShareTextActionParserTest {
     fun keepsLineBreaksInsideSharedText() {
         // Unlike the URI-bound actions, shared text rides as an extra, so a
         // multi-line note survives intact.
-        val parsed = parseShareTextActionPayload(payload("line one\nline two"))
+        val parsed = parseShareTextActionPayload(payload("line one\r\nline\u0000 two"))
 
-        assertEquals("line one\nline two", parsed?.text)
+        assertEquals("line one\nline  two", parsed?.text)
     }
 
     @Test
