@@ -269,6 +269,14 @@
           {
             "name": "openInIntegratedTerminal",
             "description": "Open In Integrated Terminal"
+          },
+          {
+            "name": "runWorkspaceCommand",
+            "description": "Directly run an explicitly requested focused test, build, lint, or diagnostic command and return structured output"
+          },
+          {
+            "name": "cancelWorkspaceCommand",
+            "description": "Cancel an active structured workspace command by execution ID"
           }
         ]
       },

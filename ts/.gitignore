@@ -4,6 +4,7 @@
 .cert/
 prod/
 coverage/
+packages/coda/dist-test/
 
 # Playwright
 /test-results/

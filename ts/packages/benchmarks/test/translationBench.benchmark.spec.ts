@@ -274,6 +274,15 @@ describe("translation-bench benchmark JSONL", () => {
         );
     });
 
+    it("rejects parameter scoring that does not align with actions", () => {
+        const benchmark = materialize();
+        benchmark.cases[0]!.seed.parameterScore = [];
+
+        expect(() => validateTranslationBenchBenchmark(benchmark)).toThrow(
+            /parameterScore must align 1:1 with expectedActions/,
+        );
+    });
+
     it("requires approval and detects changes after approval", () => {
         const draft = materialize();
         const jsonl = formatTranslationBenchBenchmarkJsonl(draft);

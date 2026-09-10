@@ -9,13 +9,19 @@ describe("Copilot provider mode", () => {
         expect(usesProviderDefault("unknown-model-alias")).toBe(true);
     });
 
-    test("maps canonical translation models to Haiku 4.5", () => {
-        expect(resolveTarget("copilot", "DEFAULT")).toBe("claude-haiku-4.5");
-        expect(resolveTarget("copilot", "GPT_5")).toBe("claude-haiku-4.5");
+    test.each([
+        ["DEFAULT", "gpt-5.6-luna"],
+        ["GPT_35_TURBO", "gpt-5.6-luna"],
+        ["GPT_4_O", "gpt-5.6-sol"],
+        ["GPT_5", "gpt-5.6-sol"],
+        ["GPT_5_MINI", "gpt-5.6-terra"],
+        ["GPT_5_NANO", "gpt-5.6-luna"],
+        ["GPT_V", "gpt-5.6-sol"],
+    ])("maps %s to %s", (canonical, expected) => {
+        expect(resolveTarget("copilot", canonical)).toBe(expected);
     });
 
     test("keeps explicit canonical model mappings", () => {
         expect(usesProviderDefault("GPT_4_O")).toBe(false);
-        expect(resolveTarget("copilot", "GPT_4_O")).toBe("gpt-5.4");
     });
 });

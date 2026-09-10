@@ -54,7 +54,7 @@ Options:
   --embedding <mode>                 Embedding source for ollama/copilot: local (default), ollama, openai, none
   --ollama-host <url>                Ollama base URL (default: http://localhost:11434)
   --chat-model <name>                Ollama chat model (default: llama3.2)
-  --copilot-model <name>             Copilot chat model (default: claude-haiku-4.5)
+  --copilot-model <name>             Copilot chat model (default: gpt-5.6-luna)
   --embedding-endpoint <url>         Embedding endpoint (openai embedding mode; full path)
   --embedding-model <name>           Embedding model name
   --openai-key <key>                 API key for openai embedding mode

@@ -11,14 +11,32 @@ import {
     AppAgentInitSettings,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import { MarkdownAction } from "./markdownActionSchema.js";
+import {
+    CreateDocumentAction,
+    MarkdownAction,
+    OpenDocumentAction,
+} from "./markdownActionSchema.js";
 import { DocumentOperation } from "./markdownOperationSchema.js";
 import { createMarkdownAgent } from "./translator.js";
 import { ChildProcess, fork } from "child_process";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { UICommandResult } from "./ipcTypes.js";
 import registerDebug from "debug";
+import {
+    normalizeRelativeDocumentPath,
+    resolveExistingFileWithinRoot,
+    resolveRealDirectory,
+    resolveWritableFileWithinRoot,
+} from "./documentPathPolicy.js";
+import {
+    computeContentRevision,
+    persistDocumentOperations,
+    readBoundDocument,
+    type DocumentBinding,
+} from "./documentUpdatePersistence.js";
+import { applyDocumentOperations } from "./documentOperations.js";
 
 const debug = registerDebug("typeagent:markdown:agent");
 
@@ -43,8 +61,21 @@ async function executeMarkdownAction(
     return result;
 }
 
+type CurrentMarkdownDocument =
+    | {
+          source: "session";
+          storageKey: string;
+          binding?: DocumentBinding;
+      }
+    | {
+          source: "workspace";
+          filePath: string;
+          workspaceRoot: string;
+      };
+
 type MarkdownActionContext = {
-    currentFileName?: string | undefined;
+    currentDocument?: CurrentMarkdownDocument | undefined;
+    currentBindingToken?: string | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
     // Handle returned by sessionContext.registerPort for the markdown
@@ -285,24 +316,43 @@ async function updateMarkdownContext(
         // Store agent context for UI command processing
         setCurrentAgentContext(context.agentContext);
 
-        if (!context.agentContext.currentFileName) {
-            context.agentContext.currentFileName = "live.md";
+        if (context.agentContext.currentDocument === undefined) {
+            context.agentContext.currentDocument = {
+                source: "session",
+                storageKey: "live.md",
+            };
         }
 
         const storage = context.sessionStorage;
-        const fileName = context.agentContext.currentFileName;
+        const currentDocument = context.agentContext.currentDocument;
+        const storageKey =
+            currentDocument.source === "session"
+                ? currentDocument.storageKey
+                : undefined;
 
-        if (!(await storage?.exists(fileName))) {
-            await storage?.write(fileName, "");
+        if (storageKey && !(await storage?.exists(storageKey))) {
+            await storage?.write(storageKey, "");
         }
 
         debug(
-            `Agent context updated for: ${fileName}, port: ${context.agentContext.localHostPort}`,
+            `Agent context updated for: ${
+                currentDocument.source === "session"
+                    ? currentDocument.storageKey
+                    : currentDocument.filePath
+            }, port: ${context.agentContext.localHostPort}`,
         );
 
-        if (!context.agentContext.viewProcess) {
-            const fullPath = await getFullMarkdownFilePath(fileName, storage!);
+        if (
+            !context.agentContext.viewProcess &&
+            currentDocument.source === "session" &&
+            storage
+        ) {
+            const fullPath = await getFullMarkdownFilePath(
+                currentDocument.storageKey,
+                storage,
+            );
             if (fullPath) {
+                currentDocument.binding = createSessionFileBinding(fullPath);
                 process.env.MARKDOWN_FILE = fullPath;
                 // Fork the express view service in the background instead of
                 // blocking agent enable (and therefore agent-server startup)
@@ -346,6 +396,20 @@ async function updateMarkdownContext(
                         // view process exists (the earlier call below ran
                         // before it was forked).
                         setCurrentAgentContext(context.agentContext);
+                        if (
+                            context.agentContext.currentDocument?.source ===
+                            "session"
+                        ) {
+                            const binding =
+                                context.agentContext.currentDocument.binding;
+                            if (binding) {
+                                viewProcess.send({
+                                    type: "setFile",
+                                    workspaceRoot: binding.root,
+                                    relativePath: binding.relativePath,
+                                });
+                            }
+                        }
                     })
                     .catch((e) => {
                         console.warn(
@@ -380,34 +444,11 @@ async function handleStreamingMarkdownAction(
     );
 
     const agent = await createMarkdownAgent("GPT_4o");
-    const storage = actionContext.sessionContext.sessionStorage;
-
-    // Get current document content
-    const filePath = `${actionContext.sessionContext.agentContext.currentFileName}`;
-    let markdownContent = "";
-
-    if (actionContext.sessionContext.agentContext.viewProcess) {
-        try {
-            markdownContent = await getDocumentContentFromView(
-                actionContext.sessionContext.agentContext.viewProcess,
-            );
-            debug(
-                `Got content from view process for streaming: ${markdownContent?.length || 0} chars`,
-            );
-        } catch (error) {
-            console.warn(
-                "[STREAMING] Failed to get content from view, falling back to storage:",
-                error,
-            );
-            if (await storage?.exists(filePath)) {
-                markdownContent = (await storage?.read(filePath, "utf8")) || "";
-            }
-        }
-    } else {
-        if (await storage?.exists(filePath)) {
-            markdownContent = (await storage?.read(filePath, "utf8")) || "";
-        }
-    }
+    const {
+        content: markdownContent,
+        binding,
+        revision,
+    } = await readCurrentDocumentContent(actionContext);
 
     try {
         // Call agent with streaming callback
@@ -456,6 +497,21 @@ async function handleStreamingMarkdownAction(
                     updateResult.operations || [],
                     actionContext,
                 );
+                if (updateResult.operations?.length) {
+                    const operations =
+                        updateResult.operations as DocumentOperation[];
+                    const updatedContent = applyDocumentOperations(
+                        markdownContent,
+                        operations,
+                    );
+                    await applyOperationsForCurrentDocument(
+                        actionContext,
+                        operations,
+                        binding,
+                        revision,
+                        computeContentRevision(updatedContent),
+                    );
+                }
 
                 return createActionResult(
                     updateResult.operationSummary ||
@@ -491,7 +547,9 @@ function sendStreamingChunkToView(
     chunk: string,
     actionContext: ActionContext<MarkdownActionContext>,
 ): void {
-    const viewProcess = actionContext.sessionContext.agentContext.viewProcess;
+    const viewProcess = getCurrentDocumentViewProcess(
+        actionContext.sessionContext.agentContext,
+    );
     if (viewProcess) {
         viewProcess.send({
             type: "streamingContent",
@@ -512,7 +570,9 @@ function sendStreamingCompleteToView(
     operations: any[],
     actionContext: ActionContext<MarkdownActionContext>,
 ): void {
-    const viewProcess = actionContext.sessionContext.agentContext.viewProcess;
+    const viewProcess = getCurrentDocumentViewProcess(
+        actionContext.sessionContext.agentContext,
+    );
     if (viewProcess) {
         viewProcess.send({
             type: "streamingComplete",
@@ -534,12 +594,518 @@ async function getFullMarkdownFilePath(fileName: string, storage: Storage) {
     return candidates ? candidates[0] : undefined;
 }
 
+function getCurrentDocumentViewProcess(
+    agentContext: MarkdownActionContext,
+): ChildProcess | undefined {
+    return agentContext.currentDocument?.source === "session"
+        ? agentContext.viewProcess
+        : undefined;
+}
+
+function getDocumentName(rawName: unknown): string {
+    const relativeCandidate = normalizeRelativeDocumentPath(rawName);
+    if (relativeCandidate === undefined) {
+        throw new Error(
+            `Document name is not a safe relative path: ${JSON.stringify(rawName)}`,
+        );
+    }
+    return relativeCandidate.toLowerCase().endsWith(".md")
+        ? relativeCandidate
+        : `${relativeCandidate}.md`;
+}
+
+async function getCurrentMarkdownContent(
+    agentContext: MarkdownActionContext,
+    storage: Storage | undefined,
+): Promise<string> {
+    const currentDocument = agentContext.currentDocument;
+    if (currentDocument === undefined) {
+        return "";
+    }
+    if (currentDocument.source === "workspace") {
+        try {
+            return await fs.promises.readFile(
+                currentDocument.filePath,
+                "utf-8",
+            );
+        } catch (error) {
+            if (
+                error instanceof Error &&
+                "code" in error &&
+                error.code === "ENOENT"
+            ) {
+                throw new Error(
+                    `Current Markdown document no longer exists: ${currentDocument.filePath}`,
+                );
+            }
+            throw error;
+        }
+    }
+    if (
+        storage !== undefined &&
+        (await storage.exists(currentDocument.storageKey))
+    ) {
+        return (await storage.read(currentDocument.storageKey, "utf8")) ?? "";
+    }
+    return "";
+}
+
+async function handleCreateDocument(
+    action: CreateDocumentAction,
+    actionContext: ActionContext<MarkdownActionContext>,
+): Promise<ActionResult> {
+    const rawName = action.parameters.name;
+    const relativeName = getDocumentName(rawName);
+
+    const initialContent = action.parameters.content ?? "";
+    const workingDirectory = actionContext.workingDirectory;
+    const storage = actionContext.sessionContext.sessionStorage;
+    const agentContext = actionContext.sessionContext.agentContext;
+    let documentExisted: boolean;
+    let absoluteFilePath: string | undefined;
+
+    if (workingDirectory === undefined) {
+        if (storage === undefined) {
+            throw new Error(
+                "Markdown document creation requires a working directory or session storage",
+            );
+        }
+
+        documentExisted = await storage.exists(relativeName);
+        if (!documentExisted) {
+            await storage.write(relativeName, initialContent);
+        } else if (initialContent) {
+            const existingContent = await storage.read(relativeName, "utf8");
+            if (existingContent) {
+                throw new Error(
+                    `Document ${relativeName} already contains content`,
+                );
+            }
+            await storage.write(relativeName, initialContent);
+        }
+
+        agentContext.currentDocument = {
+            source: "session",
+            storageKey: relativeName,
+        };
+
+        if (agentContext.viewProcess) {
+            const fullPath = await getFullMarkdownFilePath(
+                relativeName,
+                storage,
+            );
+            if (fullPath) {
+                agentContext.currentDocument.binding =
+                    createSessionFileBinding(fullPath);
+                agentContext.viewProcess.send({
+                    type: "setFile",
+                    workspaceRoot: fs.realpathSync(path.dirname(fullPath)),
+                    relativePath: path.basename(fullPath),
+                });
+            }
+        }
+    } else {
+        const canonicalRoot = resolveRealDirectory(workingDirectory);
+        if (canonicalRoot === undefined) {
+            throw new Error(
+                `Configured working directory is not a real directory: ${workingDirectory}`,
+            );
+        }
+        absoluteFilePath = resolveWritableFileWithinRoot(
+            canonicalRoot,
+            relativeName,
+        );
+        if (absoluteFilePath === undefined) {
+            throw new Error(
+                `Document path is not writable within the working directory: ${JSON.stringify(rawName)}`,
+            );
+        }
+
+        documentExisted = fs.existsSync(absoluteFilePath);
+        if (!documentExisted) {
+            fs.writeFileSync(absoluteFilePath, initialContent, {
+                encoding: "utf-8",
+                flag: "wx",
+            });
+        } else if (initialContent) {
+            const existingContent = fs.readFileSync(absoluteFilePath, "utf-8");
+            if (existingContent) {
+                throw new Error(
+                    `Document ${relativeName} already contains content`,
+                );
+            }
+            fs.writeFileSync(absoluteFilePath, initialContent, "utf-8");
+        }
+
+        agentContext.currentDocument = {
+            source: "workspace",
+            filePath: absoluteFilePath,
+            workspaceRoot: canonicalRoot,
+        };
+    }
+
+    agentContext.currentBindingToken = undefined;
+    const actionLabel = documentExisted ? "opened" : "created";
+    const documentLocation = absoluteFilePath ?? relativeName;
+    const result = createActionResult(
+        `Document ${actionLabel} at ${documentLocation}`,
+    );
+    result.resultEntity = {
+        name: relativeName,
+        type: ["file", "markdown"],
+    };
+    result.activityContext = {
+        activityName: "editingMarkdown",
+        description: "Editing a Markdown document",
+        state: {
+            fileName: relativeName,
+        },
+        openLocalView: agentContext.currentDocument.source === "session",
+    };
+    return result;
+}
+
+async function handleOpenDocument(
+    action: OpenDocumentAction,
+    actionContext: ActionContext<MarkdownActionContext>,
+): Promise<ActionResult> {
+    const relativeName = getDocumentName(action.parameters.name);
+    const workingDirectory = actionContext.workingDirectory;
+    const storage = actionContext.sessionContext.sessionStorage;
+    const agentContext = actionContext.sessionContext.agentContext;
+    let documentLocation: string;
+
+    if (workingDirectory === undefined) {
+        if (storage === undefined || !(await storage.exists(relativeName))) {
+            throw new Error(`Document does not exist: ${relativeName}`);
+        }
+        agentContext.currentDocument = {
+            source: "session",
+            storageKey: relativeName,
+        };
+        documentLocation = relativeName;
+
+        if (agentContext.viewProcess) {
+            const fullPath = await getFullMarkdownFilePath(
+                relativeName,
+                storage,
+            );
+            if (fullPath) {
+                agentContext.currentDocument.binding =
+                    createSessionFileBinding(fullPath);
+                agentContext.viewProcess.send({
+                    type: "setFile",
+                    workspaceRoot: fs.realpathSync(path.dirname(fullPath)),
+                    relativePath: path.basename(fullPath),
+                });
+            }
+        }
+    } else {
+        const canonicalRoot = resolveRealDirectory(workingDirectory);
+        if (canonicalRoot === undefined) {
+            throw new Error(
+                `Configured working directory is not a real directory: ${workingDirectory}`,
+            );
+        }
+        const absoluteFilePath = resolveExistingFileWithinRoot(
+            canonicalRoot,
+            relativeName,
+        );
+        if (absoluteFilePath === undefined) {
+            throw new Error(
+                `Document does not exist within the working directory: ${relativeName}`,
+            );
+        }
+        agentContext.currentDocument = {
+            source: "workspace",
+            filePath: absoluteFilePath,
+            workspaceRoot: canonicalRoot,
+        };
+        documentLocation = absoluteFilePath;
+    }
+
+    agentContext.currentBindingToken = undefined;
+    const result = createActionResult(`Document opened at ${documentLocation}`);
+    result.resultEntity = {
+        name: relativeName,
+        type: ["file", "markdown"],
+    };
+    result.activityContext = {
+        activityName: "editingMarkdown",
+        description: "Editing a Markdown document",
+        state: {
+            fileName: relativeName,
+        },
+        openLocalView: agentContext.currentDocument.source === "session",
+    };
+    return result;
+}
+
+type DocumentUpdateAction = Extract<
+    MarkdownAction,
+    { actionName: "updateDocument" | "streamingUpdateDocument" }
+>;
+
+type CurrentDocumentBinding = DocumentBinding | { storageKey: string };
+
+function createSessionFileBinding(fullPath: string): DocumentBinding {
+    return {
+        token: undefined,
+        root: fs.realpathSync(path.dirname(fullPath)),
+        relativePath: path.basename(fullPath),
+        filePath: fs.realpathSync(fullPath),
+    };
+}
+
+async function getCurrentDocumentBinding(
+    agentContext: MarkdownActionContext,
+    storage: Storage | undefined,
+): Promise<CurrentDocumentBinding> {
+    const currentDocument = agentContext.currentDocument;
+    if (currentDocument === undefined) {
+        throw new Error(
+            "No markdown document is open. Use createDocument or openDocument first.",
+        );
+    }
+    if (currentDocument.source === "session") {
+        if (
+            getCurrentDocumentViewProcess(agentContext) &&
+            currentDocument.binding
+        ) {
+            return {
+                ...currentDocument.binding,
+                token: agentContext.currentBindingToken,
+            };
+        }
+        if (storage === undefined) {
+            throw new Error("Session storage is unavailable");
+        }
+        if (!getCurrentDocumentViewProcess(agentContext)) {
+            return { storageKey: currentDocument.storageKey };
+        }
+        const fullPath = await getFullMarkdownFilePath(
+            currentDocument.storageKey,
+            storage,
+        );
+        if (fullPath === undefined) {
+            throw new Error("Current session document has no local file");
+        }
+        return {
+            ...createSessionFileBinding(fullPath),
+            token: agentContext.currentBindingToken,
+        };
+    }
+    return {
+        token: agentContext.currentBindingToken,
+        root: currentDocument.workspaceRoot,
+        relativePath: path.relative(
+            currentDocument.workspaceRoot,
+            currentDocument.filePath,
+        ),
+        filePath: currentDocument.filePath,
+    };
+}
+
+async function readCurrentDocumentContent(
+    actionContext: ActionContext<MarkdownActionContext>,
+): Promise<{
+    content: string;
+    binding: CurrentDocumentBinding;
+    revision: string;
+}> {
+    const agentContext = actionContext.sessionContext.agentContext;
+    const storage = actionContext.sessionContext.sessionStorage;
+    const binding = await getCurrentDocumentBinding(agentContext, storage);
+    if ("storageKey" in binding) {
+        const content = await getCurrentMarkdownContent(agentContext, storage);
+        return { content, binding, revision: computeContentRevision(content) };
+    }
+    const viewProcess = getCurrentDocumentViewProcess(agentContext);
+    if (!viewProcess) {
+        const document = await readBoundDocument(binding);
+        return {
+            content: document.content,
+            binding,
+            revision: document.revision,
+        };
+    }
+
+    const response = await getDocumentContentFromView(viewProcess, {
+        expectedBindingToken: binding.token,
+        expectedRoot: binding.root,
+        expectedRelativePath: binding.relativePath,
+    });
+    if (response.identityMismatch) {
+        throw new Error(
+            "Document identity changed while reading; refusing to update the wrong file",
+        );
+    }
+    if (response.error) {
+        throw new Error(response.error);
+    }
+    if (typeof response.bindingToken === "string") {
+        agentContext.currentBindingToken = response.bindingToken;
+    }
+    return {
+        content: response.content,
+        binding: {
+            ...binding,
+            token: agentContext.currentBindingToken,
+        },
+        revision: response.revision ?? computeContentRevision(response.content),
+    };
+}
+
+async function applyOperationsForCurrentDocument(
+    actionContext: ActionContext<MarkdownActionContext>,
+    operations: DocumentOperation[],
+    binding: CurrentDocumentBinding,
+    revision: string,
+    expectedUpdatedRevision?: string,
+): Promise<void> {
+    const agentContext = actionContext.sessionContext.agentContext;
+    const storage = actionContext.sessionContext.sessionStorage;
+    const currentBinding = await getCurrentDocumentBinding(
+        agentContext,
+        storage,
+    );
+    if ("storageKey" in binding) {
+        if (
+            !("storageKey" in currentBinding) ||
+            currentBinding.storageKey !== binding.storageKey
+        ) {
+            throw new Error("Document binding changed while generating update");
+        }
+        if (storage === undefined) {
+            throw new Error("Session storage is unavailable");
+        }
+        const content = await getCurrentMarkdownContent(agentContext, storage);
+        const currentRevision = computeContentRevision(content);
+        if (currentRevision === expectedUpdatedRevision) {
+            return;
+        }
+        if (currentRevision !== revision) {
+            throw new Error(
+                "Document changed between read and apply (revision mismatch)",
+            );
+        }
+        const updatedContent = applyDocumentOperations(content, operations);
+        if (
+            expectedUpdatedRevision !== undefined &&
+            computeContentRevision(updatedContent) !== expectedUpdatedRevision
+        ) {
+            throw new Error(
+                "Updated document revision does not match operations",
+            );
+        }
+        await storage.write(binding.storageKey, updatedContent);
+        return;
+    }
+    if (
+        "storageKey" in currentBinding ||
+        currentBinding.token !== binding.token ||
+        currentBinding.root !== binding.root ||
+        currentBinding.relativePath !== binding.relativePath ||
+        currentBinding.filePath !== binding.filePath
+    ) {
+        throw new Error("Document binding changed while generating update");
+    }
+    const expectations = {
+        expectedBindingToken: binding.token,
+        expectedRoot: binding.root,
+        expectedRelativePath: binding.relativePath,
+        expectedRevision: revision,
+        expectedUpdatedRevision,
+    };
+    const viewProcess = getCurrentDocumentViewProcess(agentContext);
+    if (!viewProcess) {
+        persistDocumentOperations(binding, operations, {
+            bindingToken: binding.token,
+            root: binding.root,
+            relativePath: binding.relativePath,
+            revision,
+            updatedRevision: expectedUpdatedRevision,
+        });
+        return;
+    }
+
+    const applied = await sendOperationsToView(
+        viewProcess,
+        operations,
+        expectations,
+    );
+    if (applied.success) {
+        return;
+    }
+    if (applied.identityMismatch) {
+        throw new Error(
+            "Document identity changed while applying operations; refusing to write to the wrong file",
+        );
+    }
+    if (applied.revisionMismatch) {
+        throw new Error(
+            "Document changed between read and apply; refusing to overwrite (revision mismatch)",
+        );
+    }
+    throw new Error(
+        applied.error ?? "Failed to apply operations in view process",
+    );
+}
+
+function parseEditorContext(serializedContext: string | undefined): unknown {
+    if (!serializedContext) {
+        return undefined;
+    }
+    try {
+        return JSON.parse(serializedContext);
+    } catch (error) {
+        debug(
+            `[AGENT] Failed to parse context JSON: ${
+                error instanceof Error ? error.message : String(error)
+            }, using undefined`,
+        );
+        return undefined;
+    }
+}
+
+async function updateCurrentDocument(
+    action: DocumentUpdateAction,
+    actionContext: ActionContext<MarkdownActionContext>,
+    agent: Awaited<ReturnType<typeof createMarkdownAgent>>,
+): Promise<ActionResult> {
+    const { content, binding, revision } =
+        await readCurrentDocumentContent(actionContext);
+    const response = await agent.updateDocument(
+        content,
+        action.parameters.originalRequest,
+        action.parameters.cursorPosition,
+        parseEditorContext(action.parameters.context),
+    );
+    if (!response.success) {
+        const message =
+            (response as { message?: string }).message ??
+            "Unknown error occurred";
+        return createActionResult(`Failed to update document: ${message}`);
+    }
+
+    if (response.data.operations?.length) {
+        await applyOperationsForCurrentDocument(
+            actionContext,
+            response.data.operations,
+            binding,
+            revision,
+        );
+    }
+    return createActionResult(
+        response.data.operationSummary ?? "Updated document",
+    );
+}
+
 async function handleMarkdownAction(
     action: MarkdownAction,
     actionContext: ActionContext<MarkdownActionContext>,
 ) {
     let result: ActionResult | undefined = undefined;
-    const agent = await createMarkdownAgent("GPT_4o");
 
     // Accumulates the LLM token usage consumed while handling this action so
     // it can be reported back to the dispatcher as "Action Tokens". The agent
@@ -549,295 +1115,25 @@ async function handleMarkdownAction(
         completion_tokens: 0,
         total_tokens: 0,
     };
-    agent.tokenUsage = tokenUsage;
-
-    const storage = actionContext.sessionContext.sessionStorage;
+    const createAgent = async () => {
+        const agent = await createMarkdownAgent("GPT_4o");
+        agent.tokenUsage = tokenUsage;
+        return agent;
+    };
 
     switch (action.actionName) {
-        case "openDocument":
         case "createDocument": {
-            if (!action.parameters.name) {
-                result = createActionResult(
-                    "Document could not be created: no name was provided",
-                );
-            } else {
-                result = createActionResult("Opening document ...");
-
-                let newFileName = action.parameters.name.trim();
-                if (!newFileName.endsWith(".md")) {
-                    newFileName += ".md";
-                }
-
-                actionContext.sessionContext.agentContext.currentFileName =
-                    newFileName;
-
-                if (!(await storage?.exists(newFileName))) {
-                    await storage?.write(newFileName, "");
-                }
-
-                if (actionContext.sessionContext.agentContext.viewProcess) {
-                    const fullPath = await getFullMarkdownFilePath(
-                        newFileName,
-                        storage!,
-                    );
-
-                    actionContext.sessionContext.agentContext.viewProcess.send({
-                        type: "setFile",
-                        filePath: path.basename(fullPath!),
-                        folderPath: path.dirname(fullPath!),
-                    });
-                }
-                result = createActionResult("Document opened");
-                result.activityContext = {
-                    activityName: "editingMarkdown",
-                    description: "Editing a Markdown document",
-                    state: {
-                        fileName: newFileName,
-                    },
-                    openLocalView: true,
-                };
-            }
+            result = await handleCreateDocument(action, actionContext);
             break;
         }
-        case "updateDocument": {
-            debug("Starting updateDocument action in agent process");
-            result = createActionResult("Updating document ...");
-
-            const filePath = `${actionContext.sessionContext.agentContext.currentFileName}`;
-
-            let markdownContent = "";
-
-            if (actionContext.sessionContext.agentContext.viewProcess) {
-                try {
-                    markdownContent = await getDocumentContentFromView(
-                        actionContext.sessionContext.agentContext.viewProcess,
-                    );
-                    debug(
-                        `Got content from view process: ${markdownContent?.length || 0} chars`,
-                    );
-                    debug(
-                        `Content preview: ${markdownContent?.substring(0, 200)}...`,
-                    );
-                } catch (error) {
-                    console.warn(
-                        "Failed to get content from view, using empty content fallback:",
-                        error,
-                    );
-                    // Use empty content as fallback to allow agent to continue processing
-                    markdownContent = "";
-                    debug("Using empty content fallback");
-                }
-            } else {
-                // Fallback if no view process
-                if (await storage?.exists(filePath)) {
-                    markdownContent =
-                        (await storage?.read(filePath, "utf8")) || "";
-                    debug(
-                        "No view process, read content from storage:",
-                        markdownContent?.length,
-                        "chars",
-                    );
-                }
-            }
-
-            // Handle synchronous requests through the agent
-            const originalRequest =
-                "originalRequest" in action.parameters
-                    ? action.parameters.originalRequest
-                    : "";
-
-            const cursorPosition =
-                "cursorPosition" in action.parameters
-                    ? action.parameters.cursorPosition
-                    : undefined;
-
-            const context =
-                "context" in action.parameters && action.parameters.context
-                    ? (() => {
-                          try {
-                              return JSON.parse(action.parameters.context);
-                          } catch (error) {
-                              debug(
-                                  `[AGENT] Failed to parse context JSON: ${error}, using undefined`,
-                              );
-                              return undefined;
-                          }
-                      })()
-                    : undefined;
-
-            debug(
-                `[AGENT] About to call LLM service with request: "${originalRequest}"`,
-            );
-            debug(
-                `[AGENT] Document content length: ${markdownContent?.length || 0} chars`,
-            );
-
-            const response = await agent.updateDocument(
-                markdownContent,
-                originalRequest,
-                cursorPosition,
-                context,
-            );
-
-            debug(`[AGENT] LLM service returned, success: ${response.success}`);
-
-            if (response.success) {
-                const updateResult = response.data;
-                debug(
-                    `[AGENT] LLM processing successful, operations count: ${updateResult.operations?.length || 0}`,
-                );
-
-                // Apply operations to the document
-                if (
-                    updateResult.operations &&
-                    updateResult.operations.length > 0
-                ) {
-                    // Send operations to view process for application
-                    if (actionContext.sessionContext.agentContext.viewProcess) {
-                        debug(
-                            "Agent sending operations to view process for Yjs application",
-                        );
-
-                        const success = await sendOperationsToView(
-                            actionContext.sessionContext.agentContext
-                                .viewProcess,
-                            updateResult.operations,
-                        );
-
-                        if (!success) {
-                            throw new Error(
-                                "Failed to apply operations in view process",
-                            );
-                        }
-
-                        debug(
-                            "Operations applied successfully via view process",
-                        );
-                    } else {
-                        console.warn(
-                            "No view process available, operations not applied",
-                        );
-                    }
-                } else {
-                    debug("[AGENT] No operations returned from LLM");
-                }
-
-                if (updateResult.operationSummary) {
-                    result = createActionResult(updateResult.operationSummary);
-                } else {
-                    result = createActionResult("Updated document");
-                }
-
-                debug(`[AGENT] updateDocument case completed successfully`);
-            } else {
-                const errorMessage =
-                    (response as any).message || "Unknown error occurred";
-                console.error("Translation failed:", errorMessage);
-                result = createActionResult(
-                    "Failed to update document: " + errorMessage,
-                );
-            }
+        case "openDocument": {
+            result = await handleOpenDocument(action, actionContext);
             break;
         }
+        case "updateDocument":
         case "streamingUpdateDocument": {
-            // Handle streaming AI commands - now unified with regular updateDocument flow
-            debug(
-                "Starting streamingUpdateDocument action - using standard translator flow",
-            );
-            result = createActionResult("Updating document ...");
-
-            const filePath = `${actionContext.sessionContext.agentContext.currentFileName}`;
-
-            let markdownContent = "";
-
-            if (actionContext.sessionContext.agentContext.viewProcess) {
-                try {
-                    markdownContent = await getDocumentContentFromView(
-                        actionContext.sessionContext.agentContext.viewProcess,
-                    );
-                    debug(
-                        `Got content from view process: ${markdownContent?.length || 0} chars`,
-                    );
-                    debug(
-                        `Content preview: ${markdownContent?.substring(0, 200)}...`,
-                    );
-                } catch (error) {
-                    console.warn(
-                        "Failed to get content from view, using empty content fallback:",
-                        error,
-                    );
-                    // Use empty content as fallback to allow agent to continue processing
-                    markdownContent = "";
-                    debug("Using empty content fallback");
-                }
-            } else {
-                // Fallback if no view process
-                if (await storage?.exists(filePath)) {
-                    markdownContent =
-                        (await storage?.read(filePath, "utf8")) || "";
-                    debug(
-                        "No view process, read content from storage:",
-                        markdownContent?.length,
-                        "chars",
-                    );
-                }
-            }
-
-            // Handle streaming requests through the standard agent (same as updateDocument)
-            const response = await agent.updateDocument(
-                markdownContent,
-                action.parameters.originalRequest,
-            );
-
-            if (response.success) {
-                const updateResult = response.data;
-
-                // Apply operations to the document
-                if (
-                    updateResult.operations &&
-                    updateResult.operations.length > 0
-                ) {
-                    // Send operations to view process for application
-                    if (actionContext.sessionContext.agentContext.viewProcess) {
-                        debug(
-                            "Agent sending operations to view process for Yjs application",
-                        );
-
-                        const success = await sendOperationsToView(
-                            actionContext.sessionContext.agentContext
-                                .viewProcess,
-                            updateResult.operations,
-                        );
-
-                        if (!success) {
-                            throw new Error(
-                                "Failed to apply operations in view process",
-                            );
-                        }
-
-                        debug(
-                            "Operations applied successfully via view process",
-                        );
-                    } else {
-                        console.warn(
-                            "No view process available, operations not applied",
-                        );
-                    }
-                }
-
-                if (updateResult.operationSummary) {
-                    result = createActionResult(updateResult.operationSummary);
-                } else {
-                    result = createActionResult("Updated document");
-                }
-            } else {
-                const errorMessage =
-                    (response as any).message || "Unknown error occurred";
-                console.error("Translation failed:", errorMessage);
-                result = createActionResult(
-                    "Failed to update document: " + errorMessage,
-                );
-            }
+            const agent = await createAgent();
+            result = await updateCurrentDocument(action, actionContext, agent);
             break;
         }
     }
@@ -851,104 +1147,144 @@ async function handleMarkdownAction(
     return result;
 }
 
-/**
- * Send operations to view process for application (Flow 1 implementation)
- */
-async function sendOperationsToView(
+let applyRequestCounter = 0;
+
+type ApplyExpectations = {
+    expectedBindingToken: string | undefined;
+    expectedRoot: string;
+    expectedRelativePath: string;
+    expectedRevision: string;
+    expectedUpdatedRevision: string | undefined;
+};
+
+type ApplyResult = {
+    success: boolean;
+    identityMismatch: boolean;
+    revisionMismatch: boolean;
+    error: string | undefined;
+};
+
+export async function sendOperationsToView(
     viewProcess: ChildProcess | undefined,
     operations: DocumentOperation[],
-): Promise<boolean> {
+    expectations: ApplyExpectations,
+): Promise<ApplyResult> {
     if (!viewProcess) {
-        return false;
+        return {
+            success: false,
+            identityMismatch: false,
+            revisionMismatch: false,
+            error: "No view process",
+        };
     }
 
+    const requestId = `apply_${++applyRequestCounter}`;
     return new Promise((resolve) => {
         const timeout = setTimeout(() => {
             console.error("[AGENT] View process operation timeout");
-            resolve(false);
-        }, 5000);
+            viewProcess.off("message", responseHandler);
+            resolve({
+                success: false,
+                identityMismatch: false,
+                revisionMismatch: false,
+                error: "View process operation timeout",
+            });
+        }, 15000);
 
-        // Listen for response
-        const responseHandler = (message: any) => {
-            if (message.type === "operationsApplied") {
-                clearTimeout(timeout);
-                viewProcess.off("message", responseHandler);
-
-                if (message.success) {
-                    resolve(true);
-                } else {
-                    console.error(
-                        "[AGENT] View failed to apply operations:",
-                        message.error,
-                    );
-                    resolve(false);
-                }
+        const responseHandler = (message: Record<string, unknown>) => {
+            if (
+                message.type !== "operationsApplied" ||
+                message.requestId !== requestId
+            ) {
+                return;
             }
+            clearTimeout(timeout);
+            viewProcess.off("message", responseHandler);
+            resolve({
+                success: message.success === true,
+                identityMismatch: message.identityMismatch === true,
+                revisionMismatch: message.revisionMismatch === true,
+                error:
+                    typeof message.error === "string"
+                        ? message.error
+                        : undefined,
+            });
         };
 
         viewProcess.on("message", responseHandler);
-
-        // Send operations
         viewProcess.send({
             type: "applyLLMOperations",
-            operations: operations,
+            requestId,
+            operations,
             timestamp: Date.now(),
+            ...expectations,
         });
-
-        debug(`[AGENT] Sent ${operations.length} operations to view process`);
     });
 }
 
-/**
- * Get document content from view process (Flow 1 implementation)
- */
-async function getDocumentContentFromView(
+type ViewDocumentContentResponse = {
+    content: string;
+    bindingToken: string | null;
+    revision: string | null;
+    identityMismatch: boolean;
+    error: string | undefined;
+};
+
+type ReadExpectations = {
+    expectedBindingToken: string | undefined;
+    expectedRoot: string | undefined;
+    expectedRelativePath: string | undefined;
+};
+
+let getContentRequestCounter = 0;
+
+export async function getDocumentContentFromView(
     viewProcess: ChildProcess,
-): Promise<string> {
+    expectations: ReadExpectations,
+): Promise<ViewDocumentContentResponse> {
+    const requestId = `get_${++getContentRequestCounter}`;
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-            debug(
-                "[AGENT] Content request timeout, trying fallback to empty content",
-            );
+            viewProcess.off("message", responseHandler);
+            reject(new Error("View process content request timed out"));
+        }, 15000);
 
-            // Use empty content as fallback when view process fails
-            // This allows the agent to continue processing even if content retrieval fails
-            console.warn(
-                "[AGENT] View process content request timed out, using empty content fallback",
-            );
-            resolve("");
-        }, 15000); // 15 second timeout
-
-        const responseHandler = (message: any) => {
-            if (message.type === "documentContent") {
-                clearTimeout(timeout);
-                viewProcess.off("message", responseHandler);
-
-                // Log the source of the content for debugging
-                const source = message.source || "unknown";
-                debug(
-                    `[AGENT] Received document content from ${source}: ${message.content?.length || 0} chars`,
-                );
-
-                if (message.error) {
-                    debug(
-                        `[AGENT] Content retrieval had error: ${message.error}`,
-                    );
-                    // Still resolve with content even if there was an error
-                }
-
-                resolve(message.content || "");
+        const responseHandler = (message: Record<string, unknown>) => {
+            if (
+                message.type !== "documentContent" ||
+                message.requestId !== requestId
+            ) {
+                return;
             }
+            clearTimeout(timeout);
+            viewProcess.off("message", responseHandler);
+            resolve({
+                content:
+                    typeof message.content === "string" ? message.content : "",
+                bindingToken:
+                    typeof message.bindingToken === "string"
+                        ? message.bindingToken
+                        : null,
+                revision:
+                    typeof message.revision === "string"
+                        ? message.revision
+                        : null,
+                identityMismatch: message.identityMismatch === true,
+                error:
+                    typeof message.error === "string"
+                        ? message.error
+                        : undefined,
+            });
         };
 
         viewProcess.on("message", responseHandler);
-
-        debug("[AGENT] Sending getDocumentContent request to view process");
-        viewProcess.send({ type: "getDocumentContent" });
+        viewProcess.send({
+            type: "getDocumentContent",
+            requestId,
+            ...expectations,
+        });
     });
 }
-// NOTE: Function commented out per Flow 1 consolidation
-// Collaboration server now managed by view process
 
 async function createViewServiceHost(
     filePath: string,
@@ -985,7 +1321,8 @@ async function createViewServiceHost(
 
             childProcess.send({
                 type: "setFile",
-                filePath: path.basename(filePath),
+                workspaceRoot: folderPath,
+                relativePath: path.basename(filePath),
             });
 
             childProcess.on("message", function (message: any) {
@@ -1013,6 +1350,7 @@ async function createViewServiceHost(
 
 // Global process message handler for UI commands
 let currentAgentContext: MarkdownActionContext | null = null;
+const wiredViewProcesses = new WeakSet<ChildProcess>();
 
 // Store agent context for UI command processing
 export function setCurrentAgentContext(context: MarkdownActionContext) {
@@ -1020,9 +1358,30 @@ export function setCurrentAgentContext(context: MarkdownActionContext) {
 
     const viewProcess = context.viewProcess;
 
-    if (typeof viewProcess !== "undefined" && viewProcess.on) {
+    if (
+        typeof viewProcess !== "undefined" &&
+        viewProcess.on &&
+        !wiredViewProcesses.has(viewProcess)
+    ) {
+        wiredViewProcesses.add(viewProcess);
         viewProcess.on("message", async (message: any) => {
-            if (message.type === "uiCommand" && currentAgentContext) {
+            if (
+                message.type === "bindingUpdated" &&
+                currentAgentContext?.currentDocument?.source === "session"
+            ) {
+                const binding = currentAgentContext.currentDocument.binding;
+                if (
+                    binding &&
+                    message.boundRoot === binding.root &&
+                    message.boundRelativePath === binding.relativePath &&
+                    message.boundFilePath === binding.filePath
+                ) {
+                    currentAgentContext.currentBindingToken =
+                        typeof message.bindingToken === "string"
+                            ? message.bindingToken
+                            : undefined;
+                }
+            } else if (message.type === "uiCommand" && currentAgentContext) {
                 debug(
                     `[AGENT] Received UI command: ${message.command}, requestId: ${message.requestId}, cursorPosition: ${message.parameters?.cursorPosition}, context: ${message.parameters?.context ? "serialized" : "none"}`,
                 );

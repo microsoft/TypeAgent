@@ -93,7 +93,6 @@ export class JsonlLogExporter implements LogRecordExporter {
         }
         this.diagnostic = options.diagnostic ?? writeDiagnostic;
         activePaths.add(pathIdentity);
-        this.reportDiagnostic(`OpenTelemetry JSONL logs: ${this.filePath}`);
     }
 
     public export(
@@ -231,6 +230,7 @@ export class JsonlLogExporter implements LogRecordExporter {
                     file.chmod(0o600),
                 ]);
             }
+            this.reportDiagnostic(`OpenTelemetry JSONL logs: ${this.filePath}`);
             return file;
         } catch (error) {
             await file.close();

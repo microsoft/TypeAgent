@@ -76,4 +76,47 @@ describe("system.log grammar", () => {
             expect(match(input)).toBeUndefined();
         },
     );
+
+    // Grafana trace open shortcuts. The wildcard-bearing rule anchors on
+    // "in local grafana" so it does not swallow generic "open X" phrases.
+    const TRACE_ID = "0123456789abcdef0123456789abcdef";
+
+    it("maps 'open trace <id> in local grafana' to an openLogTrace action", () => {
+        expect(match(`open trace ${TRACE_ID} in local grafana`)).toEqual({
+            actionName: "openLogTrace",
+            parameters: { traceId: TRACE_ID },
+        });
+    });
+
+    it.each(["open last trace", "open the last trace"])(
+        "maps '%s' to openLogTrace with traceId=last",
+        (input) => {
+            expect(match(input)).toEqual({
+                actionName: "openLogTrace",
+                parameters: { traceId: "last" },
+            });
+        },
+    );
+
+    it.each([
+        "view the last action result in grafana",
+        "view the last action result in local grafana",
+    ])("maps '%s' to openLogTrace with traceId=last", (input) => {
+        expect(match(input)).toEqual({
+            actionName: "openLogTrace",
+            parameters: { traceId: "last" },
+        });
+    });
+
+    it.each([
+        // Broad open/view phrases must NOT be captured. Those anchors are
+        // deliberately narrow so unrelated intents fall through to the LLM.
+        "open the trace file",
+        "open trace",
+        "view the last result",
+        "view the last action",
+        "open in grafana",
+    ])("does not capture unscoped phrase %p", (input) => {
+        expect(match(input)).toBeUndefined();
+    });
 });
