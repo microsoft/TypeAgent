@@ -146,6 +146,48 @@ describe("markdown service document reads", () => {
         });
     });
 
+    test("rejects the previous HTTP load token after rebinding the same document", async () => {
+        const loaded = nextMessage(child, "bindingUpdated");
+        expect((await load("plan.md")).status).toBe(200);
+        const previousBinding = await loaded;
+        const currentBinding = await bind("plan.md");
+        expect(currentBinding.bindingToken).not.toBe(
+            previousBinding.bindingToken,
+        );
+
+        const response = nextMessage(child, "documentContent");
+        child.send({
+            type: "getDocumentContent",
+            requestId: "stale-load-token",
+            expectedBindingToken: previousBinding.bindingToken,
+        });
+        expect(await response).toMatchObject({
+            requestId: "stale-load-token",
+            source: "error",
+            content: "",
+            identityMismatch: true,
+            error: "Document binding token changed",
+        });
+        expect(fs.readFileSync(path.join(root, "plan.md"), "utf-8")).toBe(
+            "original",
+        );
+    });
+
+    test("reads external disk edits instead of the initialized collaborative snapshot", async () => {
+        await bind("plan.md");
+        fs.writeFileSync(path.join(root, "plan.md"), "externally updated 😀");
+        const paused = nextMessage(child, "readPaused");
+        const response = nextMessage(child, "documentContent");
+        child.send({ type: "getDocumentContent", requestId: "external-read" });
+        await paused;
+        child.send({ type: "releaseRead" });
+        expect(await response).toMatchObject({
+            requestId: "external-read",
+            content: "externally updated 😀",
+            source: "file",
+        });
+    });
+
     test.each(["other.md", "plan.md"])(
         "rejects a read when the service rebinds to %s during suspension",
         async (nextPath) => {
