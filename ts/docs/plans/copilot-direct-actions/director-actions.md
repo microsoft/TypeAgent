@@ -3,12 +3,6 @@
 **Status:** Draft
 **Last Updated:** 2026-09-10
 
-## Revision Notes
-
-2026-09-10: Resolved the structured action interface questions, including MCP exposure, progressive discovery, contract versioning, authorization, multi-step behavior, and sharing across integration modes.
-
-2026-09-10: Added input, discovery, and execution safeguards from the earlier shortcut design.
-
 ## Summary
 
 TypeAgent's Copilot integration should support two distinct execution paths depending on where the intent originates:
@@ -41,8 +35,6 @@ Action execution
 ```
 
 Copilot has already performed the reasoning necessary to determine what operation is required. Asking TypeAgent to interpret that decision again can add latency, cost, and another potential point of ambiguity.
-
-The flow above shows the case that needs model translation. TypeAgent can also resolve natural language through grammar or its construction cache without a model call, so structured invocation is not always faster.
 
 ## Proposed Design
 
