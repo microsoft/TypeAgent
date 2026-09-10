@@ -335,10 +335,40 @@ export function createAgentServerConnection(
         { dispatcher: Dispatcher; connectionId: string }
     >();
 
-    // Client-hosted agents registered on the server, name → agent-rpc server
-    // closeFn. Used to tear down the local rpc server when unregistering,
-    // re-registering, or closing the connection.
-    const clientAgentServers = new Map<string, () => void>();
+    // Client-hosted agents registered on the server. Registration details let
+    // re-registration remove the previous agent while its RPC endpoint is
+    // still alive, so dispatcher lifecycle teardown can reach it.
+    const clientAgentServers = new Map<
+        string,
+        {
+            closeFn: () => void;
+            conversationId: string;
+            instanceId?: string | undefined;
+        }
+    >();
+    let nextClientAgentRegistrationId = 0;
+
+    function resolveClientAgentConversationId(conversationId?: string): string {
+        if (conversationId !== undefined) {
+            if (!joinedConversations.has(conversationId)) {
+                throw new Error(
+                    `Not joined to conversation: ${conversationId}`,
+                );
+            }
+            return conversationId;
+        }
+        if (joinedConversations.size === 1) {
+            return joinedConversations.keys().next().value as string;
+        }
+        if (joinedConversations.size === 0) {
+            throw new Error(
+                "Cannot register client agent: no conversation joined",
+            );
+        }
+        throw new Error(
+            "Cannot register client agent: multiple conversations joined; specify conversationId",
+        );
+    }
 
     let closed = false;
 
@@ -624,22 +654,25 @@ export function createAgentServerConnection(
             conversationId?: string,
             identity?: ClientAgentIdentity,
         ): Promise<void> {
-            // Drop any previous rpc server for this name (e.g. re-registering
-            // after a reconnect, where the old server sat on a stale channel).
-            clientAgentServers.get(name)?.();
-            clientAgentServers.delete(name);
+            const resolvedConversationId =
+                resolveClientAgentConversationId(conversationId);
+            const previous = clientAgentServers.get(name);
+            const registrationId = String(++nextClientAgentRegistrationId);
+            const channelName = `agent:${name}:${registrationId}`;
 
             const { closeFn, agentInterface } = createAgentRpcServer(
                 name,
                 agent,
                 currentChannel,
+                { channelName },
             );
             try {
                 await rpc.invoke("registerClientAgent", {
                     name,
                     manifest,
                     agentInterface,
-                    ...(conversationId !== undefined ? { conversationId } : {}),
+                    conversationId: resolvedConversationId,
+                    registrationId,
                     ...(identity?.instanceId !== undefined
                         ? { instanceId: identity.instanceId }
                         : {}),
@@ -654,7 +687,44 @@ export function createAgentServerConnection(
                 closeFn();
                 throw e;
             }
-            clientAgentServers.set(name, closeFn);
+            if (
+                previous !== undefined &&
+                previous.conversationId !== resolvedConversationId
+            ) {
+                try {
+                    await rpc.invoke("unregisterClientAgent", {
+                        name,
+                        conversationId: previous.conversationId,
+                        ...(previous.instanceId !== undefined
+                            ? { instanceId: previous.instanceId }
+                            : {}),
+                    });
+                } catch (e) {
+                    try {
+                        await rpc.invoke("unregisterClientAgent", {
+                            name,
+                            conversationId: resolvedConversationId,
+                            ...(identity?.instanceId !== undefined
+                                ? { instanceId: identity.instanceId }
+                                : {}),
+                        });
+                    } catch (rollbackError) {
+                        closeFn();
+                        throw new AggregateError(
+                            [e, rollbackError],
+                            `Failed to move client agent '${name}' and roll back the new registration`,
+                        );
+                    }
+                    closeFn();
+                    throw e;
+                }
+            }
+            previous?.closeFn();
+            clientAgentServers.set(name, {
+                closeFn,
+                conversationId: resolvedConversationId,
+                instanceId: identity?.instanceId,
+            });
         },
 
         async unregisterClientAgent(
@@ -669,7 +739,7 @@ export function createAgentServerConnection(
                     ...(instanceId !== undefined ? { instanceId } : {}),
                 });
             } finally {
-                clientAgentServers.get(name)?.();
+                clientAgentServers.get(name)?.closeFn();
                 clientAgentServers.delete(name);
             }
         },
@@ -689,7 +759,7 @@ export function createAgentServerConnection(
             joinedConversations.clear();
             // Client-agent rpc servers were bound to the old channel; drop them
             // so the caller re-registers them on the new channel after re-join.
-            for (const closeFn of clientAgentServers.values()) {
+            for (const { closeFn } of clientAgentServers.values()) {
                 closeFn();
             }
             clientAgentServers.clear();
@@ -702,7 +772,7 @@ export function createAgentServerConnection(
             }
             closed = true;
             debug("Closing agent server connection");
-            for (const closeFn of clientAgentServers.values()) {
+            for (const { closeFn } of clientAgentServers.values()) {
                 closeFn();
             }
             clientAgentServers.clear();

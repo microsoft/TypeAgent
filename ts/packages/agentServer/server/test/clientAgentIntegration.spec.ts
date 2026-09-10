@@ -16,6 +16,7 @@ import {
 } from "@typeagent/agent-rpc/channel";
 import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import type { TypeAgentAction } from "@typeagent/agent-sdk";
+import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 import type { ClientIO } from "@typeagent/dispatcher-rpc/types";
 import type { MacroManager } from "@typeagent/copilot-macros";
 import {
@@ -52,7 +53,11 @@ const manifest: AppAgentManifest = {
 
 type TestServer = {
     registry: ClientAgentRegistry;
-    host: ClientAgentHost & { added: string[]; removed: string[] };
+    host: ClientAgentHost & {
+        added: string[];
+        replaced: string[];
+        removed: string[];
+    };
     connect(): TestClient;
 };
 
@@ -66,12 +71,17 @@ type TestClient = {
 function createTestServer(): TestServer {
     const registry = createClientAgentRegistry();
     const added: string[] = [];
+    const replaced: string[] = [];
     const removed: string[] = [];
     const host = {
         added,
+        replaced,
         removed,
         async addDynamicAgent(name: string) {
             added.push(name);
+        },
+        async replaceDynamicAgent(name: string) {
+            replaced.push(name);
         },
         async removeDynamicAgent(name: string) {
             removed.push(name);
@@ -102,6 +112,7 @@ function createTestServer(): TestServer {
             displayName: string,
             connectionId: string,
             multiInstance: boolean,
+            agentInterface: readonly AgentInterfaceFunctionName[],
         ) {
             await registry.add(host, name, {
                 instanceId,
@@ -109,6 +120,7 @@ function createTestServer(): TestServer {
                 connectionId,
                 appAgent,
                 manifest: agentManifest,
+                agentInterface,
                 multiInstance,
             });
         },
@@ -186,6 +198,15 @@ function makeAgent(executed: TypeAgentAction[]): AppAgent {
         async executeAction(action: TypeAgentAction) {
             executed.push(action);
             return undefined;
+        },
+    };
+}
+
+function makeAgentWithDynamicDisplay(executed: TypeAgentAction[]): AppAgent {
+    return {
+        ...makeAgent(executed),
+        async getDynamicDisplay() {
+            return { content: "test", nextRefreshMs: -1 };
         },
     };
 }
@@ -330,8 +351,8 @@ describe("client agent multi-instance integration", () => {
 
         const group = server.registry.groups.get(AGENT_NAME)!;
         expect([...group.instances.keys()]).toEqual(["device-new"]);
-        // The slot was handed over, not torn down and rebuilt.
         expect(server.host.added).toEqual([AGENT_NAME]);
+        expect(server.host.replaced).toEqual([]);
         expect(server.host.removed).toEqual([]);
 
         // The requester routes to the live proxy, not the retired one.
@@ -344,6 +365,105 @@ describe("client agent multi-instance integration", () => {
         await new Promise((resolve) => setImmediate(resolve));
         expect(server.registry.groups.size).toBe(0);
         expect(server.host.removed).toEqual([AGENT_NAME]);
+    });
+
+    test("a rejected re-registration preserves the previous instance", async () => {
+        const server = createTestServer();
+
+        const executedA: TypeAgentAction[] = [];
+        const clientA = server.connect();
+        await clientA.join();
+        await clientA.connection.registerClientAgent(
+            AGENT_NAME,
+            manifest,
+            makeAgent(executedA),
+            CONVERSATION_ID,
+            {
+                instanceId: "device-a",
+                displayName: "Pixel 8",
+                multiInstance: true,
+            },
+        );
+
+        const executedB: TypeAgentAction[] = [];
+        const clientB = server.connect();
+        await clientB.join();
+        await clientB.connection.registerClientAgent(
+            AGENT_NAME,
+            manifest,
+            makeAgent(executedB),
+            CONVERSATION_ID,
+            {
+                instanceId: "device-b",
+                displayName: "Galaxy Tab",
+                multiInstance: true,
+            },
+        );
+
+        await expect(
+            clientA.connection.registerClientAgent(
+                AGENT_NAME,
+                manifest,
+                makeAgentWithDynamicDisplay([]),
+                CONVERSATION_ID,
+                {
+                    instanceId: "device-a",
+                    displayName: "Pixel 8",
+                    multiInstance: true,
+                },
+            ),
+        ).rejects.toThrow(/different set of methods/i);
+
+        expect([
+            ...server.registry.groups.get(AGENT_NAME)!.instances.keys(),
+        ]).toEqual(["device-a", "device-b"]);
+        await executeVia(server, clientB.connectionId);
+        expect(executedB).toHaveLength(1);
+        await executeVia(server, clientA.connectionId);
+        expect(executedA).toHaveLength(1);
+
+        clientA.disconnect();
+        await new Promise((resolve) => setImmediate(resolve));
+        expect([
+            ...server.registry.groups.get(AGENT_NAME)!.instances.keys(),
+        ]).toEqual(["device-b"]);
+    });
+
+    test("a lone client changing methods replaces the dynamic agent", async () => {
+        const server = createTestServer();
+
+        const client = server.connect();
+        await client.join();
+        await client.connection.registerClientAgent(
+            AGENT_NAME,
+            manifest,
+            makeAgent([]),
+            CONVERSATION_ID,
+            {
+                instanceId: "device-a",
+                displayName: "Pixel 8",
+                multiInstance: true,
+            },
+        );
+
+        await client.connection.registerClientAgent(
+            AGENT_NAME,
+            manifest,
+            makeAgentWithDynamicDisplay([]),
+            CONVERSATION_ID,
+            {
+                instanceId: "device-a",
+                displayName: "Pixel 8",
+                multiInstance: true,
+            },
+        );
+
+        expect(server.host.added).toEqual([AGENT_NAME]);
+        expect(server.host.replaced).toEqual([AGENT_NAME]);
+        expect(server.host.removed).toEqual([]);
+        expect(
+            server.registry.groups.get(AGENT_NAME)!.mux.getDynamicDisplay,
+        ).toBeDefined();
     });
 
     // Unregister only ever removes an instance the caller owns. Naming someone
