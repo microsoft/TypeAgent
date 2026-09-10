@@ -3,6 +3,7 @@
 
 // Internal exports for agent server
 export { createDispatcherFromContext } from "./dispatcher.js";
+export type { StructuredActionAccess } from "./structuredAction/discovery.js";
 export {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
