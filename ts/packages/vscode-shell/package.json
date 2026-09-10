@@ -1,7 +1,7 @@
 {
   "name": "vscode-shell",
   "displayName": "TypeAgent VS Code Shell",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "private": true,
   "description": "Embeds the TypeAgent shell chat into VS Code",
   "categories": [

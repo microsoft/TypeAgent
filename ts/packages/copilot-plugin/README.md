@@ -1,20 +1,28 @@
 # TypeAgent Plugin for GitHub Copilot CLI
 
-This plugin integrates TypeAgent with GitHub Copilot CLI, enabling action requests (calendar, email, music, browser automation, etc.) to be routed to TypeAgent before the Copilot LLM.
+This plugin connects GitHub Copilot CLI to TypeAgent. It can route prompts to
+TypeAgent, expose TypeAgent through MCP, give registered PowerShell actions
+first refusal, and capture successful tool sequences as reusable macros.
 
 ## How It Works
 
-```
-User Input → copilot
-    ↓
-userPromptSubmitted hook (hook-router.js)
-    ↓
-Question word? → Fall through to Copilot LLM
-Action request?
-    ├── direct mode → Connect to TypeAgent ws://localhost:8999
-    │     → Recognized action? → Return response, skip LLM
-    │     → Unknown action? → Fall through to Copilot
-    └── mcp mode → Inject directive, LLM calls typeagent-processCommand tool
+```text
+User prompt
+  |
+  +-> direct: TypeAgent dispatcher -> handled response or fallthrough
+  |
+  +-> mcp: Copilot calls typeagent-processCommand
+  |
+  +-> dev: registered PowerShell action/flow
+  |           -> handled response
+  |         or PowerShell capability fallback
+  |           -> reuse/create/repair or fall through as not suitable
+  |
+  +-> bypass: Copilot handles the prompt
+
+Registered alongside routing (calls are disabled in bypass mode):
+  typeagent-workspace MCP tools
+  typeagent-macros MCP tools -> replay or macro-runner handoff
 ```
 
 The hook output fields `handled`, `responseContent`, and `handledBy` are supported in current Copilot CLI behavior, allowing the hook to skip the agentic loop entirely when TypeAgent handles a request. For local runtime debugging against the runtime repo, use `pnpm copilot:dev`.
@@ -159,7 +167,7 @@ The `--plugin-dir` flag loads the plugin from a local directory. On first launch
 > @typeagent run list the playlists
 ```
 
-### Step 5: Verify Verification in Copilot CLI
+### Step 5: Verify the Plugin in Copilot CLI
 
 Check that the plugin loaded:
 
@@ -182,6 +190,38 @@ Agent-guided adaptations may be saved only through
 budgets, and macro structure, then creates a new draft. It never mutates or
 promotes the approved version.
 
+Macros are not a plugin routing mode. They are a tool surface available in
+direct, MCP, and dev modes.
+
+### Record, approve, and run a macro
+
+1. Arm one interaction:
+
+   ```text
+   @typeagent macro record
+   ```
+
+2. Complete one successful Copilot turn that uses an MCP tool.
+3. Retrieve the trace ID:
+
+   ```text
+   @typeagent macro status
+   ```
+
+4. Ask Copilot to use `create_macro_from_trace`, then inspect the draft,
+   retrieve its requirements, and call `validate_macro`.
+5. Review the draft and explicitly call `approve_macro`. A draft cannot run;
+   approval creates a new immutable version.
+6. Call `run_macro` with the approved macro ID, required inputs, and
+   `preference: "auto"`.
+7. Use `get_macro_run` to inspect the sanitized persisted run record.
+
+Replayable macros are preflighted in full before step one. Preflight checks
+approval, required inputs, tool availability, and tool-schema fingerprints.
+Macros containing Copilot-native tools use the macro runner for the whole
+procedure. TypeAgent never replays a prefix and hands only the remainder to
+the agent.
+
 ### Rollout Controls
 
 Each macro boundary is enabled by default and can be disabled independently:
@@ -194,8 +234,8 @@ Each macro boundary is enabled by default and can be disabled independently:
 | `TYPEAGENT_MACRO_AGENT_HANDOFF_ENABLED` | Agent-runner handoff       |
 
 Set a variable to `0`, `false`, or `off` before starting Copilot to disable
-that boundary. `@typeagent status` reports the effective settings. These flags
-do not change direct, MCP, dev, or PowerShell mode selection.
+that boundary. These flags do not change direct, MCP, dev, or PowerShell mode
+selection. Restart Copilot after changing them.
 
 ### Recovery And Rollback
 
@@ -244,28 +284,30 @@ The current Copilot CLI (>= 1.0) does **not** accept a local path for
 subdirs, or git URLs. However, `copilot plugin marketplace add <path>` **does**
 accept a local path. So `pnpm run register` (`scripts/install-plugin.mjs`):
 
-1. Registers the `ts` workspace root as a local marketplace named
-   `typeagent-local`. The CLI discovers the marketplace manifest at
-   `ts/.github/plugin/marketplace.json`, whose plugin `source` points at
-   `./packages/copilot-plugin` (resolved relative to the marketplace root).
-2. Installs `typeagent@typeagent-local`, which **copies** the plugin dir into
-   `~/.copilot/installed-plugins/`.
+1. Stages only the bundled runtime files under
+   `~/.typeagent-copilot/plugin-stage`. This deliberately excludes the
+   workspace's pnpm `node_modules` junctions, which Copilot cannot copy on
+   Windows.
+2. Creates and registers a local marketplace at
+   `~/.copilot/marketplaces/typeagent-local`.
+3. Installs or updates `typeagent@typeagent-local`, which copies the staged
+   snapshot into `~/.copilot/installed-plugins/`, and verifies that it appears
+   in `copilot plugin list`.
 
-> The CLI searches several locations for the marketplace manifest, in order:
-> `marketplace.json` (root), `.plugin/marketplace.json`,
-> `.github/plugin/marketplace.json`, then `.claude-plugin/marketplace.json`.
-> We use `.github/plugin/` since the workspace already has a `.github` folder.
+On Windows, VS Code may hold a directory watcher on the installed snapshot that
+blocks Copilot CLI's normal directory replacement with `Access is denied`. The
+registrar preserves the previous snapshot, removes the locked directory, and
+retries `plugin update`. If the retry fails, it restores the previous snapshot.
 
 ### Why the build must bundle
 
-Installing copies the plugin directory into `~/.copilot/installed-plugins/`.
-Because this is a pnpm workspace, the plugin's runtime deps (the MCP SDK and the
-`workspace:*` packages) are symlinks/junctions into the central `.pnpm` store —
-the copy breaks them, and the MCP server crashes on launch with
-`ERR_MODULE_NOT_FOUND`. To fix this, `pnpm run build` runs an esbuild bundle
-step (`scripts/bundle.mjs`) that inlines every dependency into the hook and MCP
-entry points, so the copied `dist/` is self-contained and needs no
-`node_modules` at runtime.
+Installing copies a plugin snapshot into `~/.copilot/installed-plugins/`.
+Because this is a pnpm workspace, the package's runtime dependencies are
+symlinks/junctions into the central `.pnpm` store. Copying those links can fail
+with `Access is denied` on Windows, and copied links would not be portable.
+`pnpm run build` therefore runs `scripts/bundle.mjs` to inline every dependency,
+and registration stages only that self-contained runtime without
+`node_modules`.
 
 ### Updating after a code change
 
@@ -274,7 +316,7 @@ the plugin, rebuild and refresh the global copy:
 
 ```powershell
 pnpm run build       # re-bundle
-pnpm run register    # re-copies the fresh build (runs `copilot plugin update`)
+pnpm run register    # stages and installs a fresh snapshot
 ```
 
 > For rapid local development with live edits, prefer `pnpm copilot`
@@ -306,10 +348,15 @@ The hook injects a directive into the prompt context, instructing the LLM to cal
 
 ### Dev Mode
 
-The hook asks TypeAgent to handle PowerShell actions first. Ordinary requests
-are translated against the active `powershell` schema family, including static
-`powershell.*` namespaces and registered dynamic flows, with reasoning disabled.
-A miss falls through to Copilot without running TypeAgent reasoning.
+Dev mode is supported on Windows. The hook asks TypeAgent to handle the
+PowerShell schema family first, including static `powershell.*` namespaces and
+registered dynamic flows.
+
+Ordinary requests use the `powershellCapabilityFallback` reasoning profile
+after a grammar or translation miss. That bounded fallback can reuse an
+existing flow, add a grammar pattern, create and test a new flow, repair one
+stale flow once, or report that the request is not suitable for PowerShell. A
+typed `notSuitable` result falls through to Copilot with the original prompt.
 
 Recording directives such as `learn:`, `record`, and `dev: learn:` are sent to
 the configured TypeAgent reasoning engine with a PowerShell flow recording
@@ -324,8 +371,28 @@ with its normal tool set.
 
 - **Pros:** Reuses deterministic development actions without taking over normal
   Copilot coding requests
-- **Cons:** Requires an agent-server version that supports request-scoped schema
-  selection and command dispositions
+- **Cons:** Requires Windows, the PowerShell agent, and an agent-server version
+  that supports request-scoped schema selection and command dispositions
+
+Try a registered action:
+
+```text
+> @typeagent mode dev
+> show top 5 memory hogs
+```
+
+To demonstrate flow creation, use a disposable read-only task:
+
+```text
+> learn: show the 3 newest .log files under <PATH>
+> @typeagent run list powershell flows
+> show the 3 newest .log files under <PATH>
+```
+
+The generated name and output can vary with the configured model. Dynamic
+PowerShell scripts currently run in FullLanguage mode. Cmdlet and path policy
+metadata does not prevent direct .NET access, so do not treat generated or
+imported flows as securely sandboxed.
 
 **Switch modes:**
 
@@ -422,17 +489,21 @@ The hooks therefore behave as follows:
 - `preToolUse` keeps its existing PowerShell guidance policy.
 
 The workspace MCP server is local to the plugin and does not require
-agent-server. Agent-server continues to receive bounded tool/turn history from
-the hooks. Macro catalog, validation, promotion, and D1 orchestration remain
-agent-server responsibilities when those provider components are added.
+agent-server. Agent-server receives bounded tool and turn history from the
+hooks and owns macro recording state, catalog management, validation,
+immutable approval, replay orchestration, handoff records, and persisted run
+evidence.
 
 ### Agents (`agents/`)
 
 - `typeagent.agent.md` — Sub-agent that delegates action requests to TypeAgent via MCP tools
+- `typeagent-macro-runner.agent.md` — Executes an entire agent-required macro
+  through Copilot's live tools and permissions
 
 ### Skills (`skills/`)
 
 - `typeagent-setup/` — Interactive skill to configure integration mode and server connection
+- `typeagent-macros/` — Discovers, validates, runs, and adapts TypeAgent macros
 
 ---
 
@@ -472,13 +543,16 @@ Expected output shows server URL and current mode. If TypeAgent is not running, 
 
 ### Common Issues
 
-| Issue                          | Cause                         | Fix                                                            |
-| ------------------------------ | ----------------------------- | -------------------------------------------------------------- |
-| `copilot` not found            | Copilot CLI not installed     | Install GitHub Copilot CLI and verify with `copilot --version` |
-| Action not routed to TypeAgent | Prompt detected as a question | Rephrase: use imperative ("schedule...", "send...", "play...") |
-| TypeAgent connection refused   | Server not running            | Start TypeAgent server (`pnpm run start:agent-server`)         |
-| Hook timeout                   | TypeAgent slow to respond     | Increase `timeout` in `hooks.json` or use MCP mode             |
-| SQLite experimental warning    | Node 24 feature               | Normal — can be suppressed with `--no-experimental-warnings`   |
+| Issue                        | Cause                                                                   | Fix                                                                                         |
+| ---------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `copilot` not found          | Copilot CLI not installed                                               | Install GitHub Copilot CLI and verify with `copilot --version`                              |
+| Dev action falls through     | Request was unsuitable, PowerShell is unavailable, or mode is not `dev` | Check `@typeagent status`, Windows platform, agent-server, and the PowerShell agent         |
+| TypeAgent connection refused | Server not running                                                      | Start TypeAgent server (`pnpm run start:agent-server`)                                      |
+| Hook timeout                 | TypeAgent slow to respond                                               | Increase `timeout` in `hooks.json` or use MCP mode                                          |
+| Recording does not complete  | The turn is still running or recording failed                           | Run `@typeagent macro status`; re-arm after a failed or expired recording                   |
+| Macro will not run           | Version is not approved or a feature boundary is disabled               | Inspect the macro state and the macro flags shown by `@typeagent status`                    |
+| Replay fails before step one | Required input, tool, or approved schema no longer matches              | Inspect requirements and the structured replay error; revalidate or create a reviewed draft |
+| SQLite experimental warning  | Node 24 feature                                                         | Normal — can be suppressed with `--no-experimental-warnings`                                |
 
 ---
 
@@ -492,7 +566,11 @@ The key runtime hook behavior change was in:
 
 This allows any `userPromptSubmitted` hook to fully handle a request and return a response without the LLM being invoked.
 
-See the [investigation document](D:\repos\codeDocs\TypeAgent\forAgent\investigations\active\2026-04-06_copilot-cli-typeagent-integration.md) for full architectural analysis.
+See the repository's
+[Copilot fast actions plan](../../docs/plans/copilot-fastActions/PLAN.md) for
+the cross-package design and
+[workflow architecture](../../docs/architecture/workflows/workflows.md) for
+TypeAgent's common flow model.
 
 ## Trademarks
 

@@ -1818,7 +1818,7 @@ class ConfigExecutionReasoningCommandHandler implements CommandHandler {
 
 class ConfigExecutionReasoningModelCommandHandler implements CommandHandler {
     public readonly description =
-        "Set the Copilot reasoning model (e.g. claude-opus-4.8). Omit to show the current value.";
+        "Set the Copilot reasoning model (e.g. gpt-5.6-sol). Omit to show the current value.";
     public readonly parameters = {
         args: {
             model: {

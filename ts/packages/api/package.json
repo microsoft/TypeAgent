@@ -40,6 +40,7 @@
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/telemetry": "workspace:*",
     "@typeagent/typechat-utils": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",

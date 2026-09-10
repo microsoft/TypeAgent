@@ -219,6 +219,15 @@ describe("buildArgs — myPullRequests (cross-repo gh search prs)", () => {
         expect(joined).toContain("repository");
     });
 
+    describe("buildArgs — deterministic local merge actions", () => {
+        test.each(["resolveMergeConflicts", "completeMergeConflictResolution"])(
+            "keeps %s outside the generic gh execution path",
+            (actionName) => {
+                expect(buildArgs(action(actionName, {}))).toBeUndefined();
+            },
+        );
+    });
+
     test("honors an explicit state and limit", () => {
         const args = buildArgs(
             action("myPullRequests", { state: "closed", limit: 5 }),

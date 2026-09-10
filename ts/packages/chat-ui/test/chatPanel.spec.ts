@@ -273,6 +273,45 @@ describe("agent running rail", () => {
         expect(agentRail(root)).toBeNull();
     });
 
+    it("appends request metadata inside the existing response bubble", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("do it", "req-1");
+        panel.addAgentMessage(
+            "completed",
+            "agent",
+            undefined,
+            undefined,
+            "req-1",
+        );
+
+        expect(
+            panel.appendRequestMetadata(
+                "req-1",
+                "Permissions: All tools for this session.",
+            ),
+        ).toBe(true);
+        expect(
+            root.querySelectorAll(".chat-message-container-agent"),
+        ).toHaveLength(1);
+        const metadata = root.querySelector(".chat-response-metadata");
+        expect(metadata?.textContent).toBe(
+            "Permissions: All tools for this session.",
+        );
+        expect(
+            metadata?.closest(".chat-message-container-agent")?.textContent,
+        ).toContain("completed");
+    });
+
+    it("reports when request metadata has no response bubble", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("do it", "req-1");
+
+        expect(panel.appendRequestMetadata("req-1", "Permissions: Once.")).toBe(
+            false,
+        );
+        expect(root.querySelector(".chat-response-metadata")).toBeNull();
+    });
+
     it("setIdle removes the working rail", () => {
         const { root, panel } = makePanel({ onCancel: jest.fn() });
         panel.addUserMessage("hi", "req-1");
@@ -1043,6 +1082,68 @@ describe("icons", () => {
             const el = make();
             expect(el.tagName).toBe("I");
             expect(el.querySelector("svg")).not.toBeNull();
+        }
+    });
+});
+
+describe("Escape / completions propagation", () => {
+    // The host's document-level Escape handler denies the visible permission
+    // prompt and drives the double-Esc "cancel everything" clock. When Esc is
+    // consumed purely to dismiss a completion popup, chat-ui must stop
+    // propagation so those host actions don't fire.
+    it("stops propagation when Esc dismisses local chat completions", async () => {
+        jest.useFakeTimers();
+        try {
+            const root = document.createElement("div");
+            document.body.appendChild(root);
+            const panel = new ChatPanel(root, {
+                platformAdapter: { handleLinkClick() {} },
+                getCompletions: async () => ({
+                    completions: ["help", "history"],
+                    prefix: "@",
+                    startIndex: 0,
+                }),
+                onSend() {},
+            });
+            const input = root.querySelector<HTMLElement>("#phraseDiv")!;
+            // Populate the input so the completion fetch runs.
+            input.textContent = "@";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            await jest.runOnlyPendingTimersAsync();
+            // A pending promise chain resolves the completions.
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(
+                (panel as unknown as { completions: string[] }).completions
+                    .length,
+            ).toBeGreaterThan(0);
+
+            let sawEscapeOnDoc = false;
+            const docListener = (e: KeyboardEvent) => {
+                if (e.key === "Escape") sawEscapeOnDoc = true;
+            };
+            document.addEventListener("keydown", docListener);
+            try {
+                input.dispatchEvent(
+                    new KeyboardEvent("keydown", {
+                        key: "Escape",
+                        bubbles: true,
+                        cancelable: true,
+                    }),
+                );
+            } finally {
+                document.removeEventListener("keydown", docListener);
+            }
+            // Chat-ui called stopPropagation, so the doc listener never fired.
+            expect(sawEscapeOnDoc).toBe(false);
+            // And the completion popup is cleared.
+            expect(
+                (panel as unknown as { completions: string[] }).completions
+                    .length,
+            ).toBe(0);
+            document.body.removeChild(root);
+        } finally {
+            jest.useRealTimers();
         }
     });
 });

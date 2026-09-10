@@ -5,6 +5,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage } from "http";
 import { AddressInfo } from "net";
 import { isAllowedAgentOrigin } from "./originAllowlist.mjs";
+import { LOOPBACK_HOST } from "@typeagent/websocket-utils/loopback";
 import {
     createChannelProviderAdapter,
     type ChannelProviderAdapter,
@@ -98,6 +99,11 @@ export class AgentWebSocketServer {
         return new Promise((resolve, reject) => {
             const server = new WebSocketServer({
                 port,
+                // Bind loopback: the origin gate below accepts clients that
+                // send no Origin header at all (native `ws` callers), so an
+                // all-interfaces bind would let any LAN peer connect as one
+                // and drive privileged browser-control RPC.
+                host: LOOPBACK_HOST,
                 verifyClient: (info, cb) => {
                     // `info.req.headers.origin` is `string | string[] |
                     // undefined`; coerce arrays to the first element so

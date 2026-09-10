@@ -419,7 +419,9 @@ async function main() {
         res.end("Not found");
     });
 
-    httpServer.listen(PORT, () => {
+    // Loopback only: the dashboard is unauthenticated and exposes live server
+    // state, so it must not be reachable from other machines.
+    httpServer.listen(PORT, "127.0.0.1", () => {
         console.error(`
 ╔══════════════════════════════════════════════════════════════╗
 ║           Plan Validation — Live Demo Dashboard              ║

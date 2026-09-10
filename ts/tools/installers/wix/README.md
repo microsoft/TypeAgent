@@ -7,9 +7,11 @@ Automated build and signing for the TypeAgent headless agent-server MSI installe
 This implementation builds a lightweight Windows Installer (MSI) that:
 
 - Downloads the `agent-server.<rid>` artifact from the ADO feed
-- Bundles it with the Copilot plugin and TypeAgent VS Code Chat VSIX
+- Bundles it with the Copilot plugin, the TypeAgent VS Code Chat VSIX, and the
+  TypeAgent VS Code Shell VSIX
 - Installs TypeAgent Chat and creates a desktop shortcut when VS Code 1.133+
   is present
+- Installs the TypeAgent VS Code Shell extension when VS Code 1.90+ is present
 - Signs with the TypeAgent development certificate (from Key Vault)
 - Produces a signed `.msi` ready for distribution
 
@@ -28,7 +30,7 @@ ts/tools/installers/wix/
   └── register-plugin.ps1         # Deferred CA: register/unregister the Copilot CLI plugin
 
 ts/tools/installers/common/
-  └── install-vscode-chat.ps1     # Shared VSIX install + desktop shortcut lifecycle
+  └── install-vscode-typeagent.ps1 # Shared VSIX install + desktop shortcut lifecycle
 
 pipelines/
   └── azure-build-publish-all.yml   # ADO pipeline (build_sign_publish_msi job)
@@ -84,53 +86,109 @@ Use the local source build to validate WiX changes before pushing to CI. This is
 
 ### Option A: Build from local repo (recommended for WiX development)
 
-#### 1. Build the workspace
+Run the complete local build from `ts/`:
+
+```powershell
+pnpm run build:msi:local
+```
+
+The default output is
+`$env:TEMP\typeagent-msi-stage\out\TypeAgent-<version>-win32-x64.msi`.
+The wrapper builds the workspace, packages the VSIX, stages the Copilot plugin,
+creates the same bundled agent-server artifact used by CI, and runs WiX. Its
+temporary pnpm deployment state is kept out of the development workspace, and
+the wrapper restores development dependency status after pnpm's legacy deploy.
+By default it detects the installed TypeAgent MSI and increments its
+MSI-comparable version; when TypeAgent is not installed, it uses `0.0.1-local`.
+Pass `--skip-build` when compiled outputs are already current, or use
+`--version`, `--stage-dir`, and `--output` to override their defaults.
+
+```powershell
+pnpm run build:msi:local -- --skip-build --version 0.0.1-local
+```
+
+The equivalent individual steps are below for troubleshooting.
+
+#### 1. Verify dependencies and build the workspace
 
 ```powershell
 cd D:\repos\TypeAgent\ts
+pnpm install --prod=false --frozen-lockfile
 pnpm run build
 ```
 
-#### 2. Stage agent-server
+The install command ensures the workspace has development dependencies such as
+`vsce`. It also repairs dependency state left by an interrupted production
+deploy. Omit `pnpm run build` when compiled outputs are already current (the
+equivalent of `--skip-build`).
+
+#### 2. Package VS Code Chat and stage the Copilot plugin
+
+Package tools that require development dependencies before staging the
+agent-server:
+
+```powershell
+pnpm --filter vscode-chat run package
+pnpm --filter vscode-shell run package
+
+node tools/scripts/stageCopilotPlugin.mjs `
+  --out "$env:TEMP\typeagent-msi-stage\copilot-plugin"
+```
+
+`stageCopilotPlugin.mjs` copies only the runtime files used by the installer and
+writes `bundle-manifest.json`; do not copy the entire plugin `dist` directory.
+
+#### 3. Stage agent-server
+
+The MSI uses `bundleAgentServer.mjs`, matching the published CI artifact. It
+bundles server entry points and profile agents to minimize files and installed
+size. `deployAgentServer.mjs` is the unbundled variant: it preserves workspace
+package boundaries and a conventional production `node_modules` for debugging
+a repo-less deployment, but produces a substantially larger artifact and is not
+intended for MSI packaging.
 
 ```powershell
 # From D:\repos\TypeAgent\ts
-node tools/scripts/deployAgentServer.mjs `
-  --out "$env:TEMP\typeagent-msi-stage\agent-server" `
-  --platform win32 --arch x64 `
-  --profile inbox `
-  --external-cli
+$pnpmState = "$env:TEMP\typeagent-msi-stage\pnpm-state"
+Remove-Item -Recurse -Force $pnpmState -ErrorAction SilentlyContinue
+
+try {
+  node tools/scripts/bundleAgentServer.mjs `
+    --out "$env:TEMP\typeagent-msi-stage\agent-server" `
+    --platform win32 --arch x64 `
+    --profile inbox `
+    --external-cli `
+    --pnpm-state-dir $pnpmState
+} finally {
+  pnpm install --prod=false --frozen-lockfile
+  Remove-Item -Recurse -Force $pnpmState -ErrorAction SilentlyContinue
+}
 ```
 
-#### 3. Stage copilot-plugin
-
-```powershell
-$plugin = "packages/copilot-plugin"
-$out    = "$env:TEMP\typeagent-msi-stage\copilot-plugin"
-New-Item -ItemType Directory -Force $out | Out-Null
-Copy-Item -Recurse "$plugin/dist"       "$out/dist"
-Copy-Item          "$plugin/hooks.json" "$out/hooks.json"
-Copy-Item          "$plugin/.mcp.json"  "$out/.mcp.json"
-Copy-Item          "$plugin/plugin.json" "$out/plugin.json"
-Copy-Item -Recurse "$plugin/agents"     "$out/agents"
-Copy-Item -Recurse "$plugin/skills"     "$out/skills"
-```
+The isolated pnpm state keeps the production deploy out of the workspace. The
+`finally` block restores the frozen development install even if bundling fails,
+matching the wrapper's cleanup behavior.
 
 #### 4. Run the WiX build with local staged artifacts
 
 ```powershell
-pnpm --filter vscode-chat run package
-
 node tools/scripts/build-msi.mjs `
   --skip-download `
   --agent-dir  "$env:TEMP\typeagent-msi-stage\agent-server" `
   --plugin-dir "$env:TEMP\typeagent-msi-stage\copilot-plugin" `
   --vscode-chat-vsix "packages\vscode-chat\dist-pub\vscode-chat.vsix" `
+  --vscode-shell-vsix "packages\vscode-shell\dist-pub\vscode-shell.vsix" `
   --version 0.0.1-local `
   --plugin-version 0.0.1-local `
   --vscode-chat-version 0.0.1-local `
+  --vscode-shell-version 0.0.1-local `
+  --skip-shell-feed-resolution `
   --output "$env:TEMP\typeagent-msi-stage\out"
 ```
+
+The local wrapper skips shell feed resolution so this path does not require an
+Azure CLI login. Remove `--skip-shell-feed-resolution` to resolve and bake the
+latest shell fallback package version, which requires feed access.
 
 **Output:**
 
@@ -173,7 +231,8 @@ node build-msi.mjs --rid win32-x64 --version 0.0.1-<buildId> --output ./msi-out
 **What it does:**
 
 1. Downloads `agent-server.win32-x64` from the `typeagent` feed
-2. Downloads `typeagent-copilot-plugin` and `typeagent-vscode-chat`
+2. Downloads `typeagent-copilot-plugin`, `typeagent-vscode-chat`, and
+   `typeagent-vscode-shell`
 3. Extracts/stages the artifacts under `./msi-out/artifact`
 4. Compiles WiX definition (`.wxs` → `.wixobj`)
 5. Links to create `TypeAgent-<version>-win32-x64.msi`
@@ -208,10 +267,20 @@ msiexec /i "$env:TEMP\typeagent-msi-stage\out\TypeAgent-0.0.1-local-win32-x64.ms
 Get-Item "$env:LOCALAPPDATA\TypeAgent\agent-server" -ErrorAction SilentlyContinue
 ```
 
+Payload extraction failures always write the complete exception and PowerShell
+stack trace to
+`$env:LOCALAPPDATA\TypeAgent\logs\msi-extract-payload.log`. For interactive
+debugging, select **Show full error details if setup fails** on the endpoint
+providers page. The installer displays those details before rollback instead of
+leaving the underlying exception only in the log. The equivalent command-line
+property is `SHOWSTACKTRACE=1`. Error details are suppressed for quiet or basic
+UI installs so unattended deployment cannot block on the dialog; the full
+exception remains available in the log.
+
 ## Native VS Code Chat integration
 
 `VSCODECHAT=1` is enabled by default. During install, the MSI runs the shared
-`install-vscode-chat.ps1` helper as the current user. The helper:
+`install-vscode-typeagent.ps1` helper as the current user. The helper:
 
 1. Finds user- or system-installed VS Code.
 2. Requires VS Code 1.133.0 or newer.
@@ -233,6 +302,31 @@ msiexec /i TypeAgent-<version>-win32-x64.msi VSCODECHAT=0
 The MSI removes the shortcut on uninstall. It removes the extension only when
 the installed version still matches the version originally installed by
 TypeAgent, so it does not delete an independently upgraded extension.
+
+## TypeAgent VS Code Shell extension
+
+`VSCODESHELL=1` is enabled by default and is exposed as a checkbox in the
+interactive installer. During install, the MSI runs the shared
+`install-vscode-typeagent.ps1` helper with `-ExtensionId typeagent.vscode-shell`, a
+distinct ownership subkey (`HKCU\Software\Microsoft\TypeAgent\VSCodeShell`), and
+`-NoShortcut`. The helper:
+
+1. Finds user- or system-installed VS Code.
+2. Requires VS Code 1.90.0 or newer (the extension's `engines.vscode`).
+3. Installs the bundled `typeagent.vscode-shell` VSIX.
+
+No desktop shortcut is created for this extension. If compatible VS Code is
+absent, the step logs a warning to `%LOCALAPPDATA%\TypeAgent\logs\vscode-shell-install.log`
+and the rest of the TypeAgent installation continues. Disable the component for
+a silent install with:
+
+```powershell
+msiexec /i TypeAgent-<version>-win32-x64.msi VSCODESHELL=0
+```
+
+On uninstall the MSI removes the extension only when the installed version
+still matches the version originally installed by TypeAgent, so it does not
+delete an independently upgraded extension.
 
 ## Endpoint provider selection (self-host)
 
@@ -420,6 +514,18 @@ az artifacts universal download: ... (404 or auth error)
 1. Run `az login` and authenticate
 2. Verify artifact exists: `az artifacts universal list --feed typeagent`
 3. Check RID matches published artifacts (e.g., `agent-server.win32-x64`)
+
+### "Unable to clear payload directory"
+
+An upgrade cannot replace the agent-server while TypeAgent or another process
+is using a native module from the install directory. Setup reports the process
+ID and loaded module when Windows allows module inspection. Close TypeAgent,
+stop the agent server, and retry setup. Restart Windows if the file remains
+locked.
+
+Detailed extraction diagnostics are written to
+`%LOCALAPPDATA%\TypeAgent\logs\msi-extract-payload.log` and to the verbose MSI
+log when setup is run with `/L*V`.
 
 ### "Certificate not found"
 

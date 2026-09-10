@@ -108,6 +108,9 @@ export function createSessionContext<T = unknown>(
         get sessionContextId() {
             return sessionContextId;
         },
+        get currentConnectionId() {
+            return context.currentRequestId?.connectionId;
+        },
         notify(
             event: AppAgentEvent,
             message: string | DisplayContent,

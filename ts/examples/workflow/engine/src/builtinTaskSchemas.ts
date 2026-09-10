@@ -364,6 +364,11 @@ export const BUILTIN_TASK_SCHEMAS: readonly BuiltinTaskSchema[] = [
                     description:
                         "Max response body size in bytes (default 10MB). Responses larger than this are truncated.",
                 },
+                timeoutMs: {
+                    type: "integer",
+                    description:
+                        "Request timeout in milliseconds (default 30000).",
+                },
             },
         },
         outputSchema: {

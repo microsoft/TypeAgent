@@ -229,6 +229,7 @@ export async function createAgentRpcClient(
             hasSessionStorage: context.sessionStorage !== undefined,
             agentContextId: context.agentContext?.contextId,
             sessionContextId: context.sessionContextId,
+            currentConnectionId: context.currentConnectionId,
         };
     }
 
@@ -256,6 +257,7 @@ export async function createAgentRpcClient(
                 actionContextId: actionContextMap.getId(actionContext),
                 activityContext: actionContext.activityContext,
                 isFromReasoningLoop: actionContext.isFromReasoningLoop,
+                workingDirectory: actionContext.workingDirectory,
                 ...getContextParam(actionContext.sessionContext),
             });
         } finally {
@@ -264,15 +266,14 @@ export async function createAgentRpcClient(
     }
     async function withActionContextAsync<T>(
         actionContext: ActionContext<ShimContext>,
-        fn: (contextParams: {
-            actionContextId: number;
-            isFromReasoningLoop: boolean;
-        }) => Promise<T>,
+        fn: (contextParams: ActionContextParams) => Promise<T>,
     ) {
         try {
             return await fn({
                 actionContextId: actionContextMap.getId(actionContext),
+                activityContext: actionContext.activityContext,
                 isFromReasoningLoop: actionContext.isFromReasoningLoop,
+                workingDirectory: actionContext.workingDirectory,
                 ...getContextParam(actionContext.sessionContext),
             });
         } finally {

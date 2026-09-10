@@ -1043,6 +1043,20 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+.chat-response-metadata {
+  margin: 0 15px 6px;
+  padding-top: 4px;
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--chat-conversation-muted-foreground, #666) 30%,
+      transparent
+    );
+  color: var(--chat-conversation-muted-foreground, #666);
+  font-size: 0.82em;
+  line-height: 1.25;
+}
+
 /* Markdown typography inside a message. Some hosts (the vscode-shell) reset
    element margins/padding globally (media/chat.css `* {}`), which strips the
    UA list indent and heading spacing, so set them here (shared, so the

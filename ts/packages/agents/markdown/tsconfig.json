@@ -7,7 +7,8 @@
   "references": [
     { "path": "./src/agent" },
     { "path": "./src/view/site" },
-    { "path": "./src/view/route" }
+    { "path": "./src/view/route" },
+    { "path": "./test" }
   ],
   "ts-node": {
     "esm": true

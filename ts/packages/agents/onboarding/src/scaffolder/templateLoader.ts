@@ -39,6 +39,17 @@ function templatePath(filename: string): string {
 // template at scaffold time.
 const RESERVED_TEMPLATE_NAMES = new Set<string>(["__agentName__Schema.ts"]);
 
+// Values every template can reference without the caller supplying them.
+//
+// `LOOPBACK_HOST` is the bind address emitted into each scaffolded listener.
+// It is substituted as a literal rather than imported by the generated code:
+// scaffolded agents do not depend on `@typeagent/websocket-utils`, so an
+// import would not resolve in the new package. Keeping it here gives the
+// three templates that bind a socket one definition to change.
+const DEFAULT_TEMPLATE_VARS: Record<string, string> = {
+    LOOPBACK_HOST: "127.0.0.1",
+};
+
 /**
  * Load `filename` from `src/scaffolder/templates/` and substitute every
  * `__TOKEN__` with `vars[TOKEN]`. Throws if any `__TOKEN__` placeholder
@@ -65,6 +76,9 @@ export function loadTemplate(
         );
     }
     const tpl = fs.readFileSync(templatePath(filename), "utf-8");
+    // Caller-supplied values win, so a template can still be given an
+    // explicit host where that ever makes sense.
+    const allVars = { ...DEFAULT_TEMPLATE_VARS, ...vars };
     // Single-pass regex replacement so a substituted value that happens
     // to contain a `__KEY__` token is NOT re-processed by a later
     // iteration -- important if a future caller ever passes a var
@@ -75,7 +89,7 @@ export function loadTemplate(
     // `__agentName__` but leaves Node's `__filename` (no trailing `__`)
     // and `____` (empty body) alone.
     const out = tpl.replace(/__([A-Za-z_][A-Za-z0-9_]*)__/g, (match, key) =>
-        key in vars ? vars[key] : match,
+        key in allVars ? allVars[key] : match,
     );
     const leftover = out.match(/__[A-Za-z_][A-Za-z0-9_]*__/g);
     if (leftover && leftover.length > 0) {

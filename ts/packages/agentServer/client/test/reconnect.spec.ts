@@ -21,6 +21,14 @@ async function startStubServer(convs: ConversationInfo[]): Promise<{
     liveSocketCount: () => number;
     close: () => Promise<void>;
 }> {
+    const pendingInteraction = {
+        interactionId: "interaction-1",
+        type: "question",
+        source: "test",
+        timestamp: Date.now(),
+        message: "Allow?",
+        choices: ["Yes", "No"],
+    };
     const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
     await new Promise<void>((resolve, reject) => {
         wss.once("listening", () => resolve());
@@ -51,6 +59,7 @@ async function startStubServer(convs: ConversationInfo[]): Promise<{
                 conversationId: "c1",
                 connectionId: "conn-1",
                 name: "Shell",
+                pendingInteractions: [pendingInteraction],
             }),
             createConversation: async (name: string) => ({
                 conversationId: "c-new",
@@ -196,6 +205,9 @@ describe("connectAgentServer leaveConversation on a dead channel", () => {
         try {
             const conv = await connection.joinConversation(fakeClientIO);
             expect(conv.conversationId).toBe("c1");
+            expect(conv.pendingInteractions).toEqual([
+                expect.objectContaining({ interactionId: "interaction-1" }),
+            ]);
 
             // Server drops the socket; the client's control channel
             // disconnects, so a subsequent control rpc rejects with

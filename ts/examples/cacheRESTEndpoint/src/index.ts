@@ -23,7 +23,7 @@ type SchemaEntry = {
 const app = express();
 
 // Define the port number
-const port = `10482`;
+const port = 10482;
 
 // The cache file to serve
 const cacheFile = "data/v5_sample.json";
@@ -80,8 +80,10 @@ app.get(`/test`, async (req: Request, res: Response) => {
     res.sendFile(path.resolve("src/test.html"));
 });
 
-// Start the server and listen on the specified port
-app.listen(port, async () => {
+// Start the server and listen on the specified port. Bind loopback-only: the
+// endpoint has no authentication and serves cache contents plus a file read
+// from disk, so an all-interfaces bind would expose both to any LAN peer.
+app.listen(port, "127.0.0.1", async () => {
     console.log(`Server is running at http://localhost:${port}`);
     console.log(`Serving cache file from: ${cacheFile}`);
 

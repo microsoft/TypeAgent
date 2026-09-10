@@ -3,6 +3,7 @@ package com.example.typeagentchat
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Calendar
@@ -12,11 +13,16 @@ class AndroidDeviceAgentTest {
     fun registrationIncludesInlineSchemaAndExecuteAction() {
         val registration = AndroidDeviceAgent.createRegistrationParams(
             conversationId = "conversation-1",
-            schemaContent = "export type AndroidDeviceAction = never;"
+            schemaContent = "export type AndroidDeviceAction = never;",
+            instanceId = "instance-1",
+            displayName = "Pixel 8"
         )
 
         assertEquals(AndroidDeviceAgent.NAME, registration.getString("name"))
         assertEquals("conversation-1", registration.getString("conversationId"))
+        assertEquals("instance-1", registration.getString("instanceId"))
+        assertEquals("Pixel 8", registration.getString("displayName"))
+        assertEquals(true, registration.getBoolean("multiInstance"))
         assertEquals(
             "executeAction",
             registration.getJSONArray("agentInterface").getString(0)
@@ -32,11 +38,14 @@ class AndroidDeviceAgentTest {
     }
 
     @Test
-    fun unregistrationIdentifiesTheAgentAndConversation() {
+    fun unregistrationIdentifiesTheAgentAndConversationButNoInstance() {
         val unregistration = AndroidDeviceAgent.createUnregistrationParams("conversation-1")
 
         assertEquals(AndroidDeviceAgent.NAME, unregistration.getString("name"))
         assertEquals("conversation-1", unregistration.getString("conversationId"))
+        // The server resolves this to the calling connection's own instance, so
+        // naming one here would let it drop another device's registration.
+        assertFalse(unregistration.has("instanceId"))
     }
 
     @Test

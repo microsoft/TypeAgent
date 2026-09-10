@@ -302,6 +302,14 @@ export type PendingTopicalRoute = {
 };
 
 // Command Handler Context definition.
+export type SessionTrace = {
+    traceId: string;
+    requestId: string;
+    kind: "command" | "request";
+    isTraceOpen: boolean;
+    completedAt: number;
+};
+
 export type CommandHandlerContext = {
     readonly agents: AppAgentManager;
     readonly portRegistrar: IPortRegistrar;
@@ -406,6 +414,11 @@ export type CommandHandlerContext = {
      * `typeagent.trace.id` so existing logs can still be joined.
      */
     readonly traceId: string | undefined;
+    /**
+     * Canonical OpenTelemetry root traces completed in the current session.
+     * Kept in completion order for trace inspection commands.
+     */
+    readonly sessionTraceHistory: SessionTrace[];
     readonly telemetryOptions: {
         readonly joinActiveTrace: boolean;
     };
@@ -1330,6 +1343,7 @@ export async function initializeCommandHandlerContext(
             logger,
             activationId,
             traceId,
+            sessionTraceHistory: [],
             telemetryOptions: {
                 joinActiveTrace: options?.telemetry?.joinActiveTrace ?? false,
             },
@@ -1983,6 +1997,7 @@ export async function setSessionOnCommandHandlerContext(
     session: Session,
 ) {
     context.session = session;
+    context.sessionTraceHistory.length = 0;
     await context.agents.close();
 
     await initializeMemory(context, session.getSessionDirPath());

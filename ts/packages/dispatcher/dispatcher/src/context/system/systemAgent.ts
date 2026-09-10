@@ -34,6 +34,7 @@ import { executeHistoryAction } from "./action/historyActionHandler.js";
 import { executeGrammarAction } from "./action/grammarActionHandler.js";
 import { executeSettingsAction } from "./action/settingsActionHandler.js";
 import { executeLogAction } from "./action/logActionHandler.js";
+import { executePermissionsAction } from "./action/permissionsActionHandler.js";
 import { ConfigAction } from "./schema/configActionSchema.js";
 import { HelpAction } from "./schema/helpActionSchema.js";
 import { NotificationAction } from "./schema/notificationActionSchema.js";
@@ -42,6 +43,7 @@ import { ConversationAction } from "./schema/conversationActionSchema.js";
 import { GrammarAction } from "./schema/grammarActionSchema.js";
 import { UserSettingsAction } from "./schema/settingsActionSchema.js";
 import { LogAction } from "./schema/logActionSchema.js";
+import { PermissionsAction } from "./schema/permissionsActionSchema.js";
 
 // handlers
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
@@ -51,6 +53,7 @@ import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
 import { getConversationCommandHandlers } from "./handlers/conversationCommandHandlers.js";
 import { getCopilotCommandHandlers } from "./handlers/copilotCommandHandlers.js";
+import { getAllowCommandHandlers } from "./handlers/permissionCommandHandlers.js";
 import { getDemoCommandHandlers } from "./handlers/demoCommandHandlers.js";
 import { getCollisionCommandHandlers } from "./handlers/collisionCommandHandlers.js";
 import { getGrammarCommandHandlers } from "./handlers/grammarCommandHandlers.js";
@@ -105,6 +108,7 @@ export const systemHandlers: CommandHandlerTable = {
         session: getSessionCommandHandlers(),
         conversation: getConversationCommandHandlers(),
         copilot: getCopilotCommandHandlers(),
+        allow: getAllowCommandHandlers(),
         collision: getCollisionCommandHandlers(),
         grammar: getGrammarCommandHandlers(),
         history: getHistoryCommandHandlers(),
@@ -184,6 +188,7 @@ function executeSystemAction(
         | TypeAgentAction<GrammarAction, "system.grammar">
         | TypeAgentAction<UserSettingsAction, "system.settings">
         | TypeAgentAction<LogAction, "system.log">
+        | TypeAgentAction<PermissionsAction, "system.permissions">
         | TypeAgentAction<HelpAction, "system.help">,
     context: ActionContext<CommandHandlerContext>,
 ) {
@@ -202,6 +207,8 @@ function executeSystemAction(
             return executeSettingsAction(action, context);
         case "system.log":
             return executeLogAction(action, context);
+        case "system.permissions":
+            return executePermissionsAction(action, context);
         case "system.help":
             return executeHelpAction(action, context);
         default:
@@ -304,6 +311,20 @@ export const systemManifest: AppAgentManifest = {
                 schemaFile: "./src/context/system/schema/logActionSchema.ts",
                 schemaType: "LogAction",
                 grammarFile: "./src/context/system/schema/logActionSchema.agr",
+            },
+        },
+        permissions: {
+            schema: {
+                description:
+                    "Manage automatic agent permission approval for the current session. " +
+                    "Enable it when the user asks to allow or automatically approve all eligible agent/tool permissions for this session. " +
+                    "Disable it when the user asks to require permission confirmation again. " +
+                    "Managed-policy and sandbox-bypass requests always require explicit confirmation.",
+                schemaFile:
+                    "./src/context/system/schema/permissionsActionSchema.ts",
+                schemaType: "PermissionsAction",
+                grammarFile:
+                    "./src/context/system/schema/permissionsActionSchema.agr",
             },
         },
         help: {

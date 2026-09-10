@@ -19,9 +19,9 @@ function makeSettings(): CopilotApiSettings {
         provider: "copilot",
         modelType: ModelType.Chat,
         endpoint: "copilot-cli",
-        modelName: "claude-haiku-4.5",
+        modelName: "gpt-5.6-luna",
         disableInfiniteSessions: true,
-        fallbackModels: ["gpt-5-mini", "gpt-5.4-mini"],
+        fallbackModels: ["gpt-5.4-mini", "gpt-5-mini", "gpt-5.4"],
         maxRetryAttempts: 0,
         retryPauseMs: 1,
         timeout: 5_000,
@@ -31,7 +31,7 @@ function makeSettings(): CopilotApiSettings {
 function makeEndpoint(overrides?: Partial<CopilotEndpoint>): CopilotEndpoint {
     return {
         url: "https://api.example/chat/completions",
-        model: "claude-haiku-4.5",
+        model: "gpt-5.6-luna",
         headers: {
             Authorization: "******",
             "Copilot-Integration-Id": "copilot-developer-cli",
@@ -142,48 +142,49 @@ const CAPI_OK = {
 describe("selectCopilotModel", () => {
     test("uses the requested model when it is available", () => {
         const selected = selectCopilotModel(
-            "claude-haiku-4.5",
-            ["gpt-5-mini"],
-            [makeModel("gpt-5-mini"), makeModel("claude-haiku-4.5")],
+            "gpt-5.6-luna",
+            ["gpt-5.4-mini"],
+            [makeModel("gpt-5.4-mini"), makeModel("gpt-5.6-luna")],
         );
-        expect(selected?.id).toBe("claude-haiku-4.5");
+        expect(selected?.id).toBe("gpt-5.6-luna");
     });
 
     test("uses the first configured concrete fallback", () => {
         const selected = selectCopilotModel(
-            "claude-haiku-4.5",
-            ["auto", "gpt-5-mini", "gpt-5.4-mini"],
+            "gpt-5.6-luna",
+            ["auto", "gpt-5.4-mini", "gpt-5-mini", "gpt-5.4"],
             [
                 makeModel("auto"),
+                makeModel("gpt-5.4-mini"),
                 makeModel("gpt-5-mini"),
-                makeModel("gpt-5.4-mini"),
-            ],
-        );
-        expect(selected?.id).toBe("gpt-5-mini");
-    });
-
-    test("skips disabled fallback models", () => {
-        const selected = selectCopilotModel(
-            "claude-haiku-4.5",
-            ["gpt-5-mini", "gpt-5.4-mini"],
-            [
-                makeModel("gpt-5-mini", { policy: "disabled" }),
-                makeModel("gpt-5.4-mini"),
+                makeModel("gpt-5.4"),
             ],
         );
         expect(selected?.id).toBe("gpt-5.4-mini");
     });
 
-    test("allows fallback models without an explicit policy decision", () => {
+    test("skips disabled fallback models", () => {
         const selected = selectCopilotModel(
-            "claude-haiku-4.5",
-            ["gpt-5-mini", "gpt-5.4-mini"],
+            "gpt-5.6-luna",
+            ["gpt-5.4-mini", "gpt-5-mini"],
             [
-                makeModel("gpt-5-mini", { policy: "unconfigured" }),
-                makeModel("gpt-5.4-mini"),
+                makeModel("gpt-5.4-mini", { policy: "disabled" }),
+                makeModel("gpt-5-mini"),
             ],
         );
         expect(selected?.id).toBe("gpt-5-mini");
+    });
+
+    test("allows fallback models without an explicit policy decision", () => {
+        const selected = selectCopilotModel(
+            "gpt-5.6-luna",
+            ["gpt-5.4-mini", "gpt-5-mini"],
+            [
+                makeModel("gpt-5.4-mini", { policy: "unconfigured" }),
+                makeModel("gpt-5-mini"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.4-mini");
     });
 
     test("uses the newest available model in the requested family", () => {
@@ -199,6 +200,32 @@ describe("selectCopilotModel", () => {
         expect(selected?.id).toBe("claude-sonnet-6");
     });
 
+    test("uses the newest available model in the requested tier", () => {
+        const selected = selectCopilotModel(
+            "gpt-5.6-sol",
+            [],
+            [
+                makeModel("gpt-5.5-sol"),
+                makeModel("gpt-5.7-sol"),
+                makeModel("gpt-6-astra"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.7-sol");
+    });
+
+    test("uses the nearest general tier before a specialized model", () => {
+        const selected = selectCopilotModel(
+            "gpt-5.6-sol",
+            [],
+            [
+                makeModel("gpt-6-astra"),
+                makeModel("gpt-5.6-luna"),
+                makeModel("gpt-5.6-terra"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.6-terra");
+    });
+
     test("uses a deterministic concrete model as the final fallback", () => {
         const selected = selectCopilotModel(
             "missing-model",
@@ -208,13 +235,23 @@ describe("selectCopilotModel", () => {
         expect(selected?.id).toBe("a-model");
     });
 
+    test("handles long malformed model ids without family matching", () => {
+        const requested = "-0-a".repeat(10_000);
+        const selected = selectCopilotModel(
+            requested,
+            [],
+            [makeModel("z-model"), makeModel("a-model")],
+        );
+        expect(selected?.id).toBe("a-model");
+    });
+
     test("returns undefined when no concrete model is enabled", () => {
         const selected = selectCopilotModel(
-            "claude-haiku-4.5",
-            ["gpt-5-mini"],
+            "gpt-5.6-luna",
+            ["gpt-5.4-mini"],
             [
                 makeModel("auto"),
-                makeModel("gpt-5-mini", { policy: "disabled" }),
+                makeModel("gpt-5.4-mini", { policy: "disabled" }),
             ],
         );
         expect(selected).toBeUndefined();
@@ -255,7 +292,7 @@ describe("createCopilotTransportModel", () => {
         const headers = fetchArgs[0].init.headers as Record<string, string>;
         expect(headers.Authorization).toBe("******");
         const body = JSON.parse(fetchArgs[0].init.body as string);
-        expect(body.model).toBe("claude-haiku-4.5");
+        expect(body.model).toBe("gpt-5.6-luna");
         expect(body.temperature).toBe(0);
         expect(body.messages).toEqual([
             { role: "user", content: "what time is it" },

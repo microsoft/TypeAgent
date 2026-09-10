@@ -11,6 +11,22 @@ Dispatcher processes user requests and asks LLM to translate it into an action b
 
 See [dispatcher architecture](../../../docs/content/architecture/core/dispatcher.md) doc for more details on the design of the dispatcher component.
 
+## Copilot SDK upgrade check
+
+After changing the Copilot SDK or native tool allowlist, run these commands
+from `ts`:
+
+```powershell
+pnpm --filter agent-dispatcher run tsc
+pnpm --filter agent-dispatcher run test:live
+```
+
+This starts the installed Copilot runtime and checks the initialized session's
+tools for Claude and GPT models, including platform-specific shell output and
+cancellation tools. It sends no model prompt and executes no tools. Unlike the
+unit tests, it detects names that no longer match the actual runtime. It requires
+the SDK's bundled CLI to be available and able to start.
+
 ## Usage - Natural Language Requests
 
 User can request actions provided by [application agents](../agentSdk/README.md) using natural language.

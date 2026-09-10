@@ -290,6 +290,13 @@ export interface SessionContext<T = unknown> {
      */
     readonly sessionContextId: string;
 
+    /**
+     * Connection that made the request being processed, or `undefined` between
+     * requests and for server-initiated work. An agent hosted by several
+     * clients uses this to send an action back to the one that asked.
+     */
+    readonly currentConnectionId: string | undefined;
+
     notify(
         event: AppAgentEvent,
         message: string | DisplayContent,
@@ -465,6 +472,9 @@ export interface ActionContext<T = void> {
     // false when dispatched directly from the translator. Agents can use this to decide whether
     // to execute immediately or redirect back to the reasoning loop.
     readonly isFromReasoningLoop: boolean;
+
+    // Absolute filesystem root authorized by the host for this action.
+    readonly workingDirectory?: string | undefined;
 
     // queue up toggle transient agent to be executed at the end of the commands
     queueToggleTransientAgent(

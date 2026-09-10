@@ -28,8 +28,11 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log .frontend-build-cache.json .tsc-cache-*.json && rimraf .tsbuildinfo .build.cache",
     "dev": "npm run tsc && node scripts/dev-viewer.js --hmr",
     "dev:frontend": "vite  --watch",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "test": "npm run test:local",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {
@@ -67,6 +70,7 @@
     "yjs": "^13.6.8"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@milkdown/ctx": "^7.3.6",
     "@types/debug": "^4.1.12",
     "@types/express": "^4.17.17",

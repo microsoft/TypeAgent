@@ -21,7 +21,7 @@
  *
  * Usage (from ts/):
  *   node tools/scripts/deployAgentServer.mjs --out <dir> [--platform win32] [--arch x64]
- *        [--skip-deploy] [--skip-prune]
+ *        [--skip-deploy] [--skip-prune] [--pnpm-state-dir <dir>]
  */
 
 import { spawnSync } from "node:child_process";
@@ -41,6 +41,8 @@ function parseArgs(argv) {
         else if (a === "--arch") args.arch = argv[++i];
         else if (a === "--skip-deploy") args.skipDeploy = true;
         else if (a === "--skip-prune") args.skipPrune = true;
+        else if (a === "--pnpm-state-dir")
+            args.pnpmStateDir = path.resolve(argv[++i]);
         else if (a === "--profile") args.profile = argv[++i];
         else if (a === "--external-cli") args.externalCli = true;
         else throw new Error(`Unknown argument: ${a}`);
@@ -80,18 +82,20 @@ function main() {
     //    and yields a copied, self-contained node_modules).
     if (!args.skipDeploy) {
         fs.rmSync(args.out, { recursive: true, force: true });
-        run(
-            "pnpm",
-            [
-                "--filter",
-                "agent-server",
-                "--config.node-linker=hoisted",
-                "deploy",
-                "--prod",
-                args.out,
-            ],
-            tsRoot,
-        );
+        const deployArgs = [
+            "--filter",
+            "agent-server",
+            "--config.node-linker=hoisted",
+        ];
+        if (args.pnpmStateDir) {
+            const modulesDir = path.join(args.pnpmStateDir, "node_modules");
+            deployArgs.push(
+                `--config.modules-dir=${modulesDir}`,
+                `--config.virtual-store-dir=${path.join(modulesDir, ".pnpm")}`,
+            );
+        }
+        deployArgs.push("deploy", "--prod", args.out);
+        run("pnpm", deployArgs, tsRoot);
     } else {
         console.log("Skipping pnpm deploy (--skip-deploy).");
     }

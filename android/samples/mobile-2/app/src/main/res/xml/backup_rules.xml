@@ -12,4 +12,12 @@
        Path must track ConversationStore.PREFS_NAME + ".xml".
     -->
     <exclude domain="sharedpref" path="typeagent_chat_session.xml" />
+    <!--
+       The device id identifies one physical device to the server, which routes
+       actions by it. Restoring it onto a second device would give both the
+       same id, and the server would then treat them as one device and run
+       actions on whichever registered last.
+       Path must track StoredDeviceIdentity.PREFS_NAME + ".xml".
+    -->
+    <exclude domain="sharedpref" path="typeagent_device_identity.xml" />
 </full-backup-content>

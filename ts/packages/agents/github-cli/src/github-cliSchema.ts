@@ -30,6 +30,8 @@ export type GithubCliActions =
     | PrViewAction
     | PrCheckoutAction
     | PrChecksAction
+    | PrFilesAction
+    | PrFailedChecksAction
     | ProjectCreateAction
     | ProjectDeleteAction
     | ProjectListAction
@@ -67,7 +69,9 @@ export type GithubCliActions =
     | MyPullRequestsAction
     | IssueAddLabelAction
     | VariableCreateAction
-    | DependabotAlertsAction;
+    | DependabotAlertsAction
+    | ResolveMergeConflictsAction
+    | CompleteMergeConflictResolutionAction;
 
 export type AuthLoginAction = {
     actionName: "authLogin";
@@ -391,6 +395,78 @@ export type PrChecksAction = {
     };
 };
 
+// List the files a pull request changes, with per-file status and line counts,
+// and optionally an excerpt of each file's diff. Use this to find out what a
+// pull request actually touches. Read-only.
+//
+// Example:
+// User: what files does PR 2196 change?
+// Agent: { actionName: "prFiles", parameters: { number: 2196 } }
+//
+// Example:
+// User: show me the diff for pull request 42 in microsoft/TypeAgent
+// Agent: { actionName: "prFiles", parameters: { number: 42, repo: "microsoft/TypeAgent", includePatch: true } }
+//
+// Example:
+// User: what does https://github.com/microsoft/TypeAgent/pull/42 change?
+// Agent: { actionName: "prFiles", parameters: { number: 42, repo: "microsoft/TypeAgent" } }
+export type PrFilesAction = {
+    actionName: "prFiles";
+    parameters: {
+        // The pull request number.
+        number: number;
+
+        // OWNER/REPO slug (e.g. "microsoft/TypeAgent"), or the pull request's
+        // web link. Omit to use the repository in the current directory.
+        repo?: string;
+
+        // Include an excerpt of each file's diff. Off by default because
+        // patches are large; turn it on to see the actual code changes.
+        includePatch?: boolean;
+
+        // How many files to return, newest API order. Defaults to 50 to keep
+        // the structured display manageable; callers can request up to 300.
+        maxFiles?: number;
+
+        // How many lines of each file's patch to keep. 1-200, default 40.
+        // Only meaningful with includePatch.
+        maxPatchLines?: number;
+    };
+};
+
+// Explain why a pull request's checks are red: which checks failed, when, and
+// the specific error annotations GitHub recorded for each one. Use this to
+// diagnose CI failures. Read-only.
+//
+// Example:
+// User: why is CI failing on PR 2196?
+// Agent: { actionName: "prFailedChecks", parameters: { number: 2196 } }
+//
+// Example:
+// User: show the failing checks for pull request 42 in microsoft/TypeAgent
+// Agent: { actionName: "prFailedChecks", parameters: { number: 42, repo: "microsoft/TypeAgent" } }
+//
+// Example:
+// User: why is https://github.com/microsoft/TypeAgent/pull/42 red?
+// Agent: { actionName: "prFailedChecks", parameters: { number: 42, repo: "microsoft/TypeAgent" } }
+export type PrFailedChecksAction = {
+    actionName: "prFailedChecks";
+    parameters: {
+        // The pull request number.
+        number: number;
+
+        // OWNER/REPO slug (e.g. "microsoft/TypeAgent"), or the pull request's
+        // web link. Omit to use the repository in the current directory.
+        repo?: string;
+
+        // How many failing checks to describe in detail. 1-20, default 5.
+        maxChecks?: number;
+
+        // How many annotations to return per failing check. 1-50, default 10.
+        maxAnnotations?: number;
+    };
+};
+
 export type ProjectCreateAction = {
     actionName: "projectCreate";
     parameters: {
@@ -706,5 +782,35 @@ export type DependabotAlertsAction = {
         severity?: string;
         // Filter by state: open, dismissed, fixed
         state?: string;
+    };
+};
+
+// Fetch a source branch, merge it into the currently checked-out local branch,
+// and create the merge commit. This action never checks out a different
+// destination branch. If Git reports conflicts, hand the conflicted files to
+// Reasoning for semantic resolution before the deterministic completion action
+// commits.
+// Use this for requests such as "resolve merge conflicts from main" or "bring
+// the default branch into this branch and resolve conflicts". This never pushes.
+export type ResolveMergeConflictsAction = {
+    actionName: "resolveMergeConflicts";
+    parameters: {
+        // Source branch to merge into the currently checked-out local branch. A
+        // REMOTE/BRANCH value disambiguates repositories with multiple remotes.
+        // When omitted, use the selected remote's configured default branch,
+        // then an existing main or master branch.
+        targetBranch?: string;
+    };
+};
+
+// Complete a conflicted merge after Reasoning has resolved and staged every
+// conflicted path. This verifies that no unmerged or unstaged paths remain,
+// creates the merge commit, and never pushes. Usually invoked by Reasoning
+// rather than selected directly from a user request.
+export type CompleteMergeConflictResolutionAction = {
+    actionName: "completeMergeConflictResolution";
+    parameters: {
+        // Recorded merge root; execution always uses the host-authorized working directory.
+        repositoryRoot: string;
     };
 };

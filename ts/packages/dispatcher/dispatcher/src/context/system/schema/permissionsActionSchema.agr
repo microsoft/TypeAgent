@@ -1,0 +1,39 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+//
+// Natural-language patterns for session-scoped agent permission approval.
+// Every rule is anchored on a permission noun to avoid capturing general
+// requests to allow, approve, stop, or disable something.
+
+<Polite> = (can you | could you | please | would you | i want to | i need to)?;
+<PermissionNoun> = (permissions | agent permissions | tool permissions | permission requests | tool approval requests);
+
+<EnablePermissionApproval> =
+  <Polite> (allow | approve | automatically approve | auto approve) all (eligible)? <PermissionNoun> (for | in)? (this | the current)? session -> {
+    actionName: "setPermissionApproval",
+    parameters: { enable: true }
+  }
+  | <Polite> (enable | turn on) automatic approval (for | of)? <PermissionNoun> (for | in)? (this | the current)? session -> {
+    actionName: "setPermissionApproval",
+    parameters: { enable: true }
+  }
+  | <Polite> stop asking (me)? (to approve | for confirmation)? (for)? <PermissionNoun> (for | in)? (this | the current)? session -> {
+    actionName: "setPermissionApproval",
+    parameters: { enable: true }
+  };
+
+<DisablePermissionApproval> =
+  <Polite> (disable | turn off | stop) automatic approval (for | of)? <PermissionNoun> -> {
+    actionName: "setPermissionApproval",
+    parameters: { enable: false }
+  }
+  | <Polite> (ask me | prompt me) (to approve | for confirmation)? (for)? <PermissionNoun> again -> {
+    actionName: "setPermissionApproval",
+    parameters: { enable: false }
+  }
+  | <Polite> (require | restore | enable | turn on) permission confirmation (again)? -> {
+    actionName: "setPermissionApproval",
+    parameters: { enable: false }
+  };
+
+<Start> = <EnablePermissionApproval> | <DisablePermissionApproval>;

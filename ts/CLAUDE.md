@@ -103,6 +103,32 @@ Do not rely on a bare `npx prettier` for validation — always use the repo's pi
 (`node_modules/.bin/prettier`, `pnpm exec prettier`, or `npx prettier@<version from package.json>`),
 since a newer/older Prettier version can produce spurious reformatting diffs.
 
+### PR-only gates: build and tests passing is not enough
+
+`build-ts.yml` runs four ratchets that only fire on pull requests, so they are
+invisible until CI fails. Each compares the files your change touches against
+the base branch. Run all four before calling a change done:
+
+```bash
+npm run code-lint       -- --ratchet --base origin/main   # no new eslint violations
+npm run code-complexity -- --ratchet --base origin/main --cyclomatic 25 --cognitive 30 \
+                           --new-file-cyclomatic 25 --new-file-cognitive 30
+npm run code-circular   -- --ratchet --base origin/main \
+                           --exceptions-file tools/scripts/code/circular-baseline-exception.json
+npm run code-debt       -- --gate    --base origin/main   # no .only / newly skipped tests
+```
+
+The lint ratchet bites most often, usually on `no-explicit-any`. A **new file
+counts entirely as added violations**, so a new module written with `any` fails
+even though it changed nothing that existed before. Prefer `unknown` with a
+narrow cast where the value is actually used.
+
+Nothing outside `ts/` is checked at all — not by these ratchets, not by
+`prettier:changed`, and no CI job builds the Kotlin under `android/`. Verify
+those files by hand (`cd android/samples/mobile-2 && ./gradlew assembleDebug
+testDebugUnitTest`) and read the final diff, since formatting mistakes there
+reach `main` unchallenged.
+
 ## Architecture
 
 TypeAgent is a **personal agent** that routes natural language requests to specialized **application agents** (plugins). The core flow is:
@@ -212,7 +238,9 @@ Use these criteria both when **writing** changes and when **reviewing** code (yo
 own or a diff you are asked to review). Report only high-confidence, substantive
 issues — prefer a short list of real problems over an exhaustive nitpick list. For
 each issue, name the file/line, explain _why_ it matters, and suggest a concrete
-fix. Do not comment on formatting that Prettier already enforces.
+fix. Do not comment on formatting that Prettier already enforces. Formatting in
+files Prettier does not cover (anything outside `ts/`, notably Kotlin under
+`android/`) is fair game — nothing else will catch it.
 
 ### Readability & maintainability
 
@@ -229,7 +257,10 @@ fix. Do not comment on formatting that Prettier already enforces.
   distinguish a temporary **NYI (TODO)** from a fundamental limitation.
 - **Clear signatures.** Order parameters so common callers rely on defaults, make
   optional callbacks optional, and drop dead/unused parameters instead of threading
-  constants through.
+  constants through. This extends to whole members: an added function or property
+  with no caller is dead code unless it is deliberate public API of a published
+  package (`agentSdk` and friends). Nothing warns about an unused public member,
+  so review is the only thing that catches it.
 - **Clean up as you go.** Remove stale comments and tests that reference relocated
   or deleted code.
 

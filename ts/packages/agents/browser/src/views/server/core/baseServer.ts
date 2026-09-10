@@ -3,6 +3,7 @@
 
 import express, { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
+import { LOOPBACK_HOST } from "@typeagent/websocket-utils/loopback";
 import path from "path";
 import { fileURLToPath } from "url";
 import { FeatureConfig, ServerConfig, SSEManager } from "./types.js";
@@ -168,25 +169,38 @@ export class BaseServer {
     }
 
     /**
-     * Start the server
+     * Start the server.
+     *
+     * Binds loopback: these view servers front local user content and agent
+     * state with no authentication, and the origin checks they apply let
+     * through requests that carry no Origin header at all, so an
+     * all-interfaces bind would make them reachable by any LAN peer.
      */
     start(): Promise<void> {
         return new Promise((resolve, reject) => {
-            const server = this.app.listen(this.config.port, () => {
-                this.boundPort = (server.address() as { port: number }).port;
-                debug(`Server running at http://localhost:${this.boundPort}`);
-                debug(
-                    `Registered features: ${Array.from(this.features.keys()).join(", ")}`,
-                );
-                server.removeListener("error", onStartupError);
-                server.on("error", (err: NodeJS.ErrnoException) => {
-                    console.error(
-                        `Server runtime error on port ${this.boundPort}:`,
-                        err,
+            const server = this.app.listen(
+                this.config.port,
+                LOOPBACK_HOST,
+                () => {
+                    this.boundPort = (
+                        server.address() as { port: number }
+                    ).port;
+                    debug(
+                        `Server running at http://localhost:${this.boundPort}`,
                     );
-                });
-                resolve();
-            });
+                    debug(
+                        `Registered features: ${Array.from(this.features.keys()).join(", ")}`,
+                    );
+                    server.removeListener("error", onStartupError);
+                    server.on("error", (err: NodeJS.ErrnoException) => {
+                        console.error(
+                            `Server runtime error on port ${this.boundPort}:`,
+                            err,
+                        );
+                    });
+                    resolve();
+                },
+            );
             const onStartupError = (err: NodeJS.ErrnoException) => {
                 if (err.code === "EADDRINUSE") {
                     reject(
