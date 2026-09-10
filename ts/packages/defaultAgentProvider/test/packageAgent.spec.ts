@@ -1741,9 +1741,7 @@ describe("@package group", () => {
                 name: target,
                 source: expected.source,
                 sourceKind: "path",
-                ...(expected.path !== undefined
-                    ? { path: expected.path }
-                    : {}),
+                ...(expected.path !== undefined ? { path: expected.path } : {}),
                 matchedByName: false,
             }),
         });
