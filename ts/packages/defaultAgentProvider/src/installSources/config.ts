@@ -237,6 +237,9 @@ export interface InstalledAgentRecord {
     // Opaque, kind-specific metadata interpreted by the loader named by `kind`
     // (e.g. npm: `{ execMode }`).
     loaderConfig?: Record<string, unknown>;
+    // Group installs persist this so every session attaches the provider
+    // disabled unless that session already has an explicit preference.
+    initiallyDisabled?: boolean;
     // Which kind of extension this record installs; absent means "agent" (the
     // historical default, so every pre-existing agents.json record keeps its
     // meaning). "mcp" records are persisted in the separate MCP server store,

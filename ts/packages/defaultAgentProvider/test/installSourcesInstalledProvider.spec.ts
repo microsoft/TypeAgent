@@ -1177,6 +1177,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         await flush();
 
         // Reuse during removing is rejected (7.3).
+        expect(built.testApi.getAgentPackageState("foo")).toBe("transitioning");
         await expect(
             built.testApi.install(
                 "foo",
@@ -2908,6 +2909,9 @@ describe("installed record its source can no longer resolve", () => {
         const instanceDir = await installThenDropCatalogKey();
         const { built } = buildCapturingWarnings(instanceDir);
 
+        expect(built.testApi.getAgentPackageState("x")).toBe(
+            "installed-unavailable",
+        );
         await expect(
             built.testApi.update("x", undefined, noopHost),
         ).rejects.toThrow(
@@ -2915,5 +2919,173 @@ describe("installed record its source can no longer resolve", () => {
         );
         // The record is left alone for the retry after the source is fixed.
         expect(readAgentsJson(instanceDir)?.agents.x).toBeDefined();
+    });
+});
+
+describe("getAgentPackageState & installExpected", () => {
+    it("reports a legal inferred name as transitioning during candidate selection", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const packageDir = makePathAgentDir();
+        let releaseSelection!: () => void;
+        const selectionGate = new Promise<void>((resolve) => {
+            releaseSelection = resolve;
+        });
+        let selectionStarted!: () => void;
+        const started = new Promise<void>((resolve) => {
+            selectionStarted = resolve;
+        });
+        const source: InstallSource = {
+            name: "path",
+            kind: "path",
+            find: async () => undefined,
+            findName: async () => {
+                selectionStarted();
+                await selectionGate;
+                return {
+                    source: "path",
+                    path: packageDir,
+                    packageName: "ta-path-agent",
+                    defaultAgentName: "slowAgent",
+                };
+            },
+            materialize: async (candidate) => ({
+                kind: "npm",
+                source: candidate.source,
+                path: packageDir,
+            }),
+            describe: () => packageDir,
+        };
+        const built = createDefaultInstalledAgentSource(
+            instanceDir,
+            undefined,
+            () => source,
+        );
+
+        const installing = built.testApi.install(
+            "slowAgent",
+            undefined,
+            undefined,
+            noopHost,
+        );
+        await started;
+        expect(built.testApi.getAgentPackageState("slowAgent")).toBe(
+            "transitioning",
+        );
+        releaseSelection();
+        await installing;
+        expect(built.testApi.getAgentPackageState("slowAgent")).toBe(
+            "installed",
+        );
+    });
+
+    it("getAgentPackageState correctly distinguishes bundled, installed, and absent", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const src = createDefaultInstalledAgentSource(instanceDir, {
+            configName: "inbox",
+        });
+
+        expect(src.testApi.getAgentPackageState("chat")).toBe("bundled");
+        expect(src.testApi.getAgentPackageState("photo")).toBeUndefined();
+
+        const fakePkgDir = tmpDir("ta-fake-pkg-");
+        fs.writeFileSync(
+            path.join(fakePkgDir, "package.json"),
+            JSON.stringify({
+                name: "installed-test",
+                typeagent: { defaultAgentName: "installedTest" },
+                exports: { "./agent/manifest": "./manifest.json" },
+            }),
+        );
+        fs.writeFileSync(
+            path.join(fakePkgDir, "manifest.json"),
+            JSON.stringify({
+                emojiChar: "🧪",
+                description: "test",
+                commandDefaultEnabled: true,
+            }),
+        );
+        fs.writeFileSync(
+            path.join(fakePkgDir, "index.js"),
+            "export function instantiate() { return { initializeAgentContext: async () => ({}) }; }",
+        );
+
+        await src.testApi.install(
+            "installedTest",
+            fakePkgDir,
+            "path",
+            noopHost,
+        );
+        expect(src.testApi.getAgentPackageState("installedTest")).toBe(
+            "installed",
+        );
+        expect(
+            readAgentsJson(instanceDir)?.agents.installedTest.initiallyDisabled,
+        ).toBeUndefined();
+    });
+
+    it("installExpected verifies preview winner and fails on plan drift", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const src = createDefaultInstalledAgentSource(instanceDir, {
+            configName: "inbox",
+        });
+
+        const fakePkgDir = tmpDir("ta-fake-drift-");
+        fs.writeFileSync(
+            path.join(fakePkgDir, "package.json"),
+            JSON.stringify({
+                name: "expected-pkg",
+                typeagent: { defaultAgentName: "expectedAgent" },
+                exports: { "./agent/manifest": "./manifest.json" },
+            }),
+        );
+        fs.writeFileSync(
+            path.join(fakePkgDir, "manifest.json"),
+            JSON.stringify({
+                emojiChar: "🧪",
+                description: "test",
+                commandDefaultEnabled: true,
+            }),
+        );
+        fs.writeFileSync(
+            path.join(fakePkgDir, "index.js"),
+            "export function instantiate() { return { initializeAgentContext: async () => ({}) }; }",
+        );
+
+        // Preview
+        const preview = await src.testApi.preview(
+            fakePkgDir,
+            undefined,
+            undefined,
+        );
+        expect(preview).toBeDefined();
+
+        // Should install successfully with matching expected match
+        const res = await src.testApi.installExpected(
+            fakePkgDir,
+            preview!.winner,
+            noopHost,
+        );
+        expect(res.name).toBe("expectedAgent");
+        expect(
+            readAgentsJson(instanceDir)?.agents.expectedAgent.initiallyDisabled,
+        ).toBe(true);
+        const connection = src.connect(noopHost);
+        const installedProvider = (await connection.providers).find(
+            (provider) => provider.getAppAgentNames().includes("expectedAgent"),
+        );
+        expect(Reflect.get(installedProvider!, "defaultEnabled")).toBe(false);
+        connection.dispose();
+
+        // Should throw on drifted package name
+        await expect(
+            src.testApi.installExpected(
+                fakePkgDir,
+                {
+                    ...preview!.winner,
+                    name: "differentAgent",
+                },
+                noopHost,
+            ),
+        ).rejects.toThrow(/Plan drift/);
     });
 });

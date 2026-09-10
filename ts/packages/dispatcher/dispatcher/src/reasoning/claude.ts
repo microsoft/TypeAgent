@@ -74,8 +74,11 @@ import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 import { ScriptRecipeGenerator } from "./scriptRecipeGenerator.js";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import {
-    findInstallableAgents,
-    formatInstallableAgents,
+    findAgentAvailabilityOptions,
+    formatAgentAvailabilityOptions,
+    getReasoningActionSchemas,
+    FIND_UNAVAILABLE_AGENT_TOOL_DESCRIPTION,
+    FIND_UNAVAILABLE_AGENT_SYSTEM_PROMPT,
 } from "./installableAgents.js";
 import {
     emitReasoningToolCall,
@@ -500,7 +503,7 @@ function getClaudeOptions(
     // can prefer this client's editor context (see copilot.ts).
     const originatorRequestId = systemContext.currentRequestId;
     const config = systemContext.session.getConfig();
-    const activeSchemas = systemContext.agents.getActiveSchemas();
+    const activeSchemas = getReasoningActionSchemas(systemContext);
     const schemaDescriptions: string[] = [];
     const validatorSchemas = new Set<string>();
     for (const schemaName of activeSchemas) {
@@ -1046,18 +1049,16 @@ function getClaudeOptions(
         typeof findInstallableAgentSchema
     > = {
         name: "find_installable_agent",
-        description: [
-            "List agents that are NOT currently installed but can be installed on demand from the configured sources.",
-            "Call this when no active agent (from discover_actions) can fulfill the user's request, to check whether an installable agent could.",
-            "Returns each candidate's name, description, and exact `@package install` command.",
-            "If one clearly matches the request, tell the user it exists and give them the install command - do NOT install it yourself.",
-        ].join("\n"),
+        description: FIND_UNAVAILABLE_AGENT_TOOL_DESCRIPTION,
         inputSchema: findInstallableAgentSchema,
         handler: async () => {
-            const agents = await findInstallableAgents(systemContext);
+            const options = await findAgentAvailabilityOptions(systemContext);
             return {
                 content: [
-                    { type: "text", text: formatInstallableAgents(agents) },
+                    {
+                        type: "text",
+                        text: formatAgentAvailabilityOptions(options),
+                    },
                 ],
             };
         },
@@ -1212,7 +1213,7 @@ function getClaudeOptions(
                 "- `list_conversations`: List ALL conversations (id + name) across the session store — use to resolve a conversation the user names",
                 "- `search_conversations`: Search the CONTENT of ALL conversations and read back matching snippets (use for 'what did we discuss in X')",
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file, language, cursor/selection ranges, workspace, open editors, the active file's diagnostic messages) and the user's selected text (bounded) when present; use the code agent's read actions for full file contents",
-                "- `find_installable_agent`: List agents that are not installed yet but can be installed on demand. Call it when no active agent can fulfill the request; if a candidate matches, tell the user the exact `@package install` command (never install it yourself)",
+                FIND_UNAVAILABLE_AGENT_SYSTEM_PROMPT,
                 "- `ask_user`: Ask the user ONE multiple-choice question and block for their answer - only when genuinely blocked on a decision only they can make (see Autonomous Execution Policy)",
                 "- `ask_user_form`: Ask the user SEVERAL questions at once (pick / multiChoice / yesNo, optional free-text) in one form and block for their answers - prefer over repeated `ask_user` when you need more than one answer",
                 "",
@@ -1236,7 +1237,7 @@ function getClaudeOptions(
                 "",
                 "When the user asks about agent capabilities, use discover_actions first.",
                 "When the user asks to perform an action, discover the schema then execute_action.",
-                "When no active agent can perform the request, call find_installable_agent to check whether an on-demand agent could, and if one matches tell the user the exact install command.",
+                "When no active agent can perform the request, call find_installable_agent to check whether an on-demand or disabled agent could, and if one matches tell the user how to enable or install it.",
                 "",
                 ...(config.execution.entityPromptShape === "facets-with-schema"
                     ? [

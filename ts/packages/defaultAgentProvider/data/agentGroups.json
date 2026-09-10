@@ -1,0 +1,14 @@
+{
+  "groups": {
+    "developer": {
+      "displayName": "Developer Tools",
+      "description": "Agents for coding and developer workflows",
+      "agents": ["code", "visualStudio", "github-cli", "powershell", "markdown"]
+    },
+    "media": {
+      "displayName": "Media Tools",
+      "description": "Agents for creating and working with media",
+      "agents": ["photo", "image", "montage", "video", "screencapture"]
+    }
+  }
+}

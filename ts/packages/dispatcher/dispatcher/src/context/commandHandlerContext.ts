@@ -35,6 +35,7 @@ import {
     getAppAgentName,
     TypeAgentTranslator,
 } from "../translation/agentTranslators.js";
+import { persistProviderDisabledDefaults } from "./installedProviderDefaults.js";
 import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { nullClientIO } from "./interactiveIO.js";
@@ -915,6 +916,10 @@ export async function installAppProvider(
         context.agentGrammarRegistry,
         useNFAGrammar,
     );
+
+    if (provider.defaultEnabled === false) {
+        persistProviderDisabledDefaults(context, provider);
+    }
 
     await setAppAgentStates(context);
     // Re-run collision detection now that a new agent has been installed.

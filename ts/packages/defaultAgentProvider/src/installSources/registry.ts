@@ -6,6 +6,7 @@ import {
     InstallSourceConfig,
     InstallSourceInfo,
     InstallSourceUpdateResult,
+    InstallPreviewMatch,
     InstalledAgentRecord,
     McpInstallCandidate,
     ResolveResult,
@@ -88,6 +89,24 @@ export interface DefaultInstallSourceRegistry {
         nameOrTarget: string,
         ref?: string,
         sourceName?: string,
+        onWarn?: SourceWarning,
+        onStatus?: SourceStatus,
+        abortSignal?: AbortSignal,
+    ): Promise<ResolveResult>;
+    // Select the winning candidate and derive its installed name without
+    // materializing it.
+    select(
+        nameOrTarget: string,
+        ref?: string,
+        sourceName?: string,
+        onWarn?: SourceWarning,
+        onStatus?: SourceStatus,
+    ): Promise<PreviewMatch | undefined>;
+    // Re-resolve within the source selected during preview and reject any
+    // candidate identity drift before materialization.
+    resolveExpected(
+        nameOrTarget: string,
+        expected: InstallPreviewMatch,
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
         abortSignal?: AbortSignal,
@@ -517,6 +536,15 @@ export function createInstallSourceRegistry(
             ref !== undefined
                 ? nameOrTarget
                 : requireInferredName(match.candidate, nameOrTarget);
+        return materializeMatch(match, name, onStatus, abortSignal);
+    }
+
+    async function materializeMatch(
+        match: WalkMatch,
+        name: string,
+        onStatus?: SourceStatus,
+        abortSignal?: AbortSignal,
+    ): Promise<ResolveResult> {
         const record = await match.source.materialize(
             match.candidate,
             onStatus,
@@ -530,6 +558,54 @@ export function createInstallSourceRegistry(
             result.packageName = match.candidate.packageName;
         }
         return result;
+    }
+
+    function candidateIdentity(
+        match: WalkMatch,
+        name: string,
+    ): InstallPreviewMatch {
+        const identity: {
+            -readonly [K in keyof InstallPreviewMatch]: InstallPreviewMatch[K];
+        } = {
+            source: match.source.name,
+            matchKind: match.matchedByName
+                ? "defaultAgentName"
+                : match.candidate.path !== undefined
+                  ? "path"
+                  : "packageName",
+            name,
+        };
+        if (match.candidate.packageName !== undefined) {
+            identity.packageName = match.candidate.packageName;
+        }
+        if (match.candidate.path !== undefined) {
+            identity.path = match.candidate.path;
+        }
+        if (match.candidate.ref !== undefined) {
+            identity.ref = match.candidate.ref;
+        }
+        return identity;
+    }
+
+    function assertExpectedCandidate(
+        expected: InstallPreviewMatch,
+        current: InstallPreviewMatch,
+    ): void {
+        const fields: readonly (keyof InstallPreviewMatch)[] = [
+            "source",
+            "matchKind",
+            "name",
+            "packageName",
+            "path",
+            "ref",
+        ];
+        for (const field of fields) {
+            if (expected[field] !== current[field]) {
+                throw new Error(
+                    `Plan drift: ${field} changed from '${expected[field] ?? "none"}' to '${current[field] ?? "none"}'.`,
+                );
+            }
+        }
     }
 
     return {
@@ -611,6 +687,68 @@ export function createInstallSourceRegistry(
                     abortSignal,
                 ),
             );
+        },
+        async select(
+            nameOrTarget: string,
+            ref?: string,
+            sourceName?: string,
+            onWarn?: SourceWarning,
+            onStatus?: SourceStatus,
+        ): Promise<PreviewMatch | undefined> {
+            const match =
+                ref !== undefined
+                    ? await firstMatch(
+                          refMatches(ref, sourceName, onWarn, onStatus),
+                      )
+                    : await firstMatch(
+                          inferMatches(
+                              nameOrTarget,
+                              sourceName,
+                              onWarn,
+                              onStatus,
+                          ),
+                      );
+            if (match === undefined) {
+                return undefined;
+            }
+            return {
+                source: match.source.name,
+                matchedByName: match.matchedByName,
+                name:
+                    ref !== undefined
+                        ? nameOrTarget
+                        : requireInferredName(match.candidate, nameOrTarget),
+                candidate: match.candidate,
+            };
+        },
+        async resolveExpected(
+            nameOrTarget: string,
+            expected: InstallPreviewMatch,
+            onWarn?: SourceWarning,
+            onStatus?: SourceStatus,
+            abortSignal?: AbortSignal,
+        ): Promise<ResolveResult> {
+            return limiter(async () => {
+                const match = await firstMatch(
+                    inferMatches(
+                        nameOrTarget,
+                        expected.source,
+                        onWarn,
+                        onStatus,
+                    ),
+                );
+                if (match === undefined) {
+                    throw new Error(
+                        `Plan drift: '${nameOrTarget}' is no longer available from ${describeSource(expected.source)}.`,
+                    );
+                }
+                const name = requireInferredName(match.candidate, nameOrTarget);
+                assertExpectedCandidate(
+                    expected,
+                    candidateIdentity(match, name),
+                );
+                return materializeMatch(match, name, onStatus, abortSignal);
+            });
         },
         async resolveMcp(
             ref: string,
