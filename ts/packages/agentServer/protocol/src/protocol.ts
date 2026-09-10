@@ -280,12 +280,13 @@ export type AgentServerInvokeFunctions = {
      * The agent is removed automatically when the connection drops or leaves
      * the conversation.
      *
-     * The client must create its agent-rpc server on the `agent:<name>`
-     * channel (via createAgentRpcServer over the connection channel provider)
-     * before calling this. A client that opts in with `multiInstance` may share
-     * the agent name with other clients carrying the same schema: the server
-     * keeps one registration with an instance per client, and routes each
-     * action to one of them. Without it, a second client is rejected as before.
+     * The client must create its agent-rpc server before calling this. Current
+     * clients pass a `registrationId` and host it on the derived unique channel;
+     * older clients use `agent:<name>`. A client that opts in with
+     * `multiInstance` may share the agent name with other clients carrying the
+     * same schema: the server keeps one registration with an instance per
+     * client, and routes each action to one of them. Without it, a second client
+     * is rejected as before.
      */
     registerClientAgent: (param: RegisterClientAgentParams) => Promise<void>;
     /** Unregister a previously registered client-hosted agent. */
@@ -298,6 +299,12 @@ export type RegisterClientAgentParams = {
     name: string;
     manifest: AppAgentManifest;
     agentInterface: AgentInterfaceFunctionName[];
+    /**
+     * Identifies this RPC endpoint on the connection. When supplied, the
+     * endpoint is hosted on `agent:<name>:<registrationId>`, allowing a
+     * replacement to be validated while the previous endpoint remains live.
+     */
+    registrationId?: string;
     /**
      * Target conversation. If omitted, the server uses the connection's single
      * joined conversation (and errors if the connection has joined none or

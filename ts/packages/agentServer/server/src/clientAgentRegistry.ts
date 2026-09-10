@@ -512,54 +512,49 @@ function createMux(group: ClientAgentGroup, template: AppAgent): AppAgent {
             return fn.apply(instance.appAgent, rebind(instance));
         };
     }
+    if (mux.startBackgroundTasks === undefined) {
+        // The dispatcher calls this after creating its SessionContext. Keep the
+        // context even when no device implements the hook so an init-only
+        // instance can still receive closeAgentContext during replacement.
+        mux.startBackgroundTasks = async (...args: unknown[]) => {
+            getInternals(group).sessionContext =
+                args[0] as SessionContext<unknown>;
+        };
+    }
     return mux as unknown as AppAgent;
-}
-
-/**
- * Point the group's existing mux at a new method set, in place.
- *
- * The dispatcher was handed this exact object by `addDynamicAgent` and keeps
- * that reference, checking each optional method on it at call time. Assigning a
- * fresh object to `group.mux` would therefore leave the dispatcher on the old
- * one, so the methods have to be swapped onto the object it already holds.
- */
-function rebuildMux(group: ClientAgentGroup, template: AppAgent): void {
-    const next = methodsOf(createMux(group, template));
-    const current = methodsOf(group.mux);
-    for (const method of Object.keys(current)) {
-        if (next[method] === undefined) {
-            delete current[method];
-        }
-    }
-    for (const method of Object.keys(next)) {
-        current[method] = next[method];
-    }
 }
 
 /**
  * Bring a device that joined late up to the state the others are in. Failures
  * are traced, not thrown: one device must not fail another's registration.
  */
-async function initializeInstance(
+async function initializeInstanceState(
     group: ClientAgentGroup,
     instance: ClientAgentInstance,
 ): Promise<void> {
     const state = getInternals(group);
     const contexts = getContexts(group, instance.instanceId);
     const appAgent = methodsOf(instance.appAgent);
+    if (appAgent.initializeAgentContext !== undefined) {
+        contexts.agentContext = await appAgent.initializeAgentContext();
+        contexts.agentContextSet = true;
+    }
+    const sessionContext = state.sessionContext;
+    if (sessionContext !== undefined) {
+        const view = viewSessionContext(contexts, sessionContext);
+        await appAgent.startBackgroundTasks?.(view);
+        for (const schemaName of state.enabledSchemas) {
+            await appAgent.updateAgentContext?.(true, view, schemaName);
+        }
+    }
+}
+
+async function initializeInstance(
+    group: ClientAgentGroup,
+    instance: ClientAgentInstance,
+): Promise<void> {
     try {
-        if (appAgent.initializeAgentContext !== undefined) {
-            contexts.agentContext = await appAgent.initializeAgentContext();
-            contexts.agentContextSet = true;
-        }
-        const sessionContext = state.sessionContext;
-        if (sessionContext !== undefined) {
-            const view = viewSessionContext(contexts, sessionContext);
-            await appAgent.startBackgroundTasks?.(view);
-            for (const schemaName of state.enabledSchemas) {
-                await appAgent.updateAgentContext?.(true, view, schemaName);
-            }
-        }
+        await initializeInstanceState(group, instance);
     } catch (e) {
         debugGroup(
             `${group.name}: failed to initialize late-joining instance ${instance.instanceId}: ${
@@ -569,11 +564,94 @@ async function initializeInstance(
     }
 }
 
-export function createClientAgentGroup(
-    name: string,
+async function closeInstance(
+    group: ClientAgentGroup,
+    instance: ClientAgentInstance,
+): Promise<void> {
+    const state = getInternals(group);
+    const contexts = state.contexts.get(instance.instanceId);
+    const sessionContext = state.sessionContext;
+    if (contexts === undefined || sessionContext === undefined) {
+        return;
+    }
+    const appAgent = methodsOf(instance.appAgent);
+    const view = viewSessionContext(contexts, sessionContext);
+    await appAgent.stopBackgroundTasks?.(view);
+    for (const schemaName of state.enabledSchemas) {
+        await appAgent.updateAgentContext?.(false, view, schemaName);
+    }
+    await appAgent.closeAgentContext?.(view);
+}
+
+async function closeInstanceForReplacement(
+    group: ClientAgentGroup,
+    instance: ClientAgentInstance,
+): Promise<void> {
+    const state = getInternals(group);
+    const contexts = state.contexts.get(instance.instanceId);
+    const sessionContext = state.sessionContext;
+    if (contexts === undefined || sessionContext === undefined) {
+        return;
+    }
+    const appAgent = methodsOf(instance.appAgent);
+    const view = viewSessionContext(contexts, sessionContext);
+    let backgroundStopped = false;
+    const disabledSchemas: string[] = [];
+    try {
+        if (appAgent.stopBackgroundTasks !== undefined) {
+            await appAgent.stopBackgroundTasks(view);
+            backgroundStopped = true;
+        }
+        for (const schemaName of state.enabledSchemas) {
+            await appAgent.updateAgentContext?.(false, view, schemaName);
+            disabledSchemas.push(schemaName);
+        }
+        await appAgent.closeAgentContext?.(view);
+    } catch (e) {
+        const rollbackErrors: unknown[] = [];
+        for (const schemaName of disabledSchemas.reverse()) {
+            try {
+                await appAgent.updateAgentContext?.(true, view, schemaName);
+            } catch (rollbackError) {
+                rollbackErrors.push(rollbackError);
+            }
+        }
+        if (backgroundStopped) {
+            try {
+                await appAgent.startBackgroundTasks?.(view);
+            } catch (rollbackError) {
+                rollbackErrors.push(rollbackError);
+            }
+        }
+        if (rollbackErrors.length !== 0) {
+            throw new AggregateError(
+                [e, ...rollbackErrors],
+                `Failed to close and restore client agent '${group.name}' instance '${instance.instanceId}'`,
+            );
+        }
+        throw e;
+    }
+}
+
+async function closeInstanceBestEffort(
+    group: ClientAgentGroup,
+    instance: ClientAgentInstance,
+): Promise<void> {
+    try {
+        await closeInstance(group, instance);
+    } catch (e) {
+        debugGroup(
+            `${group.name}: failed to close instance ${instance.instanceId}: ${
+                e instanceof Error ? e.message : String(e)
+            }`,
+        );
+    }
+}
+
+function createClientAgentInstance(
     registration: ClientAgentRegistration,
-): ClientAgentGroup {
-    const instance: ClientAgentInstance = {
+): ClientAgentInstance {
+    return {
         instanceId: registration.instanceId,
         displayName: registration.displayName,
         connectionId: registration.connectionId,
@@ -581,6 +659,13 @@ export function createClientAgentGroup(
         registeredAt: Date.now(),
         lastUsed: Date.now(),
     };
+}
+
+export function createClientAgentGroup(
+    name: string,
+    registration: ClientAgentRegistration,
+): ClientAgentGroup {
+    const instance = createClientAgentInstance(registration);
     const group: ClientAgentGroup = {
         name,
         manifest: registration.manifest,
@@ -602,22 +687,75 @@ export function createClientAgentGroup(
     return group;
 }
 
-/**
- * True when this registration takes over the group's only instance: either the
- * same `instanceId` coming back, or the same connection re-registering under a
- * new one (its old proxy died when the new one claimed the `agent:<name>`
- * channel). Either way no other device is in the group, so the method set is
- * this device's alone to change.
- */
-function replacesSoleInstance(
+function replacementInstanceId(
     group: ClientAgentGroup,
     registration: ClientAgentRegistration,
-): boolean {
-    return (
-        group.instances.size === 1 &&
-        (group.instances.has(registration.instanceId) ||
-            findInstanceIdForConnection(group, registration.connectionId) !==
-                undefined)
+): string | undefined {
+    return group.instances.has(registration.instanceId)
+        ? registration.instanceId
+        : findInstanceIdForConnection(group, registration.connectionId);
+}
+
+async function restoreInstance(
+    group: ClientAgentGroup,
+    instance: ClientAgentInstance,
+    wasInitialized: boolean,
+): Promise<void> {
+    group.instances.set(instance.instanceId, instance);
+    if (wasInitialized) {
+        await initializeInstanceState(group, instance);
+    }
+}
+
+async function replaceClientAgentInstance(
+    group: ClientAgentGroup,
+    previousId: string,
+    registration: ClientAgentRegistration,
+): Promise<void> {
+    const state = getInternals(group);
+    const previous = group.instances.get(previousId)!;
+    const wasInitialized = state.contexts.has(previousId);
+    if (wasInitialized) {
+        await closeInstanceForReplacement(group, previous);
+    }
+
+    group.instances.delete(previousId);
+    state.contexts.delete(previousId);
+    const replacement = createClientAgentInstance(registration);
+    group.instances.set(replacement.instanceId, replacement);
+    try {
+        if (wasInitialized) {
+            await initializeInstanceState(group, replacement);
+        }
+    } catch (e) {
+        let cleanupError: unknown;
+        try {
+            await closeInstance(group, replacement);
+        } catch (closeError) {
+            cleanupError = closeError;
+        }
+        group.instances.delete(replacement.instanceId);
+        state.contexts.delete(replacement.instanceId);
+        try {
+            await restoreInstance(group, previous, wasInitialized);
+        } catch (rollbackError) {
+            throw new AggregateError(
+                cleanupError === undefined
+                    ? [e, rollbackError]
+                    : [e, cleanupError, rollbackError],
+                `Failed to initialize replacement and restore client agent '${group.name}' instance '${previousId}'`,
+            );
+        }
+        if (cleanupError !== undefined) {
+            throw new AggregateError(
+                [e, cleanupError],
+                `Failed to initialize and close replacement client agent '${group.name}' instance '${replacement.instanceId}'`,
+            );
+        }
+        throw e;
+    }
+    debugGroup(
+        `${group.name}: replaced instance ${previousId} with ${replacement.instanceId} (${replacement.displayName}) on connection ${replacement.connectionId}, instances: ${group.instances.size}`,
     );
 }
 
@@ -636,58 +774,18 @@ export async function joinClientAgentGroup(
         throw new Error(schemaMismatchMessage(group.name));
     }
 
-    // Checked alongside the schema, and for a replacement too: the mux was
-    // built from the method set of whichever proxy created the group, so an
-    // instance that arrives with a different one would be routed calls it
-    // cannot answer.
     const agentInterfaceKey = getAgentInterfaceKey(registration.agentInterface);
     if (agentInterfaceKey !== group.agentInterfaceKey) {
-        // Unless this device is the whole group. A lone device that upgrades
-        // its app keeps its schema but can gain or lose methods, and rejecting
-        // that would break a reconnect that used to work - with a message
-        // telling the user to disconnect devices that do not exist. Nobody else
-        // is sharing the name, so adopt the new set and bring the mux with it.
-        if (!replacesSoleInstance(group, registration)) {
-            throw new Error(interfaceMismatchMessage(group.name));
-        }
-        group.agentInterfaceKey = agentInterfaceKey;
-        rebuildMux(group, registration.appAgent);
-        debugGroup(
-            `${group.name}: sole instance ${registration.instanceId} changed the method set; mux rebuilt`,
-        );
+        throw new Error(interfaceMismatchMessage(group.name));
     }
 
-    const existing = group.instances.get(registration.instanceId);
-    if (existing !== undefined) {
-        existing.appAgent = registration.appAgent;
-        existing.connectionId = registration.connectionId;
-        existing.displayName = registration.displayName;
-        existing.lastUsed = Date.now();
-        debugGroup(
-            `${group.name}: replaced instance ${existing.instanceId} (${existing.displayName}) on connection ${existing.connectionId}, instances: ${group.instances.size}`,
-        );
+    const previousId = replacementInstanceId(group, registration);
+    if (previousId !== undefined) {
+        await replaceClientAgentInstance(group, previousId, registration);
         return false;
     }
 
-    // A connection hosts one instance per agent name: both would sit on the
-    // single agent:<name> channel, so an instance already on this connection
-    // is the same client coming back under a new id, and its proxy died when
-    // the new registration claimed that channel. Retire it and hand its slot
-    // over. Leaving it would strand it past the connection's disconnect, and
-    // requester routing scans in insertion order, so it would be picked ahead
-    // of the live one. This is a replacement rather than a second device, so
-    // it does not need the sharing opt-in below.
-    const superseded = findInstanceIdForConnection(
-        group,
-        registration.connectionId,
-    );
-    if (superseded !== undefined) {
-        group.instances.delete(superseded);
-        getInternals(group).contexts.delete(superseded);
-        debugGroup(
-            `${group.name}: retired instance ${superseded}; connection ${registration.connectionId} re-registered as ${registration.instanceId}`,
-        );
-    } else if (!group.multiInstance) {
+    if (!group.multiInstance) {
         // Sharing is opt-in, and the group's creator decides. A client that
         // opts in cannot join a group whose creator did not, so no client can
         // widen another client's agent.
@@ -697,20 +795,13 @@ export async function joinClientAgentGroup(
         throw new Error(agentAlreadyExistsMessage(group.name));
     }
 
-    const instance: ClientAgentInstance = {
-        instanceId: registration.instanceId,
-        displayName: registration.displayName,
-        connectionId: registration.connectionId,
-        appAgent: registration.appAgent,
-        registeredAt: Date.now(),
-        lastUsed: Date.now(),
-    };
+    const instance = createClientAgentInstance(registration);
     group.instances.set(instance.instanceId, instance);
     debugGroup(
         `${group.name}: added instance ${instance.instanceId} (${instance.displayName}) on connection ${instance.connectionId}, instances: ${group.instances.size}`,
     );
     await initializeInstance(group, instance);
-    return superseded === undefined;
+    return true;
 }
 
 /** The instance this connection owns in the group, if any. */
@@ -770,6 +861,13 @@ export type ClientAgentHost = {
         manifest: AppAgentManifest,
         appAgent: AppAgent,
     ): Promise<void>;
+    replaceDynamicAgent(
+        name: string,
+        currentManifest: AppAgentManifest,
+        currentAppAgent: AppAgent,
+        nextManifest: AppAgentManifest,
+        nextAppAgent: AppAgent,
+    ): Promise<void>;
     removeDynamicAgent(name: string): Promise<void>;
 };
 
@@ -811,6 +909,38 @@ export function createClientAgentRegistry(): ClientAgentRegistry {
             return lock(async () => {
                 const existing = groups.get(name);
                 if (existing !== undefined) {
+                    const manifestKey = getManifestKey(registration.manifest);
+                    if (manifestKey !== existing.manifestKey) {
+                        throw new Error(schemaMismatchMessage(name));
+                    }
+                    const agentInterfaceKey = getAgentInterfaceKey(
+                        registration.agentInterface,
+                    );
+                    if (agentInterfaceKey !== existing.agentInterfaceKey) {
+                        if (
+                            existing.instances.size !== 1 ||
+                            replacementInstanceId(existing, registration) ===
+                                undefined
+                        ) {
+                            throw new Error(interfaceMismatchMessage(name));
+                        }
+                        const replacement = createClientAgentGroup(name, {
+                            ...registration,
+                            multiInstance: existing.multiInstance,
+                        });
+                        await host.replaceDynamicAgent(
+                            name,
+                            existing.manifest,
+                            existing.mux,
+                            registration.manifest,
+                            replacement.mux,
+                        );
+                        groups.set(name, replacement);
+                        debugGroup(
+                            `${name}: sole instance ${registration.instanceId} changed the method set; dynamic agent replaced`,
+                        );
+                        return;
+                    }
                     await joinClientAgentGroup(existing, registration);
                     return;
                 }
@@ -828,6 +958,17 @@ export function createClientAgentRegistry(): ClientAgentRegistry {
                 const group = groups.get(name);
                 if (group === undefined) {
                     return false;
+                }
+                const instance = group.instances.get(instanceId);
+                if (
+                    instance === undefined ||
+                    (options?.ownerConnectionId !== undefined &&
+                        instance.connectionId !== options.ownerConnectionId)
+                ) {
+                    return false;
+                }
+                if (group.instances.size > 1) {
+                    await closeInstanceBestEffort(group, instance);
                 }
                 if (!removeClientAgentInstance(group, instanceId, options)) {
                     return false;

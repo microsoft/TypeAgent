@@ -28,6 +28,7 @@ import {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
     createDispatcherFromContext,
+    getAppAgentName,
     prewarmReasoning as prewarmDispatcherReasoning,
 } from "agent-dispatcher/internal";
 import { PendingInteractionManager } from "agent-dispatcher/internal";
@@ -46,6 +47,29 @@ const debugCommand = registerDebug("agent-server:command");
 
 function errMessage(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
+}
+
+function throwAgentStateFailures(
+    name: string,
+    result: {
+        failed: {
+            schemas: [string, boolean, Error][];
+            actions: [string, boolean, Error][];
+            commands: [string, boolean, Error][];
+        };
+    },
+): void {
+    const failures = [
+        ...result.failed.schemas,
+        ...result.failed.actions,
+        ...result.failed.commands,
+    ].filter(([failedName]) => getAppAgentName(failedName) === name);
+    if (failures.length !== 0) {
+        throw new AggregateError(
+            failures.map(([, , error]) => error),
+            `Failed to enable dynamic agent '${name}'`,
+        );
+    }
 }
 
 type ClientRecord = {
@@ -946,6 +970,55 @@ export async function createSharedDispatcher(
                 );
             });
         },
+        async replaceDynamicAgent(
+            name: string,
+            currentManifest: AppAgentManifest,
+            currentAppAgent: AppAgent,
+            nextManifest: AppAgentManifest,
+            nextAppAgent: AppAgent,
+        ): Promise<void> {
+            await context.commandLock(async () => {
+                await context.agents.removeAgent(
+                    name,
+                    context.agentCache.grammarStore,
+                );
+                try {
+                    await context.agents.addDynamicAgent(
+                        name,
+                        nextManifest,
+                        nextAppAgent,
+                    );
+                    const result = await context.agents.setState(
+                        context,
+                        context.session.getConfig(),
+                    );
+                    throwAgentStateFailures(name, result);
+                } catch (e) {
+                    try {
+                        await context.agents.removeAgent(
+                            name,
+                            context.agentCache.grammarStore,
+                        );
+                        await context.agents.addDynamicAgent(
+                            name,
+                            currentManifest,
+                            currentAppAgent,
+                        );
+                        const rollbackResult = await context.agents.setState(
+                            context,
+                            context.session.getConfig(),
+                        );
+                        throwAgentStateFailures(name, rollbackResult);
+                    } catch (rollbackError) {
+                        throw new AggregateError(
+                            [e, rollbackError],
+                            `Failed to replace dynamic agent '${name}' and restore the previous registration`,
+                        );
+                    }
+                    throw e;
+                }
+            });
+        },
         async removeDynamicAgent(name: string): Promise<void> {
             await context.commandLock(async () => {
                 await context.agents.removeAgent(
@@ -1010,6 +1083,14 @@ export type SharedDispatcher = {
         name: string,
         manifest: AppAgentManifest,
         appAgent: AppAgent,
+    ): Promise<void>;
+    /** Replace a dynamic agent and restore the previous one if setup fails. */
+    replaceDynamicAgent(
+        name: string,
+        currentManifest: AppAgentManifest,
+        currentAppAgent: AppAgent,
+        nextManifest: AppAgentManifest,
+        nextAppAgent: AppAgent,
     ): Promise<void>;
     /** Remove a previously added dynamic agent. No-op if it doesn't exist. */
     removeDynamicAgent(name: string): Promise<void>;

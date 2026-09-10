@@ -44,11 +44,13 @@ describe("agent action context RPC", () => {
             "test",
             serverAgent,
             serverProvider,
+            { channelName: "agent:test:registration-1" },
         );
         const clientAgent = await createAgentRpcClient(
             "test",
             clientProvider,
             server.agentInterface,
+            { channelName: "agent:test:registration-1" },
         );
 
         try {

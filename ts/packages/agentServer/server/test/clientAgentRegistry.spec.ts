@@ -88,16 +88,19 @@ function makeDevice(
 
 type FakeHost = ClientAgentHost & {
     added: string[];
+    replaced: string[];
     removed: string[];
     registered: Map<string, AppAgent>;
 };
 
 function makeHost(): FakeHost {
     const added: string[] = [];
+    const replaced: string[] = [];
     const removed: string[] = [];
     const registered = new Map<string, AppAgent>();
     return {
         added,
+        replaced,
         removed,
         registered,
         async addDynamicAgent(name, _manifest, appAgent) {
@@ -106,6 +109,17 @@ function makeHost(): FakeHost {
             }
             added.push(name);
             registered.set(name, appAgent);
+        },
+        async replaceDynamicAgent(
+            name,
+            _currentManifest,
+            currentAppAgent,
+            _nextManifest,
+            nextAppAgent,
+        ) {
+            expect(registered.get(name)).toBe(currentAppAgent);
+            replaced.push(name);
+            registered.set(name, nextAppAgent);
         },
         async removeDynamicAgent(name) {
             removed.push(name);
@@ -417,11 +431,9 @@ describe("clientAgentRegistry registration", () => {
             connectionId: "conn-a",
             appAgent: makeDevice(["executeAction"]).appAgent,
         });
-        expect(getMux(registry).getDynamicDisplay).toBeUndefined();
+        const dispatcherMux = host.registered.get(AGENT_NAME)!;
+        expect(dispatcherMux.getDynamicDisplay).toBeUndefined();
 
-        // Same device, same schema, new build that implements one more method.
-        // Nobody else is in the group, so there is no other device to conflict
-        // with and nothing for the user to disconnect.
         const upgraded = makeDevice(["executeAction", "getDynamicDisplay"]);
         await register(registry, host, {
             instanceId: "a",
@@ -430,11 +442,15 @@ describe("clientAgentRegistry registration", () => {
         });
 
         expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(1);
-        // The dispatcher still holds the object it was handed, so the new
-        // method has to show up on that same mux and route to the device.
+        const reloadedMux = host.registered.get(AGENT_NAME)!;
+        expect(reloadedMux).not.toBe(dispatcherMux);
+        expect(reloadedMux).toBe(getMux(registry));
+        expect(host.added).toEqual([AGENT_NAME]);
+        expect(host.replaced).toEqual([AGENT_NAME]);
+        expect(host.removed).toEqual([]);
         const { context } = makeSessionContext("conn-a2");
-        expect(getMux(registry).getDynamicDisplay).toBeDefined();
-        await getMux(registry).getDynamicDisplay!("html", "display-1", context);
+        expect(reloadedMux.getDynamicDisplay).toBeDefined();
+        await reloadedMux.getDynamicDisplay!("html", "display-1", context);
         expect(upgraded.dynamicDisplays).toEqual(["display-1"]);
     });
 
@@ -448,6 +464,7 @@ describe("clientAgentRegistry registration", () => {
             appAgent: makeDevice(["executeAction", "getDynamicDisplay"])
                 .appAgent,
         });
+        const dispatcherMux = host.registered.get(AGENT_NAME)!;
         await register(registry, host, {
             instanceId: "a",
             connectionId: "conn-a2",
@@ -455,8 +472,14 @@ describe("clientAgentRegistry registration", () => {
         });
 
         // Leaving it on the mux would advertise a method no device can answer.
-        expect(getMux(registry).getDynamicDisplay).toBeUndefined();
-        expect(getMux(registry).executeAction).toBeDefined();
+        const reloadedMux = host.registered.get(AGENT_NAME)!;
+        expect(reloadedMux).not.toBe(dispatcherMux);
+        expect(reloadedMux).toBe(getMux(registry));
+        expect(host.added).toEqual([AGENT_NAME]);
+        expect(host.replaced).toEqual([AGENT_NAME]);
+        expect(host.removed).toEqual([]);
+        expect(reloadedMux.getDynamicDisplay).toBeUndefined();
+        expect(reloadedMux.executeAction).toBeDefined();
     });
 
     test("a reconnecting device cannot change a shared group's method set", async () => {
@@ -489,6 +512,312 @@ describe("clientAgentRegistry registration", () => {
             }),
         ).rejects.toThrow(/different set of methods/i);
         expect(getMux(registry).getDynamicDisplay).toBeDefined();
+    });
+
+    test("replacing one shared instance refreshes its lifecycle", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        const calls: string[] = [];
+        const makeLifecycleDevice = (label: string): AppAgent => ({
+            async initializeAgentContext() {
+                calls.push(`${label}:initialize`);
+                return { label };
+            },
+            async startBackgroundTasks() {
+                calls.push(`${label}:start`);
+            },
+            async updateAgentContext(enable) {
+                calls.push(`${label}:update:${enable}`);
+            },
+            async stopBackgroundTasks() {
+                calls.push(`${label}:stop`);
+            },
+            async closeAgentContext() {
+                calls.push(`${label}:close`);
+            },
+            async executeAction() {
+                return undefined;
+            },
+        });
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeLifecycleDevice("old-a"),
+        });
+        await register(registry, host, {
+            instanceId: "b",
+            connectionId: "conn-b",
+            appAgent: makeLifecycleDevice("b"),
+        });
+
+        const mux = getMux(registry);
+        await mux.initializeAgentContext!();
+        const { context } = makeSessionContext(undefined);
+        await mux.startBackgroundTasks!(context);
+        await mux.updateAgentContext!(true, context, "androidDevice");
+        calls.length = 0;
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a2",
+            appAgent: makeLifecycleDevice("new-a"),
+        });
+
+        expect(calls).toEqual([
+            "old-a:stop",
+            "old-a:update:false",
+            "old-a:close",
+            "new-a:initialize",
+            "new-a:start",
+            "new-a:update:true",
+        ]);
+        expect(getMux(registry)).toBe(mux);
+        expect(registry.groups.get(AGENT_NAME)!.instances.size).toBe(2);
+    });
+
+    test("a departing shared instance is removed when cleanup fails", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        const makeLifecycleDevice = (stopFails: boolean): AppAgent => ({
+            async initializeAgentContext() {
+                return {};
+            },
+            async startBackgroundTasks() {},
+            async stopBackgroundTasks() {
+                if (stopFails) {
+                    throw new Error("stop failed");
+                }
+            },
+            async executeAction() {
+                return undefined;
+            },
+        });
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeLifecycleDevice(true),
+        });
+        await register(registry, host, {
+            instanceId: "b",
+            connectionId: "conn-b",
+            appAgent: makeLifecycleDevice(false),
+        });
+        const { context } = makeSessionContext(undefined);
+        await getMux(registry).initializeAgentContext!();
+        await getMux(registry).startBackgroundTasks!(context);
+
+        await expect(
+            registry.remove(host, AGENT_NAME, "a", {
+                ownerConnectionId: "conn-a",
+            }),
+        ).resolves.toBe(true);
+        expect([...registry.groups.get(AGENT_NAME)!.instances.keys()]).toEqual([
+            "b",
+        ]);
+    });
+
+    test("an init-only shared instance is closed when replaced", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        const calls: string[] = [];
+        const makeInitOnlyDevice = (label: string): AppAgent => ({
+            async initializeAgentContext() {
+                calls.push(`${label}:initialize`);
+                return { label };
+            },
+            async closeAgentContext() {
+                calls.push(`${label}:close`);
+            },
+            async executeAction() {
+                return undefined;
+            },
+        });
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeInitOnlyDevice("old-a"),
+        });
+        await register(registry, host, {
+            instanceId: "b",
+            connectionId: "conn-b",
+            appAgent: makeInitOnlyDevice("b"),
+        });
+        const mux = getMux(registry);
+        await mux.initializeAgentContext!();
+        const { context } = makeSessionContext(undefined);
+        await mux.startBackgroundTasks!(context);
+        calls.length = 0;
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a2",
+            appAgent: makeInitOnlyDevice("new-a"),
+        });
+
+        expect(calls).toEqual(["old-a:close", "new-a:initialize"]);
+    });
+
+    test("a partially initialized replacement is closed before rollback", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        const calls: string[] = [];
+        const makeLifecycleDevice = (
+            label: string,
+            failEnable = false,
+        ): AppAgent => ({
+            async initializeAgentContext() {
+                calls.push(`${label}:initialize`);
+                return { label };
+            },
+            async startBackgroundTasks() {
+                calls.push(`${label}:start`);
+            },
+            async updateAgentContext(enable) {
+                calls.push(`${label}:update:${enable}`);
+                if (enable && failEnable) {
+                    throw new Error("enable failed");
+                }
+            },
+            async stopBackgroundTasks() {
+                calls.push(`${label}:stop`);
+            },
+            async closeAgentContext() {
+                calls.push(`${label}:close`);
+            },
+            async executeAction() {
+                return undefined;
+            },
+        });
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeLifecycleDevice("old-a"),
+        });
+        await register(registry, host, {
+            instanceId: "b",
+            connectionId: "conn-b",
+            appAgent: makeLifecycleDevice("b"),
+        });
+        const mux = getMux(registry);
+        await mux.initializeAgentContext!();
+        const { context } = makeSessionContext(undefined);
+        await mux.startBackgroundTasks!(context);
+        await mux.updateAgentContext!(true, context, "androidDevice");
+        calls.length = 0;
+
+        await expect(
+            register(registry, host, {
+                instanceId: "a",
+                connectionId: "conn-a2",
+                appAgent: makeLifecycleDevice("new-a", true),
+            }),
+        ).rejects.toThrow("enable failed");
+
+        expect(calls).toEqual([
+            "old-a:stop",
+            "old-a:update:false",
+            "old-a:close",
+            "new-a:initialize",
+            "new-a:start",
+            "new-a:update:true",
+            "new-a:stop",
+            "new-a:update:false",
+            "new-a:close",
+            "old-a:initialize",
+            "old-a:start",
+            "old-a:update:true",
+        ]);
+        expect(
+            registry.groups.get(AGENT_NAME)!.instances.get("a")!.connectionId,
+        ).toBe("conn-a");
+    });
+
+    test("a teardown failure does not reinitialize the previous instance", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        const calls: string[] = [];
+        const makeLifecycleDevice = (
+            label: string,
+            stopFails = false,
+        ): AppAgent => ({
+            async initializeAgentContext() {
+                calls.push(`${label}:initialize`);
+                return { label };
+            },
+            async startBackgroundTasks() {
+                calls.push(`${label}:start`);
+            },
+            async stopBackgroundTasks() {
+                calls.push(`${label}:stop`);
+                if (stopFails) {
+                    throw new Error("stop failed");
+                }
+            },
+            async executeAction() {
+                return undefined;
+            },
+        });
+
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeLifecycleDevice("old-a", true),
+        });
+        await register(registry, host, {
+            instanceId: "b",
+            connectionId: "conn-b",
+            appAgent: makeLifecycleDevice("b"),
+        });
+        const mux = getMux(registry);
+        await mux.initializeAgentContext!();
+        const { context } = makeSessionContext(undefined);
+        await mux.startBackgroundTasks!(context);
+        calls.length = 0;
+
+        await expect(
+            register(registry, host, {
+                instanceId: "a",
+                connectionId: "conn-a2",
+                appAgent: makeLifecycleDevice("new-a"),
+            }),
+        ).rejects.toThrow("stop failed");
+
+        expect(calls).toEqual(["old-a:stop"]);
+        expect(
+            registry.groups.get(AGENT_NAME)!.instances.get("a")!.connectionId,
+        ).toBe("conn-a");
+    });
+
+    test("a failed dynamic-agent replacement keeps the previous group", async () => {
+        const registry = createClientAgentRegistry();
+        const host = makeHost();
+        await register(registry, host, {
+            instanceId: "a",
+            connectionId: "conn-a",
+            appAgent: makeDevice(["executeAction"]).appAgent,
+        });
+        const previousGroup = registry.groups.get(AGENT_NAME)!;
+        const previousMux = host.registered.get(AGENT_NAME)!;
+        host.replaceDynamicAgent = async () => {
+            throw new Error("replacement failed");
+        };
+
+        await expect(
+            register(registry, host, {
+                instanceId: "a",
+                connectionId: "conn-a2",
+                appAgent: makeDevice(["executeAction", "getDynamicDisplay"])
+                    .appAgent,
+            }),
+        ).rejects.toThrow("replacement failed");
+
+        expect(registry.groups.get(AGENT_NAME)).toBe(previousGroup);
+        expect(host.registered.get(AGENT_NAME)).toBe(previousMux);
+        expect(previousMux.getDynamicDisplay).toBeUndefined();
     });
 
     // Case 12
