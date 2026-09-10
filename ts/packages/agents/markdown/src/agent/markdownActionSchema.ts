@@ -13,6 +13,8 @@ export type CreateDocumentAction = {
     parameters: {
         // the name to use for the document
         name: string;
+        // markdown content to write into the new document
+        content?: string;
     };
 };
 
