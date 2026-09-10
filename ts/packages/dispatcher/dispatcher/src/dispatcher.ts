@@ -36,6 +36,10 @@ import {
 import { randomUUID } from "node:crypto";
 import { context as otelContext } from "@opentelemetry/api";
 import { getAgentSchemas } from "./context/system/describe/agentSchemaInfo.js";
+import {
+    StructuredActionDiscovery,
+    type StructuredActionAccess,
+} from "./structuredAction/discovery.js";
 
 async function getDynamicDisplay(
     context: CommandHandlerContext,
@@ -200,7 +204,12 @@ export function createDispatcherFromContext(
     context: CommandHandlerContext,
     connectionId?: ConnectionId,
     closeFn?: () => Promise<void>,
+    structuredActionAccess?: StructuredActionAccess,
 ): Dispatcher {
+    const structuredActions = new StructuredActionDiscovery(
+        context,
+        structuredActionAccess,
+    );
     const submitInput = (
         command: string,
         clientRequestId: unknown,
@@ -388,6 +397,12 @@ export function createDispatcherFromContext(
         },
         async getAgentSchemas(agentName?: string) {
             return getAgentSchemas(context, agentName);
+        },
+        async searchActions(request) {
+            return structuredActions.searchActions(request);
+        },
+        async getActionContract(identity) {
+            return structuredActions.getActionContract(identity);
         },
         async cancelCommand(requestId: string): Promise<CancelResult> {
             const kind = context.requestQueue.classifyCancel(requestId, "user");

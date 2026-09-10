@@ -6,6 +6,8 @@ import type { RpcStructuredLogger } from "@typeagent/agent-rpc/rpc";
 import { createDispatcherRpcClient } from "../src/dispatcherClient.js";
 import { createDispatcherRpcServer } from "../src/dispatcherServer.js";
 import type {
+    ActionContractResult,
+    ActionSearchResult,
     CommandResult,
     Dispatcher,
     QueuedRequest,
@@ -72,6 +74,8 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
         close: notImplemented("close") as any,
         getStatus: notImplemented("getStatus") as any,
         getAgentSchemas: notImplemented("getAgentSchemas") as any,
+        searchActions: notImplemented("searchActions"),
+        getActionContract: notImplemented("getActionContract"),
         respondToChoice: notImplemented("respondToChoice") as any,
         getDisplayHistory: notImplemented("getDisplayHistory") as any,
         async cancelCommand(...args) {
@@ -149,6 +153,114 @@ describe("dispatcher RPC lifecycle options", () => {
     });
 });
 
+describe("dispatcher RPC structured discovery", () => {
+    it("forwards exact identities and the complete versioned contract", async () => {
+        const identity = { schemaName: "test.sub", actionName: "select" };
+        const summary = {
+            ...identity,
+            description: "Select",
+            availability: {
+                state: "setup-required" as const,
+                schemaEnabled: true,
+                actionEnabled: true,
+                schemaActive: true,
+                actionActive: true,
+                readiness: {
+                    source: "cached" as const,
+                    report: {
+                        state: "setup-required" as const,
+                        message: "Configure first",
+                    },
+                },
+                authorization: "checked-at-execution" as const,
+            },
+        };
+        const searchResult: ActionSearchResult = {
+            protocolVersion: 1,
+            scopeId: "server-scope",
+            actions: [summary],
+            total: 1,
+        };
+        const contractResult: ActionContractResult = {
+            protocolVersion: 1,
+            scopeId: "server-scope",
+            status: "found",
+            contract: {
+                ...summary,
+                fingerprint: "opaque-fingerprint",
+                input: {
+                    format: "typescript",
+                    typeName: "Select",
+                    schemaText:
+                        'type Select = { actionName: "select"; parameters: { id?: string } };',
+                },
+                policy: { effects: "unknown", confirmation: "required" },
+                output: {
+                    envelope: "ActionResult",
+                    optional: true,
+                    resultValue: { type: "unknown", optional: true },
+                    resultEntity: { type: "Entity", optional: true },
+                    entities: { type: "Entity[]", optional: true },
+                },
+                interactions: {
+                    mode: "may-require-interaction",
+                    kinds: ["question", "choice", "form", "action-proposal"],
+                },
+            },
+        };
+        const calls: { method: string; input: unknown }[] = [];
+        const searchActions: Dispatcher["searchActions"] = async (input) => {
+            calls.push({ method: "search", input });
+            return searchResult;
+        };
+        const getActionContract: Dispatcher["getActionContract"] = async (
+            input,
+        ) => {
+            calls.push({ method: "contract", input });
+            return contractResult;
+        };
+        const channels = createChannelPair();
+        createDispatcherRpcServer(
+            makeStubDispatcher({ searchActions, getActionContract }),
+            channels.serverChannel,
+        );
+        const { dispatcher } = createDispatcherRpcClient(
+            channels.clientChannel,
+        );
+        const request = { schemaName: "test.sub", limit: 1 };
+        await expect(dispatcher.searchActions(request)).resolves.toEqual(
+            searchResult,
+        );
+        await expect(dispatcher.getActionContract(identity)).resolves.toEqual(
+            contractResult,
+        );
+        expect(calls).toEqual([
+            { method: "search", input: request },
+            { method: "contract", input: identity },
+        ]);
+    });
+
+    it("propagates discovery errors without a command fallback", async () => {
+        const channels = createChannelPair();
+        createDispatcherRpcServer(
+            makeStubDispatcher({
+                async getActionContract() {
+                    throw new Error("Invalid action identity");
+                },
+            }),
+            channels.serverChannel,
+        );
+        const { dispatcher } = createDispatcherRpcClient(
+            channels.clientChannel,
+        );
+        await expect(
+            dispatcher.getActionContract({
+                schemaName: "",
+                actionName: "select",
+            }),
+        ).rejects.toThrow("Invalid action identity");
+    });
+});
 describe("dispatcher RPC — cancelInteraction (fire-and-forget)", () => {
     it("sends a call message and does not wait for a reply", () => {
         const { serverChannel, clientChannel } = createChannelPair();
