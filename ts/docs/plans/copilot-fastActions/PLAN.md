@@ -10,10 +10,10 @@ Copilot fast actions let TypeAgent reuse a known procedure instead of asking
 the Copilot model to plan the same work again. The area contains two related
 mechanisms:
 
-| Mechanism | Entry point | Fast path | Learning or adaptation |
-| --- | --- | --- | --- |
-| Dev actions | Copilot `userPromptSubmitted` hook in dev mode | A registered PowerShell namespace action or dynamic flow handles the prompt | PowerShell-specific reasoning may reuse, create, or repair a flow |
-| Tool-composed macros | `typeagent-macros` MCP tools | An approved replayable macro invokes its MCP steps in order | An explicit trace creates a draft; agent-guided execution may submit a new draft |
+| Mechanism            | Entry point                                    | Fast path                                                                   | Learning or adaptation                                                           |
+| -------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Dev actions          | Copilot `userPromptSubmitted` hook in dev mode | A registered PowerShell namespace action or dynamic flow handles the prompt | PowerShell-specific reasoning may reuse, create, or repair a flow                |
+| Tool-composed macros | `typeagent-macros` MCP tools                   | An approved replayable macro invokes its MCP steps in order                 | An explicit trace creates a draft; agent-guided execution may submit a new draft |
 
 Both mechanisms store reusable procedures, but they have different routing,
 approval, execution, and platform rules. Macros are tools available alongside
@@ -44,15 +44,15 @@ and provider-specific flow formats, see
 
 ## Terminology
 
-| Term | Meaning |
-| --- | --- |
-| Dev action | A PowerShell-family action offered first refusal in Copilot dev mode |
-| Static namespace action | A committed, typed PowerShell action implemented in a `powershell.*` namespace |
-| Dynamic PowerShell flow | A persisted PowerShell recipe with generated schema and grammar |
-| Tool-composed macro | A versioned procedure induced from one explicitly recorded Copilot tool trace |
-| Deterministic replay | TypeAgent executes a fixed, validated sequence of replayable MCP calls |
-| Agent-guided execution | The Copilot macro runner executes the whole procedure through the live tool and permission surface |
-| Automatic selection | `run_macro` chooses replay or agent handoff from the approved macro's execution class |
+| Term                    | Meaning                                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------------------------- |
+| Dev action              | A PowerShell-family action offered first refusal in Copilot dev mode                               |
+| Static namespace action | A committed, typed PowerShell action implemented in a `powershell.*` namespace                     |
+| Dynamic PowerShell flow | A persisted PowerShell recipe with generated schema and grammar                                    |
+| Tool-composed macro     | A versioned procedure induced from one explicitly recorded Copilot tool trace                      |
+| Deterministic replay    | TypeAgent executes a fixed, validated sequence of replayable MCP calls                             |
+| Agent-guided execution  | The Copilot macro runner executes the whole procedure through the live tool and permission surface |
+| Automatic selection     | `run_macro` chooses replay or agent handoff from the approved macro's execution class              |
 
 ## System map
 
@@ -205,15 +205,15 @@ It does not mutate or approve the source version.
 
 ## Execution selection
 
-| Condition | Result |
-| --- | --- |
-| Registered PowerShell action or flow matches in dev mode | TypeAgent executes it and handles the prompt |
-| No direct PowerShell match, request is suitable | Bounded reasoning may reuse, create, or repair a flow |
-| Request is not suitable for PowerShell | TypeAgent returns not handled and Copilot continues |
-| Approved macro contains only replayable MCP steps | TypeAgent preflights and replays it |
-| Macro contains an agent-required step | TypeAgent returns a runner launch payload |
-| Macro version is draft or disabled | Execution is rejected |
-| A tool schema changed after approval | Replay fails before step one with `schemaDrift` |
+| Condition                                                | Result                                                |
+| -------------------------------------------------------- | ----------------------------------------------------- |
+| Registered PowerShell action or flow matches in dev mode | TypeAgent executes it and handles the prompt          |
+| No direct PowerShell match, request is suitable          | Bounded reasoning may reuse, create, or repair a flow |
+| Request is not suitable for PowerShell                   | TypeAgent returns not handled and Copilot continues   |
+| Approved macro contains only replayable MCP steps        | TypeAgent preflights and replays it                   |
+| Macro contains an agent-required step                    | TypeAgent returns a runner launch payload             |
+| Macro version is draft or disabled                       | Execution is rejected                                 |
+| A tool schema changed after approval                     | Replay fails before step one with `schemaDrift`       |
 
 ## Try dev actions
 
@@ -269,12 +269,12 @@ surface and remains model-mediated.
 
 Macro boundaries can be disabled independently:
 
-| Environment variable | Boundary |
-| --- | --- |
-| `TYPEAGENT_MACRO_RECORDING_ENABLED` | Explicit trace recording |
-| `TYPEAGENT_MACRO_INDUCTION_ENABLED` | Draft creation |
-| `TYPEAGENT_MACRO_REPLAY_ENABLED` | Deterministic replay |
-| `TYPEAGENT_MACRO_AGENT_HANDOFF_ENABLED` | Agent-runner handoff |
+| Environment variable                    | Boundary                 |
+| --------------------------------------- | ------------------------ |
+| `TYPEAGENT_MACRO_RECORDING_ENABLED`     | Explicit trace recording |
+| `TYPEAGENT_MACRO_INDUCTION_ENABLED`     | Draft creation           |
+| `TYPEAGENT_MACRO_REPLAY_ENABLED`        | Deterministic replay     |
+| `TYPEAGENT_MACRO_AGENT_HANDOFF_ENABLED` | Agent-runner handoff     |
 
 ## Storage
 
@@ -313,32 +313,31 @@ agent-server is stopped.
 
 ## Verification
 
-| Behavior | Focused evidence |
-| --- | --- |
-| Dev hook options, platform policy, fallthrough, and cancellation | `packages/copilot-plugin/test/hookDevActions.spec.ts` |
-| Schema-family routing and dispositions | `packages/dispatcher/test/devActionRouting.spec.ts` |
-| Flow transaction, repair, persistence, and namespaces | `packages/agents/powershell/test/actionHandler.spec.ts` |
-| Flow storage | `packages/agents/powershell/test/powerShellStore.spec.ts` |
-| Macro induction and validation | `packages/copilot-macros/test/macroDefinition.spec.ts` |
-| Replay preflight and ordered execution | `packages/copilot-macros/test/deterministicReplay.spec.ts` |
-| Versioning, approval, schema drift, and runs | `packages/copilot-macros/test/macroCatalog.spec.ts` |
-| Macro MCP surface and packaging | `packages/copilot-plugin/test/macroServer.spec.ts`, `pluginArtifact.spec.ts` |
-| Recording RPC integration | `packages/agentServer/server/test/macroRecordingRpc.spec.ts` |
+| Behavior                                                         | Focused evidence                                                             |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Dev hook options, platform policy, fallthrough, and cancellation | `packages/copilot-plugin/test/hookDevActions.spec.ts`                        |
+| Schema-family routing and dispositions                           | `packages/dispatcher/test/devActionRouting.spec.ts`                          |
+| Flow transaction, repair, persistence, and namespaces            | `packages/agents/powershell/test/actionHandler.spec.ts`                      |
+| Flow storage                                                     | `packages/agents/powershell/test/powerShellStore.spec.ts`                    |
+| Macro induction and validation                                   | `packages/copilot-macros/test/macroDefinition.spec.ts`                       |
+| Replay preflight and ordered execution                           | `packages/copilot-macros/test/deterministicReplay.spec.ts`                   |
+| Versioning, approval, schema drift, and runs                     | `packages/copilot-macros/test/macroCatalog.spec.ts`                          |
+| Macro MCP surface and packaging                                  | `packages/copilot-plugin/test/macroServer.spec.ts`, `pluginArtifact.spec.ts` |
+| Recording RPC integration                                        | `packages/agentServer/server/test/macroRecordingRpc.spec.ts`                 |
 
 ## Key files
 
-| Area | Path |
-| --- | --- |
-| Dev-action hook | `packages/copilot-plugin/src/hooks/hook-dev-actions.ts` |
-| Hook routing and recording commands | `packages/copilot-plugin/src/hooks/hook-router.ts` |
-| Macro MCP adapter | `packages/copilot-plugin/src/mcp/macroServer.ts` |
-| Macro contracts | `packages/copilot-macros/src/contracts.ts` |
-| Induction and validation | `packages/copilot-macros/src/macroDefinition.ts` |
-| Macro lifecycle and persistence | `packages/copilot-macros/src/macroManager.ts` |
-| Deterministic replay | `packages/copilot-macros/src/deterministicReplay.ts` |
-| MCP replay host | `packages/defaultAgentProvider/src/mcp/mcpReplayHost.ts` |
-| PowerShell action and flow lifecycle | `packages/agents/powershell/src/actionHandler.mts` |
-| PowerShell store | `packages/agents/powershell/src/store/powerShellStore.mts` |
-| PowerShell script host | `packages/agents/powershell/scripts/scriptHost.ps1` |
-| Capability reasoning profiles | `packages/dispatcher/dispatcher/src/reasoning/reasoningProfile.ts` |
-
+| Area                                 | Path                                                               |
+| ------------------------------------ | ------------------------------------------------------------------ |
+| Dev-action hook                      | `packages/copilot-plugin/src/hooks/hook-dev-actions.ts`            |
+| Hook routing and recording commands  | `packages/copilot-plugin/src/hooks/hook-router.ts`                 |
+| Macro MCP adapter                    | `packages/copilot-plugin/src/mcp/macroServer.ts`                   |
+| Macro contracts                      | `packages/copilot-macros/src/contracts.ts`                         |
+| Induction and validation             | `packages/copilot-macros/src/macroDefinition.ts`                   |
+| Macro lifecycle and persistence      | `packages/copilot-macros/src/macroManager.ts`                      |
+| Deterministic replay                 | `packages/copilot-macros/src/deterministicReplay.ts`               |
+| MCP replay host                      | `packages/defaultAgentProvider/src/mcp/mcpReplayHost.ts`           |
+| PowerShell action and flow lifecycle | `packages/agents/powershell/src/actionHandler.mts`                 |
+| PowerShell store                     | `packages/agents/powershell/src/store/powerShellStore.mts`         |
+| PowerShell script host               | `packages/agents/powershell/scripts/scriptHost.ps1`                |
+| Capability reasoning profiles        | `packages/dispatcher/dispatcher/src/reasoning/reasoningProfile.ts` |

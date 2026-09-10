@@ -42,17 +42,17 @@ approved version rather than changing the draft in place.
 
 The public contracts in `src/contracts.ts` include:
 
-| Type | Purpose |
-| --- | --- |
-| `RecordedInteractionTrace` | One completed Copilot interaction and its correlated tool calls |
-| `CopilotToolMacro` | A versioned macro definition, inputs, steps, provenance, and state |
-| `MacroInput` | A required or optional caller-supplied value, including secret inputs |
-| `MacroStep` | One captured tool call and its argument expression |
-| `ValueExpression` | A literal, caller input, prior-step result, or template containing bindings |
-| `MacroPostcondition` | A result-type or required-result-path check |
-| `MacroValidationReport` | Errors and warnings produced before approval |
-| `MacroRunRecord` | Sanitized evidence from one deterministic run |
-| `ReplayToolHost` | The host interface for tool inspection and invocation |
+| Type                       | Purpose                                                                     |
+| -------------------------- | --------------------------------------------------------------------------- |
+| `RecordedInteractionTrace` | One completed Copilot interaction and its correlated tool calls             |
+| `CopilotToolMacro`         | A versioned macro definition, inputs, steps, provenance, and state          |
+| `MacroInput`               | A required or optional caller-supplied value, including secret inputs       |
+| `MacroStep`                | One captured tool call and its argument expression                          |
+| `ValueExpression`          | A literal, caller input, prior-step result, or template containing bindings |
+| `MacroPostcondition`       | A result-type or required-result-path check                                 |
+| `MacroValidationReport`    | Errors and warnings produced before approval                                |
+| `MacroRunRecord`           | Sanitized evidence from one deterministic run                               |
+| `ReplayToolHost`           | The host interface for tool inspection and invocation                       |
 
 Each macro and step has an execution class:
 
@@ -160,14 +160,14 @@ Minimal setup:
 import { MacroManager, type ReplayToolHost } from "@typeagent/copilot-macros";
 
 const replayHost: ReplayToolHost = {
-    async inspectTool(serverName, toolName) {
-        // Return the current descriptor from the host's MCP catalog.
-        return undefined;
-    },
-    async callTool(serverName, toolName, args, signal) {
-        // Invoke the MCP tool and return its structured result.
-        throw new Error("Provide a ReplayToolHost implementation.");
-    },
+  async inspectTool(serverName, toolName) {
+    // Return the current descriptor from the host's MCP catalog.
+    return undefined;
+  },
+  async callTool(serverName, toolName, args, signal) {
+    // Invoke the MCP tool and return its structured result.
+    throw new Error("Provide a ReplayToolHost implementation.");
+  },
 };
 
 const manager = new MacroManager(instanceDirectory, replayHost);
@@ -178,15 +178,15 @@ TypeAgent's concrete MCP replay host lives in
 
 ## Integration points
 
-| Area | Location |
-| --- | --- |
-| Recording and macro RPC contracts | `packages/agentServer/protocol/src/protocol.ts` |
-| Agent-server ownership | `packages/agentServer/server/src/` |
-| MCP adapter | `packages/copilot-plugin/src/mcp/macroServer.ts` |
-| Recording hooks | `packages/copilot-plugin/src/hooks/` |
-| Macro skill | `packages/copilot-plugin/skills/typeagent-macros/SKILL.md` |
-| Macro runner | `packages/copilot-plugin/agents/typeagent-macro-runner.agent.md` |
-| MCP replay host | `packages/defaultAgentProvider/src/mcp/mcpReplayHost.ts` |
+| Area                              | Location                                                         |
+| --------------------------------- | ---------------------------------------------------------------- |
+| Recording and macro RPC contracts | `packages/agentServer/protocol/src/protocol.ts`                  |
+| Agent-server ownership            | `packages/agentServer/server/src/`                               |
+| MCP adapter                       | `packages/copilot-plugin/src/mcp/macroServer.ts`                 |
+| Recording hooks                   | `packages/copilot-plugin/src/hooks/`                             |
+| Macro skill                       | `packages/copilot-plugin/skills/typeagent-macros/SKILL.md`       |
+| Macro runner                      | `packages/copilot-plugin/agents/typeagent-macro-runner.agent.md` |
+| MCP replay host                   | `packages/defaultAgentProvider/src/mcp/mcpReplayHost.ts`         |
 
 ## Build and test
 

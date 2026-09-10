@@ -543,16 +543,16 @@ Expected output shows server URL and current mode. If TypeAgent is not running, 
 
 ### Common Issues
 
-| Issue                          | Cause                         | Fix                                                            |
-| ------------------------------ | ----------------------------- | -------------------------------------------------------------- |
-| `copilot` not found            | Copilot CLI not installed     | Install GitHub Copilot CLI and verify with `copilot --version` |
-| Dev action falls through | Request was unsuitable, PowerShell is unavailable, or mode is not `dev` | Check `@typeagent status`, Windows platform, agent-server, and the PowerShell agent |
-| TypeAgent connection refused   | Server not running            | Start TypeAgent server (`pnpm run start:agent-server`)         |
-| Hook timeout                   | TypeAgent slow to respond     | Increase `timeout` in `hooks.json` or use MCP mode             |
-| Recording does not complete | The turn is still running or recording failed | Run `@typeagent macro status`; re-arm after a failed or expired recording |
-| Macro will not run | Version is not approved or a feature boundary is disabled | Inspect the macro state and the macro flags shown by `@typeagent status` |
-| Replay fails before step one | Required input, tool, or approved schema no longer matches | Inspect requirements and the structured replay error; revalidate or create a reviewed draft |
-| SQLite experimental warning    | Node 24 feature               | Normal — can be suppressed with `--no-experimental-warnings`   |
+| Issue                        | Cause                                                                   | Fix                                                                                         |
+| ---------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `copilot` not found          | Copilot CLI not installed                                               | Install GitHub Copilot CLI and verify with `copilot --version`                              |
+| Dev action falls through     | Request was unsuitable, PowerShell is unavailable, or mode is not `dev` | Check `@typeagent status`, Windows platform, agent-server, and the PowerShell agent         |
+| TypeAgent connection refused | Server not running                                                      | Start TypeAgent server (`pnpm run start:agent-server`)                                      |
+| Hook timeout                 | TypeAgent slow to respond                                               | Increase `timeout` in `hooks.json` or use MCP mode                                          |
+| Recording does not complete  | The turn is still running or recording failed                           | Run `@typeagent macro status`; re-arm after a failed or expired recording                   |
+| Macro will not run           | Version is not approved or a feature boundary is disabled               | Inspect the macro state and the macro flags shown by `@typeagent status`                    |
+| Replay fails before step one | Required input, tool, or approved schema no longer matches              | Inspect requirements and the structured replay error; revalidate or create a reviewed draft |
+| SQLite experimental warning  | Node 24 feature                                                         | Normal — can be suppressed with `--no-experimental-warnings`                                |
 
 ---
 
