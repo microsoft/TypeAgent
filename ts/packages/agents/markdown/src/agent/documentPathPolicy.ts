@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+// Filesystem policy for durable documents, including nested document creation.
 type RootPaths = {
     resolvedRoot: string;
     canonicalRoot: string;
