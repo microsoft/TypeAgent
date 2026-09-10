@@ -1999,6 +1999,7 @@ async function executeReasoningWithoutPlanning(
 /**
  * Execute reasoning action with trace capture (no plan execution)
  */
+// code-complexity-allow: reasoning-session orchestration with tracing, fallback, and cancellation paths
 async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,

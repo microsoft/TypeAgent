@@ -15,6 +15,102 @@ export interface AgentGroupCatalog {
     readonly groups: Readonly<Record<string, AgentGroupDefinition>>;
 }
 
+function requireObject(
+    value: unknown,
+    message: string,
+): Record<string, unknown> {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        throw new Error(message);
+    }
+    return value as Record<string, unknown>;
+}
+
+function rejectUnknownFields(
+    value: Record<string, unknown>,
+    allowed: ReadonlySet<string>,
+    messagePrefix: string,
+): void {
+    const unknownFields = Object.keys(value).filter(
+        (field) => !allowed.has(field),
+    );
+    if (unknownFields.length > 0) {
+        throw new Error(
+            `${messagePrefix} contains unknown field(s): ${unknownFields.join(", ")}.`,
+        );
+    }
+}
+
+function requireBoundedString(
+    value: unknown,
+    maxLength: number,
+    message: string,
+): string {
+    const normalized = typeof value === "string" ? value.trim() : "";
+    if (normalized.length === 0 || normalized.length > maxLength) {
+        throw new Error(message);
+    }
+    return normalized;
+}
+
+function validateGroupMembers(
+    value: unknown,
+    source: string,
+    groupName: string,
+): readonly string[] {
+    if (!Array.isArray(value) || value.length === 0) {
+        throw new Error(
+            `${source}: group '${groupName}' field 'agents' must be a non-empty array.`,
+        );
+    }
+    const validated: string[] = [];
+    const seen = new Set<string>();
+    for (const member of value) {
+        if (typeof member !== "string" || !isLegalAgentName(member)) {
+            throw new Error(
+                `${source}: group '${groupName}' field 'agents' has invalid member '${String(member)}'.`,
+            );
+        }
+        const normalized = member.toLowerCase();
+        if (seen.has(normalized)) {
+            throw new Error(
+                `${source}: group '${groupName}' field 'agents' has duplicate member '${member}' case-insensitively.`,
+            );
+        }
+        seen.add(normalized);
+        validated.push(member);
+    }
+    return Object.freeze(validated);
+}
+
+function validateGroupDefinition(
+    value: unknown,
+    source: string,
+    groupName: string,
+): AgentGroupDefinition {
+    const group = requireObject(
+        value,
+        `${source}: group '${groupName}' must be an object.`,
+    );
+    rejectUnknownFields(
+        group,
+        new Set(["displayName", "description", "agents"]),
+        `${source}: group '${groupName}'`,
+    );
+    return Object.freeze({
+        displayName: requireBoundedString(
+            group.displayName,
+            100,
+            `${source}: group '${groupName}' field 'displayName' must be a non-empty string up to 100 characters.`,
+        ),
+        description: requireBoundedString(
+            group.description,
+            500,
+            `${source}: group '${groupName}' field 'description' must be a non-empty string up to 500 characters.`,
+        ),
+        agents: validateGroupMembers(group.agents, source, groupName),
+    });
+}
+
 /**
  * Validates a parsed agent group catalog structure.
  */
@@ -22,32 +118,16 @@ export function validateAgentGroupCatalog(
     data: unknown,
     source = "agent group catalog",
 ): AgentGroupCatalog {
-    if (typeof data !== "object" || data === null || Array.isArray(data)) {
-        throw new Error(`${source}: expected a root object.`);
-    }
-
-    const root = data as Record<string, unknown>;
-    const rootFields = Object.keys(root);
-    if (rootFields.some((field) => field !== "groups")) {
-        throw new Error(
-            `${source}: root contains unknown field(s): ${rootFields
-                .filter((field) => field !== "groups")
-                .join(", ")}.`,
-        );
-    }
-    if (
-        typeof root.groups !== "object" ||
-        root.groups === null ||
-        Array.isArray(root.groups)
-    ) {
-        throw new Error(`${source}: field 'groups' must be an object.`);
-    }
-
-    const rawGroups = root.groups as Record<string, unknown>;
+    const root = requireObject(data, `${source}: expected a root object.`);
+    rejectUnknownFields(root, new Set(["groups"]), `${source}: root`);
+    const rawGroups = requireObject(
+        root.groups,
+        `${source}: field 'groups' must be an object.`,
+    );
     const validatedGroups: Record<string, AgentGroupDefinition> = {};
     const seenGroupKeys = new Set<string>();
 
-    for (const [key, val] of Object.entries(rawGroups)) {
+    for (const [key, value] of Object.entries(rawGroups)) {
         if (!isLegalAgentName(key)) {
             throw new Error(
                 `${source}: group '${key}' has an invalid name; expected the legal agent-name format.`,
@@ -61,80 +141,7 @@ export function validateAgentGroupCatalog(
             );
         }
         seenGroupKeys.add(lowerKey);
-
-        if (typeof val !== "object" || val === null || Array.isArray(val)) {
-            throw new Error(`${source}: group '${key}' must be an object.`);
-        }
-
-        const groupObj = val as Record<string, unknown>;
-        const allowedFields = new Set(["displayName", "description", "agents"]);
-        const unknownFields = Object.keys(groupObj).filter(
-            (field) => !allowedFields.has(field),
-        );
-        if (unknownFields.length > 0) {
-            throw new Error(
-                `${source}: group '${key}' contains unknown field(s): ${unknownFields.join(", ")}.`,
-            );
-        }
-        const displayName = groupObj.displayName;
-        const normalizedDisplayName =
-            typeof displayName === "string" ? displayName.trim() : "";
-        if (
-            typeof displayName !== "string" ||
-            normalizedDisplayName.length === 0 ||
-            normalizedDisplayName.length > 100
-        ) {
-            throw new Error(
-                `${source}: group '${key}' field 'displayName' must be a non-empty string up to 100 characters.`,
-            );
-        }
-
-        const description = groupObj.description;
-        const normalizedDescription =
-            typeof description === "string" ? description.trim() : "";
-        if (
-            typeof description !== "string" ||
-            normalizedDescription.length === 0 ||
-            normalizedDescription.length > 500
-        ) {
-            throw new Error(
-                `${source}: group '${key}' field 'description' must be a non-empty string up to 500 characters.`,
-            );
-        }
-
-        const agents = groupObj.agents;
-        if (!Array.isArray(agents) || agents.length === 0) {
-            throw new Error(
-                `${source}: group '${key}' field 'agents' must be a non-empty array.`,
-            );
-        }
-
-        const validatedAgents: string[] = [];
-        const seenMemberNames = new Set<string>();
-
-        for (const agent of agents) {
-            if (typeof agent !== "string" || !isLegalAgentName(agent)) {
-                throw new Error(
-                    `${source}: group '${key}' field 'agents' has invalid member '${String(agent)}'.`,
-                );
-            }
-
-            const lowerAgent = agent.toLowerCase();
-            if (seenMemberNames.has(lowerAgent)) {
-                throw new Error(
-                    `${source}: group '${key}' field 'agents' has duplicate member '${agent}' case-insensitively.`,
-                );
-            }
-            seenMemberNames.add(lowerAgent);
-            validatedAgents.push(agent);
-        }
-
-        validatedGroups[key] = {
-            displayName: normalizedDisplayName,
-            description: normalizedDescription,
-            agents: Object.freeze(validatedAgents),
-        };
-        Object.freeze(validatedGroups[key]);
+        validatedGroups[key] = validateGroupDefinition(value, source, key);
     }
 
     return Object.freeze({

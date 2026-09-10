@@ -1177,6 +1177,7 @@ class GroupInstallCommandHandler implements CommandHandler {
         },
     } as const;
 
+    // code-complexity-allow: group install keeps preflight, confirmation, sequential execution, and state reporting in one command flow
     public async run(
         context: PackageActionContext,
         params: ParsedCommandParams<typeof this.parameters>,
