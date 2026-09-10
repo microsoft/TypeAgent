@@ -491,6 +491,7 @@ function createClaudeCanUseTool(context: ActionContext<CommandHandlerContext>) {
 
 function getClaudeOptions(
     context: ActionContext<CommandHandlerContext>,
+    workingDirectory?: string,
 ): Options {
     const systemContext = context.sessionContext.agentContext;
     // Stable clientIO reference for get_user_context (see copilot.ts).
@@ -1181,7 +1182,7 @@ function getClaudeOptions(
         // AVAILABILITY; `canUseTool` decides ALLOW/DENY per call.
         canUseTool: createClaudeCanUseTool(context),
         tools: availableBuiltInTools,
-        cwd: getRepoRoot(),
+        cwd: workingDirectory ?? getRepoRoot(),
         settingSources: [],
         maxTurns: 20,
         thinking: { type: "adaptive" },
@@ -1951,6 +1952,7 @@ async function executeReasoningWithoutPlanning(
     fallbackContext?: ReasoningFallbackContext,
     abortController?: AbortController,
     requireToolUse: boolean = false,
+    workingDirectory?: string,
 ): Promise<any> {
     const abortSignal = abortController?.signal;
     // Display initial message
@@ -1963,7 +1965,7 @@ async function executeReasoningWithoutPlanning(
             fallbackContext,
         ),
         options: {
-            ...getClaudeOptions(context),
+            ...getClaudeOptions(context, workingDirectory),
             ...claudeExecutableOption(),
             ...(abortController === undefined ? {} : { abortController }),
         },
@@ -2002,6 +2004,7 @@ async function executeReasoningWithTracing(
     fallbackContext?: ReasoningFallbackContext,
     abortController?: AbortController,
     requireToolUse: boolean = false,
+    workingDirectory?: string,
 ): Promise<any> {
     const abortSignal = abortController?.signal;
     const systemContext = context.sessionContext.agentContext;
@@ -2016,6 +2019,7 @@ async function executeReasoningWithTracing(
             undefined,
             abortController,
             requireToolUse,
+            workingDirectory,
         );
     }
 
@@ -2044,7 +2048,7 @@ async function executeReasoningWithTracing(
                 fallbackContext,
             ),
             options: {
-                ...getClaudeOptions(context),
+                ...getClaudeOptions(context, workingDirectory),
                 ...claudeExecutableOption(),
                 ...(abortController === undefined ? {} : { abortController }),
             },
@@ -2292,6 +2296,9 @@ export async function executeReasoningAction(
         planReuseEnabled: planReuseEnabled || scriptReuseEnabled,
         engine: "claude",
         requireToolUse: true,
+        ...(action.parameters.workingDirectory === undefined
+            ? {}
+            : { workingDirectory: action.parameters.workingDirectory }),
         ...(fallbackContext ? { fallbackContext } : {}),
     });
 }
@@ -2664,6 +2671,7 @@ export async function executeReasoning(
         // (reasoningAction). Conversation-answer callers leave it false, since
         // answering a question with text only is a valid result.
         requireToolUse?: boolean;
+        workingDirectory?: string;
     },
 ) {
     const engine = options?.engine ?? "claude";
@@ -2673,6 +2681,7 @@ export async function executeReasoning(
     const planReuseEnabled = options?.planReuseEnabled ?? false;
     const fallbackContext = options?.fallbackContext;
     const requireToolUse = options?.requireToolUse ?? false;
+    const workingDirectory = options?.workingDirectory;
     const controller = new AbortController();
     return runInReasoningSpan(
         context,
@@ -2685,6 +2694,7 @@ export async function executeReasoning(
                         fallbackContext,
                         controller,
                         requireToolUse,
+                        workingDirectory,
                     );
                 }
                 // Trace capture + auto recipe generation
@@ -2694,6 +2704,7 @@ export async function executeReasoning(
                     fallbackContext,
                     controller,
                     requireToolUse,
+                    workingDirectory,
                 );
             }),
         {

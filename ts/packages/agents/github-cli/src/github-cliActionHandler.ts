@@ -37,6 +37,11 @@ import {
     runSetupCommand,
     whichExists,
 } from "./setup.js";
+import {
+    MergeConflictResult,
+    completeMergeConflictResolution,
+    mergeAndCommit,
+} from "./mergeConflict.js";
 import { buildTableBlock } from "./structuredResults.js";
 import { GhResult, runPrFailedChecks, runPrFiles } from "./prDiagnostics.js";
 
@@ -463,6 +468,12 @@ export function buildArgs(
     const p = action.parameters as Record<string, unknown>;
 
     switch (action.actionName) {
+        case "resolveMergeConflicts":
+        case "completeMergeConflictResolution":
+            // This action uses the narrowly scoped local git workflow below,
+            // never the general-purpose gh argument marshaller.
+            return undefined;
+
         // ── Auth ──
         case "authLogin": {
             const args = ["auth", "login"];
@@ -1941,11 +1952,122 @@ export async function validateAndResolveRepo(
     };
 }
 
+export function getRequestedMergeTarget(action: {
+    actionName?: string;
+    parameters?: { targetBranch?: string };
+}): string | undefined {
+    return action.parameters?.targetBranch;
+}
+
+function buildMergeFailure(
+    result: Extract<MergeConflictResult, { status: "blocked" }>,
+): ActionResult {
+    const recovery =
+        result.recovery === undefined ? "" : `\n\n${result.recovery}`;
+    return {
+        error: JSON.stringify(result),
+        errorCode: result.errorCode,
+        retryable: !result.mayHaveSideEffects,
+        mayHaveSideEffects: result.mayHaveSideEffects,
+        errorDisplayContent: {
+            type: "markdown",
+            content: `**${result.message}**${recovery}`,
+        },
+    };
+}
+
+export function buildMergeResult(result: MergeConflictResult): ActionResult {
+    if (result.status === "blocked") {
+        return buildMergeFailure(result);
+    }
+
+    const target = result.target?.displayName;
+    const summary =
+        result.status === "committed"
+            ? `Created merge commit ${result.commit.slice(0, 12)}${target ? ` from ${target}` : ""}.`
+            : result.status === "upToDate"
+              ? `${target} is already incorporated.`
+              : `Merge from ${target} has ${result.conflicts.length} conflict(s). Reasoning will resolve them.`;
+    const blocks: StructuredBlock[] = [
+        { kind: "heading", level: 3, text: summary },
+    ];
+    if (result.status === "conflicts") {
+        blocks.push({
+            kind: "text",
+            format: "markdown",
+            text: result.conflicts.map((file) => `- \`${file}\``).join("\n"),
+        });
+        blocks.push({
+            kind: "text",
+            format: "markdown",
+            text: `The merge is in progress in \`${result.repositoryRoot}\`. If Reasoning cannot finish it, run \`git -C "${result.repositoryRoot}" merge --abort\`.`,
+        });
+    }
+    const actionResult: ActionResultSuccess = {
+        historyText: JSON.stringify(result),
+        entities: [],
+        resultValue: result,
+        displayContent: createStructuredContent(blocks, { rawData: result }),
+    };
+    if (result.status === "conflicts") {
+        const files = result.conflicts.map((file) => `- ${file}`).join("\n");
+        actionResult.additionalActions = [
+            {
+                schemaName: "dispatcher.reasoning",
+                actionName: "reasoningAction",
+                parameters: {
+                    originalRequest:
+                        `Resolve the current Git merge conflicts in the repository at ${result.repositoryRoot}. ` +
+                        `Treat every path below as relative to that root, and run every Git command with that exact repository as its working directory:\n${files}\n\n` +
+                        "Inspect both sides and preserve the intent of each change. Edit and stage only these conflicted paths. Do not edit unrelated files, abort the merge, commit, or push. " +
+                        "Use your native file and terminal tools directly; do not delegate this task to another agent or an editor extension. " +
+                        "Stage each resolved path with git add or git rm, then return. " +
+                        "The dispatcher will run the completion action next to verify the staged resolution and create the merge commit. " +
+                        "Do not invoke the completion action yourself or claim a merge commit was created.",
+                    reason: "The merge produced file conflicts that require semantic resolution.",
+                    workingDirectory: result.repositoryRoot,
+                },
+            },
+            {
+                schemaName: "github-cli",
+                actionName: "completeMergeConflictResolution",
+                parameters: { repositoryRoot: result.repositoryRoot },
+            },
+        ];
+    }
+    return actionResult;
+}
+
 // code-complexity-allow: top-level action dispatch over all github-cli actions
 async function executeAction(
     action: TypeAgentAction<GithubCliActions>,
     context: ActionContext<unknown>,
 ): Promise<ActionResult> {
+    if (
+        action.actionName === "resolveMergeConflicts" ||
+        action.actionName === "completeMergeConflictResolution"
+    ) {
+        // The server's cwd may belong to an unrelated repository.
+        if (!context.workingDirectory) {
+            return buildMergeFailure({
+                status: "blocked",
+                errorCode: "notRepository",
+                message:
+                    "The host did not provide a working directory for this action. Open a session in a Git repository and retry.",
+                mayHaveSideEffects: false,
+            });
+        }
+        const options = {
+            cwd: context.workingDirectory,
+            signal: context.abortSignal,
+        };
+        return buildMergeResult(
+            action.actionName === "resolveMergeConflicts"
+                ? await mergeAndCommit(getRequestedMergeTarget(action), options)
+                : await completeMergeConflictResolution(options),
+        );
+    }
+
     // Bare-name repo guard — see validateAndResolveRepo. Runs before
     // buildArgs so we never hand `gh` a malformed --repo value.
     const validated = await validateAndResolveRepo(
@@ -1955,6 +2077,7 @@ async function executeAction(
     if (validated.kind === "clarify") {
         return validated.result;
     }
+
     action = validated.action;
 
     // Multi-call read-only diagnostics. These compose several gh invocations

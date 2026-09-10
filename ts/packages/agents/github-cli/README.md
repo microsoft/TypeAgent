@@ -44,6 +44,34 @@ fork microsoft/TypeAgent
 star microsoft/TypeAgent
 ```
 
+## Local merge conflict resolution
+
+Say `resolve merge conflicts` or `resolve merge conflicts from main` to merge
+the source branch into the currently checked-out local branch. The default
+source is the remote's default branch, falling back to an existing `main` or
+`master`. This action does not check out another branch or push.
+
+Both merge actions require the working directory supplied by the host session.
+They never use the agent server's working directory as a fallback.
+
+Clean merges are committed locally. For conflicts, Reasoning uses its native
+file and terminal tools in the repository root to inspect, resolve, and stage
+only the conflicted paths. No connected editor extension is required. The
+dispatcher then runs a separate completion action that verifies the index and
+creates the merge commit; a model's text response alone is not completion.
+
+Completion checks the saved post-merge staged paths and original conflicts,
+including changes Git automatically applied through renames. The saved state is
+bound to the original `HEAD` and `MERGE_HEAD`; missing, outdated, or mismatched
+state requires manual inspection and commit or abort.
+
+Cancellation stops further Git operations and cleans up the temporary fetch ref.
+If a merge has already started, it is left in place rather than automatically
+reset or aborted. Inspect `git status` before continuing. Resolve and stage the
+listed files, then run `completeMergeConflictResolution` in the same host session
+repository, or explicitly abort with `git merge --abort`. Do not start another
+merge on top of it.
+
 ## Output Formatting
 
 - PR, issue, and repo listings include clickable **hyperlinks**
