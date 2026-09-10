@@ -142,48 +142,49 @@ const CAPI_OK = {
 describe("selectCopilotModel", () => {
     test("uses the requested model when it is available", () => {
         const selected = selectCopilotModel(
-            "claude-haiku-4.5",
-            ["gpt-5-mini"],
-            [makeModel("gpt-5-mini"), makeModel("claude-haiku-4.5")],
+            "gpt-5.6-luna",
+            ["gpt-5.4-mini"],
+            [makeModel("gpt-5.4-mini"), makeModel("gpt-5.6-luna")],
         );
-        expect(selected?.id).toBe("claude-haiku-4.5");
+        expect(selected?.id).toBe("gpt-5.6-luna");
     });
 
     test("uses the first configured concrete fallback", () => {
         const selected = selectCopilotModel(
-            "claude-haiku-4.5",
-            ["auto", "gpt-5-mini", "gpt-5.4-mini"],
+            "gpt-5.6-luna",
+            ["auto", "gpt-5.4-mini", "gpt-5-mini", "gpt-5.4"],
             [
                 makeModel("auto"),
+                makeModel("gpt-5.4-mini"),
                 makeModel("gpt-5-mini"),
-                makeModel("gpt-5.4-mini"),
-            ],
-        );
-        expect(selected?.id).toBe("gpt-5-mini");
-    });
-
-    test("skips disabled fallback models", () => {
-        const selected = selectCopilotModel(
-            "claude-haiku-4.5",
-            ["gpt-5-mini", "gpt-5.4-mini"],
-            [
-                makeModel("gpt-5-mini", { policy: "disabled" }),
-                makeModel("gpt-5.4-mini"),
+                makeModel("gpt-5.4"),
             ],
         );
         expect(selected?.id).toBe("gpt-5.4-mini");
     });
 
-    test("allows fallback models without an explicit policy decision", () => {
+    test("skips disabled fallback models", () => {
         const selected = selectCopilotModel(
-            "claude-haiku-4.5",
-            ["gpt-5-mini", "gpt-5.4-mini"],
+            "gpt-5.6-luna",
+            ["gpt-5.4-mini", "gpt-5-mini"],
             [
-                makeModel("gpt-5-mini", { policy: "unconfigured" }),
-                makeModel("gpt-5.4-mini"),
+                makeModel("gpt-5.4-mini", { policy: "disabled" }),
+                makeModel("gpt-5-mini"),
             ],
         );
         expect(selected?.id).toBe("gpt-5-mini");
+    });
+
+    test("allows fallback models without an explicit policy decision", () => {
+        const selected = selectCopilotModel(
+            "gpt-5.6-luna",
+            ["gpt-5.4-mini", "gpt-5-mini"],
+            [
+                makeModel("gpt-5.4-mini", { policy: "unconfigured" }),
+                makeModel("gpt-5-mini"),
+            ],
+        );
+        expect(selected?.id).toBe("gpt-5.4-mini");
     });
 
     test("uses the newest available model in the requested family", () => {
@@ -246,11 +247,11 @@ describe("selectCopilotModel", () => {
 
     test("returns undefined when no concrete model is enabled", () => {
         const selected = selectCopilotModel(
-            "claude-haiku-4.5",
-            ["gpt-5-mini"],
+            "gpt-5.6-luna",
+            ["gpt-5.4-mini"],
             [
                 makeModel("auto"),
-                makeModel("gpt-5-mini", { policy: "disabled" }),
+                makeModel("gpt-5.4-mini", { policy: "disabled" }),
             ],
         );
         expect(selected).toBeUndefined();

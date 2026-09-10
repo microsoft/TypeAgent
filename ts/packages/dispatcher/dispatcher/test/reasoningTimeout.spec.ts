@@ -14,14 +14,14 @@ const MAX_SETTIMEOUT_MS = 2_147_483_647;
 
 describe("resolveCopilotReasoningModel", () => {
     it("uses the configured model before the environment", () => {
-        expect(
-            resolveCopilotReasoningModel("gpt-6-astra", "claude-opus-4.8"),
-        ).toBe("gpt-6-astra");
+        expect(resolveCopilotReasoningModel("gpt-6-astra", "gpt-5.5")).toBe(
+            "gpt-6-astra",
+        );
     });
 
     it("uses the environment model when no live override is configured", () => {
-        expect(resolveCopilotReasoningModel(undefined, "claude-opus-5")).toBe(
-            "claude-opus-5",
+        expect(resolveCopilotReasoningModel(undefined, "gpt-5.5")).toBe(
+            "gpt-5.5",
         );
     });
 

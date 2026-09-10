@@ -54,13 +54,13 @@ describe("flatten", () => {
     test("flattens Copilot fallback models as a JSON array", () => {
         const out = flatten({
             copilot: {
-                defaultModel: "claude-haiku-4.5",
-                fallbackModels: ["gpt-5-mini", "gpt-5.4-mini"],
+                defaultModel: "gpt-5.6-luna",
+                fallbackModels: ["gpt-5.4-mini", "gpt-5-mini", "gpt-5.4"],
             },
         });
         expect(out).toEqual({
-            COPILOT_DEFAULT_MODEL: "claude-haiku-4.5",
-            COPILOT_FALLBACK_MODELS: '["gpt-5-mini","gpt-5.4-mini"]',
+            COPILOT_DEFAULT_MODEL: "gpt-5.6-luna",
+            COPILOT_FALLBACK_MODELS: '["gpt-5.4-mini","gpt-5-mini","gpt-5.4"]',
         });
     });
 
