@@ -306,6 +306,22 @@ class AndroidDeviceAgentTest {
     }
 
     @Test
+    fun reportsOverlongShareTextAsAnActionError() {
+        val parsed = parse(
+            "shareText",
+            JSONObject().put("text", "x".repeat(MAX_SHARE_TEXT_CHARS + 1))
+        )
+
+        assertEquals(
+            AndroidDeviceActionParseResult.ActionError(
+                "Invalid shareText parameters: text is required and must not exceed " +
+                    "$MAX_SHARE_TEXT_CHARS characters."
+            ),
+            parsed
+        )
+    }
+
+    @Test
     fun parsesOpenSettingsExecuteAction() {
         val parsed = parseSuccess<AndroidDeviceAction.OpenSettings>(
             "openSettings",

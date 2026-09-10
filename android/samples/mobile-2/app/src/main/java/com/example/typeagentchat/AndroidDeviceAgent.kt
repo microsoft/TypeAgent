@@ -148,7 +148,8 @@ internal object AndroidDeviceAgent {
                 val parsed = parseComposeEmailActionPayload(parameters)
                     ?: return AndroidDeviceActionParseResult.ActionError(
                         "Invalid composeEmail parameters: every recipient must be a " +
-                            "valid email address and the draft cannot be empty."
+                            "valid email address, the draft cannot be empty, and the body " +
+                            "must not exceed $MAX_EMAIL_BODY_CHARS characters."
                     )
                 AndroidDeviceActionParseResult.Success(AndroidDeviceAction.ComposeEmail(parsed))
             }
@@ -156,7 +157,8 @@ internal object AndroidDeviceAgent {
             "shareText" -> {
                 val parsed = parseShareTextActionPayload(parameters)
                     ?: return AndroidDeviceActionParseResult.ActionError(
-                        "Invalid shareText parameters: text is required."
+                        "Invalid shareText parameters: text is required and must not exceed " +
+                            "$MAX_SHARE_TEXT_CHARS characters."
                     )
                 AndroidDeviceActionParseResult.Success(AndroidDeviceAction.ShareText(parsed))
             }
@@ -175,7 +177,8 @@ internal object AndroidDeviceAgent {
                     ?: return AndroidDeviceActionParseResult.ActionError(
                         "Invalid createCalendarEvent parameters: title is required and " +
                             "start/end must be local ISO-8601 values such as " +
-                            "2026-08-24T15:00, with end after start."
+                            "2026-08-24T15:00, with end after start; description must not " +
+                            "exceed $MAX_EVENT_DESCRIPTION_CHARS characters."
                     )
                 AndroidDeviceActionParseResult.Success(
                     AndroidDeviceAction.CreateCalendarEvent(parsed)

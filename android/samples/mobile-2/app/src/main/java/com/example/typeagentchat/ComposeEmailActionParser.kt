@@ -25,7 +25,7 @@ private const val MAX_EMAIL_RECIPIENTS = 32
  * An email body is the longest field any action carries. Still three orders of
  * magnitude below the ~1 MB binder transaction limit.
  */
-private const val MAX_EMAIL_BODY_CHARS = 8_000
+internal const val MAX_EMAIL_BODY_CHARS = 8_000
 
 /**
  * Deliberately loose: the point is to reject values that are obviously not
@@ -64,6 +64,7 @@ internal fun parseComposeEmailActionPayload(data: Any?): ComposeEmailAction? {
     val bcc = payload.parseEmailAddressList("bcc") ?: return null
     val subject = payload.sanitizedActionText("subject")
     val body = payload.sanitizedMultilineActionText("body", MAX_EMAIL_BODY_CHARS)
+        ?: return null
 
     // An entirely empty draft is not something a user ever asks for, so it is
     // treated as a failed translation rather than silently opening a blank

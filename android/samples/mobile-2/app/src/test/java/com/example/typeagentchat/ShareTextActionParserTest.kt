@@ -50,10 +50,12 @@ class ShareTextActionParserTest {
     }
 
     @Test
-    fun capsOverlongText() {
-        val parsed = parseShareTextActionPayload(payload("x".repeat(9_000)))
-
-        assertEquals(4_000, parsed?.text?.length)
+    fun rejectsOverlongTextRatherThanSilentlyTruncatingIt() {
+        assertNull(
+            parseShareTextActionPayload(
+                payload("x".repeat(MAX_SHARE_TEXT_CHARS + 1))
+            )
+        )
     }
 
     @Test

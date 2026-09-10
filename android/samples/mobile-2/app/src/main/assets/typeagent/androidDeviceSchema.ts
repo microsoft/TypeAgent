@@ -163,7 +163,8 @@ export type ComposeEmailAction = {
         bcc?: string[];
         // The subject line.
         subject?: string;
-        // The message body. Preserve paragraphs, lists and signatures.
+        // The message body, up to 8,000 characters. Preserve paragraphs, lists
+        // and signatures.
         body?: string;
     };
 };
@@ -176,7 +177,7 @@ export type ShareTextAction = {
     parameters: {
         // The original user request.
         originalRequest: string;
-        // The exact text to share.
+        // The exact text to share, up to 4,000 characters.
         text: string;
         // An optional title or subject offered to apps that can use one.
         subject?: string;
@@ -239,7 +240,8 @@ export type CreateCalendarEventAction = {
         allDay?: boolean;
         // Where the event takes place.
         location?: string;
-        // Longer notes about the event. Preserve multiline formatting.
+        // Longer notes about the event, up to 4,000 characters. Preserve
+        // multiline formatting.
         description?: string;
     };
 };

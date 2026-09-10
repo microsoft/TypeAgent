@@ -20,7 +20,7 @@ internal data class CreateCalendarEventAction(
 
 private const val MAX_EVENT_TITLE_CHARS = 256
 private const val MAX_EVENT_LOCATION_CHARS = 256
-private const val MAX_EVENT_DESCRIPTION_CHARS = 4_000
+internal const val MAX_EVENT_DESCRIPTION_CHARS = 4_000
 
 private const val MILLIS_PER_MINUTE = 60_000L
 private const val MILLIS_PER_HOUR = 60L * MILLIS_PER_MINUTE
@@ -150,6 +150,10 @@ internal fun parseCreateCalendarEventActionPayload(
     if (endMillis <= startMillis || endMillis - startMillis > MAX_EVENT_SPAN_MILLIS) {
         return null
     }
+    val description = payload.sanitizedMultilineActionText(
+        "description",
+        MAX_EVENT_DESCRIPTION_CHARS
+    ) ?: return null
 
     return CreateCalendarEventAction(
         originalRequest = payload.sanitizedActionText("originalRequest"),
@@ -158,10 +162,7 @@ internal fun parseCreateCalendarEventActionPayload(
         endMillis = endMillis,
         allDay = allDay,
         location = payload.sanitizedActionText("location", MAX_EVENT_LOCATION_CHARS),
-        description = payload.sanitizedMultilineActionText(
-            "description",
-            MAX_EVENT_DESCRIPTION_CHARS
-        )
+        description = description
     )
 }
 

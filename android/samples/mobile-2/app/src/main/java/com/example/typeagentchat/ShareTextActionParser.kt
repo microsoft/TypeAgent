@@ -13,7 +13,7 @@ internal data class ShareTextAction(
  * another app through a binder transaction, so it is capped like every other
  * free-text field.
  */
-private const val MAX_SHARE_TEXT_CHARS = 4_000
+internal const val MAX_SHARE_TEXT_CHARS = 4_000
 
 /**
  * Parses the `parameters` of the `shareText` action declared by
@@ -38,6 +38,7 @@ internal fun parseShareTextActionPayload(data: Any?): ShareTextAction? {
     // Newlines survive here, unlike in the URI-bound actions: shared text is
     // carried as an extra, and a multi-line note is a normal thing to share.
     val text = payload.sanitizedMultilineActionText("text", MAX_SHARE_TEXT_CHARS)
+        ?: return null
     if (text.isEmpty()) {
         return null
     }

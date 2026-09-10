@@ -63,22 +63,24 @@ internal fun JSONObject.sanitizedActionText(
 
 /**
  * Preserves line breaks for text carried in an intent extra while replacing
- * other control characters and enforcing the same binder-safe length cap.
+ * other control characters. Returns null rather than silently changing the
+ * content when the sanitized value exceeds the binder-safe length cap.
  */
 internal fun sanitizeMultilineActionText(
     raw: String,
     maxChars: Int = MAX_ACTION_TEXT_CHARS
-): String = raw.replace(lineBreakRegex, "\n")
-    .replace(nonNewlineControlCharRegex, " ")
-    .trim()
-    .take(maxChars)
-    .trim()
+): String? {
+    val sanitized = raw.replace(lineBreakRegex, "\n")
+        .replace(nonNewlineControlCharRegex, " ")
+        .trim()
+    return sanitized.takeIf { it.length <= maxChars }
+}
 
 /** Convenience for multiline intent-extra text. */
 internal fun JSONObject.sanitizedMultilineActionText(
     name: String,
     maxChars: Int = MAX_ACTION_TEXT_CHARS
-): String = sanitizeMultilineActionText(optActionString(name), maxChars)
+): String? = sanitizeMultilineActionText(optActionString(name), maxChars)
 
 /**
  * Percent-encodes a value for use inside a URI.

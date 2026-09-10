@@ -410,6 +410,19 @@ class CreateCalendarEventActionParserTest {
     }
 
     @Test
+    fun rejectsAnOverlongDescriptionRatherThanSilentlyTruncatingIt() {
+        assertNull(
+            parseCreateCalendarEventActionPayload(
+                payload(
+                    "start" to "2026-08-24T15:00",
+                    "description" to "x".repeat(MAX_EVENT_DESCRIPTION_CHARS + 1)
+                ),
+                timeZone = utc
+            )
+        )
+    }
+
+    @Test
     fun rejectsNonObjectPayloads() {
         assertNull(parseCreateCalendarEventActionPayload(null, timeZone = utc))
         assertNull(parseCreateCalendarEventActionPayload("2026-08-24T15:00", timeZone = utc))

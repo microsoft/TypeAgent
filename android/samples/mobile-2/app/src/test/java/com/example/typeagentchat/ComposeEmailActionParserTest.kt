@@ -129,10 +129,12 @@ class ComposeEmailActionParserTest {
     }
 
     @Test
-    fun capsAnOverlongBodyRatherThanFailing() {
-        val parsed = parseComposeEmailActionPayload(payload("body" to "x".repeat(20_000)))
-
-        assertEquals(8_000, parsed?.body?.length)
+    fun rejectsAnOverlongBodyRatherThanSilentlyTruncatingIt() {
+        assertNull(
+            parseComposeEmailActionPayload(
+                payload("body" to "x".repeat(MAX_EMAIL_BODY_CHARS + 1))
+            )
+        )
     }
 
     @Test
