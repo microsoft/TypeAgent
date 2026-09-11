@@ -638,6 +638,7 @@ export function createInstallSourceRegistry(
             source: match.source.name,
             sourceKind: match.sourceKind,
             sourceIdentity: match.sourceIdentity,
+            sourceGeneration: match.sourceGeneration,
             matchKind: match.matchedByName
                 ? "defaultAgentName"
                 : match.candidate.path !== undefined
