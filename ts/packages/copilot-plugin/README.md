@@ -27,6 +27,157 @@ Registered alongside routing (calls are disabled in bypass mode):
 
 The hook output fields `handled`, `responseContent`, and `handledBy` are supported in current Copilot CLI behavior, allowing the hook to skip the agentic loop entirely when TypeAgent handles a request. For local runtime debugging against the runtime repo, use `pnpm copilot:dev`.
 
+## Structured actions in Direct and MCP modes
+
+There are two intentional entry paths:
+
+- **User-originated natural language:** ordinary Direct prompts still go through
+  the hook and TypeAgent intent resolution. In MCP mode the hook sends the user's
+  exact request to `typeagent-processCommand`. Preserve `learn:`, `dev:`,
+  `record:`, and `dev: learn:` exactly. Do not replace them with typed calls.
+- **Copilot-selected actions with concrete inputs:** fixed MCP tools call the
+  real shared Dispatcher structured-action interface. They do not build command
+  strings, parse contracts, hash schemas, determine effect policy, or translate
+  natural language locally.
+
+The normal sequence is **search summaries -> get selected contract -> execute**.
+A known action can skip search; a current contract can be reused within its
+binding. `getStatus` and `listAgents` remain available but are not prerequisite
+stages. If an identity or input remains unresolved ("it", "that one"), clarify
+with the user or use the natural-language path rather than guessing.
+
+| Tool                          | Input / behavior                                                                                                                                                     |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `typeagent-searchActions`     | Optional `query`, `agentName`, `schemaName`, `offset`, `limit`; compact summaries and live availability metadata                                                     |
+| `typeagent-getActionContract` | Separate exact `schemaName` and `actionName`; returns one closed TypeScript contract including nested types, output/interaction shape, policy, fingerprint and scope |
+| `typeagent-executeAction`     | `protocolVersion`, `scopeId`, `schemaName`, `actionName`, exact `fingerprint`, optional typed `parameters` object                                                    |
+| `typeagent-continueAction`    | `protocolVersion`, `scopeId`, `operationId`, `interactionId`, and the actual user's typed `response`                                                                 |
+| `typeagent-cancelAction`      | `protocolVersion`, `scopeId`, `operationId`, and optional exact `interactionId`; cancel at the user's request                                                        |
+
+Lists, IDs, paths, Unicode, quotes and newlines remain JSON values, not command
+arguments or prose. The shared service owns contract generation, exact-match
+validation, enabled/readiness checks, permission scope, effect confirmation,
+execution and single-use interaction state. Unknown and state-changing effect
+policy requires user confirmation; only explicitly read-only policy can be
+exempt (agents can still ask questions). Choosing an action is not user consent.
+Discovery neither enables an action nor authorizes execution.
+
+### A reachable Direct structured bridge
+
+Direct's `userPromptSubmitted` hook is a **one-shot natural-language process**,
+not a structured protocol endpoint. The existing long-lived `typeagent` MCP
+server therefore exposes the five structured tools in **both Direct and MCP
+modes**, and calls the same transport-neutral `StructuredActionClient` /
+Dispatcher interface. This is the Direct structured caller; it is not a claim
+that Copilot can inject structured requests into the one-shot prompt hook.
+Except for explicit cancellation, tool calls are rejected in dev/bypass modes
+before connecting. Mode is checked per call because the MCP catalog remains
+registered when a mode changes.
+Workspace and macro server registrations and their mode behavior are unchanged.
+
+`StructuredActionClient` is a public export of
+`@typeagent/agent-server-client`, shared with other consumers such as command
+executor. The plugin wrapper only supplies its URL, public conversation ID,
+ClientIO and unique conversation name. The shared client exposes the five
+Dispatcher-shaped methods (with an optional `AbortSignal`), `close()`, and
+public `binding` metadata. A `StructuredActionClientError.dispatched` flag
+distinguishes a pre-dispatch failure from uncertain delivery; raw transport
+exceptions and private resume capabilities are never exposed. The exported
+`StructuredActionClientErrorReason` supplies a safe `reason`, preserved in tool
+errors instead of flattening resume rejection into `transport_error`.
+`resume_rejected` means the host rejected the capability; the host intentionally
+does not distinguish invalid/wrong-conversation, expired, or restarted/lost
+state. `resume_failed` reports an unclassified failure to resume the same owner.
+Neither result permits a replacement owner or automatic replay.
+
+### Results and actual user interaction
+
+Every shared-service result is returned intact as MCP `structuredContent`,
+with readable, untruncated JSON in `content`. Actual nested `ActionResult`
+values, `resultEntity`, `entities`, IDs, display content, collected output and
+child results are retained. Text output is not treated as the action's data.
+
+Execution has seven distinct statuses: `completed`, `failed`, `cancelled`,
+`requires_interaction`, `contract_stale`, `unavailable`, `execution_uncertain`.
+Pending interactions are not MCP tool errors: `completed`, `requires_interaction`
+and found contracts omit `isError`; unsuccessful terminal results and missing
+contracts set `isError: true` while preserving the complete service envelope.
+Responses also include public `binding` metadata (conversation ID and connection
+state), never the private resume capability.
+Connection/caller failures use a separately marked `source: copilot-transport`
+error result rather than fabricating a service operation ID. Once a call has
+been dispatched, lost delivery is `execution_uncertain`; no effect is replayed.
+
+For `requires_interaction`, display the full `prompt` (all choices, form fields
+and field IDs), keep `operationId`, `interactionId`, `expiresAt` and `scopeId`,
+then **ask the USER and wait**. Submit only their answer to `continueAction`.
+Supported response types are `confirmation`, `question`, `yesNo`, `multiChoice`,
+`pickRemember`, `form` and `proposal`. Form answers are keyed by the exact field
+ID. A new prompt requires a new user answer. Never use a displayed default,
+invent form answers, autoapprove, or direct the user to an inaccessible Shell.
+Use `cancelAction` with the returned IDs if the user wants to stop.
+Cancellation remains available after switching to Dev or Bypass mode; new
+execution and continuation remain disabled there. Switching mode never supplies
+an answer or implies that pending work was cancelled.
+
+On `contract_stale`, refresh the selected contract and reassess parameters and
+consent before constructing a new request; **no automatic replay**. On timeout,
+disconnect or uncertain execution, effects may already have happened. Surface
+that uncertainty and do not rerun the effect call. The service supports typed
+flows through its guarded executor; **raw PowerShell flow steps are unsupported**
+on this structured path. Do not present an unsupported flow as completed.
+
+Two legacy setup-capable actions are also unsupported on the structured path:
+`system.config.toggleAgent` and `system.config.enterAgentPriorityMode`. Their
+unquoted argument bridges can enter agent setup, so discovery marks these exact
+actions unsupported and execution rejects them before handler entry. Other
+deterministic internal command bridges remain supported. A runtime guard also
+rejects unsupported nested setup before invoking agent setup hooks. Ordinary
+natural-language routing, including legacy setup choices, is unchanged. A
+guarded failure, including one crossing agent RPC, retains the authoritative
+service status such as `contract_stale` or `unavailable`; do not reinterpret it
+as completion or retry it through a command string.
+
+The legacy natural-language ClientIO cannot continue its prompts through these
+structured tools. It no longer supplies default answers, and reports collected
+pending prompts/unsupported interaction rather than pretending completion.
+
+### Explicit binding, reconnect, and trust
+
+Stdio provides no intrinsic Copilot session identity. Each structured MCP
+process finds/creates a dedicated named conversation with a random process-local
+name, then explicitly joins its **concrete conversation ID** with
+`structuredActions: {}`. All five operations share that one owner and concurrent
+connection attempts are singleflight. This does not implicitly share context
+with the ordinary Direct NL hook's conversation.
+
+To intentionally use a known conversation, set `TYPEAGENT_CONVERSATION_ID`, or
+set public `conversationId` in the plugin `config.json`. Environment wins over
+config. The ID must exist: an explicit failed join does not silently fall back to
+another conversation. An explicit ID selects context, **not** a prior owner's
+authority. Two fresh processes using the same public ID get isolated owners.
+
+The server's structured resume token is retained only in private volatile
+connector memory. It is never logged, printed, persisted, put in config, or sent
+to Copilot. On reconnect the connector reuses the **same conversation ID and
+token**, preserving scope and pending service operations. It never creates a
+replacement owner if resume fails. If the initial join reply is lost, it fails
+closed because it cannot recover a capability it never received. Transport
+exceptions are not echoed since they could contain join arguments.
+
+A server restart, expired/lost state, deleted conversation or new MCP process
+can make continuation unavailable. Shutdown disconnects; it does not assert
+cancellation, rollback or completion of pending work. A lost operation reply
+without an operation ID cannot be safely continued by guessing one. No automatic
+effect retry is provided.
+
+Public conversation IDs, operation/interaction IDs and `scopeId` are binding
+metadata, not credentials. The server retains its existing **unauthenticated
+loopback host trust model**, not a multi-user ACL or a remote-authentication
+boundary. Do not expose this endpoint to untrusted network clients.
+
+See the [canonical structured-action design](../../docs/plans/copilot-direct-actions/director-actions.md).
+
 ---
 
 ## Prerequisites
@@ -336,6 +487,9 @@ different MCP tool catalog.
 
 The hook connects directly to TypeAgent over WebSocket. When TypeAgent recognizes and handles the request, the hook returns `{ handled: true, responseContent: "..." }` — Copilot skips the LLM entirely.
 
+Copilot-selected typed calls use the persistent MCP structured bridge described
+above; this does not reinterpret or alter the user prompt hook.
+
 - **Pros:** Fast (~1-3s), no LLM tokens consumed
 - **Cons:** No streaming output, response is returned all at once
 
@@ -426,13 +580,14 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 
 **Environment variable overrides** (take precedence over config file):
 
-| Variable                    | Default                           | Description                                                                      |
-| --------------------------- | --------------------------------- | -------------------------------------------------------------------------------- |
-| `TYPEAGENT_MODE`            | `direct`                          | `direct`, `mcp`, `dev`, or `bypass`                                              |
-| `TYPEAGENT_HOST`            | `localhost`                       | TypeAgent server host                                                            |
-| `TYPEAGENT_PORT`            | `8999`                            | TypeAgent server port                                                            |
-| `TYPEAGENT_PLUGIN_DATA`     | `~/.typeagent-copilot`            | Config directory                                                                 |
-| `TYPEAGENT_WORKSPACE_ROOTS` | Copilot process working directory | Approved roots for workspace MCP tools, separated by the platform path delimiter |
+| Variable                    | Default                            | Description                                                                                      |
+| --------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `TYPEAGENT_MODE`            | `direct`                           | `direct`, `mcp`, `dev`, or `bypass`                                                              |
+| `TYPEAGENT_HOST`            | `localhost`                        | TypeAgent server host                                                                            |
+| `TYPEAGENT_PORT`            | `8999`                             | TypeAgent server port                                                                            |
+| `TYPEAGENT_CONVERSATION_ID` | Dedicated per-process conversation | Optional existing public conversation ID for structured tools; overrides config `conversationId` |
+| `TYPEAGENT_PLUGIN_DATA`     | `~/.typeagent-copilot`             | Config directory                                                                                 |
+| `TYPEAGENT_WORKSPACE_ROOTS` | Copilot process working directory  | Approved roots for workspace MCP tools, separated by the platform path delimiter                 |
 
 ---
 
@@ -452,18 +607,19 @@ The plugin stores config at `%USERPROFILE%\.typeagent-copilot\config.json` (Wind
 The plugin starts three logical MCP servers from the same bundled entry point and
 single-file release executable:
 
-| Server                | Tool                       | Description                                                                             |
-| --------------------- | -------------------------- | --------------------------------------------------------------------------------------- |
-| `typeagent`           | `typeagent-processCommand` | Send a command to the TypeAgent agent-server                                            |
-| `typeagent`           | `typeagent-listAgents`     | List available TypeAgent agents                                                         |
-| `typeagent`           | `typeagent-getStatus`      | Get TypeAgent server status                                                             |
-| `typeagent-workspace` | `read`                     | Read bounded text under approved workspace roots                                        |
-| `typeagent-workspace` | `glob`                     | Find bounded, deterministically ordered workspace files                                 |
-| `typeagent-workspace` | `grep`                     | Search bounded workspace text                                                           |
-| `typeagent-workspace` | `fetch`                    | Fetch bounded public HTTP(S) text without ambient credentials or private-network access |
-| `typeagent-macros`    | `list_macros`              | List and search reusable captured procedures                                            |
-| `typeagent-macros`    | `run_macro`                | Replay an approved macro or return an agent-runner handoff                              |
-| `typeagent-macros`    | lifecycle tools            | Capture-derived draft validation, approval, disablement, and candidate submission       |
+| Server                | Tool                         | Description                                                                                                 |
+| --------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `typeagent`           | `typeagent-processCommand`   | Send a command to the TypeAgent agent-server                                                                |
+| `typeagent`           | `typeagent-listAgents`       | List available TypeAgent agents                                                                             |
+| `typeagent`           | `typeagent-getStatus`        | Get TypeAgent server status                                                                                 |
+| `typeagent`           | five structured-action tools | Search summaries, retrieve a contract, execute, continue, and cancel through Dispatcher in Direct/MCP modes |
+| `typeagent-workspace` | `read`                       | Read bounded text under approved workspace roots                                                            |
+| `typeagent-workspace` | `glob`                       | Find bounded, deterministically ordered workspace files                                                     |
+| `typeagent-workspace` | `grep`                       | Search bounded workspace text                                                                               |
+| `typeagent-workspace` | `fetch`                      | Fetch bounded public HTTP(S) text without ambient credentials or private-network access                     |
+| `typeagent-macros`    | `list_macros`                | List and search reusable captured procedures                                                                |
+| `typeagent-macros`    | `run_macro`                  | Replay an approved macro or return an agent-runner handoff                                                  |
+| `typeagent-macros`    | lifecycle tools              | Capture-derived draft validation, approval, disablement, and candidate submission                           |
 
 Workspace tools are available in direct, MCP, and dev modes. In bypass mode
 they remain discoverable because Copilot fixes the MCP catalog when the session

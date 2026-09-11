@@ -10,13 +10,15 @@ import {
     connectAgentServer,
     AgentServerConnection,
     AGENT_SERVER_DEFAULT_URL,
+    StructuredActionClient,
 } from "@typeagent/agent-server-client";
 import { discoverPort } from "@typeagent/agent-server-client/discovery";
 import type {
-    AgentSchemaInfo,
+    ActionContractResult,
     ClientIO,
     IAgentMessage,
     RequestId,
+    StructuredActionExecutionResult,
     TemplateEditConfig,
 } from "@typeagent/dispatcher-types";
 import type { Dispatcher } from "@typeagent/dispatcher-types";
@@ -39,18 +41,14 @@ import {
     WorkspaceCommandInput,
     WorkspaceCommandInputSchema,
     WorkspaceCommandResultSchema,
+    WorkspaceCommandToolResultSchema,
 } from "./workspaceCommandMcpSchema.js";
-
-// ── Agent filter ──────────────────────────────────────────────────────────────
-
-/**
- * Agents skipped for MCP exposure — not useful via Claude Code.
- * browser: use the Claude browser extension instead
- * settings: dead stub, real settings are in desktop sub-schemas
- * montage: requires the shell embedded browser
- * markdown: not applicable for MCP use
- */
-const SKIP_AGENTS = new Set(["browser", "settings", "montage", "markdown"]);
+import {
+    invokeStructuredAction,
+    registerStructuredActionTools,
+    structuredToolResult,
+    type StructuredActionClient as StructuredActionToolClient,
+} from "./structuredActionTools.js";
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -64,48 +62,6 @@ function executeCommandRequestSchema() {
 const ExecuteCommandRequestSchema = z.object(executeCommandRequestSchema());
 export type ExecuteCommandRequest = z.infer<typeof ExecuteCommandRequestSchema>;
 
-function discoverAgentsRequestSchema() {
-    return {
-        agentName: z
-            .string()
-            .optional()
-            .describe(
-                "If omitted, returns a list of all available agents. If provided, returns sub-schema groups with action names and descriptions for that agent.",
-            ),
-        actionName: z
-            .string()
-            .optional()
-            .describe(
-                "If provided along with agentName, returns the full TypeScript schema source for that specific action.",
-            ),
-    };
-}
-
-function executeActionRequestSchema() {
-    return {
-        schemaName: z.string().describe("The agent name (e.g. 'player')"),
-        actionName: z
-            .string()
-            .describe("The action name (e.g. 'createPlaylist')"),
-        parameters: z
-            .record(z.string(), z.any())
-            .optional()
-            .describe("Action-specific parameters"),
-        naturalLanguage: z
-            .string()
-            .optional()
-            .describe(
-                "The original natural language request from the user. When provided, the dispatcher stores this as a cache entry mapping the phrase to this action+parameters, so future identical or similar requests can be handled without LLM translation.",
-            ),
-    };
-}
-type ExecuteActionRequest = {
-    schemaName: string;
-    actionName: string;
-    parameters?: Record<string, unknown> | undefined;
-    naturalLanguage?: string | undefined;
-};
-
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 function toolResult(result: string, rawData?: unknown): CallToolResult {
@@ -117,13 +73,6 @@ function toolResult(result: string, rawData?: unknown): CallToolResult {
             : (rawData as Record<string, unknown>);
     }
     return out;
-}
-
-function resultText(result: CallToolResult): string {
-    return result.content
-        .map((content) => (content.type === "text" ? content.text : ""))
-        .filter((text) => text.length > 0)
-        .join("\n");
 }
 
 // One shape for every result where the command never actually ran, so the
@@ -197,93 +146,6 @@ function htmlToPlainText(html: string): string {
 
 async function processHtmlContent(content: string): Promise<string> {
     return htmlToPlainText(content);
-}
-
-function remapWebflowAction(request: ExecuteActionRequest): {
-    schemaName: string;
-    actionName: string;
-    parameters: Record<string, unknown> | undefined;
-} {
-    if (
-        request.schemaName !== "webflow" ||
-        !["run_draft", "list", "execute"].includes(request.actionName)
-    ) {
-        return {
-            schemaName: request.schemaName,
-            actionName: request.actionName,
-            parameters: request.parameters,
-        };
-    }
-
-    const parameters = request.parameters;
-    if (request.actionName === "run_draft") {
-        const p = parameters as
-            | {
-                  script?: unknown;
-                  params?: unknown;
-                  parameters?: unknown;
-                  timeout?: unknown;
-              }
-            | undefined;
-        const mappedParameters: Record<string, unknown> = {
-            script: p?.script,
-        };
-        if (p?.params !== undefined) {
-            mappedParameters.params =
-                typeof p.params === "string"
-                    ? p.params
-                    : JSON.stringify(p.params);
-        }
-        if (p?.parameters !== undefined) {
-            mappedParameters.params =
-                typeof p.parameters === "string"
-                    ? p.parameters
-                    : JSON.stringify(p.parameters);
-        }
-        if (p?.timeout !== undefined) {
-            mappedParameters.timeout = p.timeout;
-        }
-        return {
-            schemaName: "browser",
-            actionName: "executeAdHocScript",
-            parameters: mappedParameters,
-        };
-    }
-    if (request.actionName === "list") {
-        const domain = (parameters as { domain?: unknown } | undefined)?.domain;
-        return domain
-            ? {
-                  schemaName: "browser",
-                  actionName: "getWebFlowsForDomain",
-                  parameters: { domain },
-              }
-            : {
-                  schemaName: "browser",
-                  actionName: "getAllWebFlows",
-                  parameters: {},
-              };
-    }
-
-    const p = parameters as
-        | { flowName?: unknown; parameters?: unknown }
-        | undefined;
-    let flowParams = p?.parameters;
-    if (typeof flowParams === "string") {
-        try {
-            flowParams = JSON.parse(flowParams);
-        } catch {
-            flowParams = {};
-        }
-    }
-    return {
-        schemaName: "browser.webFlows",
-        actionName:
-            typeof p?.flowName === "string" ? p.flowName : request.actionName,
-        parameters:
-            flowParams && typeof flowParams === "object"
-                ? (flowParams as Record<string, unknown>)
-                : {},
-    };
 }
 
 // ── Logger ────────────────────────────────────────────────────────────────────
@@ -481,9 +343,12 @@ function createMcpClientIO(
  * MCP server that exposes TypeAgent capabilities to Claude Code.
  *
  * Tools:
- *   execute_command   — natural-language pass-through to dispatcher
- *   discover_agents   — list agents or fetch a specific agent's schema
- *   execute_action    — call any agent action directly by schema/action name
+ *   execute_command      - natural-language pass-through to dispatcher
+ *   discover_agents      - search structured action summaries
+ *   get_action_contract  - fetch one closed structured contract
+ *   execute_action       - execute an exact contract
+ *   continue_action      - answer a pending interaction
+ *   cancel_action        - cancel a pending operation
  *
  * Lifecycle: spawned fresh per Claude Code session; connects to the persistent
  * TypeAgent agentServer via WebSocket.
@@ -513,8 +378,12 @@ export class CommandServer {
     private dispatcherRequestInFlight = false;
     private workspaceCommandInFlight = false;
     private config: ResolvedAgentServerConfig;
+    private readonly structuredActionClient: StructuredActionToolClient;
 
-    constructor(agentServerUrl?: string) {
+    constructor(
+        agentServerUrl?: string,
+        structuredActionClient?: StructuredActionToolClient,
+    ) {
         this.logger = new Logger();
 
         const configResult = loadConfig();
@@ -536,6 +405,15 @@ export class CommandServer {
             agentServerUrl ??
             process.env.AGENT_SERVER_URL ??
             AGENT_SERVER_DEFAULT_URL;
+        const structuredConversationId = process.env.TYPEAGENT_CONVERSATION_ID;
+        this.structuredActionClient =
+            structuredActionClient ??
+            new StructuredActionClient({
+                url: this.agentServerUrl,
+                ...(structuredConversationId === undefined
+                    ? {}
+                    : { conversationId: structuredConversationId }),
+            });
 
         // When set (e.g. by the reasoning subagent manager), this instance runs
         // in its own dedicated conversation instead of the shared default one,
@@ -678,6 +556,7 @@ export class CommandServer {
 
     public async close(): Promise<void> {
         this.stopReconnectionMonitoring();
+        await this.structuredActionClient.close();
         if (this.connection) {
             // Isolated-conversation path: delete our dedicated conversation and
             // tear down the whole connection.
@@ -723,11 +602,11 @@ export class CommandServer {
                     "- 'what's the weather in Berkeley'\n" +
                     "- 'show seconds in the clock' / 'left align the taskbar'\n" +
                     "- 'add milk to my shopping list'\n\n" +
-                    "DO NOT use this for multi-step tasks. Instead, use discover_agents + execute_action directly:\n" +
+                    "For actions already selected during orchestration, use discover_agents + get_action_contract + execute_action:\n" +
                     "- Tasks requiring web search + an agent action (e.g. 'find top jazz songs and make a playlist')\n" +
                     "- Tasks requiring multiple sequential agent actions\n" +
                     "- Tasks where you need to reason about parameters before calling\n" +
-                    "For those, call discover_agents to find the right action, gather any external info yourself (web search etc.), then call execute_action with the resolved parameters.\n\n" +
+                    "Search for an action, get its exact contract, gather concrete inputs, then call execute_action with that contract's fingerprint and scope. Reuse a known current contract without rediscovery. Keep unresolved references on this natural-language path or clarify them first. Preserve learn:, dev:, record:, and dev: learn: prefixes exactly.\n\n" +
                     "Parameters:\n" +
                     "- request: The command to execute\n" +
                     "- cacheCheck: (optional) Check cache before executing\n" +
@@ -742,67 +621,15 @@ export class CommandServer {
                 this.executeCommand(request),
         );
 
-        // 2. Agent discovery — list all agents or fetch a specific agent's schema
-        this.server.registerTool(
-            "discover_agents",
-            {
-                inputSchema: discoverAgentsRequestSchema(),
-                description:
-                    "Discover available TypeAgent capabilities.\n\n" +
-                    "- Called WITHOUT agentName: returns a list of all agents with name, emoji, and description.\n" +
-                    "- Called WITH agentName only: returns sub-schema groups with schemaName, description, and action names+descriptions. Use the schemaName shown in each group as the exact value for execute_action.\n" +
-                    "- Called WITH agentName AND actionName: returns the full TypeScript schema source for that specific action.\n\n" +
-                    "Use this BEFORE telling the user a capability isn't available. Call without agentName first to find the right agent, then with agentName to see its actions.\n\n" +
-                    "PREFERRED PATTERN for multi-step tasks: use discover_agents to find actions, do any external reasoning yourself (web search, calculations, etc.), then call execute_action with fully resolved parameters. Do NOT delegate multi-step reasoning to execute_command.\n\n" +
-                    "Example — 'find top jazz songs and make a playlist':\n" +
-                    "  1. WebSearch for current top jazz songs\n" +
-                    "  2. discover_agents({ agentName: 'player' }) → find createPlaylist, addSongsToPlaylist\n" +
-                    "  3. execute_action({ schemaName: 'player', actionName: 'createPlaylist', parameters: { name: 'Top Jazz Feb 2026' } })\n" +
-                    "  4. execute_action({ schemaName: 'player', actionName: 'addSongsToPlaylist', parameters: { playlist: '...', songs: [...] } })\n\n" +
-                    "Available agents include (but are not limited to):\n" +
-                    "- player: music playback (Spotify/media)\n" +
-                    "- calendar: schedule and view events\n" +
-                    "- list: shopping lists, todo lists\n" +
-                    "- desktop: Windows desktop control, taskbar, VSCode editor automation\n" +
-                    "- email: read and send email\n" +
-                    "- chat: messaging\n" +
-                    "- photo: photo library\n" +
-                    "- image: image generation\n" +
-                    "- video: video playback\n" +
-                    "- code: code generation tasks",
-            },
-            async (request: {
-                agentName?: string | undefined;
-                actionName?: string | undefined;
-            }) => this.discoverAgents(request),
-        );
-
-        // 3. Direct action execution
-        this.server.registerTool(
-            "execute_action",
-            {
-                inputSchema: executeActionRequestSchema(),
-                description:
-                    "Execute a TypeAgent action directly by specifying the agent, action name, and parameters.\n\n" +
-                    "Use discover_agents to find the correct schemaName and actionName before calling this.\n\n" +
-                    "Parameters:\n" +
-                    "- schemaName: The agent name (e.g. 'player', 'calendar', 'list')\n" +
-                    "- actionName: The action to execute (e.g. 'createPlaylist', 'addEvent')\n" +
-                    "- parameters: Action-specific parameters object (optional)\n" +
-                    "- naturalLanguage: The original natural language request from the user (e.g. 'play shake it off'). ALWAYS provide this when you have the user's original request — the dispatcher uses it to populate its NL cache so future identical or similar requests can be handled without LLM translation.\n\n" +
-                    "The action is dispatched directly to the agent, bypassing the LLM translation step for maximum speed.",
-            },
-            async (request: ExecuteActionRequest, extra) =>
-                this.executeAction(request, false, extra.signal),
-        );
+        registerStructuredActionTools(this.server, this.structuredActionClient);
 
         this.server.registerTool(
             "run_workspace_command",
             {
                 inputSchema: WorkspaceCommandInputSchema.shape,
-                outputSchema: WorkspaceCommandResultSchema.shape,
+                outputSchema: WorkspaceCommandToolResultSchema,
                 description:
-                    "Run one explicitly requested build, test, lint, or diagnostic command in the open VS Code workspace through Coda. This is a direct TypeAgent action: it does not use natural-language translation or a terminal UI. Returns structured stdout, stderr, exitCode, durationMs, success, timedOut, cancelled, and truncation metadata. Example: { command: 'pnpm test -- --runInBand', workingDirectory: 'ts/packages/coda', executionId: 'coda-tests-1' }. Coda rejects shell composition and restricts commands to an allowlist of focused tools, with path arguments confined to the workspace root. This tool holds the Command Executor for the whole run, so execute_command and execute_action are unavailable until it finishes; use a separate MCP connection for concurrent work. cancel_workspace_command still works while it runs.",
+                    "Run one explicitly requested build, test, lint, or diagnostic command in the open VS Code workspace through Coda. This uses the structured action service, not natural-language translation or a terminal UI. A completed result includes the full service envelope plus structured stdout, stderr, exitCode, durationMs, success, timedOut, cancelled, and truncation metadata. Pending and failed calls retain their complete service status, prompt, and root error. Example: { command: 'pnpm test -- --runInBand', workingDirectory: 'ts/packages/coda', executionId: 'coda-tests-1' }. Coda rejects shell composition and restricts commands to an allowlist of focused tools, with path arguments confined to the workspace root. execute_command remains unavailable while this tool runs; cancel_workspace_command still works.",
             },
             async (request: WorkspaceCommandInput, extra) =>
                 this.runWorkspaceCommand(request, extra.signal),
@@ -833,7 +660,7 @@ export class CommandServer {
                     "Served by the TypeAgent `code` agent (VS Code CODA extension); returns data only when VS Code with the code agent is connected to this agent server, otherwise reports no editor context.\n\n" +
                     "For actual file/selection text, use execute_action with the code agent's read actions (getSelection, getFileContent, getDiagnostics).",
             },
-            async () => this.getUserContext(),
+            async (_request, extra) => this.getUserContext(extra.signal),
         );
     }
 
@@ -855,13 +682,14 @@ export class CommandServer {
             {
                 inputSchema: {},
                 description:
-                    "Report whether this command-executor is currently connected to the TypeAgent agent server. Returns structured { connected, url, conversationId }.",
+                    "Report connection metadata. The legacy natural-language connection and the separate structuredActions conversation binding are shown explicitly. No resume capability is exposed.",
             },
             async () =>
                 toolResult(this.dispatcher ? "connected" : "disconnected", {
                     connected: this.dispatcher !== null,
                     url: this.agentServerUrl,
                     conversationId: this.ownedConversationId,
+                    structuredActions: this.structuredActionClient.binding,
                 }),
         );
 
@@ -1037,138 +865,56 @@ export class CommandServer {
         }
     }
 
-    /** Resolve AgentSchemaInfo list — live from dispatcher. Returns empty if disconnected. */
-    private async resolveAgentSchemas(
-        agentName?: string,
-    ): Promise<AgentSchemaInfo[]> {
-        if (!this.dispatcher) {
-            return [];
-        }
-        try {
-            const schemas = await this.dispatcher.getAgentSchemas(agentName);
-            return schemas.filter((a) => !SKIP_AGENTS.has(a.name));
-        } catch (error) {
-            if (
-                error instanceof Error &&
-                error.message.includes("Agent channel disconnected")
-            ) {
-                this.logger.log(
-                    "Agent channel disconnected during getAgentSchemas, clearing dispatcher",
-                );
-                this.dispatcher = null;
-            }
-            return [];
-        }
-    }
-
-    private async discoverAgents(request: {
-        agentName?: string | undefined;
-        actionName?: string | undefined;
-    }): Promise<CallToolResult> {
-        if (!request.agentName) {
-            // Level 1 — list agents, filtered to active ones when dispatcher is available
-            const agents = await this.resolveAgentSchemas();
-            if (agents.length === 0) {
-                return toolResult(
-                    "No agents available. Ensure TypeAgent server is running.",
-                );
-            }
-
-            // Filter to active agents when connected
-            let visible = agents;
-            if (this.dispatcher) {
-                try {
-                    const status = await this.dispatcher.getStatus();
-                    const activeNames = new Set(
-                        status.agents
-                            .filter((a) => a.active)
-                            .map((a) => a.name.toLowerCase()),
-                    );
-                    const filtered = agents.filter((a) =>
-                        activeNames.has(a.name.toLowerCase()),
-                    );
-                    if (filtered.length > 0) visible = filtered;
-                } catch {
-                    // Use unfiltered list
-                }
-            }
-
-            const lines = visible.map(
-                (a) => `${a.emoji} **${a.name}** — ${a.description}`,
-            );
-            return toolResult(
-                `Available TypeAgent agents (${visible.length}):\n\n` +
-                    lines.join("\n") +
-                    "\n\nCall discover_agents({ agentName: '<name>' }) to see actions for a specific agent.",
-            );
-        }
-
-        const schemas = await this.resolveAgentSchemas(request.agentName);
-        const agent = schemas[0];
-        if (!agent) {
-            return toolResult(
-                `Agent '${request.agentName}' not found or not available.`,
-            );
-        }
-
-        if (request.actionName) {
-            // Level 3 — full TypeScript source for one specific action
-            const needle = request.actionName.toLowerCase();
-            const subSchema = agent.subSchemas.find((s) =>
-                s.actions.some((a) => a.name.toLowerCase() === needle),
-            );
-            if (!subSchema) {
-                const allActions = agent.subSchemas
-                    .flatMap((s) => s.actions.map((a) => a.name))
-                    .join(", ");
-                return toolResult(
-                    `Action '${request.actionName}' not found in agent '${agent.name}'.\n\nAvailable actions: ${allActions}`,
-                );
-            }
-            if (!subSchema.schemaText) {
-                return toolResult(
-                    `TypeScript schema not available for action '${request.actionName}'.`,
-                );
-            }
-            return toolResult(
-                `TypeScript schema for **${subSchema.schemaName}** (action: ${request.actionName}):\n\n` +
-                    `\`\`\`typescript\n${subSchema.schemaText}\n\`\`\``,
-            );
-        }
-
-        // Level 2 — sub-schema groups with schemaName + action names+descriptions
-        const sections = agent.subSchemas
-            .map((sub) => {
-                const actionLines = sub.actions
-                    .map((a) => `     • **${a.name}** — ${a.description}`)
-                    .join("\n");
-                return `  📂 **${sub.schemaName}** — ${sub.description}\n${actionLines}`;
-            })
-            .join("\n\n");
-
-        const totalActions = agent.subSchemas.reduce(
-            (n, s) => n + s.actions.length,
-            0,
-        );
-        return toolResult(
-            `${agent.emoji} **${agent.name}** — ${agent.description}\n\n` +
-                sections +
-                `\n\n(${totalActions} total actions across ${agent.subSchemas.length} schema${agent.subSchemas.length > 1 ? "s" : ""})\n\n` +
-                `To get TypeScript for an action: discover_agents({ agentName: '${agent.name}', actionName: '<name>' })\n` +
-                `To execute: execute_action({ schemaName: '<schemaName from 📂 above>', actionName: '<name>', parameters: {...} })`,
+    private async getUserContext(
+        signal?: AbortSignal,
+    ): Promise<CallToolResult> {
+        return this.executeKnownStructuredAction(
+            "code",
+            "getActiveEditor",
+            {},
+            signal,
         );
     }
 
-    private async getUserContext(): Promise<CallToolResult> {
-        // The command-executor is headless; the live editor state lives in the
-        // VS Code CODA extension, reachable through the code agent's read
-        // action. executeAction returns a clear error when the code agent is
-        // not enabled / VS Code is not connected.
-        return this.executeAction({
-            schemaName: "code",
-            actionName: "getActiveEditor",
-            parameters: {},
-        });
+    private async executeKnownStructuredAction(
+        schemaName: string,
+        actionName: string,
+        parameters: Record<string, unknown>,
+        signal?: AbortSignal,
+    ): Promise<CallToolResult> {
+        const contractResult = await invokeStructuredAction(
+            this.structuredActionClient,
+            (client, requestSignal) =>
+                client.getActionContract(
+                    { schemaName, actionName },
+                    requestSignal,
+                ),
+            false,
+            signal,
+        );
+        const contract = contractResult.structuredContent as
+            | ActionContractResult
+            | undefined;
+        if (contract?.status !== "found") {
+            return contractResult;
+        }
+        return invokeStructuredAction(
+            this.structuredActionClient,
+            (client, requestSignal) =>
+                client.executeAction(
+                    {
+                        protocolVersion: contract.protocolVersion,
+                        scopeId: contract.scopeId,
+                        schemaName,
+                        actionName,
+                        fingerprint: contract.contract.fingerprint,
+                        parameters,
+                    },
+                    requestSignal,
+                ),
+            true,
+            signal,
+        );
     }
 
     private async runWorkspaceCommand(
@@ -1203,22 +949,37 @@ export class CommandServer {
             }
             this.dispatcherRequestInFlight = true;
             acquiredDispatcherLock = true;
-            const result = await this.executeActionUnlocked(
-                {
-                    schemaName: "code.code-workbench",
-                    actionName: "runWorkspaceCommand",
-                    parameters: { ...request, executionId },
-                },
-                true,
+            const result = await this.executeKnownStructuredAction(
+                "code.code-workbench",
+                "runWorkspaceCommand",
+                { ...request, executionId },
+                signal,
             );
-            if (
-                result.structuredContent !== undefined &&
-                WorkspaceCommandResultSchema.safeParse(result.structuredContent)
-                    .success
-            ) {
-                return result;
+            const serviceResult = result.structuredContent;
+            if (serviceResult?.status === "completed") {
+                const executionResult =
+                    serviceResult as StructuredActionExecutionResult;
+                for (const action of executionResult.results) {
+                    if (
+                        action.action.schemaName !== "code.code-workbench" ||
+                        action.action.actionName !== "runWorkspaceCommand"
+                    ) {
+                        continue;
+                    }
+                    const parsed = WorkspaceCommandResultSchema.safeParse(
+                        "resultValue" in action.result
+                            ? action.result.resultValue
+                            : undefined,
+                    );
+                    if (parsed.success) {
+                        return structuredToolResult({
+                            ...serviceResult,
+                            ...parsed.data,
+                        });
+                    }
+                }
             }
-            return workspaceCommandFailure(resultText(result), executionId);
+            return result;
         } finally {
             if (acquiredDispatcherLock) {
                 this.dispatcherRequestInFlight = false;
@@ -1228,13 +989,9 @@ export class CommandServer {
         }
     }
 
-    // Cancellation deliberately bypasses the dispatcher and talks to the Code
-    // Agent websocket directly. It has to: a running run_workspace_command
-    // holds dispatcherRequestInFlight for its whole duration, so a cancel
-    // routed through executeAction would queue behind the very command it is
-    // meant to stop. The lock itself is load-bearing, since responseCollector
-    // is a single buffer shared by every dispatcher request, so the second
-    // transport is the consequence of that and not an alternative to it.
+    // Keep Coda's executionId-based process control separate from cancellation
+    // of the structured operation: stopping its dispatcher wait is not proof
+    // that the underlying workspace process has stopped.
     //
     // Known limitation: the target is resolved by discovering the "code" agent
     // independently of where the run was dispatched. With more than one
@@ -1334,113 +1091,5 @@ export class CommandServer {
                 );
             });
         });
-    }
-
-    private async executeAction(
-        request: ExecuteActionRequest,
-        preserveDisplayText = false,
-        signal?: AbortSignal,
-    ): Promise<CallToolResult> {
-        if (
-            request.schemaName === "code.code-workbench" &&
-            request.actionName === "runWorkspaceCommand"
-        ) {
-            const parsed = WorkspaceCommandInputSchema.safeParse(
-                request.parameters,
-            );
-            return parsed.success
-                ? this.runWorkspaceCommand(parsed.data, signal)
-                : toolResult(
-                      `Action parameters are invalid: ${parsed.error.message}`,
-                  );
-        }
-        if (
-            request.schemaName === "code.code-workbench" &&
-            request.actionName === "cancelWorkspaceCommand"
-        ) {
-            const parsed = CancelWorkspaceCommandInputSchema.safeParse(
-                request.parameters,
-            );
-            return parsed.success
-                ? this.cancelWorkspaceCommand(parsed.data)
-                : toolResult(
-                      `Action parameters are invalid: ${parsed.error.message}`,
-                  );
-        }
-        if (this.dispatcherRequestInFlight) {
-            return toolResult(
-                "Another request is already using this Command Executor. Wait for it to complete before sending another command.",
-            );
-        }
-        this.dispatcherRequestInFlight = true;
-        try {
-            return await this.executeActionUnlocked(
-                request,
-                preserveDisplayText,
-            );
-        } finally {
-            this.dispatcherRequestInFlight = false;
-        }
-    }
-
-    private async executeActionUnlocked(
-        request: ExecuteActionRequest,
-        preserveDisplayText = false,
-    ): Promise<CallToolResult> {
-        this.logger.log(
-            `execute_action: ${request.schemaName}.${request.actionName} params=${JSON.stringify(request.parameters ?? {})}`,
-        );
-
-        if (!this.dispatcher && !this.isConnecting) {
-            await this.connectToDispatcher();
-        }
-
-        if (!this.dispatcher) {
-            return toolResult(
-                `Cannot execute action: not connected to TypeAgent dispatcher at ${this.agentServerUrl}.`,
-            );
-        }
-
-        const { schemaName, actionName, parameters } =
-            remapWebflowAction(request);
-
-        const paramStr =
-            parameters && Object.keys(parameters).length > 0
-                ? `--parameters '${JSON.stringify(parameters).replaceAll("'", "\\u0027")}'`
-                : "";
-
-        const nlStr = request.naturalLanguage
-            ? `--naturalLanguage '${request.naturalLanguage.replaceAll("'", "\\u0027")}'`
-            : "";
-
-        const actionCommand =
-            `@action ${schemaName} ${actionName} ${paramStr} ${nlStr}`.trim();
-
-        this.logger.log(`Dispatching: ${actionCommand}`);
-        this.responseCollector.messages = [];
-        this.responseCollector.rawData = undefined;
-
-        try {
-            const result = await awaitCommand(this.dispatcher, actionCommand);
-            if (result?.lastError) {
-                return toolResult(`Action error: ${result.lastError}`);
-            }
-            if (this.responseCollector.messages.length > 0) {
-                const response = this.responseCollector.messages.join("\n\n");
-                return toolResult(
-                    preserveDisplayText
-                        ? response
-                        : await processHtmlContent(response),
-                    this.responseCollector.rawData,
-                );
-            }
-            return toolResult(
-                `✓ Action ${request.actionName} executed successfully`,
-            );
-        } catch (error) {
-            return toolResult(
-                `Action execution failed: ${error instanceof Error ? error.message : String(error)}`,
-            );
-        }
     }
 }

@@ -16,6 +16,7 @@ import {
 import type { AppAgentManager } from "../context/appAgentManager.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createActionContract } from "./contract.js";
+import { nestedSetupUnavailable } from "./executionFailure.js";
 
 // Host-only policy. Never deserialize this from a discovery/RPC request.
 // Reuse scope only for the same authorized logical caller/conversation binding,
@@ -77,6 +78,7 @@ function validateSearch(request: ActionSearchRequest): void {
 function getAvailability(
     agents: AppAgentManager,
     schemaName: string,
+    actionName: string,
 ): ActionAvailability {
     const agentName = getAppAgentName(schemaName);
     const readiness = agents.getReadinessSnapshot(agentName);
@@ -90,7 +92,14 @@ function getAvailability(
         authorization: "checked-at-execution",
     };
     const loadError = agents.getLoadError(agentName);
-    if (agents.isSchemaLoading(schemaName)) {
+    if (
+        schemaName === "system.config" &&
+        (actionName === "toggleAgent" ||
+            actionName === "enterAgentPriorityMode")
+    ) {
+        availability.state = "unsupported";
+        availability.message = nestedSetupUnavailable;
+    } else if (agents.isSchemaLoading(schemaName)) {
         availability.state = "loading";
     } else if (loadError !== undefined) {
         availability.state = "error";
@@ -166,10 +175,6 @@ export class StructuredActionDiscovery {
             }
             const schema =
                 this.context.agents.getActionSchemaFileForConfig(config);
-            const availability = getAvailability(
-                this.context.agents,
-                config.schemaName,
-            );
             for (const [actionName, definition] of schema.parsedActionSchema
                 .actionSchemas) {
                 const description = getActionDescription(definition) ?? "";
@@ -185,7 +190,11 @@ export class StructuredActionDiscovery {
                     schemaName: config.schemaName,
                     actionName,
                     description,
-                    availability,
+                    availability: getAvailability(
+                        this.context.agents,
+                        config.schemaName,
+                        actionName,
+                    ),
                 });
             }
         }
@@ -262,7 +271,11 @@ export class StructuredActionDiscovery {
                 },
                 definition,
                 config,
-                getAvailability(this.context.agents, identity.schemaName),
+                getAvailability(
+                    this.context.agents,
+                    identity.schemaName,
+                    identity.actionName,
+                ),
             ),
         };
     }

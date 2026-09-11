@@ -42,6 +42,7 @@ import {
 import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 import { getAppAgentName } from "../internal.js";
 import { getStructuredExecution } from "../structuredAction/executionHooks.js";
+import { ExecutionFailure } from "../structuredAction/executionFailure.js";
 import {
     logCommandException,
     logRequestCompleted,
@@ -399,6 +400,12 @@ export async function processCommandNoLock(
             attachments,
         );
     } catch (e: any) {
+        if (
+            e instanceof ExecutionFailure &&
+            getStructuredExecution(context) !== undefined
+        ) {
+            throw e;
+        }
         if (
             otel.isTelemetryCancellation(
                 e,
