@@ -556,10 +556,14 @@ describe("InstallSourceRegistry expected candidate resolution", () => {
             materialize: async (resolved) => {
                 materializeCalls++;
                 return {
-                    kind: "npm",
+                    kind: "npm" as const,
                     source: resolved.source,
-                    module: resolved.module,
-                    ref: resolved.ref,
+                    ...(resolved.module !== undefined
+                        ? { module: resolved.module }
+                        : {}),
+                    ...(resolved.ref !== undefined
+                        ? { ref: resolved.ref }
+                        : {}),
                 };
             },
             describe: () => "test feed",
@@ -643,10 +647,14 @@ describe("InstallSourceRegistry expected candidate resolution", () => {
                 find: async () => candidate,
                 findName: async () => candidate,
                 materialize: async (resolved) => ({
-                    kind: "npm",
+                    kind: "npm" as const,
                     source: resolved.source,
-                    module: resolved.module,
-                    ref: resolved.ref,
+                    ...(resolved.module !== undefined
+                        ? { module: resolved.module }
+                        : {}),
+                    ...(resolved.ref !== undefined
+                        ? { ref: resolved.ref }
+                        : {}),
                 }),
                 describe: () =>
                     config.kind === "path"
@@ -701,10 +709,14 @@ describe("InstallSourceRegistry expected candidate resolution", () => {
                               return undefined;
                           },
                 materialize: async (resolved) => ({
-                    kind: "npm",
+                    kind: "npm" as const,
                     source: resolved.source,
-                    module: resolved.module,
-                    ref: resolved.ref,
+                    ...(resolved.module !== undefined
+                        ? { module: resolved.module }
+                        : {}),
+                    ...(resolved.ref !== undefined
+                        ? { ref: resolved.ref }
+                        : {}),
                 }),
                 describe: () =>
                     config.kind === "path"
