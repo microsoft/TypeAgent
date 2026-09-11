@@ -211,13 +211,6 @@ export class DocumentManager {
                 bindingToken,
                 bindingVersion,
             );
-            if (response.ok) {
-                console.log("[AUTO-SAVE] Successfully saved document");
-            } else {
-                console.log(
-                    "[AUTO-SAVE] Reconciled with content already persisted by another client",
-                );
-            }
         } catch (error) {
             console.error("[AUTO-SAVE] Error during auto-save:", error);
             if (
@@ -335,7 +328,6 @@ export class DocumentManager {
                 }
                 this.isPrimaryClient = true;
                 this.adoptRevision(data);
-                console.log("[SSE] Promoted to PRIMARY for auto-save");
                 break;
 
             case "operationsBeingApplied":
@@ -905,9 +897,6 @@ export class DocumentManager {
                 const targetRelativePath =
                     ensureMarkdownExtension(documentPath);
                 if (this.currentBoundRelativePath === targetRelativePath) {
-                    console.log(
-                        `[DOCUMENT] Already bound to ${this.currentBoundRelativePath}; skipping /api/switch-document`,
-                    );
                     return;
                 }
             }
@@ -951,7 +940,6 @@ export class DocumentManager {
                 typeof result.documentName === "string"
                     ? result.documentName
                     : documentPath;
-            console.log(`[DOCUMENT] Server switched to: ${documentPath}`);
 
             await this.transitionToBinding(
                 {
