@@ -35,8 +35,8 @@ import {
 } from "../shared/plugin-config.js";
 
 const modeDescriptions: Record<Mode, string> = {
-    direct: "Hook handles requests directly, bypassing the LLM. Workspace macro tools remain available.",
-    mcp: "Hook redirects to the TypeAgent MCP tool. Workspace macro tools remain available.",
+    direct: "Hook handles user natural language directly. Copilot-selected structured actions use the persistent TypeAgent MCP tools. Workspace macro tools remain available.",
+    mcp: "Hook redirects user natural language to processCommand; Copilot-selected actions use searchActions, getActionContract, and executeAction. Workspace macro tools remain available.",
     dev: "TypeAgent handles registered PowerShell flows and recording directives; other requests fall through to Copilot. Workspace macro tools remain available.",
     bypass: "TypeAgent is disabled. All requests bypass TypeAgent routing and fall through to other handlers.",
 };

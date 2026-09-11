@@ -25,6 +25,26 @@ function createDependencies(claimed: boolean): RoutePromptDependencies {
 }
 
 describe("macro recording routing override", () => {
+    it.each([
+        "list the playlists",
+        "learn: create a playlist",
+        "dev: create a playlist",
+        "record: create a playlist",
+        "dev: learn: create a playlist",
+        'keep "quotes", 東京 and\nnewlines',
+    ])("keeps the exact Direct user prompt: %s", async (prompt) => {
+        const dependencies = createDependencies(false);
+        const request = { ...input, prompt };
+        await routePrompt(
+            request,
+            "direct",
+            new AbortController().signal,
+            dependencies,
+        );
+        expect(dependencies.direct).toHaveBeenCalledWith(request);
+        expect(dependencies.mcp).not.toHaveBeenCalled();
+        expect(dependencies.dev).not.toHaveBeenCalled();
+    });
     it.each(["direct", "mcp", "dev"] as const)(
         "falls through one claimed interaction in %s mode",
         async (mode) => {
