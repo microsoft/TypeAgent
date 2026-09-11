@@ -24,6 +24,12 @@ internal const val MAX_ACTION_TEXT_CHARS = 256
 private val controlCharRegex = Regex("""\p{Cntrl}""")
 private val whitespaceRunRegex = Regex("""\s+""")
 
+/** `\r\n` and a lone `\r` both mean "new line"; only `\n` is kept. */
+private val lineBreakRegex = Regex("""\r\n?""")
+
+/** Every control character except the newline that [lineBreakRegex] normalised. */
+private val nonNewlineControlCharRegex = Regex("""[\p{Cntrl}&&[^\n]]""")
+
 /**
  * Reads a string field, rejecting the JSON-null trap.
  *
@@ -54,6 +60,27 @@ internal fun JSONObject.sanitizedActionText(
     name: String,
     maxChars: Int = MAX_ACTION_TEXT_CHARS
 ): String = sanitizeActionText(optActionString(name), maxChars)
+
+/**
+ * Preserves line breaks for text carried in an intent extra while replacing
+ * other control characters. Returns null rather than silently changing the
+ * content when the sanitized value exceeds the binder-safe length cap.
+ */
+internal fun sanitizeMultilineActionText(
+    raw: String,
+    maxChars: Int = MAX_ACTION_TEXT_CHARS
+): String? {
+    val sanitized = raw.replace(lineBreakRegex, "\n")
+        .replace(nonNewlineControlCharRegex, " ")
+        .trim()
+    return sanitized.takeIf { it.length <= maxChars }
+}
+
+/** Convenience for multiline intent-extra text. */
+internal fun JSONObject.sanitizedMultilineActionText(
+    name: String,
+    maxChars: Int = MAX_ACTION_TEXT_CHARS
+): String? = sanitizeMultilineActionText(optActionString(name), maxChars)
 
 /**
  * Percent-encodes a value for use inside a URI.
