@@ -232,8 +232,11 @@ describe("Copilot dev actions hook", () => {
         expect(cancelCommand).toHaveBeenCalledWith("request-1");
     });
 
-    it("defaults unattended interactions to denial", async () => {
-        const clientIO = createClientIO({});
+    it("reports full unattended questions without choosing any default", async () => {
+        const prompts: unknown[] = [];
+        const clientIO = createClientIO({
+            onPendingPrompt: (prompt) => prompts.push(prompt),
+        });
 
         await expect(
             clientIO.question(
@@ -243,15 +246,29 @@ describe("Copilot dev actions hook", () => {
                 undefined,
                 "powershell",
             ),
-        ).resolves.toBe(1);
+        ).rejects.toThrow("A user answer is required");
         await expect(
             clientIO.question(
                 undefined,
                 "Allow action?",
                 ["Run", "Cancel"],
-                1,
+                0,
                 "powershell",
             ),
-        ).resolves.toBe(1);
+        ).rejects.toThrow("A user answer is required");
+        expect(prompts).toEqual([
+            {
+                type: "question",
+                message: "Allow action?",
+                choices: ["Run", "Cancel"],
+                defaultId: undefined,
+            },
+            {
+                type: "question",
+                message: "Allow action?",
+                choices: ["Run", "Cancel"],
+                defaultId: 0,
+            },
+        ]);
     });
 });

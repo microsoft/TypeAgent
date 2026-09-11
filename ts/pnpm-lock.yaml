@@ -4712,6 +4712,9 @@ importers:
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.40
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../dispatcher/dispatcher
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2

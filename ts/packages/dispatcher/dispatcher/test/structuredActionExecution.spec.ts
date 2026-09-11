@@ -430,12 +430,21 @@ describe("real structured dispatcher execution", () => {
         closeRpc = undefined;
     });
 
-    async function useAgentRpc() {
+    async function useAgentRpc(disconnectOnHostError = false) {
         let clientProvider: ChannelProviderAdapter;
         let serverProvider: ChannelProviderAdapter;
         clientProvider = createChannelProviderAdapter(
             "client",
             (message, callback) => {
+                if (
+                    disconnectOnHostError &&
+                    message.message?.type === "invokeError"
+                ) {
+                    clientProvider.notifyDisconnected();
+                    serverProvider.notifyDisconnected();
+                    callback?.(null);
+                    return;
+                }
                 setImmediate(() =>
                     serverProvider.notifyMessage(structuredClone(message)),
                 );
@@ -748,6 +757,7 @@ describe("real structured dispatcher execution", () => {
                             await request("read", mode),
                         ),
                     );
+
                     if (status === "contract_stale") {
                         const config =
                             context.agents.getActionConfig("guarded");
@@ -785,6 +795,36 @@ describe("real structured dispatcher execution", () => {
                     status: "failed",
                     error: { code: "execution_failed" },
                 });
+            });
+        },
+    );
+
+    it.each(["contract_stale", "unavailable"] as const)(
+        "does not hide RPC uncertainty when delivering a host %s prompt failure",
+        async (status) => {
+            await useAgentRpc(true);
+            const input = await request("read", "question");
+            const prompt = requirePrompt(await dispatcher.executeAction(input));
+            if (status === "contract_stale") {
+                const config = context.agents.getActionConfig("guarded");
+                config.actionPolicies = {
+                    ...config.actionPolicies,
+                    read: { effects: "state-changing" },
+                };
+            } else {
+                readiness = { state: "setup-required" };
+                await context.agents.refreshReadiness("guarded");
+            }
+            expect(
+                await answer(prompt, { type: "question", selected: 0 }),
+            ).toMatchObject({
+                status: "execution_uncertain",
+                error: { code: "execution_state_lost" },
+            });
+            expect(callbacks).toBe(0);
+            expect(entered).toEqual(["original"]);
+            expect(await dispatcher.executeAction(input)).toMatchObject({
+                status: "unavailable",
             });
         },
     );
