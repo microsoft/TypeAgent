@@ -170,6 +170,11 @@ export function instantiate(): AppAgent {
                 getKnownCodePort(),
             );
         },
+        cancelChoice: async (choiceId, context) => {
+            (
+                context.agentContext as CodeActionContext
+            ).choiceManager.cancelChoice(choiceId);
+        },
         handleChoice: async (choiceId, response, context) => {
             const ctx = (context as ActionContext<CodeActionContext>)
                 .sessionContext.agentContext;

@@ -221,7 +221,18 @@ export class ActionSchemaFileCache {
                       parsedActionSchema: parseActionSchemaSource(
                           source,
                           actionConfig.schemaName,
-                          actionConfig.schemaType,
+                          typeof actionConfig.schemaType === "string"
+                              ? actionConfig.schemaType
+                              : {
+                                    ...actionConfig.schemaType,
+                                    ...(actionConfig.schemaType.entities ===
+                                    undefined
+                                        ? {}
+                                        : {
+                                              entity: actionConfig.schemaType
+                                                  .entities,
+                                          }),
+                                },
                           fullPath,
                           config ? <SchemaConfig>JSON.parse(config) : undefined,
                           true,

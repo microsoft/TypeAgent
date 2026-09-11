@@ -197,6 +197,7 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
     ): Promise<ActionResult | undefined>;
 
     // Choice (yes/no confirmation, multi-select, or multi-question form)
+    cancelChoice?(choiceId: string, context: SessionContext): Promise<void>;
     handleChoice?(
         choiceId: string,
         response:
@@ -478,6 +479,9 @@ export interface ActionContext<T = void> {
     readonly actionIO: ActionIO;
     readonly sessionContext: SessionContext<T>;
     readonly abortSignal?: AbortSignal | undefined;
+    // Hosts retaining shared execution state require transports to await the
+    // actual handler after forwarding abort, rather than racing its response.
+    readonly waitForCompletionOnAbort?: boolean;
 
     // true when this action was dispatched from within the reasoning loop (via MCP execute_action),
     // false when dispatched directly from the translator. Agents can use this to decide whether

@@ -23,6 +23,10 @@ import { createActionContract } from "./contract.js";
 export type StructuredActionAccess = () => {
     scope: object;
     canDiscoverSchema(schemaName: string): boolean;
+    // Discovery-only facades deny execution without hiding contracts.
+    // Omitted for existing/direct callers, which retain execution access.
+    canExecute?: boolean;
+    isActive?(): boolean;
 };
 
 type DiscoveryContext = {
@@ -117,8 +121,14 @@ export class StructuredActionDiscovery {
         private readonly access?: StructuredActionAccess,
     ) {}
 
-    private bindScope() {
+    public bindScope() {
         const policy = this.access?.();
+        if (
+            policy?.isActive?.() === false ||
+            (this.access !== undefined && policy === undefined)
+        ) {
+            throw new Error("Structured action access has been revoked");
+        }
         const permissionScope = policy?.scope ?? this.anonymousScope;
         let scopes = sessionScopes.get(this.context.session);
         if (scopes === undefined) {
@@ -208,6 +218,13 @@ export class StructuredActionDiscovery {
     public async getActionContract(
         identity: ActionIdentity,
     ): Promise<ActionContractResult> {
+        return this.getActionContractSnapshot(identity);
+    }
+
+    /** Synchronous final gate: no event-loop turn between checking and handler entry. */
+    public getActionContractSnapshot(
+        identity: ActionIdentity,
+    ): ActionContractResult {
         if (
             identity === null ||
             typeof identity !== "object" ||

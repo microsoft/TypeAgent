@@ -103,6 +103,9 @@ export function createDispatcherRpcServer(
         getActionContract: async (...args) => {
             return dispatcher.getActionContract(...args);
         },
+        executeAction: async (...args) => dispatcher.executeAction(...args),
+        continueAction: async (...args) => dispatcher.continueAction(...args),
+        cancelAction: async (...args) => dispatcher.cancelAction(...args),
         respondToChoice: async (...args) => {
             return dispatcher.respondToChoice(...args);
         },

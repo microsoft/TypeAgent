@@ -631,6 +631,28 @@ export async function createAgentRpcClient(
 
     // The shim needs to implement all the APIs regardless whether the actual agent
     // has that API.  We remove remove it the one that is not necessary below.
+    async function invokeWithActionCancellation<T>(
+        context: ActionContext<ShimContext>,
+        contextParams: ActionContextParams,
+        invoke: () => Promise<T>,
+    ): Promise<T> {
+        const signal = context.abortSignal;
+        signal?.throwIfAborted();
+        const onAbort = () =>
+            rpc.send("cancelAction", {
+                actionContextId: contextParams.actionContextId,
+            });
+        signal?.addEventListener("abort", onAbort, { once: true });
+        try {
+            const pending = invoke();
+            return await (context.waitForCompletionOnAbort
+                ? pending
+                : raceWithSignal(pending, signal));
+        } finally {
+            signal?.removeEventListener("abort", onAbort);
+        }
+    }
+
     const agent: Required<AppAgent> = {
         initializeAgentContext(settings?: AppAgentInitSettings) {
             return rpc.invoke("initializeAgentContext", {
@@ -653,32 +675,14 @@ export async function createAgentRpcClient(
             action: TypeAgentAction,
             context: ActionContext<ShimContext>,
         ) {
-            return withActionContextAsync(context, (contextParams) => {
-                const signal = context.abortSignal;
-                if (signal) {
-                    const onAbort = () =>
-                        rpc.send("cancelAction", {
-                            actionContextId: contextParams.actionContextId,
-                        });
-                    signal.addEventListener("abort", onAbort, { once: true });
-                    return raceWithSignal(
-                        rpc.invoke("executeAction", {
-                            ...contextParams,
-                            action,
-                        }),
-                        signal,
-                    ).finally(() => {
-                        signal.removeEventListener("abort", onAbort);
-                    });
-                }
-                return raceWithSignal(
+            return withActionContextAsync(context, (contextParams) =>
+                invokeWithActionCancellation(context, contextParams, () =>
                     rpc.invoke("executeAction", {
                         ...contextParams,
                         action,
                     }),
-                    signal,
-                );
-            });
+                ),
+            );
         },
         validateWildcardMatch(
             action: AppAction,
@@ -809,6 +813,12 @@ export async function createAgentRpcClient(
                 entityTypeName,
             });
         },
+        cancelChoice(choiceId: string, context: SessionContext<ShimContext>) {
+            return rpc.invoke("cancelChoice", {
+                ...getContextParam(context),
+                choiceId,
+            });
+        },
         handleChoice(
             choiceId: string,
             response:
@@ -819,11 +829,13 @@ export async function createAgentRpcClient(
             context: ActionContext<ShimContext>,
         ) {
             return withActionContextAsync(context, (contextParams) =>
-                rpc.invoke("handleChoice", {
-                    ...contextParams,
-                    choiceId,
-                    response,
-                }),
+                invokeWithActionCancellation(context, contextParams, () =>
+                    rpc.invoke("handleChoice", {
+                        ...contextParams,
+                        choiceId,
+                        response,
+                    }),
+                ),
             );
         },
         getDynamicSchema(

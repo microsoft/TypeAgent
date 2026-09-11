@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import {
     DispatcherConnectOptions,
+    JoinConversationResult,
     registerClientType,
     unregisterClient,
 } from "@typeagent/agent-server-protocol";
@@ -38,6 +39,11 @@ import {
     selectWorkingDirectoryProposal,
     resolveWorkingDirectory,
 } from "./workingDirectoryPolicy.js";
+import {
+    StructuredActionBindings,
+    type StructuredActionLease,
+    validateStructuredActionJoin,
+} from "./structuredActionBindings.js";
 
 import registerDebug from "debug";
 const debugConnect = registerDebug("agent-server:connect");
@@ -479,6 +485,10 @@ export async function createSharedDispatcher(
         ...options,
         clientIO,
     });
+    const structuredBindings = new StructuredActionBindings(
+        () => context.session,
+    );
+    const structuredLeases = new Map<string, StructuredActionLease>();
 
     // Intercept display methods on the shared clientIO to mirror display
     // traffic into the DisplayLog for later replay. Patches context.clientIO
@@ -624,6 +634,19 @@ export async function createSharedDispatcher(
             // so interactions created before disconnect are unroutable after
             // reconnect. See docs/async-clientio-design.md §Open Questions.
             const connectionId = (nextConnectionId++).toString();
+            const anonymousScope = {};
+            validateStructuredActionJoin(options);
+            const structuredLease =
+                options?.structuredActions === undefined
+                    ? undefined
+                    : structuredBindings.acquire(
+                          options.conversationId!,
+                          connectionId,
+                          options.structuredActions.resumeToken,
+                      );
+            if (structuredLease !== undefined) {
+                structuredLeases.set(connectionId, structuredLease);
+            }
             let selectedWorkingDirectory: string | undefined;
             const wasEmpty = clients.size === 0;
             clients.set(connectionId, {
@@ -642,6 +665,8 @@ export async function createSharedDispatcher(
                 context,
                 connectionId,
                 async () => {
+                    structuredLease?.release();
+                    structuredLeases.delete(connectionId);
                     clients.delete(connectionId);
                     dispatchers.delete(connectionId);
                     unregisterClient(connectionId);
@@ -677,6 +702,12 @@ export async function createSharedDispatcher(
                         `Client disconnected: ${connectionId} (total clients: ${clients.size})`,
                     );
                 },
+                structuredLease?.access ??
+                    (() => ({
+                        scope: anonymousScope,
+                        canDiscoverSchema: () => clients.has(connectionId),
+                        canExecute: false,
+                    })),
             );
             dispatchers.set(connectionId, dispatcher);
             debugConnect(
@@ -820,6 +851,12 @@ export async function createSharedDispatcher(
 
             return dispatcher;
         },
+        getStructuredActionBinding(connectionId) {
+            const lease = structuredLeases.get(connectionId);
+            return lease === undefined
+                ? undefined
+                : { resumeToken: lease.resumeToken };
+        },
         respondToInteraction(response: PendingInteractionResponse): void {
             debugInteractionInfo("respondToInteraction", {
                 interactionId: response.interactionId,
@@ -938,6 +975,7 @@ export async function createSharedDispatcher(
         },
         async close() {
             cancelNoClientsGraceTimer();
+            structuredBindings.close();
             pendingInteractions.cancelAll(
                 new Error("SharedDispatcher closing"),
             );
@@ -1058,6 +1096,9 @@ export type SharedDispatcher = {
         closeFn: () => void,
         options?: DispatcherConnectOptions,
     ): Dispatcher;
+    getStructuredActionBinding(
+        connectionId: string,
+    ): JoinConversationResult["structuredActions"];
     respondToInteraction(response: PendingInteractionResponse): void;
     cancelInteraction(interactionId: string): void;
     getPendingInteractions(

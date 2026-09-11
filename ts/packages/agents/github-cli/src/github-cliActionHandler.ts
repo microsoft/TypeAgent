@@ -72,6 +72,11 @@ export function instantiate(): AppAgent {
             ),
         // Routes user yes/no responses (from createYesNoChoiceResult)
         // back to the registered ChoiceManager callback.
+        cancelChoice: async (choiceId, context) => {
+            (
+                context.agentContext as GithubCliActionContext
+            ).choiceManager.cancelChoice(choiceId);
+        },
         handleChoice: async (choiceId, response, context) => {
             const ctx = (context as ActionContext<GithubCliActionContext>)
                 .sessionContext.agentContext;

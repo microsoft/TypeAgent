@@ -13,6 +13,10 @@ import type {
     ActionIdentity,
     ActionSearchRequest,
     ActionSearchResult,
+    ExecuteActionRequest,
+    ContinueActionRequest,
+    CancelActionRequest,
+    StructuredActionExecutionResult,
     CancelResult,
     CommandCompletionResult,
     CommandResult,
@@ -106,6 +110,16 @@ export type DispatcherInvokeFunctions = {
     searchActions(request?: ActionSearchRequest): Promise<ActionSearchResult>;
 
     getActionContract(identity: ActionIdentity): Promise<ActionContractResult>;
+
+    executeAction(
+        request: ExecuteActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
+    continueAction(
+        request: ContinueActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
+    cancelAction(
+        request: CancelActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
 
     respondToChoice(
         choiceId: string,

@@ -26,7 +26,7 @@ import {
 import { getDispatcherStatus, processCommand } from "./command/command.js";
 import { getCommandCompletion } from "./command/completion.js";
 import { getActionContext } from "./execute/actionContext.js";
-import { emitActionResult } from "./execute/actionHandlers.js";
+import { emitActionResult, executeActions } from "./execute/actionHandlers.js";
 import {
     closeCommandHandlerContext,
     CommandHandlerContext,
@@ -40,6 +40,7 @@ import {
     StructuredActionDiscovery,
     type StructuredActionAccess,
 } from "./structuredAction/discovery.js";
+import { StructuredActionExecution } from "./structuredAction/execution.js";
 
 async function getDynamicDisplay(
     context: CommandHandlerContext,
@@ -209,6 +210,12 @@ export function createDispatcherFromContext(
     const structuredActions = new StructuredActionDiscovery(
         context,
         structuredActionAccess,
+    );
+    const structuredExecution = new StructuredActionExecution(
+        context,
+        structuredActions,
+        { executeActions, getActionContext },
+        connectionId,
     );
     const submitInput = (
         command: string,
@@ -404,6 +411,10 @@ export function createDispatcherFromContext(
         async getActionContract(identity) {
             return structuredActions.getActionContract(identity);
         },
+        executeAction: (request) => structuredExecution.executeAction(request),
+        continueAction: (request) =>
+            structuredExecution.continueAction(request),
+        cancelAction: (request) => structuredExecution.cancelAction(request),
         async cancelCommand(requestId: string): Promise<CancelResult> {
             const kind = context.requestQueue.classifyCancel(requestId, "user");
             if (kind === "queued") {
@@ -584,6 +595,9 @@ export function createDispatcherFromContext(
                 | { selected: number; remember: boolean }
                 | QuestionFormResponse,
         ) {
+            if (!context.pendingChoiceRoutes.has(choiceId)) {
+                throw new Error("Choice not found or expired");
+            }
             return context.commandLock(async () => {
                 const pending = context.pendingChoiceRoutes.get(choiceId);
                 if (!pending) {
