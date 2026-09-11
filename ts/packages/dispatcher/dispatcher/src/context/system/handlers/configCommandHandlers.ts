@@ -13,6 +13,11 @@ import {
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
 import { getActionContext } from "../../../execute/actionContext.js";
 import { emitActionResult } from "../../../execute/actionHandlers.js";
+import { getStructuredExecution } from "../../../structuredAction/executionHooks.js";
+import {
+    ExecutionFailure,
+    nestedSetupUnavailable,
+} from "../../../structuredAction/executionFailure.js";
 
 import { simpleStarRegex } from "@typeagent/common-utils";
 import {
@@ -674,6 +679,13 @@ class AgentSetupCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
+        if (getStructuredExecution(systemContext) !== undefined) {
+            throw new ExecutionFailure(
+                "unavailable",
+                nestedSetupUnavailable,
+                "unavailable",
+            );
+        }
         const agents = systemContext.agents;
         const name = params.args.agentName;
 
