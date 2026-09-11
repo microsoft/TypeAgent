@@ -448,6 +448,7 @@ async function handleStreamingMarkdownAction(
         content: markdownContent,
         binding,
         revision,
+        readToken,
     } = await readCurrentDocumentContent(actionContext);
 
     try {
@@ -510,6 +511,7 @@ async function handleStreamingMarkdownAction(
                         binding,
                         revision,
                         computeContentRevision(updatedContent),
+                        readToken,
                     );
                 }
 
@@ -912,6 +914,7 @@ async function readCurrentDocumentContent(
     content: string;
     binding: CurrentDocumentBinding;
     revision: string;
+    readToken?: string;
 }> {
     const agentContext = actionContext.sessionContext.agentContext;
     const storage = actionContext.sessionContext.sessionStorage;
@@ -953,6 +956,7 @@ async function readCurrentDocumentContent(
             token: agentContext.currentBindingToken,
         },
         revision: response.revision ?? computeContentRevision(response.content),
+        ...(response.readToken ? { readToken: response.readToken } : {}),
     };
 }
 
@@ -962,6 +966,7 @@ async function applyOperationsForCurrentDocument(
     binding: CurrentDocumentBinding,
     revision: string,
     expectedUpdatedRevision?: string,
+    expectedReadToken?: string,
 ): Promise<void> {
     const agentContext = actionContext.sessionContext.agentContext;
     const storage = actionContext.sessionContext.sessionStorage;
@@ -1016,6 +1021,7 @@ async function applyOperationsForCurrentDocument(
         expectedRelativePath: binding.relativePath,
         expectedRevision: revision,
         expectedUpdatedRevision,
+        ...(expectedReadToken ? { expectedReadToken } : {}),
     };
     const viewProcess = getCurrentDocumentViewProcess(agentContext);
     if (!viewProcess) {
@@ -1073,7 +1079,7 @@ async function updateCurrentDocument(
     actionContext: ActionContext<MarkdownActionContext>,
     agent: Awaited<ReturnType<typeof createMarkdownAgent>>,
 ): Promise<ActionResult> {
-    const { content, binding, revision } =
+    const { content, binding, revision, readToken } =
         await readCurrentDocumentContent(actionContext);
     const response = await agent.updateDocument(
         content,
@@ -1094,6 +1100,8 @@ async function updateCurrentDocument(
             response.data.operations,
             binding,
             revision,
+            undefined,
+            readToken,
         );
     }
     return createActionResult(
@@ -1155,6 +1163,7 @@ type ApplyExpectations = {
     expectedRelativePath: string;
     expectedRevision: string;
     expectedUpdatedRevision: string | undefined;
+    expectedReadToken?: string;
 };
 
 type ApplyResult = {
@@ -1189,7 +1198,7 @@ export async function sendOperationsToView(
                 revisionMismatch: false,
                 error: "View process operation timeout",
             });
-        }, 15000);
+        }, 60_000);
 
         const responseHandler = (message: Record<string, unknown>) => {
             if (
@@ -1226,6 +1235,7 @@ type ViewDocumentContentResponse = {
     content: string;
     bindingToken: string | null;
     revision: string | null;
+    readToken: string | undefined;
     identityMismatch: boolean;
     error: string | undefined;
 };
@@ -1269,6 +1279,10 @@ export async function getDocumentContentFromView(
                     typeof message.revision === "string"
                         ? message.revision
                         : null,
+                readToken:
+                    typeof message.readToken === "string"
+                        ? message.readToken
+                        : undefined,
                 identityMismatch: message.identityMismatch === true,
                 error:
                     typeof message.error === "string"

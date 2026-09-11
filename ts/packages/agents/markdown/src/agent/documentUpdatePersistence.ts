@@ -131,6 +131,9 @@ export function persistDocumentOperations(
 ) {
     validateIdentity(binding, expected);
     let filePath = resolveBoundFile(binding);
+    if (!filePath.startsWith(binding.root + path.sep)) {
+        throw new Error("Document binding path changed");
+    }
     const currentContent = fs.readFileSync(filePath, "utf-8");
     const currentRevision = computeContentRevision(currentContent);
     if (expected.updatedRevision === currentRevision) {
@@ -158,6 +161,9 @@ export function persistDocumentOperations(
 
     validateIdentity(binding, expected);
     filePath = resolveBoundFile(binding);
+    if (!filePath.startsWith(binding.root + path.sep)) {
+        throw new Error("Document binding path changed");
+    }
     if (
         computeContentRevision(fs.readFileSync(filePath, "utf-8")) !==
         currentRevision

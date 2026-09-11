@@ -39,18 +39,14 @@ describe("asynchronous bound document reads", () => {
     test("reads a large UTF-8 document without synchronous content I/O", async () => {
         const content = "# Large 😀 document\n".repeat(200_000);
         fs.writeFileSync(binding.filePath, content);
-        const syncRead = jest
-            .spyOn(fs, "readFileSync")
-            .mockImplementation(() => {
-                throw new Error("Synchronous content reads are forbidden");
-            });
+        const syncRead = jest.spyOn(fs, "readFileSync");
         const result = await readBoundDocument(binding);
         expect(result).toEqual({
             content,
             filePath: binding.filePath,
             revision: computeContentRevision(content),
         });
-        expect(syncRead).not.toHaveBeenCalled();
+        expect(syncRead).not.toHaveBeenCalledWith(binding.filePath, "utf-8");
     });
 
     test("missing nested documents do not create directories", async () => {

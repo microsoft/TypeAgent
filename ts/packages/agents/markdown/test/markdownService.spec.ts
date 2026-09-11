@@ -132,6 +132,15 @@ describe("markdown service document reads", () => {
         expect((await load("escape/plan.md")).status).toBe(403);
     });
 
+    test("hydrates the authoritative collaboration document after HTTP load", async () => {
+        const response = await load("plan.md");
+        expect(response.status).toBe(200);
+
+        const document = await fetch(`http://127.0.0.1:${port}/document`);
+        expect(document.status).toBe(200);
+        expect(await document.text()).toBe("original");
+    });
+
     test("returns the durable snapshot after an asynchronous read", async () => {
         await bind("plan.md");
         const paused = nextMessage(child, "readPaused");
@@ -142,7 +151,7 @@ describe("markdown service document reads", () => {
         expect(await response).toMatchObject({
             requestId: "read-1",
             content: "original",
-            source: "file",
+            source: "file-fallback",
         });
     });
 
@@ -184,7 +193,7 @@ describe("markdown service document reads", () => {
         expect(await response).toMatchObject({
             requestId: "external-read",
             content: "externally updated 😀",
-            source: "file",
+            source: "file-fallback",
         });
     });
 
