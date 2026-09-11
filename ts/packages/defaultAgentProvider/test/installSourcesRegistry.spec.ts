@@ -467,6 +467,7 @@ describe("InstallSourceRegistry expected candidate resolution", () => {
             source: match.source,
             sourceKind: match.sourceKind,
             sourceIdentity: match.sourceIdentity,
+            sourceGeneration: match.sourceGeneration,
             matchKind: match.matchedByName
                 ? "defaultAgentName"
                 : match.candidate.path !== undefined
@@ -671,6 +672,52 @@ describe("InstallSourceRegistry expected candidate resolution", () => {
         await expect(
             registry.resolveExpected("photo", expected),
         ).rejects.toThrow(/Plan drift: sourceIdentity changed/);
+    });
+
+    it("rejects replacement of a source with identical configuration", async () => {
+        const candidate: ResolvedCandidate = {
+            source: "feed",
+            module: "@typeagent/photo-agent",
+            packageName: "@typeagent/photo-agent",
+            defaultAgentName: "photo",
+            ref: "@typeagent/photo-agent@latest",
+            version: "1.0.0",
+        };
+        const sourceConfig: InstallSourceConfig = {
+            kind: "path",
+            name: "feed",
+            baseDir: "same",
+        };
+        const registry = createInstallSourceRegistry(
+            [sourceConfig],
+            { installDir: tmpInstallDir() },
+            (config) => ({
+                name: config.name,
+                kind: config.kind,
+                find: async () => candidate,
+                findName: async () => candidate,
+                materialize: async (resolved) => ({
+                    kind: "npm" as const,
+                    source: resolved.source,
+                    ...(resolved.module !== undefined
+                        ? { module: resolved.module }
+                        : {}),
+                    ...(resolved.ref !== undefined
+                        ? { ref: resolved.ref }
+                        : {}),
+                }),
+                describe: () => "same",
+            }),
+        );
+        const preview = await registry.preview("photo");
+        const expected = expectedFromPreview(preview!.winner);
+
+        registry.remove("feed");
+        registry.add(sourceConfig);
+
+        await expect(
+            registry.resolveExpected("photo", expected),
+        ).rejects.toThrow(/Plan drift: sourceGeneration changed/);
     });
 
     it("keeps the identity of the source instance that produced the preview", async () => {

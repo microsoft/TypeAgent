@@ -1216,6 +1216,7 @@ class GroupInstallCommandHandler implements CommandHandler {
         const plan: MemberPlan[] = [];
         const unavailable: string[] = [];
         const transitioning: string[] = [];
+        const mismatched: { requested: string; resolved: string }[] = [];
 
         for (const agent of group.agents) {
             const state = source.getAgentPackageState(agent);
@@ -1238,6 +1239,12 @@ class GroupInstallCommandHandler implements CommandHandler {
                 if (preview === undefined) {
                     plan.push({ name: agent, state: "unavailable" });
                     unavailable.push(agent);
+                } else if (preview.winner.name !== agent) {
+                    plan.push({ name: agent, state: "unavailable" });
+                    mismatched.push({
+                        requested: agent,
+                        resolved: preview.winner.name,
+                    });
                 } else {
                     plan.push({ name: agent, state: "install", preview });
                 }
@@ -1247,6 +1254,16 @@ class GroupInstallCommandHandler implements CommandHandler {
         if (transitioning.length > 0) {
             throw new Error(
                 `Group '${groupKey}' cannot be installed while these agent(s) have an operation in progress: ${transitioning.join(", ")}. Retry when the current operation completes.`,
+            );
+        }
+        if (mismatched.length > 0) {
+            throw new Error(
+                `Group '${groupKey}' cannot be installed because these members resolve to different agent names: ${mismatched
+                    .map(
+                        ({ requested, resolved }) =>
+                            `${requested} -> ${resolved}`,
+                    )
+                    .join(", ")}.`,
             );
         }
         if (unavailable.length > 0) {

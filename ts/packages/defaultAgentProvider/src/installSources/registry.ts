@@ -42,6 +42,7 @@ export interface PreviewMatch {
     source: string;
     sourceKind: string;
     sourceIdentity: string;
+    sourceGeneration: number;
     matchedByName: boolean;
     name: string;
     candidate: ResolvedCandidate;
@@ -66,6 +67,7 @@ export interface DefaultInstallSourceRegistry {
         name: string,
         expectedKind: string,
         expectedIdentity: string,
+        expectedGeneration: number,
     ): void;
     // Reprioritize the single source list (which is the resolution priority
     // order, first match wins): the named sources move to the front (in the
@@ -252,6 +254,8 @@ export function createInstallSourceRegistry(
     // lockstep). The map iteration order IS the resolution priority order
     // (first match wins).
     let entries = new Map<string, Entry>();
+    const sourceGenerations = new WeakMap<InstallSource, number>();
+    let nextSourceGeneration = 1;
 
     // Process-lifetime dedup for the server log: a source problem (corrupt
     // catalog, dropped entry) is logged at most once per distinct
@@ -317,11 +321,27 @@ export function createInstallSourceRegistry(
         return wrapped;
     }
 
+    function createEntry(config: InstallSourceConfig): Entry {
+        const source = build(config);
+        sourceGenerations.set(source, nextSourceGeneration++);
+        return { config, source };
+    }
+
+    function getSourceGeneration(source: InstallSource): number {
+        const generation = sourceGenerations.get(source);
+        if (generation === undefined) {
+            throw new Error(
+                `Install source '${source.name}' has no registered generation.`,
+            );
+        }
+        return generation;
+    }
+
     for (const config of initialConfigs) {
         if (entries.has(config.name)) {
             throw new Error(`duplicate install source name: '${config.name}'`);
         }
-        entries.set(config.name, { config, source: build(config) });
+        entries.set(config.name, createEntry(config));
     }
 
     function persist(): void {
@@ -345,7 +365,7 @@ export function createInstallSourceRegistry(
         if (entries.has(config.name)) {
             throw new Error(`source '${config.name}' already exists`);
         }
-        entries.set(config.name, { config, source: build(config) });
+        entries.set(config.name, createEntry(config));
         persist();
     }
 
@@ -406,6 +426,7 @@ export function createInstallSourceRegistry(
                     source,
                     sourceKind: source.kind,
                     sourceIdentity: source.describe(),
+                    sourceGeneration: getSourceGeneration(source),
                     candidate,
                     matchedByName: false,
                 };
@@ -439,6 +460,7 @@ export function createInstallSourceRegistry(
                         source,
                         sourceKind: source.kind,
                         sourceIdentity: source.describe(),
+                        sourceGeneration: getSourceGeneration(source),
                         candidate,
                         matchedByName: true,
                     };
@@ -454,6 +476,7 @@ export function createInstallSourceRegistry(
                     source,
                     sourceKind: source.kind,
                     sourceIdentity: source.describe(),
+                    sourceGeneration: getSourceGeneration(source),
                     candidate,
                     matchedByName: false,
                 };
@@ -572,6 +595,7 @@ export function createInstallSourceRegistry(
             source: match.source.name,
             sourceKind: match.sourceKind,
             sourceIdentity: match.sourceIdentity,
+            sourceGeneration: match.sourceGeneration,
             matchedByName: match.matchedByName,
             name,
             candidate: match.candidate,
@@ -595,6 +619,7 @@ export function createInstallSourceRegistry(
             matchedByName: match.matchedByName,
             sourceKind: match.sourceKind,
             sourceIdentity: match.sourceIdentity,
+            sourceGeneration: match.sourceGeneration,
         };
         if (match.candidate.packageName !== undefined) {
             result.packageName = match.candidate.packageName;
@@ -642,6 +667,7 @@ export function createInstallSourceRegistry(
             "source",
             "sourceKind",
             "sourceIdentity",
+            "sourceGeneration",
             "matchKind",
             "name",
             "packageName",
@@ -673,11 +699,15 @@ export function createInstallSourceRegistry(
             name: string,
             expectedKind: string,
             expectedIdentity: string,
+            expectedGeneration: number,
         ): void {
             const current = entries.get(name)?.source;
             if (
                 current?.kind !== expectedKind ||
-                current.describe() !== expectedIdentity
+                current.describe() !== expectedIdentity ||
+                (current !== undefined
+                    ? getSourceGeneration(current)
+                    : undefined) !== expectedGeneration
             ) {
                 throw new Error(
                     `Install source '${name}' changed before the install could be committed. Retry the install.`,
@@ -782,6 +812,7 @@ export function createInstallSourceRegistry(
                 source: match.source.name,
                 sourceKind: match.sourceKind,
                 sourceIdentity: match.sourceIdentity,
+                sourceGeneration: match.sourceGeneration,
                 matchedByName: match.matchedByName,
                 name:
                     ref !== undefined
@@ -909,6 +940,7 @@ export function createInstallSourceRegistry(
                 source: m.source.name,
                 sourceKind: m.sourceKind,
                 sourceIdentity: m.sourceIdentity,
+                sourceGeneration: m.sourceGeneration,
                 matchedByName: m.matchedByName,
                 // EXPLICIT stamps the user-supplied name; INFER derives the
                 // winner's name from the resolved package (same rule as

@@ -150,6 +150,7 @@ export interface InstallPreviewMatch {
     readonly source: string;
     readonly sourceKind?: string; // path / catalog / feed, for the preview message
     readonly sourceIdentity?: string; // resolved source configuration, used only for plan drift checks
+    readonly sourceGeneration?: number; // process-local source instance, used only for plan drift checks
     readonly matchKind: InstallMatchKind;
     readonly name: string; // dispatcher name it would install as
     readonly packageName?: string;
@@ -271,6 +272,7 @@ export interface ResolveResult {
     packageName?: string;
     sourceKind: string;
     sourceIdentity: string;
+    sourceGeneration: number;
 }
 
 /**

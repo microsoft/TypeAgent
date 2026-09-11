@@ -1723,6 +1723,36 @@ describe("@package group", () => {
         expect(text).toContain("installed");
     });
 
+    it("rejects a group member that resolves to a different agent name", async () => {
+        const { api, calls } = makeSource({
+            getAgentPackageState: (name) =>
+                name === "photo" ? "bundled" : undefined,
+            preview: async () => ({
+                winner: {
+                    source: "feed",
+                    matchKind: "packageName",
+                    name: "differentImage",
+                    packageName: "@typeagent/image-agent",
+                },
+                matches: [],
+            }),
+        });
+        const handler = getGroupHandler(api, "install");
+        const { context } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+            agentGroups: fakeGroups,
+        });
+
+        await expect(
+            handler.run(context, {
+                args: { group: "media" },
+                flags: { yes: true },
+            } as any),
+        ).rejects.toThrow(/image -> differentImage/);
+        expect(calls).toEqual([]);
+    });
+
     it("group install reports the actual path identity", async () => {
         const { api } = makeSource({
             getAgentPackageState: (name) =>

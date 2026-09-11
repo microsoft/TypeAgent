@@ -922,6 +922,7 @@ export function createDefaultInstalledAgentSource(
             source: match.source,
             sourceKind: match.sourceKind,
             sourceIdentity: match.sourceIdentity,
+            sourceGeneration: match.sourceGeneration,
             matchKind: deriveMatchKind({
                 matchedByName: match.matchedByName,
                 path: match.candidate.path,
@@ -1012,6 +1013,7 @@ export function createDefaultInstalledAgentSource(
                         record.source,
                         resolved.sourceKind,
                         resolved.sourceIdentity,
+                        resolved.sourceGeneration,
                     );
                     mutateAgentsJson((agents) => {
                         if (agents[name] !== undefined) {
@@ -1136,6 +1138,7 @@ export function createDefaultInstalledAgentSource(
                         record.source,
                         resolved.sourceKind,
                         resolved.sourceIdentity,
+                        resolved.sourceGeneration,
                     );
                     mutateAgentsJson((agents) => {
                         if (agents[name] !== undefined) {
