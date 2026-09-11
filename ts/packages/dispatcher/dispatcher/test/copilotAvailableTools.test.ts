@@ -5,7 +5,6 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { buildCopilotAvailableTools } from "../src/reasoning/copilot.js";
 
 // Jest's ESM VM lacks import.meta.resolve; use the SDK's CommonJS entry so its
 // bundled CLI resolver can use Node's native module resolution.
