@@ -7,6 +7,31 @@ import { AI_CONFIG, DEFAULT_MARKDOWN_CONTENT, EDITOR_CONFIG } from "../config";
 import { getMarkdownFromEditor, getEditorPositionInfo } from "../utils";
 import { encodeDocumentPathForUrl } from "../../route/urlPath";
 
+interface SSEEventData {
+    type: string;
+    bindingToken: string | null;
+    documentId: string | null;
+    revision: string;
+    documentName: string;
+    boundRelativePath: string;
+    newDocumentId: string;
+    newDocumentName: string;
+    markdown: string;
+    baseMarkdown: string;
+    clientRole: string;
+    operations: Array<Record<string, unknown>>;
+    filePath: string;
+    error: unknown;
+    operationCount: number;
+    requestId: string;
+}
+
+interface BindingStateData {
+    documentId?: unknown;
+    bindingToken?: unknown;
+    revision?: unknown;
+}
+
 export class DocumentManager {
     private notificationManager: any = null;
     private editorManager: any = null;
@@ -180,51 +205,16 @@ export class DocumentManager {
         }
     }
 
-    private async handleSSEEvent(data: any): Promise<void> {
+    private async handleSSEEvent(data: SSEEventData): Promise<void> {
         console.log("[SSE] Received event:", data.type, data);
 
         switch (data.type) {
             case "bindingBootstrap":
-                if (
-                    typeof data.bindingToken === "string" &&
-                    typeof data.documentId === "string" &&
-                    typeof data.revision === "string"
-                ) {
-                    await this.transitionToBinding(
-                        {
-                            documentId: data.documentId,
-                            bindingToken: data.bindingToken,
-                            revision: data.revision,
-                        },
-                        data.documentName,
-                        data.boundRelativePath,
-                    );
-                } else if (
-                    data.bindingToken === null &&
-                    data.documentId === null
-                ) {
-                    this.adoptBinding(data);
-                }
+                await this.handleBindingBootstrap(data);
                 break;
 
             case "documentChanged":
-                console.log(`[SSE] Document changed to: ${data.newDocumentId}`);
-                // Reset sync notification state for new document
-                if (this.notificationManager) {
-                    this.notificationManager.resetDocumentSyncState(
-                        data.newDocumentId,
-                    );
-                }
-
-                await this.transitionToBinding(
-                    {
-                        documentId: data.newDocumentId,
-                        bindingToken: data.bindingToken,
-                        revision: data.revision,
-                    },
-                    data.newDocumentName,
-                    data.boundRelativePath,
-                );
+                await this.handleDocumentChanged(data);
                 break;
 
             case "documentSynced":
@@ -239,40 +229,7 @@ export class DocumentManager {
                 break;
 
             case "documentSnapshot":
-                if (
-                    data.bindingToken === this.bindingToken &&
-                    typeof data.markdown === "string" &&
-                    typeof data.baseMarkdown === "string" &&
-                    this.editorManager
-                ) {
-                    await this.bindingTransitionQueue;
-                    if (
-                        data.bindingToken !== this.bindingToken ||
-                        this.isBindingTransitionInProgress
-                    ) {
-                        break;
-                    }
-                    const editor = this.editorManager.getEditor();
-                    if (!editor) {
-                        break;
-                    }
-                    const currentMarkdown =
-                        await this.getMarkdownContent(editor);
-                    if (currentMarkdown === data.markdown) {
-                        this.lastAutoSaveContent = data.markdown;
-                        this.adoptRevision(data);
-                        break;
-                    }
-                    if (currentMarkdown !== data.baseMarkdown) {
-                        console.warn(
-                            "[SSE] Ignoring document snapshot because the editor changed after the agent read it",
-                        );
-                        break;
-                    }
-                    await this.editorManager.setContent(data.markdown);
-                    this.adoptRevision(data);
-                    this.lastAutoSaveContent = data.markdown;
-                }
+                await this.handleDocumentSnapshot(data);
                 break;
 
             case "autoSaveError":
@@ -281,58 +238,7 @@ export class DocumentManager {
                 break;
 
             case "llmOperations":
-                // PRODUCTION: Handle LLM operations sent to PRIMARY client only via SSE
-                // Apply operations through editor API for proper markdown parsing
-                if (
-                    data.clientRole === "primary" &&
-                    data.operations &&
-                    Array.isArray(data.operations) &&
-                    this.editorManager
-                ) {
-                    try {
-                        // Mark this client as primary for auto-save
-                        this.isPrimaryClient = true;
-                        console.log(
-                            "[SSE] Marked as PRIMARY CLIENT for auto-save",
-                        );
-
-                        // Apply operations through editor API for proper markdown parsing
-                        const editor = this.editorManager.getEditor();
-                        if (editor) {
-                            await this.applyOperationsThroughEditor(
-                                editor,
-                                data.operations,
-                            );
-                            console.log(
-                                ` [SSE] Applied ${data.operations.length} operations via editor API`,
-                            );
-                        } else {
-                            console.warn(
-                                ` [SSE] No editor available to apply operations`,
-                            );
-                        }
-                    } catch (error) {
-                        console.error(
-                            `[ERROR] [SSE] Failed to apply LLM operations:`,
-                            error,
-                        );
-                        if (this.notificationManager) {
-                            this.notificationManager.showNotification(
-                                `❌ Failed to apply AI changes`,
-                                "error",
-                            );
-                        }
-                    }
-                } else if (data.clientRole !== "primary") {
-                    // Mark as secondary client
-                    this.isPrimaryClient = false;
-                    console.log(`[SSE] Marked as SECONDARY CLIENT`);
-                } else {
-                    console.warn(
-                        `[SSE] Invalid LLM operations received:`,
-                        data,
-                    );
-                }
+                await this.handleLLMOperations(data);
                 break;
 
             case "operationsBeingApplied":
@@ -359,6 +265,122 @@ export class DocumentManager {
                 // Log unknown event types for debugging
                 console.log(`[SSE] Unknown event type: ${data.type}`, data);
                 break;
+        }
+    }
+
+    private async handleBindingBootstrap(data: SSEEventData): Promise<void> {
+        if (
+            typeof data.bindingToken === "string" &&
+            typeof data.documentId === "string" &&
+            typeof data.revision === "string"
+        ) {
+            await this.transitionToBinding(
+                {
+                    documentId: data.documentId,
+                    bindingToken: data.bindingToken,
+                    revision: data.revision,
+                },
+                data.documentName,
+                data.boundRelativePath,
+            );
+        } else if (data.bindingToken === null && data.documentId === null) {
+            this.adoptBinding(data);
+        }
+    }
+
+    private async handleDocumentChanged(data: SSEEventData): Promise<void> {
+        console.log(`[SSE] Document changed to: ${data.newDocumentId}`);
+        if (typeof data.bindingToken !== "string") {
+            return;
+        }
+        if (this.notificationManager) {
+            this.notificationManager.resetDocumentSyncState(data.newDocumentId);
+        }
+        await this.transitionToBinding(
+            {
+                documentId: data.newDocumentId,
+                bindingToken: data.bindingToken,
+                revision: data.revision,
+            },
+            data.newDocumentName,
+            data.boundRelativePath,
+        );
+    }
+
+    private async handleDocumentSnapshot(data: SSEEventData): Promise<void> {
+        if (
+            data.bindingToken !== this.bindingToken ||
+            typeof data.markdown !== "string" ||
+            typeof data.baseMarkdown !== "string" ||
+            !this.editorManager
+        ) {
+            return;
+        }
+        await this.bindingTransitionQueue;
+        if (
+            data.bindingToken !== this.bindingToken ||
+            this.isBindingTransitionInProgress
+        ) {
+            return;
+        }
+        const editor = this.editorManager.getEditor();
+        if (!editor) {
+            return;
+        }
+        const currentMarkdown = await this.getMarkdownContent(editor);
+        if (currentMarkdown === data.markdown) {
+            this.lastAutoSaveContent = data.markdown;
+            this.adoptRevision(data);
+            return;
+        }
+        if (currentMarkdown !== data.baseMarkdown) {
+            console.warn(
+                "[SSE] Ignoring document snapshot because the editor changed after the agent read it",
+            );
+            return;
+        }
+        await this.editorManager.setContent(data.markdown);
+        this.adoptRevision(data);
+        this.lastAutoSaveContent = data.markdown;
+    }
+
+    private async handleLLMOperations(data: SSEEventData): Promise<void> {
+        if (data.clientRole !== "primary") {
+            this.isPrimaryClient = false;
+            console.log(`[SSE] Marked as SECONDARY CLIENT`);
+            return;
+        }
+        if (
+            !data.operations ||
+            !Array.isArray(data.operations) ||
+            !this.editorManager
+        ) {
+            console.warn(`[SSE] Invalid LLM operations received:`, data);
+            return;
+        }
+        try {
+            this.isPrimaryClient = true;
+            console.log("[SSE] Marked as PRIMARY CLIENT for auto-save");
+            const editor = this.editorManager.getEditor();
+            if (!editor) {
+                console.warn(`[SSE] No editor available to apply operations`);
+                return;
+            }
+            await this.applyOperationsThroughEditor(editor, data.operations);
+            console.log(
+                ` [SSE] Applied ${data.operations.length} operations via editor API`,
+            );
+        } catch (error) {
+            console.error(
+                `[ERROR] [SSE] Failed to apply LLM operations:`,
+                error,
+            );
+            if (this.notificationManager) {
+                this.notificationManager.showNotification(
+                    `❌ Failed to apply AI changes`,
+                    "error",
+                );
+            }
         }
     }
 
@@ -798,7 +820,7 @@ export class DocumentManager {
         }
     }
 
-    private adoptBinding(data: any): void {
+    private adoptBinding(data: BindingStateData): void {
         this.bindingVersion++;
         if (typeof data.documentId === "string") {
             this.currentDocumentId = data.documentId;
@@ -809,7 +831,7 @@ export class DocumentManager {
             typeof data.revision === "string" ? data.revision : null;
     }
 
-    private adoptRevision(data: any): void {
+    private adoptRevision(data: BindingStateData): void {
         if (
             typeof data.bindingToken === "string" &&
             data.bindingToken !== this.bindingToken
