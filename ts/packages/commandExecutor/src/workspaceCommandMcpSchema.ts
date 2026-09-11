@@ -81,6 +81,40 @@ export type WorkspaceCommandResult = z.infer<
     typeof WorkspaceCommandResultSchema
 >;
 
+// Completed calls include the workspace result fields alongside the full
+// structured-action envelope. Other service statuses intentionally remain
+// service-shaped so pending prompts and root errors are not converted into a
+// fabricated command failure.
+export const WorkspaceCommandToolResultSchema =
+    WorkspaceCommandResultSchema.partial()
+        .extend({
+            error: z
+                .union([
+                    z.string(),
+                    z.object({ code: z.string(), message: z.string() }),
+                ])
+                .optional(),
+            status: z
+                .enum([
+                    "requires_interaction",
+                    "completed",
+                    "failed",
+                    "cancelled",
+                    "contract_stale",
+                    "unavailable",
+                    "execution_uncertain",
+                    "not-found",
+                ])
+                .optional(),
+        })
+        .passthrough()
+        .refine(
+            (value) =>
+                value.status !== undefined ||
+                WorkspaceCommandResultSchema.safeParse(value).success,
+            "Expected a workspace result or a structured action status",
+        );
+
 export const CancelWorkspaceCommandInputSchema = z.object({
     executionId: z
         .string()

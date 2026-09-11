@@ -9,6 +9,8 @@ export type Mode = "direct" | "mcp" | "dev" | "bypass";
 
 export interface PluginConfig {
     mode: Mode;
+    /** Public server conversation id, never a structured resume capability. */
+    conversationId?: string;
     powershell?: {
         enabled?: boolean;
     };

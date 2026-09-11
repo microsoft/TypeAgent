@@ -599,7 +599,13 @@ class Operation implements StructuredExecutionHooks {
 
     finish(error?: unknown): void {
         if (this.terminal !== undefined) return;
-        error = this.promptFailure ?? error;
+        if (
+            this.promptFailure !== undefined &&
+            (!(error instanceof ExecutionFailure) ||
+                error.code === "execution_failed")
+        ) {
+            error = this.promptFailure;
+        }
         if (
             error === undefined &&
             this.context.currentRequestId?.requestId === this.id &&
