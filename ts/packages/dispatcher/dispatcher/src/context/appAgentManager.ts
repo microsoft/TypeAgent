@@ -321,6 +321,23 @@ export class AppAgentManager implements ActionConfigProvider {
         return this.readiness.get(appAgentName) ?? { state: "ready" };
     }
 
+    public getReadinessSnapshot(appAgentName: string): {
+        source: "cached" | "not-supported" | "uninitialized" | "not-checked";
+        report?: ReadinessReport;
+    } {
+        const record = this.getRecord(appAgentName);
+        if (record.sessionContext === undefined) {
+            return { source: "uninitialized" };
+        }
+        const report = this.readiness.get(appAgentName);
+        if (report !== undefined) {
+            return { source: "cached", report: { ...report } };
+        }
+        return record.appAgent?.checkReadiness === undefined
+            ? { source: "not-supported", report: { state: "ready" } }
+            : { source: "not-checked" };
+    }
+
     // True iff this agent has been observed to implement checkReadiness
     // at any point this session AND we currently don't have a cached
     // report for it. In practice this means: the agent was enabled at

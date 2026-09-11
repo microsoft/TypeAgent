@@ -9,6 +9,8 @@ export {
     SchemaContent,
     SchemaFormat,
     SchemaManifest,
+    ActionEffect,
+    ActionPolicy,
     AppAgent,
     AppAgentEvent,
     AgentMessageKind,

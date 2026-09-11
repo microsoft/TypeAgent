@@ -74,6 +74,15 @@ export type GrammarContent = {
     sourceMap?: string | undefined;
 };
 
+export type ActionEffect = "read-only" | "state-changing" | "unknown";
+
+export type ActionPolicy = {
+    // Omission is unknown, never an exemption from effect confirmation.
+    effects?: ActionEffect;
+    // Even a read-only action can explicitly require confirmation.
+    confirmation?: "required";
+};
+
 export type SchemaManifest = {
     description: string;
     schemaType: string | SchemaTypeNames; // string if there are only action schemas
@@ -83,6 +92,8 @@ export type SchemaManifest = {
     injected?: boolean; // whether the translator is injected into other domains, default is false
     cached?: boolean; // whether the translator's action should be cached, default is true
     streamingActions?: string[];
+    // Exact action names. Applies to structured invocation, not NL routing.
+    actionPolicies?: Record<string, ActionPolicy>;
 };
 
 export type ActionManifest = {
