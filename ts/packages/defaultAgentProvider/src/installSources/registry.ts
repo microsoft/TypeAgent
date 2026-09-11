@@ -399,6 +399,7 @@ export function createInstallSourceRegistry(
         source: InstallSource;
         sourceKind: string;
         sourceIdentity: string;
+        sourceGeneration: number;
         candidate: ResolvedCandidate;
         matchedByName: boolean;
     };
