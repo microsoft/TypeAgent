@@ -24,6 +24,13 @@ import type { PortRegistrar } from "agent-dispatcher";
 import type { ConversationManager } from "./conversationManager.js";
 import { resolveTunnelUrlForDiscovery } from "./tunnelResolver.js";
 import { getSpeechToken } from "./speechToken.js";
+import registerDebug from "debug";
+
+// Disconnect cleanup is best effort, so a failure cannot be surfaced to anyone:
+// the socket it would be reported on is already gone. Without a trace, a client
+// agent left behind on the shared dispatcher only shows up much later as a
+// routing failure with nothing pointing back at the cause.
+const debugError = registerDebug("agent-server:connection:error");
 
 /**
  * Per-connection handler signature expected by transports (the WebSocket
@@ -244,10 +251,12 @@ export function createAgentServerConnectionHandler(
         >();
 
         // Client-hosted agents this connection registered, per conversation.
-        // conversationId → (agent name → instanceId). Keyed by instance, not
-        // just by name, so tearing this connection down removes only its own
-        // instances and leaves other devices on the same agent alone.
-        const clientAgents = new Map<string, Map<string, string>>();
+        // Keyed by instance so disconnect removes only this connection's
+        // devices; the channel name lets replacements overlap until commit.
+        const clientAgents = new Map<
+            string,
+            Map<string, { instanceId: string; channelName: string }>
+        >();
 
         // Resolve the conversation a client-agent operation targets. When no id
         // is given, use the single joined conversation; error if there are zero
@@ -583,23 +592,41 @@ export function createAgentServerConnectionHandler(
                     param.displayName,
                     name,
                 );
+                const registrationId =
+                    param.registrationId === undefined
+                        ? undefined
+                        : checkIdentityField(
+                              "registrationId",
+                              param.registrationId,
+                              "",
+                          );
+                const channelName =
+                    registrationId === undefined
+                        ? `agent:${name}`
+                        : `agent:${name}:${registrationId}`;
 
                 const registered = clientAgents.get(conversationId);
-                if (registered?.has(name)) {
-                    // This connection is re-registering the same name (the
-                    // client rebuilt its rpc server). Drop the stale channel so
-                    // the new proxy can claim it.
-                    channelProvider.deleteChannel(`agent:${name}`);
+                const previous = registered?.get(name);
+                const replacedExistingChannel =
+                    previous?.channelName === channelName;
+                if (replacedExistingChannel) {
+                    // Legacy clients reuse agent:<name>. The current client
+                    // uses a unique registration channel, so its old proxy can
+                    // stay live until the replacement commits.
+                    channelProvider.deleteChannel(channelName);
                 }
-                // Build the rpc proxy on the connection's own channel provider
-                // (the client hosts the real agent via createAgentRpcServer on
-                // the matching agent:<name> channel).
-                const appAgent = await createAgentRpcClient(
-                    name,
-                    channelProvider,
-                    agentInterface,
-                );
+                let proxyCreated = false;
                 try {
+                    // Build the rpc proxy on the connection's own channel
+                    // provider. The client hosts the real agent on the matching
+                    // registration channel.
+                    const appAgent = await createAgentRpcClient(
+                        name,
+                        channelProvider,
+                        agentInterface,
+                        { channelName },
+                    );
+                    proxyCreated = true;
                     await conversationManager.addClientAgent(
                         conversationId,
                         name,
@@ -609,17 +636,45 @@ export function createAgentServerConnectionHandler(
                         displayName,
                         connectionId,
                         param.multiInstance === true,
+                        agentInterface,
                     );
                 } catch (e) {
-                    channelProvider.deleteChannel(`agent:${name}`);
+                    if (proxyCreated || replacedExistingChannel) {
+                        channelProvider.deleteChannel(channelName);
+                    }
+                    if (
+                        replacedExistingChannel &&
+                        previous !== undefined &&
+                        registered !== undefined
+                    ) {
+                        // The client and server have both replaced the old RPC
+                        // channel by this point. If validation rejected the new
+                        // proxy, remove the now-unreachable previous instance.
+                        const removed =
+                            await conversationManager.removeClientAgent(
+                                conversationId,
+                                name,
+                                previous.instanceId,
+                                { ownerConnectionId: connectionId },
+                            );
+                        if (removed) {
+                            registered.delete(name);
+                        }
+                    }
                     throw e;
+                }
+                if (
+                    previous !== undefined &&
+                    previous.channelName !== channelName
+                ) {
+                    channelProvider.deleteChannel(previous.channelName);
                 }
                 let map = clientAgents.get(conversationId);
                 if (map === undefined) {
                     map = new Map();
                     clientAgents.set(conversationId, map);
                 }
-                map.set(name, instanceId);
+                map.set(name, { instanceId, channelName });
             },
             unregisterClientAgent: async (param) => {
                 const conversationId = resolveClientAgentConversation(
@@ -635,7 +690,7 @@ export function createAgentServerConnectionHandler(
                 // someone else's agent.
                 const instanceId =
                     param.instanceId ??
-                    tracked ??
+                    tracked?.instanceId ??
                     conversationManager.findClientAgentInstance(
                         conversationId,
                         name,
@@ -657,7 +712,9 @@ export function createAgentServerConnectionHandler(
                 // past disconnect. With nothing tracked there is nothing to
                 // protect, so any dangling channel can go.
                 if (removed || tracked === undefined) {
-                    channelProvider.deleteChannel(`agent:${name}`);
+                    channelProvider.deleteChannel(
+                        tracked?.channelName ?? `agent:${name}`,
+                    );
                     clientAgents.get(conversationId)?.delete(name);
                 }
             },
@@ -678,14 +735,30 @@ export function createAgentServerConnectionHandler(
             for (const [conversationId, agents] of clientAgents.entries()) {
                 const connectionId =
                     joinedConversations.get(conversationId)?.connectionId;
-                for (const [name, instanceId] of agents.entries()) {
+                for (const [
+                    name,
+                    { instanceId, channelName },
+                ] of agents.entries()) {
                     conversationManager
                         .removeClientAgent(conversationId, name, instanceId, {
                             ownerConnectionId: connectionId,
                         })
-                        .catch(() => {
-                            // Best effort on disconnect
-                        });
+                        .catch((e) => {
+                            // Best effort on disconnect, but not silent: this
+                            // failing is how a client agent leaks onto the
+                            // shared dispatcher. Not retried on purpose --
+                            // removal is idempotent and ownership-checked, so a
+                            // second attempt could only race a reconnect that
+                            // has legitimately reclaimed the instance.
+                            debugError(
+                                `Failed to remove client agent "${name}" instance ${instanceId} (connection ${connectionId}) from conversation ${conversationId} on disconnect: ${
+                                    e instanceof Error ? e.message : String(e)
+                                }`,
+                            );
+                        })
+                        .finally(() =>
+                            channelProvider.deleteChannel(channelName),
+                        );
                 }
             }
             clientAgents.clear();
@@ -695,8 +768,15 @@ export function createAgentServerConnectionHandler(
             ] of joinedConversations.entries()) {
                 conversationManager
                     .leaveConversation(conversationId, connectionId)
-                    .catch(() => {
-                        // Best effort on disconnect
+                    .catch((e) => {
+                        // Best effort on disconnect, but traced: a conversation
+                        // this connection never leaves keeps its dispatcher
+                        // alive and its idle timer from ever starting.
+                        debugError(
+                            `Failed to leave conversation ${conversationId} for connection ${connectionId} on disconnect: ${
+                                e instanceof Error ? e.message : String(e)
+                            }`,
+                        );
                     });
             }
             joinedConversations.clear();
