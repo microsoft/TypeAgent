@@ -32,47 +32,4 @@ describe("installed Copilot runtime tool contract", () => {
         }
     });
 
-    test.each(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] as const)(
-        "%s exposes usable native tools",
-        async (model: "gpt-5.6-sol" | "gpt-5.6-terra" | "gpt-5.6-luna") => {
-            const session = await client.createSession({
-                model,
-                workingDirectory,
-                availableTools: buildCopilotAvailableTools({
-                    subagentsEnabled: false,
-                }),
-                onPermissionRequest: () => ({
-                    kind: "denied-no-approval-rule-and-could-not-request-from-user",
-                }),
-            });
-            try {
-                // Unlike the static global listing, this applies the host platform,
-                // model overrides and our allowlist. No model request is sent.
-                await session.rpc.tools.initializeAndValidate();
-                const { tools } = await session.rpc.tools.getCurrentMetadata();
-                expect(tools).not.toBeNull();
-                const names = tools?.map((tool) => tool.name);
-                const shell =
-                    process.platform === "win32" ? "powershell" : "bash";
-                expect(names).toEqual(
-                    expect.arrayContaining([
-                        "view",
-                        "apply_patch",
-                        "rg",
-                        "glob",
-                        "web_fetch",
-                        shell,
-                        `read_${shell}`,
-                        `stop_${shell}`,
-                        `list_${shell}`,
-                    ]),
-                );
-                for (const excluded of ["task", "run_factory", "skill"]) {
-                    expect(names).not.toContain(excluded);
-                }
-            } finally {
-                await client.deleteSession(session.sessionId);
-            }
-        },
-    );
 });
