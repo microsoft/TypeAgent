@@ -1318,6 +1318,7 @@ function createGrammarRule(
                 // match time — no rule definition needed, no NFA state expansion.
                 // BUT: only use the phrase-set if the rule is NOT defined locally
                 // or via import (preserves grammars that define their own <Polite> etc.)
+                const { optional, repeat } = expr;
                 const isLocallyDefined =
                     context.ruleDefMap.has(expr.refName.name) ||
                     context.importedRuleMap.has(expr.refName.name);
@@ -1325,22 +1326,37 @@ function createGrammarRule(
                     !isLocallyDefined &&
                     globalPhraseSetRegistry.isPhraseSetName(expr.refName.name)
                 ) {
-                    parts.push(
-                        createPhraseSetPart(
-                            expr.refName.name,
-                            undefined,
-                            allocPartId(
-                                context,
-                                expr.pos,
-                                `<${expr.refName.name}>`,
-                            ),
+                    const phrasePart = createPhraseSetPart(
+                        expr.refName.name,
+                        undefined,
+                        allocPartId(
+                            context,
+                            expr.pos,
+                            `<${expr.refName.name}>`,
                         ),
                     );
+                    // PhraseSetPart cannot carry optional/repeat; wrap so bare
+                    // <Polite>? / <Polite>* / <Polite>+ match grouped form.
+                    if (optional || repeat) {
+                        parts.push(
+                            createRulesPart([{ parts: [phrasePart] }], {
+                                optional,
+                                repeat,
+                                partId: allocPartId(
+                                    context,
+                                    expr.pos,
+                                    `<${expr.refName.name}>${repeat ? (optional ? "*" : "+") : "?"}`,
+                                ),
+                            }),
+                        );
+                    } else {
+                        parts.push(phrasePart);
+                    }
                     // Phrase sets don't produce a captured value on their own.
                     // Use defaultValue=true so single-part rules using a phrase set
                     // don't trip the "Start rule does not produce a value" check.
                     defaultValue = true;
-                    consumedInput(); // phrase sets always consume input
+                    if (!optional) consumedInput(); // required / + still consume
                     break;
                 }
                 const record = createNamedGrammarRules(
@@ -1355,6 +1371,8 @@ function createGrammarRule(
                 parts.push(
                     createRulesPart(record.grammarRules, {
                         name: expr.refName.name,
+                        optional,
+                        repeat,
                         partId: allocPartId(
                             context,
                             expr.pos,
@@ -1362,14 +1380,16 @@ function createGrammarRule(
                         ),
                     }),
                 );
-                // RuleRefExpr has no optional modifier; it is always non-optional.
+                // Optional / * rule refs can be skipped — do not force non-null.
                 // === false: only clear when *definitely* non-nullable (same
                 // asymmetry as the variable ruleRef case above).
-                if (record.nullable === false) {
-                    currentEpr = new Set();
+                if (!optional) {
+                    if (record.nullable === false) {
+                        currentEpr = new Set();
+                    }
+                    // ?? false: treat undefined (back-ref) as non-nullable.
+                    ruleNullable = ruleNullable && (record.nullable ?? false);
                 }
-                // ?? false: treat undefined (back-ref) as non-nullable.
-                ruleNullable = ruleNullable && (record.nullable ?? false);
                 break;
             }
             case "rules": {
