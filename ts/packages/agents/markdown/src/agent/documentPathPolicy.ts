@@ -89,17 +89,19 @@ export function resolveExistingFileWithinRoot(
         return undefined;
     }
     const rootPaths = resolveRootPaths(root);
-    // Both inputs are validated and the canonical file is checked below.
-    const candidate = path.resolve(rootPaths.resolvedRoot, relativePath); // lgtm[js/path-injection]
+    const candidate = path.resolve(rootPaths.resolvedRoot, relativePath);
     if (!isPathWithinRoot(rootPaths.resolvedRoot, candidate)) {
         return undefined;
     }
     try {
         const canonicalFile = fs.realpathSync(candidate);
-        return isPathWithinRoot(rootPaths.canonicalRoot, canonicalFile) &&
-            fs.statSync(canonicalFile).isFile()
-            ? canonicalFile
-            : undefined;
+        if (
+            canonicalFile !== rootPaths.canonicalRoot &&
+            !canonicalFile.startsWith(rootPaths.canonicalRoot + path.sep)
+        ) {
+            return undefined;
+        }
+        return fs.statSync(canonicalFile).isFile() ? canonicalFile : undefined;
     } catch (error) {
         if (isFileNotFoundError(error)) {
             return undefined;
@@ -140,7 +142,10 @@ function ensureDirectoryWithinRoot(
         }
 
         const canonicalDirectory = fs.realpathSync(nextDirectory);
-        if (!isPathWithinRoot(root.canonicalRoot, canonicalDirectory)) {
+        if (
+            canonicalDirectory !== root.canonicalRoot &&
+            !canonicalDirectory.startsWith(root.canonicalRoot + path.sep)
+        ) {
             return undefined;
         }
         currentDirectory = canonicalDirectory;
@@ -181,7 +186,8 @@ export function resolveWritableFileWithinRoot(
             return undefined;
         }
         const canonicalFile = fs.realpathSync(writablePath);
-        return isPathWithinRoot(rootPaths.canonicalRoot, canonicalFile)
+        return canonicalFile === rootPaths.canonicalRoot ||
+            canonicalFile.startsWith(rootPaths.canonicalRoot + path.sep)
             ? canonicalFile
             : undefined;
     } catch (error) {
