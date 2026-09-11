@@ -465,6 +465,8 @@ describe("InstallSourceRegistry expected candidate resolution", () => {
     function expectedFromPreview(match: PreviewMatch): InstallPreviewMatch {
         return {
             source: match.source,
+            sourceKind: match.sourceKind,
+            sourceIdentity: match.sourceIdentity,
             matchKind: match.matchedByName
                 ? "defaultAgentName"
                 : match.candidate.path !== undefined
@@ -480,6 +482,9 @@ describe("InstallSourceRegistry expected candidate resolution", () => {
             ...(match.candidate.ref !== undefined
                 ? { ref: match.candidate.ref }
                 : {}),
+            ...(match.candidate.version !== undefined
+                ? { version: match.candidate.version }
+                : {}),
         };
     }
 
@@ -490,6 +495,7 @@ describe("InstallSourceRegistry expected candidate resolution", () => {
             packageName: "@typeagent/photo-agent",
             defaultAgentName: "photo",
             ref: "@typeagent/photo-agent@latest",
+            version: "1.0.0",
         };
         let materializeCalls = 0;
         const source: InstallSource = {
@@ -529,6 +535,48 @@ describe("InstallSourceRegistry expected candidate resolution", () => {
         await expect(
             registry.resolveExpected("photo", expected),
         ).rejects.toThrow(/Plan drift: ref changed/);
+        expect(materializeCalls).toBe(0);
+    });
+
+    it("rejects concrete version drift before materialization", async () => {
+        let candidate: ResolvedCandidate = {
+            source: "feed",
+            module: "@typeagent/photo-agent",
+            packageName: "@typeagent/photo-agent",
+            defaultAgentName: "photo",
+            ref: "@typeagent/photo-agent@latest",
+            version: "1.0.0",
+        };
+        let materializeCalls = 0;
+        const source: InstallSource = {
+            name: "feed",
+            kind: "feed",
+            find: async () => candidate,
+            findName: async () => candidate,
+            materialize: async (resolved) => {
+                materializeCalls++;
+                return {
+                    kind: "npm",
+                    source: resolved.source,
+                    module: resolved.module,
+                    ref: resolved.ref,
+                };
+            },
+            describe: () => "test feed",
+        };
+        const registry = createInstallSourceRegistry(
+            [{ kind: "path", name: "feed" }],
+            { installDir: tmpInstallDir() },
+            () => source,
+        );
+        const preview = await registry.preview("photo");
+        const expected = expectedFromPreview(preview!.winner);
+
+        candidate = { ...candidate, version: "1.1.0" };
+
+        await expect(
+            registry.resolveExpected("photo", expected),
+        ).rejects.toThrow(/Plan drift: version changed/);
         expect(materializeCalls).toBe(0);
     });
 
@@ -575,6 +623,104 @@ describe("InstallSourceRegistry expected candidate resolution", () => {
 
         expect(result.record.source).toBe("a");
         expect(materialized).toEqual(["a"]);
+    });
+
+    it("rejects replacement of a source with different configuration", async () => {
+        const candidate: ResolvedCandidate = {
+            source: "feed",
+            module: "@typeagent/photo-agent",
+            packageName: "@typeagent/photo-agent",
+            defaultAgentName: "photo",
+            ref: "@typeagent/photo-agent@latest",
+            version: "1.0.0",
+        };
+        const registry = createInstallSourceRegistry(
+            [{ kind: "path", name: "feed", baseDir: "first" }],
+            { installDir: tmpInstallDir() },
+            (config) => ({
+                name: config.name,
+                kind: config.kind,
+                find: async () => candidate,
+                findName: async () => candidate,
+                materialize: async (resolved) => ({
+                    kind: "npm",
+                    source: resolved.source,
+                    module: resolved.module,
+                    ref: resolved.ref,
+                }),
+                describe: () =>
+                    config.kind === "path"
+                        ? (config.baseDir ?? "(default base)")
+                        : config.name,
+            }),
+        );
+        const preview = await registry.preview("photo");
+        const expected = expectedFromPreview(preview!.winner);
+
+        registry.remove("feed");
+        registry.add({ kind: "path", name: "feed", baseDir: "second" });
+
+        await expect(
+            registry.resolveExpected("photo", expected),
+        ).rejects.toThrow(/Plan drift: sourceIdentity changed/);
+    });
+
+    it("keeps the identity of the source instance that produced the preview", async () => {
+        let releaseSecond!: () => void;
+        const secondGate = new Promise<void>((resolve) => {
+            releaseSecond = resolve;
+        });
+        let secondStarted!: () => void;
+        const secondPending = new Promise<void>((resolve) => {
+            secondStarted = resolve;
+        });
+        const candidate: ResolvedCandidate = {
+            source: "a",
+            module: "@typeagent/photo-agent",
+            packageName: "@typeagent/photo-agent",
+            defaultAgentName: "photo",
+            ref: "@typeagent/photo-agent@latest",
+            version: "1.0.0",
+        };
+        const registry = createInstallSourceRegistry(
+            [
+                { kind: "path", name: "a", baseDir: "old" },
+                { kind: "path", name: "b", baseDir: "block" },
+            ],
+            { installDir: tmpInstallDir() },
+            (config) => ({
+                name: config.name,
+                kind: config.kind,
+                find: async () => undefined,
+                findName:
+                    config.name === "a"
+                        ? async () => candidate
+                        : async () => {
+                              secondStarted();
+                              await secondGate;
+                              return undefined;
+                          },
+                materialize: async (resolved) => ({
+                    kind: "npm",
+                    source: resolved.source,
+                    module: resolved.module,
+                    ref: resolved.ref,
+                }),
+                describe: () =>
+                    config.kind === "path"
+                        ? (config.baseDir ?? "(default base)")
+                        : config.name,
+            }),
+        );
+
+        const previewing = registry.preview("photo");
+        await secondPending;
+        registry.remove("a");
+        registry.add({ kind: "path", name: "a", baseDir: "new" });
+        releaseSecond();
+
+        const preview = await previewing;
+        expect(preview?.winner.sourceIdentity).toBe("old");
     });
 });
 

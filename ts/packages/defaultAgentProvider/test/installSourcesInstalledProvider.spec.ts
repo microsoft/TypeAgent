@@ -311,6 +311,22 @@ describe("createInstalledAppAgentProvider(s)", () => {
         expect(manifest.emojiChar).toBe("🧪");
     });
 
+    it("applies an explicit provider default during construction", () => {
+        const provider = createInstalledAppAgentProvider(
+            "feedy",
+            {
+                name: "feedy",
+                kind: "npm",
+                path: "/abs/feedy",
+                source: "path",
+            },
+            "/nonexistent/installDir",
+            { defaultEnabled: false },
+        );
+
+        expect(provider.defaultEnabled).toBe(false);
+    });
+
     it("resolves a module from its per-agent version-scoped root (5.5)", async () => {
         // A record carrying an `installRoot` resolves from
         // installDir/agents/<installRoot>/node_modules, NOT the shared installDir.
@@ -2978,6 +2994,173 @@ describe("getAgentPackageState & installExpected", () => {
         );
     });
 
+    it("clears a legal requested-name reservation when resolution fails", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const packageDir = makePathAgentDir();
+        let available = false;
+        const source: InstallSource = {
+            name: "path",
+            kind: "path",
+            find: async () => undefined,
+            findName: async () =>
+                available
+                    ? {
+                          source: "path",
+                          path: packageDir,
+                          packageName: "ta-path-agent",
+                          defaultAgentName: "retryAgent",
+                      }
+                    : undefined,
+            materialize: async (candidate) => ({
+                kind: "npm",
+                source: candidate.source,
+                path: packageDir,
+            }),
+            describe: () => packageDir,
+        };
+        const built = createDefaultInstalledAgentSource(
+            instanceDir,
+            undefined,
+            () => source,
+        );
+
+        await expect(
+            built.testApi.install("retryAgent", undefined, undefined, noopHost),
+        ).rejects.toThrow(/No source could resolve 'retryAgent'/);
+        expect(
+            built.testApi.getAgentPackageState("retryAgent"),
+        ).toBeUndefined();
+
+        available = true;
+        await expect(
+            built.testApi.install("retryAgent", undefined, undefined, noopHost),
+        ).resolves.toMatchObject({ name: "retryAgent" });
+    });
+
+    it("clears the requested-name reservation when the inferred name is built-in", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const packageDir = makePathAgentDir();
+        let materializeCalls = 0;
+        const source: InstallSource = {
+            name: "path",
+            kind: "path",
+            find: async () => undefined,
+            findName: async () => ({
+                source: "path",
+                path: packageDir,
+                packageName: "ta-path-agent",
+                defaultAgentName: "chat",
+            }),
+            materialize: async (candidate) => {
+                materializeCalls++;
+                return {
+                    kind: "npm",
+                    source: candidate.source,
+                    path: packageDir,
+                };
+            },
+            describe: () => packageDir,
+        };
+        const built = createDefaultInstalledAgentSource(
+            instanceDir,
+            { configName: "inbox" },
+            () => source,
+        );
+
+        await expect(
+            built.testApi.install("chatAlias", undefined, undefined, noopHost),
+        ).rejects.toThrow(
+            "Agent 'chat' is built-in and cannot be shadowed by an install",
+        );
+        expect(built.testApi.getAgentPackageState("chatAlias")).toBeUndefined();
+        expect(materializeCalls).toBe(0);
+    });
+
+    it("resolves an ordinary one-argument install only once", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const packageDir = makePathAgentDir();
+        let findNameCalls = 0;
+        const source: InstallSource = {
+            name: "path",
+            kind: "path",
+            find: async () => undefined,
+            findName: async () => {
+                findNameCalls++;
+                return {
+                    source: "path",
+                    path: packageDir,
+                    packageName: "ta-path-agent",
+                    defaultAgentName: "singlePassAgent",
+                    ref: `candidate-${findNameCalls}`,
+                };
+            },
+            materialize: async (candidate) => ({
+                kind: "npm",
+                source: candidate.source,
+                path: packageDir,
+            }),
+            describe: () => packageDir,
+        };
+        const built = createDefaultInstalledAgentSource(
+            instanceDir,
+            undefined,
+            () => source,
+        );
+
+        await expect(
+            built.testApi.install(
+                "singlePassAgent",
+                undefined,
+                undefined,
+                noopHost,
+            ),
+        ).resolves.toMatchObject({ name: "singlePassAgent" });
+        expect(findNameCalls).toBe(1);
+    });
+
+    it("does not commit an install after its source identity changes", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const packageDir = makePathAgentDir();
+        let sourceIdentity = "first";
+        const source: InstallSource = {
+            name: "path",
+            kind: "path",
+            find: async () => undefined,
+            findName: async () => ({
+                source: "path",
+                path: packageDir,
+                packageName: "ta-path-agent",
+                defaultAgentName: "removedSourceAgent",
+            }),
+            materialize: async (candidate) => {
+                sourceIdentity = "second";
+                return {
+                    kind: "npm",
+                    source: candidate.source,
+                    path: packageDir,
+                };
+            },
+            describe: () => sourceIdentity,
+        };
+        const built = createDefaultInstalledAgentSource(
+            instanceDir,
+            undefined,
+            () => source,
+        );
+
+        await expect(
+            built.testApi.install(
+                "removedSourceAgent",
+                undefined,
+                undefined,
+                noopHost,
+            ),
+        ).rejects.toThrow(/Install source 'path' changed/);
+        expect(
+            readAgentsJson(instanceDir)?.agents.removedSourceAgent,
+        ).toBeUndefined();
+    });
+
     it("getAgentPackageState correctly distinguishes bundled, installed, and absent", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const src = createDefaultInstalledAgentSource(instanceDir, {
@@ -3073,7 +3256,7 @@ describe("getAgentPackageState & installExpected", () => {
         const installedProvider = (await connection.providers).find(
             (provider) => provider.getAppAgentNames().includes("expectedAgent"),
         );
-        expect(Reflect.get(installedProvider!, "defaultEnabled")).toBe(false);
+        expect(installedProvider?.defaultEnabled).toBe(false);
         connection.dispose();
 
         // Should throw on drifted package name

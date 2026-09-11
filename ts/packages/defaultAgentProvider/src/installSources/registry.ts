@@ -40,6 +40,8 @@ import { createLimiter, Limiter } from "@typeagent/common-utils";
  */
 export interface PreviewMatch {
     source: string;
+    sourceKind: string;
+    sourceIdentity: string;
     matchedByName: boolean;
     name: string;
     candidate: ResolvedCandidate;
@@ -59,6 +61,12 @@ export interface DefaultInstallSourceRegistry {
     // Host-rendered summaries for `@package source list`.
     list(): InstallSourceInfo[];
     get(name: string): InstallSource | undefined;
+    // Fail if the selected source was removed or replaced before commit.
+    assertSourceCurrent(
+        name: string,
+        expectedKind: string,
+        expectedIdentity: string,
+    ): void;
     // Reprioritize the single source list (which is the resolution priority
     // order, first match wins): the named sources move to the front (in the
     // given order); every unnamed source keeps its current relative position
@@ -85,6 +93,8 @@ export interface DefaultInstallSourceRegistry {
     // `onStatus`, when supplied, reports each source as it is probed.
     // `abortSignal`, when supplied, cancels a long install (the feed source's
     // `npm install`) mid flight.
+    // `onSelected`, when supplied, runs synchronously after name inference and
+    // before materialization so the caller can validate or reserve the name.
     resolve(
         nameOrTarget: string,
         ref?: string,
@@ -92,6 +102,7 @@ export interface DefaultInstallSourceRegistry {
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
         abortSignal?: AbortSignal,
+        onSelected?: (match: PreviewMatch) => void,
     ): Promise<ResolveResult>;
     // Select the winning candidate and derive its installed name without
     // materializing it.
@@ -366,6 +377,8 @@ export function createInstallSourceRegistry(
     // phase-2 / explicit ref (`find`) match.
     type WalkMatch = {
         source: InstallSource;
+        sourceKind: string;
+        sourceIdentity: string;
         candidate: ResolvedCandidate;
         matchedByName: boolean;
     };
@@ -389,7 +402,13 @@ export function createInstallSourceRegistry(
             );
             const candidate = await source.find(ref, onWarn);
             if (candidate !== undefined) {
-                yield { source, candidate, matchedByName: false };
+                yield {
+                    source,
+                    sourceKind: source.kind,
+                    sourceIdentity: source.describe(),
+                    candidate,
+                    matchedByName: false,
+                };
             }
         }
     }
@@ -416,7 +435,13 @@ export function createInstallSourceRegistry(
                 onStatus?.(`Trying ${describeSource(source.name)}...`);
                 const candidate = await source.findName(target, onWarn);
                 if (candidate !== undefined) {
-                    yield { source, candidate, matchedByName: true };
+                    yield {
+                        source,
+                        sourceKind: source.kind,
+                        sourceIdentity: source.describe(),
+                        candidate,
+                        matchedByName: true,
+                    };
                 }
             }
         }
@@ -425,7 +450,13 @@ export function createInstallSourceRegistry(
             onStatus?.(`Trying ${describeSource(source.name)}...`);
             const candidate = await source.find(target, onWarn);
             if (candidate !== undefined) {
-                yield { source, candidate, matchedByName: false };
+                yield {
+                    source,
+                    sourceKind: source.kind,
+                    sourceIdentity: source.describe(),
+                    candidate,
+                    matchedByName: false,
+                };
             }
         }
     }
@@ -506,6 +537,7 @@ export function createInstallSourceRegistry(
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
         abortSignal?: AbortSignal,
+        onSelected?: (match: PreviewMatch) => void,
     ): Promise<ResolveResult> {
         // EXPLICIT (ref supplied) and INFER (ref omitted) modes differ only in
         // which walk runs and how the installed name is chosen; the not-found
@@ -536,6 +568,14 @@ export function createInstallSourceRegistry(
             ref !== undefined
                 ? nameOrTarget
                 : requireInferredName(match.candidate, nameOrTarget);
+        onSelected?.({
+            source: match.source.name,
+            sourceKind: match.sourceKind,
+            sourceIdentity: match.sourceIdentity,
+            matchedByName: match.matchedByName,
+            name,
+            candidate: match.candidate,
+        });
         return materializeMatch(match, name, onStatus, abortSignal);
     }
 
@@ -553,6 +593,8 @@ export function createInstallSourceRegistry(
         const result: ResolveResult = {
             record: { ...record, name },
             matchedByName: match.matchedByName,
+            sourceKind: match.sourceKind,
+            sourceIdentity: match.sourceIdentity,
         };
         if (match.candidate.packageName !== undefined) {
             result.packageName = match.candidate.packageName;
@@ -568,6 +610,8 @@ export function createInstallSourceRegistry(
             -readonly [K in keyof InstallPreviewMatch]: InstallPreviewMatch[K];
         } = {
             source: match.source.name,
+            sourceKind: match.sourceKind,
+            sourceIdentity: match.sourceIdentity,
             matchKind: match.matchedByName
                 ? "defaultAgentName"
                 : match.candidate.path !== undefined
@@ -584,6 +628,9 @@ export function createInstallSourceRegistry(
         if (match.candidate.ref !== undefined) {
             identity.ref = match.candidate.ref;
         }
+        if (match.candidate.version !== undefined) {
+            identity.version = match.candidate.version;
+        }
         return identity;
     }
 
@@ -593,11 +640,14 @@ export function createInstallSourceRegistry(
     ): void {
         const fields: readonly (keyof InstallPreviewMatch)[] = [
             "source",
+            "sourceKind",
+            "sourceIdentity",
             "matchKind",
             "name",
             "packageName",
             "path",
             "ref",
+            "version",
         ];
         for (const field of fields) {
             if (expected[field] !== current[field]) {
@@ -618,6 +668,21 @@ export function createInstallSourceRegistry(
         },
         get(name: string): InstallSource | undefined {
             return entries.get(name)?.source;
+        },
+        assertSourceCurrent(
+            name: string,
+            expectedKind: string,
+            expectedIdentity: string,
+        ): void {
+            const current = entries.get(name)?.source;
+            if (
+                current?.kind !== expectedKind ||
+                current.describe() !== expectedIdentity
+            ) {
+                throw new Error(
+                    `Install source '${name}' changed before the install could be committed. Retry the install.`,
+                );
+            }
         },
         setOrder(names: string[]): void {
             // Pull the named sources to the front in the requested order; then
@@ -673,6 +738,7 @@ export function createInstallSourceRegistry(
             onWarn?: SourceWarning,
             onStatus?: SourceStatus,
             abortSignal?: AbortSignal,
+            onSelected?: (match: PreviewMatch) => void,
         ): Promise<ResolveResult> {
             // The whole install op (resolve -> materialize) runs under the
             // shared limiter. The installer reuses the
@@ -685,6 +751,7 @@ export function createInstallSourceRegistry(
                     onWarn,
                     onStatus,
                     abortSignal,
+                    onSelected,
                 ),
             );
         },
@@ -713,6 +780,8 @@ export function createInstallSourceRegistry(
             }
             return {
                 source: match.source.name,
+                sourceKind: match.sourceKind,
+                sourceIdentity: match.sourceIdentity,
                 matchedByName: match.matchedByName,
                 name:
                     ref !== undefined
@@ -838,6 +907,8 @@ export function createInstallSourceRegistry(
             // Shadows carry a best-effort name that is never shown.
             const matches: PreviewMatch[] = raw.map((m, i) => ({
                 source: m.source.name,
+                sourceKind: m.sourceKind,
+                sourceIdentity: m.sourceIdentity,
                 matchedByName: m.matchedByName,
                 // EXPLICIT stamps the user-supplied name; INFER derives the
                 // winner's name from the resolved package (same rule as

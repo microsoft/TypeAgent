@@ -476,15 +476,14 @@ export function createDefaultInstalledAgentSource(
         record: InstalledAgentRecord,
     ): AppAgentProvider {
         const loadRecord = registry.load(record);
-        const provider = createInstalledAppAgentProvider(
+        return createInstalledAppAgentProvider(
             name,
             loadRecord,
             resolvedInstallDir,
+            record.initiallyDisabled === true
+                ? { defaultEnabled: false }
+                : undefined,
         );
-        if (record.initiallyDisabled === true) {
-            Object.assign(provider, { defaultEnabled: false });
-        }
-        return provider;
     }
 
     // Build the shared provider for a freshly-resolved install/update record AND
@@ -921,16 +920,14 @@ export function createDefaultInstalledAgentSource(
             -readonly [K in keyof InstallPreviewMatch]: InstallPreviewMatch[K];
         } = {
             source: match.source,
+            sourceKind: match.sourceKind,
+            sourceIdentity: match.sourceIdentity,
             matchKind: deriveMatchKind({
                 matchedByName: match.matchedByName,
                 path: match.candidate.path,
             }),
             name: match.name,
         };
-        const sourceKind = registry.get(match.source)?.kind;
-        if (sourceKind !== undefined) {
-            preview.sourceKind = sourceKind;
-        }
         if (match.candidate.packageName !== undefined) {
             preview.packageName = match.candidate.packageName;
         }
@@ -939,6 +936,9 @@ export function createDefaultInstalledAgentSource(
         }
         if (match.candidate.ref !== undefined) {
             preview.ref = match.candidate.ref;
+        }
+        if (match.candidate.version !== undefined) {
+            preview.version = match.candidate.version;
         }
         return preview;
     };
@@ -1008,6 +1008,11 @@ export function createDefaultInstalledAgentSource(
                     record,
                 );
                 await limiter(async () => {
+                    registry.assertSourceCurrent(
+                        record.source,
+                        resolved.sourceKind,
+                        resolved.sourceIdentity,
+                    );
                     mutateAgentsJson((agents) => {
                         if (agents[name] !== undefined) {
                             throw new Error(`Agent '${name}' already exists`);
@@ -1060,79 +1065,56 @@ export function createDefaultInstalledAgentSource(
             const explicit = ref !== undefined;
             let busyName: string | undefined;
             let requestedNameReserved = false;
-            let inferredExpected: InstallPreviewMatch | undefined;
-            // Explicit (two-argument) mode knows the installed name up front, so
-            // fail fast on a built-in / busy / draining name before resolving.
-            if (explicit) {
-                if (isBuiltin(nameOrTarget)) {
-                    throw new Error(
-                        `Agent '${nameOrTarget}' is built-in and cannot be shadowed by an install`,
-                    );
-                }
-                assertNameFree(nameOrTarget);
-                busy.add(nameOrTarget);
-                busyName = nameOrTarget;
-            } else {
-                if (isLegalAgentName(nameOrTarget)) {
+            try {
+                // Explicit mode knows the installed name up front. Infer mode
+                // can reserve a legal requested name while its source resolves,
+                // but the final package name is checked after resolution.
+                if (explicit) {
+                    if (isBuiltin(nameOrTarget)) {
+                        throw new Error(
+                            `Agent '${nameOrTarget}' is built-in and cannot be shadowed by an install`,
+                        );
+                    }
+                    assertNameFree(nameOrTarget);
+                    busy.add(nameOrTarget);
+                    busyName = nameOrTarget;
+                } else if (isLegalAgentName(nameOrTarget)) {
                     assertNameFree(nameOrTarget);
                     busy.add(nameOrTarget);
                     requestedNameReserved = true;
                 }
-                const preview = await registry.select(
-                    nameOrTarget,
-                    undefined,
-                    sourceName,
-                    undefined,
-                    onStatus,
-                );
-                if (preview === undefined) {
-                    throw sourceName === undefined
-                        ? new Error(
-                              `No source could resolve '${nameOrTarget}'. Order: [${registry
-                                  .list()
-                                  .map((sourceInfo) => sourceInfo.name)
-                                  .join(", ")}]`,
-                          )
-                        : new Error(
-                              `'${nameOrTarget}' not found in source '${sourceName}'`,
-                          );
-                }
-                inferredExpected = toInstallPreviewMatch(preview);
-                const inferredName = inferredExpected.name;
-                if (isBuiltin(inferredName)) {
-                    throw new Error(
-                        `Agent '${inferredName}' is built-in and cannot be shadowed by an install`,
-                    );
-                }
-                if (!requestedNameReserved || inferredName !== nameOrTarget) {
-                    assertNameFree(inferredName);
-                    busy.add(inferredName);
-                }
-                busyName = inferredName;
-            }
-            try {
+
                 // resolve + materialize is serialized by the registry's limiter.
                 // In infer mode this derives the installed name from the resolved
                 // package; in explicit mode it stamps the supplied name. Collect
                 // any non-fatal source warnings raised during resolve.
                 const warningSet = new Set<string>();
-                const resolved =
-                    inferredExpected === undefined
-                        ? await registry.resolve(
-                              nameOrTarget,
-                              ref,
-                              sourceName,
-                              (m) => warningSet.add(m),
-                              onStatus,
-                              abortSignal,
-                          )
-                        : await registry.resolveExpected(
-                              nameOrTarget,
-                              inferredExpected,
-                              (m) => warningSet.add(m),
-                              onStatus,
-                              abortSignal,
-                          );
+                const resolved = await registry.resolve(
+                    nameOrTarget,
+                    ref,
+                    sourceName,
+                    (m) => warningSet.add(m),
+                    onStatus,
+                    abortSignal,
+                    explicit
+                        ? undefined
+                        : (selected) => {
+                              const name = selected.name;
+                              if (isBuiltin(name)) {
+                                  throw new Error(
+                                      `Agent '${name}' is built-in and cannot be shadowed by an install`,
+                                  );
+                              }
+                              if (
+                                  !requestedNameReserved ||
+                                  name !== nameOrTarget
+                              ) {
+                                  assertNameFree(name);
+                                  busy.add(name);
+                              }
+                              busyName = name;
+                          },
+                );
                 const record = resolved.record;
                 const name = record.name;
                 // Build the shared per-agent provider AND structurally validate
@@ -1150,6 +1132,11 @@ export function createDefaultInstalledAgentSource(
                 // install that resolved to the same inferred name) cannot enter
                 // until the first commits, so the existing-agent check catches it.
                 await limiter(async () => {
+                    registry.assertSourceCurrent(
+                        record.source,
+                        resolved.sourceKind,
+                        resolved.sourceIdentity,
+                    );
                     mutateAgentsJson((agents) => {
                         if (agents[name] !== undefined) {
                             throw new Error(`Agent '${name}' already exists`);

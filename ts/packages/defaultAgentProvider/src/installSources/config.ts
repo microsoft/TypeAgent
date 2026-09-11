@@ -149,11 +149,13 @@ export function deriveMatchKind(m: {
 export interface InstallPreviewMatch {
     readonly source: string;
     readonly sourceKind?: string; // path / catalog / feed, for the preview message
+    readonly sourceIdentity?: string; // resolved source configuration, used only for plan drift checks
     readonly matchKind: InstallMatchKind;
     readonly name: string; // dispatcher name it would install as
     readonly packageName?: string;
     readonly path?: string;
     readonly ref?: string; // durable handle
+    readonly version?: string; // concrete artifact version, when the source resolves one
 }
 
 /**
@@ -267,6 +269,8 @@ export interface ResolveResult {
     record: InstalledAgentRecord; // name already assigned
     matchedByName: boolean;
     packageName?: string;
+    sourceKind: string;
+    sourceIdentity: string;
 }
 
 /**
