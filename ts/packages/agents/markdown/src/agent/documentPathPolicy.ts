@@ -95,10 +95,7 @@ export function resolveExistingFileWithinRoot(
     }
     try {
         const canonicalFile = fs.realpathSync(candidate);
-        if (
-            canonicalFile !== rootPaths.canonicalRoot &&
-            !canonicalFile.startsWith(rootPaths.canonicalRoot + path.sep)
-        ) {
+        if (!canonicalFile.startsWith(rootPaths.canonicalRoot + path.sep)) {
             return undefined;
         }
         return fs.statSync(canonicalFile).isFile() ? canonicalFile : undefined;
@@ -186,8 +183,7 @@ export function resolveWritableFileWithinRoot(
             return undefined;
         }
         const canonicalFile = fs.realpathSync(writablePath);
-        return canonicalFile === rootPaths.canonicalRoot ||
-            canonicalFile.startsWith(rootPaths.canonicalRoot + path.sep)
+        return canonicalFile.startsWith(rootPaths.canonicalRoot + path.sep)
             ? canonicalFile
             : undefined;
     } catch (error) {
