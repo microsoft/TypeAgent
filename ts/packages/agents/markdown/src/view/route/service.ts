@@ -150,6 +150,8 @@ app.post(
             if (!sameBinding) {
                 bindingToken = randomUUID();
             }
+            bindingGeneration++;
+            bindingSource = "managed";
             notifyBindingToParent();
 
             const documentId = getCurrentDocumentId();
@@ -271,6 +273,8 @@ let clients: any[] = [];
 let filePath: string | null = null;
 let boundRelativePath: string | null = null;
 let bindingToken: string | null = null;
+let bindingGeneration = 0;
+let bindingSource: "http-load" | "managed" | null = null;
 const collaborationManager = new CollaborationManager();
 
 // UI Command routing state
@@ -293,6 +297,14 @@ type PendingMarkdownRequest = {
 };
 const pendingMarkdownRequests = new Map<string, PendingMarkdownRequest>();
 const activeApplyBindings = new Set<string>();
+const browserReadDiskRevisions = new Map<
+    string,
+    {
+        bindingToken: string | null;
+        contentRevision: string;
+        diskRevision: string;
+    }
+>();
 const userHomeDir = os.homedir();
 const INITIAL_ROOT_DIR =
     process.env.TYPEAGENT_MARKDOWN_ROOT || path.join(userHomeDir, "Documents");
@@ -316,18 +328,26 @@ function getValidatedCurrentRoot(): string {
 
 type BindingSnapshot = {
     bindingToken: string | null;
+    bindingGeneration: number;
     currentRoot: string;
     filePath: string | null;
     boundRelativePath: string | null;
 };
 
 function captureBindingSnapshot(): BindingSnapshot {
-    return { bindingToken, currentRoot, filePath, boundRelativePath };
+    return {
+        bindingToken,
+        bindingGeneration,
+        currentRoot,
+        filePath,
+        boundRelativePath,
+    };
 }
 
 function bindingsDiffer(a: BindingSnapshot, b: BindingSnapshot): boolean {
     return (
         a.bindingToken !== b.bindingToken ||
+        a.bindingGeneration !== b.bindingGeneration ||
         a.currentRoot !== b.currentRoot ||
         a.filePath !== b.filePath ||
         a.boundRelativePath !== b.boundRelativePath
@@ -382,10 +402,10 @@ type BoundWriteValidation =
           content?: string;
       };
 
-function validateBoundWriteRequest(body: {
+async function validateBoundWriteRequest(body: {
     bindingToken?: unknown;
     expectedRevision?: unknown;
-}): BoundWriteValidation {
+}): Promise<BoundWriteValidation> {
     const snapshot = captureBindingSnapshot();
     if (!snapshot.filePath || !snapshot.boundRelativePath) {
         return {
@@ -406,7 +426,7 @@ function validateBoundWriteRequest(body: {
     }
 
     try {
-        const document = readBoundDocument({
+        const document = await readBoundDocument({
             token: snapshot.bindingToken,
             root: snapshot.currentRoot,
             relativePath: snapshot.boundRelativePath,
@@ -754,6 +774,14 @@ app.get("/document", (req: Request, res: Response) => {
     }
 
     try {
+        const expectedBindingToken = req.get("X-Binding-Token");
+        if (
+            expectedBindingToken !== undefined &&
+            expectedBindingToken !== bindingToken
+        ) {
+            res.status(409).json({ error: "Document binding changed" });
+            return;
+        }
         debug(
             "[FILE_MODE] File provided when resolving the /document call " +
                 filePath,
@@ -763,13 +791,10 @@ app.get("/document", (req: Request, res: Response) => {
         const ydoc = getAuthoritativeDocument(documentId);
         const ytext = ydoc.getText("content");
         const content = ytext.toString();
-        const persistedContent = fs.existsSync(filePath)
-            ? fs.readFileSync(filePath, "utf-8")
-            : "";
-        res.setHeader(
-            "X-Content-Revision",
-            computeContentRevision(persistedContent),
-        );
+        res.setHeader("X-Content-Revision", computeContentRevision(content));
+        if (bindingToken) {
+            res.setHeader("X-Binding-Token", bindingToken);
+        }
 
         debug(
             `Retrieved content from authoritative Y.js doc: ${documentId}, ${content.length} chars`,
@@ -785,7 +810,7 @@ app.get("/document", (req: Request, res: Response) => {
 });
 
 // Save document from markdown text.
-app.post("/document", express.json(), (req: Request, res: Response) => {
+app.post("/document", express.json(), async (req: Request, res: Response) => {
     const markdownContent =
         typeof req.body?.content === "string" ? req.body.content : "";
 
@@ -803,8 +828,26 @@ app.post("/document", express.json(), (req: Request, res: Response) => {
         return;
     }
 
+    let acquiredWriteKey: string | undefined;
     try {
-        const validation = validateBoundWriteRequest(req.body ?? {});
+        const activeWriteKey =
+            typeof req.body?.bindingToken === "string"
+                ? req.body.bindingToken
+                : undefined;
+        if (
+            activeWriteKey !== undefined &&
+            activeApplyBindings.has(activeWriteKey)
+        ) {
+            res.status(409).json({
+                error: "Another document update is already in progress for this binding",
+            });
+            return;
+        }
+        if (activeWriteKey !== undefined) {
+            activeApplyBindings.add(activeWriteKey);
+            acquiredWriteKey = activeWriteKey;
+        }
+        const validation = await validateBoundWriteRequest(req.body ?? {});
         if (!validation.ok) {
             res.status(validation.status).json({
                 error: validation.error,
@@ -818,16 +861,17 @@ app.post("/document", express.json(), (req: Request, res: Response) => {
             return;
         }
 
+        fs.writeFileSync(validation.targetFilePath, markdownContent, "utf-8");
         const ydoc = getAuthoritativeDocument(validation.targetDocumentId);
         const ytext = ydoc.getText("content");
         ytext.delete(0, ytext.length);
         ytext.insert(0, markdownContent);
-        fs.writeFileSync(validation.targetFilePath, markdownContent, "utf-8");
         filePath = validation.targetFilePath;
         res.json({
             success: true,
             filePath: validation.targetFilePath,
             documentId: validation.targetDocumentId,
+            bindingToken: validation.snapshot.bindingToken,
             revision: computeContentRevision(markdownContent),
         });
     } catch (error) {
@@ -835,6 +879,10 @@ app.post("/document", express.json(), (req: Request, res: Response) => {
             error: "Failed to save document",
             details: error,
         });
+    } finally {
+        if (acquiredWriteKey !== undefined) {
+            activeApplyBindings.delete(acquiredWriteKey);
+        }
     }
 });
 
@@ -897,7 +945,8 @@ app.post("/api/ai-awareness", express.json(), (req: Request, res: Response) => {
 });
 
 // Save browser content only when it still belongs to the active binding.
-app.post("/autosave", express.json(), (req: Request, res: Response) => {
+app.post("/autosave", express.json(), async (req: Request, res: Response) => {
+    let acquiredWriteKey: string | undefined;
     try {
         const content =
             typeof req.body?.content === "string" ? req.body.content : null;
@@ -906,7 +955,24 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
             return;
         }
 
-        const validation = validateBoundWriteRequest(req.body ?? {});
+        const activeWriteKey =
+            typeof req.body?.bindingToken === "string"
+                ? req.body.bindingToken
+                : undefined;
+        if (
+            activeWriteKey !== undefined &&
+            activeApplyBindings.has(activeWriteKey)
+        ) {
+            res.status(409).json({
+                error: "Another document update is already in progress for this binding",
+            });
+            return;
+        }
+        if (activeWriteKey !== undefined) {
+            activeApplyBindings.add(activeWriteKey);
+            acquiredWriteKey = activeWriteKey;
+        }
+        const validation = await validateBoundWriteRequest(req.body ?? {});
         if (!validation.ok) {
             res.status(validation.status).json({
                 error: validation.error,
@@ -920,11 +986,11 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
             return;
         }
 
+        fs.writeFileSync(validation.targetFilePath, content, "utf-8");
         const ydoc = getAuthoritativeDocument(validation.targetDocumentId);
         const ytext = ydoc.getText("content");
         ytext.delete(0, ytext.length);
         ytext.insert(0, content);
-        fs.writeFileSync(validation.targetFilePath, content, "utf-8");
         const revision = computeContentRevision(content);
         broadcastEvent({
             type: "autoSave",
@@ -941,6 +1007,7 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
             message: "Auto-saved successfully",
             filePath: validation.targetFilePath,
             documentId: validation.targetDocumentId,
+            bindingToken: validation.snapshot.bindingToken,
             revision,
         });
     } catch (error) {
@@ -971,6 +1038,10 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
             error: "Auto-save failed",
             details: error instanceof Error ? error.message : error,
         });
+    } finally {
+        if (acquiredWriteKey !== undefined) {
+            activeApplyBindings.delete(acquiredWriteKey);
+        }
     }
 });
 
@@ -1025,16 +1096,18 @@ app.post("/file/load", express.json(), (req: Request, res: Response) => {
             .split(path.sep)
             .join("/");
         bindingToken = randomUUID();
+        bindingGeneration++;
+        bindingSource = "http-load";
         notifyBindingToParent();
 
         const documentId = getCurrentDocumentId();
         if (previousDocumentId !== documentId) {
             evictRoomIfIdle(previousDocumentId);
         }
-        collaborationManager.initializeDocument(documentId, resolvedPath);
-
         const content = fs.readFileSync(resolvedPath, "utf-8");
-        collaborationManager.setDocumentContent(documentId, content);
+        const ytext = getAuthoritativeDocument(documentId).getText("content");
+        ytext.delete(0, ytext.length);
+        ytext.insert(0, content);
 
         res.json({
             success: true,
@@ -1648,41 +1721,66 @@ erDiagram
     };
 }
 
-app.get("/events", (req: Request, res: Response) => {
+app.get("/events", async (req: Request, res: Response) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
 
-    clients.push(res);
+    let closed = false;
+    req.on("close", () => {
+        closed = true;
+        clients = clients.filter((client) => client !== res);
+    });
+
+    let bootstrap = captureBindingSnapshot();
     let revision: string | null = null;
-    if (filePath && boundRelativePath) {
-        try {
-            revision = readBoundDocument({
-                token: bindingToken ?? undefined,
-                root: currentRoot,
-                relativePath: boundRelativePath,
-                filePath,
-            }).revision;
-        } catch (error) {
-            debug(`Unable to read binding bootstrap revision: ${error}`);
+    for (let attempt = 0; attempt < 3; attempt++) {
+        bootstrap = captureBindingSnapshot();
+        revision = null;
+        if (bootstrap.filePath && bootstrap.boundRelativePath) {
+            try {
+                revision = (
+                    await readBoundDocument({
+                        token: bootstrap.bindingToken ?? undefined,
+                        root: bootstrap.currentRoot,
+                        relativePath: bootstrap.boundRelativePath,
+                        filePath: bootstrap.filePath,
+                    })
+                ).revision;
+            } catch (error) {
+                debug(`Unable to read binding bootstrap revision: ${error}`);
+                res.end();
+                return;
+            }
+        }
+        if (closed) {
+            return;
+        }
+        if (!bindingsDiffer(captureBindingSnapshot(), bootstrap)) {
+            break;
+        }
+        if (attempt === 2) {
+            res.end();
+            return;
         }
     }
     res.write(
         `data: ${JSON.stringify({
             type: "bindingBootstrap",
-            bindingToken,
-            documentId: filePath ? getCurrentDocumentId() : null,
-            documentName: filePath ? path.basename(filePath, ".md") : null,
-            boundRelativePath,
+            bindingToken: bootstrap.bindingToken,
+            documentId: bootstrap.filePath
+                ? getCurrentDocumentId(bootstrap)
+                : null,
+            documentName: bootstrap.filePath
+                ? path.basename(bootstrap.filePath, ".md")
+                : null,
+            boundRelativePath: bootstrap.boundRelativePath,
             revision,
             timestamp: Date.now(),
         })}\n\n`,
     );
-
-    req.on("close", () => {
-        clients = clients.filter((client) => client !== res);
-    });
+    clients.push(res);
 });
 
 // Serve static files AFTER API routes to avoid conflicts
@@ -1720,8 +1818,10 @@ process.on("message", async (message: any) => {
                 currentRoot === nextRoot &&
                 filePath === resolvedFilePath &&
                 boundRelativePath === relativePath &&
-                bindingToken !== null
+                bindingToken !== null &&
+                bindingSource === "managed"
             ) {
+                bindingGeneration++;
                 notifyBindingToParent();
                 return;
             }
@@ -1732,6 +1832,8 @@ process.on("message", async (message: any) => {
             filePath = resolvedFilePath;
             boundRelativePath = relativePath;
             bindingToken = randomUUID();
+            bindingGeneration++;
+            bindingSource = "managed";
             notifyBindingToParent();
 
             const documentId = getCurrentDocumentId();
@@ -1780,6 +1882,8 @@ process.on("message", async (message: any) => {
             filePath = null;
             boundRelativePath = null;
             bindingToken = null;
+            bindingGeneration++;
+            bindingSource = null;
             notifyBindingToParent();
             debug("Running in memory-only mode (no file)");
 
@@ -1863,7 +1967,7 @@ Start typing to see the editor in action!
         const requestId =
             typeof message.requestId === "string" ? message.requestId : "";
         const snapshot = captureBindingSnapshot();
-        let activeApplyKey: string | undefined;
+        let acquiredApplyKey: string | undefined;
         try {
             if (
                 !Array.isArray(message.operations) ||
@@ -1887,13 +1991,14 @@ Start typing to see the editor in action!
             if (typeof message.expectedRevision !== "string") {
                 throw new Error("Invalid document update request");
             }
-            activeApplyKey = snapshot.bindingToken ?? "memory";
+            const activeApplyKey = snapshot.bindingToken ?? "memory";
             if (activeApplyBindings.has(activeApplyKey)) {
                 throw new Error(
                     "Another document update is already in progress for this binding",
                 );
             }
             activeApplyBindings.add(activeApplyKey);
+            acquiredApplyKey = activeApplyKey;
 
             const binding: DocumentBinding = {
                 token: snapshot.bindingToken ?? undefined,
@@ -1921,18 +2026,46 @@ Start typing to see the editor in action!
                         : undefined,
             };
             let persisted;
-            if (clients.length === 0) {
+            let browserBaseMarkdown: string | undefined;
+            if (
+                clients.length === 0 ||
+                typeof message.expectedReadToken !== "string"
+            ) {
                 persisted = persistDocumentOperations(
                     binding,
                     message.operations as DocumentOperation[],
                     expected,
                 );
             } else {
-                const persistedRevisionBeforeRead =
-                    readBoundDocument(binding).revision;
+                const persistedRevisionBeforeRead = (
+                    await readBoundDocument(binding)
+                ).revision;
+                const readToken =
+                    typeof message.expectedReadToken === "string"
+                        ? message.expectedReadToken
+                        : "";
+                const readSnapshot = browserReadDiskRevisions.get(readToken);
+                browserReadDiskRevisions.delete(readToken);
+                if (
+                    readSnapshot === undefined ||
+                    readSnapshot.bindingToken !== snapshot.bindingToken ||
+                    readSnapshot.contentRevision !== expected.revision ||
+                    readSnapshot.diskRevision !== persistedRevisionBeforeRead
+                ) {
+                    throw new Error(
+                        "Document changed since the browser snapshot was read (revision mismatch)",
+                    );
+                }
                 const response = await requestMarkdownFromClient(0, snapshot);
+                browserBaseMarkdown = response.markdown;
+                const authoritativeDocument = getAuthoritativeDocument(
+                    getCurrentDocumentId(snapshot),
+                );
+                const browserStateVector = Y.encodeStateVector(
+                    authoritativeDocument,
+                );
                 if (bindingsDiffer(captureBindingSnapshot(), snapshot)) {
-                    throw new Error("Document binding changed during read");
+                    throw new Error("Document binding changed while reading");
                 }
                 const baseRevision = computeContentRevision(response.markdown);
                 const alreadyApplied =
@@ -1971,20 +2104,43 @@ Start typing to see the editor in action!
                 if (bindingsDiffer(captureBindingSnapshot(), snapshot)) {
                     throw new Error("Document binding changed before write");
                 }
+                const persistedRevisionAfterRead = (
+                    await readBoundDocument(binding)
+                ).revision;
                 if (
-                    readBoundDocument(binding).revision !==
-                    persistedRevisionBeforeRead
+                    bindingsDiffer(captureBindingSnapshot(), snapshot) ||
+                    persistedRevisionAfterRead !== persistedRevisionBeforeRead
                 ) {
                     throw new Error(
                         "Document changed during browser read (revision mismatch)",
                     );
                 }
-                fs.writeFileSync(writableFilePath, content, "utf-8");
+                const verifiedFilePath = resolveWritableFileWithinRoot(
+                    snapshot.currentRoot,
+                    snapshot.boundRelativePath,
+                );
+                if (
+                    verifiedFilePath === undefined ||
+                    verifiedFilePath !== writableFilePath ||
+                    path.relative(verifiedFilePath, snapshot.filePath) !== ""
+                ) {
+                    throw new Error("Document binding path changed");
+                }
+                if (
+                    !Buffer.from(
+                        Y.encodeStateVector(authoritativeDocument),
+                    ).equals(Buffer.from(browserStateVector))
+                ) {
+                    throw new Error(
+                        "Document changed after browser serialization (revision mismatch)",
+                    );
+                }
+                fs.writeFileSync(verifiedFilePath, content, "utf-8");
                 persisted = {
                     content,
                     revision,
                     alreadyApplied,
-                    filePath: writableFilePath,
+                    filePath: verifiedFilePath,
                 };
             }
 
@@ -1993,10 +2149,11 @@ Start typing to see the editor in action!
                 documentId,
                 persisted.content,
             );
-            if (snapshot.bindingToken) {
+            if (snapshot.bindingToken && browserBaseMarkdown !== undefined) {
                 broadcastEvent({
                     type: "documentSnapshot",
                     bindingToken: snapshot.bindingToken,
+                    baseMarkdown: browserBaseMarkdown,
                     markdown: persisted.content,
                     revision: persisted.revision,
                     timestamp: Date.now(),
@@ -2025,8 +2182,8 @@ Start typing to see the editor in action!
                 bindingToken: snapshot.bindingToken,
             });
         } finally {
-            if (activeApplyKey !== undefined) {
-                activeApplyBindings.delete(activeApplyKey);
+            if (acquiredApplyKey !== undefined) {
+                activeApplyBindings.delete(acquiredApplyKey);
             }
         }
     } else if (message.type === "getDocumentContent") {
@@ -2057,10 +2214,29 @@ Start typing to see the editor in action!
             }
             let content: string;
             let source: "client-serializer" | "file-fallback";
+            let browserDiskRevision: string | undefined;
             if (clients.length > 0) {
                 try {
+                    const diskBefore = await readBoundDocument({
+                        token: snapshot.bindingToken ?? undefined,
+                        root: snapshot.currentRoot,
+                        relativePath: snapshot.boundRelativePath,
+                        filePath: snapshot.filePath,
+                    });
                     content = (await requestMarkdownFromClient(0, snapshot))
                         .markdown;
+                    const diskAfter = await readBoundDocument({
+                        token: snapshot.bindingToken ?? undefined,
+                        root: snapshot.currentRoot,
+                        relativePath: snapshot.boundRelativePath,
+                        filePath: snapshot.filePath,
+                    });
+                    if (diskBefore.revision !== diskAfter.revision) {
+                        throw new Error(
+                            "Document changed during browser serialization (revision mismatch)",
+                        );
+                    }
+                    browserDiskRevision = diskBefore.revision;
                     source = "client-serializer";
                 } catch (error) {
                     if (error instanceof ClientBindingMismatchError) {
@@ -2086,7 +2262,26 @@ Start typing to see the editor in action!
                 source = "file-fallback";
             }
             if (bindingsDiffer(captureBindingSnapshot(), snapshot)) {
-                throw new Error("Document binding changed during read");
+                throw new Error("Document binding changed while reading");
+            }
+            const revision = computeContentRevision(content);
+            let readToken: string | undefined;
+            if (source === "client-serializer") {
+                if (browserDiskRevision === undefined) {
+                    throw new Error(
+                        "Browser document read is missing its disk revision",
+                    );
+                }
+                readToken = randomUUID();
+                browserReadDiskRevisions.set(readToken, {
+                    bindingToken: snapshot.bindingToken,
+                    contentRevision: revision,
+                    diskRevision: browserDiskRevision,
+                });
+                const tokenToExpire = readToken;
+                setTimeout(() => {
+                    browserReadDiskRevisions.delete(tokenToExpire);
+                }, 300_000).unref();
             }
             process.send?.({
                 type: "documentContent",
@@ -2097,7 +2292,8 @@ Start typing to see the editor in action!
                 boundFilePath: snapshot.filePath,
                 boundRoot: snapshot.currentRoot,
                 boundRelativePath: snapshot.boundRelativePath,
-                revision: computeContentRevision(content),
+                revision,
+                readToken,
                 timestamp: Date.now(),
             });
         } catch (error) {

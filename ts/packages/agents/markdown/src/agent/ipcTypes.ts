@@ -68,6 +68,7 @@ export interface DocumentContentMessage {
     boundRoot: string | null;
     boundRelativePath: string | null;
     revision: string | null;
+    readToken?: string;
     identityMismatch?: boolean;
 }
 
@@ -82,6 +83,7 @@ export interface LLMOperationsMessage {
     expectedRelativePath?: string;
     expectedRevision: string;
     expectedUpdatedRevision?: string;
+    expectedReadToken?: string;
 }
 
 export interface OperationsAppliedMessage {

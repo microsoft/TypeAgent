@@ -18,6 +18,7 @@ import { UIManager } from "./ui/ui-manager";
 
 // Import utilities
 import { getRequiredElement, eventHandlers } from "./utils";
+import { parseDocumentPathFromUrl } from "../route/urlPath";
 
 // Global state for the application
 let editorManager: EditorManager | null = null;
@@ -36,9 +37,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 async function initializeApplication(): Promise<void> {
     // Check if we have a document name in the URL
-    const urlPath = window.location.pathname;
-    const documentNameMatch = urlPath.match(/\/document\/([^\/]+)/);
-    const documentName = documentNameMatch ? documentNameMatch[1] : null;
+    const documentName = parseDocumentPathFromUrl(window.location.pathname);
 
     // Initialize managers
     editorManager = new EditorManager();
@@ -48,16 +47,8 @@ async function initializeApplication(): Promise<void> {
     // Initialize UI first
     await uiManager.initialize();
 
-    // Initialize document manager (sets up SSE connection)
-    await documentManager.initialize();
-
     // Connect DocumentManager to UI components
     uiManager.setDocumentManager(documentManager);
-
-    // If we have a document name in URL, switch to that document
-    if (documentName) {
-        await switchToDocument(documentName);
-    }
 
     // Get required DOM elements
     const editorElement = getRequiredElement("editor");
@@ -67,6 +58,13 @@ async function initializeApplication(): Promise<void> {
 
     // Setup cross-manager dependencies
     setupManagerDependencies(editor);
+
+    // Bind the initialized editor before opening SSE. Otherwise an early
+    // serializer request can return empty content with a valid binding token.
+    if (documentName) {
+        await switchToDocument(documentName);
+    }
+    await documentManager.initialize();
 
     // Setup event handlers
     eventHandlers.setEditor(editor);
@@ -100,9 +98,7 @@ async function switchToDocument(documentName: string): Promise<void> {
 function setupBrowserHistoryHandling(): void {
     // Handle browser back/forward navigation
     window.addEventListener("popstate", async (event) => {
-        const urlPath = window.location.pathname;
-        const documentNameMatch = urlPath.match(/\/document\/([^\/]+)/);
-        const documentName = documentNameMatch ? documentNameMatch[1] : null;
+        const documentName = parseDocumentPathFromUrl(window.location.pathname);
 
         if (documentName && event.state?.documentName !== documentName) {
             await switchToDocument(documentName);

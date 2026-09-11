@@ -260,6 +260,30 @@ describe("markdown view service binding isolation", () => {
                 boundRelativePath: "nested/second.md",
             });
 
+            const read = sendAndWait(
+                viewProcess!,
+                {
+                    type: "getDocumentContent",
+                    requestId: "snapshot-read",
+                },
+                (message) => message.requestId === "snapshot-read",
+            );
+            const readMarkdownRequest = await waitForEvent(
+                events,
+                "requestMarkdown",
+            );
+            await fetch(`http://127.0.0.1:${port}/api/markdown-response`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    requestId: readMarkdownRequest.requestId,
+                    markdown: "second",
+                    positionInfo: { position: 0 },
+                    bindingToken: switched.bindingToken,
+                }),
+            });
+            const readResult = await read;
+            events.splice(events.indexOf(readMarkdownRequest), 1);
             const apply = sendAndWait(
                 viewProcess!,
                 {
@@ -273,7 +297,8 @@ describe("markdown view service binding isolation", () => {
                         },
                     ],
                     expectedBindingToken: switched.bindingToken,
-                    expectedRevision: switched.revision,
+                    expectedRevision: readResult.revision,
+                    expectedReadToken: readResult.readToken,
                 },
                 (message) => message.requestId === "snapshot-apply",
             );

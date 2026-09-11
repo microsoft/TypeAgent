@@ -82,6 +82,7 @@ export type NotificationType = "success" | "error" | "info";
 export interface CollaborationInfo {
     websocketServerUrl: string;
     currentDocument: string;
+    currentDocumentId?: string;
     documents: number;
     totalClients: number;
 }

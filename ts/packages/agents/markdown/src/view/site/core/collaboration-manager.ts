@@ -184,9 +184,9 @@ export class CollaborationManager {
                     websocketServerUrl:
                         collabInfo.websocketServerUrl ||
                         COLLABORATION_CONFIG.DEFAULT_WEBSOCKET_URL,
-                    documentId: collabInfo.currentDocument
-                        ? collabInfo.currentDocument.replace(".md", "")
-                        : COLLABORATION_CONFIG.DEFAULT_DOCUMENT_ID,
+                    documentId:
+                        collabInfo.currentDocumentId ||
+                        COLLABORATION_CONFIG.DEFAULT_DOCUMENT_ID,
                     fallbackToLocal: true,
                 };
 

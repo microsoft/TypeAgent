@@ -5,15 +5,22 @@ import type { Editor } from "@milkdown/core";
 import { editorViewCtx, parserCtx } from "@milkdown/core";
 import { AI_CONFIG, DEFAULT_MARKDOWN_CONTENT, EDITOR_CONFIG } from "../config";
 import { getMarkdownFromEditor, getEditorPositionInfo } from "../utils";
+import { encodeDocumentPathForUrl } from "../../route/urlPath";
 
 export class DocumentManager {
     private notificationManager: any = null;
     private editorManager: any = null;
     private eventSource: EventSource | null = null;
+    private sseEventQueue: Promise<void> = Promise.resolve();
+    private bindingTransitionQueue: Promise<void> = Promise.resolve();
     private autoSaveTimer: NodeJS.Timeout | null = null;
     private isPrimaryClient = false;
+    private isBindingTransitionInProgress = false;
     private lastAutoSaveContent = "";
     private currentDocumentId = "default";
+    private bindingToken: string | null = null;
+    private revision: string | null = null;
+    private bindingVersion = 0;
 
     public setNotificationManager(notificationManager: any): void {
         this.notificationManager = notificationManager;
@@ -67,6 +74,13 @@ export class DocumentManager {
                 console.log("[AUTO-SAVE] Skipping - no editor manager");
                 return;
             }
+            if (
+                this.isBindingTransitionInProgress ||
+                this.bindingToken === null
+            ) {
+                console.log("[AUTO-SAVE] Skipping - binding is not ready");
+                return;
+            }
 
             const editor = this.editorManager.getEditor();
             if (!editor) {
@@ -85,22 +99,30 @@ export class DocumentManager {
 
             console.log(`[AUTO-SAVE] Content changed, auto-saving...`);
 
-            // Get current document path from server
-            const docInfo = await this.getCurrentDocumentInfo();
-
             // Send auto-save request
+            const bindingToken = this.bindingToken;
+            const bindingVersion = this.bindingVersion;
             const response = await fetch(AI_CONFIG.ENDPOINTS.AUTOSAVE, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     content: currentContent,
-                    filePath: docInfo.fullPath,
                     documentId: this.currentDocumentId,
+                    bindingToken,
+                    expectedRevision: this.revision,
                 }),
             });
 
             if (response.ok) {
-                this.lastAutoSaveContent = currentContent;
+                const result = await response.json();
+                if (
+                    bindingVersion === this.bindingVersion &&
+                    bindingToken === this.bindingToken &&
+                    result.bindingToken === bindingToken
+                ) {
+                    this.adoptRevision(result);
+                    this.lastAutoSaveContent = currentContent;
+                }
                 console.log("[AUTO-SAVE] Successfully saved document");
             } else {
                 console.error(
@@ -111,29 +133,6 @@ export class DocumentManager {
         } catch (error) {
             console.error("[AUTO-SAVE] Error during auto-save:", error);
         }
-    }
-
-    /**
-     * Get current document info from server
-     */
-    private async getCurrentDocumentInfo(): Promise<{
-        currentDocument: string;
-        fullPath: string | null;
-    }> {
-        try {
-            const response = await fetch("/api/current-document");
-            if (response.ok) {
-                return await response.json();
-            }
-        } catch (error) {
-            console.warn("Failed to get current document info:", error);
-        }
-
-        // Fallback
-        return {
-            currentDocument: this.currentDocumentId,
-            fullPath: null,
-        };
     }
 
     private setupSSEConnection(): void {
@@ -148,7 +147,14 @@ export class DocumentManager {
                 try {
                     const data = JSON.parse(event.data);
                     console.log(`[SSE] Received event: ${data.type}`, data);
-                    this.handleSSEEvent(data);
+                    this.sseEventQueue = this.sseEventQueue
+                        .then(() => this.handleSSEEvent(data))
+                        .catch((error: unknown) => {
+                            console.error(
+                                "[SSE] Failed to process event:",
+                                error,
+                            );
+                        });
                 } catch (error) {
                     console.error("[SSE] Failed to parse event data:", error);
                     console.error(
@@ -178,10 +184,31 @@ export class DocumentManager {
         console.log("[SSE] Received event:", data.type, data);
 
         switch (data.type) {
+            case "bindingBootstrap":
+                if (
+                    typeof data.bindingToken === "string" &&
+                    typeof data.documentId === "string" &&
+                    typeof data.revision === "string"
+                ) {
+                    await this.transitionToBinding(
+                        {
+                            documentId: data.documentId,
+                            bindingToken: data.bindingToken,
+                            revision: data.revision,
+                        },
+                        data.documentName,
+                        data.boundRelativePath,
+                    );
+                } else if (
+                    data.bindingToken === null &&
+                    data.documentId === null
+                ) {
+                    this.adoptBinding(data);
+                }
+                break;
+
             case "documentChanged":
                 console.log(`[SSE] Document changed to: ${data.newDocumentId}`);
-                this.currentDocumentId = data.newDocumentId;
-
                 // Reset sync notification state for new document
                 if (this.notificationManager) {
                     this.notificationManager.resetDocumentSyncState(
@@ -189,9 +216,14 @@ export class DocumentManager {
                     );
                 }
 
-                await this.handleDocumentChangeFromBackend(
-                    data.newDocumentId,
+                await this.transitionToBinding(
+                    {
+                        documentId: data.newDocumentId,
+                        bindingToken: data.bindingToken,
+                        revision: data.revision,
+                    },
                     data.newDocumentName,
+                    data.boundRelativePath,
                 );
                 break;
 
@@ -201,8 +233,46 @@ export class DocumentManager {
                 break;
 
             case "autoSave":
+                this.adoptRevision(data);
                 console.log(`[SSE] Auto-save completed for: ${data.filePath}`);
                 // Auto-save notification removed per user request
+                break;
+
+            case "documentSnapshot":
+                if (
+                    data.bindingToken === this.bindingToken &&
+                    typeof data.markdown === "string" &&
+                    typeof data.baseMarkdown === "string" &&
+                    this.editorManager
+                ) {
+                    await this.bindingTransitionQueue;
+                    if (
+                        data.bindingToken !== this.bindingToken ||
+                        this.isBindingTransitionInProgress
+                    ) {
+                        break;
+                    }
+                    const editor = this.editorManager.getEditor();
+                    if (!editor) {
+                        break;
+                    }
+                    const currentMarkdown =
+                        await this.getMarkdownContent(editor);
+                    if (currentMarkdown === data.markdown) {
+                        this.lastAutoSaveContent = data.markdown;
+                        this.adoptRevision(data);
+                        break;
+                    }
+                    if (currentMarkdown !== data.baseMarkdown) {
+                        console.warn(
+                            "[SSE] Ignoring document snapshot because the editor changed after the agent read it",
+                        );
+                        break;
+                    }
+                    await this.editorManager.setContent(data.markdown);
+                    this.adoptRevision(data);
+                    this.lastAutoSaveContent = data.markdown;
+                }
                 break;
 
             case "autoSaveError":
@@ -295,37 +365,78 @@ export class DocumentManager {
     private async handleDocumentChangeFromBackend(
         documentId: string,
         documentName: string,
+        relativePath?: string,
+        expectedBindingToken?: string,
     ): Promise<void> {
-        try {
-            console.log(
-                `[DOCUMENT] Backend switched to: ${documentName}, reconnecting frontend...`,
-            );
+        console.log(
+            `[DOCUMENT] Backend switched to: ${documentName}, reconnecting frontend...`,
+        );
 
-            // Get content from server with URL logging
-            const documentUrl = AI_CONFIG.ENDPOINTS.DOCUMENT;
-
-            const response = await fetch(documentUrl);
-
-            const content = response.ok ? await response.text() : "";
-            console.log(
-                ` [DOCUMENT] Frontend switched to document: "${documentId}"`,
-            );
-
-            // Switch editor collaboration to new document room
-            if (this.editorManager) {
-                await this.editorManager.switchToDocument(documentId, content);
-            }
-
-            // Update page title and URL
-            document.title = `${documentName} - AI-Enhanced Markdown Editor`;
-            const newUrl = `/document/${encodeURIComponent(documentName)}`;
-            window.history.pushState({ documentName }, document.title, newUrl);
-        } catch (error) {
-            console.error(
-                "[DOCUMENT] Failed to handle backend document change:",
-                error,
+        const response = await fetch(
+            AI_CONFIG.ENDPOINTS.DOCUMENT,
+            expectedBindingToken
+                ? { headers: { "X-Binding-Token": expectedBindingToken } }
+                : undefined,
+        );
+        if (!response.ok) {
+            throw new Error(
+                `Failed to load switched document: ${response.status}`,
             );
         }
+        const content = await response.text();
+
+        console.log(
+            ` [DOCUMENT] Frontend switched to document: "${documentId}"`,
+        );
+
+        if (!this.editorManager) {
+            throw new Error("Editor is not ready for a binding transition");
+        }
+        await this.editorManager.switchToDocument(documentId, content);
+
+        document.title = `${documentName} - AI-Enhanced Markdown Editor`;
+        const documentPath = relativePath || documentName;
+        const newUrl = `/document/${encodeDocumentPathForUrl(documentPath)}`;
+        window.history.pushState(
+            { documentName: documentPath },
+            document.title,
+            newUrl,
+        );
+    }
+
+    private async transitionToBinding(
+        binding: {
+            documentId: string;
+            bindingToken: string;
+            revision: unknown;
+        },
+        documentName: string,
+        relativePath?: string,
+    ): Promise<void> {
+        const transition = this.bindingTransitionQueue.then(async () => {
+            if (
+                binding.bindingToken === this.bindingToken &&
+                binding.documentId === this.currentDocumentId
+            ) {
+                this.adoptRevision(binding);
+                return;
+            }
+
+            this.isBindingTransitionInProgress = true;
+            try {
+                await this.handleDocumentChangeFromBackend(
+                    binding.documentId,
+                    documentName,
+                    relativePath,
+                    binding.bindingToken,
+                );
+                this.adoptBinding(binding);
+            } finally {
+                this.isBindingTransitionInProgress = false;
+            }
+        });
+        this.bindingTransitionQueue = transition.catch(() => undefined);
+        await transition;
     }
 
     public destroy(): void {
@@ -351,6 +462,13 @@ export class DocumentManager {
         );
 
         try {
+            if (
+                this.isBindingTransitionInProgress ||
+                !this.editorManager ||
+                !this.editorManager.getEditor()
+            ) {
+                throw new Error("Editor is not ready to serialize Markdown");
+            }
             let markdown = "";
             let positionInfo = { position: 0 };
 
@@ -389,6 +507,7 @@ export class DocumentManager {
                     requestId: requestId,
                     markdown: markdown,
                     positionInfo: positionInfo,
+                    bindingToken: this.bindingToken,
                     timestamp: Date.now(),
                 }),
             });
@@ -417,6 +536,7 @@ export class DocumentManager {
                             error instanceof Error
                                 ? error.message
                                 : "Unknown error",
+                        bindingToken: this.bindingToken,
                         timestamp: Date.now(),
                     }),
                 });
@@ -431,6 +551,12 @@ export class DocumentManager {
 
     public async saveDocument(editor?: Editor): Promise<void> {
         try {
+            if (
+                this.isBindingTransitionInProgress ||
+                this.bindingToken === null
+            ) {
+                throw new Error("Cannot save while the binding is not ready");
+            }
             // Get markdown content from editor or server
             const content = editor
                 ? await this.getMarkdownContent(editor)
@@ -438,16 +564,31 @@ export class DocumentManager {
 
             const saveUrl = AI_CONFIG.ENDPOINTS.DOCUMENT;
 
+            const bindingToken = this.bindingToken;
+            const bindingVersion = this.bindingVersion;
             const response = await fetch(saveUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content }),
+                body: JSON.stringify({
+                    content,
+                    bindingToken,
+                    expectedRevision: this.revision,
+                }),
             });
 
             if (!response.ok) {
                 throw new Error(`Save failed: ${response.status}`);
             }
 
+            const result = await response.json();
+            if (
+                bindingVersion !== this.bindingVersion ||
+                bindingToken !== this.bindingToken ||
+                result.bindingToken !== bindingToken
+            ) {
+                throw new Error("Binding changed while saving");
+            }
+            this.adoptRevision(result);
             console.log(` [DOCUMENT] Document saved successfully`);
         } catch (error) {
             console.error("[DOCUMENT] Failed to save document:", error);
@@ -460,35 +601,7 @@ export class DocumentManager {
 
     public async getMarkdownContent(editor: Editor): Promise<string> {
         if (!editor) return "";
-
-        try {
-            // Get content directly from editor first (most current state)
-            const editorContent = await new Promise<string>((resolve) => {
-                editor.action((ctx) => {
-                    const view = ctx.get(editorViewCtx);
-                    resolve(view.state.doc.textContent || "");
-                });
-            });
-
-            if (editorContent) {
-                return editorContent;
-            }
-        } catch (error) {
-            console.warn("Failed to get content from editor:", error);
-        }
-
-        try {
-            // Fallback to server content if editor content is empty
-            const response = await fetch(AI_CONFIG.ENDPOINTS.DOCUMENT);
-            if (response.ok) {
-                const serverContent = await response.text();
-                return serverContent;
-            }
-        } catch (error) {
-            console.warn("Failed to fetch document from server:", error);
-        }
-
-        return "";
+        return getMarkdownFromEditor(editor);
     }
 
     public async loadInitialContent(): Promise<string> {
@@ -499,6 +612,7 @@ export class DocumentManager {
 
             if (response.ok) {
                 const content = await response.text();
+                this.adoptRevisionHeader(response);
                 return content;
             } else {
                 return this.getDefaultContent();
@@ -516,6 +630,7 @@ export class DocumentManager {
 
         if (response.ok) {
             const content = await response.text();
+            this.adoptRevisionHeader(response);
             return content;
         }
         throw new Error(
@@ -536,6 +651,7 @@ export class DocumentManager {
 
             if (response.ok) {
                 const content = await response.text();
+                this.adoptRevisionHeader(response);
                 return content;
             }
             throw new Error(
@@ -549,12 +665,25 @@ export class DocumentManager {
 
     public async setDocumentContent(content: string): Promise<void> {
         try {
+            if (
+                this.isBindingTransitionInProgress ||
+                this.bindingToken === null
+            ) {
+                throw new Error(
+                    "Cannot update content while the binding is not ready",
+                );
+            }
             const saveUrl = AI_CONFIG.ENDPOINTS.DOCUMENT;
-
+            const bindingToken = this.bindingToken;
+            const bindingVersion = this.bindingVersion;
             const response = await fetch(saveUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content }),
+                body: JSON.stringify({
+                    content,
+                    bindingToken,
+                    expectedRevision: this.revision,
+                }),
             });
 
             if (!response.ok) {
@@ -563,6 +692,15 @@ export class DocumentManager {
                 );
             }
 
+            const result = await response.json();
+            if (
+                bindingVersion !== this.bindingVersion ||
+                bindingToken !== this.bindingToken ||
+                result.bindingToken !== bindingToken
+            ) {
+                throw new Error("Binding changed while updating content");
+            }
+            this.adoptRevision(result);
             console.log(` [DOCUMENT] Document content updated successfully`);
             // Don't reload the whole page, just notify the editor will update via collaboration
             console.log(
@@ -621,12 +759,13 @@ export class DocumentManager {
     public async switchToDocument(documentName: string): Promise<void> {
         try {
             const switchUrl = "/api/switch-document";
+            const startingBindingVersion = this.bindingVersion;
 
             // Call server to switch document
             const response = await fetch(switchUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ documentName }),
+                body: JSON.stringify({ documentPath: documentName }),
             });
 
             if (!response.ok) {
@@ -636,27 +775,56 @@ export class DocumentManager {
             }
 
             const result = await response.json();
+            if (
+                this.bindingVersion !== startingBindingVersion &&
+                this.bindingToken !== result.bindingToken
+            ) {
+                return;
+            }
             console.log(`[DOCUMENT] Server switched to: ${documentName}`);
 
-            // Switch editor collaboration to new document room
-            if (this.editorManager) {
-                const documentId = documentName; // Document ID is same as document name (without .md)
-                await this.editorManager.switchToDocument(
-                    documentId,
-                    result.content,
-                );
-                console.log(
-                    ` [DOCUMENT] Editor switched to document: "${documentId}"`,
-                );
-            }
-
-            // Update page title and URL
-            document.title = `${documentName} - AI-Enhanced Markdown Editor`;
-            const newUrl = `/document/${encodeURIComponent(documentName)}`;
-            window.history.pushState({ documentName }, document.title, newUrl);
+            await this.transitionToBinding(
+                {
+                    documentId: result.documentId,
+                    bindingToken: result.bindingToken,
+                    revision: result.revision,
+                },
+                documentName,
+                result.boundRelativePath,
+            );
         } catch (error) {
             console.error("[DOCUMENT] Failed to switch document:", error);
             throw error;
+        }
+    }
+
+    private adoptBinding(data: any): void {
+        this.bindingVersion++;
+        if (typeof data.documentId === "string") {
+            this.currentDocumentId = data.documentId;
+        }
+        this.bindingToken =
+            typeof data.bindingToken === "string" ? data.bindingToken : null;
+        this.revision =
+            typeof data.revision === "string" ? data.revision : null;
+    }
+
+    private adoptRevision(data: any): void {
+        if (
+            typeof data.bindingToken === "string" &&
+            data.bindingToken !== this.bindingToken
+        ) {
+            return;
+        }
+        if (typeof data.revision === "string") {
+            this.revision = data.revision;
+        }
+    }
+
+    private adoptRevisionHeader(response: Response): void {
+        const revision = response.headers.get("X-Content-Revision");
+        if (revision) {
+            this.revision = revision;
         }
     }
 

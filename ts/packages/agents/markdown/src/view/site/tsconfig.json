@@ -4,7 +4,7 @@
     "noEmit": true,
     "composite": true,
     "incremental": true,
-    "rootDir": ".",
+    "rootDir": "..",
     "outDir": "../../../dist/view/site-typecheck",
     "moduleResolution": "bundler",
     "module": "ESNext",
@@ -13,7 +13,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["./**/*"],
+  "include": ["./**/*", "../route/urlPath.ts"],
   "ts-node": {
     "esm": true
   }
