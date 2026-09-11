@@ -46,7 +46,21 @@ import { getActiveTypeAgentSpanAttributes } from "@typeagent/telemetry/traceCont
 export type AgentRpcOptions = {
     trustedContextPropagation?: boolean;
     logger?: RpcStructuredLogger;
+    channelName?: string;
 };
+
+function getAgentChannelName(name: string, options?: AgentRpcOptions): string {
+    return options?.channelName ?? `agent:${name}`;
+}
+
+function getOptionsChannelName(
+    name: string,
+    options?: AgentRpcOptions,
+): string {
+    return options?.channelName === undefined
+        ? `options:${name}`
+        : `${options.channelName}:options`;
+}
 
 /**
  * Race a promise against an AbortSignal. If the signal fires before the
@@ -164,7 +178,9 @@ function createOptionsRpc(
     name: string,
     options?: AgentRpcOptions,
 ) {
-    const channel = channelProvider.createChannel(`options:${name}`);
+    const channel = channelProvider.createChannel(
+        getOptionsChannelName(name, options),
+    );
     const optionsMap = createObjectMap();
     return {
         optionsMap,
@@ -209,7 +225,9 @@ export async function createAgentRpcClient(
     agentInterface: AgentInterfaceFunctionName[],
     options?: AgentRpcOptions,
 ) {
-    const channel = channelProvider.createChannel(`agent:${name}`);
+    const channel = channelProvider.createChannel(
+        getAgentChannelName(name, options),
+    );
     const contextMap = createObjectMap<SessionContext<ShimContext>>();
     // Tracks port registration handles returned by sessionContext.registerPort
     // so the out-of-process agent can release them via the regId we sent back.
@@ -869,7 +887,7 @@ export async function createAgentRpcClient(
         // Options are agent-scoped (created once per initializeAgentContext call)
         // so they can be released when the context is torn down.
         if (optionsRpc !== undefined) {
-            channelProvider.deleteChannel(`options:${name}`);
+            channelProvider.deleteChannel(getOptionsChannelName(name, options));
             optionsRpc = undefined;
         }
         return result;

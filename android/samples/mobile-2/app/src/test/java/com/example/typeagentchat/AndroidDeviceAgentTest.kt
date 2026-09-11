@@ -23,10 +23,16 @@ class AndroidDeviceAgentTest {
         assertEquals("instance-1", registration.getString("instanceId"))
         assertEquals("Pixel 8", registration.getString("displayName"))
         assertEquals(true, registration.getBoolean("multiInstance"))
-        assertEquals(
-            "executeAction",
-            registration.getJSONArray("agentInterface").getString(0)
-        )
+        // The declared set must be exactly what the RPC dispatcher answers: the
+        // server builds its proxy from this and, with several devices hosting
+        // the agent, rejects one that declares a different set.
+        val declared = registration.getJSONArray("agentInterface")
+        assertEquals(AndroidDeviceAgent.SUPPORTED_METHODS.size, declared.length())
+        for (index in AndroidDeviceAgent.SUPPORTED_METHODS.indices) {
+            assertEquals(AndroidDeviceAgent.SUPPORTED_METHODS[index], declared.getString(index))
+        }
+        assertTrue(AndroidDeviceAgent.supports("executeAction"))
+        assertFalse(AndroidDeviceAgent.supports("getDynamicDisplay"))
         assertEquals(
             "export type AndroidDeviceAction = never;",
             registration

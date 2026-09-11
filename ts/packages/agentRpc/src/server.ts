@@ -43,7 +43,24 @@ import {
 export type AgentRpcServerOptions = {
     trustedContextPropagation?: boolean;
     logger?: RpcStructuredLogger;
+    channelName?: string;
 };
+
+function getAgentChannelName(
+    name: string,
+    options?: AgentRpcServerOptions,
+): string {
+    return options?.channelName ?? `agent:${name}`;
+}
+
+function getOptionsChannelName(
+    name: string,
+    options?: AgentRpcServerOptions,
+): string {
+    return options?.channelName === undefined
+        ? `options:${name}`
+        : `${options.channelName}:options`;
+}
 
 function getTrustedRpcOptions(
     options: AgentRpcServerOptions | undefined,
@@ -73,7 +90,7 @@ function createOptionsRpc(
     options?: AgentRpcServerOptions,
 ) {
     const optionsChannel: RpcChannel = channelProvider.createChannel(
-        `options:${name}`,
+        getOptionsChannelName(name, options),
     );
     return createRpc<OptionsFunctionCallBack>(
         name,
@@ -107,7 +124,7 @@ export function createAgentRpcServer(
     channelProvider: ChannelProvider,
     options?: AgentRpcServerOptions,
 ) {
-    const channelName = `agent:${name}`;
+    const channelName = getAgentChannelName(name, options);
     const channel = channelProvider.createChannel(channelName);
     let optionsRpc: ReturnType<typeof createOptionsRpc> | undefined;
 
