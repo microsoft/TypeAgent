@@ -1077,56 +1077,62 @@ describe("real structured dispatcher execution", () => {
         );
     });
 
-    it("binds a flow step's own result and never replays its additional actions", async () => {
-        const registry = (
-            context.agents as unknown as {
-                flowRegistry: Map<string, FlowDefinition>;
-            }
-        ).flowRegistry;
-        registry.set("guarded/read", {
-            name: "read",
-            description: "Distinct parent and child results",
-            parameters: {},
-            steps: [
-                {
-                    id: "first",
-                    schemaName: "guarded",
-                    actionName: "write",
-                    parameters: { value: "first", mode: "parentChild" },
-                },
-                {
-                    id: "last",
-                    schemaName: "guarded",
-                    actionName: "write",
-                    parameters: {
-                        value: "${first.data.ids.0}",
-                        mode: "parentChild",
+    it.each([
+        ["${first.data.ids.0}", "source-id"],
+        ["${first.text}", "Parent result"],
+    ])(
+        "binds a flow step's own %s without replaying its additional actions",
+        async (binding, expected) => {
+            const registry = (
+                context.agents as unknown as {
+                    flowRegistry: Map<string, FlowDefinition>;
+                }
+            ).flowRegistry;
+            registry.set("guarded/read", {
+                name: "read",
+                description: "Distinct parent and child results",
+                parameters: {},
+                steps: [
+                    {
+                        id: "first",
+                        schemaName: "guarded",
+                        actionName: "write",
+                        parameters: { value: "first", mode: "parentChild" },
                     },
-                },
-            ],
-        });
-        let result = await dispatcher.executeAction(await request("read"));
-        for (const value of ["first", "child", "source-id", "child"]) {
-            const current = requirePrompt(result);
-            expect(current.prompt).toMatchObject({
-                type: "confirmation",
-                action: { parameters: { value } },
+                    {
+                        id: "last",
+                        schemaName: "guarded",
+                        actionName: "write",
+                        parameters: {
+                            value: binding,
+                            mode: "parentChild",
+                        },
+                    },
+                ],
             });
-            result = await answer(current, {
-                type: "confirmation",
-                approved: true,
+            let result = await dispatcher.executeAction(await request("read"));
+            for (const value of ["first", "child", expected, "child"]) {
+                const current = requirePrompt(result);
+                expect(current.prompt).toMatchObject({
+                    type: "confirmation",
+                    action: { parameters: { value } },
+                });
+                result = await answer(current, {
+                    type: "confirmation",
+                    approved: true,
+                });
+            }
+            expect(result.status).toBe("completed");
+            expect(entered).toEqual(["first", "child", expected, "child"]);
+            const root = result.results.find(
+                ({ action }) => action.actionName === "read",
+            );
+            expect(root?.result).toMatchObject({
+                resultValue: { ids: ["source-id"] },
             });
-        }
-        expect(result.status).toBe("completed");
-        expect(entered).toEqual(["first", "child", "source-id", "child"]);
-        const root = result.results.find(
-            ({ action }) => action.actionName === "read",
-        );
-        expect(root?.result).toMatchObject({
-            resultValue: { ids: ["source-id"] },
-        });
-        expect(root?.result).not.toHaveProperty("additionalActions");
-    });
+            expect(root?.result).not.toHaveProperty("additionalActions");
+        },
+    );
 
     it("retains uncertainty and serialization while an uncooperative handler runs", async () => {
         const input = await request("read", "hold");
