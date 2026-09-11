@@ -74,6 +74,9 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
         getStatus: notImplemented("getStatus") as any,
         getAgentSchemas: notImplemented("getAgentSchemas") as any,
         searchActions: notImplemented("searchActions"),
+        executeAction: notImplemented("executeAction"),
+        continueAction: notImplemented("continueAction"),
+        cancelAction: notImplemented("cancelAction"),
         respondToChoice: notImplemented("respondToChoice") as any,
         getDisplayHistory: notImplemented("getDisplayHistory") as any,
         async cancelCommand(...args) {
@@ -205,6 +208,84 @@ describe("dispatcher RPC structured discovery", () => {
             searchResult,
         );
         expect(calls).toEqual([{ method: "search", input: request }]);
+    });
+
+    describe("dispatcher RPC structured execution", () => {
+        it("roundtrips execution, continuation and cancellation with result data", async () => {
+            const channels = createChannelPair();
+            const seen: unknown[] = [];
+            const result: StructuredActionExecutionResult = {
+                protocolVersion: 1,
+                scopeId: "scope",
+                operationId: "operation",
+                status: "completed",
+                output: ["Saved"],
+                results: [
+                    {
+                        action: {
+                            schemaName: "test",
+                            actionName: "save",
+                            parameters: { name: "item" },
+                        },
+                        result: {
+                            resultValue: { id: "stable" },
+                            resultEntity: {
+                                name: "item",
+                                type: ["Item"],
+                                uniqueId: "stable",
+                            },
+                        },
+                    },
+                ],
+            };
+            createDispatcherRpcServer(
+                makeStubDispatcher({
+                    executeAction: async (request) => {
+                        seen.push(request);
+                        return result;
+                    },
+                    continueAction: async (request) => {
+                        seen.push(request);
+                        return result;
+                    },
+                    cancelAction: async (request) => {
+                        seen.push(request);
+                        return result;
+                    },
+                }),
+                channels.serverChannel,
+            );
+            const { dispatcher } = createDispatcherRpcClient(
+                channels.clientChannel,
+            );
+            const request = {
+                protocolVersion: 1 as const,
+                scopeId: "scope",
+                schemaName: "test",
+                actionName: "save",
+                parameters: { name: "item" },
+            };
+            const continuation = {
+                protocolVersion: 1 as const,
+                scopeId: "scope",
+                operationId: "operation",
+                interactionId: "opaque",
+                response: { type: "confirmation" as const, approved: true },
+            };
+            const cancellation = {
+                protocolVersion: 1 as const,
+                scopeId: "scope",
+                operationId: "operation",
+            };
+            await expect(dispatcher.executeAction(request)).resolves.toEqual(result);
+            await expect(
+                dispatcher.continueAction(continuation),
+            ).resolves.toEqual(result);
+            await expect(dispatcher.cancelAction(cancellation)).resolves.toEqual(
+                result,
+            );
+            expect(seen).toEqual([request, continuation, cancellation]);
+        });
     });
 
     it("propagates discovery errors without a command fallback", async () => {

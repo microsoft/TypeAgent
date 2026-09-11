@@ -401,6 +401,10 @@ export function createDispatcherFromContext(
         async searchActions(request) {
             return structuredActions.searchActions(request);
         },
+        executeAction: (request) => structuredExecution.executeAction(request),
+        continueAction: (request) =>
+            structuredExecution.continueAction(request),
+        cancelAction: (request) => structuredExecution.cancelAction(request),
         async cancelCommand(requestId: string): Promise<CancelResult> {
             const kind = context.requestQueue.classifyCancel(requestId, "user");
             if (kind === "queued") {

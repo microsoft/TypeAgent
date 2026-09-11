@@ -41,6 +41,7 @@ import {
 } from "@typeagent/dispatcher-types";
 import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
 import { getAppAgentName } from "../internal.js";
+import { getStructuredExecution } from "../structuredAction/executionHooks.js";
 import {
     logCommandException,
     logRequestCompleted,
@@ -438,6 +439,9 @@ export async function processCommandNoLock(
             request: originalInput,
             error: e,
         });
+        if (getStructuredExecution(context) !== undefined) {
+            throw e;
+        }
     }
 }
 
@@ -504,6 +508,7 @@ export async function processCommand(
     attachments?: string[],
     options?: ProcessCommandOptions,
     parentContext?: Context,
+    work?: { kind: "structured-action"; run(): Promise<void> },
 ): Promise<CommandResult | undefined> {
     const isCommand = originalInput.trimStart().startsWith("@");
     // Create the AbortController *before* acquiring the lock so that a
@@ -573,11 +578,16 @@ export async function processCommand(
                         : undefined;
                     context.clientIO.setUserRequest(requestId, originalInput);
                     try {
-                        await processCommandNoLock(
-                            originalInput,
-                            context,
-                            attachments,
-                        );
+                        if (work !== undefined) {
+                            abortController.signal.throwIfAborted();
+                            await work.run();
+                        } else {
+                            await processCommandNoLock(
+                                originalInput,
+                                context,
+                                attachments,
+                            );
+                        }
                     } catch (e: any) {
                         if (e.name === "AbortError") {
                             const activeSpan = trace.getActiveSpan();

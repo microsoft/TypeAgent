@@ -100,6 +100,9 @@ export function createDispatcherRpcServer(
         searchActions: async (...args) => {
             return dispatcher.searchActions(...args);
         },
+        executeAction: async (...args) => dispatcher.executeAction(...args),
+        continueAction: async (...args) => dispatcher.continueAction(...args),
+        cancelAction: async (...args) => dispatcher.cancelAction(...args),
         respondToChoice: async (...args) => {
             return dispatcher.respondToChoice(...args);
         },
