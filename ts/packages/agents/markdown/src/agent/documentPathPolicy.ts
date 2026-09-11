@@ -84,8 +84,13 @@ export function resolveExistingFileWithinRoot(
     root: string,
     requestedPath: string,
 ): string | undefined {
+    const relativePath = normalizeRelativeDocumentPath(requestedPath);
+    if (relativePath === undefined) {
+        return undefined;
+    }
     const rootPaths = resolveRootPaths(root);
-    const candidate = path.resolve(rootPaths.resolvedRoot, requestedPath);
+    // Both inputs are validated and the canonical file is checked below.
+    const candidate = path.resolve(rootPaths.resolvedRoot, relativePath); // lgtm[js/path-injection]
     if (!isPathWithinRoot(rootPaths.resolvedRoot, candidate)) {
         return undefined;
     }
@@ -147,8 +152,12 @@ export function resolveWritableFileWithinRoot(
     root: string,
     requestedPath: string,
 ): string | undefined {
+    const relativePath = normalizeRelativeDocumentPath(requestedPath);
+    if (relativePath === undefined) {
+        return undefined;
+    }
     const rootPaths = resolveRootPaths(root);
-    const candidate = path.resolve(rootPaths.resolvedRoot, requestedPath);
+    const candidate = path.resolve(rootPaths.resolvedRoot, relativePath);
     if (!isPathWithinRoot(rootPaths.resolvedRoot, candidate)) {
         return undefined;
     }

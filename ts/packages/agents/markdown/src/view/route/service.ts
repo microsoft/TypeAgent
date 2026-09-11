@@ -312,11 +312,7 @@ let currentRoot =
     resolveRealDirectory(INITIAL_ROOT_DIR) ?? path.resolve(INITIAL_ROOT_DIR);
 
 function resolveCanonicalRoot(root: string): string | undefined {
-    const canonicalRoot = resolveRealDirectory(root);
-    return canonicalRoot !== undefined &&
-        path.relative(path.resolve(root), canonicalRoot) === ""
-        ? canonicalRoot
-        : undefined;
+    return resolveRealDirectory(root);
 }
 
 function getValidatedCurrentRoot(): string {

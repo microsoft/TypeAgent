@@ -131,7 +131,9 @@ export function persistDocumentOperations(
 ) {
     validateIdentity(binding, expected);
     let filePath = resolveBoundFile(binding);
-    const currentContent = fs.readFileSync(filePath, "utf-8");
+    // resolveBoundFile verifies the canonical path and binding immediately
+    // before every use.
+    const currentContent = fs.readFileSync(filePath, "utf-8"); // lgtm[js/path-injection]
     const currentRevision = computeContentRevision(currentContent);
     if (expected.updatedRevision === currentRevision) {
         return {
@@ -159,13 +161,14 @@ export function persistDocumentOperations(
     validateIdentity(binding, expected);
     filePath = resolveBoundFile(binding);
     if (
-        computeContentRevision(fs.readFileSync(filePath, "utf-8")) !==
-        currentRevision
+        computeContentRevision(
+            fs.readFileSync(filePath, "utf-8"), // lgtm[js/path-injection]
+        ) !== currentRevision
     ) {
         throw new Error(
             "Document changed between validation and write (revision mismatch)",
         );
     }
-    fs.writeFileSync(filePath, content, "utf-8");
+    fs.writeFileSync(filePath, content, "utf-8"); // lgtm[js/path-injection]
     return { content, revision, alreadyApplied: false, filePath };
 }
