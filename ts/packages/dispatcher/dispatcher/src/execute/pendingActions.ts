@@ -42,6 +42,7 @@ import { getObjectProperty } from "@typeagent/common-utils";
 import { ActionSchemaFile } from "../translation/actionConfigProvider.js";
 import { tryGetActionParametersType } from "../translation/actionSchemaUtils.js";
 import { isPendingRequestAction } from "../translation/pendingRequest.js";
+import { getStructuredExecution } from "../structuredAction/executionHooks.js";
 
 const debugEntities = registerDebug("typeagent:dispatcher:actions:entities");
 
@@ -716,6 +717,7 @@ async function resolveEntityWithAgent(
         `Resolving ${type} entity with agent ${appAgentName}: ${value}`,
     );
     displayStatus(`Resolving ${type}: ${value}`, context);
+    getStructuredExecution(context.sessionContext.agentContext)?.effect();
     const result = await agent.resolveEntity(
         type,
         value,
@@ -792,7 +794,10 @@ function createParameterEntityResolver(
 ): ParameterEntityResolver {
     const agentContext = context.sessionContext.agentContext;
     const agents = agentContext.agents;
-    const conversationMemory = agentContext.conversationMemory;
+    const conversationMemory =
+        getStructuredExecution(agentContext) === undefined
+            ? agentContext.conversationMemory
+            : undefined;
     const resultEntityMap = new Set<string>();
     const clarifyEntities: ClarifyResolvedEntity[] = [];
     const promptEntityMap = toPromptEntityMap(entities);
@@ -883,12 +888,20 @@ function createParameterEntityResolver(
                     }
                 }
 
+                await getStructuredExecution(agentContext)?.guard(
+                    action,
+                    "enter",
+                );
                 resolveEntityResult = await resolveEntityWithAgent(
                     agents,
                     appAgentName,
                     fieldType.name,
                     value,
                     context,
+                );
+                await getStructuredExecution(agentContext)?.guard(
+                    action,
+                    "enter",
                 );
 
                 if (resolveEntityResult !== undefined) {
@@ -1079,14 +1092,18 @@ export async function toPendingActions(
     let resultEntityResolver: EntityResolver | undefined;
     const systemContext = context.sessionContext.agentContext;
     const agents = systemContext.agents;
+    const structured = getStructuredExecution(systemContext);
     const entityResolver = createParameterEntityResolver(
         context,
-        entities,
-        systemContext.session.getConfig().translation.entity,
+        structured === undefined ? entities : undefined,
+        structured === undefined
+            ? systemContext.session.getConfig().translation.entity
+            : { resolve: true, clarify: false, filter: false },
     );
     const pendingActions: PendingAction[] = [];
 
     for (const executableAction of actions) {
+        await structured?.guard(executableAction.action, "prepare");
         if (isPendingRequestAction(executableAction.action)) {
             // Pending request action is an internal action.  It doesn't have any entities.
             continue;
@@ -1096,6 +1113,7 @@ export async function toPendingActions(
             executableAction.action,
             entityResolver,
         );
+        await structured?.guard(executableAction.action, "enter");
 
         if (entityResolver.clarifyResolvedEntities.length > 0) {
             const clarifyEntityAction: TypeAgentAction<ClarifyEntityAction> = {

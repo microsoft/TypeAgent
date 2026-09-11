@@ -604,6 +604,11 @@ export const dispatcherManifest: AppAgentManifest = {
 
 export const dispatcherAgent: AppAgent = {
     executeAction: executeDispatcherAction,
+    cancelChoice: async (choiceId, context) => {
+        (
+            context.agentContext as CommandHandlerContext
+        ).choiceManager.cancelChoice(choiceId);
+    },
     handleChoice: async (choiceId, response, context) => {
         const systemContext = (context as ActionContext<CommandHandlerContext>)
             .sessionContext.agentContext;

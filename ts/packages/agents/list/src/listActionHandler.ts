@@ -24,6 +24,11 @@ export function instantiate(): AppAgent {
         updateAgentContext: updateListContext,
         executeAction: executeListAction,
         validateWildcardMatch: listValidateWildcardMatch,
+        cancelChoice: async (choiceId, context) => {
+            (
+                context.agentContext as ListActionContext
+            ).choiceManager.cancelChoice(choiceId);
+        },
         handleChoice: (choiceId, response, context) =>
             (
                 context as ActionContext<ListActionContext>

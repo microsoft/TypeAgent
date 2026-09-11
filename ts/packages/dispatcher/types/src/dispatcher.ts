@@ -23,6 +23,10 @@ import type {
     ActionIdentity,
     ActionSearchRequest,
     ActionSearchResult,
+    ExecuteActionRequest,
+    ContinueActionRequest,
+    CancelActionRequest,
+    StructuredActionExecutionResult,
 } from "./structuredAction.js";
 
 export const DispatcherName = "dispatcher";
@@ -517,6 +521,16 @@ export interface Dispatcher {
     searchActions(request?: ActionSearchRequest): Promise<ActionSearchResult>;
 
     getActionContract(identity: ActionIdentity): Promise<ActionContractResult>;
+
+    executeAction(
+        request: ExecuteActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
+    continueAction(
+        request: ContinueActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
+    cancelAction(
+        request: CancelActionRequest,
+    ): Promise<StructuredActionExecutionResult>;
 
     /**
      * Respond to a pending choice from an agent.

@@ -369,6 +369,11 @@ export const systemAgent: AppAgent = {
     getTemplateCompletion: getSystemTemplateCompletion,
     executeAction: executeSystemAction as unknown as AppAgent["executeAction"],
     handleChoice: handleSystemChoice,
+    cancelChoice: async (choiceId, context) => {
+        (
+            context.agentContext as CommandHandlerContext
+        ).choiceManager.cancelChoice(choiceId);
+    },
     getCommands: commandInterface.getCommands,
     getCommandCompletion: commandInterface.getCommandCompletion,
     executeCommand: commandInterface.executeCommand,

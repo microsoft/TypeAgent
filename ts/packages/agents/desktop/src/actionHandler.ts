@@ -34,6 +34,12 @@ export function instantiate(): AppAgent {
         initializeAgentContext: initializeDesktopContext,
         updateAgentContext: updateDesktopContext,
         executeAction: executeDesktopAction,
+        async cancelChoice(
+            choiceId: string,
+            context: SessionContext<DesktopActionContext>,
+        ) {
+            context.agentContext.choiceManager.cancelChoice(choiceId);
+        },
         async handleChoice(
             choiceId: string,
             response: boolean | number[],

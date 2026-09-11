@@ -139,6 +139,7 @@ import { RequestQueue } from "../queue/requestQueue.js";
 import type { QueueExecutionContext } from "../queue/requestQueue.js";
 import { createSnapshotCoalescer } from "../queue/snapshotCoalescer.js";
 import { processCommand as runProcessCommand } from "../command/command.js";
+import { closeStructuredActions } from "../structuredAction/executionHooks.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -1416,6 +1417,7 @@ export async function initializeCommandHandlerContext(
                     qctx.attachments,
                     qctx.options,
                     qctx.traceContext,
+                    qctx.work,
                 );
                 try {
                     context.displayLog.logCommandResult(
@@ -1951,6 +1953,7 @@ function processSetAppAgentStateResult(
 export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
+    closeStructuredActions(context);
     // Stop accepting exclusive mutations in this closing session.
     context.appAgentProviderSetController.dispose();
     // Tear down any reasoning subagents (spawned command-executor processes and

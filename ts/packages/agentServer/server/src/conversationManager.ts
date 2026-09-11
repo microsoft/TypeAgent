@@ -12,6 +12,7 @@ import {
     ConversationMatch,
     ConversationContentMatch,
     ConversationSource,
+    JoinConversationResult,
     RenameConversationOptions,
 } from "@typeagent/agent-server-protocol";
 import {
@@ -55,6 +56,7 @@ import {
     type ConversationSummaryTranslator,
 } from "./conversationSummary.js";
 import { lockInstanceDir } from "agent-dispatcher/internal";
+import { validateStructuredActionJoin } from "./structuredActionBindings.js";
 
 import registerDebug from "debug";
 const debugConversation = registerDebug("agent-server:conversation");
@@ -182,6 +184,7 @@ export type ConversationManager = {
         name: string;
         pendingInteractions: PendingInteractionRequest[];
         queueSnapshot?: QueueSnapshot;
+        structuredActions?: JoinConversationResult["structuredActions"];
     }>;
     leaveConversation(
         conversationId: string,
@@ -1129,21 +1132,46 @@ export async function createConversationManager(
             name: string;
             pendingInteractions: PendingInteractionRequest[];
             queueSnapshot?: QueueSnapshot;
+            structuredActions?: JoinConversationResult["structuredActions"];
         }> {
+            validateStructuredActionJoin(options, conversationId);
             const record = conversations.get(conversationId);
             if (record === undefined) {
                 throw new Error(`Conversation not found: ${conversationId}`);
             }
+            if (options?.structuredActions !== undefined && record.readOnly) {
+                throw new Error(
+                    "Structured execution is unavailable in a read-only conversation",
+                );
+            }
+            if (
+                options?.structuredActions?.resumeToken !== undefined &&
+                record.sharedDispatcher === undefined
+            ) {
+                throw new Error(
+                    "Structured action resume state is unavailable; do not replay an interrupted action",
+                );
+            }
 
             cancelIdleTimer(record);
             const sharedDispatcher = await ensureDispatcher(record);
-            const dispatcher = sharedDispatcher.join(
-                clientIO,
-                closeFn,
-                options,
-            );
-            touchConversation(conversationId);
-            await saveMetadata();
+            let dispatcher: Dispatcher | undefined;
+            try {
+                dispatcher = sharedDispatcher.join(clientIO, closeFn, options);
+                touchConversation(conversationId);
+                await saveMetadata();
+            } catch (error) {
+                try {
+                    if (dispatcher?.connectionId !== undefined) {
+                        await sharedDispatcher.leave(dispatcher.connectionId);
+                    }
+                } finally {
+                    if (sharedDispatcher.clientCount === 0) {
+                        startIdleTimer(record);
+                    }
+                }
+                throw error;
+            }
 
             debugConversation(
                 `Client joined conversation "${record.name}" (${conversationId}), clients: ${sharedDispatcher.clientCount}`,
@@ -1166,6 +1194,7 @@ export async function createConversationManager(
                 name: string;
                 pendingInteractions: PendingInteractionRequest[];
                 queueSnapshot?: QueueSnapshot;
+                structuredActions?: JoinConversationResult["structuredActions"];
             } = {
                 dispatcher,
                 connectionId: dispatcher.connectionId!,
@@ -1177,6 +1206,13 @@ export async function createConversationManager(
             };
             if (queueSnapshot !== undefined) {
                 result.queueSnapshot = queueSnapshot;
+            }
+            const structuredActions =
+                sharedDispatcher.getStructuredActionBinding(
+                    dispatcher.connectionId!,
+                );
+            if (structuredActions !== undefined) {
+                result.structuredActions = structuredActions;
             }
             return result;
         },

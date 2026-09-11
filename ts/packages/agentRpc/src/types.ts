@@ -276,6 +276,9 @@ export type AgentInvokeFunctions = {
                 | QuestionFormResponse;
         },
     ): Promise<ActionResult | undefined>;
+    cancelChoice(
+        param: Partial<ContextParams> & { choiceId: string },
+    ): Promise<void>;
     getDynamicSchema(
         param: Partial<ContextParams> & { schemaName: string },
     ): Promise<SchemaContent | undefined>;

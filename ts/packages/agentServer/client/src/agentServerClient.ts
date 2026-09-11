@@ -149,6 +149,8 @@ export type ConversationDispatcher = {
     pendingInteractions?: NonNullable<
         JoinConversationResult["pendingInteractions"]
     >;
+    /** Retain only in trusted memory; pass back on an explicit resumed join. */
+    structuredActions?: JoinConversationResult["structuredActions"];
 };
 
 export type AgentServerConnection = {
@@ -542,6 +544,9 @@ export function createAgentServerConnection(
                 connectionId: result.connectionId,
                 queueSnapshot: result.queueSnapshot,
                 pendingInteractions: result.pendingInteractions ?? [],
+                ...(result.structuredActions === undefined
+                    ? {}
+                    : { structuredActions: result.structuredActions }),
             };
         },
 
@@ -832,7 +837,8 @@ export async function connectAgentServer(
                 createChannelProviderAdapter(
                     "agent-server:client",
                     (message: any) => {
-                        debug("Sending message to server:", message);
+                        // Join payloads can carry private resume capabilities.
+                        debug("Sending message to server");
                         ws.send(JSON.stringify(message));
                     },
                 );
@@ -843,7 +849,7 @@ export async function connectAgentServer(
                 settle(channel);
             };
             ws.onmessage = (event: WebSocket.MessageEvent) => {
-                debug("Received message from server:", event.data);
+                debug("Received message from server");
                 channel.notifyMessage(JSON.parse(event.data.toString()));
             };
             ws.onclose = (event: WebSocket.CloseEvent) => {

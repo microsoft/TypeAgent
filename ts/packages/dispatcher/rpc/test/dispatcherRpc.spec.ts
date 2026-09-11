@@ -12,6 +12,7 @@ import type {
     Dispatcher,
     QueuedRequest,
     SubmitResult,
+    StructuredActionExecutionResult,
 } from "@typeagent/dispatcher-types";
 import { ServerStoppingError } from "@typeagent/dispatcher-types";
 import type { PendingInteractionResponse } from "@typeagent/dispatcher-types";
@@ -76,6 +77,9 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
         getAgentSchemas: notImplemented("getAgentSchemas") as any,
         searchActions: notImplemented("searchActions"),
         getActionContract: notImplemented("getActionContract"),
+        executeAction: notImplemented("executeAction"),
+        continueAction: notImplemented("continueAction"),
+        cancelAction: notImplemented("cancelAction"),
         respondToChoice: notImplemented("respondToChoice") as any,
         getDisplayHistory: notImplemented("getDisplayHistory") as any,
         async cancelCommand(...args) {
@@ -154,6 +158,93 @@ describe("dispatcher RPC lifecycle options", () => {
 });
 
 describe("dispatcher RPC structured discovery", () => {
+    it("roundtrips structured execution, continuation and cancellation without losing result data", async () => {
+        const { serverChannel, clientChannel } = createChannelPair();
+        const seen: unknown[] = [];
+        const result: StructuredActionExecutionResult = {
+            protocolVersion: 1,
+            scopeId: "scope",
+            operationId: "operation",
+            status: "completed",
+            output: ["Saved"],
+            results: [
+                {
+                    action: {
+                        schemaName: "test",
+                        actionName: "save",
+                        parameters: { name: "item" },
+                    },
+                    result: {
+                        displayContent: {
+                            type: "html",
+                            content: "<b>Saved</b>",
+                        },
+                        entities: [
+                            {
+                                name: "item",
+                                type: ["Item"],
+                                uniqueId: "stable",
+                            },
+                        ],
+                        resultEntity: {
+                            name: "item",
+                            type: ["Item"],
+                            uniqueId: "stable",
+                        },
+                        resultValue: {
+                            songs: [{ id: "stable", title: "song" }],
+                        },
+                    },
+                },
+            ],
+        };
+        createDispatcherRpcServer(
+            makeStubDispatcher({
+                executeAction: async (request) => {
+                    seen.push(request);
+                    return result;
+                },
+                continueAction: async (request) => {
+                    seen.push(request);
+                    return result;
+                },
+                cancelAction: async (request) => {
+                    seen.push(request);
+                    return result;
+                },
+            }),
+            serverChannel,
+        );
+        const { dispatcher } = createDispatcherRpcClient(
+            clientChannel,
+            undefined,
+        );
+        const request = {
+            protocolVersion: 1 as const,
+            scopeId: "scope",
+            schemaName: "test",
+            actionName: "save",
+            fingerprint: "exact",
+            parameters: { name: "item" },
+        };
+        const continuation = {
+            protocolVersion: 1 as const,
+            scopeId: "scope",
+            operationId: "operation",
+            interactionId: "opaque",
+            response: { type: "confirmation" as const, approved: true },
+        };
+        const cancellation = {
+            protocolVersion: 1 as const,
+            scopeId: "scope",
+            operationId: "operation",
+        };
+        expect(await dispatcher.executeAction(request)).toEqual(result);
+        expect(await dispatcher.continueAction(continuation)).toEqual(result);
+        expect(await dispatcher.cancelAction(cancellation)).toEqual(result);
+        expect(seen).toEqual([request, continuation, cancellation]);
+    });
+
     it("forwards exact identities and the complete versioned contract", async () => {
         const identity = { schemaName: "test.sub", actionName: "select" };
         const summary = {
