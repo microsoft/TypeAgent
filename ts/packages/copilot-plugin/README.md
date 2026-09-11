@@ -70,8 +70,9 @@ server therefore exposes the five structured tools in **both Direct and MCP
 modes**, and calls the same transport-neutral `StructuredActionClient` /
 Dispatcher interface. This is the Direct structured caller; it is not a claim
 that Copilot can inject structured requests into the one-shot prompt hook.
-Tool calls are rejected in dev/bypass modes before connecting. Mode is checked
-per call because the MCP catalog remains registered when a mode changes.
+Except for explicit cancellation, tool calls are rejected in dev/bypass modes
+before connecting. Mode is checked per call because the MCP catalog remains
+registered when a mode changes.
 Workspace and macro server registrations and their mode behavior are unchanged.
 
 `StructuredActionClient` is a public export of
@@ -115,6 +116,9 @@ Supported response types are `confirmation`, `question`, `yesNo`, `multiChoice`,
 ID. A new prompt requires a new user answer. Never use a displayed default,
 invent form answers, autoapprove, or direct the user to an inaccessible Shell.
 Use `cancelAction` with the returned IDs if the user wants to stop.
+Cancellation remains available after switching to Dev or Bypass mode; new
+execution and continuation remain disabled there. Switching mode never supplies
+an answer or implies that pending work was cancelled.
 
 On `contract_stale`, refresh the selected contract and reassess parameters and
 consent before constructing a new request; **no automatic replay**. On timeout,
