@@ -64,6 +64,7 @@ import {
 import { otel } from "@typeagent/telemetry";
 import { getActionContext } from "./actionContext.js";
 import { getStructuredExecution } from "../structuredAction/executionHooks.js";
+import { ExecutionFailure } from "../structuredAction/executionFailure.js";
 import { RpcDisconnectedError } from "@typeagent/agent-rpc/rpc";
 import {
     AgentNotReadyError,
@@ -219,7 +220,8 @@ function rethrowIfActionCancelled(
     systemContext: CommandHandlerContext,
 ): void {
     if (
-        error instanceof RpcDisconnectedError &&
+        (error instanceof RpcDisconnectedError ||
+            error instanceof ExecutionFailure) &&
         getStructuredExecution(systemContext) !== undefined
     )
         throw error;

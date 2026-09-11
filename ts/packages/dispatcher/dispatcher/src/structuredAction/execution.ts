@@ -45,6 +45,7 @@ import {
     validateJson,
     validateResponse,
 } from "./validation.js";
+import { ExecutionFailure } from "./executionFailure.js";
 
 const OPERATION_TTL = 10 * 60_000;
 const MAX_OPERATIONS = 100;
@@ -55,23 +56,6 @@ type ExecutionRuntime = {
     executeActions: typeof executeActions;
     getActionContext: typeof getActionContext;
 };
-
-type FailureStatus =
-    | "failed"
-    | "contract_stale"
-    | "unavailable"
-    | "cancelled"
-    | "execution_uncertain";
-
-class ExecutionFailure extends Error {
-    constructor(
-        readonly code: StructuredActionError["code"],
-        message: string,
-        readonly status: FailureStatus = "failed",
-    ) {
-        super(message);
-    }
-}
 
 function binding(discovery: StructuredActionDiscovery) {
     let current: ReturnType<StructuredActionDiscovery["bindScope"]>;
@@ -194,6 +178,7 @@ class Operation implements StructuredExecutionHooks {
     private readonly contracts = new Map<string, ActionContract>();
     private readonly approved = new WeakSet<FullAction>();
     private possibleEffects = false;
+    private promptFailure: ExecutionFailure | undefined;
     private promptTail: Promise<void> = Promise.resolve();
     private queuedPrompts = 0;
     private timer: ReturnType<typeof setTimeout>;
@@ -231,6 +216,7 @@ class Operation implements StructuredExecutionHooks {
     }
 
     private checkLive(): void {
+        if (this.promptFailure !== undefined) throw this.promptFailure;
         if (this.terminal !== undefined)
             throw new DOMException("Operation ended", "AbortError");
         this.context.currentAbortSignal?.throwIfAborted();
@@ -519,6 +505,11 @@ class Operation implements StructuredExecutionHooks {
             this.checkLive();
             this.revalidate();
             return response;
+        } catch (error) {
+            // Agent RPC serializes thrown callback errors. Retain the host's
+            // authoritative guard failure rather than trusting the roundtrip.
+            if (error instanceof ExecutionFailure) this.promptFailure = error;
+            throw error;
         } finally {
             if (this.pending === pending) this.pending = undefined;
             this.context.requestQueue.markUnblocked(this.id);
@@ -602,6 +593,7 @@ class Operation implements StructuredExecutionHooks {
 
     finish(error?: unknown): void {
         if (this.terminal !== undefined) return;
+        error = this.promptFailure ?? error;
         if (
             error === undefined &&
             this.context.currentRequestId?.requestId === this.id &&
