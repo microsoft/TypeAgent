@@ -10,6 +10,7 @@ import {
     Grammar,
     GrammarPart,
     GrammarRule,
+    PhraseSetPart,
     RulesPart,
     StringPart,
     StringPartRegExpEntry,
@@ -17,6 +18,7 @@ import {
     VarStringPart,
     DispatchModeBucket,
     createRulesPart,
+    createStringPart,
 } from "./grammarTypes.js";
 import { wordBoundaryScriptRe } from "./spacingScripts.js";
 import {
@@ -24,6 +26,7 @@ import {
     getDispatchMergedSingle,
     getDispatchMergedMulti,
 } from "./dispatchHelpers.js";
+import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
 import type { TraceCallback } from "./traceEvents.js";
 
 // Separator mode for completion results.  Structurally identical to
@@ -2752,6 +2755,67 @@ function matchVarStringPart(state: MatchState, part: VarStringPart) {
     return true;
 }
 
+/**
+ * Expand a PhraseSetPart into a RulesPart whose alternatives are fixed
+ * string phrases from the registry.  Cached on the part so repeated
+ * match attempts (and multi-request reuse of a compiled grammar) do not
+ * rebuild the alternation.  Phrase-set registry growth via addPhrase()
+ * invalidates the cache by phrase count.
+ *
+ * Nested rules inherit the surrounding spacingMode so flex-space /
+ * boundary behavior matches a hand-written alternation of the same
+ * tokens.  Capture (`part.variable`) is carried on the RulesPart so
+ * finalizeNestedRule binds the matched phrase the same way NFA does.
+ */
+type PhraseSetExpandCache = {
+    rulesPart: RulesPart;
+    phraseCount: number;
+    spacingMode: CompiledSpacingMode;
+    variable: string | undefined;
+};
+const phraseSetExpandCache = new WeakMap<PhraseSetPart, PhraseSetExpandCache>();
+
+function getPhraseSetRulesPart(
+    part: PhraseSetPart,
+    spacingMode: CompiledSpacingMode,
+): RulesPart | undefined {
+    const matcher = globalPhraseSetRegistry.getMatcher(part.matcherName);
+    if (matcher === undefined || matcher.phrases.length === 0) {
+        return undefined;
+    }
+    const cached = phraseSetExpandCache.get(part);
+    if (
+        cached !== undefined &&
+        cached.phraseCount === matcher.phrases.length &&
+        cached.spacingMode === spacingMode &&
+        cached.variable === part.variable
+    ) {
+        return cached.rulesPart;
+    }
+    const rulesPart = createRulesPart(
+        matcher.phrases.map((phrase) => ({
+            // Slice so later registry mutations cannot alias into the
+            // compiled string part's immutable token array.
+            parts: [createStringPart(phrase.slice())],
+            spacingMode,
+        })),
+        {
+            variable: part.variable,
+            partId: part.partId,
+            name: part.matcherName,
+            // Phrase-set expansions are pure string alternations — memo is
+            // fine and helps when the same <Polite> appears in many rules.
+        },
+    );
+    phraseSetExpandCache.set(part, {
+        rulesPart,
+        phraseCount: matcher.phrases.length,
+        spacingMode,
+        variable: part.variable,
+    });
+    return rulesPart;
+}
+
 // Enter a tail `RulesPart` (true tail call).  No parent frame is
 // pushed - `state.parent` keeps pointing at whatever ancestor frame
 // was already current.  When the selected member finishes, finalize
@@ -3048,6 +3112,57 @@ export function matchState(state: MatchState, request: string) {
                         namePrefix,
                     )
                 ) {
+                    return false;
+                }
+                // continue the loop (without incrementing partIndex)
+                continue;
+            }
+            case "phraseSet": {
+                // Built-in phrase sets (<Polite>, <Greeting>, …) compile to
+                // PhraseSetPart. Expand to a string-phrase alternation and
+                // reuse the RulesPart entry path (backtrack + capture).
+                const rulesPart = getPhraseSetRulesPart(
+                    part,
+                    state.spacingMode,
+                );
+                if (rulesPart === undefined) {
+                    if (trace !== undefined) {
+                        trace({
+                            seq: state.traceSeq++,
+                            inputPos: state.index,
+                            kind: "partFailed",
+                            rule: state.name,
+                            part: part.partId ?? partIndex,
+                        });
+                    }
+                    return false;
+                }
+                if (debugEnabled) {
+                    debugMatch(
+                        state,
+                        `expanding phraseSet <${part.matcherName}> (${rulesPart.alternatives.length} phrases)`,
+                    );
+                }
+                const namePrefix = state.trackNames
+                    ? `<${part.matcherName}>`
+                    : "";
+                if (
+                    !enterRulesAlternation(
+                        state,
+                        rulesPart,
+                        rulesPart.alternatives,
+                        namePrefix,
+                    )
+                ) {
+                    if (trace !== undefined) {
+                        trace({
+                            seq: state.traceSeq++,
+                            inputPos: state.index,
+                            kind: "partFailed",
+                            rule: state.name,
+                            part: part.partId ?? partIndex,
+                        });
+                    }
                     return false;
                 }
                 // continue the loop (without incrementing partIndex)

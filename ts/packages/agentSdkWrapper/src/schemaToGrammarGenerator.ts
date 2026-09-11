@@ -47,9 +47,9 @@ The Action Grammar format uses:
 - Rule definitions: <RuleName> = pattern;
 - Literal text: "play" or 'play'
 - Wildcards with types: $(name:Type) - captures any text and assigns it to 'name' with validation type 'Type'
-- Optional elements: element?
-- Zero or more: element*
-- One or more: element+
+- Optional: (element)? or <Name>?   (quantifiers ? * + ONLY valid immediately after ")" or ">")
+- Zero or more: (element)* or <Name>*
+- One or more: (element)+ or <Name>+
 - Alternation: pattern1 | pattern2
 - Grouping: (expression) - groups expressions for operators
 - Rule references: <RuleName>
@@ -57,8 +57,9 @@ The Action Grammar format uses:
 
 CRITICAL SYNTAX RULES:
 1. ALWAYS use parentheses around alternatives when combined with operators
-   CORRECT: ('can you'? 'add' | 'include')
-   WRONG: 'can you'? 'add' | 'include'
+   CORRECT: (((can you)? add) | include)
+   WRONG: can you? add | include   (bare ? after a word is a PARSE ERROR)
+   WRONG: 'can you'? 'add' | 'include'   (bare ? after a string is also a PARSE ERROR)
 
 2. ALWAYS use parentheses around groups that should be treated as a unit
    CORRECT: ('on' | 'for') $(date:CalendarDate)
@@ -81,12 +82,23 @@ CRITICAL SYNTAX RULES:
    WRONG: <ScheduleEvent> = ... ; for action "scheduleEvent"
    This enables easy targeting of specific actions when extending grammars incrementally.
 
+6. Quantifiers ? * + are SPECIAL characters in patterns:
+   - Valid ONLY immediately after ")" or ">" : (<Polite>)?, <Song>?, $(x)?, (a|b)*
+   - Bare "?" after a word/string is a PARSE ERROR. Escape literals: what is the time\\?
+   - Required name + question mark: who sings song <Song>\\?
+   - Optional name + question mark: who sings song (<Song>)?\\?
+   - Do NOT write <Polite>? intending a literal "?"; that makes Polite optional.
+   - The writer/prettier prefers the grouped form (<Name>)? over bare <Name>?.
+   CORRECT: (please)?  (can you)?  (<Polite>)?  <Song>?  $(x)?
+   WRONG:   please?  can you?  'can you'?  "please"?  word*
+
 EFFICIENCY GUIDELINES:
 1. Identify common patterns across actions and extract them as sub-rules
    Example: If multiple actions use date expressions, create <DateExpr> = ('on' | 'for') $(date:CalendarDate);
 
 2. Create shared vocabulary rules for common phrases
-   Example: <Polite> = 'can you'? | 'please'? | 'would you'?;
+   Example: <Polite> = can you | please | would you;
+   Then make the whole rule optional at use sites: (<Polite>)? open outlook
 
 3. Reuse entity type rules across actions
    Example: If multiple actions need participant names, reference the same wildcard pattern
@@ -142,6 +154,19 @@ IMPROVEMENT INSTRUCTIONS:
 AVAILABLE ENTITY TYPES AND CONVERTERS:
 {entityTypes}
 
+CRITICAL SYNTAX RULES (must follow when extending):
+1. Quantifiers ? * + are SPECIAL characters in patterns:
+   - Valid ONLY immediately after ")" or ">" : (<Polite>)?, <Song>?, $(x)?, (a|b)*
+   - Bare "?" after a word is a PARSE ERROR. Escape literals: what is the time\\?
+   - Required name + question mark: who sings song <Song>\\?
+   - Optional name + question mark: who sings song (<Song>)?\\?
+   - Do NOT write <Polite>? intending a literal "?"; that makes Polite optional.
+   - The writer/prettier prefers the grouped form (<Name>)? over bare <Name>?.
+   CORRECT: (please)?  (can you)?  (<Polite>)?  <Song>?  $(x)?
+   WRONG:   please?  can you?  'can you'?  "please"?  word*
+2. Comments use // not #
+3. Action rule names MUST match the exact action name (not capitalized)
+
 Your task:
 1. Analyze the existing grammar and identify areas for improvement
 2. Incorporate the new examples by extending or refining existing rules
@@ -149,7 +174,7 @@ Your task:
 4. Maintain consistency with existing patterns and style
 5. Ensure all actions in the schema are covered
 6. Keep shared sub-rules and don't duplicate patterns
-7. Follow all AGR syntax rules (see above)
+7. Follow all AGR syntax rules above (especially quantifier special-char rules)
 8. IMPORTANT: Use exact action names for action rules (e.g., <scheduleEvent> = ... ;, not <ScheduleEvent> = ... ;)
    This enables easy targeting of specific actions when extending grammars incrementally
 
@@ -530,6 +555,11 @@ Remember the CRITICAL SYNTAX RULES:
 1. ALWAYS use parentheses around alternatives when combined with operators
 2. ALWAYS use parentheses around groups that should be treated as a unit
 3. Optional groups must have parentheses
+4. Quantifiers ? * + are SPECIAL — valid ONLY immediately after ")" or ">":
+   CORRECT: (<Polite>)?, <Song>?, $(x)?, (a|b)*, (please)?, (can you)?
+   WRONG:   please?  can you?  'can you'?  "please"?  word*  (bare quantifier = PARSE ERROR)
+   Literal ? * + require backslash escapes: what is the time\\?
+   Prefer grouped form (<Name>)? over bare <Name>?.
 
 Return the complete corrected grammar, starting with the copyright header.`;
 

@@ -589,10 +589,9 @@ export class ScenarioBasedGrammarGenerator {
                 output += `<${categoryName}> =\n`;
                 verbsList.forEach((verb, index) => {
                     const separator = index < verbsList.length - 1 ? " |" : "";
-                    // Escape backslashes first, then single quotes in verb phrases
-                    const escapedVerb = verb
-                        .replace(/\\/g, "\\\\")
-                        .replace(/'/g, "\\'");
+                    // Same escapes as generatePrefixSuffixRule — quotes are
+                    // ordinary match chars, so bare ?/*/+ inside would parse-error.
+                    const escapedVerb = this.escapeSpecialChars(verb);
                     output += `    '${escapedVerb}'${separator}\n`;
                 });
                 output += `\n`;
@@ -856,13 +855,13 @@ export class ScenarioBasedGrammarGenerator {
 
     /**
      * Escape special characters in quoted string literals
-     * Special chars: \, @, |, (, ), <, >, $, -, {, }, [, ], '
+     * Special chars: \, @, |, (, ), <, >, $, -, {, }, [, ], ?, *, +, '
      * Backslashes must be escaped first to avoid double-escaping
      */
     private escapeSpecialChars(text: string): string {
         return text
             .replace(/\\/g, "\\\\")
-            .replace(/[@|()\[\]<>$\-{}']/g, "\\$&");
+            .replace(/[@|()\[\]<>$\-{}?*+']/g, "\\$&");
     }
 
     /**

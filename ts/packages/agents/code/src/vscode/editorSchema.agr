@@ -10,7 +10,7 @@ import { EditorCodeActions } from "./editorCodeActionsSchema.ts";
 <Start> : EditorCodeActions = <createFunction> | <createCodeBlock> | <fixCodeProblem> | <moveCursorInFile> | <insertOrDeleteLines> | <insertComment> | <generateWithCopilot> | <createFile> | <saveCurrentFile> | <saveAllFiles>;
 
 // Common patterns and sub-rules
-<Polite> = ('can you'? | 'please'? | 'could you'?);
+<Polite> = (('can you')? | ('please')? | ('could you')?);
 <QuickPhrase> = ('quick' | 'quickly' | 'fast')?;
 <LanguageSpec> = ('in' | 'using' | 'as') $(language:string) -> language;
 <FileSpec> = ('in' | 'to' | 'at') $(file:string) ('file' | 'document')? -> file;

@@ -14,6 +14,7 @@ import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
 import {
     normalizeToken,
     parseNumberToken,
+    tokenizeRequestKeepingTrailingPunct,
     tokenizeRequestWithOffsets,
 } from "./nfaMatcher.js";
 import type { GrammarCompletionResult } from "./grammarCompletion.js";
@@ -720,12 +721,17 @@ function compareDFAMatchPriority(a: DFAMatchResult, b: DFAMatchResult): number {
 }
 
 /**
- * Match tokens against a DFA, performing a two-pass split-candidate strategy
- * when the DFA has split candidates (for spacing=optional/auto grammars).
+ * Match tokens against a DFA, performing a multi-pass strategy:
  *
- * Pass 1 — original whitespace tokens.
+ * Pass 1 — original whitespace tokens (trailing sentence punct stripped).
  * Pass 2 — pre-split tokens using dfa.splitCandidates (e.g. "Swift's" → ["Swift", "'s"]).
- * The higher-priority result is returned.
+ * Pass 3 — when `spacingContext.request` is set and earlier passes miss, retry
+ *           with trailing sentence punctuation peeled into its own tokens so
+ *           grammars with a standalone literal `\?` match natural questions
+ *           like `"who sings song hello?"` (mirrors matchGrammarWithNFA).
+ *
+ * The higher-priority result across passes is returned.  The strip pass is
+ * preferred when it matches (trailing punct as flex-space).
  */
 export function matchDFAWithSplitting(
     dfa: DFA,
@@ -739,8 +745,47 @@ export function matchDFAWithSplitting(
      * original request the matcher cannot distinguish "  helloworld" from
      * "helloworld".  Callers that have the request and grammar should
      * pass them; legacy callers can omit.
+     *
+     * When `request` is provided, a failed strip-tokenized match is retried
+     * with trailing punctuation kept as separate tokens (see Pass 3 above).
      */
-    spacingContext?: { request: string; grammar: Grammar },
+    spacingContext?: { request: string; grammar?: Grammar },
+): DFAMatchResult {
+    const best = matchDFAWithSplittingCore(dfa, tokens, debugMode);
+
+    // Pass 3: peel glued trailing sentence punctuation (needs original request).
+    if (!best.matched && spacingContext?.request) {
+        const punctTokens = tokenizeRequestKeepingTrailingPunct(
+            spacingContext.request,
+        );
+        if (
+            punctTokens.length > 0 &&
+            (punctTokens.length !== tokens.length ||
+                punctTokens.some((t, i) => t !== tokens[i]))
+        ) {
+            const punctBest = matchDFAWithSplittingCore(
+                dfa,
+                punctTokens,
+                debugMode,
+            );
+            if (punctBest.matched) {
+                return applySpacingNoneRejection(
+                    punctBest,
+                    punctTokens,
+                    spacingContext,
+                );
+            }
+        }
+    }
+
+    return applySpacingNoneRejection(best, tokens, spacingContext);
+}
+
+/** Split-candidate passes only (no trailing-punct retry, no spacing=none). */
+function matchDFAWithSplittingCore(
+    dfa: DFA,
+    tokens: string[],
+    debugMode: boolean,
 ): DFAMatchResult {
     // O(1) first-token pre-filter
     if (dfaFirstTokenRejects(dfa, tokens)) {
@@ -776,10 +821,21 @@ export function matchDFAWithSplitting(
             }
         }
     }
+    return best;
+}
 
+function applySpacingNoneRejection(
+    best: DFAMatchResult,
+    tokens: string[],
+    spacingContext?: { request: string; grammar?: Grammar },
+): DFAMatchResult {
     // spacing=none rejection of leading/trailing whitespace.  Mirrors the
     // check in matchGrammarWithNFA (nfaMatcher.ts).
-    if (best.matched && spacingContext && best.ruleIndex !== undefined) {
+    if (
+        best.matched &&
+        spacingContext?.grammar &&
+        best.ruleIndex !== undefined
+    ) {
         const { request, grammar } = spacingContext;
         const hasOuterWhitespace =
             request.length !== request.trim().length &&

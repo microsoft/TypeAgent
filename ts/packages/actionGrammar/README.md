@@ -42,6 +42,13 @@ import { Helper } from "./other.agr";                 // Grammar imports
 <SkipTrack> = (skip | next) (track | song)?            // Optionals, alternation
     -> { actionName: "skip" };
 <Items> = $(item:string) (, $(item:string))*;          // Repetition (Kleene star)
+// Quantifiers ? * + are special: valid only after ")" or ">" (e.g. (<Polite>)?, <Song>?).
+// Bare ? elsewhere is a parse error — escape literals as \?
+// what is the time\?                                 // literal trailing ?
+// who sings song <Song>\?                            // required Song + literal ?
+// who sings song <Song>?                             // OPTIONAL Song, NO literal "?" (pitfall)
+// who sings song (<Song>)?\?                         // optional Song + literal "?"
+// Writer/prettier always emits the grouped form: (<Name>)? not bare <Name>?.
 ```
 
 ## Exports
