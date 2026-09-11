@@ -145,6 +145,16 @@ export function isSwitchEnabled(config: DispatcherConfig) {
     );
 }
 
+export function resolveTranslatedActionSchemaName(
+    action: TranslatedAction,
+    translator: Pick<TypeAgentTranslator, "getSchemaName">,
+): string | undefined {
+    // UnknownAction belongs to the dispatcher and is absent from translator maps.
+    return isUnknownAction(action)
+        ? DispatcherName
+        : translator.getSchemaName(action.actionName);
+}
+
 export function getTranslatorForSchema(
     context: CommandHandlerContext,
     schemaName: string,
@@ -192,6 +202,7 @@ export function getTranslatorForSchema(
         jsonSchemaFunction: config.schema.generation.jsonSchemaFunction,
         jsonSchemaWithTs: config.schema.generation.jsonSchemaWithTs,
         jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
+        validate: config.schema.generation.validate,
     };
     const newTranslator = loadAgentJsonTranslator(
         actionConfigs,
@@ -1067,12 +1078,23 @@ async function finalizeAction(
     }
 
     // A translator may combine actions from multiple schemas (inline, selected actions)
-    const currentActionSchemaName = currentTranslator.getSchemaName(
-        currentAction.actionName,
+    const currentActionSchemaName = resolveTranslatedActionSchemaName(
+        currentAction,
+        currentTranslator,
     );
 
     if (currentActionSchemaName === undefined) {
-        // Should not happen
+        if (
+            !context.sessionContext.agentContext.session.getConfig().translation
+                .schema.generation.validate
+        ) {
+            return createExecutableAction(
+                currentSchemaName,
+                currentAction.actionName,
+                currentAction.parameters,
+                resultEntityId,
+            );
+        }
         throw new Error(
             `Internal Error: Unable to match schema name for action ${currentAction.actionName}`,
         );

@@ -59,18 +59,34 @@ export type {
 export type { UserContext } from "./translation/userContext.js";
 export { resolveUserContextFromSchema } from "./translation/userContext.js";
 export { schemaGuidelines } from "./translation/schemaGuidelines.js";
-export { tryGetActionSchema } from "./translation/actionSchemaFileCache.js";
-export { createSchemaInfoProvider } from "./translation/actionSchemaFileCache.js";
+export {
+    ActionSchemaFileCache,
+    tryGetActionSchema,
+    createSchemaInfoProvider,
+} from "./translation/actionSchemaFileCache.js";
 export { getAllActionConfigProvider } from "./context/inlineAgentProvider.js";
 export type { ComposeSchemaOptions } from "./translation/actionSchemaJsonTranslator.js";
-export type { ActionConfig } from "./translation/actionConfig.js";
-export type { ActionConfigProvider } from "./translation/actionConfigProvider.js";
+export {
+    convertToActionConfig,
+    type ActionConfig,
+} from "./translation/actionConfig.js";
+export type {
+    ActionConfigProvider,
+    ActionSchemaFile,
+} from "./translation/actionConfigProvider.js";
+export { createHistoryContext } from "./translation/interpretRequest.js";
+export { translateRequest } from "./translation/translateRequest.js";
+export {
+    DispatcherClarifyName,
+    isUnknownAction,
+} from "./context/dispatcher/dispatcherUtils.js";
 
 export {
     ChatHistoryInput,
     ChatHistoryInputEntry,
     ChatHistoryInputAssistant,
     isChatHistoryInput,
+    createChatHistory,
 } from "./context/chatHistory.js";
 
 export {
@@ -79,6 +95,9 @@ export {
     getSessionNames,
     getSessionConstructionDirPath,
     getSessionConstructionDirPaths,
+    type CollisionStrategy,
+    type DispatcherConfig,
+    Session,
 } from "./context/session.js";
 
 export { initializeGeolocation } from "./context/geolocation.js";

@@ -17,6 +17,12 @@ export const TRANSLATION_BENCH_SYNTHESIZER_PROMPTS_DIR = path.dirname(
     fileURLToPath(import.meta.url),
 );
 
+/** Parameter-grader prompt lives under policy/ (colocated with policyGenerator). */
+export const TRANSLATION_BENCH_POLICY_PROMPTS_DIR = path.resolve(
+    TRANSLATION_BENCH_SYNTHESIZER_PROMPTS_DIR,
+    "../policy",
+);
+
 const SYNTHESIZER_PROMPT_FILE = "synthesizer.prompt.yaml";
 const QUALITY_VERIFIER_PROMPT_FILE = "quality-verifier.prompt.yaml";
 const PARAMETER_GRADER_PROMPT_FILE = "parameter-grader.prompt.yaml";
@@ -122,17 +128,26 @@ const qualityVerifierYamlSchema = z
                 model_configuration: translationBenchModelConfigurationSchema,
             })
             .strip(),
+        ambiguity_probe: z
+            .object({
+                template: nonEmptyString,
+                issue_codes: stringListSchema,
+                model_configuration: translationBenchModelConfigurationSchema,
+            })
+            .strip(),
         acceptance: z
             .object({
                 // Closed: LLM-derived rows always need format + semantic approve.
                 require_format_pass: z.literal(true).default(true),
                 require_semantic_approve: z.literal(true).default(true),
+                require_ambiguity_probe_pass: z.boolean().default(true),
                 max_attempts: finiteNumber.min(1).max(5).default(5),
             })
             .strip()
             .default({
                 require_format_pass: true,
                 require_semantic_approve: true,
+                require_ambiguity_probe_pass: true,
                 max_attempts: 5,
             }),
     })
@@ -204,9 +219,16 @@ export const translationBenchQualityVerifierPromptPackSchema =
             issueCodes: parsed.semantic_checker.issue_codes,
             modelConfiguration: parsed.semantic_checker.model_configuration,
         },
+        ambiguityProbe: {
+            template: parsed.ambiguity_probe.template,
+            issueCodes: parsed.ambiguity_probe.issue_codes,
+            modelConfiguration: parsed.ambiguity_probe.model_configuration,
+        },
         acceptance: {
             requireFormatPass: parsed.acceptance.require_format_pass,
             requireSemanticApprove: parsed.acceptance.require_semantic_approve,
+            requireAmbiguityProbePass:
+                parsed.acceptance.require_ambiguity_probe_pass,
             maxAttempts: parsed.acceptance.max_attempts,
         },
         raw: parsed as Record<string, unknown>,
@@ -399,7 +421,7 @@ export function loadTranslationBenchParameterGraderPromptPack(
     return loadPack(
         PARAMETER_GRADER_PROMPT_FILE,
         translationBenchParameterGraderPromptPackSchema,
-        promptsDir,
+        promptsDir ?? TRANSLATION_BENCH_POLICY_PROMPTS_DIR,
         (pack, raw) => ({ ...pack, raw }),
     );
 }

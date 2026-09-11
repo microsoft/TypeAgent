@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { splitTranslationBenchCheckpointLines } from "../runner/scale.js";
+import { readRecoverableJsonlLines as splitTranslationBenchCheckpointLines } from "../runner/scale.js";
 
 function fsyncDirectory(filePath: string): void {
     if (process.platform === "win32") return;

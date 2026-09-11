@@ -127,6 +127,7 @@ export type GenerateSchemaOptions = {
     jsonSchemaFunction?: boolean; // default false
     jsonSchemaWithTs?: boolean; // default false, applies only when jsonSchema or jsonSchemaFunction is true.
     jsonSchemaValidate?: boolean; //default false, applies only when jsonSchema or jsonSchemaFunction is true.
+    validate?: boolean; // default true; validates parsed actions against their TypeScript schema.
 };
 
 function isJsonSchemaEnabled(options?: GenerateSchemaOptions): boolean {

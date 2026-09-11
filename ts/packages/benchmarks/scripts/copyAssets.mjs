@@ -50,6 +50,10 @@ const files = [
         "dist/translationBench/action-parameters-grader.generated.json",
     ],
     [
+        "src/translationBench/eligible-gold-actions.generated.json",
+        "dist/translationBench/eligible-gold-actions.generated.json",
+    ],
+    [
         "src/translationBench/config.schema.json",
         "dist/translationBench/config.schema.json",
     ],
@@ -86,6 +90,21 @@ if (existsSync(yamlSrc)) {
         copyFileFast(
             path.join(yamlSrc, name.name),
             path.join(yamlDst, name.name),
+        );
+    }
+}
+
+const policyYamlSrc = path.join(root, "src/translationBench/policy");
+const policyYamlDst = path.join(root, "dist/translationBench/policy");
+if (existsSync(policyYamlSrc)) {
+    for (const name of readdirSync(policyYamlSrc, { withFileTypes: true })) {
+        if (!name.isFile()) continue;
+        if (!name.name.endsWith(".yaml") && !name.name.endsWith(".yml")) {
+            continue;
+        }
+        copyFileFast(
+            path.join(policyYamlSrc, name.name),
+            path.join(policyYamlDst, name.name),
         );
     }
 }

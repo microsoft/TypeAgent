@@ -22,15 +22,20 @@ import { finished } from "node:stream/promises";
 
 import { Command } from "commander";
 
-import type { ParamSpec } from "../synthesizer/catalogGenerator/paramTypes.js";
+import type { ParamSpec } from "../policy/paramTypes.js";
 import {
     renderSchemaType,
     schemaTypeToParamSpec,
     type SchemaFieldNode,
     type SchemaTypeNode,
-} from "../synthesizer/catalogGenerator/schemaTypeConvert.js";
+} from "../policy/schemaTypeConvert.js";
 
-const LABEL_EXCLUDED_SCHEMAS = new Set(["dispatcher"]);
+/**
+ * Schemas whose actions are omitted from the packaged catalog action list.
+ * Root `dispatcher` previously excluded the abstain action (`unknown`); keep
+ * it in the catalog so eligibility policy and the action-quality picker can
+ * fail-closed remove it. No schemas are label-excluded today.
+ */
 
 interface GeneratedAction {
     schemaName: string;
@@ -637,10 +642,6 @@ async function main(): Promise<void> {
     const unloadable: Array<{ schemaName: string; error: string }> = [];
 
     for (const schemaName of schemaNames) {
-        if (LABEL_EXCLUDED_SCHEMAS.has(schemaName)) {
-            delete actionConfigs[schemaName];
-            continue;
-        }
         const config = actionConfigs[schemaName]!;
         try {
             const extracted = extractActionsForSchema(schemaName, config);
