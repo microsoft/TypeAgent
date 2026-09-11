@@ -2144,6 +2144,33 @@ Usage: `@package install [-r|--refresh] [-n|--dry-run] [-s|--source <string>] <t
 - --dry-run -n : Preview how the target would resolve without installing. (default: false)
 - --refresh -r : Refresh cache-backed source metadata before resolving. (default: false)
 
+## @package group list - List available agent groups
+
+Usage: `@package group list`
+
+## @package group show - Show details and members of an agent group
+
+Usage: `@package group show <group>`
+
+### Arguments:
+
+- &lt;group&gt; - Name of the group to show (type: string)
+
+## @package group install - Install all missing agents in an agent group
+
+Usage: `@package group install [-y|--yes] [-r|--refresh] [-n|--dry-run] [-s|--source <string>] <group>`
+
+### Arguments:
+
+- &lt;group&gt; - Name of the group to install (type: string)
+
+### Flags:
+
+- --source -s &lt;string&gt; : Resolve only against this named source
+- --dry-run -n : Preview how the group would resolve without installing (default: false)
+- --refresh -r : Refresh cache-backed source metadata before resolving (default: false)
+- --yes -y : Skip confirmation prompt (default: false)
+
 ## @package update - Update an installed agent
 
 Usage: `@package update <name> [<range>]`

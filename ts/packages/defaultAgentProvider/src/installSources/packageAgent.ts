@@ -38,6 +38,7 @@ import {
     ExtensionKind,
     InstallMatchKind,
     InstallPreview,
+    InstallPreviewMatch,
     InstallResult,
     McpInstallCandidate,
     deriveMatchKind,
@@ -46,6 +47,7 @@ import {
     UpdateOutcomeStatus,
     UpdateResult,
 } from "./config.js";
+import { type AgentGroupCatalog, findAgentGroup } from "./agentGroups.js";
 
 // A legal dispatcher agent identifier (matches existing agent names such as
 // "github-cli", "osNotifications").
@@ -103,6 +105,18 @@ export interface InstalledAgentSourceApi {
         nameOrTarget: string,
         ref: string | undefined,
         sourceName: string | undefined,
+        issuingController: AppAgentProviderSetController,
+        onStatus?: SourceStatus,
+        abortSignal?: AbortSignal,
+    ): Promise<InstallResult>;
+    // Classify the package state without rereading the durable record store.
+    getAgentPackageState(name: string): AgentPackageState | undefined;
+    // Install an agent expecting it to match the preflight winner from preview().
+    // Pins resolution to the previewed source and validates expected identity
+    // before materialization.
+    installExpected(
+        nameOrTarget: string,
+        expected: InstallPreviewMatch,
         issuingController: AppAgentProviderSetController,
         onStatus?: SourceStatus,
         abortSignal?: AbortSignal,
@@ -191,11 +205,31 @@ export interface PackageAgentContext {
     readonly appAgentProviderSetController: AppAgentProviderSetController;
     readonly source: InstalledAgentSourceApi;
     readonly mcpSource?: McpServerSourceApi;
+    readonly agentGroups?: AgentGroupCatalog;
+    readonly agentGroupsError?: string;
 }
 
 type PackageActionContext = ActionContext<PackageAgentContext>;
 type PackageSessionContext = SessionContext<PackageAgentContext>;
 type PackageType = ExtensionKind | "all";
+
+export type AgentPackageState =
+    | "bundled"
+    | "installed"
+    | "installed-unavailable"
+    | "transitioning";
+
+function requireAgentGroupCatalog(
+    context: PackageAgentContext,
+): AgentGroupCatalog {
+    if (context.agentGroups !== undefined) {
+        return context.agentGroups;
+    }
+    throw new Error(
+        context.agentGroupsError ??
+            "The agent group catalog is unavailable. Reinstall or repair TypeAgent and retry.",
+    );
+}
 
 function parsePackageType(
     value: string | undefined,
@@ -988,6 +1022,592 @@ class InstallCommandHandler implements CommandHandler {
         }
         return { groups: completions };
     }
+}
+
+class GroupListCommandHandler implements CommandHandler {
+    public readonly description = "List available agent groups";
+    public readonly parameters = {} as const;
+    public async run(context: PackageActionContext) {
+        const catalog = requireAgentGroupCatalog(
+            context.sessionContext.agentContext,
+        );
+        const groups = Object.entries(catalog.groups);
+        if (groups.length === 0) {
+            displayResult("No agent groups configured.", context);
+            return;
+        }
+        const table: string[][] = [
+            ["Group", "Display Name", "Description", "Agents"],
+        ];
+        for (const [key, group] of groups) {
+            table.push([
+                chalk.cyanBright(key),
+                group.displayName,
+                group.description,
+                chalk.gray(group.agents.join(", ")),
+            ]);
+        }
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: table,
+            },
+            "block",
+        );
+    }
+}
+
+class GroupShowCommandHandler implements CommandHandler {
+    public readonly description = "Show details and members of an agent group";
+    public readonly parameters = {
+        args: {
+            group: {
+                description: "Name of the group to show",
+                type: "string",
+            },
+        },
+    } as const;
+
+    public async run(
+        context: PackageActionContext,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const catalog = requireAgentGroupCatalog(
+            context.sessionContext.agentContext,
+        );
+        const groupName = params.args.group;
+        const found = findAgentGroup(catalog, groupName);
+        if (found === undefined) {
+            const available = Object.keys(catalog.groups).join(", ") || "none";
+            throw new Error(
+                `Unknown agent group '${groupName}'. Available groups: ${available}. Use '@package group list' to see all groups.`,
+            );
+        }
+        const { key, group } = found;
+        const source = context.sessionContext.agentContext.source;
+
+        displayResult(
+            `Group: **${group.displayName}** (\`${key}\`)\n${group.description}\n`,
+            context,
+        );
+
+        const table: string[][] = [["Agent", "Status"]];
+        for (const agent of group.agents) {
+            const state = source.getAgentPackageState(agent);
+            let statusText = chalk.gray("not installed");
+            if (state === "bundled") {
+                statusText = chalk.green("bundled (built-in)");
+            } else if (state === "installed") {
+                statusText = chalk.cyanBright("installed");
+            } else if (state === "installed-unavailable") {
+                statusText = chalk.yellow(
+                    `installed but unavailable (repair or '@package uninstall ${agent}')`,
+                );
+            } else if (state === "transitioning") {
+                statusText = chalk.yellow("operation in progress");
+            }
+            table.push([agent, statusText]);
+        }
+
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: table,
+            },
+            "block",
+        );
+    }
+
+    public async getCompletion(
+        context: PackageSessionContext,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<{ groups: CompletionGroup[] }> {
+        const catalog = context.agentContext.agentGroups;
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "group") {
+                completions.push({
+                    name,
+                    completions: catalog ? Object.keys(catalog.groups) : [],
+                });
+            }
+        }
+        return { groups: completions };
+    }
+}
+
+class GroupInstallCommandHandler implements CommandHandler {
+    public readonly description =
+        "Install all missing agents in an agent group";
+    public readonly parameters = {
+        args: {
+            group: {
+                description: "Name of the group to install",
+                type: "string",
+            },
+        },
+        flags: {
+            source: {
+                description: "Resolve only against this named source",
+                char: "s",
+                type: "string",
+                optional: true,
+            },
+            "dry-run": {
+                description:
+                    "Preview how the group would resolve without installing",
+                char: "n",
+                type: "boolean",
+                default: false,
+            },
+            refresh: {
+                description:
+                    "Refresh cache-backed source metadata before resolving",
+                char: "r",
+                type: "boolean",
+                default: false,
+            },
+            yes: {
+                description: "Skip confirmation prompt",
+                char: "y",
+                type: "boolean",
+                default: false,
+            },
+        },
+    } as const;
+
+    // code-complexity-allow: group install keeps preflight, confirmation, sequential execution, and state reporting in one command flow
+    public async run(
+        context: PackageActionContext,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const catalog = requireAgentGroupCatalog(
+            context.sessionContext.agentContext,
+        );
+        const groupName = params.args.group;
+        const found = findAgentGroup(catalog, groupName);
+        if (found === undefined) {
+            const available = Object.keys(catalog.groups).join(", ") || "none";
+            throw new Error(
+                `Unknown agent group '${groupName}'. Available groups: ${available}. Use '@package group list' to see all groups.`,
+            );
+        }
+
+        const { key: groupKey, group } = found;
+        const source = context.sessionContext.agentContext.source;
+        const sourceName = params.flags.source ?? undefined;
+
+        if (params.flags.refresh) {
+            displayStatus("Refreshing source metadata...", context);
+            await source.refresh(sourceName);
+        }
+
+        // Preflight all members
+        displayStatus(`Preflighting group '${groupKey}'...`, context);
+        type MemberPlan =
+            | { name: string; state: "bundled" }
+            | { name: string; state: "installed" }
+            | { name: string; state: "installed-unavailable" }
+            | { name: string; state: "transitioning" }
+            | { name: string; state: "install"; preview: InstallPreview }
+            | { name: string; state: "unavailable" };
+
+        const plan: MemberPlan[] = [];
+        const unavailable: string[] = [];
+        const transitioning: string[] = [];
+        const mismatched: { requested: string; resolved: string }[] = [];
+
+        for (const agent of group.agents) {
+            const state = source.getAgentPackageState(agent);
+            if (state === "bundled") {
+                plan.push({ name: agent, state: "bundled" });
+            } else if (state === "installed") {
+                plan.push({ name: agent, state: "installed" });
+            } else if (state === "installed-unavailable") {
+                plan.push({ name: agent, state: "installed-unavailable" });
+            } else if (state === "transitioning") {
+                plan.push({ name: agent, state: "transitioning" });
+                transitioning.push(agent);
+            } else {
+                const preview = await source.preview(
+                    agent,
+                    undefined,
+                    sourceName,
+                    (msg) => displayStatus(msg, context),
+                );
+                if (preview === undefined) {
+                    plan.push({ name: agent, state: "unavailable" });
+                    unavailable.push(agent);
+                } else if (preview.winner.name !== agent) {
+                    plan.push({ name: agent, state: "unavailable" });
+                    mismatched.push({
+                        requested: agent,
+                        resolved: preview.winner.name,
+                    });
+                } else {
+                    plan.push({ name: agent, state: "install", preview });
+                }
+            }
+        }
+
+        if (transitioning.length > 0) {
+            throw new Error(
+                `Group '${groupKey}' cannot be installed while these agent(s) have an operation in progress: ${transitioning.join(", ")}. Retry when the current operation completes.`,
+            );
+        }
+        if (mismatched.length > 0) {
+            throw new Error(
+                `Group '${groupKey}' cannot be installed because these members resolve to different agent names: ${mismatched
+                    .map(
+                        ({ requested, resolved }) =>
+                            `${requested} -> ${resolved}`,
+                    )
+                    .join(", ")}.`,
+            );
+        }
+        if (unavailable.length > 0) {
+            throw new Error(
+                `Group '${groupKey}' cannot be installed because the following agent(s) could not be resolved from configured sources: ${unavailable.join(", ")}.`,
+            );
+        }
+
+        // Render Preflight Plan Table
+        const preflightTable: string[][] = [
+            ["Agent", "State", "Source", "Match Details"],
+        ];
+        for (const item of plan) {
+            if (item.state === "bundled") {
+                preflightTable.push([
+                    item.name,
+                    chalk.green("bundled"),
+                    chalk.gray("—"),
+                    chalk.gray("built-in with current profile"),
+                ]);
+            } else if (item.state === "installed") {
+                preflightTable.push([
+                    item.name,
+                    chalk.cyanBright("installed"),
+                    chalk.gray("—"),
+                    chalk.gray("already installed"),
+                ]);
+            } else if (item.state === "installed-unavailable") {
+                preflightTable.push([
+                    item.name,
+                    chalk.yellow("installed but unavailable"),
+                    chalk.gray("—"),
+                    chalk.yellow("requires repair; duplicate install skipped"),
+                ]);
+            } else if (item.state === "install") {
+                const winner = item.preview.winner;
+                const sourceDesc = winner.sourceKind
+                    ? `${winner.source} (${winner.sourceKind})`
+                    : winner.source;
+                const matchDesc = `${winner.matchKind}: ${winner.packageName ?? winner.path ?? winner.name}`;
+                preflightTable.push([
+                    chalk.bold(item.name),
+                    chalk.yellow("to install"),
+                    sourceDesc,
+                    item.preview.matches.length > 1
+                        ? `${matchDesc}; shadows: ${item.preview.matches
+                              .slice(1)
+                              .map(
+                                  (match) =>
+                                      `${match.source} (${match.matchKind}: ${
+                                          match.packageName ??
+                                          match.path ??
+                                          match.name
+                                      })`,
+                              )
+                              .join(", ")}`
+                        : matchDesc,
+                ]);
+            }
+        }
+
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: preflightTable,
+            },
+            "block",
+        );
+
+        if (params.flags["dry-run"]) {
+            displayResult(
+                "Dry run complete. No agents were installed.",
+                context,
+            );
+            return;
+        }
+
+        const toInstall = plan.filter(
+            (
+                p,
+            ): p is {
+                name: string;
+                state: "install";
+                preview: InstallPreview;
+            } => p.state === "install",
+        );
+
+        if (toInstall.length === 0) {
+            const unresolved = plan.filter(
+                (item) => item.state === "installed-unavailable",
+            );
+            if (unresolved.length > 0) {
+                displayWarn(
+                    `No agents need installation, but group '${groupKey}' still has installed agent(s) that require repair: ${unresolved.map((item) => item.name).join(", ")}.`,
+                    context,
+                );
+            } else {
+                displayResult(
+                    `All agents in group '${groupKey}' are already present. Nothing to install.`,
+                    context,
+                );
+            }
+            return;
+        }
+
+        if (!params.flags.yes) {
+            const choice = await context.sessionContext.popupQuestion(
+                `Install ${toInstall.length} agent(s) for group '${groupKey}'?`,
+                ["Install", "Cancel"],
+                1,
+            );
+            if (choice !== 0) {
+                displayResult("Group installation cancelled.", context);
+                return;
+            }
+        }
+
+        // Sequential install
+        const { appAgentProviderSetController } =
+            context.sessionContext.agentContext;
+        const results: {
+            name: string;
+            status:
+                | "installed"
+                | "already_installed"
+                | "failed"
+                | "not_attempted";
+            detail?: string;
+        }[] = [];
+
+        let aborted = false;
+
+        for (const item of toInstall) {
+            if (context.abortSignal?.aborted || aborted) {
+                results.push({
+                    name: item.name,
+                    status: "not_attempted",
+                    detail: "cancelled by user",
+                });
+                aborted = true;
+                continue;
+            }
+
+            // Re-check presence right before install to catch concurrent installs
+            const currentState = source.getAgentPackageState(item.name);
+            if (currentState === "bundled" || currentState === "installed") {
+                results.push({
+                    name: item.name,
+                    status: "already_installed",
+                    detail:
+                        currentState === "bundled" ? "built-in" : "installed",
+                });
+                continue;
+            }
+            if (currentState === "installed-unavailable") {
+                results.push({
+                    name: item.name,
+                    status: "failed",
+                    detail: "installed record requires repair",
+                });
+                continue;
+            }
+            if (currentState === "transitioning") {
+                results.push({
+                    name: item.name,
+                    status: "failed",
+                    detail: "another package operation is in progress; retry",
+                });
+                continue;
+            }
+
+            displayStatus(`Installing '${item.name}'...`, context);
+            try {
+                const res = await source.installExpected(
+                    item.name,
+                    item.preview.winner,
+                    appAgentProviderSetController,
+                    (msg) => displayStatus(msg, context),
+                    context.abortSignal,
+                );
+                for (const warning of res.warnings ?? []) {
+                    displayWarn(warning, context);
+                }
+                const resolvedIdentity =
+                    res.packageName ?? res.path ?? res.ref ?? res.name;
+                results.push({
+                    name: item.name,
+                    status: "installed",
+                    detail: `committed via ${res.sourceKind ?? "source"} '${res.source}' (${resolvedIdentity})`,
+                });
+            } catch (err: unknown) {
+                if (context.abortSignal?.aborted) {
+                    results.push({
+                        name: item.name,
+                        status: "failed",
+                        detail: "cancelled after installation started",
+                    });
+                    aborted = true;
+                    continue;
+                }
+
+                // If collision, check if now present
+                const stateAfterError = source.getAgentPackageState(item.name);
+                if (
+                    stateAfterError === "bundled" ||
+                    stateAfterError === "installed"
+                ) {
+                    results.push({
+                        name: item.name,
+                        status: "already_installed",
+                        detail: "installed concurrently",
+                    });
+                } else {
+                    const message =
+                        err instanceof Error ? err.message : String(err);
+                    results.push({
+                        name: item.name,
+                        status: "failed",
+                        detail: message,
+                    });
+                }
+            }
+        }
+
+        // Summary table
+        const summaryTable: string[][] = [["Agent", "Status", "Details"]];
+        for (const item of plan) {
+            if (item.state === "bundled") {
+                summaryTable.push([
+                    item.name,
+                    chalk.green("bundled"),
+                    chalk.gray("already built-in"),
+                ]);
+            } else if (item.state === "installed") {
+                summaryTable.push([
+                    item.name,
+                    chalk.cyanBright("installed"),
+                    chalk.gray("already installed"),
+                ]);
+            } else if (item.state === "installed-unavailable") {
+                summaryTable.push([
+                    item.name,
+                    chalk.yellow("installed but unavailable"),
+                    chalk.yellow("requires repair"),
+                ]);
+            } else {
+                const res = results.find((r) => r.name === item.name);
+                if (res === undefined) {
+                    summaryTable.push([item.name, chalk.gray("skipped"), ""]);
+                } else if (res.status === "installed") {
+                    summaryTable.push([
+                        chalk.bold(res.name),
+                        chalk.green("installed"),
+                        res.detail ?? "",
+                    ]);
+                } else if (res.status === "already_installed") {
+                    summaryTable.push([
+                        chalk.bold(res.name),
+                        chalk.cyanBright("already installed"),
+                        res.detail ?? "",
+                    ]);
+                } else if (res.status === "not_attempted") {
+                    summaryTable.push([
+                        chalk.bold(res.name),
+                        chalk.yellow("not attempted"),
+                        res.detail ?? "",
+                    ]);
+                } else {
+                    summaryTable.push([
+                        chalk.bold(res.name),
+                        chalk.red("failed"),
+                        chalk.red(res.detail ?? "error"),
+                    ]);
+                }
+            }
+        }
+
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: summaryTable,
+            },
+            "block",
+        );
+
+        const hasFailures = results.some((r) => r.status === "failed");
+        const newlyInstalled = results.filter((r) => r.status === "installed");
+        const unresolved = plan.some(
+            (item) => item.state === "installed-unavailable",
+        );
+
+        if (hasFailures || unresolved) {
+            displayWarn(
+                `Group '${groupKey}' installation completed but still requires attention. Re-running the command will resume missing agents; installed-unavailable agents require repair.`,
+                context,
+            );
+        } else if (aborted) {
+            displayWarn(
+                `Group '${groupKey}' installation was interrupted. Re-running the command will resume uninstalled agents.`,
+                context,
+            );
+        } else {
+            displayResult(
+                `Group '${groupKey}' installation complete (${newlyInstalled.length} agent(s) newly installed). Installed agents remain disabled until enabled with '@config agent <name>'; provider propagation to connected sessions is asynchronous.`,
+                context,
+            );
+        }
+    }
+
+    public async getCompletion(
+        context: PackageSessionContext,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<{ groups: CompletionGroup[] }> {
+        const catalog = context.agentContext.agentGroups;
+        const source = context.agentContext.source;
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "group") {
+                completions.push({
+                    name,
+                    completions: catalog ? Object.keys(catalog.groups) : [],
+                });
+            } else if (name === "--source") {
+                completions.push({
+                    name,
+                    completions: source.listSources(),
+                });
+            }
+        }
+        return { groups: completions };
+    }
+}
+
+function buildGroupCommandTable(): CommandHandlerTable {
+    return {
+        description: "Manage and install agent groups",
+        defaultSubCommand: "list",
+        commands: {
+            list: new GroupListCommandHandler(),
+            show: new GroupShowCommandHandler(),
+            install: new GroupInstallCommandHandler(),
+        },
+    };
 }
 
 class UninstallCommandHandler implements CommandHandler {
@@ -1813,6 +2433,7 @@ export function buildPackageCommandTable(
             list: new ListInstalledCommandHandler(),
             available: new ListAvailableCommandHandler(),
             install: new InstallCommandHandler(),
+            group: buildGroupCommandTable(),
             update: new UpdateCommandHandler(),
             uninstall: new UninstallCommandHandler(),
             mcp: buildMcpCommandTable(),

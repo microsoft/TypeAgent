@@ -34,6 +34,11 @@ export interface AppAgentProvider {
     ) => void;
     getLoadingAgentNames?(): string[];
     /**
+     * When false, newly attached sessions persist disabled command, schema, and
+     * action overrides unless the session already has an explicit preference.
+     */
+    readonly defaultEnabled?: boolean;
+    /**
      * Return whether an agent has a loaded instance. A shared provider must
      * report its actual refcount state rather than one dispatcher's local state.
      */

@@ -98,11 +98,13 @@ function copyProviderAssets(out, profile) {
         path.join(sourceRoot, "package.json"),
         path.join(destinationRoot, "package.json"),
     );
-    for (const config of ["config.json", `config.${profile}.json`]) {
-        copyFile(
-            path.join(sourceRoot, "data", config),
-            path.join(destinationRoot, "data", config),
-        );
+    for (const config of [
+        "config.json",
+        `config.${profile}.json`,
+        "agentGroups.json",
+    ]) {
+        const fullSource = path.join(sourceRoot, "data", config);
+        copyFile(fullSource, path.join(destinationRoot, "data", config));
     }
     copyDirectory(
         path.join(sourceRoot, "data", "explainer"),
