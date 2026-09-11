@@ -119,7 +119,7 @@ describe("browser document persistence", () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    test("promotes only the active binding without adopting a newer disk revision", async () => {
+    test("only the primary adopts autosave revisions and promotion does not advance them", async () => {
         const manager = new DocumentManager();
         manager.currentBindingToken = "binding-1";
         manager.currentRevision = "revision-0";
@@ -129,14 +129,14 @@ describe("browser document persistence", () => {
             bindingToken: "binding-1",
             revision: "revision-1",
         });
-        expect(manager.currentRevision).toBe("revision-1");
+        expect(manager.currentRevision).toBe("revision-0");
 
         await manager.handleSSEEvent({
             type: "autoSave",
             bindingToken: "stale-binding",
             revision: "wrong-revision",
         });
-        expect(manager.currentRevision).toBe("revision-1");
+        expect(manager.currentRevision).toBe("revision-0");
 
         await manager.handleSSEEvent({
             type: "primaryElected",
@@ -144,7 +144,7 @@ describe("browser document persistence", () => {
             revision: "wrong-revision",
         });
         expect(manager.isPrimaryClient).toBe(false);
-        expect(manager.currentRevision).toBe("revision-1");
+        expect(manager.currentRevision).toBe("revision-0");
 
         await manager.handleSSEEvent({
             type: "primaryElected",
@@ -152,7 +152,14 @@ describe("browser document persistence", () => {
             revision: "revision-2",
         });
         expect(manager.isPrimaryClient).toBe(true);
-        expect(manager.currentRevision).toBe("revision-1");
+        expect(manager.currentRevision).toBe("revision-0");
+
+        await manager.handleSSEEvent({
+            type: "autoSave",
+            bindingToken: "binding-1",
+            revision: "revision-3",
+        });
+        expect(manager.currentRevision).toBe("revision-3");
 
         const unbound = new DocumentManager();
         await unbound.handleSSEEvent({
@@ -162,6 +169,27 @@ describe("browser document persistence", () => {
         });
         expect(unbound.isPrimaryClient).toBe(true);
         expect(unbound.currentRevision).toBeNull();
+    });
+
+    test("same-binding bootstrap does not adopt an unseen disk revision", async () => {
+        const manager = new DocumentManager();
+        manager.currentBindingToken = "binding-1";
+        manager.currentDocumentId = "room-1";
+        manager.currentRevision = "revision-0";
+        manager.currentBoundRelativePath = "one.md";
+
+        await manager.handleSSEEvent({
+            type: "bindingBootstrap",
+            bindingToken: "binding-1",
+            documentId: "room-1",
+            boundRelativePath: "one.md",
+            documentName: "one",
+            revision: "revision-from-disk",
+            clientRole: "primary",
+        });
+
+        expect(manager.isPrimaryClient).toBe(true);
+        expect(manager.currentRevision).toBe("revision-0");
     });
 
     test("reconciles a 409 only when the same content is already on disk", async () => {
@@ -330,6 +358,114 @@ describe("browser document persistence", () => {
 
         expect(manager.lastAutoSaveContent).toBe(markdown);
         expect(pushState).not.toHaveBeenCalled();
+    });
+
+    test("serializes rapid history switches instead of skipping the final target", async () => {
+        const editor = createEditor(() => "# Content\n", "Content");
+        const originalWindow = Object.getOwnPropertyDescriptor(
+            globalThis,
+            "window",
+        );
+        const originalDocument = Object.getOwnPropertyDescriptor(
+            globalThis,
+            "document",
+        );
+        Object.defineProperty(globalThis, "window", {
+            configurable: true,
+            value: { history: { pushState: jest.fn() } },
+        });
+        Object.defineProperty(globalThis, "document", {
+            configurable: true,
+            value: { title: "" },
+        });
+
+        let resolveFirstSwitch!: (response: Response) => void;
+        const fetchMock = jest.fn(
+            async (input: string | URL | Request, init?: RequestInit) => {
+                if (input !== "/api/switch-document") {
+                    return new Response("# Content\n");
+                }
+                const request = JSON.parse(init?.body as string) as {
+                    documentPath: string;
+                };
+                if (request.documentPath === "a.md") {
+                    return new Promise<Response>((resolve) => {
+                        resolveFirstSwitch = resolve;
+                    });
+                }
+                return Response.json({
+                    bindingToken: "binding-b-new",
+                    documentId: "room-b-new",
+                    boundRelativePath: "b.md",
+                    documentName: "b",
+                    revision: "revision-b-new",
+                });
+            },
+        );
+        globalThis.fetch = fetchMock as typeof fetch;
+
+        const manager = new DocumentManager();
+        manager.editorManager = {
+            getEditor: () => editor,
+            switchToDocument: jest.fn(async () => {}),
+        };
+        manager.currentBindingToken = "binding-b-old";
+        manager.currentDocumentId = "room-b-old";
+        manager.currentRevision = "revision-b-old";
+        manager.currentBoundRelativePath = "b.md";
+
+        try {
+            const back = manager.switchToDocument("a.md", false);
+            await Promise.resolve();
+            const forward = manager.switchToDocument("b.md", false);
+            resolveFirstSwitch(
+                Response.json({
+                    bindingToken: "binding-a",
+                    documentId: "room-a",
+                    boundRelativePath: "a.md",
+                    documentName: "a",
+                    revision: "revision-a",
+                }),
+            );
+            await Promise.all([back, forward]);
+        } finally {
+            if (originalWindow) {
+                Object.defineProperty(globalThis, "window", originalWindow);
+            } else {
+                Reflect.deleteProperty(globalThis, "window");
+            }
+            if (originalDocument) {
+                Object.defineProperty(globalThis, "document", originalDocument);
+            } else {
+                Reflect.deleteProperty(globalThis, "document");
+            }
+        }
+
+        expect(manager.currentBoundRelativePath).toBe("b.md");
+        expect(manager.currentBindingToken).toBe("binding-b-new");
+        expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+
+    test("accepted snapshots clear suppression from an earlier conflict", async () => {
+        const markdown = "# Persisted by agent\n";
+        const editor = createEditor(() => markdown, "Persisted by agent");
+        const manager = new DocumentManager();
+        manager.editorManager = { getEditor: () => editor };
+        manager.currentBindingToken = "binding-1";
+        manager.currentRevision = "revision-0";
+        manager.lastConflictedAutoSaveContent = "# Earlier conflict\n";
+
+        await manager.handleSSEEvent({
+            type: "documentSnapshot",
+            bindingToken: "binding-1",
+            markdown,
+            baseMarkdown: "# Old baseline\n",
+            revision: "revision-1",
+        });
+
+        expect(manager.lastConflictedAutoSaveContent).toBeNull();
+        expect(manager.lastAutoSaveContent).toBe(markdown);
+        expect(manager.currentRevision).toBe("revision-1");
     });
 
     test("matching bootstrap path skips a redundant switch request", async () => {

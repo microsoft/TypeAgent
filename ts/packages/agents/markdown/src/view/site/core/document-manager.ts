@@ -56,6 +56,7 @@ export class DocumentManager {
     private eventSource: EventSource | null = null;
     private sseEventQueue: Promise<void> = Promise.resolve();
     private bindingTransitionQueue: Promise<void> = Promise.resolve();
+    private switchRequestQueue: Promise<void> = Promise.resolve();
     private autoSaveTimer: NodeJS.Timeout | null = null;
     private isPrimaryClient = false;
     private isBindingTransitionInProgress = false;
@@ -291,6 +292,7 @@ export class DocumentManager {
             case "autoSave":
                 console.log(`[SSE] Auto-save completed for: ${data.filePath}`);
                 if (
+                    this.isPrimaryClient &&
                     typeof data.bindingToken === "string" &&
                     data.bindingToken === this.bindingToken
                 ) {
@@ -444,6 +446,7 @@ export class DocumentManager {
         const currentMarkdown = await this.getMarkdownContent(editor);
         if (currentMarkdown === data.markdown) {
             this.lastAutoSaveContent = data.markdown;
+            this.lastConflictedAutoSaveContent = null;
             this.adoptRevision(data);
             return;
         }
@@ -456,6 +459,7 @@ export class DocumentManager {
         await this.editorManager.setContent(data.markdown);
         this.adoptRevision(data);
         this.lastAutoSaveContent = data.markdown;
+        this.lastConflictedAutoSaveContent = null;
     }
 
     private async handleLLMOperations(data: SSEEventData): Promise<void> {
@@ -565,7 +569,6 @@ export class DocumentManager {
                 binding.documentId === this.currentDocumentId
             ) {
                 this.currentBoundRelativePath = binding.boundRelativePath;
-                this.adoptRevision(binding);
                 return;
             }
 
@@ -900,6 +903,17 @@ export class DocumentManager {
     public async switchToDocument(
         documentPath: string,
         updateHistory = true,
+    ): Promise<void> {
+        const request = this.switchRequestQueue.then(() =>
+            this.performDocumentSwitch(documentPath, updateHistory),
+        );
+        this.switchRequestQueue = request.catch(() => undefined);
+        await request;
+    }
+
+    private async performDocumentSwitch(
+        documentPath: string,
+        updateHistory: boolean,
     ): Promise<void> {
         const targetRelativePath = ensureMarkdownExtension(documentPath);
         try {
