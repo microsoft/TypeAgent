@@ -485,6 +485,37 @@ describe("real MCP protocol over the shared real structured Dispatcher", () => {
     });
 
     it.each(["dev", "bypass"])(
+        "retains explicit cancellation but blocks continuation after switching to %s",
+        async (mode) => {
+            const interaction = pending(await execute(await request("clear")));
+            process.env.TYPEAGENT_MODE = mode;
+            const denied = await client.callTool({
+                name: "typeagent-continueAction",
+                arguments: {
+                    protocolVersion: 1,
+                    scopeId: interaction.scopeId,
+                    operationId: interaction.operationId,
+                    interactionId: interaction.interactionId,
+                    response: { type: "confirmation", approved: true },
+                },
+            });
+            expect(denied.isError).toBe(true);
+            const cancelled = await call<StructuredActionExecutionResult>(
+                "cancelAction",
+                {
+                    protocolVersion: 1,
+                    scopeId: interaction.scopeId,
+                    operationId: interaction.operationId,
+                    interactionId: interaction.interactionId,
+                },
+            );
+            expect(cancelled.status).toBe("cancelled");
+            expect(fixture.effects).toBe(0);
+            expect(fixture.joins).toHaveLength(1);
+        },
+    );
+
+    it.each(["dev", "bypass"])(
         "does not dispatch structured tools in %s mode",
         async (mode) => {
             process.env.TYPEAGENT_MODE = mode;
