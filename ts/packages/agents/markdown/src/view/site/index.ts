@@ -36,8 +36,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 async function initializeApplication(): Promise<void> {
-    // Check if we have a document name in the URL
-    const documentName = parseDocumentPathFromUrl(window.location.pathname);
+    const documentPath = parseDocumentPathFromUrl(window.location.pathname);
 
     // Initialize managers
     editorManager = new EditorManager();
@@ -61,8 +60,8 @@ async function initializeApplication(): Promise<void> {
 
     // Bind the initialized editor before opening SSE. Otherwise an early
     // serializer request can return empty content with a valid binding token.
-    if (documentName) {
-        await switchToDocument(documentName);
+    if (documentPath) {
+        await switchToDocument(documentPath, false);
     }
     await documentManager.initialize();
 
@@ -79,10 +78,13 @@ async function initializeApplication(): Promise<void> {
     console.log("[APP] Application initialized successfully");
 }
 
-async function switchToDocument(documentName: string): Promise<void> {
+async function switchToDocument(
+    documentName: string,
+    updateHistory = true,
+): Promise<void> {
     try {
         if (documentManager) {
-            await documentManager.switchToDocument(documentName);
+            await documentManager.switchToDocument(documentName, updateHistory);
             console.log(
                 `[APP] Successfully switched to document: ${documentName}`,
             );
@@ -96,12 +98,11 @@ async function switchToDocument(documentName: string): Promise<void> {
 }
 
 function setupBrowserHistoryHandling(): void {
-    // Handle browser back/forward navigation
-    window.addEventListener("popstate", async (event) => {
-        const documentName = parseDocumentPathFromUrl(window.location.pathname);
-
-        if (documentName && event.state?.documentName !== documentName) {
-            await switchToDocument(documentName);
+    // Use the same nested-path parser for initial navigation and history.
+    window.addEventListener("popstate", async () => {
+        const documentPath = parseDocumentPathFromUrl(window.location.pathname);
+        if (documentPath) {
+            await switchToDocument(documentPath, false);
         }
     });
 }

@@ -81,7 +81,11 @@ export type NotificationType = "success" | "error" | "info";
 
 export interface CollaborationInfo {
     websocketServerUrl: string;
+    // Human-readable display name (typically the file basename without
+    // the .md extension). Not safe to use as a room key.
     currentDocument: string;
+    // Opaque server-authoritative Yjs room identifier. Older servers may
+    // omit it, in which case collaboration falls back to the default room.
     currentDocumentId?: string;
     documents: number;
     totalClients: number;
