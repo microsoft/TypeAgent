@@ -31,5 +31,4 @@ describe("installed Copilot runtime tool contract", () => {
             fs.rmSync(workingDirectory, { recursive: true, force: true });
         }
     });
-
 });
