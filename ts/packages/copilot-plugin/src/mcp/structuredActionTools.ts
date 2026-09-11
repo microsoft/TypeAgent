@@ -113,8 +113,9 @@ export function registerStructuredActionTools(
             client: StructuredActionClient,
         ) => Promise<Record<string, unknown>>,
         effect: boolean,
+        allowWhenDisabled = false,
     ): Promise<CallToolResult> {
-        if (mode() !== "direct" && mode() !== "mcp") {
+        if (!allowWhenDisabled && mode() !== "direct" && mode() !== "mcp") {
             return {
                 ...result({
                     error: "Structured action tools require Direct or MCP mode.",
@@ -257,7 +258,7 @@ export function registerStructuredActionTools(
         "typeagent-cancelAction",
         {
             description:
-                "Cancel a pending TypeAgent operation at the USER's request with its exact scopeId/operationId and interactionId when supplied. Return the authoritative service status; cancellation or disconnect is not proof effects were rolled back.",
+                "Cancel a pending TypeAgent operation at the USER's request with its exact scopeId/operationId and interactionId when supplied. Remains available after switching out of Direct/MCP mode so pending work can be stopped. Return the authoritative service status; cancellation or disconnect is not proof effects were rolled back.",
             inputSchema: z
                 .object({
                     ...envelope,
@@ -273,6 +274,7 @@ export function registerStructuredActionTools(
                         request as CancelActionRequest,
                         extra.signal,
                     ),
+                true,
                 true,
             ),
     );
