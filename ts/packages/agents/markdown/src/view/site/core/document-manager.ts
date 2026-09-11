@@ -66,6 +66,7 @@ export class DocumentManager {
     private revision: string | null = null;
     private bindingVersion = 0;
     private currentBoundRelativePath: string | null = null;
+    private historyNavigationTarget: string | null = null;
 
     // Keep the names introduced by the persistence change as aliases while
     // retaining the parent's binding state machine and transition guards.
@@ -316,18 +317,13 @@ export class DocumentManager {
                 break;
 
             case "primaryElected":
-                if (
-                    typeof data.bindingToken !== "string" ||
-                    data.bindingToken !== this.bindingToken ||
-                    typeof data.revision !== "string"
-                ) {
+                if (data.bindingToken !== this.bindingToken) {
                     console.warn(
                         "[SSE] Ignoring incomplete or stale primaryElected event",
                     );
                     break;
                 }
                 this.isPrimaryClient = true;
-                this.adoptRevision(data);
                 break;
 
             case "operationsBeingApplied":
@@ -420,6 +416,7 @@ export class DocumentManager {
             },
             data.newDocumentName,
             data.boundRelativePath,
+            this.consumeHistoryNavigation(data.boundRelativePath),
         );
     }
 
@@ -506,6 +503,7 @@ export class DocumentManager {
         documentName: string,
         relativePath?: string,
         expectedBindingToken?: string,
+        updateHistory = true,
     ): Promise<void> {
         console.log(
             `[DOCUMENT] Backend switched to: ${documentName}, reconnecting frontend...`,
@@ -532,16 +530,22 @@ export class DocumentManager {
             throw new Error("Editor is not ready for a binding transition");
         }
         await this.editorManager.switchToDocument(documentId, content);
+        this.lastAutoSaveContent = await this.getMarkdownContent(
+            this.editorManager.getEditor(),
+        );
+        this.lastConflictedAutoSaveContent = null;
 
         const documentPath = relativePath || documentName;
         const displayPath = documentPath.replace(/\.md$/i, "");
         document.title = `${displayPath} - AI-Enhanced Markdown Editor`;
-        const newUrl = `/document/${encodeDocumentPathForUrl(documentPath)}`;
-        window.history.pushState(
-            { documentPath: displayPath },
-            document.title,
-            newUrl,
-        );
+        if (updateHistory) {
+            const newUrl = `/document/${encodeDocumentPathForUrl(documentPath)}`;
+            window.history.pushState(
+                { documentPath: displayPath },
+                document.title,
+                newUrl,
+            );
+        }
     }
 
     private async transitionToBinding(
@@ -553,6 +557,7 @@ export class DocumentManager {
         },
         documentName: string,
         relativePath?: string,
+        updateHistory = true,
     ): Promise<void> {
         const transition = this.bindingTransitionQueue.then(async () => {
             if (
@@ -574,6 +579,7 @@ export class DocumentManager {
                         documentName,
                         relativePath,
                         binding.bindingToken,
+                        updateHistory,
                     );
                 }
                 this.adoptBinding(binding);
@@ -891,14 +897,19 @@ export class DocumentManager {
         }
     }
 
-    public async switchToDocument(documentPath: string): Promise<void> {
+    public async switchToDocument(
+        documentPath: string,
+        updateHistory = true,
+    ): Promise<void> {
+        const targetRelativePath = ensureMarkdownExtension(documentPath);
         try {
             if (this.currentBoundRelativePath !== null) {
-                const targetRelativePath =
-                    ensureMarkdownExtension(documentPath);
                 if (this.currentBoundRelativePath === targetRelativePath) {
                     return;
                 }
+            }
+            if (!updateHistory) {
+                this.historyNavigationTarget = targetRelativePath;
             }
 
             const switchUrl = "/api/switch-document";
@@ -950,11 +961,24 @@ export class DocumentManager {
                 },
                 documentName,
                 result.boundRelativePath,
+                updateHistory,
             );
         } catch (error) {
             console.error("[DOCUMENT] Failed to switch document:", error);
             throw error;
+        } finally {
+            if (this.historyNavigationTarget === targetRelativePath) {
+                this.historyNavigationTarget = null;
+            }
         }
+    }
+
+    private consumeHistoryNavigation(relativePath: string): boolean {
+        if (this.historyNavigationTarget !== relativePath) {
+            return true;
+        }
+        this.historyNavigationTarget = null;
+        return false;
     }
 
     private adoptBinding(data: BindingStateData): void {
@@ -1056,7 +1080,11 @@ export class DocumentManager {
             return;
         }
 
-        if (response.status === 409) {
+        if (
+            response.status === 409 &&
+            typeof result?.revision === "string" &&
+            typeof result.content === "string"
+        ) {
             this.lastConflictedAutoSaveContent = attemptedContent;
             const detail =
                 typeof result?.error === "string" ? ` ${result.error}` : "";

@@ -119,7 +119,7 @@ describe("browser document persistence", () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    test("adopts current revisions from autosave and primary promotion events", async () => {
+    test("promotes only the active binding without adopting a newer disk revision", async () => {
         const manager = new DocumentManager();
         manager.currentBindingToken = "binding-1";
         manager.currentRevision = "revision-0";
@@ -152,7 +152,16 @@ describe("browser document persistence", () => {
             revision: "revision-2",
         });
         expect(manager.isPrimaryClient).toBe(true);
-        expect(manager.currentRevision).toBe("revision-2");
+        expect(manager.currentRevision).toBe("revision-1");
+
+        const unbound = new DocumentManager();
+        await unbound.handleSSEEvent({
+            type: "primaryElected",
+            bindingToken: null,
+            revision: null,
+        });
+        expect(unbound.isPrimaryClient).toBe(true);
+        expect(unbound.currentRevision).toBeNull();
     });
 
     test("reconciles a 409 only when the same content is already on disk", async () => {
@@ -184,7 +193,7 @@ describe("browser document persistence", () => {
         expect(manager.lastAutoSaveContent).toBe(markdown);
     });
 
-    test("surfaces a divergent or malformed 409 without retrying or adopting its revision", async () => {
+    test("surfaces a divergent conflict without retrying or adopting its revision", async () => {
         const markdown = "# Local edit\n";
         const editor = createEditor(() => markdown, "Local edit");
         const fetchMock = jest
@@ -225,9 +234,102 @@ describe("browser document persistence", () => {
 
         manager.lastConflictedAutoSaveContent = null;
         await expect(manager.saveDocument(editor)).rejects.toThrow(
-            "changed on disk and was not overwritten",
+            "Save failed: 409 Conflict",
         );
         expect(manager.currentRevision).toBe("local-base-revision");
+    });
+
+    test("retries autosave after transient binding contention", async () => {
+        const markdown = "# Pending edit\n";
+        const editor = createEditor(() => markdown, "Pending edit");
+        const fetchMock = jest
+            .fn<() => Promise<Response>>()
+            .mockResolvedValueOnce(
+                Response.json(
+                    {
+                        error: "Another document update is already in progress for this binding",
+                    },
+                    { status: 409 },
+                ),
+            )
+            .mockResolvedValueOnce(
+                Response.json({
+                    bindingToken: "binding-1",
+                    revision: "revision-1",
+                }),
+            );
+        globalThis.fetch = fetchMock as typeof fetch;
+
+        const manager = new DocumentManager();
+        manager.editorManager = { getEditor: () => editor };
+        manager.currentBindingToken = "binding-1";
+        manager.currentDocumentId = "binding-1";
+        manager.currentRevision = "revision-0";
+
+        await manager.performAutoSave();
+        await manager.performAutoSave();
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(manager.lastConflictedAutoSaveContent).toBeNull();
+        expect(manager.lastAutoSaveContent).toBe(markdown);
+        expect(manager.currentRevision).toBe("revision-1");
+    });
+
+    test("records the loaded editor baseline without adding history during navigation", async () => {
+        const markdown = "# Serialized baseline\n";
+        const editor = createEditor(() => markdown, "Serialized baseline");
+        const pushState = jest.fn();
+        const originalWindow = Object.getOwnPropertyDescriptor(
+            globalThis,
+            "window",
+        );
+        const originalDocument = Object.getOwnPropertyDescriptor(
+            globalThis,
+            "document",
+        );
+        Object.defineProperty(globalThis, "window", {
+            configurable: true,
+            value: { history: { pushState } },
+        });
+        Object.defineProperty(globalThis, "document", {
+            configurable: true,
+            value: { title: "" },
+        });
+        globalThis.fetch = jest.fn(async (input) => {
+            if (input === "/api/switch-document") {
+                return Response.json({
+                    bindingToken: "binding-1",
+                    documentId: "room-1",
+                    boundRelativePath: "team/plan.md",
+                    documentName: "plan",
+                    revision: "revision-1",
+                });
+            }
+            return new Response("# Raw baseline\n");
+        }) as typeof fetch;
+
+        const manager = new DocumentManager();
+        manager.editorManager = {
+            getEditor: () => editor,
+            switchToDocument: jest.fn(async () => {}),
+        };
+        try {
+            await manager.switchToDocument("team/plan.md", false);
+        } finally {
+            if (originalWindow) {
+                Object.defineProperty(globalThis, "window", originalWindow);
+            } else {
+                Reflect.deleteProperty(globalThis, "window");
+            }
+            if (originalDocument) {
+                Object.defineProperty(globalThis, "document", originalDocument);
+            } else {
+                Reflect.deleteProperty(globalThis, "document");
+            }
+        }
+
+        expect(manager.lastAutoSaveContent).toBe(markdown);
+        expect(pushState).not.toHaveBeenCalled();
     });
 
     test("matching bootstrap path skips a redundant switch request", async () => {

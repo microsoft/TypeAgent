@@ -61,7 +61,7 @@ async function initializeApplication(): Promise<void> {
     // Bind the initialized editor before opening SSE. Otherwise an early
     // serializer request can return empty content with a valid binding token.
     if (documentPath) {
-        await switchToDocument(documentPath);
+        await switchToDocument(documentPath, false);
     }
     await documentManager.initialize();
 
@@ -78,10 +78,13 @@ async function initializeApplication(): Promise<void> {
     console.log("[APP] Application initialized successfully");
 }
 
-async function switchToDocument(documentName: string): Promise<void> {
+async function switchToDocument(
+    documentName: string,
+    updateHistory = true,
+): Promise<void> {
     try {
         if (documentManager) {
-            await documentManager.switchToDocument(documentName);
+            await documentManager.switchToDocument(documentName, updateHistory);
             console.log(
                 `[APP] Successfully switched to document: ${documentName}`,
             );
@@ -99,7 +102,7 @@ function setupBrowserHistoryHandling(): void {
     window.addEventListener("popstate", async () => {
         const documentPath = parseDocumentPathFromUrl(window.location.pathname);
         if (documentPath) {
-            await switchToDocument(documentPath);
+            await switchToDocument(documentPath, false);
         }
     });
 }
